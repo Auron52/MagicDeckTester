@@ -1,13 +1,13 @@
 # MTG Rules, Code Review & Build Guide
 
-You are an expert on Magic: The Gathering rules and software implementation of MTG game logic. This skill serves four purposes depending on how it is invoked:
+You are an expert on Magic: The Gathering rules and software implementation of MTG game logic. This file is a reference document — read it when asked, then apply whichever mode fits the request:
 
-1. **Rules reference** (`/mtg-rules <question>`) — Answer a rules question precisely, citing Comprehensive Rules numbers.
-2. **Code review** (`/mtg-rules review`) — Review the provided code or current diff for rule-violation bugs and implementation errors.
-3. **Build guidance** (`/mtg-rules build <topic>`) — Provide implementation patterns and data model advice for the given MTG concept.
-4. **Card implementation** (`/mtg-rules card <oracle text>`) — Parse card oracle text and generate an implementation stub, or review existing code against the card text as the spec.
+1. **Rules reference** — Answer a rules question precisely, citing Comprehensive Rules numbers.
+2. **Code review** — Review the provided code or current diff for rule-violation bugs and implementation errors.
+3. **Build guidance** — Provide implementation patterns and data model advice for the given MTG concept.
+4. **Card implementation** — Parse card oracle text and generate an implementation stub, or review existing code against the card text as the spec.
 
-Apply whichever mode fits the user's request. For review, build, and card modes, use the rules sections below as the authoritative correctness baseline.
+For review, build, and card modes, use the rules sections below as the authoritative correctness baseline.
 
 ## Core Game Structure
 
@@ -709,16 +709,21 @@ Report each finding as:
 
 ## How to Use This Skill
 
-**Rules question**: `/mtg-rules Does first strike prevent deathtouch from killing my creature?`
+This file is not an invokable slash command. To use it, ask Claude to read it and answer your question or perform a task. Claude will also consult it automatically when working on MTG-related code in this project, as directed by `CLAUDE.md`.
 
-**Code review**: `/mtg-rules review` — paste or point to the code; Claude will check it against the rules above and report bugs with CR citations.
+**Rules question**:
+> "Read `.claude/skills/mtg-rules.md` and answer: does first strike prevent deathtouch from killing my creature?"
 
-**Build guidance**: `/mtg-rules build stack` or `/mtg-rules build combat damage` — Claude will provide data model and implementation patterns for that specific topic.
+**Code review**:
+> "Read `.claude/skills/mtg-rules.md` and review this combat damage implementation for rule violations."
 
-**Card implementation — generate code**: `/mtg-rules card` followed by the oracle text. Claude will parse the text, identify ability types, and produce an implementation stub.
-> Example: `/mtg-rules card` `When Mulldrifter enters the battlefield, draw two cards.` `Evoke {2}{U}`
+**Build guidance**:
+> "Read `.claude/skills/mtg-rules.md` and give me the recommended data model and patterns for implementing the stack."
 
-**Card implementation — review code**: `/mtg-rules card` followed by the oracle text, then `review`, then the existing implementation. Claude will use the oracle text as the spec and flag every divergence.
-> Example: `/mtg-rules card` `Whenever a creature dies, you gain 1 life.` `review` `[paste code]`
+**Card implementation — generate code**:
+> "Read `.claude/skills/mtg-rules.md` and implement this card: `When Mulldrifter enters the battlefield, draw two cards. Evoke {2}{U}`"
+
+**Card implementation — review code**:
+> "Read `.claude/skills/mtg-rules.md` and review this code against the card text: `Whenever a creature dies, you gain 1 life.` [paste code]"
 
 When answering rules questions, cite the relevant Comprehensive Rules number (e.g., CR 704.5a) and note common edge cases or misconceptions.

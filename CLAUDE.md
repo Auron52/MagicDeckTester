@@ -14,22 +14,27 @@ The application is in early development — no build system, test runner, or sou
 
 This project has a custom skill at `.claude/skills/mtg-rules.md` that **all agents working in this repository must use**. It is the authoritative reference for both MTG rules correctness and implementation patterns.
 
-The skill has four modes:
+The skill is not an invokable slash command. Access it by reading the file directly:
 
-| Invocation | Purpose |
-|------------|---------|
-| `/mtg-rules <question>` | Answer a rules question with Comprehensive Rules citations |
-| `/mtg-rules review` | Review code or a diff for rule-violation bugs |
-| `/mtg-rules build <topic>` | Get data models and implementation patterns for an MTG concept |
-| `/mtg-rules card <oracle text>` | Generate an implementation stub from card oracle text |
-| `/mtg-rules card <oracle text> review <code>` | Review code against a specific card's oracle text as the spec |
+```
+Read `.claude/skills/mtg-rules.md` and [answer / implement / review] ...
+```
 
-### When to invoke the skill
+It covers four modes of use:
 
-- **Before implementing any MTG game mechanic** — use `build` mode to get correct data models and patterns. Do not implement from memory; the skill contains the ground-truth rules.
-- **Before implementing any specific card** — use `card` mode with the card's oracle text to generate the correct ability type, timing, and targeting structure.
-- **After implementing any MTG logic** — use `review` mode to catch rule-violation bugs before committing.
-- **When a rules question arises during development** — use rules mode rather than relying on training data; edge cases (layer system, state-based actions, replacement effects) are subtle and the skill has the precise rules.
+| Mode | Example prompt |
+|------|---------------|
+| Rules question | "Read the skill and answer: how does the legend rule work?" |
+| Code review | "Read the skill and review this implementation for rule violations." |
+| Build guidance | "Read the skill and give me patterns for implementing the stack." |
+| Card implementation | "Read the skill and implement this card: [oracle text]" |
+
+### When to consult the skill
+
+- **Before implementing any MTG game mechanic** — read the skill for correct data models and patterns; do not implement from memory.
+- **Before implementing any specific card** — read the skill and provide the card's oracle text to get the correct ability type, timing, and targeting structure.
+- **After implementing any MTG logic** — read the skill and review the code for rule-violation bugs before committing.
+- **When a rules question arises during development** — read the skill rather than relying on training data; edge cases (layer system, state-based actions, replacement effects) are subtle.
 
 ### Key correctness areas the skill covers
 
