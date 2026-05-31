@@ -409,7 +409,7 @@ Phase 2 adds a real opponent. This dramatically increases AI complexity. Key add
 
 *How much mana to hold open:*
 - Check your hand for instants and flash spells. Hold open enough mana to cast the cheapest one that would be profitable on the opponent's turn (removal, counterspell, flash creature).
-- If multiple instants are in hand, prioritise holding for the one most likely to matter against a generic opponent (removal > counterspell > cantrip).
+- If multiple instants are in hand, prioritise holding for the one most likely to matter against a generic opponent. Default priority: counterspell (if it can counter any spell) > removal > cantrip. Flip removal above counterspell if there is already a notable threat on the board that warrants immediate answers. Narrow counterspells (e.g. creature-only or noncreature-only) drop in priority proportionally to how likely the opponent is to cast a spell they can actually hit.
 - If nothing in hand is instant-speed, play out your hand normally and hold nothing.
 
 **Opponent model**: In goldfishing-vs-opponent mode, both AIs use the same encoded heuristics. The AI does not model the opponent's hand or future plays — it reacts to visible game state only.
