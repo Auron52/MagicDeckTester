@@ -25,7 +25,7 @@ These are the moments during a game where the AI must choose between legal optio
 | Decision Point | When | Notes |
 |---------------|------|-------|
 | Mulligan | Before game starts | Keep or send back opening hand |
-| Land drop | Main phase | Which land to play (one per turn) |
+| Land drop | Main phase | Which land to play; one per turn by default, more with effects like Exploration (see `landDropsAvailable()` in `mtg-rules.md`) |
 | Spell selection | Main phase / instant windows | Which spells to cast and in what order |
 | Mana payment | On cast | Which mana sources to tap; which color to produce |
 | Target selection | On cast / ability activation | Which legal targets to choose |
