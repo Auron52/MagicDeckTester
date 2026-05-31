@@ -342,21 +342,32 @@ Any event that requires randomness (coin flips, random discard from opponent's h
 
 ## AI Implementation Approach
 
-The core constraint from the specification is: **no inference calls during game execution**. The AI must be a self-contained program that makes all decisions locally at runtime without calling external services (LLMs, APIs, remote models).
+### Goals and Priority Order
 
-Within that constraint, any implementation technique is valid:
+When making implementation trade-offs, use this priority order:
 
-| Approach | Notes |
+1. **Accuracy** — the AI should make the best possible decisions. Heuristics are acceptable where they produce accurate play; where they don't, prefer search or a better approach even if it is more complex.
+2. **Performance** — running 10,000 games in a few hours is acceptable if it meaningfully improves accuracy. Don't sacrifice accuracy for speed unless the performance impact is prohibitive.
+3. **Simplicity** — prefer simpler implementations when accuracy is equal. Complexity is justified when it improves accuracy, not as an end in itself.
+4. **Determinism** — prefer deterministic algorithms. Where nondeterminism is unavoidable (e.g. MCTS rollouts), it must be driven by the game's seeded RNG so that the same seed always produces the same final result (win turn, board state, etc.). Nondeterminism that affects only internal search paths is acceptable; nondeterminism that changes game outcomes is not.
+
+### Hard Constraint
+
+**No inference calls during game execution.** The AI must be a self-contained program that makes all decisions locally at runtime without calling external services (LLMs, APIs, remote models). Offline training that produces a local model or policy table is fine; calling out to a model at decision time is not.
+
+### Choosing an Approach
+
+| Approach | When to use |
 |---|---|
-| Rule-based heuristics | What most of this skill describes; inspectable and correctable |
-| Search (minimax, MCTS, lookahead) | Fine for any decision point where the branching factor is tractable |
-| Offline-trained local models | Fine if the model is trained before the program runs and executes locally; not fine if it requires inference calls at runtime |
+| Rule-based heuristics | Good starting point; use where the heuristic is accurate enough and the decision space is simple |
+| Search (minimax, MCTS, lookahead) | Prefer over heuristics for complex decisions where the branching factor is tractable within the performance budget |
+| Offline-trained local models | Use where search is too expensive and a trained policy produces better accuracy than a heuristic |
 
-The heuristics in this skill are the starting point because they are simple to implement and easy to inspect when the game log shows a bad decision. Search or learned approaches can replace or augment them if a heuristic proves too weak for a given decision point — raise for discussion before implementing a non-heuristic approach so the complexity trade-off can be evaluated.
+The heuristics in this skill are a starting point, not the target. For any decision point where a heuristic produces clearly suboptimal play, search or a trained approach is the right answer — raise for discussion so the trade-off can be scoped before implementation.
 
-**When heuristics become impractical** (raise for discussion before proceeding):
-- Cards with open-ended modal choices where the best choice depends on information the AI can't see (opponent's hand in Phase 2)
-- Cards that require multi-turn planning (e.g., Suspend cards, Saga sequencing across 3+ turns)
+**When any encoded approach becomes impractical** (raise for discussion before proceeding):
+- Cards with open-ended modal choices that depend on information the AI can't see (opponent's hand in Phase 2)
+- Cards requiring multi-turn planning (e.g. Suspend, Saga sequencing across 3+ turns)
 - Highly synergistic combo decks where the win line requires a specific sequence across multiple turns
 
 For these cases, consider: (a) hardcoding a known combo line as a special case, (b) a limited search lookahead, or (c) flagging the card as "requires human review" in the log.
