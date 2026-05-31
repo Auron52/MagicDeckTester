@@ -45,49 +45,127 @@ The goldfishing AI's single objective is to **win as fast as possible**. Because
 
 ### Mulligan Heuristic
 
-Evaluate the opening hand before keeping:
+The mulligan decision is deck-dependent. No single function works across all archetypes — a 40-land deck wants 5–6 lands in hand, while a combo deck should mulligan aggressively until it sees its key piece. The heuristic is therefore parameterized by a **mulligan profile** attached to each deck.
+
+#### Mulligan Profile
+
+| Field | Default | Purpose |
+|---|---|---|
+| `minLands` | 1 | Mulligan if fewer lands than this |
+| `maxLands` | 5 | Mulligan if more lands than this |
+| `requiredPieces` | `[]` | Card names/IDs — mulligan unless at least one is in hand |
+| `skipCurveCheck` | `false` | Set true for decks that don't need early plays |
+| `stopAt` | 4 | Keep unconditionally once hand reaches this size |
+
+The defaults represent a generic fair deck. Non-generic archetypes must override:
+
+- **Land-heavy decks** (e.g. 40+ lands, one key non-land): raise `maxLands` to 6, add the key card(s) to `requiredPieces`, set `skipCurveCheck` to true.
+- **Combo decks** (must see a specific piece to function): add the required combo piece(s) to `requiredPieces`. The AI mulligans until a required piece appears or hand size reaches `stopAt`.
+- **Decks with no early plays by design**: set `skipCurveCheck` to true.
+
+`requiredPieces` uses OR logic — any one listed card satisfies the requirement. For AND requirements (must have card A AND card B), encode them as two separate `requiredPieces` checks evaluated together, or flag the deck for manual review if the combo is too narrow to simulate reliably.
+
+#### Heuristic
 
 ```
-keepHand(hand: Card[], onMulligan: int) -> bool:
-  landCount = count cards that are lands
-  nonLandCount = 7 - onMulligan - landCount
+keepHand(hand: Card[], onMulligan: int, profile: MulliganProfile) -> bool:
+  handSize = 7 - onMulligan
+  landCount = count cards in hand that are lands
+  nonLandCount = handSize - landCount
 
-  // Hard mulligans
-  if landCount == 0: return false
-  if landCount >= 6: return false
+  // Land count bounds
+  if landCount < profile.minLands: return false
+  if landCount > profile.maxLands: return false
   if nonLandCount == 0: return false
 
+  // Required pieces
+  if profile.requiredPieces is not empty:
+    if none of profile.requiredPieces are in hand: return false
+
   // Curve check: can we cast something in the first 2 turns?
-  castableByTurn2 = any card in hand with manaValue <= 2 and castable given landCount >= 2
-  if not castableByTurn2 and onMulligan < 2: return false
+  if not profile.skipCurveCheck:
+    castableByTurn2 = any card in hand with manaValue <= 2 and castable given landCount >= 2
+    if not castableByTurn2 and onMulligan < 2: return false
 
   return true
 ```
 
-On each mulligan, bottom one card before redrawing (Vancouver rule). Stop at 4 cards and keep whatever is dealt.
+On each mulligan, bottom one card before redrawing (Vancouver rule). Stop at `profile.stopAt` cards and keep unconditionally.
+
+**[Phase 2] Mulligan complexity increases significantly in 1v1.** The profile system above is Phase 1 only — it evaluates hands purely against your own game plan. In 1v1, the keep decision gains a second axis: does this hand answer the opponent's strategy?
+
+Concretely, a hand that is a fine goldfish may be an immediate mulligan against a specific opponent. Examples:
+- A fast aggro hand may be wrong to keep against a combo deck that wins on turn 3 if you have no disruption.
+- A hand full of removal is weak against a control deck with few creatures but correct against an aggro deck.
+
+Extending the profile naively (e.g. adding `requiredInteraction` fields) does not solve this cleanly, because the value of a given piece of interaction depends on what the opponent is doing — information the profile can't encode statically. **Raise for discussion before implementing Phase 2 mulligan logic.** The practical options are: (a) ignore the opponent dimension and accept the quality ceiling, (b) matchup-specific profile overrides authored per deck pairing, or (c) a limited hand evaluation that scores interaction against the known opponent decklist.
 
 ### Land Drop Decision
 
-Always play a land if one is available and the land drop hasn't been used this turn.
+The land drop decision is not just "do I have a land" — it's **which land and when within the turn**. Evaluate the land drop after resolving any draw effects so the full hand is visible before committing.
 
-When multiple lands are available:
-1. Prefer lands that produce colors needed to cast cards in hand this turn or next.
-2. Prefer lands that enter untapped over tapped.
-3. Among equal options, prefer basic lands (preserves non-basics for later flexibility).
+**Timing**: resolve cantrips, draw spells, and fetch crack decisions before playing a land. The land you'd have played at the start of main phase may no longer be the best choice after drawing.
+
+**Which land to play** (once you've decided to play one):
+1. Prefer the land that best matches the colors needed to cast cards in the current hand.
+2. Prefer lands that enter untapped over tapped — but only when you can use the additional mana this turn. If your planned spells don't consume the extra mana the untapped land would provide, prefer the tapped land instead and preserve the untapped land for a future turn where tempo matters.
+3. Among equal options, prefer the land that introduces a color not yet covered by lands already in play — a land that duplicates an existing color source is less valuable than one that opens a new color.
+
+**When not to play a land immediately**:
+- Hold the land drop until after draw effects resolve — a drawn land may be a better fit for the colors needed.
+- If you hold a fetch land and expect to draw this turn, crack the fetch after drawing to find the most color-appropriate land given the full hand.
+- If the only available land enters tapped and you have an untapped land you could play next turn, consider whether the tempo cost is worth it this turn.
+
+These are heuristics, not hard rules. Deck-specific logic may override them — a deck with heavy color requirements may always prioritize color fixing over tempo.
 
 ### Spell Selection and Sequencing
 
-Each main phase, collect all castable spells (affordable with available mana, legal targets exist if required). Then order them:
+Turn planning has two distinct phases that must run in order. The development heuristic only applies when the win-now check fails.
 
-**General priority order** (cast lower-priority items first if they enable higher-priority ones):
+#### Phase 1 — Win-Now Check
 
-1. **Mana producers** (mana dorks, rituals, ramp) — cast early so they fund later spells this turn
+Before selecting any spells, ask: **can I deal lethal damage this turn?**
+
+```
+canWinThisTurn(state) -> (bool, Sequence):
+  attackDamage = sum of power of creatures that can legally attack this turn
+  // For each affordable subset of direct-damage spells in hand:
+  //   check if attackDamage + spellDamage >= opponent.life
+  //   accounting for mana sequencing (rituals cast before payoffs)
+  // Return the winning sequence if one exists, else (false, [])
+```
+
+If a winning sequence exists, execute it — skip the development heuristic entirely. The winning sequence is not always obvious: you may need to cast a ritual or tap a mana dork before you can afford the burn spell that closes it out, meaning the sequencing itself must be solved, not just the damage total.
+
+**Complexity boundary**: For most decks this check is tractable (enumerate affordable direct-damage spells, sum with attacker power). It becomes a search problem when the win requires a specific multi-spell chain (e.g. ritual → ritual → payoff) or when pump spells interact with creature power in non-obvious ways. If the winning sequence search is too broad for a given card set, flag those cards for manual sequence annotation and fall back to the development heuristic.
+
+#### Phase 2 — Development Heuristic
+
+If no win this turn, the goal is to maximize board development toward winning a future turn. This has two sub-steps: **selection** (what to cast) then **sequencing** (in what order).
+
+**Selection — what to cast**
+
+Selection and sequencing are separate decisions. The priority order below governs sequencing only; do not use it to drive selection.
+
+Select the combination of spells that:
+1. Spends the most total mana this turn, then
+2. Among equally efficient combinations, maximises impact — generally: higher mana cost = higher impact; use the board evaluation function to break close ties.
+
+Mana producers (dorks, rituals) participate in this trade-off like any other spell. Include them when:
+- You need their mana this turn to afford a higher-impact spell (cast the producer first, then the payoff), or
+- There is spare mana remaining after selecting your main plays.
+
+Do not include a mana producer if doing so displaces a higher-cost spell and leaves total mana spent the same or lower. A 3-mana threat beats a 1-mana dork on a turn where you only have 3 mana — the dork can wait for a future turn when you have mana to spare.
+
+**Sequencing — in what order to cast**
+
+Once the set of spells to cast is decided, order them:
+
+1. **Mana producers** — cast first so they fund the spells that follow
 2. **Enablers** (cards whose value depends on other permanents being in play) — cast before the permanents they enable
 3. **Threats** (creatures, planeswalkers that advance the clock)
 4. **Card draw / filtering** — cast after threats to find more threats
 5. **Pump / combat tricks** — hold for the attack step if possible
-
-**Mana efficiency rule**: Prefer to spend all available mana each turn. Among castable spells, choose the combination that most fully uses available mana. If two spells cost `{2}` and `{3}` and you have 5 mana, cast both. If you must leave mana unused, spend it on the most impactful single spell.
 
 **Sequencing with ETB triggers**: If spell A's ETB trigger benefits from a permanent already being in play (e.g., "when this enters, put a +1/+1 counter on target creature you control"), cast the permanent first, then A.
 
@@ -101,22 +179,47 @@ For damage/removal effects (in goldfishing these mostly target the opponent dire
 - Target the opponent when possible
 - If forced to target a permanent (e.g., fight), pick the one that advances the win fastest
 
-For "up to N targets" — always choose N if there are legal targets.
+For "up to N targets" — choose as many targets as advance your position:
+- Beneficial effects (pump, protection, draw): always fill N from your own permanents/players if legal targets are available.
+- Negative effects (damage, destruction, debuffs): fill N from opponent permanents and the opponent only; never pad to N by targeting your own permanents or yourself.
 
 ### Attack Declaration
 
-In goldfishing, the opponent has no blockers. Always attack with every creature that can legally attack:
+In goldfishing, the opponent has no blockers. Attack with every creature that can legally attack, subject to the tap-ability exception below:
 - Must be untapped
 - Must not have summoning sickness (unless haste — see `mtg-rules.md`)
 - Must not have Defender
+
+**Exception — tap-requiring activated abilities**: Before committing a creature to the attack, check whether its tap ability provides more value than its combat damage this turn. If so, hold it back and use the ability during the main phase instead.
+
+| Ability type | Default action |
+|---|---|
+| Mana production | Use during main phase if you have spells left to cast; attack only if all castable spells are already on the stack and the mana would go unused |
+| Card advantage (draw, loot, filter) | Almost always prefer the tap ability — card selection exceeds 1–2 combat damage in virtually every scenario |
+| Tap-for-damage | Use the ability during main phase; creature ends up tapped either way, but this lets you pick targets and preserves Phase 2 flexibility |
+| Other (pump, bounce, etc.) | Evaluate case by case; prefer the ability if its immediate effect advances the win more than the combat damage |
+
+Creatures with none of the above always attack.
 
 Track `enteredThisTurn` on each permanent to enforce summoning sickness correctly.
 
 ### X Value Selection
 
-For damage spells targeting the opponent (`{X}: deals X damage to any target`): pay all remaining mana into X.
-For spells that put X counters on a creature: pay all remaining mana into X.
-For draw spells (`draw X cards`): pay all remaining mana into X, unless hand is already full.
+X spells are not a simple mana dump. Whether to cast at all, and for how much, depends on the spell type.
+
+**Damage X spells** (`{X}: deals X damage to any target`, e.g. Fireball, Crackle with Power):
+- Evaluate as part of the win-now check first. If casting for lethal this turn, include in the winning sequence at the required X.
+- If not part of a lethal line, default to holding rather than casting for a small X. Spending mana on a damage spell that does not close the game is usually worse than developing the board. Decks that use X damage spells as their primary finisher should almost never cast them for sub-lethal amounts.
+- Exception: cast for partial damage if the deck has no other use for the mana and the game is in a late, mana-flush state.
+
+**Creature pump X spells** (`put X +1/+1 counters on target creature`): pay all remaining mana into X — growing a permanent threat is always worth maximising.
+
+**Draw X spells** (`draw X cards`):
+- Participate in spell selection like any other spell — higher-impact plays take priority and are cast first. The draw spell only gets cast with whatever mana remains after those.
+- Do not cast if the remaining mana after other plays would produce a low X. Holding for a future turn at full mana is usually better than drawing 1–2 cards now. A reasonable default minimum: X ≥ 3, or a deck-specific threshold.
+- Do not use low hand size alone as a trigger to cast early — play out other spells first, then reassess with the mana that remains.
+- When mana is high, do not dump all of it into X. Reserve enough mana to cast at least one spell from what you draw — how much to hold back is deck-dependent on the curve (e.g. a deck full of three-drops should hold at least 3). Drawing a large number of cards and then having no mana to act on them wastes a full turn.
+- Clear exception: if this is your only remaining nonland card in hand and you have full or near-full mana, cast it. There is no benefit to holding when there is nothing else to do.
 
 ### Activated Abilities
 
@@ -237,21 +340,26 @@ Any event that requires randomness (coin flips, random discard from opponent's h
 
 ---
 
-## Encoding the AI Logic
+## AI Implementation Approach
 
-The spec calls for the AI to be **encoded** — rule-based logic hardcoded into the engine — rather than a learned or search-based system. This is the correct approach for Phase 1 and likely Phase 2 given the project goals.
+The core constraint from the specification is: **no inference calls during game execution**. The AI must be a self-contained program that makes all decisions locally at runtime without calling external services (LLMs, APIs, remote models).
 
-**Why encoded logic fits here:**
-- The objective (goldfish as fast as possible) is well-defined and narrow
-- Deck-testing validity depends on the AI making *reasonable* plays, not *optimal* plays — an encoded heuristic is inspectable and correctable when it makes mistakes
-- Game logs are intended for Claude to review; encoded logic produces explainable decisions
+Within that constraint, any implementation technique is valid:
 
-**When encoded logic becomes impractical** (raise for discussion before proceeding):
+| Approach | Notes |
+|---|---|
+| Rule-based heuristics | What most of this skill describes; inspectable and correctable |
+| Search (minimax, MCTS, lookahead) | Fine for any decision point where the branching factor is tractable |
+| Offline-trained local models | Fine if the model is trained before the program runs and executes locally; not fine if it requires inference calls at runtime |
+
+The heuristics in this skill are the starting point because they are simple to implement and easy to inspect when the game log shows a bad decision. Search or learned approaches can replace or augment them if a heuristic proves too weak for a given decision point — raise for discussion before implementing a non-heuristic approach so the complexity trade-off can be evaluated.
+
+**When heuristics become impractical** (raise for discussion before proceeding):
 - Cards with open-ended modal choices where the best choice depends on information the AI can't see (opponent's hand in Phase 2)
 - Cards that require multi-turn planning (e.g., Suspend cards, Saga sequencing across 3+ turns)
 - Highly synergistic combo decks where the win line requires a specific sequence across multiple turns
 
-For these cases, consider: (a) hardcoding a known combo line as a special case, (b) a limited lookahead (1–2 turns), or (c) flagging the card as "requires human review" in the log.
+For these cases, consider: (a) hardcoding a known combo line as a special case, (b) a limited search lookahead, or (c) flagging the card as "requires human review" in the log.
 
 ---
 
