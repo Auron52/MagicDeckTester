@@ -450,6 +450,31 @@ StackEntry {
 }
 ```
 
+**Player**
+```
+Player {
+  life: int
+  hand: Card[]
+  library: Card[]       // ordered; index 0 = top
+  graveyard: Card[]
+  landsPlayedThisTurn: int          // reset to 0 at start of untap step
+  bonusLandDropsThisTurn: int       // one-time grants ("play an additional land this turn"); reset to 0 at start of untap step
+  poisonCounters: int
+}
+```
+
+Whether a player may play a land is: `landsPlayedThisTurn < landDropsAvailable(player, state)`, where:
+
+```
+landDropsAvailable(player, state) -> int:
+  base = 1
+  base += count of static effects on the battlefield granting additional land drops (e.g. Exploration)
+  base += player.bonusLandDropsThisTurn
+  return base
+```
+
+Static effects (Exploration, Oracle of Mul Daya) are evaluated continuously against the current battlefield — they are not stored in the Player struct. One-time triggered grants increment `bonusLandDropsThisTurn` when they resolve.
+
 **Game State**
 ```
 GameState {
