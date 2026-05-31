@@ -102,7 +102,9 @@ Extending the profile naively (e.g. adding `requiredInteraction` fields) does no
 
 ### Land Drop Decision
 
-The land drop decision is not just "do I have a land" — it's **which land and when within the turn**. Evaluate the land drop after resolving any draw effects so the full hand is visible before committing.
+A player may play one land per turn by default, but effects like Exploration grant additional drops. The engine tracks this via `landDropsAvailable()` (see `mtg-rules.md`). The AI must loop over available drops — not assume exactly one — re-evaluating after each land played since the hand and mana situation change.
+
+The decision is not just "do I have a land" — it's **which land and when within the turn**. Evaluate each drop after resolving any draw effects so the full hand is visible before committing.
 
 **Timing**: resolve cantrips, draw spells, and fetch crack decisions before playing a land. The land you'd have played at the start of main phase may no longer be the best choice after drawing.
 
