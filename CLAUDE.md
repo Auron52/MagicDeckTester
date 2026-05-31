@@ -47,3 +47,27 @@ The skill contains detailed rules and implementation guidance for the areas most
 - Zone transitions (objects become new objects when changing zones)
 - The layer system for continuous effects
 - Triggered vs. replacement effects (replacement effects do not use the stack)
+
+## MTG AI Skill
+
+This project has a second custom skill at `.claude/skills/mtg-ai.md` covering the AI engine: decision-making, board evaluation, game logging, and deterministic seeding. It builds on top of the rules skill.
+
+Read it before implementing any AI decision logic, the game log format, the shuffle/seeding system, or opponent behaviour.
+
+```
+Read `.claude/skills/mtg-ai.md` and [implement / design / review] ...
+```
+
+| Mode | Example prompt |
+|------|---------------|
+| AI decisions | "Read the skill and implement the spell selection logic for the goldfishing AI." |
+| Game logging | "Read the skill and implement the game logging module." |
+| Seeding | "Read the skill and implement card numbering and deterministic shuffle seeding." |
+| Phase 2 planning | "Read the skill and outline what changes when we add a real opponent." |
+
+### When to consult the skill
+
+- **Before implementing any AI decision point** — read the skill for the heuristic ordering and evaluation approach.
+- **Before designing the game log format** — the skill specifies the required structure and disk-cleanup policy.
+- **Before implementing shuffle or random event logic** — the seeding contract between d1 and d2 is non-obvious; read the skill first.
+- **When considering Phase 2 (opponent AI)** — the skill flags where encoded logic becomes impractical and prompts a discussion.

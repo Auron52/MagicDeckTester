@@ -1,0 +1,51 @@
+A C++ application that can aid in the creation of modification of Magic Decks by playing games to compare the performance of different cards.
+
+Stages of the Application:
+
+PHASE 1
+
+1. Create an endpoint that can take in either a text file or a Cockatrice (.cod) file (examples will be provided on request) as a decklist. The input deck will be tested playing against an opponent with 20 life that does nothing. (also known as goldfishing) The important metric here is determining the average turn that the deck wins.
+
+2. Generate templates to minimize code generation of future cards. Use these to support logic for a sizeable set of decks (a directory of these will be provided by the user) and verify their logic using the card review option and goldfishing decklist average win turn.
+
+During this portion we should do most of the work required to handle these decks within the AI engine, which should be encoded. If this is impractical for some reason, (i.e. we need inference calls)  please bring up this point for discussion.
+
+3. Create a new testing mode that takes in two versions (in the future we may allow more) of a decklist d1 and d2 and goldfishes them 10,000 times (or a configurable number) each against an opponent, comparing the winrates. 
+
+An important piece is that we should persist what happened in the games for review, so that bugs in the AI or card implementation can be evaluated. Perhaps there should be a routine to clean these up when they start to take up too much disk space. The format should be understandable enough that claude can be asked to evaluate the decision making and results.
+
+Importantly, the decklists should be tested with exactly the same results of random factors. For example:
+a. The cards should be numbered 1-60. (or more if needed, but most should be 60) Cards that are the same between the two lists should have the same numbers.
+b. Shuffle n of the deck should result in the same resulting order (of the numbered cards) for both d1 and d2, aside from . This . These shuffles may happen at the start of the game, to draw an initial hand
+c. Similarly any other random event should be seeded in the same manner.
+
+These rules are intended to both keep the unnecessary game-to-game variance to a minimum and make it easier to evaluate specific games. 
+
+4. Implement a gui using a cross-platform gui toolkit (possibly QT)
+
+This gui would primarily allow playback of previous matches, either chosen randomly or based on specific inputs (like matches that the results changed)
+
+Preferable the UI would play out approximately like a video, with motions being carried out at a specific speed, so the user can evaluate whether what they are seeing is correct.
+
+Once this phase is completed this will be a helpful application for testing decklists.
+
+5. (optional) Upgrade the UI to take human input, so their decisions can be an input into AI behaviour. This step would preferably not 
+
+PHASE 2
+
+1. If possible we would like to drop the goldfishing requirement and begin to test against other decklists in 1-vs-1 matches.
+
+This step should include both adding the opponent and improving the AI engine to support an opponent.
+
+This provides significant complication to the AI, so it should be discussed if continuing to codify the logic is practical.
+
+Realistically we will probably want to test against a number of different opponents to get a realistic idea of the impact, so the set of opponents should be flexible.
+
+
+2. Extend the GUI to include the opponent in the playback of each game.
+
+
+
+
+
+
