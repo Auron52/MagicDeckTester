@@ -233,9 +233,9 @@ X spells are not a simple mana dump. Whether to cast at all, and for how much, d
 ### Activated Abilities
 
 Evaluate each activated ability at every priority window:
-- If the ability deals damage to the opponent and you have enough mana: activate immediately during main phase before the attack step (so summoning-sick creatures still get to attack)
-- If the ability requires tapping a creature, activate before declaring attackers
-- Loyalty abilities: activate once per turn during main phase; prefer +loyalty abilities unless the ultimate is reachable this turn
+- **Tap-costed abilities**: check `canAttackOrTap` before activating — summoning-sick creatures (those that entered this turn without haste) cannot activate tap abilities, just as they cannot attack. If the ability requires tapping a creature, activate before declaring attackers so the creature isn't already committed to combat.
+- If the ability deals damage to the opponent and you have enough mana: activate during main phase before the attack step.
+- Loyalty abilities: activate once per turn during main phase; prefer +loyalty abilities unless the ultimate is reachable this turn.
 
 ---
 
@@ -397,6 +397,20 @@ Phase 2 adds a real opponent. This dramatically increases AI complexity. Key add
 **Reactive spell casting**:
 - Hold instants until the opponent's end step if no immediate trigger requires earlier use
 - Counter spells only when the opponent casts a threat that would otherwise win the game
+
+**Information hiding and mana openness** *(not applicable in goldfishing)*:
+- Avoid tapping out or playing most of your hand in the first main phase. Doing so reveals your resources to the opponent and removes your ability to respond with instants or flash spells during their turn.
+- Prefer deferring sorcery-speed plays to the second main phase when doing so doesn't cost tempo (e.g. a creature that attacks this turn anyway should be cast before combat; a creature that enters tapped or won't affect combat can wait).
+
+*When to cast in first main phase anyway:*
+- The spell has immediate combat relevance this turn (a creature that needs to attack, a pump spell, an equipment you want to equip before attackers are declared).
+- The spell is your primary win condition and the board will fall apart if you wait (e.g. your only remaining threat into an opponent with lethal next turn).
+- You have no instants or flash spells in hand — holding mana open has no upside if you have nothing to do with it.
+
+*How much mana to hold open:*
+- Check your hand for instants and flash spells. Hold open enough mana to cast the cheapest one that would be profitable on the opponent's turn (removal, counterspell, flash creature).
+- If multiple instants are in hand, prioritise holding for the one most likely to matter against a generic opponent (removal > counterspell > cantrip).
+- If nothing in hand is instant-speed, play out your hand normally and hold nothing.
 
 **Opponent model**: In goldfishing-vs-opponent mode, both AIs use the same encoded heuristics. The AI does not model the opponent's hand or future plays — it reacts to visible game state only.
 
