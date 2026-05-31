@@ -130,10 +130,17 @@ Before selecting any spells, ask: **can I deal lethal damage this turn?**
 
 ```
 canWinThisTurn(state) -> (bool, Sequence):
-  attackDamage = sum of power of creatures that can legally attack this turn
-  // For each affordable subset of direct-damage spells in hand:
-  //   check if attackDamage + spellDamage >= opponent.life
-  //   accounting for mana sequencing (rituals cast before payoffs)
+  // effectivePower must be computed through the layer system — not read from base values.
+  // Static power bonuses from lords and other continuous effects can be the margin
+  // that makes lethal reachable. Lords may be on the battlefield already or in hand —
+  // a lord cast this turn before the attack applies its bonus to the attack.
+  attackDamage = sum of effectivePower of creatures that can legally attack this turn
+                 given the current battlefield (lords already in play included)
+  // For each affordable subset of spells in hand that could be cast pre-attack
+  //   (direct damage spells, lords/pump that raise effectivePower of attackers):
+  //   recompute attackDamage with the lord/pump applied, add direct damage
+  //   check if total >= opponent.life
+  //   accounting for mana sequencing (lords and rituals cast before payoffs and attack)
   // Return the winning sequence if one exists, else (false, [])
 ```
 
