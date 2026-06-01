@@ -1,5 +1,6 @@
 #pragma once
 #include "../deck/DeckLoader.h"
+#include "../core/GameState.h"
 #include <vector>
 #include <cstdint>
 
