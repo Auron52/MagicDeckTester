@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <random>
 #include "deck/DeckLoader.h"
 #include "runner/GoldFishRunner.h"
 
@@ -11,7 +12,7 @@ static void printUsage(const char* prog)
               << " <deckfile> [--games N] [--seed S] [--max-turns T]\n"
               << "  <deckfile>     Plain text (.txt) or Cockatrice (.cod) decklist\n"
               << "  --games N      Number of games to simulate (default: 1000)\n"
-              << "  --seed S       Base RNG seed (default: 42)\n"
+              << "  --seed S       Base RNG seed (omit to generate randomly)\n"
               << "  --max-turns T  Maximum turns before declaring no-win (default: 20)\n";
 }
 
@@ -24,9 +25,10 @@ int main(int argc, char* argv[])
     }
 
     std::filesystem::path deckPath = argv[1];
-    int      numGames = 1000;
-    uint64_t seed     = 42;
-    int      maxTurns = 20;
+    int      numGames    = 1000;
+    int      maxTurns    = 20;
+    uint64_t seed        = 0;
+    bool     seedProvided = false;
 
     for (int i = 2; i < argc - 1; ++i)
     {
@@ -39,7 +41,8 @@ int main(int argc, char* argv[])
             }
             else if (flag == "--seed")
             {
-                seed = std::stoull(argv[i + 1]);
+                seed          = std::stoull(argv[i + 1]);
+                seedProvided  = true;
             }
             else if (flag == "--max-turns")
             {
@@ -51,6 +54,12 @@ int main(int argc, char* argv[])
             std::cerr << "Invalid value for " << flag << ": " << argv[i + 1] << "\n";
             return 1;
         }
+    }
+
+    if (!seedProvided)
+    {
+        std::random_device rd;
+        seed = (static_cast<uint64_t>(rd()) << 32) | rd();
     }
 
     try
@@ -66,6 +75,7 @@ int main(int argc, char* argv[])
         GoldFishRunner runner;
         RunResult result = runner.run(deck, numGames, seed, maxTurns);
 
+        std::cout << "Seed         : " << result.seed << "\n";
         std::cout << "Games played : " << result.gamesPlayed << "\n";
         std::cout << "Games won    : " << result.gamesWon
                   << " (" << (100.0 * result.gamesWon / result.gamesPlayed) << "%)\n";
