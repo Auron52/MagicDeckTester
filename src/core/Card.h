@@ -42,20 +42,43 @@ struct Card {
     bool isInstant()   const { return hasType(CardType::Instant); }
     bool isSorcery()   const { return hasType(CardType::Sorcery); }
 
-    bool hasType(CardType t)    const;
+    bool hasType(CardType t)       const;
     bool hasSupertype(Supertype s) const;
-    bool hasKeyword(Keyword k)  const;
+    bool hasKeyword(Keyword k)     const;
 };
 
-inline bool Card::hasType(CardType t) const {
-    for (auto ct : types) if (ct == t) return true;
+inline bool Card::hasType(CardType t) const
+{
+    for (auto ct : types)
+    {
+        if (ct == t)
+        {
+            return true;
+        }
+    }
     return false;
 }
-inline bool Card::hasSupertype(Supertype s) const {
-    for (auto st : supertypes) if (st == s) return true;
+
+inline bool Card::hasSupertype(Supertype s) const
+{
+    for (auto st : supertypes)
+    {
+        if (st == s)
+        {
+            return true;
+        }
+    }
     return false;
 }
-inline bool Card::hasKeyword(Keyword k) const {
-    for (auto kw : keywords) if (kw == k) return true;
+
+inline bool Card::hasKeyword(Keyword k) const
+{
+    for (auto kw : keywords)
+    {
+        if (kw == k)
+        {
+            return true;
+        }
+    }
     return false;
 }
