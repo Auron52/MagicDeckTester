@@ -43,10 +43,10 @@ void GameEngine::untapStep(GameState& state)
 {
     state.phase = Phase::Beginning;
     state.step  = Step::Untap;
-    auto& ap = state.activePlayer();
+    Player& ap = state.activePlayer();
     ap.landsPlayedThisTurn    = 0;
     ap.bonusLandDropsThisTurn = 0;
-    for (auto& p : state.battlefield)
+    for (Permanent& p : state.battlefield)
     {
         if (p.controller == &ap)
         {
@@ -67,7 +67,7 @@ void GameEngine::upkeepStep(GameState& state)
 void GameEngine::drawStep(GameState& state)
 {
     state.step = Step::Draw;
-    auto& ap = state.activePlayer();
+    Player& ap = state.activePlayer();
     if (ap.library.empty())
     {
         state.playerLostOnDraw = true;
@@ -96,13 +96,13 @@ void GameEngine::combatPhase(GameState& state)
     resolveStack(state);
 
     state.step = Step::DeclareAttackers;
-    auto attackers = ai_.declareAttackers(state);
+    std::vector<Permanent*> attackers = ai_.declareAttackers(state);
     // Phase 1: opponent has no blockers; all attackers deal damage unblocked.
     resolveStack(state);
 
     state.step = Step::CombatDamage;
-    auto& opp = state.opponent();
-    for (auto* attacker : attackers)
+    Player& opp = state.opponent();
+    for (Permanent* attacker : attackers)
     {
         opp.life -= attacker->effectivePower();
         if (!attacker->card.hasKeyword(Keyword::Vigilance))
@@ -128,7 +128,7 @@ void GameEngine::endStep(GameState& state)
 void GameEngine::cleanupStep(GameState& state)
 {
     state.step = Step::Cleanup;
-    auto& ap = state.activePlayer();
+    Player& ap = state.activePlayer();
 
     // Discard to maximum hand size (7 by default; hand-size modifiers deferred to Phase 1.2)
     while (ap.hand.size() > 7)
@@ -140,7 +140,7 @@ void GameEngine::cleanupStep(GameState& state)
     }
 
     // Remove all damage marks from permanents (CR 514.2)
-    for (auto& p : state.battlefield)
+    for (Permanent& p : state.battlefield)
     {
         p.damage = 0;
     }
@@ -171,9 +171,9 @@ void GameEngine::checkStateBasedActions(GameState& state)
     while (changed)
     {
         changed = false;
-        for (auto it = state.battlefield.begin(); it != state.battlefield.end(); )
+        for (std::vector<Permanent>::iterator it = state.battlefield.begin(); it != state.battlefield.end(); )
         {
-            auto& p = *it;
+            Permanent& p = *it;
             bool destroy = p.markedForDestruction;
             if (p.card.isCreature())
             {
