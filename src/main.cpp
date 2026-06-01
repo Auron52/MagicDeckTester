@@ -11,7 +11,7 @@ static void printUsage(const char* prog)
     std::cerr << "Usage: " << prog
               << " <deckfile> [--games N] [--seed S] [--max-turns T]\n"
               << "  <deckfile>     Plain text (.txt) or Cockatrice (.cod) decklist\n"
-              << "  --games N      Number of games to simulate (default: 1000)\n"
+              << "  --games N      Number of games to simulate (default: 10000)\n"
               << "  --seed S       Base RNG seed (omit to generate randomly)\n"
               << "  --max-turns T  Maximum turns before declaring no-win (default: 20)\n";
 }
@@ -25,7 +25,7 @@ int main(int argc, char* argv[])
     }
 
     std::filesystem::path deckPath = argv[1];
-    int      numGames    = 1000;
+    int      numGames    = 10000;
     int      maxTurns    = 20;
     uint64_t seed        = 0;
     bool     seedProvided = false;
