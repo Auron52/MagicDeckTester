@@ -7,6 +7,7 @@
 RunResult GoldFishRunner::run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns)
 {
     RunResult result;
+    result.seed        = baseSeed;
     result.gamesPlayed = numGames;
     result.winTurns.reserve(numGames);
 
