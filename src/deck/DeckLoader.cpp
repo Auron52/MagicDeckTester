@@ -8,12 +8,12 @@
 
 static std::string trim(const std::string& s)
 {
-    auto start = s.find_first_not_of(" \t\r\n");
+    std::string::size_type start = s.find_first_not_of(" \t\r\n");
     if (start == std::string::npos)
     {
         return "";
     }
-    auto end = s.find_last_not_of(" \t\r\n");
+    std::string::size_type end = s.find_last_not_of(" \t\r\n");
     return s.substr(start, end - start + 1);
 }
 
@@ -100,7 +100,7 @@ Decklist DeckLoader::loadTextFile(const std::filesystem::path& path)
         }
 
         // Strip set/collector info from Arena exports: "Card Name (SET) 123"
-        auto paren = name.find(" (");
+        std::string::size_type paren = name.find(" (");
         if (paren != std::string::npos)
         {
             name = name.substr(0, paren);
@@ -136,7 +136,7 @@ Decklist DeckLoader::loadCockatrice(const std::filesystem::path& path)
     {
         std::string zoneName = zone.attribute("name").as_string();
         bool isSide = (zoneName == "side" || zoneName == "sideboard");
-        auto& target = isSide ? deck.sideboard : deck.mainboard;
+        std::vector<Card>& target = isSide ? deck.sideboard : deck.mainboard;
 
         for (pugi::xml_node card : zone.children("card"))
         {

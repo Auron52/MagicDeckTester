@@ -6,7 +6,7 @@ AIEngine::AIEngine(MulliganProfile profile) : profile_(std::move(profile)) {}
 
 void AIEngine::handleMulligan(GameState& state)
 {
-    auto& ap = state.activePlayer();
+    Player& ap = state.activePlayer();
 
     // Draw opening hand of 7
     int draw = std::min(7, static_cast<int>(ap.library.size()));
@@ -22,7 +22,7 @@ void AIEngine::handleMulligan(GameState& state)
     {
         // Return hand to library; GoldFishRunner has already shuffled for this game,
         // so re-shuffle here to simulate the physical shuffle during a mulligan.
-        for (auto& c : ap.hand)
+        for (Card& c : ap.hand)
         {
             ap.library.push_back(c);
         }
@@ -64,7 +64,7 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
     }
 
     int landCount = 0;
-    for (const auto& c : hand)
+    for (const Card& c : hand)
     {
         if (c.isLand())
         {
@@ -89,9 +89,9 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
     if (!profile_.requiredPieces.empty())
     {
         bool found = false;
-        for (const auto& piece : profile_.requiredPieces)
+        for (const std::string& piece : profile_.requiredPieces)
         {
-            for (const auto& c : hand)
+            for (const Card& c : hand)
             {
                 if (c.name == piece)
                 {
@@ -109,7 +109,7 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
     if (!profile_.skipCurveCheck)
     {
         bool hasTwoDrop = false;
-        for (const auto& c : hand)
+        for (const Card& c : hand)
         {
             if (!c.isLand() && c.manaCost.manaValue() <= 2 && landCount >= 2)
             {
@@ -127,12 +127,12 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
 
 void AIEngine::bottomCards(GameState& state, int count)
 {
-    auto& ap = state.activePlayer();
+    Player& ap = state.activePlayer();
     // Bottom the highest-mana-value cards first (fewest immediate options lost).
     // TODO: smarter bottoming once CardDatabase provides card role context (Phase 1.2).
     for (int i = 0; i < count && !ap.hand.empty(); ++i)
     {
-        auto worst = std::max_element(ap.hand.begin(), ap.hand.end(),
+        std::vector<Card>::iterator worst = std::max_element(ap.hand.begin(), ap.hand.end(),
             [](const Card& a, const Card& b)
             {
                 return a.manaCost.manaValue() < b.manaCost.manaValue();
@@ -153,8 +153,8 @@ void AIEngine::takeTurn(GameState& state, bool isPreCombatMain)
 std::vector<Permanent*> AIEngine::declareAttackers(GameState& state)
 {
     std::vector<Permanent*> attackers;
-    auto& ap = state.activePlayer();
-    for (auto& p : state.battlefield)
+    Player& ap = state.activePlayer();
+    for (Permanent& p : state.battlefield)
     {
         if (p.controller == &ap
             && p.card.isCreature()
@@ -170,7 +170,7 @@ std::vector<Permanent*> AIEngine::declareAttackers(GameState& state)
 
 Card* AIEngine::chooseDiscard(GameState& state)
 {
-    auto& ap = state.activePlayer();
+    Player& ap = state.activePlayer();
     if (ap.hand.empty())
     {
         throw std::runtime_error("chooseDiscard called with empty hand");

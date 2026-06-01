@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
 
     try
     {
-        auto deck = DeckLoader::loadFromFile(deckPath);
+        Decklist deck = DeckLoader::loadFromFile(deckPath);
         std::cout << "Loaded " << deck.mainboard.size() << " mainboard card(s)";
         if (!deck.sideboard.empty())
         {
@@ -64,7 +64,7 @@ int main(int argc, char* argv[])
         std::cout << "\n";
 
         GoldFishRunner runner;
-        auto result = runner.run(deck, numGames, seed, maxTurns);
+        RunResult result = runner.run(deck, numGames, seed, maxTurns);
 
         std::cout << "Games played : " << result.gamesPlayed << "\n";
         std::cout << "Games won    : " << result.gamesWon
