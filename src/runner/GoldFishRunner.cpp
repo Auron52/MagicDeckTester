@@ -4,7 +4,8 @@
 #include <random>
 #include <numeric>
 
-RunResult GoldFishRunner::run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns) {
+RunResult GoldFishRunner::run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns)
+{
     RunResult result;
     result.gamesPlayed = numGames;
     result.winTurns.reserve(numGames);
@@ -12,18 +13,28 @@ RunResult GoldFishRunner::run(const Decklist& deck, int numGames, uint64_t baseS
     AIEngine   ai;
     GameEngine engine(ai);
 
-    for (int i = 0; i < numGames; ++i) {
+    for (int i = 0; i < numGames; ++i)
+    {
         GameState state = setupGame(deck, baseSeed + static_cast<uint64_t>(i));
         int winTurn = engine.runGame(state, maxTurns);
         result.winTurns.push_back(winTurn);
-        if (winTurn > 0) ++result.gamesWon;
+        if (winTurn > 0)
+        {
+            ++result.gamesWon;
+        }
     }
 
-    if (result.gamesWon > 0) {
+    if (result.gamesWon > 0)
+    {
         long long sum = 0;
         int count = 0;
-        for (int t : result.winTurns) {
-            if (t > 0) { sum += t; ++count; }
+        for (int t : result.winTurns)
+        {
+            if (t > 0)
+            {
+                sum += t;
+                ++count;
+            }
         }
         result.averageWinTurn = static_cast<double>(sum) / count;
     }
@@ -31,7 +42,8 @@ RunResult GoldFishRunner::run(const Decklist& deck, int numGames, uint64_t baseS
     return result;
 }
 
-GameState GoldFishRunner::setupGame(const Decklist& deck, uint64_t seed) {
+GameState GoldFishRunner::setupGame(const Decklist& deck, uint64_t seed)
+{
     GameState state;
 
     // Player 0 = goldfishing AI; Player 1 = do-nothing opponent (Phase 1)
@@ -50,7 +62,8 @@ GameState GoldFishRunner::setupGame(const Decklist& deck, uint64_t seed) {
     return state;
 }
 
-void GoldFishRunner::shuffleLibrary(std::vector<Card>& library, uint64_t seed) {
+void GoldFishRunner::shuffleLibrary(std::vector<Card>& library, uint64_t seed)
+{
     std::mt19937_64 rng(seed);
     std::shuffle(library.begin(), library.end(), rng);
 }

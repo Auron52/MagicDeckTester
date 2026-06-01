@@ -29,22 +29,38 @@ struct Permanent {
     bool canAttackOrTap() const { return !enteredThisTurn || card.hasKeyword(Keyword::Haste); }
 };
 
-inline int Permanent::effectivePower() const {
+inline int Permanent::effectivePower() const
+{
     // TODO: route through layer system when continuous effects are implemented (Phase 1.2)
     int p = card.power.value_or(0);
-    for (const auto& c : counters) {
-        if (c.type == Counter::Type::PlusOnePlusOne)   p += c.count;
-        if (c.type == Counter::Type::MinusOneMinusOne) p -= c.count;
+    for (const auto& c : counters)
+    {
+        if (c.type == Counter::Type::PlusOnePlusOne)
+        {
+            p += c.count;
+        }
+        if (c.type == Counter::Type::MinusOneMinusOne)
+        {
+            p -= c.count;
+        }
     }
     return p;
 }
 
-inline int Permanent::effectiveToughness() const {
+inline int Permanent::effectiveToughness() const
+{
     // TODO: route through layer system when continuous effects are implemented (Phase 1.2)
     int t = card.toughness.value_or(0);
-    for (const auto& c : counters) {
-        if (c.type == Counter::Type::PlusOnePlusOne)   t += c.count;
-        if (c.type == Counter::Type::MinusOneMinusOne) t -= c.count;
+    for (const auto& c : counters)
+    {
+        if (c.type == Counter::Type::PlusOnePlusOne)
+        {
+            t += c.count;
+        }
+        if (c.type == Counter::Type::MinusOneMinusOne)
+        {
+            t -= c.count;
+        }
     }
     return t;
 }
