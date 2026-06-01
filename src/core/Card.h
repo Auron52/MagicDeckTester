@@ -49,7 +49,7 @@ struct Card {
 
 inline bool Card::hasType(CardType t) const
 {
-    for (auto ct : types)
+    for (CardType ct : types)
     {
         if (ct == t)
         {
@@ -61,7 +61,7 @@ inline bool Card::hasType(CardType t) const
 
 inline bool Card::hasSupertype(Supertype s) const
 {
-    for (auto st : supertypes)
+    for (Supertype st : supertypes)
     {
         if (st == s)
         {
@@ -73,7 +73,7 @@ inline bool Card::hasSupertype(Supertype s) const
 
 inline bool Card::hasKeyword(Keyword k) const
 {
-    for (auto kw : keywords)
+    for (Keyword kw : keywords)
     {
         if (kw == k)
         {
