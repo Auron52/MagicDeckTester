@@ -40,7 +40,9 @@ void AIEngine::handleMulligan(GameState& state) {
 }
 
 bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const {
-    if (static_cast<int>(hand.size()) <= profile_.stopAt) return true;
+    int effectiveSize = static_cast<int>(hand.size()) - mulliganCount;
+    if (effectiveSize <= 1)                return true;  // hard floor: never go below 1
+    if (effectiveSize <= profile_.stopAt)  return true;
 
     int landCount    = 0;
     for (const auto& c : hand) if (c.isLand()) ++landCount;
