@@ -1,11 +1,12 @@
 #pragma once
 #include "Card.h"
+#include "Library.h"
 #include <vector>
 
 struct Player {
     int life                    = 20;
     std::vector<Card> hand;
-    std::vector<Card> library;      // index 0 = top of library
+    Library           library;      // index 0 = top of library
     std::vector<Card> graveyard;
     int landsPlayedThisTurn     = 0;
     int bonusLandDropsThisTurn  = 0;  // one-time grants; reset in untap step

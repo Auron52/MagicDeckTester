@@ -1,6 +1,5 @@
 #include "AIEngine.h"
 #include <algorithm>
-#include <random>
 #include <stdexcept>
 
 AIEngine::AIEngine(MulliganProfile profile) : profile_(std::move(profile)) {}
@@ -13,8 +12,7 @@ void AIEngine::handleMulligan(GameState& state)
     int draw = std::min(7, static_cast<int>(ap.library.size()));
     for (int i = 0; i < draw; ++i)
     {
-        ap.hand.push_back(ap.library.front());
-        ap.library.erase(ap.library.begin());
+        ap.hand.push_back(ap.library.drawTop());
     }
 
     int mulliganCount = 0;
@@ -29,16 +27,14 @@ void AIEngine::handleMulligan(GameState& state)
         ap.hand.clear();
         // Derive a per-mulligan seed so each reshuffle produces a distinct order.
         // TODO: replace with the unified seeded RNG in Phase 1.3.
-        std::mt19937_64 rng(state.gameSeed + static_cast<uint64_t>(mulliganCount));
-        std::shuffle(ap.library.begin(), ap.library.end(), rng);
+        ap.library.shuffle(state.gameSeed + static_cast<uint64_t>(mulliganCount));
 
         ++mulliganCount;
 
         int toDraw = std::min(7, static_cast<int>(ap.library.size()));
         for (int i = 0; i < toDraw; ++i)
         {
-            ap.hand.push_back(ap.library.front());
-            ap.library.erase(ap.library.begin());
+            ap.hand.push_back(ap.library.drawTop());
         }
 
         if (static_cast<int>(ap.hand.size()) <= profile_.stopAt)

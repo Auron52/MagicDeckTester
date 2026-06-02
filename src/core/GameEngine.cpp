@@ -73,8 +73,7 @@ void GameEngine::drawStep(GameState& state)
         state.playerLostOnDraw = true;
         return;
     }
-    ap.hand.push_back(ap.library.front());
-    ap.library.erase(ap.library.begin());
+    ap.hand.push_back(ap.library.drawTop());
     // TODO: fire draw-step triggered abilities (Phase 1.2)
     resolveStack(state);
 }
