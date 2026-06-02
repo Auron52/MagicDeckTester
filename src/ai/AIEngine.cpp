@@ -329,8 +329,14 @@ Card* AIEngine::PickBestCastable(GameState& state, const ManaPool& available,
 
         // Score: prefer high-power creatures, then direct damage, then others.
         // Use effective mana value so Spectacle cards score correctly.
+        // Sacrifice-land spells score lowest so other spells tap lands first,
+        // ensuring the sacrificed land is already spent.
         int score = 0;
-        if (def->card.IsCreature())
+        if (def->params.sacrifice_land)
+        {
+            score = 1;
+        }
+        else if (def->card.IsCreature())
         {
             score = 100 + def->card.m_power.value_or(0) * 10 - effective.ManaValue();
         }
