@@ -23,15 +23,15 @@ struct Permanent
     Permanent* attachedTo       = nullptr;
     bool      markedForDestruction = false;
 
-    int  effectivePower()     const;
-    int  effectiveToughness() const;
+    int  EffectivePower()     const;
+    int  EffectiveToughness() const;
 
     // Summoning sickness: creatures that entered this turn cannot attack or
     // activate tap abilities unless they have haste (CR 302.6).
-    bool canAttackOrTap() const { return !enteredThisTurn || card.hasKeyword(Keyword::Haste); }
+    bool CanAttackOrTap() const { return !enteredThisTurn || card.HasKeyword(Keyword::Haste); }
 };
 
-inline int Permanent::effectivePower() const
+inline int Permanent::EffectivePower() const
 {
     // TODO: route through layer system when continuous effects are implemented (Phase 1.2)
     int p = card.m_power.value_or(0);
@@ -49,7 +49,7 @@ inline int Permanent::effectivePower() const
     return p;
 }
 
-inline int Permanent::effectiveToughness() const
+inline int Permanent::EffectiveToughness() const
 {
     // TODO: route through layer system when continuous effects are implemented (Phase 1.2)
     int t = card.m_toughness.value_or(0);

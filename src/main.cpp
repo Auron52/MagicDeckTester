@@ -6,7 +6,7 @@
 #include "deck/DeckLoader.h"
 #include "runner/GoldFishRunner.h"
 
-static void printUsage(const char* prog)
+static void PrintUsage(const char* prog)
 {
     std::cerr << "Usage: " << prog
               << " <deckfile> [--games N] [--seed S] [--max-turns T]\n"
@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
 {
     if (argc < 2)
     {
-        printUsage(argv[0]);
+        PrintUsage(argv[0]);
         return 1;
     }
 
@@ -64,7 +64,7 @@ int main(int argc, char* argv[])
 
     try
     {
-        Decklist deck = DeckLoader::loadFromFile(deckPath);
+        Decklist deck = DeckLoader::LoadFromFile(deckPath);
         std::cout << "Loaded " << deck.mainboard.size() << " mainboard card(s)";
         if (!deck.sideboard.empty())
         {
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
         std::cout << "\n";
 
         GoldFishRunner runner;
-        RunResult result = runner.run(deck, numGames, seed, maxTurns);
+        RunResult result = runner.Run(deck, numGames, seed, maxTurns);
 
         std::cout << "Seed         : " << result.seed << "\n";
         std::cout << "Games played : " << result.gamesPlayed << "\n";

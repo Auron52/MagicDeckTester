@@ -4,22 +4,21 @@
 
 AIEngine::AIEngine(MulliganProfile profile) : m_profile(std::move(profile)) {}
 
-void AIEngine::handleMulligan(GameState& state)
+void AIEngine::HandleMulligan(GameState& state)
 {
-    Player& ap = state.activePlayer();
+    Player& ap = state.ActivePlayer();
 
     // Draw opening hand of 7
     int draw = std::min(7, static_cast<int>(ap.library.size()));
     for (int i = 0; i < draw; ++i)
     {
-        ap.hand.push_back(ap.library.drawTop());
+        ap.hand.push_back(ap.library.DrawTop());
     }
 
     int mulliganCount = 0;
-    while (!keepHand(ap.hand, mulliganCount))
+    while (!KeepHand(ap.hand, mulliganCount))
     {
-        // Return hand to library; GoldFishRunner has already shuffled for this game,
-        // so re-shuffle here to simulate the physical shuffle during a mulligan.
+        // Return hand to library; re-shuffle to simulate the physical shuffle during a mulligan.
         for (Card& c : ap.hand)
         {
             ap.library.push_back(c);
@@ -27,14 +26,14 @@ void AIEngine::handleMulligan(GameState& state)
         ap.hand.clear();
         // Derive a per-mulligan seed so each reshuffle produces a distinct order.
         // TODO: replace with the unified seeded RNG in Phase 1.3.
-        ap.library.shuffle(state.gameSeed + static_cast<uint64_t>(mulliganCount));
+        ap.library.Shuffle(state.gameSeed + static_cast<uint64_t>(mulliganCount));
 
         ++mulliganCount;
 
         int toDraw = std::min(7, static_cast<int>(ap.library.size()));
         for (int i = 0; i < toDraw; ++i)
         {
-            ap.hand.push_back(ap.library.drawTop());
+            ap.hand.push_back(ap.library.DrawTop());
         }
 
         if (static_cast<int>(ap.hand.size()) <= m_profile.stopAt)
@@ -46,11 +45,11 @@ void AIEngine::handleMulligan(GameState& state)
     // Bottom one card per mulligan (London mulligan rule)
     if (mulliganCount > 0)
     {
-        bottomCards(state, mulliganCount);
+        BottomCards(state, mulliganCount);
     }
 }
 
-bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
+bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulliganCount) const
 {
     int effectiveSize = static_cast<int>(hand.size()) - mulliganCount;
     if (effectiveSize <= 1)
@@ -65,7 +64,7 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
     int landCount = 0;
     for (const Card& c : hand)
     {
-        if (c.isLand())
+        if (c.IsLand())
         {
             ++landCount;
         }
@@ -110,7 +109,7 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
         bool hasTwoDrop = false;
         for (const Card& c : hand)
         {
-            if (!c.isLand() && c.m_mana_cost.manaValue() <= 2 && landCount >= 2)
+            if (!c.IsLand() && c.m_mana_cost.ManaValue() <= 2 && landCount >= 2)
             {
                 hasTwoDrop = true;
             }
@@ -124,9 +123,9 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
     return true;
 }
 
-void AIEngine::bottomCards(GameState& state, int count)
+void AIEngine::BottomCards(GameState& state, int count)
 {
-    Player& ap = state.activePlayer();
+    Player& ap = state.ActivePlayer();
     // Bottom the highest-mana-value cards first (fewest immediate options lost).
     // TODO: smarter bottoming once CardDatabase provides card role context (Phase 1.2).
     for (int i = 0; i < count && !ap.hand.empty(); ++i)
@@ -134,14 +133,14 @@ void AIEngine::bottomCards(GameState& state, int count)
         std::vector<Card>::iterator worst = std::max_element(ap.hand.begin(), ap.hand.end(),
             [](const Card& a, const Card& b)
             {
-                return a.m_mana_cost.manaValue() < b.m_mana_cost.manaValue();
+                return a.m_mana_cost.ManaValue() < b.m_mana_cost.ManaValue();
             });
         ap.library.push_back(*worst);
         ap.hand.erase(worst);
     }
 }
 
-void AIEngine::takeTurn(GameState& state, bool isPreCombatMain)
+void AIEngine::TakeTurn(GameState& state, bool isPreCombatMain)
 {
     // TODO (Phase 1.2): land drop, spell casting, activated abilities.
     // Requires CardDatabase to resolve card types and mana costs from placeholder Cards.
@@ -149,17 +148,17 @@ void AIEngine::takeTurn(GameState& state, bool isPreCombatMain)
     (void)isPreCombatMain;
 }
 
-std::vector<Permanent*> AIEngine::declareAttackers(GameState& state)
+std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
 {
     std::vector<Permanent*> attackers;
-    Player& ap = state.activePlayer();
+    Player& ap = state.ActivePlayer();
     for (Permanent& p : state.battlefield)
     {
         if (p.controller == &ap
-            && p.card.isCreature()
+            && p.card.IsCreature()
             && !p.tapped
-            && p.canAttackOrTap()
-            && !p.card.hasKeyword(Keyword::Defender))
+            && p.CanAttackOrTap()
+            && !p.card.HasKeyword(Keyword::Defender))
         {
             attackers.push_back(&p);
         }
@@ -167,18 +166,18 @@ std::vector<Permanent*> AIEngine::declareAttackers(GameState& state)
     return attackers;
 }
 
-Card* AIEngine::chooseDiscard(GameState& state)
+Card* AIEngine::ChooseDiscard(GameState& state)
 {
-    Player& ap = state.activePlayer();
+    Player& ap = state.ActivePlayer();
     if (ap.hand.empty())
     {
-        throw std::runtime_error("chooseDiscard called with empty hand");
+        throw std::runtime_error("ChooseDiscard called with empty hand");
     }
     // Discard the highest-mana-value card.
     // TODO: smarter discard evaluation once CardDatabase is available (Phase 1.2).
     return &(*std::max_element(ap.hand.begin(), ap.hand.end(),
         [](const Card& a, const Card& b)
         {
-            return a.m_mana_cost.manaValue() < b.m_mana_cost.manaValue();
+            return a.m_mana_cost.ManaValue() < b.m_mana_cost.ManaValue();
         }));
 }

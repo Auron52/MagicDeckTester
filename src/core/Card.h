@@ -24,7 +24,7 @@ struct ManaCost
     bool hasX     = false;
 
     // X counts as 0 outside the stack (CR 202.3)
-    int manaValue() const { return generic + white + blue + black + red + green + colorless; }
+    int ManaValue() const { return generic + white + blue + black + red + green + colorless; }
 };
 
 struct Card
@@ -40,17 +40,17 @@ struct Card
     std::vector<Keyword>   m_keywords;
     std::string            m_oracle_text;
 
-    bool isLand()      const { return hasType(CardType::Land); }
-    bool isCreature()  const { return hasType(CardType::Creature); }
-    bool isInstant()   const { return hasType(CardType::Instant); }
-    bool isSorcery()   const { return hasType(CardType::Sorcery); }
+    bool IsLand()     const { return HasType(CardType::Land); }
+    bool IsCreature() const { return HasType(CardType::Creature); }
+    bool IsInstant()  const { return HasType(CardType::Instant); }
+    bool IsSorcery()  const { return HasType(CardType::Sorcery); }
 
-    bool hasType(CardType t)       const;
-    bool hasSupertype(Supertype s) const;
-    bool hasKeyword(Keyword k)     const;
+    bool HasType(CardType t)       const;
+    bool HasSupertype(Supertype s) const;
+    bool HasKeyword(Keyword k)     const;
 };
 
-inline bool Card::hasType(CardType t) const
+inline bool Card::HasType(CardType t) const
 {
     for (CardType ct : m_types)
     {
@@ -62,7 +62,7 @@ inline bool Card::hasType(CardType t) const
     return false;
 }
 
-inline bool Card::hasSupertype(Supertype s) const
+inline bool Card::HasSupertype(Supertype s) const
 {
     for (Supertype st : m_supertypes)
     {
@@ -74,7 +74,7 @@ inline bool Card::hasSupertype(Supertype s) const
     return false;
 }
 
-inline bool Card::hasKeyword(Keyword k) const
+inline bool Card::HasKeyword(Keyword k) const
 {
     for (Keyword kw : m_keywords)
     {
