@@ -3,7 +3,8 @@
 #include "MulliganProfile.h"
 #include <vector>
 
-class AIEngine {
+class AIEngine
+{
 public:
     explicit AIEngine(MulliganProfile profile = MulliganProfile::defaultProfile());
 

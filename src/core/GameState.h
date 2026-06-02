@@ -10,14 +10,16 @@ enum class Step  { Untap, Upkeep, Draw, MainPhase,
                    BeginCombat, DeclareAttackers, DeclareBlockers, CombatDamage, EndCombat,
                    End, Cleanup };
 
-struct Target {
+struct Target
+{
     enum class Type { Player, Permanent };
     Type type;
     int  playerIndex    = -1;
     int  permanentIndex = -1;
 };
 
-struct StackEntry {
+struct StackEntry
+{
     enum class EntryType { Spell, Triggered, Activated };
     EntryType           type;
     Card                source;
@@ -27,7 +29,8 @@ struct StackEntry {
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
 };
 
-struct GameState {
+struct GameState
+{
     std::array<Player, 2>    players;
     int                      activePlayerIndex   = 0;
     int                      priorityPlayerIndex = 0;

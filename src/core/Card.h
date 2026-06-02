@@ -5,13 +5,15 @@
 
 enum class CardType { Land, Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Battle };
 enum class Color { White, Blue, Black, Red, Green, Colorless };
-enum class Keyword {
+enum class Keyword
+{
     Haste, Flying, Trample, Deathtouch, Lifelink, FirstStrike, DoubleStrike,
     Vigilance, Reach, Defender, Indestructible, Flash, Menace
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 
-struct ManaCost {
+struct ManaCost
+{
     int generic   = 0;
     int white     = 0;
     int blue      = 0;
@@ -25,7 +27,8 @@ struct ManaCost {
     int manaValue() const { return generic + white + blue + black + red + green + colorless; }
 };
 
-struct Card {
+struct Card
+{
     std::string id;           // placeholder until CardDatabase is implemented (Phase 1.2)
     std::string name;
     ManaCost manaCost;
