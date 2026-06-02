@@ -159,7 +159,7 @@ Decklist DeckLoader::loadCockatrice(const std::filesystem::path& path)
 Card DeckLoader::makePlaceholder(const std::string& name)
 {
     Card c;
-    c.name = name;
+    c.m_name = name;
     return c;
 }
 
