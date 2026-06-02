@@ -25,9 +25,9 @@ int main(int argc, char* argv[])
     }
 
     std::filesystem::path deck_path = argv[1];
-    int      num_games    = 10000;
-    int      max_turns    = 20;
-    uint64_t seed         = 0;
+    int      num_games     = 10000;
+    int      max_turns     = 20;
+    uint64_t seed          = 0;
     bool     seed_provided = false;
 
     for (int i = 2; i < argc - 1; ++i)
@@ -76,12 +76,12 @@ int main(int argc, char* argv[])
         RunResult result = runner.Run(deck, num_games, seed, max_turns);
 
         std::cout << "Seed         : " << result.seed << "\n";
-        std::cout << "Games played : " << result.gamesPlayed << "\n";
-        std::cout << "Games won    : " << result.gamesWon
-                  << " (" << (100.0 * result.gamesWon / result.gamesPlayed) << "%)\n";
-        if (result.gamesWon > 0)
+        std::cout << "Games played : " << result.games_played << "\n";
+        std::cout << "Games won    : " << result.games_won
+                  << " (" << (100.0 * result.games_won / result.games_played) << "%)\n";
+        if (result.games_won > 0)
         {
-            std::cout << "Avg win turn : " << result.averageWinTurn << "\n";
+            std::cout << "Avg win turn : " << result.average_win_turn << "\n";
         }
         else
         {

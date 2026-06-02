@@ -14,8 +14,8 @@ struct Target
 {
     enum class Type { Player, Permanent };
     Type type;
-    int  playerIndex    = -1;
-    int  permanentIndex = -1;
+    int  player_index    = -1;
+    int  permanent_index = -1;
 };
 
 struct StackEntry
@@ -23,29 +23,29 @@ struct StackEntry
     enum class EntryType { Spell, Triggered, Activated };
     EntryType           type;
     Card                source;
-    int                 controllerIndex = 0;
+    int                 controller_index = 0;
     std::vector<Target> targets;
-    std::optional<int>  chosenX;
+    std::optional<int>  chosen_x;
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
 };
 
 struct GameState
 {
     std::array<Player, 2>    players;
-    int                      activePlayerIndex   = 0;
-    int                      priorityPlayerIndex = 0;
-    Phase                    phase               = Phase::Beginning;
-    Step                     step                = Step::Untap;
+    int                      active_player_index   = 0;
+    int                      priority_player_index = 0;
+    Phase                    phase                 = Phase::Beginning;
+    Step                     step                  = Step::Untap;
     std::vector<StackEntry>  stack;
     std::vector<Permanent>   battlefield;
     std::vector<Card>        exile;
-    int                      consecutivePasses   = 0;
-    int                      turnNumber          = 0;
-    bool                     playerLostOnDraw    = false;
-    uint64_t                 gameSeed            = 0;   // seed used to set up this game; used for mulligan reshuffles
+    int                      consecutive_passes    = 0;
+    int                      turn_number           = 0;
+    bool                     player_lost_on_draw   = false;
+    uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
 
-    Player&       ActivePlayer()       { return players[activePlayerIndex]; }
-    const Player& ActivePlayer() const { return players[activePlayerIndex]; }
-    Player&       Opponent()           { return players[1 - activePlayerIndex]; }
-    const Player& Opponent()     const { return players[1 - activePlayerIndex]; }
+    Player&       ActivePlayer()       { return players[active_player_index]; }
+    const Player& ActivePlayer() const { return players[active_player_index]; }
+    Player&       Opponent()           { return players[1 - active_player_index]; }
+    const Player& Opponent()     const { return players[1 - active_player_index]; }
 };

@@ -6,9 +6,9 @@
 RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base_seed, int max_turns)
 {
     RunResult result;
-    result.seed        = base_seed;
-    result.gamesPlayed = num_games;
-    result.winTurns.reserve(num_games);
+    result.seed         = base_seed;
+    result.games_played = num_games;
+    result.win_turns.reserve(num_games);
 
     AIEngine   ai;
     GameEngine engine(ai);
@@ -17,18 +17,18 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     {
         GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(i));
         int win_turn = engine.RunGame(state, max_turns);
-        result.winTurns.push_back(win_turn);
+        result.win_turns.push_back(win_turn);
         if (win_turn > 0)
         {
-            ++result.gamesWon;
+            ++result.games_won;
         }
     }
 
-    if (result.gamesWon > 0)
+    if (result.games_won > 0)
     {
         long long sum = 0;
         int count = 0;
-        for (int t : result.winTurns)
+        for (int t : result.win_turns)
         {
             if (t > 0)
             {
@@ -36,7 +36,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 ++count;
             }
         }
-        result.averageWinTurn = static_cast<double>(sum) / count;
+        result.average_win_turn = static_cast<double>(sum) / count;
     }
 
     return result;
@@ -55,10 +55,10 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
 
     // Wire controller/owner pointers for future permanents as they enter the battlefield.
     // (No permanents exist at game start; pointer wiring happens in GameEngine on ETB.)
-    state.activePlayerIndex   = 0;
-    state.priorityPlayerIndex = 0;
-    state.turnNumber          = 0;
-    state.gameSeed            = seed;
+    state.active_player_index   = 0;
+    state.priority_player_index = 0;
+    state.turn_number           = 0;
+    state.game_seed             = seed;
 
     return state;
 }

@@ -21,7 +21,7 @@ struct ManaCost
     int red       = 0;
     int green     = 0;
     int colorless = 0;  // {C} symbols
-    bool hasX     = false;
+    bool has_x    = false;
 
     // X counts as 0 outside the stack (CR 202.3)
     int ManaValue() const { return generic + white + blue + black + red + green + colorless; }
