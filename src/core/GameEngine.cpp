@@ -7,16 +7,16 @@ GameEngine::GameEngine(AIEngine& ai) : m_ai(ai) {}
 int GameEngine::RunGame(GameState& state, int max_turns)
 {
     m_ai.HandleMulligan(state);
-    while (state.turnNumber < max_turns)
+    while (state.turn_number < max_turns)
     {
-        if (state.playerLostOnDraw)
+        if (state.player_lost_on_draw)
         {
             return -1;
         }
         RunTurn(state);
         if (CheckWinCondition(state))
         {
-            return state.turnNumber;
+            return state.turn_number;
         }
     }
     return -1;
@@ -24,11 +24,11 @@ int GameEngine::RunGame(GameState& state, int max_turns)
 
 void GameEngine::RunTurn(GameState& state)
 {
-    ++state.turnNumber;
+    ++state.turn_number;
     UntapStep(state);
     UpkeepStep(state);
     DrawStep(state);
-    if (state.playerLostOnDraw)
+    if (state.player_lost_on_draw)
     {
         return;
     }
@@ -44,14 +44,14 @@ void GameEngine::UntapStep(GameState& state)
     state.phase = Phase::Beginning;
     state.step  = Step::Untap;
     Player& ap = state.ActivePlayer();
-    ap.landsPlayedThisTurn    = 0;
-    ap.bonusLandDropsThisTurn = 0;
+    ap.lands_played_this_turn    = 0;
+    ap.bonus_land_drops_this_turn = 0;
     for (Permanent& p : state.battlefield)
     {
         if (p.controller == &ap)
         {
-            p.tapped          = false;
-            p.enteredThisTurn = false;
+            p.tapped            = false;
+            p.entered_this_turn = false;
         }
     }
     // Untap is a turn-based action; no priority is passed (CR 502).
@@ -70,7 +70,7 @@ void GameEngine::DrawStep(GameState& state)
     Player& ap = state.ActivePlayer();
     if (ap.library.empty())
     {
-        state.playerLostOnDraw = true;
+        state.player_lost_on_draw = true;
         return;
     }
     ap.hand.push_back(ap.library.DrawTop());
@@ -173,7 +173,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
         for (std::vector<Permanent>::iterator it = state.battlefield.begin(); it != state.battlefield.end(); )
         {
             Permanent& p = *it;
-            bool destroy = p.markedForDestruction;
+            bool destroy = p.marked_for_destruction;
             if (p.card.IsCreature())
             {
                 if (p.EffectiveToughness() <= 0)

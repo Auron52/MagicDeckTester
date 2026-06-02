@@ -14,21 +14,21 @@ struct Counter
 struct Permanent
 {
     Card      card;
-    Player*   controller        = nullptr;
-    Player*   owner             = nullptr;
-    bool      tapped            = false;
-    int       damage            = 0;    // reset each cleanup step
+    Player*   controller           = nullptr;
+    Player*   owner                = nullptr;
+    bool      tapped               = false;
+    int       damage               = 0;    // reset each cleanup step
     std::vector<Counter> counters;
-    bool      enteredThisTurn   = false;  // summoning sickness tracker
-    Permanent* attachedTo       = nullptr;
-    bool      markedForDestruction = false;
+    bool      entered_this_turn    = false;  // summoning sickness tracker
+    Permanent* attached_to         = nullptr;
+    bool      marked_for_destruction = false;
 
     int  EffectivePower()     const;
     int  EffectiveToughness() const;
 
     // Summoning sickness: creatures that entered this turn cannot attack or
     // activate tap abilities unless they have haste (CR 302.6).
-    bool CanAttackOrTap() const { return !enteredThisTurn || card.HasKeyword(Keyword::Haste); }
+    bool CanAttackOrTap() const { return !entered_this_turn || card.HasKeyword(Keyword::Haste); }
 };
 
 inline int Permanent::EffectivePower() const

@@ -22,13 +22,13 @@ void AIEngine::HandleMulligan(GameState& state)
         ap.hand.clear();
         // Derive a per-mulligan seed so each reshuffle produces a distinct order.
         // TODO: replace with the unified seeded RNG in Phase 1.3.
-        ap.library.Shuffle(state.gameSeed + static_cast<uint64_t>(mulligan_count));
+        ap.library.Shuffle(state.game_seed + static_cast<uint64_t>(mulligan_count));
 
         ++mulligan_count;
 
         ap.library.DrawN(7, ap.hand);
 
-        if (static_cast<int>(ap.hand.size()) <= m_profile.stopAt)
+        if (static_cast<int>(ap.hand.size()) <= m_profile.stop_at)
         {
             break;
         }
@@ -48,7 +48,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
     {
         return true;  // hard floor: never go below 1
     }
-    if (effective_size <= m_profile.stopAt)
+    if (effective_size <= m_profile.stop_at)
     {
         return true;
     }
@@ -63,11 +63,11 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
     }
     int non_land_count = static_cast<int>(hand.size()) - land_count;
 
-    if (land_count < m_profile.minLands)
+    if (land_count < m_profile.min_lands)
     {
         return false;
     }
-    if (land_count > m_profile.maxLands)
+    if (land_count > m_profile.max_lands)
     {
         return false;
     }
@@ -76,10 +76,10 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
         return false;
     }
 
-    if (!m_profile.requiredPieces.empty())
+    if (!m_profile.required_pieces.empty())
     {
         bool found = false;
-        for (const std::string& piece : m_profile.requiredPieces)
+        for (const std::string& piece : m_profile.required_pieces)
         {
             for (const Card& c : hand)
             {
@@ -96,7 +96,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
         }
     }
 
-    if (!m_profile.skipCurveCheck)
+    if (!m_profile.skip_curve_check)
     {
         bool has_two_drop = false;
         for (const Card& c : hand)

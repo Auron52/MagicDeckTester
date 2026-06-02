@@ -7,10 +7,10 @@
 struct RunResult
 {
     uint64_t seed          = 0;     // base seed used; pass to --seed to reproduce this run
-    double averageWinTurn  = 0.0;
-    int    gamesWon        = 0;
-    int    gamesPlayed     = 0;
-    std::vector<int> winTurns;  // per-game result; -1 = did not win within max_turns
+    double average_win_turn = 0.0;
+    int    games_won        = 0;
+    int    games_played     = 0;
+    std::vector<int> win_turns;  // per-game result; -1 = did not win within max_turns
 };
 
 class GoldFishRunner
