@@ -34,7 +34,7 @@ struct Permanent
 inline int Permanent::effectivePower() const
 {
     // TODO: route through layer system when continuous effects are implemented (Phase 1.2)
-    int p = card.power.value_or(0);
+    int p = card.m_power.value_or(0);
     for (const Counter& c : counters)
     {
         if (c.type == Counter::Type::PlusOnePlusOne)
@@ -52,7 +52,7 @@ inline int Permanent::effectivePower() const
 inline int Permanent::effectiveToughness() const
 {
     // TODO: route through layer system when continuous effects are implemented (Phase 1.2)
-    int t = card.toughness.value_or(0);
+    int t = card.m_toughness.value_or(0);
     for (const Counter& c : counters)
     {
         if (c.type == Counter::Type::PlusOnePlusOne)
