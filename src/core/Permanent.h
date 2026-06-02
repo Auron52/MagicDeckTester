@@ -26,9 +26,19 @@ struct Permanent
     int  EffectivePower()     const;
     int  EffectiveToughness() const;
 
-    // Summoning sickness only restricts creatures (CR 302.6).
-    // Non-creatures can always tap for abilities regardless of when they entered.
-    bool CanAttackOrTap() const
+    // A permanent can attack only if it is a creature that is not summoning sick (CR 302.6).
+    bool CanAttack() const
+    {
+        if (!card.IsCreature())
+        {
+            return false;
+        }
+        return !entered_this_turn || card.HasKeyword(Keyword::Haste);
+    }
+
+    // A permanent can be tapped for an activated ability unless it is a summoning-sick
+    // creature. Non-creatures are never affected by summoning sickness (CR 302.6).
+    bool CanTap() const
     {
         if (!card.IsCreature())
         {
