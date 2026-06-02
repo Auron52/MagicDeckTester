@@ -3,22 +3,22 @@
 #include "../ai/AIEngine.h"
 #include <numeric>
 
-RunResult GoldFishRunner::Run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns)
+RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base_seed, int max_turns)
 {
     RunResult result;
-    result.seed        = baseSeed;
-    result.gamesPlayed = numGames;
-    result.winTurns.reserve(numGames);
+    result.seed        = base_seed;
+    result.gamesPlayed = num_games;
+    result.winTurns.reserve(num_games);
 
     AIEngine   ai;
     GameEngine engine(ai);
 
-    for (int i = 0; i < numGames; ++i)
+    for (int i = 0; i < num_games; ++i)
     {
-        GameState state = SetupGame(deck, baseSeed + static_cast<uint64_t>(i));
-        int winTurn = engine.RunGame(state, maxTurns);
-        result.winTurns.push_back(winTurn);
-        if (winTurn > 0)
+        GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(i));
+        int win_turn = engine.RunGame(state, max_turns);
+        result.winTurns.push_back(win_turn);
+        if (win_turn > 0)
         {
             ++result.gamesWon;
         }

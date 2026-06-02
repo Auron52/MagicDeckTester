@@ -24,11 +24,11 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    std::filesystem::path deckPath = argv[1];
-    int      numGames    = 10000;
-    int      maxTurns    = 20;
-    uint64_t seed        = 0;
-    bool     seedProvided = false;
+    std::filesystem::path deck_path = argv[1];
+    int      num_games    = 10000;
+    int      max_turns    = 20;
+    uint64_t seed         = 0;
+    bool     seed_provided = false;
 
     for (int i = 2; i < argc - 1; ++i)
     {
@@ -37,16 +37,16 @@ int main(int argc, char* argv[])
         {
             if (flag == "--games")
             {
-                numGames = std::stoi(argv[i + 1]);
+                num_games = std::stoi(argv[i + 1]);
             }
             else if (flag == "--seed")
             {
                 seed          = std::stoull(argv[i + 1]);
-                seedProvided  = true;
+                seed_provided = true;
             }
             else if (flag == "--max-turns")
             {
-                maxTurns = std::stoi(argv[i + 1]);
+                max_turns = std::stoi(argv[i + 1]);
             }
         }
         catch (...)
@@ -56,7 +56,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (!seedProvided)
+    if (!seed_provided)
     {
         std::random_device rd;
         seed = (static_cast<uint64_t>(rd()) << 32) | rd();
@@ -64,7 +64,7 @@ int main(int argc, char* argv[])
 
     try
     {
-        Decklist deck = DeckLoader::LoadFromFile(deckPath);
+        Decklist deck = DeckLoader::LoadFromFile(deck_path);
         std::cout << "Loaded " << deck.mainboard.size() << " mainboard card(s)";
         if (!deck.sideboard.empty())
         {
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
         std::cout << "\n";
 
         GoldFishRunner runner;
-        RunResult result = runner.Run(deck, numGames, seed, maxTurns);
+        RunResult result = runner.Run(deck, num_games, seed, max_turns);
 
         std::cout << "Seed         : " << result.seed << "\n";
         std::cout << "Games played : " << result.gamesPlayed << "\n";

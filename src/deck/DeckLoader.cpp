@@ -46,7 +46,7 @@ Decklist DeckLoader::LoadTextFile(const std::filesystem::path& path)
     }
 
     Decklist deck;
-    bool inSideboard = false;
+    bool in_sideboard = false;
     std::string line;
 
     while (std::getline(file, line))
@@ -61,7 +61,7 @@ Decklist DeckLoader::LoadTextFile(const std::filesystem::path& path)
         std::string low = ToLower(line);
         if (low == "sideboard" || low == "sideboard:" || low.rfind("sb:", 0) == 0)
         {
-            inSideboard = true;
+            in_sideboard = true;
             continue;
         }
 
@@ -76,16 +76,16 @@ Decklist DeckLoader::LoadTextFile(const std::filesystem::path& path)
         }
 
         int count = 1;
-        bool hasCount = false;
+        bool has_count = false;
         try
         {
-            count    = std::stoi(token);
-            hasCount = true;
+            count     = std::stoi(token);
+            has_count = true;
         }
         catch (...) {}
 
         std::string name;
-        if (hasCount)
+        if (has_count)
         {
             std::getline(ss, name);
             name = Trim(name);
@@ -106,7 +106,7 @@ Decklist DeckLoader::LoadTextFile(const std::filesystem::path& path)
             name = name.substr(0, paren);
         }
 
-        AppendCards(inSideboard ? deck.sideboard : deck.mainboard, name, count);
+        AppendCards(in_sideboard ? deck.sideboard : deck.mainboard, name, count);
     }
 
     if (deck.mainboard.empty())
@@ -134,9 +134,9 @@ Decklist DeckLoader::LoadCockatrice(const std::filesystem::path& path)
     Decklist deck;
     for (pugi::xml_node zone : root.children("zone"))
     {
-        std::string zoneName = zone.attribute("name").as_string();
-        bool isSide = (zoneName == "side" || zoneName == "sideboard");
-        std::vector<Card>& target = isSide ? deck.sideboard : deck.mainboard;
+        std::string zone_name = zone.attribute("name").as_string();
+        bool is_side = (zone_name == "side" || zone_name == "sideboard");
+        std::vector<Card>& target = is_side ? deck.sideboard : deck.mainboard;
 
         for (pugi::xml_node card : zone.children("card"))
         {
