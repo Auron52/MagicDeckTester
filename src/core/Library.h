@@ -16,12 +16,11 @@ public:
         std::shuffle(begin(), end(), rng);
     }
 
-    // Draws up to n cards from the top and appends them to destination.
-    // Draws fewer if the library has fewer than n cards remaining.
+    // Draws exactly n cards from the top and appends them to destination.
+    // Throws if the library runs out — drawing from an empty library is a loss condition.
     void DrawN(int n, std::vector<Card>& destination)
     {
-        int to_draw = std::min(n, static_cast<int>(size()));
-        for (int i = 0; i < to_draw; ++i)
+        for (int i = 0; i < n; ++i)
         {
             destination.push_back(DrawTop());
         }
