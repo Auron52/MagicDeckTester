@@ -21,5 +21,4 @@ public:
 
 private:
     GameState setupGame(const Decklist& deck, uint64_t seed);
-    void shuffleLibrary(std::vector<Card>& library, uint64_t seed);
 };
