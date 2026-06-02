@@ -110,7 +110,7 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
         bool hasTwoDrop = false;
         for (const Card& c : hand)
         {
-            if (!c.isLand() && c.m_manaCost.manaValue() <= 2 && landCount >= 2)
+            if (!c.isLand() && c.m_mana_cost.manaValue() <= 2 && landCount >= 2)
             {
                 hasTwoDrop = true;
             }
@@ -134,7 +134,7 @@ void AIEngine::bottomCards(GameState& state, int count)
         std::vector<Card>::iterator worst = std::max_element(ap.hand.begin(), ap.hand.end(),
             [](const Card& a, const Card& b)
             {
-                return a.m_manaCost.manaValue() < b.m_manaCost.manaValue();
+                return a.m_mana_cost.manaValue() < b.m_mana_cost.manaValue();
             });
         ap.library.push_back(*worst);
         ap.hand.erase(worst);
@@ -179,6 +179,6 @@ Card* AIEngine::chooseDiscard(GameState& state)
     return &(*std::max_element(ap.hand.begin(), ap.hand.end(),
         [](const Card& a, const Card& b)
         {
-            return a.m_manaCost.manaValue() < b.m_manaCost.manaValue();
+            return a.m_mana_cost.manaValue() < b.m_mana_cost.manaValue();
         }));
 }

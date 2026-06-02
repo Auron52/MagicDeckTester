@@ -20,7 +20,7 @@ public:
     {
         if (empty())
         {
-            // TODO: store an owner player index on Library at construction time, then throw
+            // TODO: store an m_owner_index on Library at construction time, then throw
             // a DrawLossException carrying that index. GameEngine catches it and sets the
             // loss on the correct player (CR 704.5b). Required for mill win conditions
             // where the opponent is forced to draw from an empty library.
