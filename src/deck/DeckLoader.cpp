@@ -6,7 +6,7 @@
 #include <cctype>
 #include "pugixml.hpp"
 
-static std::string trim(const std::string& s)
+static std::string Trim(const std::string& s)
 {
     std::string::size_type start = s.find_first_not_of(" \t\r\n");
     if (start == std::string::npos)
@@ -17,27 +17,27 @@ static std::string trim(const std::string& s)
     return s.substr(start, end - start + 1);
 }
 
-static std::string toLower(std::string s)
+static std::string ToLower(std::string s)
 {
     std::transform(s.begin(), s.end(), s.begin(), ::tolower);
     return s;
 }
 
-Decklist DeckLoader::loadFromFile(const std::filesystem::path& path)
+Decklist DeckLoader::LoadFromFile(const std::filesystem::path& path)
 {
     if (!std::filesystem::exists(path))
     {
         throw std::runtime_error("File not found: " + path.string());
     }
 
-    if (toLower(path.extension().string()) == ".cod")
+    if (ToLower(path.extension().string()) == ".cod")
     {
-        return loadCockatrice(path);
+        return LoadCockatrice(path);
     }
-    return loadTextFile(path);
+    return LoadTextFile(path);
 }
 
-Decklist DeckLoader::loadTextFile(const std::filesystem::path& path)
+Decklist DeckLoader::LoadTextFile(const std::filesystem::path& path)
 {
     std::ifstream file(path);
     if (!file)
@@ -51,14 +51,14 @@ Decklist DeckLoader::loadTextFile(const std::filesystem::path& path)
 
     while (std::getline(file, line))
     {
-        line = trim(line);
+        line = Trim(line);
         if (line.empty() || line[0] == '/' || line[0] == '#')
         {
             continue;
         }
 
         // Detect sideboard section headers
-        std::string low = toLower(line);
+        std::string low = ToLower(line);
         if (low == "sideboard" || low == "sideboard:" || low.rfind("sb:", 0) == 0)
         {
             inSideboard = true;
@@ -88,11 +88,11 @@ Decklist DeckLoader::loadTextFile(const std::filesystem::path& path)
         if (hasCount)
         {
             std::getline(ss, name);
-            name = trim(name);
+            name = Trim(name);
         }
         else
         {
-            name = trim(line);
+            name = Trim(line);
         }
         if (name.empty())
         {
@@ -106,7 +106,7 @@ Decklist DeckLoader::loadTextFile(const std::filesystem::path& path)
             name = name.substr(0, paren);
         }
 
-        appendCards(inSideboard ? deck.sideboard : deck.mainboard, name, count);
+        AppendCards(inSideboard ? deck.sideboard : deck.mainboard, name, count);
     }
 
     if (deck.mainboard.empty())
@@ -116,7 +116,7 @@ Decklist DeckLoader::loadTextFile(const std::filesystem::path& path)
     return deck;
 }
 
-Decklist DeckLoader::loadCockatrice(const std::filesystem::path& path)
+Decklist DeckLoader::LoadCockatrice(const std::filesystem::path& path)
 {
     pugi::xml_document doc;
     pugi::xml_parse_result result = doc.load_file(path.c_str());
@@ -141,10 +141,10 @@ Decklist DeckLoader::loadCockatrice(const std::filesystem::path& path)
         for (pugi::xml_node card : zone.children("card"))
         {
             int count        = card.attribute("number").as_int(1);
-            std::string name = trim(card.attribute("name").as_string());
+            std::string name = Trim(card.attribute("name").as_string());
             if (!name.empty())
             {
-                appendCards(target, name, count);
+                AppendCards(target, name, count);
             }
         }
     }
@@ -156,17 +156,17 @@ Decklist DeckLoader::loadCockatrice(const std::filesystem::path& path)
     return deck;
 }
 
-Card DeckLoader::makePlaceholder(const std::string& name)
+Card DeckLoader::MakePlaceholder(const std::string& name)
 {
     Card c;
     c.m_name = name;
     return c;
 }
 
-void DeckLoader::appendCards(std::vector<Card>& target, const std::string& name, int count)
+void DeckLoader::AppendCards(std::vector<Card>& target, const std::string& name, int count)
 {
     for (int i = 0; i < count; ++i)
     {
-        target.push_back(makePlaceholder(name));
+        target.push_back(MakePlaceholder(name));
     }
 }

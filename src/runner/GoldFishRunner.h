@@ -19,8 +19,8 @@ public:
     // baseSeed + gameIndex is the seed for each individual game (seeding contract).
     // Caller is responsible for generating baseSeed — use std::random_device for a
     // non-reproducible run, or a stored seed value to replay a previous run.
-    RunResult run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns = 20);
+    RunResult Run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns = 20);
 
 private:
-    GameState setupGame(const Decklist& deck, uint64_t seed);
+    GameState SetupGame(const Decklist& deck, uint64_t seed);
 };

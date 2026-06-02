@@ -13,9 +13,9 @@ struct Player
     int bonusLandDropsThisTurn  = 0;  // one-time grants; reset in untap step
     int poisonCounters          = 0;
 
-    bool hasLost() const { return life <= 0 || poisonCounters >= 10; }
+    bool HasLost() const { return life <= 0 || poisonCounters >= 10; }
 
     // Static land-drop effects (e.g. Exploration) are evaluated by GameEngine
     // against the battlefield; one-time triggered grants increment bonusLandDropsThisTurn.
-    int landDropsAvailable() const { return 1 + bonusLandDropsThisTurn; }
+    int LandDropsAvailable() const { return 1 + bonusLandDropsThisTurn; }
 };

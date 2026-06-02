@@ -8,7 +8,7 @@ struct MulliganProfile
     int maxLands = 5;
 
     // Mulligan unless at least one of these card names is in the opening hand (OR logic).
-    // For AND requirements, encode as a custom keepHand override or flag the deck for review.
+    // For AND requirements, encode as a custom KeepHand override or flag the deck for review.
     std::vector<std::string> requiredPieces;
 
     // Set true for decks that don't need early plays (e.g. all-land, high-curve control).
@@ -17,5 +17,5 @@ struct MulliganProfile
     // Keep unconditionally once hand reaches this size (London mulligan stop point).
     int stopAt = 4;
 
-    static MulliganProfile defaultProfile() { return {}; }
+    static MulliganProfile DefaultProfile() { return {}; }
 };

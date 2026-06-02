@@ -3,7 +3,7 @@
 #include "../ai/AIEngine.h"
 #include <numeric>
 
-RunResult GoldFishRunner::run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns)
+RunResult GoldFishRunner::Run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns)
 {
     RunResult result;
     result.seed        = baseSeed;
@@ -15,8 +15,8 @@ RunResult GoldFishRunner::run(const Decklist& deck, int numGames, uint64_t baseS
 
     for (int i = 0; i < numGames; ++i)
     {
-        GameState state = setupGame(deck, baseSeed + static_cast<uint64_t>(i));
-        int winTurn = engine.runGame(state, maxTurns);
+        GameState state = SetupGame(deck, baseSeed + static_cast<uint64_t>(i));
+        int winTurn = engine.RunGame(state, maxTurns);
         result.winTurns.push_back(winTurn);
         if (winTurn > 0)
         {
@@ -42,7 +42,7 @@ RunResult GoldFishRunner::run(const Decklist& deck, int numGames, uint64_t baseS
     return result;
 }
 
-GameState GoldFishRunner::setupGame(const Decklist& deck, uint64_t seed)
+GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
 {
     GameState state;
 
@@ -51,7 +51,7 @@ GameState GoldFishRunner::setupGame(const Decklist& deck, uint64_t seed)
     state.players[1].life = 20;
 
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
-    state.players[0].library.shuffle(seed);
+    state.players[0].library.Shuffle(seed);
 
     // Wire controller/owner pointers for future permanents as they enter the battlefield.
     // (No permanents exist at game start; pointer wiring happens in GameEngine on ETB.)

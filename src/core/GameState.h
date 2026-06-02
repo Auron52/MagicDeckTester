@@ -44,8 +44,8 @@ struct GameState
     bool                     playerLostOnDraw    = false;
     uint64_t                 gameSeed            = 0;   // seed used to set up this game; used for mulligan reshuffles
 
-    Player&       activePlayer()       { return players[activePlayerIndex]; }
-    const Player& activePlayer() const { return players[activePlayerIndex]; }
-    Player&       opponent()           { return players[1 - activePlayerIndex]; }
-    const Player& opponent()     const { return players[1 - activePlayerIndex]; }
+    Player&       ActivePlayer()       { return players[activePlayerIndex]; }
+    const Player& ActivePlayer() const { return players[activePlayerIndex]; }
+    Player&       Opponent()           { return players[1 - activePlayerIndex]; }
+    const Player& Opponent()     const { return players[1 - activePlayerIndex]; }
 };
