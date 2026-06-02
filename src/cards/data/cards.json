@@ -65,9 +65,9 @@
             "mana_cost": "{R}",
             "types": ["Instant"],
             "keywords": [],
-            "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nShard Volley deals 3 damage to any target. [Land sacrifice not modelled in Phase 1.2]",
+            "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nShard Volley deals 3 damage to any target.",
             "template": "direct_damage",
-            "parameters": { "damage": 3, "targeting": "any" }
+            "parameters": { "damage": 3, "targeting": "any", "sacrifice_land": true }
         },
         {
             "name": "Skullcrack",
@@ -83,9 +83,9 @@
             "mana_cost": "{2}{R}",
             "types": ["Sorcery"],
             "keywords": [],
-            "oracle_text": "Spectacle {R}\nExile the top two cards of your library. Until the end of your next turn, you may play those cards. [Simplified: draw 2; Spectacle and play-from-exile not modelled]",
+            "oracle_text": "Spectacle {R}\nExile the top two cards of your library. Until the end of your next turn, you may play those cards. [Exile zone simplified as draw 2]",
             "template": "draw_spell",
-            "parameters": { "draw": 2 }
+            "parameters": { "draw": 2, "spectacle_cost": "{R}" }
         },
         {
             "name": "Searing Blood",

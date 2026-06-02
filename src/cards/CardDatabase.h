@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
+#include <vector>
 
 // What a spell or ability can legally target.
 // Used by the AI to check for legal targets before casting,
@@ -28,6 +29,8 @@ struct CardParams
     int power_bonus  = 0;
     int tough_bonus  = 0;
     Targeting targeting = Targeting::None;
+    bool sacrifice_land = false;              // additional cost: sacrifice a land (e.g. Shard Volley)
+    std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
     std::vector<std::string> subtypes_affected;  // for lord effects
 };

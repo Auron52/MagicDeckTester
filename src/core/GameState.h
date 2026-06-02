@@ -39,9 +39,10 @@ struct GameState
     std::vector<StackEntry>  stack;
     std::vector<Permanent>   battlefield;
     std::vector<Card>        exile;
-    int                      consecutive_passes    = 0;
-    int                      turn_number           = 0;
-    bool                     player_lost_on_draw   = false;
+    int                      consecutive_passes           = 0;
+    int                      turn_number                  = 0;
+    bool                     player_lost_on_draw          = false;
+    bool                     opponent_lost_life_this_turn = false;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
 
     Player&       ActivePlayer()       { return players[active_player_index]; }

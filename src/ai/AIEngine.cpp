@@ -238,6 +238,15 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
 
 // ---- Spell selection ----
 
+ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& state) const
+{
+    if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
+    {
+        return def.params.spectacle_cost.value();
+    }
+    return def.card.m_mana_cost;
+}
+
 bool AIEngine::HasLegalTarget(const GameState& state, Targeting targeting) const
 {
     switch (targeting)
@@ -293,8 +302,19 @@ Card* AIEngine::PickBestCastable(GameState& state, const ManaPool& available,
         auto def = CardDatabase::Instance().Lookup(card.m_name);
         if (!def)                            { continue; }
         if (def->card.IsLand())              { continue; }
-        if (!available.CanPay(def->card.m_mana_cost))       { continue; }
-        if (!HasLegalTarget(state, def->params.targeting))  { continue; }
+        ManaCost effective = EffectiveCost(*def, state);
+        if (!available.CanPay(effective))                    { continue; }
+        if (!HasLegalTarget(state, def->params.targeting))   { continue; }
+
+        if (def->params.sacrifice_land)
+        {
+            bool has_land = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller == &ap && p.card.IsLand()) { has_land = true; break; }
+            }
+            if (!has_land) { continue; }
+        }
 
         bool timing_ok = def->card.IsInstant()
                       || def->card.HasKeyword(Keyword::Flash)
@@ -308,16 +328,15 @@ Card* AIEngine::PickBestCastable(GameState& state, const ManaPool& available,
         }
 
         // Score: prefer high-power creatures, then direct damage, then others.
+        // Use effective mana value so Spectacle cards score correctly.
         int score = 0;
         if (def->card.IsCreature())
         {
-            score = 100 + def->card.m_power.value_or(0) * 10
-                        - def->card.m_mana_cost.ManaValue();
+            score = 100 + def->card.m_power.value_or(0) * 10 - effective.ManaValue();
         }
         else
         {
-            score = (def->tmpl == CardTemplate::DirectDamage ? 50 : 10)
-                  - def->card.m_mana_cost.ManaValue();
+            score = (def->tmpl == CardTemplate::DirectDamage ? 50 : 10) - effective.ManaValue();
         }
 
         if (score > best_score)
@@ -382,7 +401,26 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             break;
     }
 
-    if (!TapForCost(state, def->card.m_mana_cost, available)) { return; }
+    ManaCost effective = EffectiveCost(*def, state);
+    if (!TapForCost(state, effective, available)) { return; }
+
+    if (def->params.sacrifice_land)
+    {
+        // Prefer a tapped land (already spent this turn) to preserve untapped mana sources.
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller != &ap || !p.card.IsLand()) { continue; }
+            if (idx < 0)   { idx = i; }       // first land found
+            if (p.tapped)  { idx = i; break; } // tapped land preferred
+        }
+        if (idx >= 0)
+        {
+            ap.graveyard.push_back(state.battlefield[idx].card);
+            state.battlefield.erase(state.battlefield.begin() + idx);
+        }
+    }
 
     ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
         [&hand_card](const Card& c) { return &c == &hand_card; }));

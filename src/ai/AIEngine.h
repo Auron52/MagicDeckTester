@@ -57,4 +57,7 @@ private:
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;
+
+    // Returns the mana cost to pay for this card this turn (spectacle cost if eligible).
+    ManaCost EffectiveCost(const CardDefinition& def, const GameState& state) const;
 };

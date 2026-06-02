@@ -238,7 +238,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.draw        = params.value("draw", 0);
     p.power_bonus = params.value("power_bonus", 0);
     p.tough_bonus = params.value("tough_bonus", 0);
-    p.targeting   = TargetingFromString(params.value("targeting", std::string("none")));
+    p.targeting      = TargetingFromString(params.value("targeting", std::string("none")));
+    p.sacrifice_land = params.value("sacrifice_land", false);
+    if (params.contains("spectacle_cost"))
+    {
+        p.spectacle_cost = ManaCostFromString(params["spectacle_cost"].get<std::string>());
+    }
 
     for (const std::string& c : params.value("produces", json::array()))
     {

@@ -45,6 +45,7 @@ void GameEngine::UntapStep(GameState& state)
 {
     state.phase = Phase::Beginning;
     state.step  = Step::Untap;
+    state.opponent_lost_life_this_turn = false;
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;
@@ -105,7 +106,9 @@ void GameEngine::CombatPhase(GameState& state)
     Player& opp = state.Opponent();
     for (Permanent* attacker : attackers)
     {
-        opp.life -= attacker->EffectivePower();
+        int power = attacker->EffectivePower();
+        opp.life -= power;
+        if (power > 0) { state.opponent_lost_life_this_turn = true; }
         if (!attacker->card.HasKeyword(Keyword::Vigilance))
         {
             attacker->tapped = true;

@@ -138,6 +138,10 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         if (t.type == Target::Type::Player)
         {
             state.players[t.player_index].life -= damage;
+            if (t.player_index != entry.controller_index && damage > 0)
+            {
+                state.opponent_lost_life_this_turn = true;
+            }
         }
         else if (t.type == Target::Type::Permanent)
         {
