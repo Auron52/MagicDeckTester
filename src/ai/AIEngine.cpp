@@ -9,11 +9,7 @@ void AIEngine::HandleMulligan(GameState& state)
     Player& ap = state.ActivePlayer();
 
     // Draw opening hand of 7
-    int draw = std::min(7, static_cast<int>(ap.library.size()));
-    for (int i = 0; i < draw; ++i)
-    {
-        ap.hand.push_back(ap.library.DrawTop());
-    }
+    ap.library.DrawN(7, ap.hand);
 
     int mulligan_count = 0;
     while (!KeepHand(ap.hand, mulligan_count))
@@ -30,11 +26,7 @@ void AIEngine::HandleMulligan(GameState& state)
 
         ++mulligan_count;
 
-        int to_draw = std::min(7, static_cast<int>(ap.library.size()));
-        for (int i = 0; i < to_draw; ++i)
-        {
-            ap.hand.push_back(ap.library.DrawTop());
-        }
+        ap.library.DrawN(7, ap.hand);
 
         if (static_cast<int>(ap.hand.size()) <= m_profile.stopAt)
         {
