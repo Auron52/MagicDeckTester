@@ -26,10 +26,19 @@ struct Permanent
     int  EffectivePower()     const;
     int  EffectiveToughness() const;
 
-    // A permanent can attack only if it is a creature that is not summoning sick (CR 302.6).
+    // A permanent can attack if it is an untapped creature without Defender that is not
+    // summoning sick (CR 302.6, CR 508.1).
     bool CanAttack() const
     {
         if (!card.IsCreature())
+        {
+            return false;
+        }
+        if (tapped)
+        {
+            return false;
+        }
+        if (card.HasKeyword(Keyword::Defender))
         {
             return false;
         }
