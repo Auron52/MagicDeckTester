@@ -146,10 +146,7 @@ std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
     Player& ap = state.ActivePlayer();
     for (Permanent& p : state.battlefield)
     {
-        if (p.controller == &ap
-            && !p.tapped
-            && p.CanAttack()
-            && !p.card.HasKeyword(Keyword::Defender))
+        if (p.controller == &ap && p.CanAttack())
         {
             attackers.push_back(&p);
         }
