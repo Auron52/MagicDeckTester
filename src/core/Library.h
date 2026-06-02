@@ -20,6 +20,8 @@ public:
     {
         if (empty())
         {
+            // TODO: replace with a dedicated DrawLossException caught by GameEngine,
+            // which sets the loss condition on GameState (CR 704.5b).
             throw std::runtime_error("drawTop called on empty library");
         }
         Card c = front();
