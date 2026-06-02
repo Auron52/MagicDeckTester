@@ -26,9 +26,16 @@ struct Permanent
     int  EffectivePower()     const;
     int  EffectiveToughness() const;
 
-    // Summoning sickness: creatures that entered this turn cannot attack or
-    // activate tap abilities unless they have haste (CR 302.6).
-    bool CanAttackOrTap() const { return !entered_this_turn || card.HasKeyword(Keyword::Haste); }
+    // Summoning sickness only restricts creatures (CR 302.6).
+    // Non-creatures can always tap for abilities regardless of when they entered.
+    bool CanAttackOrTap() const
+    {
+        if (!card.IsCreature())
+        {
+            return true;
+        }
+        return !entered_this_turn || card.HasKeyword(Keyword::Haste);
+    }
 };
 
 inline int Permanent::EffectivePower() const
