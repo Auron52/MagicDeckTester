@@ -1,5 +1,6 @@
 #include "AIEngine.h"
 #include <algorithm>
+#include <random>
 #include <stdexcept>
 
 AIEngine::AIEngine(MulliganProfile profile) : profile_(std::move(profile)) {}
@@ -26,7 +27,10 @@ void AIEngine::handleMulligan(GameState& state)
             ap.library.push_back(c);
         }
         ap.hand.clear();
-        // TODO: re-shuffle using the seeded RNG (Phase 1.3)
+        // Derive a per-mulligan seed so each reshuffle produces a distinct order.
+        // TODO: replace with the unified seeded RNG in Phase 1.3.
+        std::mt19937_64 rng(state.gameSeed + static_cast<uint64_t>(mulliganCount));
+        std::shuffle(ap.library.begin(), ap.library.end(), rng);
 
         ++mulliganCount;
 

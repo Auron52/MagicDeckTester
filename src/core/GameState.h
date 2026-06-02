@@ -39,6 +39,7 @@ struct GameState {
     int                      consecutivePasses   = 0;
     int                      turnNumber          = 0;
     bool                     playerLostOnDraw    = false;
+    uint64_t                 gameSeed            = 0;   // seed used to set up this game; used for mulligan reshuffles
 
     Player&       activePlayer()       { return players[activePlayerIndex]; }
     const Player& activePlayer() const { return players[activePlayerIndex]; }

@@ -59,6 +59,7 @@ GameState GoldFishRunner::setupGame(const Decklist& deck, uint64_t seed)
     state.activePlayerIndex   = 0;
     state.priorityPlayerIndex = 0;
     state.turnNumber          = 0;
+    state.gameSeed            = seed;
 
     return state;
 }
