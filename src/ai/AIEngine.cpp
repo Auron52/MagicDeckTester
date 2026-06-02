@@ -15,8 +15,8 @@ void AIEngine::HandleMulligan(GameState& state)
         ap.hand.push_back(ap.library.DrawTop());
     }
 
-    int mulliganCount = 0;
-    while (!KeepHand(ap.hand, mulliganCount))
+    int mulligan_count = 0;
+    while (!KeepHand(ap.hand, mulligan_count))
     {
         // Return hand to library; re-shuffle to simulate the physical shuffle during a mulligan.
         for (Card& c : ap.hand)
@@ -26,12 +26,12 @@ void AIEngine::HandleMulligan(GameState& state)
         ap.hand.clear();
         // Derive a per-mulligan seed so each reshuffle produces a distinct order.
         // TODO: replace with the unified seeded RNG in Phase 1.3.
-        ap.library.Shuffle(state.gameSeed + static_cast<uint64_t>(mulliganCount));
+        ap.library.Shuffle(state.gameSeed + static_cast<uint64_t>(mulligan_count));
 
-        ++mulliganCount;
+        ++mulligan_count;
 
-        int toDraw = std::min(7, static_cast<int>(ap.library.size()));
-        for (int i = 0; i < toDraw; ++i)
+        int to_draw = std::min(7, static_cast<int>(ap.library.size()));
+        for (int i = 0; i < to_draw; ++i)
         {
             ap.hand.push_back(ap.library.DrawTop());
         }
@@ -43,43 +43,43 @@ void AIEngine::HandleMulligan(GameState& state)
     }
 
     // Bottom one card per mulligan (London mulligan rule)
-    if (mulliganCount > 0)
+    if (mulligan_count > 0)
     {
-        BottomCards(state, mulliganCount);
+        BottomCards(state, mulligan_count);
     }
 }
 
-bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulliganCount) const
+bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
 {
-    int effectiveSize = static_cast<int>(hand.size()) - mulliganCount;
-    if (effectiveSize <= 1)
+    int effective_size = static_cast<int>(hand.size()) - mulligan_count;
+    if (effective_size <= 1)
     {
         return true;  // hard floor: never go below 1
     }
-    if (effectiveSize <= m_profile.stopAt)
+    if (effective_size <= m_profile.stopAt)
     {
         return true;
     }
 
-    int landCount = 0;
+    int land_count = 0;
     for (const Card& c : hand)
     {
         if (c.IsLand())
         {
-            ++landCount;
+            ++land_count;
         }
     }
-    int nonLandCount = static_cast<int>(hand.size()) - landCount;
+    int non_land_count = static_cast<int>(hand.size()) - land_count;
 
-    if (landCount < m_profile.minLands)
+    if (land_count < m_profile.minLands)
     {
         return false;
     }
-    if (landCount > m_profile.maxLands)
+    if (land_count > m_profile.maxLands)
     {
         return false;
     }
-    if (nonLandCount == 0)
+    if (non_land_count == 0)
     {
         return false;
     }
@@ -106,15 +106,15 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulliganCount) const
 
     if (!m_profile.skipCurveCheck)
     {
-        bool hasTwoDrop = false;
+        bool has_two_drop = false;
         for (const Card& c : hand)
         {
-            if (!c.IsLand() && c.m_mana_cost.ManaValue() <= 2 && landCount >= 2)
+            if (!c.IsLand() && c.m_mana_cost.ManaValue() <= 2 && land_count >= 2)
             {
-                hasTwoDrop = true;
+                has_two_drop = true;
             }
         }
-        if (!hasTwoDrop && mulliganCount < 2)
+        if (!has_two_drop && mulligan_count < 2)
         {
             return false;
         }
@@ -140,12 +140,12 @@ void AIEngine::BottomCards(GameState& state, int count)
     }
 }
 
-void AIEngine::TakeTurn(GameState& state, bool isPreCombatMain)
+void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
 {
     // TODO (Phase 1.2): land drop, spell casting, activated abilities.
     // Requires CardDatabase to resolve card types and mana costs from placeholder Cards.
     (void)state;
-    (void)isPreCombatMain;
+    (void)is_pre_combat_main;
 }
 
 std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)

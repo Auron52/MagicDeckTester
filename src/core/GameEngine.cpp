@@ -4,10 +4,10 @@
 
 GameEngine::GameEngine(AIEngine& ai) : m_ai(ai) {}
 
-int GameEngine::RunGame(GameState& state, int maxTurns)
+int GameEngine::RunGame(GameState& state, int max_turns)
 {
     m_ai.HandleMulligan(state);
-    while (state.turnNumber < maxTurns)
+    while (state.turnNumber < max_turns)
     {
         if (state.playerLostOnDraw)
         {
@@ -32,9 +32,9 @@ void GameEngine::RunTurn(GameState& state)
     {
         return;
     }
-    MainPhase(state, /*isPreCombat=*/true);
+    MainPhase(state, /*is_pre_combat=*/true);
     CombatPhase(state);
-    MainPhase(state, /*isPreCombat=*/false);
+    MainPhase(state, /*is_pre_combat=*/false);
     EndStep(state);
     CleanupStep(state);
 }
@@ -78,11 +78,11 @@ void GameEngine::DrawStep(GameState& state)
     ResolveStack(state);
 }
 
-void GameEngine::MainPhase(GameState& state, bool isPreCombat)
+void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 {
-    state.phase = isPreCombat ? Phase::PreCombatMain : Phase::PostCombatMain;
+    state.phase = is_pre_combat ? Phase::PreCombatMain : Phase::PostCombatMain;
     state.step  = Step::MainPhase;
-    m_ai.TakeTurn(state, isPreCombat);
+    m_ai.TakeTurn(state, is_pre_combat);
     ResolveStack(state);
 }
 

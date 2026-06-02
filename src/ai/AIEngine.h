@@ -13,7 +13,7 @@ public:
 
     // Called each main phase. Plays lands, casts spells, activates abilities.
     // No-op until CardDatabase is wired up in Phase 1.2.
-    void TakeTurn(GameState& state, bool isPreCombatMain);
+    void TakeTurn(GameState& state, bool is_pre_combat_main);
 
     // Returns pointers to battlefield permanents that will attack this turn.
     std::vector<Permanent*> DeclareAttackers(GameState& state);
@@ -24,6 +24,6 @@ public:
 private:
     MulliganProfile m_profile;
 
-    bool KeepHand(const std::vector<Card>& hand, int mulliganCount) const;
+    bool KeepHand(const std::vector<Card>& hand, int mulligan_count) const;
     void BottomCards(GameState& state, int count);
 };

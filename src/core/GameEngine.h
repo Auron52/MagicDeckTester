@@ -10,7 +10,7 @@ public:
 
     // Returns the turn number the active player won;
     // -1 if max turns exceeded or player lost on draw.
-    int RunGame(GameState& state, int maxTurns = 20);
+    int RunGame(GameState& state, int max_turns = 20);
 
 private:
     AIEngine& m_ai;
@@ -19,7 +19,7 @@ private:
     void UntapStep(GameState& state);
     void UpkeepStep(GameState& state);
     void DrawStep(GameState& state);
-    void MainPhase(GameState& state, bool isPreCombat);
+    void MainPhase(GameState& state, bool is_pre_combat);
     void CombatPhase(GameState& state);
     void EndStep(GameState& state);
     void CleanupStep(GameState& state);

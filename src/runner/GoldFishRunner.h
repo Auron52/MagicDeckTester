@@ -10,16 +10,16 @@ struct RunResult
     double averageWinTurn  = 0.0;
     int    gamesWon        = 0;
     int    gamesPlayed     = 0;
-    std::vector<int> winTurns;  // per-game result; -1 = did not win within maxTurns
+    std::vector<int> winTurns;  // per-game result; -1 = did not win within max_turns
 };
 
 class GoldFishRunner
 {
 public:
-    // baseSeed + gameIndex is the seed for each individual game (seeding contract).
-    // Caller is responsible for generating baseSeed — use std::random_device for a
+    // base_seed + gameIndex is the seed for each individual game (seeding contract).
+    // Caller is responsible for generating base_seed — use std::random_device for a
     // non-reproducible run, or a stored seed value to replay a previous run.
-    RunResult Run(const Decklist& deck, int numGames, uint64_t baseSeed, int maxTurns = 20);
+    RunResult Run(const Decklist& deck, int num_games, uint64_t base_seed, int max_turns = 20);
 
 private:
     GameState SetupGame(const Decklist& deck, uint64_t seed);
