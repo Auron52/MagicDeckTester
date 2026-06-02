@@ -17,8 +17,7 @@ void AIEngine::handleMulligan(GameState& state)
     }
 
     int mulliganCount = 0;
-    // Hard cap: 7 mulligans bottoms all 7 cards; can't go lower (player would concede).
-    while (mulliganCount < 7 && !keepHand(ap.hand, mulliganCount))
+    while (!keepHand(ap.hand, mulliganCount))
     {
         // Return hand to library; GoldFishRunner has already shuffled for this game,
         // so re-shuffle here to simulate the physical shuffle during a mulligan.
