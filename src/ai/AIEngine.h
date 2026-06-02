@@ -22,7 +22,7 @@ public:
     Card* chooseDiscard(GameState& state);
 
 private:
-    MulliganProfile profile_;
+    MulliganProfile m_profile;
 
     bool keepHand(const std::vector<Card>& hand, int mulliganCount) const;
     void bottomCards(GameState& state, int count);

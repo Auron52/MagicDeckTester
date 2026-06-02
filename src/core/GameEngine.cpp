@@ -2,11 +2,11 @@
 #include "../ai/AIEngine.h"
 #include <algorithm>
 
-GameEngine::GameEngine(AIEngine& ai) : ai_(ai) {}
+GameEngine::GameEngine(AIEngine& ai) : m_ai(ai) {}
 
 int GameEngine::runGame(GameState& state, int maxTurns)
 {
-    ai_.handleMulligan(state);
+    m_ai.handleMulligan(state);
     while (state.turnNumber < maxTurns)
     {
         if (state.playerLostOnDraw)
@@ -82,7 +82,7 @@ void GameEngine::mainPhase(GameState& state, bool isPreCombat)
 {
     state.phase = isPreCombat ? Phase::PreCombatMain : Phase::PostCombatMain;
     state.step  = Step::MainPhase;
-    ai_.takeTurn(state, isPreCombat);
+    m_ai.takeTurn(state, isPreCombat);
     resolveStack(state);
 }
 
@@ -95,7 +95,7 @@ void GameEngine::combatPhase(GameState& state)
     resolveStack(state);
 
     state.step = Step::DeclareAttackers;
-    std::vector<Permanent*> attackers = ai_.declareAttackers(state);
+    std::vector<Permanent*> attackers = m_ai.declareAttackers(state);
     // Phase 1: opponent has no blockers; all attackers deal damage unblocked.
     resolveStack(state);
 
@@ -132,7 +132,7 @@ void GameEngine::cleanupStep(GameState& state)
     // Discard to maximum hand size (7 by default; hand-size modifiers deferred to Phase 1.2)
     while (ap.hand.size() > 7)
     {
-        Card* discard = ai_.chooseDiscard(state);
+        Card* discard = m_ai.chooseDiscard(state);
         ap.graveyard.push_back(*discard);
         ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
             [discard](const Card& c) { return &c == discard; }));
