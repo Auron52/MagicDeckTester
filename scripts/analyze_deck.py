@@ -167,13 +167,24 @@ Available templates and their parameters:
 - basic_land:        { "produces": ["G"] }
 - vanilla_creature:  {}
 - mana_dork:         { "produces": ["G"] }
-- direct_damage:     { "damage": 3 }
+- direct_damage:     { "damage": 3, "targeting": "any" }
 - counter_spell:     { "conditional": false }
-- removal:           { "exile": false }
+- removal:           { "exile": false, "targeting": "creature" }
 - draw_spell:        { "draw": 2 }
 - draw_x:            {}
-- pump_spell:        { "power_bonus": 2, "tough_bonus": 2 }
+- pump_spell:        { "power_bonus": 2, "tough_bonus": 2, "targeting": "creature" }
 - lord_effect:       { "subtypes_affected": ["Goblin"], "power_bonus": 1, "tough_bonus": 1 }
+
+Targeting values for the "targeting" parameter:
+- "any"      — any target: player, planeswalker, or creature (e.g. Lightning Bolt, Shock)
+- "player"   — players or planeswalkers only (no creatures)
+- "creature" — creatures only (e.g. Searing Blood, Giant Growth)
+- "multi"    — requires one player target AND one creature that player controls (e.g. Searing Blaze)
+- omit field — no target required (draw spells, creatures, lands, etc.)
+
+IMPORTANT: choose "targeting" based on the card's oracle text, not its feel.
+A spell that says "any target" is "any". A spell that says "target creature" is "creature".
+A spell that says "target player and target creature that player controls" is "multi".
 
 For Tier 3, set "tier": 3, omit "entry", and explain in "reason" what mechanism requires custom code.
 Output a JSON array — one object per card."""

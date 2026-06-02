@@ -238,6 +238,35 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
 
 // ---- Spell selection ----
 
+bool AIEngine::HasLegalTarget(const GameState& state, Targeting targeting) const
+{
+    switch (targeting)
+    {
+        case Targeting::None:
+        case Targeting::Any:
+        case Targeting::Player:
+            return true;
+        case Targeting::Creature:
+        case Targeting::Multi:
+            return FindOpponentCreature(state) >= 0;
+    }
+    return true;
+}
+
+int AIEngine::FindOpponentCreature(const GameState& state) const
+{
+    const Player& opp = state.Opponent();
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller == &opp && p.card.IsCreature())
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
 bool AIEngine::WinsThisTurn(const GameState& state, int extra_damage) const
 {
     int pending = 0;
@@ -264,7 +293,8 @@ Card* AIEngine::PickBestCastable(GameState& state, const ManaPool& available,
         auto def = CardDatabase::Instance().Lookup(card.m_name);
         if (!def)                            { continue; }
         if (def->card.IsLand())              { continue; }
-        if (!available.CanPay(def->card.m_mana_cost)) { continue; }
+        if (!available.CanPay(def->card.m_mana_cost))       { continue; }
+        if (!HasLegalTarget(state, def->params.targeting))  { continue; }
 
         bool timing_ok = def->card.IsInstant()
                       || def->card.HasKeyword(Keyword::Flash)
@@ -312,12 +342,44 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     entry.controller_index = state.active_player_index;
 
     int opp_index = 1 - state.active_player_index;
-    if (def->tmpl == CardTemplate::DirectDamage)
+    switch (def->params.targeting)
     {
-        Target t;
-        t.type         = Target::Type::Player;
-        t.player_index = opp_index;
-        entry.targets.push_back(t);
+        case Targeting::Any:
+        case Targeting::Player:
+        {
+            Target t;
+            t.type         = Target::Type::Player;
+            t.player_index = opp_index;
+            entry.targets.push_back(t);
+            break;
+        }
+        case Targeting::Creature:
+        {
+            int idx = FindOpponentCreature(state);
+            if (idx < 0) { return; }
+            Target t;
+            t.type            = Target::Type::Permanent;
+            t.permanent_index = idx;
+            entry.targets.push_back(t);
+            break;
+        }
+        case Targeting::Multi:
+        {
+            int idx = FindOpponentCreature(state);
+            if (idx < 0) { return; }
+            Target player_t;
+            player_t.type         = Target::Type::Player;
+            player_t.player_index = opp_index;
+            entry.targets.push_back(player_t);
+            Target perm_t;
+            perm_t.type            = Target::Type::Permanent;
+            perm_t.permanent_index = idx;
+            entry.targets.push_back(perm_t);
+            break;
+        }
+        case Targeting::None:
+        default:
+            break;
     }
 
     if (!TapForCost(state, def->card.m_mana_cost, available)) { return; }

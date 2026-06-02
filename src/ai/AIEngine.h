@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/GameState.h"
 #include "../core/ManaPool.h"
+#include "../cards/CardDatabase.h"
 #include "MulliganProfile.h"
 #include <vector>
 
@@ -50,4 +51,10 @@ private:
     // Returns true if dealing extra_damage to the opponent wins the game this turn
     // when combined with pending attackers already declared.
     bool WinsThisTurn(const GameState& state, int extra_damage) const;
+
+    // Returns true if there is at least one legal target for the given targeting type.
+    bool HasLegalTarget(const GameState& state, Targeting targeting) const;
+
+    // Returns the battlefield index of the first creature the opponent controls, or -1.
+    int FindOpponentCreature(const GameState& state) const;
 };

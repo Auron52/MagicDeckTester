@@ -222,6 +222,15 @@ Card CardDatabase::BuildCardFromJson(const json& entry) const
     return card;
 }
 
+static Targeting TargetingFromString(const std::string& s)
+{
+    if (s == "any")      { return Targeting::Any; }
+    if (s == "player")   { return Targeting::Player; }
+    if (s == "creature") { return Targeting::Creature; }
+    if (s == "multi")    { return Targeting::Multi; }
+    return Targeting::None;
+}
+
 CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 {
     CardParams p;
@@ -229,6 +238,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.draw        = params.value("draw", 0);
     p.power_bonus = params.value("power_bonus", 0);
     p.tough_bonus = params.value("tough_bonus", 0);
+    p.targeting   = TargetingFromString(params.value("targeting", std::string("none")));
 
     for (const std::string& c : params.value("produces", json::array()))
     {

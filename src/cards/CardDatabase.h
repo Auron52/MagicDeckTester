@@ -8,6 +8,18 @@
 #include <unordered_map>
 #include <nlohmann/json.hpp>
 
+// What a spell or ability can legally target.
+// Used by the AI to check for legal targets before casting,
+// and by CastSpellFromHand to build the correct Target list.
+enum class Targeting
+{
+    None,     // no target required (creatures, draw spells, etc.)
+    Any,      // any target: player, planeswalker, or creature (e.g. Lightning Bolt)
+    Player,   // players/planeswalkers only
+    Creature, // creatures only (e.g. Searing Blood)
+    Multi,    // one player target AND one creature that player controls (e.g. Searing Blaze)
+};
+
 // Parameters extracted from a card's JSON definition, forwarded to the template handler.
 struct CardParams
 {
@@ -15,6 +27,7 @@ struct CardParams
     int draw         = 0;
     int power_bonus  = 0;
     int tough_bonus  = 0;
+    Targeting targeting = Targeting::None;
     std::vector<Color> produces;   // mana colors this card produces
     std::vector<std::string> subtypes_affected;  // for lord effects
 };
