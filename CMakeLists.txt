@@ -26,6 +26,7 @@ add_library(mtg-core STATIC
     src/core/EffectHandler.cpp
     src/deck/DeckLoader.cpp
     src/ai/AIEngine.cpp
+    src/ai/TurnSolver.cpp
     src/runner/GoldFishRunner.cpp
     src/cards/CardDatabase.cpp
 )

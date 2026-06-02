@@ -3,6 +3,7 @@
 #include "../core/ManaPool.h"
 #include "../cards/CardDatabase.h"
 #include "MulliganProfile.h"
+#include "TurnSolver.h"
 #include <vector>
 
 class AIEngine
@@ -37,23 +38,12 @@ private:
     // Build a ManaPool from all currently untapped mana sources the active player controls.
     ManaPool BuildAvailableMana(const GameState& state) const;
 
-    // Find the best castable spell given available mana, or nullptr if nothing is castable.
-    Card* PickBestCastable(GameState& state, const ManaPool& available,
-                           bool is_pre_combat_main) const;
-
     // Tap permanents to pay the cost, updating the available pool in place.
     // Returns false if the cost cannot be paid (leaves state unchanged on failure).
     bool TapForCost(GameState& state, const ManaCost& cost, ManaPool& available);
 
     // Remove a spell from hand, tap sources to pay, and push a StackEntry.
     void CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available);
-
-    // Returns true if dealing extra_damage to the opponent wins the game this turn
-    // when combined with pending attackers already declared.
-    bool WinsThisTurn(const GameState& state, int extra_damage) const;
-
-    // Returns true if there is at least one legal target for the given targeting type.
-    bool HasLegalTarget(const GameState& state, Targeting targeting) const;
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;

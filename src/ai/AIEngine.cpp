@@ -1,4 +1,5 @@
 #include "AIEngine.h"
+#include "TurnSolver.h"
 #include "../cards/CardDatabase.h"
 #include <algorithm>
 #include <stdexcept>
@@ -103,20 +104,22 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
 {
     TryPlayLand(state);
 
-    // Cast spells until nothing remains castable.
-    // Rebuilds available mana each iteration so ETB untap effects are reflected.
-    bool cast_something = true;
-    while (cast_something)
+    TurnSolver::Plan plan = TurnSolver::Solve(state, is_pre_combat_main);
+
+    // Execute: regular spells first so their lands are tapped before
+    // sacrifice-land spells fire, minimising the cost of the sacrifice.
+    auto cast_by_name = [&](const std::string& name)
     {
-        cast_something = false;
+        Player& ap = state.ActivePlayer();
+        auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
+            [&name](const Card& c) { return c.m_name == name; });
+        if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);
-        Card* to_cast = PickBestCastable(state, available, is_pre_combat_main);
-        if (to_cast != nullptr)
-        {
-            CastSpellFromHand(state, *to_cast, available);
-            cast_something = true;
-        }
-    }
+        CastSpellFromHand(state, *it, available);
+    };
+
+    for (const std::string& name : plan.spells)    { cast_by_name(name); }
+    for (const std::string& name : plan.sacrifice) { cast_by_name(name); }
 }
 
 // ---- Land drop ----
@@ -247,21 +250,6 @@ ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& sta
     return def.card.m_mana_cost;
 }
 
-bool AIEngine::HasLegalTarget(const GameState& state, Targeting targeting) const
-{
-    switch (targeting)
-    {
-        case Targeting::None:
-        case Targeting::Any:
-        case Targeting::Player:
-            return true;
-        case Targeting::Creature:
-        case Targeting::Multi:
-            return FindOpponentCreature(state) >= 0;
-    }
-    return true;
-}
-
 int AIEngine::FindOpponentCreature(const GameState& state) const
 {
     const Player& opp = state.Opponent();
@@ -274,85 +262,6 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
         }
     }
     return -1;
-}
-
-bool AIEngine::WinsThisTurn(const GameState& state, int extra_damage) const
-{
-    int pending = 0;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller == &state.ActivePlayer() && p.CanAttack())
-        {
-            pending += p.EffectivePower();
-        }
-    }
-    return (pending + extra_damage) >= state.Opponent().life;
-}
-
-Card* AIEngine::PickBestCastable(GameState& state, const ManaPool& available,
-                                  bool is_pre_combat_main) const
-{
-    (void)is_pre_combat_main;
-    Player& ap = state.ActivePlayer();
-    Card* best     = nullptr;
-    int best_score = -1;
-
-    for (Card& card : ap.hand)
-    {
-        auto def = CardDatabase::Instance().Lookup(card.m_name);
-        if (!def)                            { continue; }
-        if (def->card.IsLand())              { continue; }
-        ManaCost effective = EffectiveCost(*def, state);
-        if (!available.CanPay(effective))                    { continue; }
-        if (!HasLegalTarget(state, def->params.targeting))   { continue; }
-
-        if (def->params.sacrifice_land)
-        {
-            bool has_land = false;
-            for (const Permanent& p : state.battlefield)
-            {
-                if (p.controller == &ap && p.card.IsLand()) { has_land = true; break; }
-            }
-            if (!has_land) { continue; }
-        }
-
-        bool timing_ok = def->card.IsInstant()
-                      || def->card.HasKeyword(Keyword::Flash)
-                      || state.stack.empty();
-        if (!timing_ok) { continue; }
-
-        // Win-now line: always take it immediately.
-        if (def->tmpl == CardTemplate::DirectDamage)
-        {
-            if (WinsThisTurn(state, def->params.damage)) { return &card; }
-        }
-
-        // Score: prefer high-power creatures, then direct damage, then others.
-        // Use effective mana value so Spectacle cards score correctly.
-        // Sacrifice-land spells score lowest so other spells tap lands first,
-        // ensuring the sacrificed land is already spent.
-        int score = 0;
-        if (def->params.sacrifice_land)
-        {
-            score = 1;
-        }
-        else if (def->card.IsCreature())
-        {
-            score = 100 + def->card.m_power.value_or(0) * 10 - effective.ManaValue();
-        }
-        else
-        {
-            score = (def->tmpl == CardTemplate::DirectDamage ? 50 : 10) - effective.ManaValue();
-        }
-
-        if (score > best_score)
-        {
-            best       = &card;
-            best_score = score;
-        }
-    }
-
-    return best;
 }
 
 void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available)
