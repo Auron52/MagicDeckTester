@@ -1,4 +1,100 @@
 {
     "cards": [
+        {
+            "name": "Mountain",
+            "mana_cost": "",
+            "types": ["Land"],
+            "keywords": [],
+            "oracle_text": "{T}: Add {R}.",
+            "template": "basic_land",
+            "parameters": { "produces": ["R"] }
+        },
+        {
+            "name": "Lightning Bolt",
+            "mana_cost": "{R}",
+            "types": ["Instant"],
+            "keywords": [],
+            "oracle_text": "Lightning Bolt deals 3 damage to any target.",
+            "template": "direct_damage",
+            "parameters": { "damage": 3 }
+        },
+        {
+            "name": "Monastery Swiftspear",
+            "mana_cost": "{R}",
+            "types": ["Creature"],
+            "keywords": ["Haste"],
+            "power": 1,
+            "toughness": 2,
+            "oracle_text": "Haste\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.) [Prowess not modelled in Phase 1.2]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Goblin Guide",
+            "mana_cost": "{R}",
+            "types": ["Creature"],
+            "keywords": ["Haste"],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Haste\nWhenever Goblin Guide attacks, defending player reveals the top card of their library. If it's a land card, that player puts it into their hand. [Trigger not modelled in Phase 1.2]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Eidolon of the Great Revel",
+            "mana_cost": "{R}{R}",
+            "types": ["Enchantment", "Creature"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Whenever a player casts a spell with mana value 3 or less, Eidolon of the Great Revel deals 2 damage to that player. [Trigger not modelled in Phase 1.2]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Searing Blaze",
+            "mana_cost": "{R}{R}",
+            "types": ["Instant"],
+            "keywords": [],
+            "oracle_text": "Searing Blaze deals 1 damage to target player and 1 damage to target creature that player controls. Landfall — deals 3 instead if a land entered the battlefield under your control this turn. [Simplified: deals 1 to opponent; landfall and creature damage not modelled]",
+            "template": "direct_damage",
+            "parameters": { "damage": 1 }
+        },
+        {
+            "name": "Shard Volley",
+            "mana_cost": "{R}",
+            "types": ["Instant"],
+            "keywords": [],
+            "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nShard Volley deals 3 damage to any target. [Land sacrifice not modelled in Phase 1.2]",
+            "template": "direct_damage",
+            "parameters": { "damage": 3 }
+        },
+        {
+            "name": "Skullcrack",
+            "mana_cost": "{R}{R}",
+            "types": ["Instant"],
+            "keywords": [],
+            "oracle_text": "Players can't gain life this turn. Damage can't be prevented this turn.\nSkullcrack deals 3 damage to any target. [Life-gain lock and damage-prevention lock not modelled]",
+            "template": "direct_damage",
+            "parameters": { "damage": 3 }
+        },
+        {
+            "name": "Light Up the Stage",
+            "mana_cost": "{2}{R}",
+            "types": ["Sorcery"],
+            "keywords": [],
+            "oracle_text": "Spectacle {R}\nExile the top two cards of your library. Until the end of your next turn, you may play those cards. [Simplified: draw 2; Spectacle and play-from-exile not modelled]",
+            "template": "draw_spell",
+            "parameters": { "draw": 2 }
+        },
+        {
+            "name": "Searing Blood",
+            "mana_cost": "{R}{R}",
+            "types": ["Instant"],
+            "keywords": [],
+            "oracle_text": "Searing Blood deals 2 damage to target creature. When that creature dies this turn, Searing Blood deals 3 damage to that creature's controller. [Simplified: deals 2 to opponent; death trigger not modelled]",
+            "template": "direct_damage",
+            "parameters": { "damage": 2 }
+        }
     ]
 }

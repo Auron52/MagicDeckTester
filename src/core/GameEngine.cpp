@@ -1,5 +1,7 @@
 #include "GameEngine.h"
+#include "EffectHandler.h"
 #include "../ai/AIEngine.h"
+#include "../cards/CardDatabase.h"
 #include <algorithm>
 
 GameEngine::GameEngine(AIEngine& ai) : m_ai(ai) {}
@@ -157,8 +159,11 @@ void GameEngine::ResolveStack(GameState& state)
         // Both players have passed priority — resolve top entry (CR 608).
         StackEntry entry = state.stack.back();
         state.stack.pop_back();
-        // TODO: dispatch to card-specific resolve logic via CardDatabase (Phase 1.2)
-        (void)entry;
+        auto def = CardDatabase::Instance().Lookup(entry.source.m_name);
+        if (def)
+        {
+            EffectHandler::Resolve(state, entry, *def);
+        }
         CheckStateBasedActions(state);
     }
 }

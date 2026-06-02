@@ -23,6 +23,7 @@ FetchContent_MakeAvailable(nlohmann_json)
 # Shared game engine library — linked by both the runner and the analyzer
 add_library(mtg-core STATIC
     src/core/GameEngine.cpp
+    src/core/EffectHandler.cpp
     src/deck/DeckLoader.cpp
     src/ai/AIEngine.cpp
     src/runner/GoldFishRunner.cpp

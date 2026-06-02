@@ -4,16 +4,18 @@
 #include <string>
 #include <random>
 #include "deck/DeckLoader.h"
+#include "cards/CardDatabase.h"
 #include "runner/GoldFishRunner.h"
 
 static void PrintUsage(const char* prog)
 {
     std::cerr << "Usage: " << prog
-              << " <deckfile> [--games N] [--seed S] [--max-turns T]\n"
-              << "  <deckfile>     Plain text (.txt) or Cockatrice (.cod) decklist\n"
-              << "  --games N      Number of games to simulate (default: 10000)\n"
-              << "  --seed S       Base RNG seed (omit to generate randomly)\n"
-              << "  --max-turns T  Maximum turns before declaring no-win (default: 20)\n";
+              << " <deckfile> [--games N] [--seed S] [--max-turns T] [--cards-json path]\n"
+              << "  <deckfile>      Plain text (.txt) or Cockatrice (.cod) decklist\n"
+              << "  --games N       Number of games to simulate (default: 10000)\n"
+              << "  --seed S        Base RNG seed (omit to generate randomly)\n"
+              << "  --max-turns T   Maximum turns before declaring no-win (default: 20)\n"
+              << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n";
 }
 
 int main(int argc, char* argv[])
@@ -24,7 +26,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    std::filesystem::path deck_path = argv[1];
+    std::filesystem::path deck_path  = argv[1];
+    std::filesystem::path cards_json = "src/cards/data/cards.json";
     int      num_games     = 10000;
     int      max_turns     = 20;
     uint64_t seed          = 0;
@@ -48,6 +51,10 @@ int main(int argc, char* argv[])
             {
                 max_turns = std::stoi(argv[i + 1]);
             }
+            else if (flag == "--cards-json")
+            {
+                cards_json = argv[i + 1];
+            }
         }
         catch (...)
         {
@@ -64,6 +71,11 @@ int main(int argc, char* argv[])
 
     try
     {
+        if (std::filesystem::exists(cards_json))
+        {
+            CardDatabase::Instance().LoadFromJson(cards_json);
+        }
+
         Decklist deck = DeckLoader::LoadFromFile(deck_path);
         std::cout << "Loaded " << deck.mainboard.size() << " mainboard card(s)";
         if (!deck.sideboard.empty())
@@ -85,7 +97,7 @@ int main(int argc, char* argv[])
         }
         else
         {
-            std::cout << "No wins recorded (card logic not yet implemented — Phase 1.2)\n";
+            std::cout << "No wins recorded.\n";
         }
     }
     catch (const std::exception& e)
