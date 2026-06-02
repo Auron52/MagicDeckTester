@@ -31,14 +31,14 @@ struct Card
 {
     std::string m_id;           // placeholder until CardDatabase is implemented (Phase 1.2)
     std::string m_name;
-    ManaCost m_manaCost;
+    ManaCost m_mana_cost;
     std::vector<Supertype> m_supertypes;
     std::vector<CardType>  m_types;
     std::vector<Color>     m_colors;
     std::optional<int>     m_power;      // null for non-creatures
     std::optional<int>     m_toughness;
     std::vector<Keyword>   m_keywords;
-    std::string            m_oracleText;
+    std::string            m_oracle_text;
 
     bool isLand()      const { return hasType(CardType::Land); }
     bool isCreature()  const { return hasType(CardType::Creature); }
