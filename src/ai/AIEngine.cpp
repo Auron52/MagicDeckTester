@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-AIEngine::AIEngine(MulliganProfile profile) : profile_(std::move(profile)) {}
+AIEngine::AIEngine(MulliganProfile profile) : m_profile(std::move(profile)) {}
 
 void AIEngine::handleMulligan(GameState& state)
 {
@@ -37,7 +37,7 @@ void AIEngine::handleMulligan(GameState& state)
             ap.hand.push_back(ap.library.drawTop());
         }
 
-        if (static_cast<int>(ap.hand.size()) <= profile_.stopAt)
+        if (static_cast<int>(ap.hand.size()) <= m_profile.stopAt)
         {
             break;
         }
@@ -57,7 +57,7 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
     {
         return true;  // hard floor: never go below 1
     }
-    if (effectiveSize <= profile_.stopAt)
+    if (effectiveSize <= m_profile.stopAt)
     {
         return true;
     }
@@ -72,11 +72,11 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
     }
     int nonLandCount = static_cast<int>(hand.size()) - landCount;
 
-    if (landCount < profile_.minLands)
+    if (landCount < m_profile.minLands)
     {
         return false;
     }
-    if (landCount > profile_.maxLands)
+    if (landCount > m_profile.maxLands)
     {
         return false;
     }
@@ -85,10 +85,10 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
         return false;
     }
 
-    if (!profile_.requiredPieces.empty())
+    if (!m_profile.requiredPieces.empty())
     {
         bool found = false;
-        for (const std::string& piece : profile_.requiredPieces)
+        for (const std::string& piece : m_profile.requiredPieces)
         {
             for (const Card& c : hand)
             {
@@ -105,7 +105,7 @@ bool AIEngine::keepHand(const std::vector<Card>& hand, int mulliganCount) const
         }
     }
 
-    if (!profile_.skipCurveCheck)
+    if (!m_profile.skipCurveCheck)
     {
         bool hasTwoDrop = false;
         for (const Card& c : hand)

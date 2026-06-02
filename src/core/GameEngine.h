@@ -13,7 +13,7 @@ public:
     int runGame(GameState& state, int maxTurns = 20);
 
 private:
-    AIEngine& ai_;
+    AIEngine& m_ai;
 
     void runTurn(GameState& state);
     void untapStep(GameState& state);
