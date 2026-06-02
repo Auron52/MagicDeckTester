@@ -3,7 +3,8 @@
 #include "Library.h"
 #include <vector>
 
-struct Player {
+struct Player
+{
     int life                    = 20;
     std::vector<Card> hand;
     Library           library;      // index 0 = top of library

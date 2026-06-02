@@ -3,7 +3,8 @@
 
 class AIEngine;
 
-class GameEngine {
+class GameEngine
+{
 public:
     explicit GameEngine(AIEngine& ai);
 

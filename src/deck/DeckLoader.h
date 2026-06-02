@@ -3,12 +3,14 @@
 #include <vector>
 #include <filesystem>
 
-struct Decklist {
+struct Decklist
+{
     std::vector<Card> mainboard;   // one Card per copy (60 entries for a standard 60-card deck)
     std::vector<Card> sideboard;
 };
 
-class DeckLoader {
+class DeckLoader
+{
 public:
     // Detects format by extension: .cod -> Cockatrice XML; anything else -> plain text.
     // Throws std::runtime_error on missing file or parse failure.

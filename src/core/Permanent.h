@@ -4,13 +4,15 @@
 
 struct Player;
 
-struct Counter {
+struct Counter
+{
     enum class Type { PlusOnePlusOne, MinusOneMinusOne, Loyalty, Poison };
     Type type;
     int count = 1;
 };
 
-struct Permanent {
+struct Permanent
+{
     Card      card;
     Player*   controller        = nullptr;
     Player*   owner             = nullptr;

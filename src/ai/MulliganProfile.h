@@ -2,7 +2,8 @@
 #include <string>
 #include <vector>
 
-struct MulliganProfile {
+struct MulliganProfile
+{
     int minLands = 1;
     int maxLands = 5;
 
