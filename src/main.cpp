@@ -6,15 +6,22 @@
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
 #include "runner/GoldFishRunner.h"
+#include "ai/MulliganProfileIO.h"
 
 static void PrintUsage(const char* prog)
 {
     std::cerr << "Usage: " << prog
-              << " <deckfile> [--games N] [--seed S] [--max-turns T] [--cards-json path]\n"
+              << " <deckfile> [--games N] [--seed S] [--max-turns T]"
+                 " [--depth D] [--timeout-ms M] [--profile path] [--log-dir path] [--cards-json path]\n"
               << "  <deckfile>      Plain text (.txt) or Cockatrice (.cod) decklist\n"
               << "  --games N       Number of games to simulate (default: 10000)\n"
               << "  --seed S        Base RNG seed (omit to generate randomly)\n"
               << "  --max-turns T   Maximum turns before declaring no-win (default: 20)\n"
+              << "  --depth D       Lookahead depth (default: 0; higher = stronger but slower)\n"
+              << "  --timeout-ms M  Per-turn time budget in ms; 0 = unlimited (default: 0)\n"
+              << "  --threads N     Worker threads (default: 0 = hardware_concurrency)\n"
+              << "  --profile P     Path to a .profile.json file (default: auto-detect deckname.profile.json)\n"
+              << "  --log-dir P     Write one JSON game log per game into this directory\n"
               << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n";
 }
 
@@ -26,39 +33,72 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    std::filesystem::path deck_path  = argv[1];
-    std::filesystem::path cards_json = "src/cards/data/cards.json";
-    int      num_games     = 10000;
-    int      max_turns     = 20;
-    uint64_t seed          = 0;
-    bool     seed_provided = false;
+    std::filesystem::path deck_path    = argv[1];
+    std::filesystem::path cards_json   = "src/cards/data/cards.json";
+    std::filesystem::path profile_path;
+    std::filesystem::path log_dir;
+    int      num_games      = 10000;
+    int      max_turns      = 20;
+    int      base_game_index = 0;
+    int      lookahead_depth = 0;
+    int      timeout_ms     = 0;
+    int      num_threads    = 0;
+    uint64_t seed           = 0;
+    bool     seed_provided  = false;
 
-    for (int i = 2; i < argc - 1; ++i)
+    for (int i = 2; i < argc; ++i)
     {
         std::string flag = argv[i];
         try
         {
-            if (flag == "--games")
+            if (i + 1 < argc)
             {
-                num_games = std::stoi(argv[i + 1]);
-            }
-            else if (flag == "--seed")
-            {
-                seed          = std::stoull(argv[i + 1]);
-                seed_provided = true;
-            }
-            else if (flag == "--max-turns")
-            {
-                max_turns = std::stoi(argv[i + 1]);
-            }
-            else if (flag == "--cards-json")
-            {
-                cards_json = argv[i + 1];
+                if (flag == "--games")
+                {
+                    num_games = std::stoi(argv[++i]);
+                }
+                else if (flag == "--seed")
+                {
+                    seed          = std::stoull(argv[++i]);
+                    seed_provided = true;
+                }
+                else if (flag == "--max-turns")
+                {
+                    max_turns = std::stoi(argv[++i]);
+                }
+                else if (flag == "--profile")
+                {
+                    profile_path = argv[++i];
+                }
+                else if (flag == "--log-dir")
+                {
+                    log_dir = argv[++i];
+                }
+                else if (flag == "--game-index")
+                {
+                    base_game_index = std::stoi(argv[++i]);
+                }
+                else if (flag == "--depth")
+                {
+                    lookahead_depth = std::stoi(argv[++i]);
+                }
+                else if (flag == "--timeout-ms")
+                {
+                    timeout_ms = std::stoi(argv[++i]);
+                }
+                else if (flag == "--threads")
+                {
+                    num_threads = std::stoi(argv[++i]);
+                }
+                else if (flag == "--cards-json")
+                {
+                    cards_json = argv[++i];
+                }
             }
         }
         catch (...)
         {
-            std::cerr << "Invalid value for " << flag << ": " << argv[i + 1] << "\n";
+            std::cerr << "Invalid value for " << flag << ": " << argv[i] << "\n";
             return 1;
         }
     }
@@ -84,8 +124,23 @@ int main(int argc, char* argv[])
         }
         std::cout << "\n";
 
+        // Auto-detect deckname.profile.json if no explicit --profile was given.
+        if (profile_path.empty())
+        {
+            profile_path = deck_path.parent_path()
+                         / (deck_path.stem().string() + ".profile.json");
+        }
+
+        MulliganProfile profile;
+        if (std::filesystem::exists(profile_path))
+        {
+            profile = LoadDeckProfile(profile_path);
+            std::cerr << "Loaded profile from " << profile_path.string() << "\n";
+        }
+
         GoldFishRunner runner;
-        RunResult result = runner.Run(deck, num_games, seed, max_turns);
+        RunResult result = runner.Run(deck, num_games, seed, max_turns, profile, log_dir,
+                                       base_game_index, lookahead_depth, timeout_ms, num_threads);
 
         std::cout << "Seed         : " << result.seed << "\n";
         std::cout << "Games played : " << result.games_played << "\n";
@@ -98,6 +153,25 @@ int main(int argc, char* argv[])
         else
         {
             std::cout << "No wins recorded.\n";
+        }
+
+        int losses = result.games_played - result.games_won;
+        if (losses > 0)
+        {
+            std::cout << "Losses (" << losses << "):\n";
+            for (int i = 0; i < static_cast<int>(result.win_turns.size()); ++i)
+            {
+                if (result.win_turns[i] <= 0)
+                {
+                    std::cout << "  game " << i
+                              << "  seed " << (result.seed + static_cast<uint64_t>(i)) << "\n";
+                }
+            }
+        }
+
+        if (!log_dir.empty())
+        {
+            std::cerr << "Game logs written to " << log_dir.string() << "\n";
         }
     }
     catch (const std::exception& e)

@@ -71,3 +71,13 @@ Read `.claude/skills/mtg-ai.md` and [implement / design / review] ...
 - **Before designing the game log format** — the skill specifies the required structure and disk-cleanup policy.
 - **Before implementing shuffle or random event logic** — the seeding contract between d1 and d2 is non-obvious; read the skill first.
 - **When considering Phase 2 (opponent AI)** — the skill flags where encoded logic becomes impractical and prompts a discussion.
+
+## Deck Analysis Skill
+
+When the user asks to **analyze a deck**, **add a new deck**, or **run the simulator on a deck file**, read `.claude/skills/analyze-deck.md` first. It describes the full three-stage workflow:
+
+1. **Coverage check** — run `scripts/analyze_deck.py --coverage-only` to find missing cards and implementation gaps
+2. **Implement & review** — use the MTG Rules skill to implement missing cards, review each one, write to `cards.json`
+3. **Analyze** — run `scripts/analyze_deck.py` to build and run the C++ simulator
+
+This workflow requires no external API calls — all generation and review happens in the conversation.

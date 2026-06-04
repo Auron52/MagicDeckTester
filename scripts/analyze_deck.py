@@ -1,78 +1,95 @@
 #!/usr/bin/env python3
 """
-analyze_deck.py  —  Phase 1.2 deck analysis orchestrator
+analyze_deck.py  —  Deterministic deck analysis tool
 
-Workflow:
-  1. Parse the decklist and look up each card on Scryfall.
-  2. Check which cards are already in src/cards/data/cards.json or src/cards/custom/.
-  3. For missing cards, ask Claude to generate JSON definitions (Tier 1/2) or
-     C++ implementations (Tier 3). Write the generated files to the repo.
-  4. If any C++ files were written, rebuild the project with cmake.
-  5. Run mtg-analyze on the deck and capture the JSON analysis output.
-  6. Ask Claude to interpret the analysis and produce a DeckProfile (heuristics).
-  7. Print the rules for user review.
-  8. Save the DeckProfile to <deckname>.profile.json.
+Handles the mechanical steps that don't require Claude:
+  1. Parse the decklist (.txt plain text or .cod Cockatrice XML).
+  2. Check card coverage: which cards are missing from the database,
+     and which existing cards have known implementation gaps.
+  3. (Optional) Rebuild the project.
+  4. Run mtg-analyze and capture the JSON output.
+
+The generate / review steps that require intelligence are handled by Claude
+in the conversation, guided by .claude/skills/analyze-deck.md.
 
 Usage:
-    python scripts/analyze_deck.py <decklist> [--games N] [--output path]
+    python scripts/analyze_deck.py <decklist> [options]
 
-Environment:
-    ANTHROPIC_API_KEY  — required for Claude API calls
+Options:
+    --coverage-only    Report coverage and exit; do not build or analyze.
+    --no-rebuild       Skip the cmake rebuild step.
+    --games N          Number of simulation games (default: 500).
+    --cards-json PATH  Path to card definitions (default: src/cards/data/cards.json).
 """
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
-import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
-
-import anthropic
-import requests
-
-# ---------------------------------------------------------------------------
-# Paths (relative to repo root, resolved at startup)
-# ---------------------------------------------------------------------------
 
 REPO_ROOT    = Path(__file__).parent.parent.resolve()
 CARDS_JSON   = REPO_ROOT / "src" / "cards" / "data" / "cards.json"
 CUSTOM_DIR   = REPO_ROOT / "src" / "cards" / "custom"
 BUILD_DIR    = REPO_ROOT / "build"
 ANALYZER_BIN = BUILD_DIR / "Release" / "mtg-analyze.exe"
-CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def ParseArgs():
-    parser = argparse.ArgumentParser(description="Analyze a Magic deck and produce a DeckProfile.")
-    parser.add_argument("decklist", help="Path to .txt or .cod decklist")
-    parser.add_argument("--games",  type=int, default=500,
-                        help="Number of analysis games (default: 500)")
-    parser.add_argument("--output", default=None,
-                        help="Output path for the DeckProfile JSON (default: <deckname>.profile.json)")
-    return parser.parse_args()
+    p = argparse.ArgumentParser(description="Deterministic deck coverage check and analysis.")
+    p.add_argument("decklist",       help="Path to .txt or .cod decklist")
+    p.add_argument("--coverage-only", action="store_true",
+                   help="Report coverage and exit without building or analyzing")
+    p.add_argument("--no-rebuild",   action="store_true",
+                   help="Skip cmake rebuild")
+    p.add_argument("--games",        type=int, default=500)
+    p.add_argument("--cards-json",   default=None,
+                   help="Override path to cards.json")
+    return p.parse_args()
 
 # ---------------------------------------------------------------------------
-# Decklist parsing
+# Decklist parsing — plain text and Cockatrice .cod XML
 # ---------------------------------------------------------------------------
 
 def LoadDeckNames(path: Path) -> list[str]:
-    """Return a deduplicated list of card names from a plain-text decklist."""
+    """
+    Return a deduplicated list of mainboard card names from a decklist.
+    Supports plain text (4 Card Name / 4x Card Name) and Cockatrice .cod XML.
+    """
+    if path.suffix.lower() == ".cod":
+        return _LoadCockatriceDeck(path)
+    return _LoadTextDeck(path)
+
+def _LoadCockatriceDeck(path: Path) -> list[str]:
+    tree = ET.parse(path)
+    root = tree.getroot()
     names = []
     seen  = set()
-    with open(path) as f:
+    for zone in root.findall("zone"):
+        if zone.get("name") != "main":
+            continue
+        for card in zone.findall("card"):
+            name = card.get("name", "").strip()
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+    return names
+
+def _LoadTextDeck(path: Path) -> list[str]:
+    names = []
+    seen  = set()
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("//") or line.startswith("#"):
                 continue
-            # Strip count prefix: "4 Card Name" or "4x Card Name"
             match = re.match(r"^\d+x?\s+(.*)", line)
             name  = match.group(1).strip() if match else line.strip()
-            # Strip Arena set suffix: "Card Name (SET) 123"
             name  = re.sub(r"\s+\([A-Z0-9]+\)\s+\d+$", "", name)
             if name and name not in seen:
                 seen.add(name)
@@ -80,377 +97,205 @@ def LoadDeckNames(path: Path) -> list[str]:
     return names
 
 # ---------------------------------------------------------------------------
-# Scryfall
+# Card coverage
 # ---------------------------------------------------------------------------
 
-SCRYFALL_EXACT = "https://api.scryfall.com/cards/named"
-
-def FetchScryfallCard(name: str) -> dict | None:
-    """Fetch a card's data from Scryfall by exact name. Returns None on 404."""
-    try:
-        resp = requests.get(SCRYFALL_EXACT, params={"exact": name}, timeout=10)
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
-        return resp.json()
-    except requests.RequestException as e:
-        print(f"  Warning: Scryfall request failed for '{name}': {e}", file=sys.stderr)
-        return None
-
-def FetchAllCards(names: list[str]) -> dict[str, dict]:
-    """Fetch Scryfall data for each name, with polite rate limiting."""
-    results = {}
-    for i, name in enumerate(names):
-        print(f"  Scryfall [{i+1}/{len(names)}]: {name}")
-        data = FetchScryfallCard(name)
-        if data:
-            results[name] = data
-        else:
-            print(f"    Not found on Scryfall: {name}", file=sys.stderr)
-        time.sleep(0.1)  # Scryfall rate limit: max 10 req/s
-    return results
-
-# ---------------------------------------------------------------------------
-# Card coverage check
-# ---------------------------------------------------------------------------
-
-def LoadImplementedNames() -> set[str]:
-    """Return names of all cards currently in cards.json or src/cards/custom/."""
+def LoadImplementedNames(cards_json: Path) -> set[str]:
     implemented = set()
-
-    if CARDS_JSON.exists():
-        with open(CARDS_JSON) as f:
+    if cards_json.exists():
+        with open(cards_json, encoding="utf-8") as f:
             data = json.load(f)
         for card in data.get("cards", []):
             if "name" in card:
                 implemented.add(card["name"])
-
-    for cpp_file in CUSTOM_DIR.glob("*.cpp"):
-        # Convention: file name matches card name with spaces replaced by underscores
-        implemented.add(cpp_file.stem.replace("_", " "))
-
+    if CUSTOM_DIR.exists():
+        for cpp_file in CUSTOM_DIR.glob("*.cpp"):
+            implemented.add(cpp_file.stem.replace("_", " "))
     return implemented
 
-# ---------------------------------------------------------------------------
-# Claude: card implementation generation
-# ---------------------------------------------------------------------------
+def LoadCardEntry(name: str, cards_json: Path) -> dict | None:
+    if not cards_json.exists():
+        return None
+    with open(cards_json, encoding="utf-8") as f:
+        data = json.load(f)
+    for card in data.get("cards", []):
+        if card.get("name") == name:
+            return card
+    return None
 
-CARD_IMPL_SYSTEM = """You are a C++ game engine developer implementing Magic: The Gathering cards
-for a simulator. You generate card definitions in one of two forms:
-
-1. JSON entry for src/cards/data/cards.json (Tier 1: pure data, Tier 2: named template).
-   Use this for: basic lands, vanilla creatures, simple damage spells, simple draw spells,
-   mana dorks, counterspells, removal, pump spells, lord effects.
-
-2. A note that the card requires Tier 3 custom C++ (complex unique mechanics).
-
-For each card, output a JSON object with the following schema:
-{
-  "tier": 1 or 2 or 3,
-  "entry": {                         // present for tiers 1 and 2
-    "name": "...",
-    "mana_cost": "{1}{R}",           // use {W}{U}{B}{R}{G}{C}{X}{N} symbols
-    "mana_value": <int>,
-    "types": ["Creature"],           // Land, Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker
-    "subtypes": ["Elf", "Druid"],
-    "keywords": ["Haste"],           // exact keyword names from the oracle text
-    "power": <int or null>,
-    "toughness": <int or null>,
-    "oracle_text": "...",
-    "template": "<template_name>",   // see templates list below
-    "parameters": { ... }            // template-specific parameters
-  },
-  "reason": "..."                    // brief justification for tier/template choice
-}
-
-Available templates and their parameters:
-- basic_land:        { "produces": ["G"] }
-- vanilla_creature:  {}
-- mana_dork:         { "produces": ["G"] }
-- direct_damage:     { "damage": 3, "targeting": "any" }
-- counter_spell:     { "conditional": false }
-- removal:           { "exile": false, "targeting": "creature" }
-- draw_spell:        { "draw": 2 }
-- draw_x:            {}
-- pump_spell:        { "power_bonus": 2, "tough_bonus": 2, "targeting": "creature" }
-- lord_effect:       { "subtypes_affected": ["Goblin"], "power_bonus": 1, "tough_bonus": 1 }
-
-Targeting values for the "targeting" parameter:
-- "any"      — any target: player, planeswalker, or creature (e.g. Lightning Bolt, Shock)
-- "player"   — players or planeswalkers only (no creatures)
-- "creature" — creatures only (e.g. Searing Blood, Giant Growth)
-- "multi"    — requires one player target AND one creature that player controls (e.g. Searing Blaze)
-- omit field — no target required (draw spells, creatures, lands, etc.)
-
-IMPORTANT: choose "targeting" based on the card's oracle text, not its feel.
-A spell that says "any target" is "any". A spell that says "target creature" is "creature".
-A spell that says "target player and target creature that player controls" is "multi".
-
-For Tier 3, set "tier": 3, omit "entry", and explain in "reason" what mechanism requires custom code.
-Output a JSON array — one object per card."""
-
-def GenerateCardImplementations(missing_cards: list[str],
-                                 scryfall_data: dict[str, dict],
-                                 client: anthropic.Anthropic) -> list[dict]:
-    """Ask Claude to classify and generate definitions for missing cards."""
-    card_descriptions = []
-    for name in missing_cards:
-        sf = scryfall_data.get(name, {})
-        desc = {
-            "name":        name,
-            "oracle_text": sf.get("oracle_text", ""),
-            "type_line":   sf.get("type_line", ""),
-            "mana_cost":   sf.get("mana_cost", ""),
-            "power":       sf.get("power"),
-            "toughness":   sf.get("toughness"),
-            "keywords":    sf.get("keywords", []),
-        }
-        card_descriptions.append(desc)
-
-    prompt = (
-        "Generate card definitions for the following Magic: The Gathering cards.\n\n"
-        + json.dumps(card_descriptions, indent=2)
-    )
-
-    message = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=8096,
-        system=CARD_IMPL_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    text = message.content[0].text.strip()
-    # Extract JSON array from response (may be wrapped in markdown code block)
-    match = re.search(r"\[.*\]", text, re.DOTALL)
-    if not match:
-        raise RuntimeError("Claude did not return a JSON array in its response")
-    return json.loads(match.group(0))
-
-# ---------------------------------------------------------------------------
-# Apply generated card definitions
-# ---------------------------------------------------------------------------
-
-def ApplyCardDefinitions(definitions: list[dict]) -> tuple[list[str], list[str]]:
+def CheckExistingCoverage(card_names: list[str], cards_json: Path) -> list[dict]:
     """
-    Write Tier 1/2 entries to cards.json, note Tier 3 cards for manual implementation.
-    Returns (json_names, tier3_names).
+    Deterministic oracle-text pattern check for cards already in the database.
+    Checks: spectacle_cost, sacrifice_land, landfall_damage, stages_cards,
+            death_trigger_damage, on_cast_trigger, attack_trigger_damage,
+            upkeep_adds_charge, static effects, unbracketed triggers.
     """
-    with open(CARDS_JSON) as f:
-        cards_data = json.load(f)
+    coverage = []
+    for name in card_names:
+        entry = LoadCardEntry(name, cards_json)
+        if not entry:
+            continue
 
-    json_names  = []
-    tier3_names = []
+        oracle = entry.get("oracle_text", "")
+        params = entry.get("parameters", {})
+        gaps   = []
+        deferred = re.findall(r'\[([^\]]+)\]', oracle)
 
-    for defn in definitions:
-        tier = defn.get("tier", 3)
-        if tier in (1, 2):
-            entry = defn["entry"]
-            cards_data["cards"].append(entry)
-            json_names.append(entry["name"])
-            print(f"  Added to cards.json (Tier {tier}): {entry['name']}")
-        else:
-            name = defn.get("entry", {}).get("name") or defn.get("reason", "unknown")
-            tier3_names.append(name)
-            reason = defn.get("reason", "")
-            print(f"  Tier 3 (custom C++ needed): {name} — {reason}")
+        def is_d(kw: str) -> bool:
+            return any(kw.lower() in d.lower() for d in deferred)
 
-    with open(CARDS_JSON, "w") as f:
-        json.dump(cards_data, f, indent=4)
+        # Spectacle
+        if "Spectacle" in oracle and not params.get("spectacle_cost") and not is_d("spectacle"):
+            gaps.append("Spectacle in oracle text but spectacle_cost not set")
 
-    return json_names, tier3_names
+        # Sacrifice land
+        if "sacrifice a land" in oracle.lower() and not params.get("sacrifice_land") \
+                and not is_d("sacrifice"):
+            gaps.append("'Sacrifice a land' cost in oracle text but sacrifice_land not set")
+
+        # Landfall
+        if "Landfall" in oracle and not params.get("landfall_damage") and not is_d("landfall"):
+            gaps.append("Landfall in oracle text but landfall_damage not set")
+
+        # Staged exile
+        if ("end of your next turn" in oracle or "your next turn" in oracle) \
+                and "exile" in oracle.lower() \
+                and not params.get("stages_cards") \
+                and not is_d("next turn") and not is_d("staged"):
+            gaps.append("Staged exile in oracle text but stages_cards not set")
+
+        # Death trigger
+        if ("creature dies" in oracle or "that creature dies" in oracle) \
+                and not params.get("death_trigger_damage") \
+                and not is_d("dies") and not is_d("death"):
+            gaps.append("Death trigger in oracle text but death_trigger_damage not set")
+
+        # On-cast trigger
+        if ("casts a spell with mana value" in oracle
+                or "casts a spell with converted mana cost" in oracle) \
+                and not params.get("on_cast_trigger_max_mv") and not is_d("cast"):
+            gaps.append("On-cast trigger in oracle text but on_cast_trigger params not set")
+
+        # Static effects needing engine support
+        if "can't gain life" in oracle and not is_d("life") and not is_d("gain"):
+            gaps.append("Static 'can't gain life' not implemented — needs GameState flag")
+        if "can't be prevented" in oracle and not is_d("prevent"):
+            gaps.append("Static 'damage can't be prevented' not implemented — needs engine support")
+
+        # Unbracketed triggered abilities
+        # Skip the check if a known trigger parameter already implements the trigger.
+        trigger_implemented = (
+            params.get("on_cast_trigger_max_mv")
+            or params.get("death_trigger_damage")
+            or params.get("attack_trigger_damage")
+            or params.get("upkeep_adds_charge")
+        )
+        if not trigger_implemented:
+            for trigger in ("Whenever ", "At the beginning of "):
+                if trigger in oracle and not deferred:
+                    gaps.append(f"Triggered ability ('{trigger.strip()}') with no deferral bracket note — "
+                                 "verify it is implemented or add a bracket note")
+                    break
+
+        record: dict = {"card": name, "status": "partial" if gaps else "full"}
+        if deferred:
+            record["deferred"] = deferred
+        if gaps:
+            record["gaps"] = gaps
+        coverage.append(record)
+
+    return coverage
 
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 
 def RebuildProject() -> bool:
-    """Run cmake --build and return True on success."""
     if not BUILD_DIR.exists():
         print("  Build directory not found — run cmake configure first.", file=sys.stderr)
         return False
-
-    print("  Rebuilding project...")
+    print("  Rebuilding...", file=sys.stderr)
     result = subprocess.run(
         ["cmake", "--build", str(BUILD_DIR), "--config", "Release"],
         capture_output=True, text=True
     )
     if result.returncode != 0:
-        print("  Build failed:", file=sys.stderr)
-        print(result.stderr, file=sys.stderr)
+        print("  Build failed:\n" + result.stderr, file=sys.stderr)
         return False
-
-    print("  Build succeeded.")
+    print("  Build OK.", file=sys.stderr)
     return True
 
 # ---------------------------------------------------------------------------
-# Run analyzer
+# Run C++ analyzer
 # ---------------------------------------------------------------------------
 
-def RunAnalyzer(deck_path: Path, num_games: int, seed: int | None = None) -> dict:
-    """Run mtg-analyze and return its JSON output as a dict."""
+def RunAnalyzer(deck_path: Path, num_games: int, cards_json: Path) -> dict:
     if not ANALYZER_BIN.exists():
-        raise RuntimeError(f"Analyzer binary not found: {ANALYZER_BIN}\nRun cmake build first.")
-
+        raise RuntimeError(f"Analyzer binary not found: {ANALYZER_BIN}")
     cmd = [
         str(ANALYZER_BIN),
         str(deck_path),
         "--games", str(num_games),
-        "--cards-json", str(CARDS_JSON),
+        "--cards-json", str(cards_json),
     ]
-    if seed is not None:
-        cmd += ["--seed", str(seed)]
-
-    print(f"  Running analyzer ({num_games} games)...")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"Analyzer failed:\n{result.stderr}")
-
     return json.loads(result.stdout)
-
-# ---------------------------------------------------------------------------
-# Claude: heuristic generation
-# ---------------------------------------------------------------------------
-
-HEURISTIC_SYSTEM = """You are an expert Magic: The Gathering AI developer. Given analysis
-statistics from a goldfishing simulation of a deck, produce a DeckProfile — a set of
-AI decision heuristics that will help the test runner play the deck optimally.
-
-Output a JSON object with this structure:
-{
-  "mulligan": {
-    "min_lands": <int>,
-    "max_lands": <int>,
-    "required_pieces": ["Card Name"],  // card names that must be in opening hand, OR logic
-    "skip_curve_check": <bool>,
-    "stop_at": <int>
-  },
-  "play_priorities": [
-    // Ordered list of card names or patterns, highest priority first.
-    // These guide which spells to cast when mana is limited.
-    { "card": "Card Name", "priority": <int>, "notes": "..." }
-  ],
-  "land_preferences": [
-    // Which lands to play first when multiple are available.
-    { "card": "Card Name", "priority": <int> }
-  ],
-  "custom_rules": [
-    // Declarative conditional rules for edge cases.
-    { "condition": "...", "action": "...", "notes": "..." }
-  ],
-  "notes": "Overall deck strategy and any caveats about the heuristics."
-}
-
-Base your output on the analysis statistics and any knowledge of the deck archetype.
-Err on the side of explainable, conservative rules that are easy for a human to verify."""
-
-def GenerateDeckProfile(deck_name: str, card_names: list[str],
-                         analysis: dict, client: anthropic.Anthropic) -> dict:
-    """Ask Claude to produce a DeckProfile from the analysis results."""
-    prompt = (
-        f"Deck: {deck_name}\n"
-        f"Cards: {', '.join(card_names)}\n\n"
-        f"Analysis results:\n{json.dumps(analysis, indent=2)}\n\n"
-        "Generate a DeckProfile with AI heuristics for playing this deck optimally."
-    )
-
-    message = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=4096,
-        system=HEURISTIC_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    text = message.content[0].text.strip()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        raise RuntimeError("Claude did not return a JSON object for the DeckProfile")
-    return json.loads(match.group(0))
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def Main():
-    args = ParseArgs()
+    args      = ParseArgs()
     deck_path = Path(args.decklist).resolve()
+    cards_json = Path(args.cards_json).resolve() if args.cards_json else CARDS_JSON
 
     if not deck_path.exists():
         print(f"Error: decklist not found: {deck_path}", file=sys.stderr)
         sys.exit(1)
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("Error: ANTHROPIC_API_KEY environment variable not set.", file=sys.stderr)
-        sys.exit(1)
-
-    client    = anthropic.Anthropic(api_key=api_key)
-    deck_name = deck_path.stem
-
-    output_path = Path(args.output) if args.output else deck_path.parent / f"{deck_name}.profile.json"
-
-    print(f"\n=== Analyzing: {deck_name} ===\n")
-
-    # 1. Parse decklist
-    print("Step 1: Parsing decklist...")
+    # 1. Parse
     card_names = LoadDeckNames(deck_path)
-    print(f"  {len(card_names)} unique card(s): {', '.join(card_names[:5])}{'...' if len(card_names) > 5 else ''}")
 
-    # 2. Scryfall lookup
-    print("\nStep 2: Fetching card data from Scryfall...")
-    scryfall_data = FetchAllCards(card_names)
+    # 2. Coverage
+    implemented = LoadImplementedNames(cards_json)
+    missing     = [n for n in card_names if n not in implemented]
+    existing    = [n for n in card_names if n in implemented]
+    coverage    = CheckExistingCoverage(existing, cards_json)
 
-    # 3. Check coverage
-    print("\nStep 3: Checking card coverage...")
-    implemented  = LoadImplementedNames()
-    missing      = [n for n in card_names if n not in implemented]
-    print(f"  Implemented: {len(card_names) - len(missing)}/{len(card_names)}")
+    report = {
+        "deck":     deck_path.stem,
+        "cards":    card_names,
+        "missing":  missing,
+        "coverage": coverage,
+    }
+
+    if args.coverage_only:
+        print(json.dumps(report, indent=2))
+        sys.exit(0)
+
+    # 3. Block on missing cards
     if missing:
-        print(f"  Missing: {', '.join(missing)}")
-
-    # 4. Generate missing card implementations
-    tier3_names = []
-    if missing:
-        print(f"\nStep 4: Generating {len(missing)} card definition(s) via Claude...")
-        definitions = GenerateCardImplementations(missing, scryfall_data, client)
-        _, tier3_names = ApplyCardDefinitions(definitions)
-    else:
-        print("\nStep 4: All cards implemented — skipping generation.")
-
-    if tier3_names:
-        print(f"\n  WARNING: {len(tier3_names)} card(s) require Tier 3 custom C++:")
-        for name in tier3_names:
-            print(f"    - {name}")
-        print("  These must be implemented manually in src/cards/custom/ before analysis.")
-        print("  Re-run this script after implementing them.")
+        report["error"] = (
+            f"{len(missing)} card(s) missing from the database. "
+            "Implement them first, then re-run without --coverage-only."
+        )
+        print(json.dumps(report, indent=2))
         sys.exit(1)
 
-    # 5. Rebuild if any JSON was updated (always safe to rebuild; skips if unchanged)
-    print("\nStep 5: Rebuilding project...")
-    if not RebuildProject():
-        sys.exit(1)
+    # 4. Rebuild
+    if not args.no_rebuild:
+        if not RebuildProject():
+            sys.exit(1)
 
-    # 6. Run the C++ analyzer
-    print("\nStep 6: Running analysis...")
-    analysis = RunAnalyzer(deck_path, args.games)
+    # 5. Analyze
+    print(f"  Running analyzer ({args.games} games)...", file=sys.stderr)
+    analysis = RunAnalyzer(deck_path, args.games, cards_json)
 
-    print(f"  Average win turn : {analysis.get('average_win_turn', 'N/A')}")
-    print(f"  Win rate         : {analysis.get('win_rate', 0) * 100:.1f}%")
-
-    # 7. Generate DeckProfile heuristics
-    print("\nStep 7: Generating DeckProfile via Claude...")
-    profile = GenerateDeckProfile(deck_name, card_names, analysis, client)
-    profile["deck_name"]      = deck_name
-    profile["analysis_seed"]  = analysis.get("seed")
-    profile["games_analyzed"] = analysis.get("games_played")
-
-    # 8. Present for review
-    print("\n=== Generated DeckProfile (review before use) ===\n")
-    print(json.dumps(profile, indent=2))
-
-    # 9. Save
-    with open(output_path, "w") as f:
-        json.dump(profile, f, indent=2)
-    print(f"\nDeckProfile saved to: {output_path}")
+    report["analysis"] = analysis
+    print(json.dumps(report, indent=2))
 
 if __name__ == "__main__":
     Main()

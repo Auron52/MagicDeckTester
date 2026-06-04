@@ -22,10 +22,10 @@
             "name": "Monastery Swiftspear",
             "mana_cost": "{R}",
             "types": ["Creature"],
-            "keywords": ["Haste"],
+            "keywords": ["Haste", "Prowess"],
             "power": 1,
             "toughness": 2,
-            "oracle_text": "Haste\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.) [Prowess not modelled in Phase 1.2]",
+            "oracle_text": "Haste\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
             "template": "vanilla_creature",
             "parameters": {}
         },
@@ -47,18 +47,18 @@
             "keywords": [],
             "power": 2,
             "toughness": 2,
-            "oracle_text": "Whenever a player casts a spell with mana value 3 or less, Eidolon of the Great Revel deals 2 damage to that player. [Trigger not modelled in Phase 1.2]",
+            "oracle_text": "Whenever a player casts a spell with mana value 3 or less, Eidolon of the Great Revel deals 2 damage to that player.",
             "template": "vanilla_creature",
-            "parameters": {}
+            "parameters": { "on_cast_trigger_max_mv": 3, "on_cast_trigger_damage": 2 }
         },
         {
             "name": "Searing Blaze",
             "mana_cost": "{R}{R}",
             "types": ["Instant"],
             "keywords": [],
-            "oracle_text": "Searing Blaze deals 1 damage to target player and 1 damage to target creature that player controls. Landfall — deals 3 instead if a land entered the battlefield under your control this turn. [Simplified: deals 1 to each; landfall not modelled]",
+            "oracle_text": "Searing Blaze deals 1 damage to target player and 1 damage to target creature that player controls. Landfall — If a land entered the battlefield under your control this turn, Searing Blaze deals 3 damage to that player and 3 damage to that creature instead.",
             "template": "direct_damage",
-            "parameters": { "damage": 1, "targeting": "multi" }
+            "parameters": { "damage": 1, "targeting": "multi", "landfall_damage": 3 }
         },
         {
             "name": "Shard Volley",
@@ -83,18 +83,247 @@
             "mana_cost": "{2}{R}",
             "types": ["Sorcery"],
             "keywords": [],
-            "oracle_text": "Spectacle {R}\nExile the top two cards of your library. Until the end of your next turn, you may play those cards. [Exile zone simplified as draw 2]",
+            "oracle_text": "Spectacle {R}\nExile the top two cards of your library. Until the end of your next turn, you may play those cards.",
             "template": "draw_spell",
-            "parameters": { "draw": 2, "spectacle_cost": "{R}" }
+            "parameters": { "draw": 2, "spectacle_cost": "{R}", "stages_cards": true }
         },
         {
             "name": "Searing Blood",
             "mana_cost": "{R}{R}",
             "types": ["Instant"],
             "keywords": [],
-            "oracle_text": "Searing Blood deals 2 damage to target creature. When that creature dies this turn, Searing Blood deals 3 damage to that creature's controller. [Death trigger not modelled]",
+            "oracle_text": "Searing Blood deals 2 damage to target creature. When that creature dies this turn, Searing Blood deals 3 damage to that creature's controller.",
             "template": "direct_damage",
-            "parameters": { "damage": 2, "targeting": "creature" }
+            "parameters": { "damage": 2, "targeting": "creature", "death_trigger_damage": 3 }
+        },
+
+        {
+            "name": "Sinew Sliver",
+            "mana_cost": "{1}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "All Sliver creatures get +1/+1.",
+            "template": "lord_effect",
+            "parameters": { "subtypes_affected": ["Sliver"], "power_bonus": 1, "tough_bonus": 1 }
+        },
+        {
+            "name": "Muscle Sliver",
+            "mana_cost": "{1}{G}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "All Sliver creatures get +1/+1.",
+            "template": "lord_effect",
+            "parameters": { "subtypes_affected": ["Sliver"], "power_bonus": 1, "tough_bonus": 1 }
+        },
+        {
+            "name": "Predatory Sliver",
+            "mana_cost": "{1}{G}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "All Sliver creatures get +1/+1.",
+            "template": "lord_effect",
+            "parameters": { "subtypes_affected": ["Sliver"], "power_bonus": 1, "tough_bonus": 1 }
+        },
+        {
+            "name": "Plated Sliver",
+            "mana_cost": "{W}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "All Sliver creatures get +0/+1.",
+            "template": "lord_effect",
+            "parameters": { "subtypes_affected": ["Sliver"], "power_bonus": 0, "tough_bonus": 1 }
+        },
+        {
+            "name": "Crystalline Sliver",
+            "mana_cost": "{W}{U}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "All Slivers have shroud. (They can't be the targets of spells or abilities.) [Keyword lord not modelled: shroud is not in the keyword system and has no effect in goldfishing]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Galerider Sliver",
+            "mana_cost": "{U}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": ["Flying"],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Sliver creatures you control have flying. [Keyword lord not modelled: flying is not granted to other Slivers; Galerider itself has flying via its own effect]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Striking Sliver",
+            "mana_cost": "{R}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": ["First Strike"],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Sliver creatures you control have first strike. (They deal combat damage before creatures without first strike.) [Keyword lord not modelled: first strike is not granted to other Slivers; Striking Sliver itself has first strike via its own effect. First strike has no effect in goldfishing (no blockers).]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Cloudshredder Sliver",
+            "mana_cost": "{R}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": ["Flying", "Haste"],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Sliver creatures you control have flying and haste. [Flying lord not modelled: no effect in goldfishing (no blockers). Haste lord implemented via grants_haste.]",
+            "template": "vanilla_creature",
+            "parameters": { "grants_haste": true, "subtypes_affected": ["Sliver"] }
+        },
+        {
+            "name": "Leeching Sliver",
+            "mana_cost": "{1}{B}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Whenever a Sliver you control attacks, defending player loses 1 life.",
+            "template": "vanilla_creature",
+            "parameters": { "attack_trigger_damage": 1, "subtypes_affected": ["Sliver"] }
+        },
+        {
+            "name": "Hibernation Sliver",
+            "mana_cost": "{U}{B}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "All Slivers have \"Pay 2 life: Return this permanent to its owner's hand.\" [Activated ability lord not modelled: life-payment bounce ability requires activated ability framework; deferred to Phase 2]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Hatchery Sliver",
+            "mana_cost": "{1}{G}",
+            "types": ["Creature"],
+            "subtypes": ["Sliver"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Replicate {1}{G} (When you cast this spell, copy it for each time you paid its replicate cost.) Each Sliver spell you cast has replicate. The replicate cost is equal to its mana cost.",
+            "template": "vanilla_creature",
+            "parameters": { "has_replicate": true, "grants_replicate_to_subtypes": true, "subtypes_affected": ["Sliver"] }
+        },
+        {
+            "name": "Cavern of Souls",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type, and that spell can't be countered. [Simplified: modelled as producing all five colors; ETB choice, color restriction, and uncounterable clause not modelled]",
+            "template": "basic_land",
+            "parameters": { "produces": ["W", "U", "B", "R", "G"] }
+        },
+        {
+            "name": "Sliver Hive",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a Sliver spell. {5}, {T}: Create a 1/1 colorless Sliver creature token. Activate only if you control a Sliver. [Color restriction on mana not modelled: produces all colors; token ability implemented.]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["W", "U", "B", "R", "G"],
+                "tap_token_cost": "{5}",
+                "tap_token_power": 1,
+                "tap_token_toughness": 1,
+                "tap_token_subtypes": ["Sliver"],
+                "tap_token_requires_subtypes": ["Sliver"]
+            }
+        },
+        {
+            "name": "Unclaimed Territory",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type. [Simplified: modelled as producing all five colors; ETB choice and color restriction not modelled]",
+            "template": "basic_land",
+            "parameters": { "produces": ["W", "U", "B", "R", "G"] }
+        },
+        {
+            "name": "Ancient Ziggurat",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add one mana of any color. Spend this mana only to cast a creature spell.",
+            "template": "basic_land",
+            "parameters": { "produces": ["W", "U", "B", "R", "G"], "creature_mana_only": true }
+        },
+        {
+            "name": "Secluded Courtyard",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type. [Simplified: modelled as producing all five colors; ETB choice and restriction not modelled]",
+            "template": "basic_land",
+            "parameters": { "produces": ["W", "U", "B", "R", "G"] }
+        },
+        {
+            "name": "Mutavault",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {C}. {1}: Until end of turn, this land becomes a 2/2 creature with all creature types (including Sliver) and gains haste. It's still a land.",
+            "template": "basic_land",
+            "parameters": { "produces": ["C"], "can_animate": true, "animate_power": 2, "animate_toughness": 2, "animate_cost": "{1}" }
+        },
+        {
+            "name": "Aether Vial",
+            "mana_cost": "{1}",
+            "types": ["Artifact"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "At the beginning of your upkeep, you may put a charge counter on this artifact. {T}: You may put a creature card with mana value equal to the number of charge counters on this artifact from your hand onto the battlefield. [AI heuristic: adds counters each upkeep until reaching the most common creature MV in hand; activates to deploy matching creatures for free each main phase.]",
+            "template": "custom",
+            "parameters": { "upkeep_adds_charge": true }
+        },
+        {
+            "name": "Thrumming Hivepool",
+            "mana_cost": "{6}",
+            "types": ["Artifact"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Affinity for Slivers (This spell costs {1} less to cast for each Sliver you control.) Slivers you control have double strike and haste. At the beginning of your upkeep, create two 1/1 colorless Sliver creature tokens.",
+            "template": "custom",
+            "parameters": {
+                "affinity_for_subtype": true,
+                "grants_haste": true,
+                "grants_double_strike": true,
+                "subtypes_affected": ["Sliver"],
+                "upkeep_creates_tokens": 2,
+                "upkeep_token_power": 1,
+                "upkeep_token_toughness": 1,
+                "upkeep_token_subtypes": ["Sliver"]
+            }
         }
     ]
 }

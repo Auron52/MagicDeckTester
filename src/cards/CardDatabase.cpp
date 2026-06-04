@@ -144,6 +144,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Indestructible"){ return Keyword::Indestructible; }
     if (s == "Flash")         { return Keyword::Flash; }
     if (s == "Menace")        { return Keyword::Menace; }
+    if (s == "Prowess")       { return Keyword::Prowess; }
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -208,6 +209,11 @@ Card CardDatabase::BuildCardFromJson(const json& entry) const
         card.m_keywords.push_back(KeywordFromString(k));
     }
 
+    for (const std::string& s : entry.value("subtypes", json::array()))
+    {
+        card.m_subtypes.push_back(s);
+    }
+
     if (!entry.value("power", json{}).is_null() && entry.contains("power"))
     {
         card.m_power = entry["power"].get<int>();
@@ -253,6 +259,41 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     {
         p.subtypes_affected.push_back(s);
     }
+
+    p.on_cast_trigger_max_mv = params.value("on_cast_trigger_max_mv", 0);
+    p.on_cast_trigger_damage = params.value("on_cast_trigger_damage", 0);
+    p.landfall_damage        = params.value("landfall_damage", 0);
+    p.stages_cards           = params.value("stages_cards", false);
+    p.death_trigger_damage   = params.value("death_trigger_damage", 0);
+    p.scales_per_matching    = params.value("scales_per_matching", false);
+    p.attack_trigger_damage  = params.value("attack_trigger_damage", 0);
+    p.grants_haste           = params.value("grants_haste", false);
+    p.grants_double_strike   = params.value("grants_double_strike", false);
+    p.affinity_for_subtype   = params.value("affinity_for_subtype", false);
+    p.upkeep_adds_charge     = params.value("upkeep_adds_charge", false);
+    p.can_animate            = params.value("can_animate", false);
+    p.animate_power          = params.value("animate_power", 0);
+    p.animate_toughness      = params.value("animate_toughness", 0);
+    if (params.contains("animate_cost"))
+    {
+        p.animate_cost = ManaCostFromString(params["animate_cost"].get<std::string>());
+    }
+    p.has_replicate                  = params.value("has_replicate", false);
+    p.grants_replicate_to_subtypes   = params.value("grants_replicate_to_subtypes", false);
+    p.creature_mana_only             = params.value("creature_mana_only", false);
+    p.upkeep_creates_tokens          = params.value("upkeep_creates_tokens", 0);
+    p.upkeep_token_power             = params.value("upkeep_token_power", 0);
+    p.upkeep_token_toughness         = params.value("upkeep_token_toughness", 0);
+    for (const std::string& s : params.value("upkeep_token_subtypes", json::array()))
+        p.upkeep_token_subtypes.push_back(s);
+    if (params.contains("tap_token_cost"))
+        p.tap_token_cost = ManaCostFromString(params["tap_token_cost"].get<std::string>());
+    p.tap_token_power     = params.value("tap_token_power", 0);
+    p.tap_token_toughness = params.value("tap_token_toughness", 0);
+    for (const std::string& s : params.value("tap_token_subtypes", json::array()))
+        p.tap_token_subtypes.push_back(s);
+    for (const std::string& s : params.value("tap_token_requires_subtypes", json::array()))
+        p.tap_token_requires_subtypes.push_back(s);
 
     return p;
 }

@@ -6,15 +6,19 @@
 #include "AnalyzerEngine.h"
 #include "../deck/DeckLoader.h"
 #include "../cards/CardDatabase.h"
+#include "../ai/MulliganProfileIO.h"
 
 static void PrintUsage(const char* prog)
 {
     std::cerr << "Usage: " << prog
-              << " <deckfile> [--games N] [--seed S] [--max-turns T] [--cards-json path]\n"
+              << " <deckfile> [--games N] [--seed S] [--max-turns T]"
+                 " [--depth D] [--timeout-ms M] [--cards-json path]\n"
               << "  <deckfile>      Plain text (.txt) or Cockatrice (.cod) decklist\n"
               << "  --games N       Number of analysis games (default: 500)\n"
               << "  --seed S        Base RNG seed (omit to generate randomly)\n"
               << "  --max-turns T   Maximum turns per game (default: 20)\n"
+              << "  --depth D       Lookahead depth (default: 2; higher = slower but stronger)\n"
+              << "  --timeout-ms M  Per-turn time budget in milliseconds; 0 = unlimited (default: 0)\n"
               << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n"
               << "\nOutputs analysis JSON to stdout.\n";
 }
@@ -31,6 +35,8 @@ int main(int argc, char* argv[])
     std::filesystem::path cards_json  = "src/cards/data/cards.json";
     int      num_games     = 500;
     int      max_turns     = 20;
+    int      depth         = 2;
+    int      timeout_ms    = 0;
     uint64_t seed          = 0;
     bool     seed_provided = false;
 
@@ -51,6 +57,14 @@ int main(int argc, char* argv[])
             else if (flag == "--max-turns")
             {
                 max_turns = std::stoi(argv[i + 1]);
+            }
+            else if (flag == "--depth")
+            {
+                depth = std::stoi(argv[i + 1]);
+            }
+            else if (flag == "--timeout-ms")
+            {
+                timeout_ms = std::stoi(argv[i + 1]);
             }
             else if (flag == "--cards-json")
             {
@@ -80,8 +94,21 @@ int main(int argc, char* argv[])
         Decklist deck = DeckLoader::LoadFromFile(deck_path);
 
         AnalyzerEngine engine;
-        AnalysisResult result = engine.Run(deck, num_games, seed, max_turns);
+        AnalysisResult result = engine.Run(deck, num_games, seed, max_turns, depth, timeout_ms);
         result.deck_name = deck_path.stem().string();
+
+        // Write the optimised mulligan profile to deckname.profile.json so the runner
+        // can load it without re-running the analyser.
+        std::filesystem::path profile_path =
+            deck_path.parent_path() / (deck_path.stem().string() + ".profile.json");
+        if (SaveDeckProfile(profile_path, result.mulligan_profile))
+        {
+            std::cerr << "Profile written to " << profile_path.string() << "\n";
+        }
+        else
+        {
+            std::cerr << "Warning: could not write profile to " << profile_path.string() << "\n";
+        }
 
         std::cout << AnalysisResultToJson(result) << "\n";
     }

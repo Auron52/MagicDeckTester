@@ -1,10 +1,12 @@
 #include "AIEngine.h"
 #include "TurnSolver.h"
 #include "../cards/CardDatabase.h"
+#include "../core/SpellEffects.h"
 #include <algorithm>
 #include <stdexcept>
 
-AIEngine::AIEngine(MulliganProfile profile) : m_profile(std::move(profile)) {}
+AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int timeout_ms)
+    : m_profile(std::move(profile)), m_lookahead_depth(lookahead_depth), m_timeout_ms(timeout_ms) {}
 
 // ============================================================
 // Mulligan
@@ -12,6 +14,8 @@ AIEngine::AIEngine(MulliganProfile profile) : m_profile(std::move(profile)) {}
 
 void AIEngine::HandleMulligan(GameState& state)
 {
+    m_remaining_depth = m_lookahead_depth;
+
     Player& ap = state.ActivePlayer();
     ap.library.DrawN(7, ap.hand);
 
@@ -27,6 +31,12 @@ void AIEngine::HandleMulligan(GameState& state)
     }
 
     if (mulligan_count > 0) { BottomCards(state, mulligan_count); }
+
+    m_kept_opening_hand.clear();
+    for (const Card& c : ap.hand)
+    {
+        m_kept_opening_hand.push_back(c.m_name);
+    }
 }
 
 bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
@@ -61,17 +71,100 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
         if (!found) { return false; }
     }
 
-    if (!m_profile.skip_curve_check)
+    if (!m_profile.min_color_sources.empty())
     {
-        bool has_two_drop = false;
+        for (const std::pair<const Color, int>& req : m_profile.min_color_sources)
+        {
+            int sources = 0;
+            for (const Card& c : hand)
+            {
+                auto def = CardDatabase::Instance().Lookup(c.m_name);
+                if (!def) { continue; }
+                bool is_mana_source = (def->tmpl == CardTemplate::BasicLand)
+                                   || (def->tmpl == CardTemplate::ManaDork);
+                if (!is_mana_source) { continue; }
+                for (Color produced : def->params.produces)
+                {
+                    if (produced == req.first) { ++sources; break; }
+                }
+            }
+            if (sources < req.second) { return false; }
+        }
+    }
+
+    if (m_profile.min_playable > 0)
+    {
+        // Build a pool from lands in hand (one mana of each color they produce).
+        // Each non-land card is evaluated independently against the full pool —
+        // we're asking "is this card castable at all," not "can we cast everything."
+        // Build a simplified pool: single-color lands add their color;
+        // multi-color lands add 1 wild (can be any one color).
+        std::map<Color, int> pool;
+        int total_land_mana = 0;
+        int wild_mana = 0;
         for (const Card& c : hand)
         {
             auto def = CardDatabase::Instance().Lookup(c.m_name);
-            int  mv      = def ? def->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
-            bool is_land = def ? def->card.IsLand() : c.IsLand();
-            if (!is_land && mv <= 2 && land_count >= 2) { has_two_drop = true; }
+            if (!def || !def->card.IsLand()) { continue; }
+            ++total_land_mana;
+            if (def->params.produces.size() == 1)
+            {
+                ++pool[def->params.produces[0]];
+            }
+            else if (!def->params.produces.empty())
+            {
+                ++wild_mana;
+            }
         }
-        if (!has_two_drop && mulligan_count < 2) { return false; }
+
+        int playable = 0;
+        for (const Card& c : hand)
+        {
+            auto def = CardDatabase::Instance().Lookup(c.m_name);
+            if (!def || def->card.IsLand()) { continue; }
+            const ManaCost& cost = def->card.m_mana_cost;
+            if (total_land_mana < cost.ManaValue()) { continue; }
+            // Check each colored pip; wild_mana can cover any shortfall.
+            int deficit = std::max(0, cost.white     - pool[Color::White])
+                        + std::max(0, cost.blue      - pool[Color::Blue])
+                        + std::max(0, cost.black     - pool[Color::Black])
+                        + std::max(0, cost.red       - pool[Color::Red])
+                        + std::max(0, cost.green     - pool[Color::Green])
+                        + std::max(0, cost.colorless - pool[Color::Colorless]);
+            if (deficit > wild_mana) { continue; }
+            ++playable;
+        }
+        if (playable < m_profile.min_playable) { return false; }
+    }
+
+    if (m_profile.curve_check != CurveCheck::None && mulligan_count < 2)
+    {
+        int count_mv1 = 0;  // spells with MV <= 1
+        int count_mv2 = 0;  // spells with MV <= 2 (includes MV <= 1)
+        for (const Card& c : hand)
+        {
+            auto def     = CardDatabase::Instance().Lookup(c.m_name);
+            bool is_land = def ? def->card.IsLand() : c.IsLand();
+            if (is_land) { continue; }
+            int mv = def ? def->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
+            if (mv <= 1) { ++count_mv1; }
+            if (mv <= 2) { ++count_mv2; }
+        }
+
+        switch (m_profile.curve_check)
+        {
+            case CurveCheck::TwoDrop:
+                if (land_count < 2 || count_mv2 == 0) { return false; }
+                break;
+            case CurveCheck::OneDrop:
+                if (count_mv1 == 0) { return false; }
+                break;
+            case CurveCheck::OneAndTwo:
+                if (count_mv1 == 0 || count_mv2 < 2 || land_count < 2) { return false; }
+                break;
+            default:
+                break;
+        }
     }
 
     return true;
@@ -80,19 +173,188 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
 void AIEngine::BottomCards(GameState& state, int count)
 {
     Player& ap = state.ActivePlayer();
+
     for (int i = 0; i < count && !ap.hand.empty(); ++i)
     {
-        std::vector<Card>::iterator worst = std::max_element(ap.hand.begin(), ap.hand.end(),
-            [](const Card& a, const Card& b)
+        // Recompute from current hand — changes each iteration when a land is bottomed.
+        std::map<Color, int> pool;
+        int land_count = 0;
+        for (const Card& c : ap.hand)
+        {
+            auto def = CardDatabase::Instance().Lookup(c.m_name);
+            if (!def || !def->card.IsLand()) { continue; }
+            ++land_count;
+            for (Color produced : def->params.produces) { ++pool[produced]; }
+        }
+
+        std::vector<Card>::iterator to_bottom;
+
+        // Helper: single-spell deficit given a pool.
+        auto one_deficit = [](const ManaCost& cost,
+                              const std::map<Color, int>& p, int mana) -> int
+        {
+            auto get = [&](Color c) -> int
             {
-                auto da = CardDatabase::Instance().Lookup(a.m_name);
-                auto db = CardDatabase::Instance().Lookup(b.m_name);
-                int mv_a = da ? da->card.m_mana_cost.ManaValue() : a.m_mana_cost.ManaValue();
-                int mv_b = db ? db->card.m_mana_cost.ManaValue() : b.m_mana_cost.ManaValue();
-                return mv_a < mv_b;
-            });
-        ap.library.push_back(*worst);
-        ap.hand.erase(worst);
+                auto it = p.find(c);
+                return it != p.end() ? it->second : 0;
+            };
+            int needed = 0;
+            needed += std::max(0, cost.white     - get(Color::White));
+            needed += std::max(0, cost.blue      - get(Color::Blue));
+            needed += std::max(0, cost.black     - get(Color::Black));
+            needed += std::max(0, cost.red       - get(Color::Red));
+            needed += std::max(0, cost.green     - get(Color::Green));
+            needed += std::max(0, cost.colorless - get(Color::Colorless));
+            needed += std::max(0, cost.ManaValue() - (mana + needed));
+            return needed;
+        };
+
+        if (land_count > m_profile.min_lands + 1)
+        {
+            // Excess land: bottom the one that is least needed by the spells in hand.
+            //
+            // Primary key:   total spell deficit after removing the land (lower = prefer).
+            //   Avoids bottoming a land that would leave a spell uncastable.
+            //
+            // Secondary key: usefulness = max colour demand the land can satisfy (lower = prefer).
+            //   Demand for colour C = total pips of C across all spells in hand.
+            //   A Forest in an all-red hand has usefulness 0; a Mountain has usefulness = red demand.
+            //   Among equally safe removals, this bottoms the land producing the least-needed colour.
+
+            // Compute per-colour demand from spells in hand.
+            std::map<Color, int> demand;
+            for (const Card& hc : ap.hand)
+            {
+                auto sdef = CardDatabase::Instance().Lookup(hc.m_name);
+                if (!sdef || sdef->card.IsLand()) { continue; }
+                const ManaCost& cost = sdef->card.m_mana_cost;
+                demand[Color::White]     += cost.white;
+                demand[Color::Blue]      += cost.blue;
+                demand[Color::Black]     += cost.black;
+                demand[Color::Red]       += cost.red;
+                demand[Color::Green]     += cost.green;
+                demand[Color::Colorless] += cost.colorless;
+            }
+
+            to_bottom               = ap.hand.end();
+            int best_total_deficit  = std::numeric_limits<int>::max();
+            int best_uncastable     = std::numeric_limits<int>::max();
+            int best_usefulness     = std::numeric_limits<int>::max();
+
+            for (int j = 0; j < static_cast<int>(ap.hand.size()); ++j)
+            {
+                auto def     = CardDatabase::Instance().Lookup(ap.hand[j].m_name);
+                bool is_land = def ? def->card.IsLand() : ap.hand[j].IsLand();
+                if (!is_land) { continue; }
+
+                // Build pool without this land.
+                std::map<Color, int> tmp_pool = pool;
+                if (def)
+                {
+                    for (Color c : def->params.produces)
+                    {
+                        auto it = tmp_pool.find(c);
+                        if (it != tmp_pool.end()) { --it->second; }
+                    }
+                }
+
+                // Three-key score for the remaining hand:
+                //   1. Uncastable count — number of spells with any deficit > 0
+                //   2. Total deficit    — total additional lands needed across all spells
+                //   3. Usefulness       — max colour demand the removed land could satisfy
+                // Bottom the land that minimises (1), then (2), then (3).
+                // Count-first because immediately playable spells matter more than minimising
+                // total damage — having 2 castable spells + 1 brick is better than having
+                // 3 spells each one draw away from castable.
+                int total_deficit  = 0;
+                int uncastable_cnt = 0;
+                for (const Card& hc : ap.hand)
+                {
+                    auto sdef = CardDatabase::Instance().Lookup(hc.m_name);
+                    if (!sdef || sdef->card.IsLand()) { continue; }
+                    int d = one_deficit(sdef->card.m_mana_cost, tmp_pool, land_count - 1);
+                    total_deficit += d;
+                    if (d > 0) { ++uncastable_cnt; }
+                }
+
+                int usefulness = 0;
+                if (def)
+                {
+                    for (Color c : def->params.produces)
+                    {
+                        auto it = demand.find(c);
+                        usefulness = std::max(usefulness,
+                                              it != demand.end() ? it->second : 0);
+                    }
+                }
+
+                bool first_better, second_better;
+                if (m_profile.bottom_order == BottomOrder::CountFirst)
+                {
+                    first_better  = uncastable_cnt < best_uncastable;
+                    second_better = uncastable_cnt == best_uncastable
+                                 && total_deficit  <  best_total_deficit;
+                }
+                else
+                {
+                    first_better  = total_deficit  <  best_total_deficit;
+                    second_better = total_deficit  == best_total_deficit
+                                 && uncastable_cnt <  best_uncastable;
+                }
+                bool prefer = (to_bottom == ap.hand.end())
+                           || first_better
+                           || second_better
+                           || (uncastable_cnt == best_uncastable
+                               && total_deficit == best_total_deficit
+                               && usefulness   <  best_usefulness);
+
+                if (prefer)
+                {
+                    best_total_deficit = total_deficit;
+                    best_uncastable    = uncastable_cnt;
+                    best_usefulness    = usefulness;
+                    to_bottom          = ap.hand.begin() + j;
+                }
+            }
+
+            if (to_bottom == ap.hand.end()) { to_bottom = ap.hand.begin(); }
+        }
+        else
+        {
+            // Bottom the worst non-land spell using a two-key score:
+            //   Primary:   lands deficit — how many more lands are needed to cast this card.
+            //              Colour gaps are counted first (they require specific lands);
+            //              any remaining generic shortfall is added on top.
+            //              A 4-drop with 3 on-colour lands has deficit 1 (any land helps).
+            //              An off-colour 1-drop with 1 wrong-colour land also has deficit 1
+            //              (needs a specific colour), but is worth keeping because MV is lower.
+            //   Secondary: MV descending — among equal deficits, bottom the more expensive card.
+            to_bottom        = ap.hand.end();
+            int best_deficit = -1;
+            int best_mv      = -1;
+
+            for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+            {
+                auto def     = CardDatabase::Instance().Lookup(it->m_name);
+                bool is_land = def ? def->card.IsLand() : it->IsLand();
+                if (is_land) { continue; }
+
+                int deficit = def ? one_deficit(def->card.m_mana_cost, pool, land_count) : 0;
+                int mv      = def ? def->card.m_mana_cost.ManaValue()
+                                  : it->m_mana_cost.ManaValue();
+
+                bool prefer = (to_bottom == ap.hand.end())
+                           || (deficit > best_deficit)
+                           || (deficit == best_deficit && mv > best_mv);
+
+                if (prefer) { to_bottom = it; best_deficit = deficit; best_mv = mv; }
+            }
+
+            if (to_bottom == ap.hand.end()) { to_bottom = ap.hand.begin(); }
+        }
+
+        ap.library.push_back(*to_bottom);
+        ap.hand.erase(to_bottom);
     }
 }
 
@@ -102,9 +364,54 @@ void AIEngine::BottomCards(GameState& state, int count)
 
 void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
 {
+    // Merge any unexpired staged cards into hand so the solver and casting logic
+    // can treat them as playable. They are marked m_is_staged = true so we can
+    // identify and restore unplayed ones afterward. The expiry is preserved in
+    // staged_snapshot so it can be restored if the card is not played.
+    Player& ap_ref = state.ActivePlayer();
+    std::vector<StagedCard> staged_snapshot = ap_ref.staged_cards;
+    ap_ref.staged_cards.clear();
+    for (StagedCard& sc : staged_snapshot)
+    {
+        if (sc.expiry_turn < state.turn_number) { continue; }  // end-of-next-turn expiry (CR 406)
+        sc.card.m_is_staged = true;
+        ap_ref.hand.push_back(sc.card);
+    }
+
     TryPlayLand(state);
 
-    TurnSolver::Plan plan = TurnSolver::Solve(state, is_pre_combat_main);
+    // Activate Aether Vials before the spell solver so that vialed-in creatures are
+    // already on the battlefield when TurnSolver evaluates attacking power.
+    ActivateVials(state);
+
+    TurnSolver::Plan plan;
+    if (m_lookahead_depth > 0)
+    {
+        std::chrono::steady_clock::time_point deadline =
+            std::chrono::steady_clock::time_point::max();
+        if (m_timeout_ms > 0)
+        {
+            deadline = std::chrono::steady_clock::now()
+                     + std::chrono::milliseconds(m_timeout_ms);
+        }
+
+        // Pre-combat: use the remaining depth for this turn so future turns
+        // match the simulation's projected play. Post-combat: always use full
+        // depth (post-combat is not simulated with lookahead, so no consistency
+        // constraint applies there).
+        int effective_depth = is_pre_combat_main ? m_remaining_depth : m_lookahead_depth;
+        plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                                              effective_depth, 20, deadline);
+
+        if (is_pre_combat_main && m_remaining_depth > 0)
+        {
+            --m_remaining_depth;
+        }
+    }
+    else
+    {
+        plan = TurnSolver::Solve(state, is_pre_combat_main);
+    }
 
     // Execute: regular spells first so their lands are tapped before
     // sacrifice-land spells fire, minimising the cost of the sacrifice.
@@ -120,6 +427,49 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
 
     for (const std::string& name : plan.spells)    { cast_by_name(name); }
     for (const std::string& name : plan.sacrifice) { cast_by_name(name); }
+
+    // Animate lands and activate tap-token abilities with mana remaining after spells.
+    // Only in pre-combat main so any resulting creatures can attack this turn.
+    if (is_pre_combat_main)
+    {
+        ManaPool remaining = BuildAvailableMana(state);
+        AnimateLands(state, remaining);
+        ActivateTapTokens(state, remaining);
+    }
+
+    // Restore any unplayed staged cards from hand back to staged_cards.
+    // Walk the snapshot to match cards that are still in hand (by m_number when
+    // non-zero, by name as fallback). Those no longer in hand were cast.
+    Player& ap_after = state.ActivePlayer();
+    for (const StagedCard& orig : staged_snapshot)
+    {
+        bool still_in_hand = false;
+        for (Card& c : ap_after.hand)
+        {
+            if (!c.m_is_staged) { continue; }
+            bool match = (orig.card.m_number != 0)
+                         ? (c.m_number == orig.card.m_number)
+                         : (c.m_name    == orig.card.m_name);
+            if (match)
+            {
+                c.m_is_staged  = false; // clear flag; card moves back to staged
+                still_in_hand  = true;
+                StagedCard sc;
+                sc.card        = c;
+                sc.expiry_turn = orig.expiry_turn;
+                ap_after.staged_cards.push_back(sc);
+                break;
+            }
+        }
+        (void)still_in_hand;
+    }
+    // Remove staged cards from the hand (they've been moved back to staged_cards).
+    std::vector<Card> regular_hand;
+    for (const Card& c : ap_after.hand)
+    {
+        if (!c.m_is_staged) { regular_hand.push_back(c); }
+    }
+    ap_after.hand = std::move(regular_hand);
 }
 
 // ---- Land drop ----
@@ -129,23 +479,141 @@ bool AIEngine::TryPlayLand(GameState& state)
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
 
-    for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+    // Prefer multi-color lands (produce wild mana) over colorless-only lands
+    // like Mutavault, so that colored spells remain castable this turn.
+    // Two-pass: first look for a land producing 2+ colors; fall back to any land.
+    for (int pass = 0; pass < 2; ++pass)
     {
-        auto def = CardDatabase::Instance().Lookup(it->m_name);
-        if (!def || !def->card.IsLand()) { continue; }
+        for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+        {
+            auto def = CardDatabase::Instance().Lookup(it->m_name);
+            if (!def || !def->card.IsLand()) { continue; }
 
-        Permanent perm;
-        perm.card              = def->card;
-        perm.controller        = &ap;
-        perm.owner             = &ap;
-        perm.entered_this_turn = true;
-        state.battlefield.push_back(perm);
+            bool is_multi = def->params.produces.size() > 1;
+            if (pass == 0 && !is_multi) { continue; }  // first pass: multi-color only
 
-        ap.hand.erase(it);
-        ++ap.lands_played_this_turn;
-        return true;
+            if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
+
+            Permanent perm;
+            perm.card              = def->card;
+            perm.card.m_number     = it->m_number;
+            perm.controller_index  = state.active_player_index;
+            perm.owner_index       = state.active_player_index;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+
+            ap.hand.erase(it);
+            ++ap.lands_played_this_turn;
+            return true;
+        }
     }
     return false;
+}
+
+// ---- Aether Vial activation ----
+
+void AIEngine::ActivateVials(GameState& state)
+{
+    Player& ap = state.ActivePlayer();
+    int bf_size = static_cast<int>(state.battlefield.size());
+    for (int vi = 0; vi < bf_size; ++vi)
+    {
+        if (state.battlefield[vi].controller_index != state.active_player_index
+            || state.battlefield[vi].tapped) { continue; }
+        std::optional<CardDefinition> vdef =
+            CardDatabase::Instance().Lookup(state.battlefield[vi].card.m_name);
+        if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
+
+        int target_mv = state.battlefield[vi].charge_counters;
+        std::vector<Card>::iterator best = ap.hand.end();
+        int best_eval = -1;
+        for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+        {
+            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(it->m_name);
+            if (!cdef || !cdef->card.IsCreature()) { continue; }
+            if (cdef->card.m_mana_cost.ManaValue() != target_mv) { continue; }
+            int ev = cdef->card.m_power.value_or(0);
+            if (best == ap.hand.end() || ev > best_eval) { best = it; best_eval = ev; }
+        }
+        if (best == ap.hand.end()) { continue; }
+
+        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(best->m_name);
+        if (!cdef) { continue; }
+
+        if (m_logger) { m_logger->LogCastSpell(best->m_number, best->m_name, "Vial"); }
+
+        Permanent perm;
+        perm.card              = cdef->card;
+        perm.card.m_number     = best->m_number;
+        perm.controller_index  = state.active_player_index;
+        perm.owner_index       = state.active_player_index;
+        perm.entered_this_turn = true;
+        state.battlefield.push_back(perm);  // may reallocate — do NOT use old references
+        ap.hand.erase(best);
+        state.battlefield[vi].tapped = true;  // re-access via index, always valid
+    }
+}
+
+// ---- Land animation (e.g. Mutavault) ----
+
+void AIEngine::AnimateLands(GameState& state, ManaPool& available)
+{
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index
+            || p.tapped || p.is_animated) { continue; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (!def || !def->params.can_animate || !def->params.animate_cost.has_value()) { continue; }
+        const ManaCost& cost = def->params.animate_cost.value();
+        if (!available.CanPay(cost)) { continue; }
+        if (!TapForCost(state, cost, available, false)) { continue; }
+        p.is_animated = true;
+    }
+}
+
+// ---- Tap-and-pay token abilities (e.g. Sliver Hive) ----
+
+void AIEngine::ActivateTapTokens(GameState& state, ManaPool& available)
+{
+    int bf_size = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < bf_size; ++i)
+    {
+        if (state.battlefield[i].controller_index != state.active_player_index
+            || state.battlefield[i].tapped) { continue; }
+        std::optional<CardDefinition> def =
+            CardDatabase::Instance().Lookup(state.battlefield[i].card.m_name);
+        if (!def || !def->params.tap_token_cost.has_value()) { continue; }
+
+        if (!def->params.tap_token_requires_subtypes.empty())
+        {
+            bool found = false;
+            for (int j = 0; j < bf_size; ++j)
+            {
+                if (state.battlefield[j].controller_index != state.active_player_index) { continue; }
+                for (const std::string& req : def->params.tap_token_requires_subtypes)
+                    for (const std::string& cs : state.battlefield[j].card.m_subtypes)
+                        if (cs == req) { found = true; break; }
+                if (found) { break; }
+            }
+            if (!found) { continue; }
+        }
+
+        const ManaCost& add_cost = def->params.tap_token_cost.value();
+        if (!available.CanPay(add_cost)) { continue; }
+
+        state.battlefield[i].tapped = true;
+        if (!TapForCost(state, add_cost, available, true))
+        {
+            state.battlefield[i].tapped = false;
+            continue;
+        }
+
+        // CreateToken appends to battlefield — access `i` via index afterward, never via ref.
+        CreateToken(state, state.active_player_index,
+                    def->params.tap_token_power,
+                    def->params.tap_token_toughness,
+                    def->params.tap_token_subtypes);
+    }
 }
 
 // ---- Mana ----
@@ -153,11 +621,10 @@ bool AIEngine::TryPlayLand(GameState& state)
 ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
 {
     ManaPool pool;
-    const Player& ap = state.ActivePlayer();
 
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller != &ap || p.tapped) { continue; }
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
 
         auto def = CardDatabase::Instance().Lookup(p.card.m_name);
         if (!def) { continue; }
@@ -166,15 +633,22 @@ ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap());
         if (!is_land && !is_dork) { continue; }
 
-        for (Color c : def->params.produces)
+        // Multi-color lands contribute one wild mana (any single color per tap),
+        // not one of each color — matching how TapForCost actually works.
+        if (def->params.produces.size() == 1)
         {
-            pool.Add(c);
+            pool.Add(def->params.produces[0]);
+        }
+        else if (!def->params.produces.empty())
+        {
+            ++pool.wild;
         }
     }
     return pool;
 }
 
-bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& available)
+bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& available,
+                          bool for_creature)
 {
     Player& ap = state.ActivePlayer();
 
@@ -182,13 +656,14 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
     {
         for (Permanent& p : state.battlefield)
         {
-            if (p.controller != &ap || p.tapped) { continue; }
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
             auto def = CardDatabase::Instance().Lookup(p.card.m_name);
             if (!def) { continue; }
 
             bool is_source = (def->tmpl == CardTemplate::BasicLand)
                           || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
             if (!is_source) { continue; }
+            if (def->params.creature_mana_only && !for_creature) { continue; }
 
             for (Color c : def->params.produces)
             {
@@ -217,13 +692,14 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
         bool found = false;
         for (Permanent& p : state.battlefield)
         {
-            if (p.controller != &ap || p.tapped) { continue; }
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
             auto def = CardDatabase::Instance().Lookup(p.card.m_name);
             if (!def) { continue; }
 
             bool is_source = (def->tmpl == CardTemplate::BasicLand)
                           || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
             if (!is_source) { continue; }
+            if (def->params.creature_mana_only && !for_creature) { continue; }
 
             p.tapped = true;
             if (!def->params.produces.empty())
@@ -247,7 +723,29 @@ ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& sta
     {
         return def.params.spectacle_cost.value();
     }
-    return def.card.m_mana_cost;
+    ManaCost cost = def.card.m_mana_cost;
+    if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
+    {
+        int reduction = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            for (const std::string& sub : def.params.subtypes_affected)
+            {
+                bool matches = p.is_animated;
+                if (!matches)
+                {
+                    for (const std::string& cs : p.card.m_subtypes)
+                    {
+                        if (cs == sub) { matches = true; break; }
+                    }
+                }
+                if (matches) { ++reduction; break; }
+            }
+        }
+        cost.generic = std::max(0, cost.generic - reduction);
+    }
+    return cost;
 }
 
 int AIEngine::FindOpponentCreature(const GameState& state) const
@@ -256,7 +754,7 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& p = state.battlefield[i];
-        if (p.controller == &opp && p.card.IsCreature())
+        if (p.controller_index != state.active_player_index && p.card.IsCreature())
         {
             return i;
         }
@@ -273,6 +771,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     StackEntry entry;
     entry.type             = StackEntry::EntryType::Spell;
     entry.source           = def->card;
+    entry.source.m_number  = hand_card.m_number;  // preserve per-copy ID for logging
     entry.controller_index = state.active_player_index;
 
     int opp_index = 1 - state.active_player_index;
@@ -317,7 +816,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     }
 
     ManaCost effective = EffectiveCost(*def, state);
-    if (!TapForCost(state, effective, available)) { return; }
+    if (!TapForCost(state, effective, available, def->card.IsCreature())) { return; }
+
+    if (m_logger)
+    {
+        m_logger->LogCastSpell(hand_card.m_number, hand_card.m_name, effective.ToString());
+    }
 
     if (def->params.sacrifice_land)
     {
@@ -326,7 +830,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             const Permanent& p = state.battlefield[i];
-            if (p.controller != &ap || !p.card.IsLand()) { continue; }
+            if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
             if (idx < 0)   { idx = i; }       // first land found
             if (p.tapped)  { idx = i; break; } // tapped land preferred
         }
@@ -340,7 +844,42 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
         [&hand_card](const Card& c) { return &c == &hand_card; }));
 
+    // Replicate: if the card (or a lord on the battlefield) grants replicate to this
+    // creature type, pay the mana cost additional times before resolving to create token
+    // copies. These copies enter the battlefield when the spell resolves (simplified here
+    // as immediate ETB after the first copy enters via EffectHandler).
+    // Note: replicate copies are queued now but actually enter after stack resolution;
+    // for the goldfishing sim we pre-emptively record them so they count toward combat.
+    std::vector<Card> replicate_tokens;
+    if (def->card.IsCreature()
+        && CanReplicate(*def, state.battlefield, state.active_player_index))
+    {
+        ManaPool remaining = BuildAvailableMana(state);
+        ManaCost ec = effective;
+        while (remaining.CanPay(ec))
+        {
+            if (!TapForCost(state, ec, available, true)) { break; }
+            remaining = BuildAvailableMana(state);
+            replicate_tokens.push_back(def->card);
+        }
+    }
+
     state.stack.push_back(std::move(entry));
+
+    // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
+    FireOnCastTriggers(state, *def);
+    FireProwess(state, *def);
+
+    // Push replicate token copies onto the stack so they enter the battlefield when
+    // the stack resolves (EffectHandler will call EnterBattlefield for each).
+    for (const Card& tok : replicate_tokens)
+    {
+        StackEntry tok_entry;
+        tok_entry.type             = StackEntry::EntryType::Spell;
+        tok_entry.source           = tok;
+        tok_entry.controller_index = state.active_player_index;
+        state.stack.push_back(std::move(tok_entry));
+    }
 }
 
 // ============================================================
@@ -350,10 +889,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
 std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
 {
     std::vector<Permanent*> attackers;
-    Player& ap = state.ActivePlayer();
     for (Permanent& p : state.battlefield)
     {
-        if (p.controller == &ap && p.CanAttack())
+        if (p.controller_index == state.active_player_index
+            && CanAttackFull(p, state.battlefield, state.active_player_index))
         {
             attackers.push_back(&p);
         }
@@ -368,9 +907,12 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     {
         throw std::runtime_error("ChooseDiscard called with empty hand");
     }
+    // Prefer discarding non-staged cards (staged cards are in exile and should not
+    // be subject to the hand-size discard rule).
     return &(*std::max_element(ap.hand.begin(), ap.hand.end(),
         [](const Card& a, const Card& b)
         {
+            if (a.m_is_staged != b.m_is_staged) { return a.m_is_staged; }
             auto da = CardDatabase::Instance().Lookup(a.m_name);
             auto db = CardDatabase::Instance().Lookup(b.m_name);
             int mv_a = da ? da->card.m_mana_cost.ManaValue() : a.m_mana_cost.ManaValue();

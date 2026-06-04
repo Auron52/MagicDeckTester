@@ -5,6 +5,15 @@
 #include <vector>
 #include <optional>
 
+// A passive creature that enters the opponent's battlefield at a scheduled turn.
+// Used to provide creature targets for spells like Searing Blood in goldfishing.
+struct OpponentSpawn
+{
+    int turn;
+    int power;
+    int toughness;
+};
+
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
 enum class Step  { Untap, Upkeep, Draw, MainPhase,
                    BeginCombat, DeclareAttackers, DeclareBlockers, CombatDamage, EndCombat,
@@ -44,6 +53,7 @@ struct GameState
     bool                     player_lost_on_draw          = false;
     bool                     opponent_lost_life_this_turn = false;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
+    std::vector<OpponentSpawn> opponent_spawns;           // passive creatures to place on opp side each turn
 
     Player&       ActivePlayer()       { return players[active_player_index]; }
     const Player& ActivePlayer() const { return players[active_player_index]; }

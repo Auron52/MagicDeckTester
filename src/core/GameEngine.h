@@ -1,5 +1,6 @@
 #pragma once
 #include "GameState.h"
+#include "GameLogger.h"
 
 class AIEngine;
 
@@ -12,8 +13,11 @@ public:
     // -1 if max turns exceeded or player lost on draw.
     int RunGame(GameState& state, int max_turns = 20);
 
+    void SetLogger(GameLogger* logger);
+
 private:
-    AIEngine& m_ai;
+    AIEngine&    m_ai;
+    GameLogger*  m_logger = nullptr;
 
     void RunTurn(GameState& state);
     void UntapStep(GameState& state);

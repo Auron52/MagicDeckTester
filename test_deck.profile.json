@@ -1,0 +1,12 @@
+{
+  "mulligan": {
+    "curve_check": "one_drop",
+    "max_lands": 4,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 3
+  },
+  "version": 1
+}

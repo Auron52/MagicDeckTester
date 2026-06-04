@@ -16,6 +16,17 @@ The simulator has two phases:
 
 All implementation guidance below targets Phase 1 unless marked **[Phase 2]**.
 
+### Stack implementation is not Phase 2 exclusive
+
+The current engine fires triggered abilities immediately rather than queuing them on the stack. This is sufficient for the current mono-red burn card set, but **full stack implementation may be required before Phase 2** if new Phase 1 cards introduce interactions that depend on stack ordering. Known cases that require a real stack:
+
+- **Evoke + sacrifice payoff (e.g. Fling)**: After an evoked creature enters the battlefield, the evoke sacrifice trigger sits on the stack. The player has priority and can cast Fling to sacrifice the creature for damage before the evoke trigger resolves. This is impossible to model without proper trigger queuing.
+- **Any "race" scenario where a pre-existing trigger is already on the stack and the player casts a spell on top of it**: The spell resolves first (LIFO), which may be the difference between winning and losing.
+
+Note: on-cast triggers (e.g. Eidolon of the Great Revel) are specifically *not* raceable — the trigger is pushed on top of the spell that caused it, so it always resolves before the spell. Do not treat self-damage from on-cast triggers as a simultaneous event with the spell's damage.
+
+**Before adding any card whose value depends on stack-ordering interactions, raise whether the stack needs to be implemented first.**
+
 ---
 
 ## AI Decision Points
@@ -53,15 +64,30 @@ The mulligan decision is deck-dependent. No single function works across all arc
 |---|---|---|
 | `minLands` | 1 | Mulligan if fewer lands than this |
 | `maxLands` | 5 | Mulligan if more lands than this |
-| `requiredPieces` | `[]` | Card names/IDs — mulligan unless at least one is in hand |
-| `skipCurveCheck` | `false` | Set true for decks that don't need early plays |
+| `minPlayable` | 0 | Minimum non-land cards castable from the hand's own lands (0 = disabled). Catches color-mismatch hands and mana-quantity mismatches (e.g. 1 land + all 2-drops). |
+| `requiredPieces` | `[]` | Card names/IDs — mulligan unless at least one is in hand (OR logic) |
+| `curveCheck` | `"two_drop"` | How aggressively to require early plays — see CurveCheck values below |
 | `stopAt` | 4 | Keep unconditionally once hand reaches this size |
+
+**`curveCheck` values** (applied until the hand has been mulliganed twice):
+
+| Value | Requirement | Use when |
+|---|---|---|
+| `"none"` | No check | Decks with no required early play (control, all-land, combo) |
+| `"two_drop"` | ≥ 1 spell with MV ≤ 2 and ≥ 2 lands in hand | Generic fair decks (default) |
+| `"one_drop"` | ≥ 1 spell with MV ≤ 1 | Aggressive decks that must act on turn 1 |
+| `"one_and_two"` | ≥ 1 spell with MV ≤ 1 AND ≥ 2 spells with MV ≤ 2 (with ≥ 2 lands) | Ultra-aggressive decks requiring T1 + T2 curve coverage |
+
+`"one_drop"` and `"one_and_two"` are less commonly needed but are available for decks whose analysis requires distinguishing whether the opening hand can act on turn 1 specifically. Determine which level is appropriate empirically by comparing win-turn distributions across profile settings.
 
 The defaults represent a generic fair deck. Non-generic archetypes must override:
 
-- **Land-heavy decks** (e.g. 40+ lands, one key non-land): raise `maxLands` to 6, add the key card(s) to `requiredPieces`, set `skipCurveCheck` to true.
+- **Land-heavy decks** (e.g. 40+ lands, one key non-land): raise `maxLands` to 6, add the key card(s) to `requiredPieces`, set `curveCheck` to `"none"`.
 - **Combo decks** (must see a specific piece to function): add the required combo piece(s) to `requiredPieces`. The AI mulligans until a required piece appears or hand size reaches `stopAt`.
-- **Decks with no early plays by design**: set `skipCurveCheck` to true.
+- **Decks with no early plays by design**: set `curveCheck` to `"none"`.
+- **Multi-color decks**: set `minPlayable` to 1 or 2 to reject hands where the land colors don't match the spells.
+
+**Open question for multi-colour decks**: the bottoming logic scores colour gaps and generic mana gaps equally (each missing source = 1 deficit). It is not yet known whether colour gaps should be weighted more heavily — a hand that needs a specific dual land is harder to fix than one that just needs more lands of any colour. Calibrate against real win-turn data when the first two-colour deck is added.
 
 `requiredPieces` uses OR logic — any one listed card satisfies the requirement. For AND requirements (must have card A AND card B), encode them as two separate `requiredPieces` checks evaluated together, or flag the deck for manual review if the combo is too narrow to simulate reliably.
 
@@ -82,10 +108,19 @@ keepHand(hand: Card[], onMulligan: int, profile: MulliganProfile) -> bool:
   if profile.requiredPieces is not empty:
     if none of profile.requiredPieces are in hand: return false
 
-  // Curve check: can we cast something in the first 2 turns?
-  if not profile.skipCurveCheck:
-    castableByTurn2 = any card in hand with manaValue <= 2 and castable given landCount >= 2
-    if not castableByTurn2 and onMulligan < 2: return false
+  // min_playable: reject hands where land colors don't support casting min_playable spells
+  if profile.minPlayable > 0:
+    pool = mana pool from all lands in hand (one mana each, per color produced)
+    playable = count of non-land cards whose mana cost is fully covered by pool
+    if playable < profile.minPlayable: return false
+
+  // Curve check: applied until onMulligan >= 2 (then kept unconditionally)
+  if profile.curveCheck != "none" and onMulligan < 2:
+    count_mv1 = non-land cards with manaValue <= 1
+    count_mv2 = non-land cards with manaValue <= 2
+    if curveCheck == "two_drop":   if landCount < 2 or count_mv2 == 0: return false
+    if curveCheck == "one_drop":   if count_mv1 == 0: return false
+    if curveCheck == "one_and_two": if count_mv1 == 0 or count_mv2 < 2 or landCount < 2: return false
 
   return true
 ```

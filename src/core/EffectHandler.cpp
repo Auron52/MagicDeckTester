@@ -7,10 +7,11 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
                                       const CardDefinition& def)
 {
     Permanent perm;
-    perm.card               = def.card;
-    perm.controller         = &state.players[entry.controller_index];
-    perm.owner              = &state.players[entry.controller_index];
-    perm.entered_this_turn  = true;
+    perm.card              = def.card;
+    perm.card.m_number     = entry.source.m_number;  // preserve per-copy ID from cast
+    perm.controller_index  = entry.controller_index;
+    perm.owner_index       = entry.controller_index;
+    perm.entered_this_turn = true;
     state.battlefield.push_back(perm);
 }
 
@@ -131,7 +132,13 @@ void EffectHandler::ResolveManaDork(GameState& state, const StackEntry& entry,
 void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entry,
                                          const CardDefinition& def)
 {
+    // Landfall: use the boosted damage value if a land entered this turn.
     int damage = def.params.damage;
+    if (def.params.landfall_damage > 0
+        && state.players[entry.controller_index].lands_played_this_turn > 0)
+    {
+        damage = def.params.landfall_damage;
+    }
 
     for (const Target& t : entry.targets)
     {
@@ -148,7 +155,20 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
             if (t.permanent_index >= 0
                 && t.permanent_index < static_cast<int>(state.battlefield.size()))
             {
-                state.battlefield[t.permanent_index].damage += damage;
+                Permanent& target = state.battlefield[t.permanent_index];
+                target.damage += damage;
+
+                // Death trigger: if the creature now has lethal damage, fire immediately.
+                if (def.params.death_trigger_damage > 0
+                    && target.damage >= target.EffectiveToughness())
+                {
+                    int ctrl = target.controller_index;
+                    state.players[ctrl].life -= def.params.death_trigger_damage;
+                    if (ctrl != entry.controller_index && def.params.death_trigger_damage > 0)
+                    {
+                        state.opponent_lost_life_this_turn = true;
+                    }
+                }
             }
         }
     }
@@ -182,7 +202,7 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
             }
             else
             {
-                target.controller->graveyard.push_back(target.card);
+                state.players[target.controller_index].graveyard.push_back(target.card);
             }
             state.battlefield.erase(state.battlefield.begin() + t.permanent_index);
         }
@@ -195,7 +215,24 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
 {
     Player& controller = state.players[entry.controller_index];
     int n = def.params.draw;
-    controller.library.DrawN(n, controller.hand);
+
+    if (def.params.stages_cards)
+    {
+        // Cards go to a staged exile zone; playable until end of the player's next turn.
+        int expiry = state.turn_number + 1;
+        for (int i = 0; i < n && !controller.library.empty(); ++i)
+        {
+            StagedCard sc;
+            sc.card        = controller.library.DrawTop();
+            sc.expiry_turn = expiry;
+            controller.staged_cards.push_back(sc);
+        }
+    }
+    else
+    {
+        controller.library.DrawN(n, controller.hand);
+    }
+
     MoveToGraveyard(state, entry);
 }
 

@@ -12,8 +12,9 @@ struct ManaPool
     int red       = 0;
     int green     = 0;
     int colorless = 0;  // {C} mana specifically
+    int wild      = 0;  // one tap of a multi-color land (satisfies any single color or generic)
 
-    int Total() const { return white + blue + black + red + green + colorless; }
+    int Total() const { return white + blue + black + red + green + colorless + wild; }
 
     void Add(Color c, int amount = 1)
     {
@@ -28,21 +29,33 @@ struct ManaPool
         }
     }
 
-    void Clear() { white = blue = black = red = green = colorless = 0; }
+    void Clear() { white = blue = black = red = green = colorless = wild = 0; }
 
     // Returns true if this pool can pay the given cost.
-    // Assumes no hybrid or Phyrexian mana (TODO Phase 1.2+).
+    // Multi-color land taps are stored in `wild` — each unit satisfies exactly one
+    // pip (colored or generic). Specific-color sources pay their own color first;
+    // wild covers any shortfall. Assumes no hybrid or Phyrexian mana.
     bool CanPay(const ManaCost& cost) const
     {
-        if (white     < cost.white)     { return false; }
-        if (blue      < cost.blue)      { return false; }
-        if (black     < cost.black)     { return false; }
-        if (red       < cost.red)       { return false; }
-        if (green     < cost.green)     { return false; }
-        if (colorless < cost.colorless) { return false; }
+        // Deficit per color after using specific-color sources.
+        int deficit =  std::max(0, cost.white     - white)
+                     + std::max(0, cost.blue      - blue)
+                     + std::max(0, cost.black     - black)
+                     + std::max(0, cost.red       - red)
+                     + std::max(0, cost.green     - green)
+                     + std::max(0, cost.colorless - colorless);
 
-        int committed = cost.white + cost.blue + cost.black
-                      + cost.red + cost.green + cost.colorless;
-        return (Total() - committed) >= cost.generic;
+        if (deficit > wild) { return false; }
+
+        // Remaining wild after covering colored deficits, plus leftover specific mana,
+        // must cover the generic requirement.
+        int wild_left      = wild - deficit;
+        int specific_left  = std::max(0, white     - cost.white)
+                           + std::max(0, blue      - cost.blue)
+                           + std::max(0, black     - cost.black)
+                           + std::max(0, red       - cost.red)
+                           + std::max(0, green     - cost.green)
+                           + std::max(0, colorless - cost.colorless);
+        return (specific_left + wild_left) >= cost.generic;
     }
 };

@@ -2,8 +2,6 @@
 #include "Card.h"
 #include <vector>
 
-struct Player;
-
 struct Counter
 {
     enum class Type { PlusOnePlusOne, MinusOneMinusOne, Loyalty, Poison };
@@ -13,24 +11,31 @@ struct Counter
 
 struct Permanent
 {
-    Card      card;
-    Player*   controller           = nullptr;
-    Player*   owner                = nullptr;
-    bool      tapped               = false;
+    Card card;
+    int  controller_index          = 0;   // index into GameState::players
+    int  owner_index               = 0;   // index into GameState::players
+    bool tapped               = false;
     int       damage               = 0;    // reset each cleanup step
     std::vector<Counter> counters;
     bool      entered_this_turn    = false;  // summoning sickness tracker
     Permanent* attached_to         = nullptr;
     bool      marked_for_destruction = false;
+    int       temp_power_bonus     = 0;    // accumulated "until end of turn" boosts; reset each cleanup
+    int       temp_tough_bonus     = 0;
+    int       charge_counters      = 0;    // Aether Vial charge counter count
+    bool      is_animated          = false; // land animated as a creature (e.g. Mutavault); reset each cleanup
 
     int  EffectivePower()     const;
     int  EffectiveToughness() const;
 
-    // A permanent can attack if it is an untapped creature without Defender that is not
-    // summoning sick (CR 302.6, CR 508.1).
+    // A permanent can attack if it is an untapped creature (or animated land) without
+    // Defender that is not summoning sick (CR 302.6, CR 508.1).
+    // Animated permanents (is_animated) always have haste from their animation effect.
+    // For lord-granted haste (e.g. Cloudshredder Sliver), use CanAttackFull() in
+    // SpellEffects.h which has access to the full battlefield.
     bool CanAttack() const
     {
-        if (!card.IsCreature())
+        if (!card.IsCreature() && !is_animated)
         {
             return false;
         }
@@ -42,7 +47,7 @@ struct Permanent
         {
             return false;
         }
-        return !entered_this_turn || card.HasKeyword(Keyword::Haste);
+        return !entered_this_turn || card.HasKeyword(Keyword::Haste) || is_animated;
     }
 
     // A permanent can be tapped for an activated ability unless it is a summoning-sick
@@ -59,36 +64,22 @@ struct Permanent
 
 inline int Permanent::EffectivePower() const
 {
-    // TODO: route through layer system when continuous effects are implemented (Phase 1.2)
-    int p = card.m_power.value_or(0);
+    int p = card.m_power.value_or(0) + temp_power_bonus;
     for (const Counter& c : counters)
     {
-        if (c.type == Counter::Type::PlusOnePlusOne)
-        {
-            p += c.count;
-        }
-        if (c.type == Counter::Type::MinusOneMinusOne)
-        {
-            p -= c.count;
-        }
+        if (c.type == Counter::Type::PlusOnePlusOne)  { p += c.count; }
+        if (c.type == Counter::Type::MinusOneMinusOne) { p -= c.count; }
     }
     return p;
 }
 
 inline int Permanent::EffectiveToughness() const
 {
-    // TODO: route through layer system when continuous effects are implemented (Phase 1.2)
-    int t = card.m_toughness.value_or(0);
+    int t = card.m_toughness.value_or(0) + temp_tough_bonus;
     for (const Counter& c : counters)
     {
-        if (c.type == Counter::Type::PlusOnePlusOne)
-        {
-            t += c.count;
-        }
-        if (c.type == Counter::Type::MinusOneMinusOne)
-        {
-            t -= c.count;
-        }
+        if (c.type == Counter::Type::PlusOnePlusOne)  { t += c.count; }
+        if (c.type == Counter::Type::MinusOneMinusOne) { t -= c.count; }
     }
     return t;
 }

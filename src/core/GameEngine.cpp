@@ -1,28 +1,60 @@
 #include "GameEngine.h"
 #include "EffectHandler.h"
+#include "SpellEffects.h"
 #include "../ai/AIEngine.h"
 #include "../cards/CardDatabase.h"
 #include <algorithm>
 
 GameEngine::GameEngine(AIEngine& ai) : m_ai(ai) {}
 
+void GameEngine::SetLogger(GameLogger* logger)
+{
+    m_logger = logger;
+    m_ai.SetLogger(logger);
+}
+
+// ---- Helper: collect board state for logging ----
+
+static void CollectBoardState(const GameState& state,
+                               std::vector<int>& battlefield_out,
+                               std::vector<int>& hand_out)
+{
+    const Player& ap = state.ActivePlayer();
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index)
+        {
+            battlefield_out.push_back(p.card.m_number);
+        }
+    }
+    for (const Card& c : ap.hand)
+    {
+        hand_out.push_back(c.m_number);
+    }
+}
+
+// ============================================================
+// Public API
+// ============================================================
+
 int GameEngine::RunGame(GameState& state, int max_turns)
 {
     m_ai.HandleMulligan(state);
     while (state.turn_number < max_turns)
     {
-        if (state.player_lost_on_draw)
-        {
-            return -1;
-        }
+        if (state.player_lost_on_draw) { return -1; }
         RunTurn(state);
-        if (CheckWinCondition(state))
-        {
-            return state.turn_number;
-        }
+        // Check opponent loss first: if we dealt lethal and also triggered ourselves to
+        // death in the same turn, the win still counts.
+        if (CheckWinCondition(state)) { return state.turn_number; }
+        if (state.ActivePlayer().HasLost()) { return -1; }
     }
     return -1;
 }
+
+// ============================================================
+// Turn structure
+// ============================================================
 
 void GameEngine::RunTurn(GameState& state)
 {
@@ -30,10 +62,7 @@ void GameEngine::RunTurn(GameState& state)
     UntapStep(state);
     UpkeepStep(state);
     DrawStep(state);
-    if (state.player_lost_on_draw)
-    {
-        return;
-    }
+    if (state.player_lost_on_draw) { return; }
     MainPhase(state, /*is_pre_combat=*/true);
     CombatPhase(state);
     MainPhase(state, /*is_pre_combat=*/false);
@@ -51,19 +80,99 @@ void GameEngine::UntapStep(GameState& state)
     ap.bonus_land_drops_this_turn = 0;
     for (Permanent& p : state.battlefield)
     {
-        if (p.controller == &ap)
+        if (p.controller_index == state.active_player_index)
         {
             p.tapped            = false;
             p.entered_this_turn = false;
         }
     }
-    // Untap is a turn-based action; no priority is passed (CR 502).
+
+    // Materialise any passive opponent creatures scheduled for this turn.
+    int opp_index = 1 - state.active_player_index;
+    for (const OpponentSpawn& spawn : state.opponent_spawns)
+    {
+        if (spawn.turn != state.turn_number) { continue; }
+
+        Card token;
+        token.m_name      = std::to_string(spawn.power) + "/"
+                          + std::to_string(spawn.toughness) + " Creature";
+        token.m_id        = token.m_name;
+        token.m_types     = { CardType::Creature };
+        token.m_power     = spawn.power;
+        token.m_toughness = spawn.toughness;
+
+        Permanent perm;
+        perm.card             = token;
+        perm.controller_index = opp_index;
+        perm.owner_index      = opp_index;
+        // entered_this_turn = false: passive creatures are treated as already present,
+        // not subject to summoning sickness (irrelevant since they never attack).
+        state.battlefield.push_back(perm);
+    }
 }
 
 void GameEngine::UpkeepStep(GameState& state)
 {
     state.step = Step::Upkeep;
-    // TODO: fire upkeep triggered abilities (Phase 1.2)
+
+    // Aether Vial: add a charge counter each upkeep using an AI heuristic.
+    // Stop adding when the counter count reaches the most common creature MV in hand,
+    // so the Vial deploys creatures at maximum efficiency.
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (!def || !def->params.upkeep_adds_charge) { continue; }
+
+        // Find most common creature MV in hand.
+        const Player& ap = state.ActivePlayer();
+        std::map<int, int> mv_count;
+        for (const Card& c : ap.hand)
+        {
+            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+            if (!cdef || !cdef->card.IsCreature()) { continue; }
+            int mv = cdef->card.m_mana_cost.ManaValue();
+            if (mv > 0) { ++mv_count[mv]; }
+        }
+
+        int optimal = p.charge_counters; // default: keep current if no creatures in hand
+        if (!mv_count.empty())
+        {
+            int best_mv  = mv_count.begin()->first;
+            int best_cnt = 0;
+            for (const auto& kv : mv_count)
+            {
+                if (kv.second > best_cnt
+                    || (kv.second == best_cnt && kv.first < best_mv))
+                {
+                    best_cnt = kv.second;
+                    best_mv  = kv.first;
+                }
+            }
+            optimal = best_mv;
+        }
+
+        if (p.charge_counters < optimal) { ++p.charge_counters; }
+    }
+
+    // Upkeep token creation (e.g. Thrumming Hivepool: create two 1/1 Sliver tokens).
+    // Iterate over initial size only — tokens added here must not trigger their own upkeep.
+    int bf_size = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < bf_size; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != state.active_player_index) { continue; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (!def || def->params.upkeep_creates_tokens <= 0) { continue; }
+        for (int t = 0; t < def->params.upkeep_creates_tokens; ++t)
+        {
+            CreateToken(state, state.active_player_index,
+                        def->params.upkeep_token_power,
+                        def->params.upkeep_token_toughness,
+                        def->params.upkeep_token_subtypes);
+        }
+    }
+
     ResolveStack(state);
 }
 
@@ -77,7 +186,6 @@ void GameEngine::DrawStep(GameState& state)
         return;
     }
     ap.hand.push_back(ap.library.DrawTop());
-    // TODO: fire draw-step triggered abilities (Phase 1.2)
     ResolveStack(state);
 }
 
@@ -85,8 +193,21 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 {
     state.phase = is_pre_combat ? Phase::PreCombatMain : Phase::PostCombatMain;
     state.step  = Step::MainPhase;
+
+    if (m_logger)
+    {
+        m_logger->StartPhase(state.turn_number, is_pre_combat ? "MAIN_1" : "MAIN_2");
+    }
+
     m_ai.TakeTurn(state, is_pre_combat);
     ResolveStack(state);
+
+    if (m_logger)
+    {
+        std::vector<int> bf, hand;
+        CollectBoardState(state, bf, hand);
+        m_logger->CommitPhase(state.ActivePlayer().life, state.Opponent().life, bf, hand);
+    }
 }
 
 void GameEngine::CombatPhase(GameState& state)
@@ -94,31 +215,70 @@ void GameEngine::CombatPhase(GameState& state)
     state.phase = Phase::Combat;
 
     state.step = Step::BeginCombat;
-    // TODO: "beginning of combat" triggers (Phase 1.2)
     ResolveStack(state);
 
     state.step = Step::DeclareAttackers;
     std::vector<Permanent*> attackers = m_ai.DeclareAttackers(state);
-    // Phase 1: opponent has no blockers; all attackers deal damage unblocked.
     ResolveStack(state);
+
+    if (m_logger) { m_logger->StartPhase(state.turn_number, "COMBAT"); }
 
     state.step = Step::CombatDamage;
     Player& opp = state.Opponent();
+    int total_combat_dmg = 0;
     for (Permanent* attacker : attackers)
     {
-        int power = attacker->EffectivePower();
-        opp.life -= power;
-        if (power > 0) { state.opponent_lost_life_this_turn = true; }
-        if (!attacker->card.HasKeyword(Keyword::Vigilance))
+        bool animated = attacker->is_animated;
+        auto [lord_pb, lord_tb] = ComputeLordBonus(
+            attacker->card, state.battlefield, state.active_player_index, animated);
+        bool ds = animated
+            ? HasDoubleStrikeFromLords(attacker->card, state.battlefield, state.active_player_index, true)
+            : (attacker->card.HasKeyword(Keyword::DoubleStrike)
+               || HasDoubleStrikeFromLords(attacker->card, state.battlefield, state.active_player_index));
+        int animate_pw = 0;
+        if (animated)
         {
-            attacker->tapped = true;
+            std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(attacker->card.m_name);
+            if (adef) { animate_pw = adef->params.animate_power; }
         }
+        int base_power = animate_pw + attacker->EffectivePower() + lord_pb;
+        int power = base_power * (ds ? 2 : 1);
+        opp.life -= power;
+        total_combat_dmg += power;
+        if (power > 0) { state.opponent_lost_life_this_turn = true; }
+        if (!attacker->card.HasKeyword(Keyword::Vigilance)) { attacker->tapped = true; }
     }
+
+    // Attack triggers (e.g. Leeching Sliver: each attacking Sliver costs the opponent 1 life).
+    std::vector<const Permanent*> attacker_ptrs;
+    attacker_ptrs.reserve(attackers.size());
+    for (const Permanent* p : attackers) { attacker_ptrs.push_back(p); }
+    int trigger_dmg = CountAttackTriggerDamage(
+        state.battlefield, state.active_player_index, attacker_ptrs);
+    if (trigger_dmg > 0)
+    {
+        opp.life -= trigger_dmg;
+        total_combat_dmg += trigger_dmg;
+        state.opponent_lost_life_this_turn = true;
+    }
+
+    if (m_logger && total_combat_dmg > 0)
+    {
+        m_logger->LogAttack(total_combat_dmg, opp.life);
+    }
+
     CheckStateBasedActions(state);
     ResolveStack(state);
 
     state.step = Step::EndCombat;
     ResolveStack(state);
+
+    if (m_logger)
+    {
+        std::vector<int> bf, hand;
+        CollectBoardState(state, bf, hand);
+        m_logger->CommitPhase(state.ActivePlayer().life, opp.life, bf, hand);
+    }
 }
 
 void GameEngine::EndStep(GameState& state)
@@ -143,67 +303,56 @@ void GameEngine::CleanupStep(GameState& state)
             [discard](const Card& c) { return &c == discard; }));
     }
 
-    // Remove all damage marks from permanents (CR 514.2)
+    // Remove all damage marks, "until end of turn" boosts, and animation effects (CR 514.2).
     for (Permanent& p : state.battlefield)
     {
-        p.damage = 0;
+        p.damage           = 0;
+        p.temp_power_bonus = 0;
+        p.temp_tough_bonus = 0;
+        p.is_animated      = false;
     }
-
-    // TODO: "until end of turn" effects expire here (Phase 1.2)
 }
+
+// ============================================================
+// Stack / state-based actions
+// ============================================================
 
 void GameEngine::ResolveStack(GameState& state)
 {
-    // In Phase 1 the opponent passes all priority automatically.
-    // The active player places spells/abilities on the stack during TakeTurn();
-    // here we resolve everything that was queued.
     while (!state.stack.empty())
     {
-        // Both players have passed priority — resolve top entry (CR 608).
         StackEntry entry = state.stack.back();
         state.stack.pop_back();
         auto def = CardDatabase::Instance().Lookup(entry.source.m_name);
-        if (def)
-        {
-            EffectHandler::Resolve(state, entry, *def);
-        }
+        if (def) { EffectHandler::Resolve(state, entry, *def); }
         CheckStateBasedActions(state);
     }
 }
 
 void GameEngine::CheckStateBasedActions(GameState& state)
 {
-    // Must run to a fixed point — repeat until no change (CR 704.3)
     bool changed = true;
     while (changed)
     {
         changed = false;
-        for (std::vector<Permanent>::iterator it = state.battlefield.begin(); it != state.battlefield.end(); )
+        for (std::vector<Permanent>::iterator it = state.battlefield.begin();
+             it != state.battlefield.end(); )
         {
             Permanent& p = *it;
             bool destroy = p.marked_for_destruction;
             if (p.card.IsCreature())
             {
-                if (p.EffectiveToughness() <= 0)
-                {
-                    destroy = true;
-                }
-                if (p.damage >= p.EffectiveToughness() && !p.card.HasKeyword(Keyword::Indestructible))
-                {
-                    destroy = true;
-                }
+                if (p.EffectiveToughness() <= 0) { destroy = true; }
+                if (p.damage >= p.EffectiveToughness()
+                    && !p.card.HasKeyword(Keyword::Indestructible)) { destroy = true; }
             }
-            // TODO: planeswalker 0-loyalty, aura without legal attachment, legend rule (Phase 1.2)
             if (destroy)
             {
-                p.controller->graveyard.push_back(p.card);
+                state.players[p.controller_index].graveyard.push_back(p.card);
                 it = state.battlefield.erase(it);
                 changed = true;
             }
-            else
-            {
-                ++it;
-            }
+            else { ++it; }
         }
     }
 }
