@@ -13,6 +13,11 @@ public:
     // -1 if max turns exceeded or player lost on draw.
     int RunGame(GameState& state, int max_turns = 20);
 
+    // Plays turns from the current state to a win or max_turns WITHOUT running a
+    // mulligan first. Used both by RunGame (after mulligan) and by lookahead
+    // bottoming, which rolls out candidate hands and must not re-enter mulligan.
+    int PlayOut(GameState& state, int max_turns = 20);
+
     void SetLogger(GameLogger* logger);
 
 private:

@@ -125,7 +125,7 @@ keepHand(hand: Card[], onMulligan: int, profile: MulliganProfile) -> bool:
   return true
 ```
 
-On each mulligan, bottom one card before redrawing (Vancouver rule). Stop at `profile.stopAt` cards and keep unconditionally.
+London mulligan: draw a fresh 7 on each mulligan; once a hand is kept after N mulligans, bottom N cards from it. Stop at `profile.stopAt` cards and keep unconditionally. (Bottoming may be a simple curve/castability heuristic, or — when accuracy matters — a clairvoyant greedy lookahead that rolls out each candidate removal and bottoms the card whose removal preserves the earliest win, deferring to the heuristic among win-turn ties. The keep/mulligan decision itself stays on the analyzer-informed heuristic above.)
 
 **[Phase 2] Mulligan complexity increases significantly in 1v1.** The profile system above is Phase 1 only — it evaluates hands purely against your own game plan. In 1v1, the keep decision gains a second axis: does this hand answer the opponent's strategy?
 

@@ -19,7 +19,8 @@ public:
                       int timeout_ms = 0);
 
     // London mulligan: draw 7, keep or mulligan, bottom N cards on keep after N mulligans.
-    void HandleMulligan(GameState& state);
+    // max_turns bounds the rollout horizon used by lookahead bottoming (see below).
+    void HandleMulligan(GameState& state, int max_turns = 20);
 
     // Returns the card names of the hand kept after the most recent HandleMulligan call.
     const std::vector<std::string>& GetKeptOpeningHand() const { return m_kept_opening_hand; }
@@ -35,16 +36,32 @@ public:
 
     void SetLogger(GameLogger* logger) { m_logger = logger; }
 
+    // When enabled, bottoming evaluates each candidate removal with a full
+    // clairvoyant game rollout and bottoms the card whose removal preserves the
+    // earliest win (heuristic breaks win-turn ties). More accurate, ~2x slower;
+    // off by default so the analyzer's scoring passes keep their speed.
+    void SetLookaheadBottoming(bool enabled) { m_lookahead_bottoming = enabled; }
+
 private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
     int                      m_timeout_ms        = 0;
+    bool                     m_lookahead_bottoming = false;
     std::vector<std::string> m_kept_opening_hand;
     GameLogger*              m_logger            = nullptr;
 
     // --- Mulligan helpers ---
     bool KeepHand(const std::vector<Card>& hand, int mulligan_count) const;
-    void BottomCards(GameState& state, int count);
+    void BottomCards(GameState& state, int count, int max_turns);
+
+    // Picks the index of the card the curve/castability heuristic would bottom,
+    // considering only cards whose allowed[i] is non-zero. Returns -1 if none.
+    int HeuristicBottomPick(const std::vector<Card>& hand,
+                            const std::vector<char>& allowed) const;
+
+    // Plays a full clairvoyant game from a (post-mulligan) trial state and returns
+    // the win turn, or max_turns + 1 if no win. Suppresses logging during the rollout.
+    int RolloutWinTurn(GameState trial, int max_turns);
 
     // --- Turn helpers ---
 

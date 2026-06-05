@@ -1,8 +1,10 @@
 #include "AIEngine.h"
 #include "TurnSolver.h"
 #include "../cards/CardDatabase.h"
+#include "../core/GameEngine.h"
 #include "../core/SpellEffects.h"
 #include <algorithm>
+#include <limits>
 #include <numeric>
 #include <stdexcept>
 
@@ -36,7 +38,7 @@ AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int timeout_ms)
 // Mulligan
 // ============================================================
 
-void AIEngine::HandleMulligan(GameState& state)
+void AIEngine::HandleMulligan(GameState& state, int max_turns)
 {
     Player& ap = state.ActivePlayer();
     ap.library.DrawN(7, ap.hand);
@@ -52,7 +54,7 @@ void AIEngine::HandleMulligan(GameState& state)
         if (static_cast<int>(ap.hand.size()) <= m_profile.stop_at) { break; }
     }
 
-    if (mulligan_count > 0) { BottomCards(state, mulligan_count); }
+    if (mulligan_count > 0) { BottomCards(state, mulligan_count, max_turns); }
 
     m_kept_opening_hand.clear();
     for (const Card& c : ap.hand)
@@ -198,191 +200,245 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
     return true;
 }
 
-void AIEngine::BottomCards(GameState& state, int count)
+int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
+                                 const std::vector<char>& allowed) const
+{
+    // Recompute from the passed hand — the caller bottoms one card at a time, so
+    // the composition changes between calls.
+    std::map<Color, int> pool;
+    int land_count = 0;
+    for (const Card& c : hand)
+    {
+        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        if (!def || !def->card.IsLand()) { continue; }
+        ++land_count;
+        for (Color produced : def->params.produces) { ++pool[produced]; }
+    }
+
+    // Helper: single-spell deficit given a pool.
+    auto one_deficit = [](const ManaCost& cost,
+                          const std::map<Color, int>& p, int mana) -> int
+    {
+        auto get = [&](Color c) -> int
+        {
+            auto it = p.find(c);
+            return it != p.end() ? it->second : 0;
+        };
+        int needed = 0;
+        needed += std::max(0, cost.white     - get(Color::White));
+        needed += std::max(0, cost.blue      - get(Color::Blue));
+        needed += std::max(0, cost.black     - get(Color::Black));
+        needed += std::max(0, cost.red       - get(Color::Red));
+        needed += std::max(0, cost.green     - get(Color::Green));
+        needed += std::max(0, cost.colorless - get(Color::Colorless));
+        needed += std::max(0, cost.ManaValue() - (mana + needed));
+        return needed;
+    };
+
+    int chosen = -1;
+
+    if (land_count > m_profile.min_lands + 1)
+    {
+        // Excess land: bottom the one that is least needed by the spells in hand.
+        //
+        // Primary key:   total spell deficit after removing the land (lower = prefer).
+        //   Avoids bottoming a land that would leave a spell uncastable.
+        //
+        // Secondary key: usefulness = max colour demand the land can satisfy (lower = prefer).
+        //   Demand for colour C = total pips of C across all spells in hand.
+        //   A Forest in an all-red hand has usefulness 0; a Mountain has usefulness = red demand.
+        //   Among equally safe removals, this bottoms the land producing the least-needed colour.
+
+        // Compute per-colour demand from spells in hand.
+        std::map<Color, int> demand;
+        for (const Card& hc : hand)
+        {
+            auto sdef = CardDatabase::Instance().Lookup(hc.m_name);
+            if (!sdef || sdef->card.IsLand()) { continue; }
+            const ManaCost& cost = sdef->card.m_mana_cost;
+            demand[Color::White]     += cost.white;
+            demand[Color::Blue]      += cost.blue;
+            demand[Color::Black]     += cost.black;
+            demand[Color::Red]       += cost.red;
+            demand[Color::Green]     += cost.green;
+            demand[Color::Colorless] += cost.colorless;
+        }
+
+        int best_total_deficit  = std::numeric_limits<int>::max();
+        int best_uncastable     = std::numeric_limits<int>::max();
+        int best_usefulness     = std::numeric_limits<int>::max();
+
+        for (int j = 0; j < static_cast<int>(hand.size()); ++j)
+        {
+            if (!allowed[j]) { continue; }
+            auto def     = CardDatabase::Instance().Lookup(hand[j].m_name);
+            bool is_land = def ? def->card.IsLand() : hand[j].IsLand();
+            if (!is_land) { continue; }
+
+            // Build pool without this land.
+            std::map<Color, int> tmp_pool = pool;
+            if (def)
+            {
+                for (Color c : def->params.produces)
+                {
+                    auto it = tmp_pool.find(c);
+                    if (it != tmp_pool.end()) { --it->second; }
+                }
+            }
+
+            // Three-key score for the remaining hand:
+            //   1. Uncastable count — number of spells with any deficit > 0
+            //   2. Total deficit    — total additional lands needed across all spells
+            //   3. Usefulness       — max colour demand the removed land could satisfy
+            // Bottom the land that minimises (1), then (2), then (3).
+            // Count-first because immediately playable spells matter more than minimising
+            // total damage — having 2 castable spells + 1 brick is better than having
+            // 3 spells each one draw away from castable.
+            int total_deficit  = 0;
+            int uncastable_cnt = 0;
+            for (const Card& hc : hand)
+            {
+                auto sdef = CardDatabase::Instance().Lookup(hc.m_name);
+                if (!sdef || sdef->card.IsLand()) { continue; }
+                int d = one_deficit(sdef->card.m_mana_cost, tmp_pool, land_count - 1);
+                total_deficit += d;
+                if (d > 0) { ++uncastable_cnt; }
+            }
+
+            int usefulness = 0;
+            if (def)
+            {
+                for (Color c : def->params.produces)
+                {
+                    auto it = demand.find(c);
+                    usefulness = std::max(usefulness,
+                                          it != demand.end() ? it->second : 0);
+                }
+            }
+
+            bool first_better, second_better;
+            if (m_profile.bottom_order == BottomOrder::CountFirst)
+            {
+                first_better  = uncastable_cnt < best_uncastable;
+                second_better = uncastable_cnt == best_uncastable
+                             && total_deficit  <  best_total_deficit;
+            }
+            else
+            {
+                first_better  = total_deficit  <  best_total_deficit;
+                second_better = total_deficit  == best_total_deficit
+                             && uncastable_cnt <  best_uncastable;
+            }
+            bool prefer = (chosen == -1)
+                       || first_better
+                       || second_better
+                       || (uncastable_cnt == best_uncastable
+                           && total_deficit == best_total_deficit
+                           && usefulness   <  best_usefulness);
+
+            if (prefer)
+            {
+                best_total_deficit = total_deficit;
+                best_uncastable    = uncastable_cnt;
+                best_usefulness    = usefulness;
+                chosen             = j;
+            }
+        }
+    }
+    else
+    {
+        // Bottom the worst non-land spell using a two-key score:
+        //   Primary:   lands deficit — how many more lands are needed to cast this card.
+        //              Colour gaps are counted first (they require specific lands);
+        //              any remaining generic shortfall is added on top.
+        //              A 4-drop with 3 on-colour lands has deficit 1 (any land helps).
+        //              An off-colour 1-drop with 1 wrong-colour land also has deficit 1
+        //              (needs a specific colour), but is worth keeping because MV is lower.
+        //   Secondary: MV descending — among equal deficits, bottom the more expensive card.
+        int best_deficit = -1;
+        int best_mv      = -1;
+
+        for (int j = 0; j < static_cast<int>(hand.size()); ++j)
+        {
+            if (!allowed[j]) { continue; }
+            auto def     = CardDatabase::Instance().Lookup(hand[j].m_name);
+            bool is_land = def ? def->card.IsLand() : hand[j].IsLand();
+            if (is_land) { continue; }
+
+            int deficit = def ? one_deficit(def->card.m_mana_cost, pool, land_count) : 0;
+            int mv      = def ? def->card.m_mana_cost.ManaValue()
+                              : hand[j].m_mana_cost.ManaValue();
+
+            bool prefer = (chosen == -1)
+                       || (deficit > best_deficit)
+                       || (deficit == best_deficit && mv > best_mv);
+
+            if (prefer) { chosen = j; best_deficit = deficit; best_mv = mv; }
+        }
+    }
+
+    // Fallback: the branch found no eligible card of its preferred type (e.g. the
+    // allowed set is all lands while we're in the spell branch). Bottom the first
+    // allowed card — under lookahead these are all win-equal anyway.
+    if (chosen == -1)
+    {
+        for (int j = 0; j < static_cast<int>(hand.size()); ++j)
+        {
+            if (allowed[j]) { chosen = j; break; }
+        }
+    }
+    return chosen;
+}
+
+int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
+{
+    GameLogger* saved = m_logger;
+    m_logger = nullptr;                  // suppress per-decision logging during the rollout
+    GameEngine engine(*this);
+    int win_turn = engine.PlayOut(trial, max_turns);
+    m_logger = saved;
+    return win_turn > 0 ? win_turn : max_turns + 1;
+}
+
+void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 {
     Player& ap = state.ActivePlayer();
 
     for (int i = 0; i < count && !ap.hand.empty(); ++i)
     {
-        // Recompute from current hand — changes each iteration when a land is bottomed.
-        std::map<Color, int> pool;
-        int land_count = 0;
-        for (const Card& c : ap.hand)
+        int hand_size = static_cast<int>(ap.hand.size());
+        std::vector<char> allowed(hand_size, 1);
+
+        if (m_lookahead_bottoming)
         {
-            auto def = CardDatabase::Instance().Lookup(c.m_name);
-            if (!def || !def->card.IsLand()) { continue; }
-            ++land_count;
-            for (Color produced : def->params.produces) { ++pool[produced]; }
+            // Clairvoyant greedy: roll out a full game for removing each candidate
+            // card (it goes to the bottom of the library, so the draws the rollout
+            // sees are the real future draws). The best removal is the one that
+            // preserves the earliest win. Restrict the heuristic tiebreak below to
+            // those win-optimal removals, so lookahead only ever overrides the
+            // heuristic to secure a strictly earlier win.
+            std::vector<int> win_turn(hand_size, 0);
+            int best_win = std::numeric_limits<int>::max();
+            for (int j = 0; j < hand_size; ++j)
+            {
+                GameState trial = state;
+                Player& trial_ap = trial.ActivePlayer();
+                trial_ap.library.push_back(trial_ap.hand[j]);
+                trial_ap.hand.erase(trial_ap.hand.begin() + j);
+                win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                if (win_turn[j] < best_win) { best_win = win_turn[j]; }
+            }
+            for (int j = 0; j < hand_size; ++j)
+            {
+                allowed[j] = (win_turn[j] == best_win) ? 1 : 0;
+            }
         }
 
-        std::vector<Card>::iterator to_bottom;
+        int pick = HeuristicBottomPick(ap.hand, allowed);
+        if (pick < 0) { pick = 0; }
 
-        // Helper: single-spell deficit given a pool.
-        auto one_deficit = [](const ManaCost& cost,
-                              const std::map<Color, int>& p, int mana) -> int
-        {
-            auto get = [&](Color c) -> int
-            {
-                auto it = p.find(c);
-                return it != p.end() ? it->second : 0;
-            };
-            int needed = 0;
-            needed += std::max(0, cost.white     - get(Color::White));
-            needed += std::max(0, cost.blue      - get(Color::Blue));
-            needed += std::max(0, cost.black     - get(Color::Black));
-            needed += std::max(0, cost.red       - get(Color::Red));
-            needed += std::max(0, cost.green     - get(Color::Green));
-            needed += std::max(0, cost.colorless - get(Color::Colorless));
-            needed += std::max(0, cost.ManaValue() - (mana + needed));
-            return needed;
-        };
-
-        if (land_count > m_profile.min_lands + 1)
-        {
-            // Excess land: bottom the one that is least needed by the spells in hand.
-            //
-            // Primary key:   total spell deficit after removing the land (lower = prefer).
-            //   Avoids bottoming a land that would leave a spell uncastable.
-            //
-            // Secondary key: usefulness = max colour demand the land can satisfy (lower = prefer).
-            //   Demand for colour C = total pips of C across all spells in hand.
-            //   A Forest in an all-red hand has usefulness 0; a Mountain has usefulness = red demand.
-            //   Among equally safe removals, this bottoms the land producing the least-needed colour.
-
-            // Compute per-colour demand from spells in hand.
-            std::map<Color, int> demand;
-            for (const Card& hc : ap.hand)
-            {
-                auto sdef = CardDatabase::Instance().Lookup(hc.m_name);
-                if (!sdef || sdef->card.IsLand()) { continue; }
-                const ManaCost& cost = sdef->card.m_mana_cost;
-                demand[Color::White]     += cost.white;
-                demand[Color::Blue]      += cost.blue;
-                demand[Color::Black]     += cost.black;
-                demand[Color::Red]       += cost.red;
-                demand[Color::Green]     += cost.green;
-                demand[Color::Colorless] += cost.colorless;
-            }
-
-            to_bottom               = ap.hand.end();
-            int best_total_deficit  = std::numeric_limits<int>::max();
-            int best_uncastable     = std::numeric_limits<int>::max();
-            int best_usefulness     = std::numeric_limits<int>::max();
-
-            for (int j = 0; j < static_cast<int>(ap.hand.size()); ++j)
-            {
-                auto def     = CardDatabase::Instance().Lookup(ap.hand[j].m_name);
-                bool is_land = def ? def->card.IsLand() : ap.hand[j].IsLand();
-                if (!is_land) { continue; }
-
-                // Build pool without this land.
-                std::map<Color, int> tmp_pool = pool;
-                if (def)
-                {
-                    for (Color c : def->params.produces)
-                    {
-                        auto it = tmp_pool.find(c);
-                        if (it != tmp_pool.end()) { --it->second; }
-                    }
-                }
-
-                // Three-key score for the remaining hand:
-                //   1. Uncastable count — number of spells with any deficit > 0
-                //   2. Total deficit    — total additional lands needed across all spells
-                //   3. Usefulness       — max colour demand the removed land could satisfy
-                // Bottom the land that minimises (1), then (2), then (3).
-                // Count-first because immediately playable spells matter more than minimising
-                // total damage — having 2 castable spells + 1 brick is better than having
-                // 3 spells each one draw away from castable.
-                int total_deficit  = 0;
-                int uncastable_cnt = 0;
-                for (const Card& hc : ap.hand)
-                {
-                    auto sdef = CardDatabase::Instance().Lookup(hc.m_name);
-                    if (!sdef || sdef->card.IsLand()) { continue; }
-                    int d = one_deficit(sdef->card.m_mana_cost, tmp_pool, land_count - 1);
-                    total_deficit += d;
-                    if (d > 0) { ++uncastable_cnt; }
-                }
-
-                int usefulness = 0;
-                if (def)
-                {
-                    for (Color c : def->params.produces)
-                    {
-                        auto it = demand.find(c);
-                        usefulness = std::max(usefulness,
-                                              it != demand.end() ? it->second : 0);
-                    }
-                }
-
-                bool first_better, second_better;
-                if (m_profile.bottom_order == BottomOrder::CountFirst)
-                {
-                    first_better  = uncastable_cnt < best_uncastable;
-                    second_better = uncastable_cnt == best_uncastable
-                                 && total_deficit  <  best_total_deficit;
-                }
-                else
-                {
-                    first_better  = total_deficit  <  best_total_deficit;
-                    second_better = total_deficit  == best_total_deficit
-                                 && uncastable_cnt <  best_uncastable;
-                }
-                bool prefer = (to_bottom == ap.hand.end())
-                           || first_better
-                           || second_better
-                           || (uncastable_cnt == best_uncastable
-                               && total_deficit == best_total_deficit
-                               && usefulness   <  best_usefulness);
-
-                if (prefer)
-                {
-                    best_total_deficit = total_deficit;
-                    best_uncastable    = uncastable_cnt;
-                    best_usefulness    = usefulness;
-                    to_bottom          = ap.hand.begin() + j;
-                }
-            }
-
-            if (to_bottom == ap.hand.end()) { to_bottom = ap.hand.begin(); }
-        }
-        else
-        {
-            // Bottom the worst non-land spell using a two-key score:
-            //   Primary:   lands deficit — how many more lands are needed to cast this card.
-            //              Colour gaps are counted first (they require specific lands);
-            //              any remaining generic shortfall is added on top.
-            //              A 4-drop with 3 on-colour lands has deficit 1 (any land helps).
-            //              An off-colour 1-drop with 1 wrong-colour land also has deficit 1
-            //              (needs a specific colour), but is worth keeping because MV is lower.
-            //   Secondary: MV descending — among equal deficits, bottom the more expensive card.
-            to_bottom        = ap.hand.end();
-            int best_deficit = -1;
-            int best_mv      = -1;
-
-            for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
-            {
-                auto def     = CardDatabase::Instance().Lookup(it->m_name);
-                bool is_land = def ? def->card.IsLand() : it->IsLand();
-                if (is_land) { continue; }
-
-                int deficit = def ? one_deficit(def->card.m_mana_cost, pool, land_count) : 0;
-                int mv      = def ? def->card.m_mana_cost.ManaValue()
-                                  : it->m_mana_cost.ManaValue();
-
-                bool prefer = (to_bottom == ap.hand.end())
-                           || (deficit > best_deficit)
-                           || (deficit == best_deficit && mv > best_mv);
-
-                if (prefer) { to_bottom = it; best_deficit = deficit; best_mv = mv; }
-            }
-
-            if (to_bottom == ap.hand.end()) { to_bottom = ap.hand.begin(); }
-        }
-
-        ap.library.push_back(*to_bottom);
-        ap.hand.erase(to_bottom);
+        ap.library.push_back(ap.hand[pick]);
+        ap.hand.erase(ap.hand.begin() + pick);
     }
 }
 

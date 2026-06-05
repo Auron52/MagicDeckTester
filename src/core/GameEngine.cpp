@@ -39,7 +39,12 @@ static void CollectBoardState(const GameState& state,
 
 int GameEngine::RunGame(GameState& state, int max_turns)
 {
-    m_ai.HandleMulligan(state);
+    m_ai.HandleMulligan(state, max_turns);
+    return PlayOut(state, max_turns);
+}
+
+int GameEngine::PlayOut(GameState& state, int max_turns)
+{
     while (state.turn_number < max_turns)
     {
         if (state.player_lost_on_draw) { return -1; }
