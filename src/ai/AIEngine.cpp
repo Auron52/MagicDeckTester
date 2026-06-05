@@ -38,8 +38,6 @@ AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int timeout_ms)
 
 void AIEngine::HandleMulligan(GameState& state)
 {
-    m_remaining_depth = m_lookahead_depth;
-
     Player& ap = state.ActivePlayer();
     ap.library.DrawN(7, ap.hand);
 
@@ -421,18 +419,12 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
                      + std::chrono::milliseconds(m_timeout_ms);
         }
 
-        // Pre-combat: use the remaining depth for this turn so future turns
-        // match the simulation's projected play. Post-combat: always use full
-        // depth (post-combat is not simulated with lookahead, so no consistency
-        // constraint applies there).
-        int effective_depth = is_pre_combat_main ? m_remaining_depth : m_lookahead_depth;
+        // Search at full depth every turn. The per-turn depth decrement that used
+        // to live here was a workaround for candidate starvation under the timeout;
+        // iterative deepening in SolveWithLookahead now guarantees every candidate
+        // is evaluated, so later turns no longer need to be shallower.
         plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
-                                              effective_depth, 20, deadline);
-
-        if (is_pre_combat_main && m_remaining_depth > 0)
-        {
-            --m_remaining_depth;
-        }
+                                              m_lookahead_depth, 20, deadline);
     }
     else
     {

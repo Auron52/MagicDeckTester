@@ -39,11 +39,6 @@ private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
     int                      m_timeout_ms        = 0;
-    // Remaining lookahead depth for the current game. Starts at m_lookahead_depth
-    // and decrements once per pre-combat main phase so that T2 uses depth-1, T3
-    // uses depth-2, etc. — matching exactly what T1's simulation used when
-    // projecting each future turn, eliminating the search-depth inconsistency.
-    int                      m_remaining_depth   = 0;
     std::vector<std::string> m_kept_opening_hand;
     GameLogger*              m_logger            = nullptr;
 
