@@ -124,34 +124,9 @@ void GameEngine::UpkeepStep(GameState& state)
         std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
         if (!def || !def->params.upkeep_adds_charge) { continue; }
 
-        // Find most common creature MV in hand.
-        const Player& ap = state.ActivePlayer();
-        std::map<int, int> mv_count;
-        for (const Card& c : ap.hand)
-        {
-            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
-            if (!cdef || !cdef->card.IsCreature()) { continue; }
-            int mv = cdef->card.m_mana_cost.ManaValue();
-            if (mv > 0) { ++mv_count[mv]; }
-        }
-
-        int optimal = p.charge_counters; // default: keep current if no creatures in hand
-        if (!mv_count.empty())
-        {
-            int best_mv  = mv_count.begin()->first;
-            int best_cnt = 0;
-            for (const auto& kv : mv_count)
-            {
-                if (kv.second > best_cnt
-                    || (kv.second == best_cnt && kv.first < best_mv))
-                {
-                    best_cnt = kv.second;
-                    best_mv  = kv.first;
-                }
-            }
-            optimal = best_mv;
-        }
-
+        // Use the deck's precomputed dominant creature MV as the target — deck composition
+        // is stable and not subject to hand-variance like a per-upkeep hand scan would be.
+        int optimal = (state.vial_target_mv > 0) ? state.vial_target_mv : p.charge_counters;
         if (p.charge_counters < optimal) { ++p.charge_counters; }
     }
 
@@ -179,6 +154,14 @@ void GameEngine::UpkeepStep(GameState& state)
 void GameEngine::DrawStep(GameState& state)
 {
     state.step = Step::Draw;
+
+    // Player on the play skips their first draw step (CR 103.8a).
+    if (state.on_the_play && state.turn_number == 1)
+    {
+        ResolveStack(state);
+        return;
+    }
+
     Player& ap = state.ActivePlayer();
     if (ap.library.empty())
     {

@@ -1,0 +1,14 @@
+{
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "one_and_two",
+    "max_lands": 4,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 3
+  },
+  "version": 1,
+  "vial_target_mv": 2
+}

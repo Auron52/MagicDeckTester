@@ -3,7 +3,31 @@
 #include "../cards/CardDatabase.h"
 #include "../core/SpellEffects.h"
 #include <algorithm>
+#include <numeric>
 #include <stdexcept>
+
+static double ComputeHandScore(const std::vector<Card>& hand,
+    const std::map<std::string, std::vector<double>>& card_scores)
+{
+    std::map<std::string, int> counts;
+    for (const Card& c : hand) { ++counts[c.m_name]; }
+
+    double score = 0.0;
+    for (const auto& kv : counts)
+    {
+        auto it = card_scores.find(kv.first);
+        if (it == card_scores.end()) { continue; }
+        const std::vector<double>& marginals = it->second;
+        int copies = std::min(kv.second, static_cast<int>(marginals.size()));
+        // Clamp to zero: negative scores arise from selection-bias confounds
+        // (e.g. Aether Vial looks slower because Vial hands have fewer creatures
+        // on average), not from the card being a liability in the opening hand.
+        // We only want to score hands DOWN for lacking good cards, not UP for
+        // having support cards that test negatively in goldfishing.
+        for (int k = 0; k < copies; ++k) { score += std::max(0.0, marginals[k]); }
+    }
+    return score;
+}
 
 AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int timeout_ms)
     : m_profile(std::move(profile)), m_lookahead_depth(lookahead_depth), m_timeout_ms(timeout_ms) {}
@@ -165,6 +189,12 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
             default:
                 break;
         }
+    }
+
+    if (!m_profile.card_scores.empty())
+    {
+        double score = ComputeHandScore(hand, m_profile.card_scores);
+        if (score < m_profile.hand_score_threshold) { return false; }
     }
 
     return true;
@@ -380,10 +410,6 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
 
     TryPlayLand(state);
 
-    // Activate Aether Vials before the spell solver so that vialed-in creatures are
-    // already on the battlefield when TurnSolver evaluates attacking power.
-    ActivateVials(state);
-
     TurnSolver::Plan plan;
     if (m_lookahead_depth > 0)
     {
@@ -411,6 +437,39 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
     else
     {
         plan = TurnSolver::Solve(state, is_pre_combat_main);
+    }
+
+    // Deploy creatures via Aether Vial first (lords boost subsequent spell evals).
+    for (const std::string& name : plan.vial_activations)
+    {
+        std::optional<CardDefinition> copt = CardDatabase::Instance().Lookup(name);
+        if (!copt || !copt->card.IsCreature()) { continue; }
+        int mv = copt->card.m_mana_cost.ManaValue();
+        Player& ap_v = state.ActivePlayer();
+        auto hand_it = std::find_if(ap_v.hand.begin(), ap_v.hand.end(),
+            [&name](const Card& c) { return c.m_name == name; });
+        if (hand_it == ap_v.hand.end()) { continue; }
+        int bf_sz = static_cast<int>(state.battlefield.size());
+        for (int vi = 0; vi < bf_sz; ++vi)
+        {
+            Permanent& vp = state.battlefield[vi];
+            if (vp.controller_index != state.active_player_index || vp.tapped) { continue; }
+            std::optional<CardDefinition> vdef =
+                CardDatabase::Instance().Lookup(vp.card.m_name);
+            if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
+            if (vp.charge_counters != mv) { continue; }
+            if (m_logger) { m_logger->LogCastSpell(hand_it->m_number, name, "Vial"); }
+            Permanent perm;
+            perm.card              = copt->card;
+            perm.card.m_number     = hand_it->m_number;
+            perm.controller_index  = state.active_player_index;
+            perm.owner_index       = state.active_player_index;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+            ap_v.hand.erase(hand_it);
+            state.battlefield[vi].tapped = true;  // index access — safe after push_back
+            break;
+        }
     }
 
     // Execute: regular spells first so their lands are tapped before
@@ -510,49 +569,6 @@ bool AIEngine::TryPlayLand(GameState& state)
     return false;
 }
 
-// ---- Aether Vial activation ----
-
-void AIEngine::ActivateVials(GameState& state)
-{
-    Player& ap = state.ActivePlayer();
-    int bf_size = static_cast<int>(state.battlefield.size());
-    for (int vi = 0; vi < bf_size; ++vi)
-    {
-        if (state.battlefield[vi].controller_index != state.active_player_index
-            || state.battlefield[vi].tapped) { continue; }
-        std::optional<CardDefinition> vdef =
-            CardDatabase::Instance().Lookup(state.battlefield[vi].card.m_name);
-        if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
-
-        int target_mv = state.battlefield[vi].charge_counters;
-        std::vector<Card>::iterator best = ap.hand.end();
-        int best_eval = -1;
-        for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
-        {
-            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(it->m_name);
-            if (!cdef || !cdef->card.IsCreature()) { continue; }
-            if (cdef->card.m_mana_cost.ManaValue() != target_mv) { continue; }
-            int ev = cdef->card.m_power.value_or(0);
-            if (best == ap.hand.end() || ev > best_eval) { best = it; best_eval = ev; }
-        }
-        if (best == ap.hand.end()) { continue; }
-
-        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(best->m_name);
-        if (!cdef) { continue; }
-
-        if (m_logger) { m_logger->LogCastSpell(best->m_number, best->m_name, "Vial"); }
-
-        Permanent perm;
-        perm.card              = cdef->card;
-        perm.card.m_number     = best->m_number;
-        perm.controller_index  = state.active_player_index;
-        perm.owner_index       = state.active_player_index;
-        perm.entered_this_turn = true;
-        state.battlefield.push_back(perm);  // may reallocate — do NOT use old references
-        ap.hand.erase(best);
-        state.battlefield[vi].tapped = true;  // re-access via index, always valid
-    }
-}
 
 // ---- Land animation (e.g. Mutavault) ----
 
@@ -854,11 +870,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     if (def->card.IsCreature()
         && CanReplicate(*def, state.battlefield, state.active_player_index))
     {
+        // Replicate cost = printed mana cost (CR 702.56a), not the effective cast cost.
+        ManaCost rep_cost = def->card.m_mana_cost;
         ManaPool remaining = BuildAvailableMana(state);
-        ManaCost ec = effective;
-        while (remaining.CanPay(ec))
+        while (remaining.CanPay(rep_cost))
         {
-            if (!TapForCost(state, ec, available, true)) { break; }
+            if (!TapForCost(state, rep_cost, available, true)) { break; }
             remaining = BuildAvailableMana(state);
             replicate_tokens.push_back(def->card);
         }

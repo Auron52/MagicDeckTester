@@ -54,5 +54,21 @@ struct MulliganProfile
     // Keep unconditionally once hand reaches this size (London mulligan stop point).
     int stop_at = 4;
 
+    // Aether Vial target: the charge-counter value at which the Vial should stop advancing.
+    // Computed by the deck analyzer from the deck's creature curve. 0 = not set.
+    int vial_target_mv = 0;
+
+    // Per-card marginal win-turn improvement for the opening hand scorer.
+    // card_scores[name][0] = improvement from having the first copy in hand,
+    // card_scores[name][1] = additional improvement from a second copy, etc.
+    // Positive values mean the card improves the expected win turn.
+    // Computed by the deck analyzer from empirical game data; empty = scoring disabled.
+    std::map<std::string, std::vector<double>> card_scores;
+
+    // Minimum hand score to keep without mulliganing (after hard filters pass).
+    // hand_score = sum of marginal values for all cards in hand.
+    // 0.0 with empty card_scores = scoring disabled.
+    double hand_score_threshold = 0.0;
+
     static MulliganProfile DefaultProfile() { return {}; }
 };

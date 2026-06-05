@@ -56,9 +56,6 @@ private:
     // Play a land from hand if a land drop is available.
     bool TryPlayLand(GameState& state);
 
-    // Activate untapped Aether Vials: put a matching creature from hand onto the battlefield.
-    void ActivateVials(GameState& state);
-
     // Animate untapped animatable lands (e.g. Mutavault) if mana is available.
     void AnimateLands(GameState& state, ManaPool& available);
 

@@ -111,6 +111,20 @@ inline std::string DeckProfileToJson(const MulliganProfile& profile)
     json root;
     root["version"]  = 1;
     root["mulligan"] = MulliganProfileToJsonObj(profile);
+    if (profile.vial_target_mv > 0)
+        root["vial_target_mv"] = profile.vial_target_mv;
+    if (!profile.card_scores.empty())
+    {
+        json cs = json::object();
+        for (const auto& [name, marginals] : profile.card_scores)
+        {
+            json arr = json::array();
+            for (double v : marginals) { arr.push_back(v); }
+            cs[name] = arr;
+        }
+        root["card_scores"] = cs;
+        root["hand_score_threshold"] = profile.hand_score_threshold;
+    }
     return root.dump(2);
 }
 
@@ -164,6 +178,21 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
             catch (...) {}   // ignore unknown color strings
         }
     }
+
+    if (root.contains("vial_target_mv"))
+        profile.vial_target_mv = root["vial_target_mv"].get<int>();
+
+    if (root.contains("card_scores"))
+    {
+        for (const auto& [name, arr] : root["card_scores"].items())
+        {
+            std::vector<double> marginals;
+            for (const json& v : arr) { marginals.push_back(v.get<double>()); }
+            profile.card_scores[name] = std::move(marginals);
+        }
+    }
+    if (root.contains("hand_score_threshold"))
+        profile.hand_score_threshold = root["hand_score_threshold"].get<double>();
 
     return profile;
 }

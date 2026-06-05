@@ -23,10 +23,15 @@ public:
         // Spells to execute in order: regular spells first, sacrifice-land last.
         std::vector<std::string> spells;
         std::vector<std::string> sacrifice;
+        // Creatures to deploy via Aether Vial (zero mana cost, execute before spells).
+        std::vector<std::string> vial_activations;
         int  value          = -1;   // -1 = nothing castable
         bool wins_this_turn = false;
 
-        bool empty() const { return spells.empty() && sacrifice.empty(); }
+        bool empty() const
+        {
+            return spells.empty() && sacrifice.empty() && vial_activations.empty();
+        }
     };
 
     // Returns the highest-value feasible plan for one main phase.

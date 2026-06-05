@@ -205,6 +205,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
             {
                 int gi = thread_start + li;
                 GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi));
+                state.vial_target_mv = profile.vial_target_mv;
                 PopulateOpponentSpawns(state, base_game_index + gi);
 
                 if (logging) { AssignCardNumbers(state, numbering); }
@@ -267,6 +268,11 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     state.priority_player_index = 0;
     state.turn_number           = 0;
     state.game_seed             = seed;
+
+    // Alternate play/draw by seed parity. Every caller iterates games as
+    // base_seed + i, so consecutive games flip on_the_play, giving a balanced
+    // 50/50 split within any run without a separate play/draw parameter.
+    state.on_the_play = (seed % 2 == 0);
 
     return state;
 }

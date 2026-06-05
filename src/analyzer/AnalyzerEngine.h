@@ -36,6 +36,12 @@ struct AnalysisResult
     std::vector<TurnStats>         turn_stats;
     MulliganProfile                mulligan_profile;
     std::vector<RequiredPieceFlag> mulligan_flags;
+    std::map<std::string, std::vector<double>> card_scores;
+    double      hand_score_threshold = 0.0;
+    // Win-turn distribution: turn -> count of games won on that turn (turn 0 = did
+    // not win within max_turns). Enables threshold metrics like P(win <= T), which
+    // matter more than the mean for a racing game.
+    std::map<int, int> win_turn_histogram;
 };
 
 class AnalyzerEngine
@@ -51,10 +57,12 @@ public:
         std::vector<std::string> opening_hand;
     };
 
-    // Runs games at depth=0 and captures the kept opening hand for each game.
+    // Runs games and captures the kept opening hand for each game.
+    // depth=0 (greedy) is fast; higher depth captures look-ahead value of cards like Aether Vial.
     static std::vector<GameRecord> RunForRecords(
         const Decklist& deck, const MulliganProfile& profile,
-        int num_games, uint64_t seed, int max_turns);
+        int num_games, uint64_t seed, int max_turns,
+        int depth = 0, int timeout_ms = 0);
 
     // Average win turn over records (losses count as max_turns+1).
     static double AverageWinTurn(const std::vector<GameRecord>& records, int max_turns);
@@ -64,6 +72,12 @@ private:
     // Returns card_name -> (avg_win_turn_without - avg_win_turn_with): positive = card helps.
     static std::map<std::string, double> ScanCardImpacts(
         const std::vector<GameRecord>& records, int max_turns);
+
+    // Computes per-card marginal win-turn scores and a recommended hand threshold.
+    // scores[name][k] = improvement from the (k+1)-th copy in opening hand.
+    // *threshold_out is set to mean - 0.5*std_dev of hand scores over records.
+    static std::map<std::string, std::vector<double>> ComputeCardScores(
+        const std::vector<GameRecord>& records, int max_turns, double* threshold_out);
 
     // Grid-searches min_lands / max_lands / stop_at / skip_curve_check.
     // Returns the best profile found and writes its avg win turn to best_win_turn.
@@ -80,8 +94,12 @@ private:
 
     // Full mulligan optimisation: card-importance analysis + land grid search.
     // Uses a seed offset separate from the user's analysis seed to avoid overfitting.
+    // vial_target_mv is injected into every profile used so Aether Vial ticks correctly.
     static OptResult OptimizeMulligan(
-        const Decklist& deck, uint64_t seed, int max_turns);
+        const Decklist& deck, uint64_t seed, int max_turns, int vial_target_mv = 0);
+
+    // Returns the most common creature MV if the deck contains Aether Vial, else 0.
+    static int ComputeVialTargetMv(const Decklist& deck);
 
     AnalysisResult RunMonteCarlo(
         const Decklist& deck, int num_games, uint64_t base_seed,

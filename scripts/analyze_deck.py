@@ -56,45 +56,102 @@ def ParseArgs():
 # Decklist parsing — plain text and Cockatrice .cod XML
 # ---------------------------------------------------------------------------
 
-def LoadDeckNames(path: Path) -> list[str]:
-    """
-    Return a deduplicated list of mainboard card names from a decklist.
-    Supports plain text (4 Card Name / 4x Card Name) and Cockatrice .cod XML.
-    """
+def LoadDeckCounts(path: Path) -> dict[str, int]:
+    """Return {card_name: count} for mainboard cards, preserving insertion order."""
     if path.suffix.lower() == ".cod":
-        return _LoadCockatriceDeck(path)
-    return _LoadTextDeck(path)
+        return _LoadCockatriceDeckCounts(path)
+    return _LoadTextDeckCounts(path)
 
-def _LoadCockatriceDeck(path: Path) -> list[str]:
-    tree = ET.parse(path)
-    root = tree.getroot()
-    names = []
-    seen  = set()
-    for zone in root.findall("zone"):
-        if zone.get("name") != "main":
-            continue
-        for card in zone.findall("card"):
-            name = card.get("name", "").strip()
-            if name and name not in seen:
-                seen.add(name)
-                names.append(name)
-    return names
-
-def _LoadTextDeck(path: Path) -> list[str]:
-    names = []
-    seen  = set()
+def _LoadTextDeckCounts(path: Path) -> dict[str, int]:
+    counts: dict[str, int] = {}
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("//") or line.startswith("#"):
                 continue
-            match = re.match(r"^\d+x?\s+(.*)", line)
-            name  = match.group(1).strip() if match else line.strip()
+            match = re.match(r"^(\d+)x?\s+(.*)", line)
+            if not match:
+                continue
+            count = int(match.group(1))
+            name  = match.group(2).strip()
             name  = re.sub(r"\s+\([A-Z0-9]+\)\s+\d+$", "", name)
-            if name and name not in seen:
-                seen.add(name)
-                names.append(name)
-    return names
+            if name:
+                counts[name] = counts.get(name, 0) + count
+    return counts
+
+def _LoadCockatriceDeckCounts(path: Path) -> dict[str, int]:
+    tree = ET.parse(path)
+    root = tree.getroot()
+    counts: dict[str, int] = {}
+    for zone in root.findall("zone"):
+        if zone.get("name") != "main":
+            continue
+        for card in zone.findall("card"):
+            name  = card.get("name", "").strip()
+            count = int(card.get("number", "1"))
+            if name:
+                counts[name] = counts.get(name, 0) + count
+    return counts
+
+def LoadDeckNames(path: Path) -> list[str]:
+    """Return a deduplicated list of mainboard card names (order-preserving)."""
+    return list(LoadDeckCounts(path).keys())
+
+# ---------------------------------------------------------------------------
+# Vial target computation
+# ---------------------------------------------------------------------------
+
+def _ManaValue(mana_cost: str) -> int:
+    total = 0
+    for symbol in re.findall(r'\{([^}]+)\}', mana_cost):
+        if symbol.isdigit():
+            total += int(symbol)
+        elif symbol != 'X':
+            total += 1  # one generic mana per colored pip
+    return total
+
+def ComputeVialTargetMv(deck_counts: dict[str, int], cards_json: Path) -> int:
+    """
+    Returns the most common creature MV (weighted by deck count) if the deck
+    contains Aether Vial, otherwise returns 0. Tie-breaks toward higher MV.
+    """
+    if "Aether Vial" not in deck_counts:
+        return 0
+    if not cards_json.exists():
+        return 0
+    with open(cards_json, encoding="utf-8") as f:
+        data = json.load(f)
+    card_map = {c["name"]: c for c in data.get("cards", []) if "name" in c}
+    mv_count: dict[int, int] = {}
+    for name, count in deck_counts.items():
+        entry = card_map.get(name)
+        if not entry or "Creature" not in entry.get("types", []):
+            continue
+        mv = _ManaValue(entry.get("mana_cost", ""))
+        if mv > 0:
+            mv_count[mv] = mv_count.get(mv, 0) + count
+    if not mv_count:
+        return 0
+    best_mv, best_cnt = 0, 0
+    for mv, cnt in mv_count.items():
+        if cnt > best_cnt or (cnt == best_cnt and mv > best_mv):
+            best_cnt, best_mv = cnt, mv
+    return best_mv
+
+def UpdateDeckProfile(deck_path: Path, updates: dict) -> None:
+    """Merge `updates` into the deck's .profile.json, creating it if needed."""
+    profile_path = deck_path.with_name(deck_path.stem + ".profile.json")
+    data: dict = {"version": 1, "mulligan": {}}
+    if profile_path.exists():
+        try:
+            with open(profile_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+    data.update(updates)
+    with open(profile_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    print(f"  Profile updated: {profile_path.name}", file=sys.stderr)
 
 # ---------------------------------------------------------------------------
 # Card coverage
@@ -257,7 +314,8 @@ def Main():
         sys.exit(1)
 
     # 1. Parse
-    card_names = LoadDeckNames(deck_path)
+    deck_counts = LoadDeckCounts(deck_path)
+    card_names  = list(deck_counts.keys())
 
     # 2. Coverage
     implemented = LoadImplementedNames(cards_json)
@@ -285,14 +343,28 @@ def Main():
         print(json.dumps(report, indent=2))
         sys.exit(1)
 
-    # 4. Rebuild
+    # 4. Update deck profile with computed AI parameters
+    vial_target_mv = ComputeVialTargetMv(deck_counts, cards_json)
+    if vial_target_mv > 0:
+        UpdateDeckProfile(deck_path, {"vial_target_mv": vial_target_mv})
+
+    # 5. Rebuild
     if not args.no_rebuild:
         if not RebuildProject():
             sys.exit(1)
 
-    # 5. Analyze
+    # 6. Analyze
     print(f"  Running analyzer ({args.games} games)...", file=sys.stderr)
     analysis = RunAnalyzer(deck_path, args.games, cards_json)
+
+    # Write card scores and threshold into the profile if the analyzer produced them.
+    profile_updates: dict = {}
+    if "card_scores" in analysis:
+        profile_updates["card_scores"] = analysis["card_scores"]
+    if "hand_score_threshold" in analysis:
+        profile_updates["hand_score_threshold"] = analysis["hand_score_threshold"]
+    if profile_updates:
+        UpdateDeckProfile(deck_path, profile_updates)
 
     report["analysis"] = analysis
     print(json.dumps(report, indent=2))

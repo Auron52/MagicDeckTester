@@ -233,16 +233,34 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         return DMG;  // minimal X=1 estimate
     }
 
-    // Aether Vial and similar: each turn after being played, the Vial deploys one
-    // creature from hand for free. Value declines with a turn penalty so that:
-    //   T1-T3: Vial beats a non-haste 1-drop (good opening plays)
-    //   T4+:   direct board presence beats Vial (speed matters more late-game;
-    //           lords and haste Slivers compound existing board, not future ones)
-    // A floor of 3/4 * DMG keeps Vial as a valid filler if nothing else is castable.
+    // Aether Vial and similar: deploys a creature from hand for free each turn once charged.
+    // Score as the best matching creature in hand. Lords boost all existing attackers
+    // immediately on deployment (continuous effect, not blocked by summoning sickness);
+    // haste creatures (via card or lord) attack the same turn deployed.
+    // Apply a 1-attack penalty vs direct cast: Vial must reach target charge first.
     if (def.params.upkeep_adds_charge)
     {
-        return std::max(3 * DMG / 4,
-                        ExpectedAttacks(state) * DMG - state.turn_number * 30);
+        int best = 0;
+        int target_mv = state.vial_target_mv;
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+            if (!cdef || !cdef->card.IsCreature()) { continue; }
+            if (target_mv > 0 && cdef->card.m_mana_cost.ManaValue() != target_mv) { continue; }
+            auto [lord_pb, lord_tb] = ComputeLordBonus(cdef->card, state.battlefield,
+                                                        state.active_player_index);
+            bool ds = cdef->card.HasKeyword(Keyword::DoubleStrike)
+                   || HasDoubleStrikeFromLords(cdef->card, state.battlefield,
+                                               state.active_player_index);
+            int power = (cdef->card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+            bool haste = cdef->card.HasKeyword(Keyword::Haste)
+                      || HasHasteFromLords(cdef->card, state.battlefield,
+                                           state.active_player_index);
+            int attacks = std::max(1, ExpectedAttacks(state) - (haste ? 1 : 2));
+            best = std::max(best, power * attacks * DMG);
+        }
+        if (best > 0) { return best; }
+        return std::max(3 * DMG / 4, ExpectedAttacks(state) * DMG - state.turn_number * 30);
     }
 
     return DMG;  // fallback for other spell types
@@ -261,7 +279,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
     bool has_creature_target = HasLegalCreatureTarget(state);
 
-    // Build candidate list: non-land cards that are legally castable this phase.
+    // Build candidate list: non-land cards that are legally castable this phase,
+    // plus zero-cost Aether Vial activations.
     struct Candidate
     {
         int          hand_index;
@@ -272,6 +291,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         bool         is_noncreature;
         int          card_mv;        // base MV of the card (used for trigger checks)
         int          direct_damage;
+        bool         is_vial_activation = false;
+        int          vial_bf_index      = -1;   // battlefield index of the tapped Vial
+        int          vial_attack_power  = 0;    // power this turn if haste (for wins_this_turn)
     };
 
     std::vector<Candidate> cands;
@@ -316,12 +338,78 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                          def.card.m_mana_cost.ManaValue(), direct});
     }
 
+    // Add zero-cost Aether Vial activation candidates — one per (Vial, creature) pair.
+    {
+        constexpr int DMG = 100;
+        int bf_size = static_cast<int>(state.battlefield.size());
+        for (int vi = 0; vi < bf_size; ++vi)
+        {
+            const Permanent& vp = state.battlefield[vi];
+            if (vp.controller_index != state.active_player_index || vp.tapped) { continue; }
+            std::optional<CardDefinition> vdef =
+                CardDatabase::Instance().Lookup(vp.card.m_name);
+            if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
+
+            int target_mv = vp.charge_counters;
+            for (int i = 0; i < n; ++i)
+            {
+                std::optional<CardDefinition> copt =
+                    CardDatabase::Instance().Lookup(ap.hand[i].m_name);
+                if (!copt || !copt->card.IsCreature()) { continue; }
+                if (copt->card.m_mana_cost.ManaValue() != target_mv) { continue; }
+
+                auto [lord_pb, lord_tb] = ComputeLordBonus(
+                    copt->card, state.battlefield, state.active_player_index);
+                bool ds = copt->card.HasKeyword(Keyword::DoubleStrike)
+                       || HasDoubleStrikeFromLords(copt->card, state.battlefield,
+                                                   state.active_player_index);
+                int power = (copt->card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+                bool haste = copt->card.HasKeyword(Keyword::Haste)
+                          || HasHasteFromLords(copt->card, state.battlefield,
+                                               state.active_player_index);
+                int attacks = ExpectedAttacks(state);
+                if (!haste && attacks > 0) { --attacks; }
+
+                Candidate c;
+                c.hand_index        = i;
+                c.def               = *copt;
+                c.cost              = ManaCost{};
+                c.eval              = power * attacks * DMG;
+                c.sacrifice_land    = false;
+                c.is_noncreature    = false;
+                c.card_mv           = target_mv;
+                c.direct_damage     = 0;
+                c.is_vial_activation = true;
+                c.vial_bf_index      = vi;
+                c.vial_attack_power  = haste ? power : 0;
+                cands.push_back(c);
+            }
+        }
+    }
+
     int m = static_cast<int>(cands.size());
     Plan best;
 
     // Enumerate all non-empty subsets (mask=0 is "do nothing" and is the default).
     for (int mask = 1; mask < (1 << m); ++mask)
     {
+        // Reject subsets that use the same hand card twice (e.g. cast + Vial same creature)
+        // or that tap the same Vial twice.
+        bool valid = true;
+        for (int j = 0; j < m && valid; ++j)
+        {
+            if (!(mask & (1 << j))) { continue; }
+            for (int k = j + 1; k < m; ++k)
+            {
+                if (!(mask & (1 << k))) { continue; }
+                if (cands[j].hand_index == cands[k].hand_index) { valid = false; break; }
+                if (cands[j].is_vial_activation && cands[k].is_vial_activation
+                    && cands[j].vial_bf_index == cands[k].vial_bf_index)
+                { valid = false; break; }
+            }
+        }
+        if (!valid) { continue; }
+
         ManaCost combined;
         ManaCost noncreature_combined;
         int sacrifice_count   = 0;
@@ -329,6 +417,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         int direct_dmg        = 0;
         int total_eval        = 0;
         int self_damage       = 0;
+        int vial_haste_atk    = 0;
 
         for (int j = 0; j < m; ++j)
         {
@@ -354,10 +443,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 noncreature_combined.generic   += c.cost.generic;
             }
 
-            if (c.sacrifice_land)   { ++sacrifice_count; }
-            if (c.is_noncreature)   { ++noncreature_count; }
-            direct_dmg += c.direct_damage;
-            total_eval += c.eval;
+            if (c.sacrifice_land)    { ++sacrifice_count; }
+            if (c.is_noncreature)    { ++noncreature_count; }
+            direct_dmg        += c.direct_damage;
+            total_eval        += c.eval;
+            vial_haste_atk    += c.vial_attack_power;
 
             for (const TriggerSource& src : trigger_sources)
             {
@@ -374,7 +464,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // we die to the trigger before the spell deals its damage.
         if (self_damage >= ap.life) { continue; }
 
-        int projected_atk = pending_atk + noncreature_count * prowess_attackers;
+        int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
 
         // A winning plan always beats a non-winning plan.
@@ -386,13 +476,15 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         {
             best.spells.clear();
             best.sacrifice.clear();
+            best.vial_activations.clear();
             for (int j = 0; j < m; ++j)
             {
                 if (!(mask & (1 << j))) { continue; }
                 const Candidate& c = cands[j];
                 const std::string& name = ap.hand[c.hand_index].m_name;
-                if (c.sacrifice_land) { best.sacrifice.push_back(name); }
-                else                  { best.spells.push_back(name); }
+                if (c.is_vial_activation) { best.vial_activations.push_back(name); }
+                else if (c.sacrifice_land) { best.sacrifice.push_back(name); }
+                else                       { best.spells.push_back(name); }
             }
             best.value          = total_eval;
             best.wins_this_turn = wins;
@@ -470,6 +562,36 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     Player& ap  = state.ActivePlayer();
     int opp_idx = 1 - state.active_player_index;
 
+    // Deploy creatures via Aether Vial before casting spells so lord effects are live.
+    auto apply_vial = [&](const std::string& name)
+    {
+        std::optional<CardDefinition> copt = CardDatabase::Instance().Lookup(name);
+        if (!copt || !copt->card.IsCreature()) { return; }
+        int mv = copt->card.m_mana_cost.ManaValue();
+        auto hand_it = std::find_if(ap.hand.begin(), ap.hand.end(),
+            [&name](const Card& c) { return c.m_name == name; });
+        if (hand_it == ap.hand.end()) { return; }
+        int bf_sz = static_cast<int>(state.battlefield.size());
+        for (int vi = 0; vi < bf_sz; ++vi)
+        {
+            Permanent& vp = state.battlefield[vi];
+            if (vp.controller_index != state.active_player_index || vp.tapped) { continue; }
+            std::optional<CardDefinition> vdef = CardDatabase::Instance().Lookup(vp.card.m_name);
+            if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
+            if (vp.charge_counters != mv) { continue; }
+            Permanent perm;
+            perm.card              = copt->card;
+            perm.controller_index  = state.active_player_index;
+            perm.owner_index       = state.active_player_index;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+            ap.hand.erase(hand_it);
+            state.battlefield[vi].tapped = true;  // access by index — push_back may reallocate
+            return;
+        }
+    };
+    for (const std::string& name : plan.vial_activations) { apply_vial(name); }
+
     std::function<void(const std::string&, bool)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice)
     {
@@ -506,12 +628,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
             // Replicate: if Hatchery Sliver (or the card itself) grants replicate,
             // pay the mana cost additional times to create token copies.
+            // Replicate cost = printed mana cost (CR 702.56a), not the effective cast cost.
             if (CanReplicate(def, state.battlefield, state.active_player_index))
             {
+                ManaCost rep_cost = def.card.m_mana_cost;
                 ManaPool remaining = BuildPool(state);
-                while (remaining.CanPay(ec))
+                while (remaining.CanPay(rep_cost))
                 {
-                    if (!TapForCostDirect(state, ec, true)) { break; }
+                    if (!TapForCostDirect(state, rep_cost, true)) { break; }
                     Permanent token = perm;
                     token.card.m_number = 0;
                     state.battlefield.push_back(token);
@@ -527,6 +651,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Draw breakpoint: re-solve with updated hand and remaining mana so
             // newly revealed cards can be cast with mana still available this turn.
             TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+            for (const std::string& extra_name : extra.vial_activations) { apply_vial(extra_name); }
             for (const std::string& extra_name : extra.spells)    { apply_one(extra_name, false); }
             for (const std::string& extra_name : extra.sacrifice) { apply_one(extra_name, true); }
         }
@@ -594,47 +719,6 @@ static void SimulateCombat(GameState& state)
     }
 }
 
-// Activate Aether Vials: put the best creature from hand with MV == charge_counters
-// onto the battlefield for free. Mirrors the real-game logic in AIEngine::ActivateVials.
-static void SimulateVialActivation(GameState& state)
-{
-    int active = state.active_player_index;
-    Player& ap = state.ActivePlayer();
-    int bf_size = static_cast<int>(state.battlefield.size());
-    for (int vi = 0; vi < bf_size; ++vi)
-    {
-        if (state.battlefield[vi].controller_index != active
-            || state.battlefield[vi].tapped) { continue; }
-        std::optional<CardDefinition> vdef =
-            CardDatabase::Instance().Lookup(state.battlefield[vi].card.m_name);
-        if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
-
-        int target_mv = state.battlefield[vi].charge_counters;
-        std::vector<Card>::iterator best = ap.hand.end();
-        int best_pw = -1;
-        for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
-        {
-            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(it->m_name);
-            if (!cdef || !cdef->card.IsCreature()) { continue; }
-            if (cdef->card.m_mana_cost.ManaValue() != target_mv) { continue; }
-            int pw = cdef->card.m_power.value_or(0);
-            if (best == ap.hand.end() || pw > best_pw) { best = it; best_pw = pw; }
-        }
-        if (best == ap.hand.end()) { continue; }
-
-        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(best->m_name);
-        if (!cdef) { continue; }
-
-        Permanent perm;
-        perm.card              = cdef->card;
-        perm.controller_index  = active;
-        perm.owner_index       = active;
-        perm.entered_this_turn = true;
-        state.battlefield.push_back(perm);  // may reallocate — never use old refs after this
-        ap.hand.erase(best);
-        state.battlefield[vi].tapped = true;
-    }
-}
 
 // Activate tap-and-pay token abilities (e.g. Sliver Hive) with any spare mana.
 static void SimulateTapTokens(GameState& state)
@@ -736,26 +820,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (p.controller_index != state.active_player_index) { continue; }
         std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
         if (!def || !def->params.upkeep_adds_charge) { continue; }
-        std::map<int, int> mv_count;
-        for (const Card& c : ap_upkeep.hand)
-        {
-            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
-            if (!cdef || !cdef->card.IsCreature()) { continue; }
-            int mv = cdef->card.m_mana_cost.ManaValue();
-            if (mv > 0) { ++mv_count[mv]; }
-        }
-        int optimal = p.charge_counters;
-        if (!mv_count.empty())
-        {
-            int best_mv = mv_count.begin()->first;
-            int best_cnt = 0;
-            for (const auto& kv : mv_count)
-            {
-                if (kv.second > best_cnt || (kv.second == best_cnt && kv.first < best_mv))
-                { best_cnt = kv.second; best_mv = kv.first; }
-            }
-            optimal = best_mv;
-        }
+        int optimal = (state.vial_target_mv > 0) ? state.vial_target_mv : p.charge_counters;
         if (p.charge_counters < optimal) { ++p.charge_counters; }
     }
 
@@ -849,6 +914,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         bool        is_draw;
         bool        has_spectacle;
         int         direct_damage;
+        bool        is_vial_activation = false;
+        int         vial_bf_index      = -1;
+        int         vial_attack_power  = 0;
     };
 
     std::vector<Candidate> cands;
@@ -893,12 +961,71 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         cands.push_back(c);
     }
 
+    // Add zero-cost Aether Vial activation candidates.
+    {
+        constexpr int DMG = 100;
+        int bf_size = static_cast<int>(state.battlefield.size());
+        for (int vi = 0; vi < bf_size; ++vi)
+        {
+            const Permanent& vp = state.battlefield[vi];
+            if (vp.controller_index != state.active_player_index || vp.tapped) { continue; }
+            std::optional<CardDefinition> vdef =
+                CardDatabase::Instance().Lookup(vp.card.m_name);
+            if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
+
+            int target_mv = vp.charge_counters;
+            for (int i = 0; i < n; ++i)
+            {
+                std::optional<CardDefinition> copt =
+                    CardDatabase::Instance().Lookup(ap.hand[i].m_name);
+                if (!copt || !copt->card.IsCreature()) { continue; }
+                if (copt->card.m_mana_cost.ManaValue() != target_mv) { continue; }
+
+                auto [lord_pb, lord_tb] = ComputeLordBonus(
+                    copt->card, state.battlefield, state.active_player_index);
+                bool ds = copt->card.HasKeyword(Keyword::DoubleStrike)
+                       || HasDoubleStrikeFromLords(copt->card, state.battlefield,
+                                                   state.active_player_index);
+                int power = (copt->card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+                bool haste = copt->card.HasKeyword(Keyword::Haste)
+                          || HasHasteFromLords(copt->card, state.battlefield,
+                                               state.active_player_index);
+                int attacks = ExpectedAttacks(state);
+                if (!haste && attacks > 0) { --attacks; }
+
+                Candidate c{};
+                c.hand_index         = i;
+                c.eval               = power * attacks * DMG;
+                c.is_vial_activation = true;
+                c.vial_bf_index      = vi;
+                c.vial_attack_power  = haste ? power : 0;
+                cands.push_back(c);
+            }
+        }
+    }
+
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
 
     // --- Base set: all non-empty feasible subsets ---
     for (int mask = 1; mask < (1 << m); ++mask)
     {
+        // Reject subsets that use the same hand card twice or tap the same Vial twice.
+        bool valid = true;
+        for (int j = 0; j < m && valid; ++j)
+        {
+            if (!(mask & (1 << j))) { continue; }
+            for (int k = j + 1; k < m; ++k)
+            {
+                if (!(mask & (1 << k))) { continue; }
+                if (cands[j].hand_index == cands[k].hand_index) { valid = false; break; }
+                if (cands[j].is_vial_activation && cands[k].is_vial_activation
+                    && cands[j].vial_bf_index == cands[k].vial_bf_index)
+                { valid = false; break; }
+            }
+        }
+        if (!valid) { continue; }
+
         ManaCost combined;
         ManaCost noncreature_combined;
         int sacrifice_count   = 0;
@@ -906,6 +1033,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int direct_dmg        = 0;
         int total_eval        = 0;
         int self_damage       = 0;
+        int vial_haste_atk    = 0;
 
         for (int j = 0; j < m; ++j)
         {
@@ -928,10 +1056,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 noncreature_combined.colorless += c.cost.colorless;
                 noncreature_combined.generic   += c.cost.generic;
             }
-            if (c.sacrifice_land)  { ++sacrifice_count; }
-            if (c.is_noncreature)  { ++noncreature_count; }
-            direct_dmg += c.direct_damage;
-            total_eval += c.eval;
+            if (c.sacrifice_land)   { ++sacrifice_count; }
+            if (c.is_noncreature)   { ++noncreature_count; }
+            direct_dmg     += c.direct_damage;
+            total_eval     += c.eval;
+            vial_haste_atk += c.vial_attack_power;
             for (const TriggerSource& src : trigger_sources)
             {
                 if (c.card_mv <= src.max_mv) { self_damage += src.damage; }
@@ -944,7 +1073,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
         if (self_damage >= ap.life) { continue; }
 
-        int projected_atk = pending_atk + noncreature_count * prowess_attackers;
+        int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
         TurnSolver::Plan plan;
         plan.value          = total_eval;
@@ -954,8 +1083,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (!(mask & (1 << j))) { continue; }
             const Candidate& c = cands[j];
             const std::string& name = ap.hand[c.hand_index].m_name;
-            if (c.sacrifice_land) { plan.sacrifice.push_back(name); }
-            else                  { plan.spells.push_back(name); }
+            if (c.is_vial_activation) { plan.vial_activations.push_back(name); }
+            else if (c.sacrifice_land) { plan.sacrifice.push_back(name); }
+            else                       { plan.spells.push_back(name); }
         }
         plans.push_back(std::move(plan));
     }
@@ -1050,14 +1180,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 // pre-combat decisions and Solve for post-combat decisions.
 // Returns the win turn, or max_turns+1 if the game was not won in time.
 static int SimulateToEnd(GameState state, int depth, int max_turns,
-                         std::chrono::steady_clock::time_point deadline)
+                         std::chrono::steady_clock::time_point deadline,
+                         int cutoff_turn)
 {
     while (state.turn_number <= max_turns)
     {
         if (std::chrono::steady_clock::now() >= deadline) { return max_turns + 1; }
+        // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
+        // incumbent best win turn, so abandon it (win turn only grows from here).
+        // Abort only AFTER cutoff_turn so a win exactly on cutoff_turn still
+        // registers for the value tiebreak.
+        if (state.turn_number > cutoff_turn) { return max_turns + 1; }
 
-        // Pre-combat main: activate Vials, pick and apply plan, then animate lands + tokens
-        SimulateVialActivation(state);
+        // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens
         TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(state, true, depth, max_turns, deadline);
         ApplyPlanDirect(state, pre_plan, true);
         SimulateAnimateLands(state);
@@ -1099,50 +1234,72 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
     if (candidates.empty()) { return Plan{}; }
 
-    // Initialise with the highest-value single-turn plan (candidates.front()
-    // after sorting) so that a timeout at any point returns a reasonable result.
-    Plan best_plan    = candidates.front();
-    int  best_win_turn = max_turns + 1;
+    // Iterative deepening: evaluate EVERY candidate at increasing rollout depth
+    // (sub_depth = 0, 1, ... depth-1), and only commit a pass's result once that
+    // pass has fully completed. On a deadline we fall back to the best plan from
+    // the last fully-completed depth, so the decision always reflects a COMPLETE
+    // comparison of all candidates (at some depth) rather than a partial ranking.
+    // This guarantees a low-ranked but winning line is never starved by the clock:
+    // even the cheap depth-0 pass plays each rollout out and discovers its win.
+    //
+    // Cross-pass cutoff: each pass is seeded with the previous complete pass's
+    // best plan and win turn. A deeper rollout wins as-fast-or-faster, so that
+    // win turn is a valid starting bound for the branch-and-bound cutoff — the
+    // expensive deep passes then prune lines that can't beat it from the start,
+    // instead of re-discovering the bound from scratch. Lossless: any candidate
+    // that wins on or before the seeded bound is still played out in full.
+    Plan best_plan = candidates.front();
+    int  best_win  = max_turns + 1;
 
-    for (const Plan& plan : candidates)
+    for (int sub_depth = 0; sub_depth <= depth - 1; ++sub_depth)
     {
-        if (std::chrono::steady_clock::now() >= deadline) { break; }
+        Plan pass_best     = best_plan;
+        int  pass_best_win = best_win;
+        bool pass_complete = true;
 
-        GameState copy = state;
-        SimulateVialActivation(copy);
-        ApplyPlanDirect(copy, plan, true);
-        SimulateAnimateLands(copy);
-        SimulateTapTokens(copy);
-
-        // Combat this turn
-        SimulateCombat(copy);
-        if (copy.Opponent().life <= 0) { return plan; }
-
-        // Post-combat main (single-turn)
-        Plan post = Solve(copy, false);
-        ApplyPlanDirect(copy, post, false);
-        if (copy.Opponent().life <= 0) { return plan; }
-
-        // End of this turn + start of next
-        if (!SimulateEndAndStartNextTurn(copy)) { continue; }
-        SimulateLandPlay(copy);
-
-        // Simulate remaining turns with (depth-1) lookahead.
-        // Pass max() so the sub-simulation runs to completion — the deadline
-        // only controls how many top-level plans this function evaluates, not
-        // how deeply each evaluated plan is simulated. Without this, a long
-        // timeout causes early plans to consume most of the budget, leaving
-        // later plans with truncated simulations that make them look worse
-        // than they are, which can produce a worse overall decision.
-        int win_turn = SimulateToEnd(copy, depth - 1, max_turns,
-                                     std::chrono::steady_clock::time_point::max());
-        bool better = win_turn < best_win_turn
-                   || (win_turn == best_win_turn && plan.value > best_plan.value);
-        if (better)
+        for (const Plan& plan : candidates)
         {
-            best_win_turn = win_turn;
-            best_plan     = plan;
+            if (std::chrono::steady_clock::now() >= deadline) { pass_complete = false; break; }
+
+            GameState copy = state;
+            ApplyPlanDirect(copy, plan, true);
+            SimulateAnimateLands(copy);
+            SimulateTapTokens(copy);
+
+            // Combat this turn
+            SimulateCombat(copy);
+            if (copy.Opponent().life <= 0) { return plan; }
+
+            // Post-combat main (single-turn)
+            Plan post = Solve(copy, false);
+            ApplyPlanDirect(copy, post, false);
+            if (copy.Opponent().life <= 0) { return plan; }
+
+            // End of this turn + start of next
+            if (!SimulateEndAndStartNextTurn(copy)) { continue; }
+            SimulateLandPlay(copy);
+
+            // Simulate remaining turns with sub_depth lookahead. Pass max() so the
+            // sub-simulation itself runs to completion (the deadline only governs
+            // how far this pass gets through the candidate list); the branch-and-
+            // bound cutoff (pass_best_win) prunes lines that cannot beat the pass
+            // incumbent.
+            int win_turn = SimulateToEnd(copy, sub_depth, max_turns,
+                                         std::chrono::steady_clock::time_point::max(),
+                                         pass_best_win);
+            bool better = win_turn < pass_best_win
+                       || (win_turn == pass_best_win && plan.value > pass_best.value);
+            if (better)
+            {
+                pass_best_win = win_turn;
+                pass_best     = plan;
+            }
         }
+
+        if (!pass_complete) { break; }  // deadline hit: keep last complete pass
+
+        best_plan = pass_best;
+        best_win  = pass_best_win;
     }
 
     return best_plan;

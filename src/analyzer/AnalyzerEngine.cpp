@@ -3,13 +3,17 @@
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
 #include "../ai/MulliganProfileIO.h"
+#include "../cards/CardDatabase.h"
 #include "../runner/GoldFishRunner.h"
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <nlohmann/json.hpp>
+#include <numeric>
 #include <set>
 #include <sstream>
+#include <thread>
 
 using json = nlohmann::json;
 
@@ -30,24 +34,63 @@ double AnalyzerEngine::AverageWinTurn(const std::vector<GameRecord>& records, in
 
 std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
     const Decklist& deck, const MulliganProfile& profile,
-    int num_games, uint64_t seed, int max_turns)
+    int num_games, uint64_t seed, int max_turns,
+    int depth, int timeout_ms)
 {
-    std::vector<GameRecord> records;
-    records.reserve(num_games);
+    std::vector<GameRecord> records(num_games);
 
-    AIEngine   ai(profile, /*depth=*/0, /*timeout_ms=*/0);
-    GameEngine engine(ai);
-
-    for (int i = 0; i < num_games; ++i)
+    // Single-threaded fast path for depth=0 (used heavily by the optimiser).
+    if (depth == 0)
     {
-        GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(i));
-        int win_turn    = engine.RunGame(state, max_turns);
-
-        GameRecord rec;
-        rec.win_turn    = win_turn;
-        rec.opening_hand = ai.GetKeptOpeningHand();
-        records.push_back(std::move(rec));
+        AIEngine   ai(profile, 0, 0);
+        GameEngine engine(ai);
+        for (int i = 0; i < num_games; ++i)
+        {
+            GameState state  = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(i));
+            state.vial_target_mv = profile.vial_target_mv;
+            records[i].win_turn  = engine.RunGame(state, max_turns);
+            records[i].opening_hand = ai.GetKeptOpeningHand();
+        }
+        return records;
     }
+
+    // Multi-threaded path for depth > 0 (scoring pass, etc.).
+    int hw  = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
+    int nth = std::min(hw, num_games);
+    int per_thread_timeout = timeout_ms;
+    if (timeout_ms > 0 && nth > 1)
+    {
+        int scale = std::max(1, static_cast<int>(std::ceil(2.0 * nth / hw)));
+        per_thread_timeout = timeout_ms * scale;
+    }
+
+    int base_count = num_games / nth;
+    int extra      = num_games % nth;
+    int start      = 0;
+    std::vector<std::thread> threads;
+    threads.reserve(nth);
+
+    for (int t = 0; t < nth; ++t)
+    {
+        int count        = base_count + (t < extra ? 1 : 0);
+        int thread_start = start;
+        start           += count;
+
+        threads.emplace_back([&, thread_start, count]()
+        {
+            AIEngine   ai(profile, depth, per_thread_timeout);
+            GameEngine engine(ai);
+            for (int li = 0; li < count; ++li)
+            {
+                int gi          = thread_start + li;
+                GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(gi));
+                state.vial_target_mv = profile.vial_target_mv;
+                records[gi].win_turn    = engine.RunGame(state, max_turns);
+                records[gi].opening_hand = ai.GetKeptOpeningHand();
+            }
+        });
+    }
+    for (std::thread& th : threads) { th.join(); }
     return records;
 }
 
@@ -88,6 +131,90 @@ std::map<std::string, double> AnalyzerEngine::ScanCardImpacts(
         }
     }
     return impact;
+}
+
+std::map<std::string, std::vector<double>> AnalyzerEngine::ComputeCardScores(
+    const std::vector<GameRecord>& records, int max_turns, double* threshold_out)
+{
+    const int N           = static_cast<int>(records.size());
+    const int MIN_SAMPLES = 30;   // minimum games per (card, count) bucket for a reliable estimate
+    const int MAX_COPIES  = 4;    // marginals beyond 4 copies in opening hand are noise
+
+    // Precompute win turns once (losses count as max_turns + 1).
+    std::vector<double> win_turns(N);
+    for (int i = 0; i < N; ++i)
+    {
+        win_turns[i] = (records[i].win_turn > 0)
+                       ? static_cast<double>(records[i].win_turn)
+                       : static_cast<double>(max_turns + 1);
+    }
+
+    // Collect all card names seen across all opening hands.
+    std::set<std::string> all_cards;
+    for (const GameRecord& r : records)
+        for (const std::string& c : r.opening_hand) { all_cards.insert(c); }
+
+    std::map<std::string, std::vector<double>> result;
+
+    for (const std::string& card : all_cards)
+    {
+        // Group win turns by how many copies of this card were in the opening hand.
+        std::map<int, std::vector<double>> groups;  // count -> [win_turns]
+        for (int i = 0; i < N; ++i)
+        {
+            int count = 0;
+            for (const std::string& c : records[i].opening_hand)
+                if (c == card) { ++count; }
+            groups[count].push_back(win_turns[i]);
+        }
+
+        // Compute marginals: marginal[k] = avg_wt(k-1 copies) - avg_wt(k copies).
+        // Stop at the first copy count with too few samples.
+        std::vector<double> marginals;
+        for (int k = 1; k <= MAX_COPIES; ++k)
+        {
+            auto it_k   = groups.find(k);
+            auto it_km1 = groups.find(k - 1);
+            if (it_k   == groups.end() || static_cast<int>(it_k->second.size())   < MIN_SAMPLES) { break; }
+            if (it_km1 == groups.end() || static_cast<int>(it_km1->second.size()) < MIN_SAMPLES) { break; }
+
+            double avg_k   = std::accumulate(it_k->second.begin(),   it_k->second.end(),   0.0) / it_k->second.size();
+            double avg_km1 = std::accumulate(it_km1->second.begin(), it_km1->second.end(), 0.0) / it_km1->second.size();
+            marginals.push_back(avg_km1 - avg_k);
+        }
+
+        if (!marginals.empty()) { result[card] = std::move(marginals); }
+    }
+
+    // Compute hand scores over all records and derive the threshold.
+    if (threshold_out && !result.empty())
+    {
+        std::vector<double> hand_scores;
+        hand_scores.reserve(N);
+        for (int i = 0; i < N; ++i)
+        {
+            std::map<std::string, int> counts;
+            for (const std::string& c : records[i].opening_hand) { ++counts[c]; }
+
+            double score = 0.0;
+            for (const auto& kv : counts)
+            {
+                auto it = result.find(kv.first);
+                if (it == result.end()) { continue; }
+                int copies = std::min(kv.second, static_cast<int>(it->second.size()));
+                for (int k = 0; k < copies; ++k) { score += std::max(0.0, it->second[k]); }
+            }
+            hand_scores.push_back(score);
+        }
+
+        double mean = std::accumulate(hand_scores.begin(), hand_scores.end(), 0.0) / hand_scores.size();
+        double variance = 0.0;
+        for (double s : hand_scores) { variance += (s - mean) * (s - mean); }
+        variance /= hand_scores.size();
+        *threshold_out = mean - 1.5 * std::sqrt(variance);
+    }
+
+    return result;
 }
 
 MulliganProfile AnalyzerEngine::GridSearchLands(
@@ -216,8 +343,33 @@ static int ConfirmColorSourceMin(
 // Mulligan optimiser
 // ============================================================
 
+int AnalyzerEngine::ComputeVialTargetMv(const Decklist& deck)
+{
+    bool has_vial = false;
+    for (const Card& c : deck.mainboard)
+        if (c.m_name == "Aether Vial") { has_vial = true; break; }
+    if (!has_vial) { return 0; }
+
+    std::map<int, int> mv_count;
+    for (const Card& c : deck.mainboard)
+    {
+        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+        if (!cdef || !cdef->card.IsCreature()) { continue; }
+        int mv = cdef->card.m_mana_cost.ManaValue();
+        if (mv > 0) { ++mv_count[mv]; }
+    }
+    if (mv_count.empty()) { return 0; }
+    int best_mv = 0, best_cnt = 0;
+    for (const auto& kv : mv_count)
+    {
+        if (kv.second > best_cnt || (kv.second == best_cnt && kv.first > best_mv))
+        { best_cnt = kv.second; best_mv = kv.first; }
+    }
+    return best_mv;
+}
+
 AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
-    const Decklist& deck, uint64_t seed, int max_turns)
+    const Decklist& deck, uint64_t seed, int max_turns, int vial_target_mv)
 {
     // Use a seed far from the user's analysis seed to avoid overfitting
     // to the same shuffle sequences.
@@ -241,6 +393,7 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
 
     // ---- Phase 1: baseline scan ------------------------------------------------
     MulliganProfile             baseline_profile;
+    baseline_profile.vial_target_mv = vial_target_mv;
     std::vector<GameRecord>     scan_records = RunForRecords(
         deck, baseline_profile, SCAN_GAMES, opt_seed, max_turns);
     double baseline_avg = AverageWinTurn(scan_records, max_turns);
@@ -259,6 +412,7 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
 
     // ---- Phase 2: multi-round confirmation of candidates -----------------------
     MulliganProfile              working_profile;
+    working_profile.vial_target_mv = vial_target_mv;
     std::vector<RequiredPieceFlag> flags;
     int                          confirmed = 0;
     uint64_t confirm_seed = opt_seed + SCAN_GAMES;
@@ -361,11 +515,29 @@ AnalysisResult AnalyzerEngine::Run(const Decklist& deck, int num_games,
                                     uint64_t base_seed, int max_turns,
                                     int depth, int timeout_ms)
 {
-    OptResult opt = OptimizeMulligan(deck, base_seed, max_turns);
+    int vial_target_mv = ComputeVialTargetMv(deck);
+    OptResult opt = OptimizeMulligan(deck, base_seed, max_turns, vial_target_mv);
+    opt.profile.vial_target_mv = vial_target_mv;
     AnalysisResult result = RunMonteCarlo(
         deck, num_games, base_seed, max_turns, depth, timeout_ms, opt.profile);
     result.mulligan_profile = opt.profile;
     result.mulligan_flags   = opt.flags;
+
+    // Compute per-card marginal scores from a dedicated scoring pass.
+    // Uses depth=2 so the lookahead captures delayed-value cards (e.g. Aether Vial
+    // only looks bad at depth=0 because the greedy AI can't plan for its future ticks).
+    const int      SCORING_GAMES  = 2000;
+    const int      SCORING_DEPTH  = 5;
+    const uint64_t SCORING_OFFSET = 3'000'000ULL;
+    std::cerr << "  Computing card scores (" << SCORING_GAMES << " games, depth=" << SCORING_DEPTH << ")...\n";
+    std::vector<GameRecord> scoring_records = RunForRecords(
+        deck, opt.profile, SCORING_GAMES, base_seed + SCORING_OFFSET, max_turns,
+        SCORING_DEPTH, /*timeout_ms=*/200);
+    double threshold = 0.0;
+    result.card_scores         = ComputeCardScores(scoring_records, max_turns, &threshold);
+    result.hand_score_threshold = threshold;
+    std::cerr << "  Card scores computed. Hand threshold: " << threshold << "\n";
+
     return result;
 }
 
@@ -386,6 +558,7 @@ AnalysisResult AnalyzerEngine::RunMonteCarlo(
     for (int i = 0; i < num_games; ++i)
     {
         GameState state = GoldFishRunner::SetupGame(deck, base_seed + static_cast<uint64_t>(i));
+        state.vial_target_mv = profile.vial_target_mv;
         int win_turn = engine.RunGame(state, max_turns);
         run.win_turns.push_back(win_turn);
         if (win_turn > 0) { ++run.games_won; }
@@ -405,6 +578,10 @@ AnalysisResult AnalyzerEngine::RunMonteCarlo(
     result.games_played     = run.games_played;
     result.games_won        = run.games_won;
     result.average_win_turn = run.average_win_turn;
+
+    // Win-turn distribution (turn 0 bucket = games not won within max_turns).
+    for (int t : run.win_turns) { ++result.win_turn_histogram[t > 0 ? t : 0]; }
+
     return result;
 }
 
@@ -453,6 +630,29 @@ std::string AnalysisResultToJson(const AnalysisResult& result)
         turns.push_back(t);
     }
     j["turn_stats"] = turns;
+
+    if (!result.card_scores.empty())
+    {
+        json cs = json::object();
+        for (const auto& kv : result.card_scores)
+        {
+            json arr = json::array();
+            for (double v : kv.second) { arr.push_back(v); }
+            cs[kv.first] = arr;
+        }
+        j["card_scores"]          = cs;
+        j["hand_score_threshold"] = result.hand_score_threshold;
+    }
+
+    if (!result.win_turn_histogram.empty())
+    {
+        json hist = json::object();
+        for (const std::pair<const int, int>& kv : result.win_turn_histogram)
+        {
+            hist[std::to_string(kv.first)] = kv.second;
+        }
+        j["win_turn_histogram"] = hist;
+    }
 
     return j.dump(2);
 }
