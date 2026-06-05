@@ -55,7 +55,7 @@ static void AssignCardNumbers(GameState& state,
 // 10-game repeating cycle of passive opponent board states.
 // Creatures are added to the opponent's side at the scheduled turn; they never
 // attack or block — their purpose is to provide targets for creature-targeting spells.
-static void PopulateOpponentSpawns(GameState& state, int game_index)
+void GoldFishRunner::PopulateOpponentSpawns(GameState& state, int game_index)
 {
     // Each row is one slot in the 10-game cycle.
     // Format: { turn, power, toughness }
@@ -154,17 +154,27 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     if (num_threads <= 0) { num_threads = hw_concurrency; }
     num_threads = std::min(num_threads, num_games);
 
-    // Scale per-thread timeout to compensate for CPU contention under parallel load.
-    // hardware_concurrency() reports logical cores (including hyperthreads), so fully
-    // loading all of them means each physical core handles ~2 threads — hence the 2×
-    // numerator. The result is ×1 when threads fit within half the logical core count,
-    // ×2 at full logical-core load, ×4 if oversubscribed, etc.
+    // Scale the per-thread wall-clock budget to compensate for reduced per-thread
+    // throughput under parallel load, so the search reaches a similar depth — and the
+    // avg win turn stays ~invariant — regardless of thread count.
+    //
+    // Continuous model: a lone thread runs at full single-core turbo. As the machine
+    // fills toward physical-core saturation (~hw_concurrency/2 threads, assuming 2-way
+    // SMT), all-core clock throttling roughly halves per-thread throughput, so we reach
+    // x2 there; beyond that, hyperthread sharing / oversubscription keeps it growing
+    // linearly. The previous formula, ceil(2*threads/hw), stayed at x1 all the way up to
+    // hw/2 and only stepped up past it — so at the common --threads = hw/2 setting it
+    // applied NO compensation and deeper (e.g. depth-4) searches were silently starved
+    // of compute, reading as a spurious "deeper is worse" result.
+    //
+    // This is a heuristic band-aid. The robust fix is to bound the search by a
+    // deterministic node/iteration count instead of wall-clock time, which would make
+    // results both thread-invariant and reproducible; revisit if depth ever matters.
     int per_thread_timeout = timeout_ms;
     if (timeout_ms > 0 && num_threads > 1)
     {
-        int scale = std::max(1, static_cast<int>(
-            std::ceil(2.0 * num_threads / hw_concurrency)));
-        per_thread_timeout = timeout_ms * scale;
+        double scale = std::max(1.0, 4.0 * num_threads / static_cast<double>(hw_concurrency));
+        per_thread_timeout = static_cast<int>(std::lround(timeout_ms * scale));
     }
 
     RunResult result;
@@ -208,7 +218,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 int gi = thread_start + li;
                 GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi));
                 state.vial_target_mv = profile.vial_target_mv;
-                PopulateOpponentSpawns(state, base_game_index + gi);
+                GoldFishRunner::PopulateOpponentSpawns(state, base_game_index + gi);
 
                 if (logging) { AssignCardNumbers(state, numbering); }
 

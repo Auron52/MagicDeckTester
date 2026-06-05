@@ -39,4 +39,8 @@ public:
     // Build the initial GameState for a single game with the given seed.
     // Shared by the runner and the analyzer.
     static GameState SetupGame(const Decklist& deck, uint64_t seed);
+
+    // Adds the opponent's blocker pattern for this game index (10-game cycle).
+    // Exposed so diagnostics can reproduce the runner's per-game setup exactly.
+    static void PopulateOpponentSpawns(GameState& state, int game_index);
 };
