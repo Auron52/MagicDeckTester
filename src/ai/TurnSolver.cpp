@@ -1242,19 +1242,23 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // This guarantees a low-ranked but winning line is never starved by the clock:
     // even the cheap depth-0 pass plays each rollout out and discovers its win.
     //
-    // Cross-pass cutoff: each pass is seeded with the previous complete pass's
-    // best plan and win turn. A deeper rollout wins as-fast-or-faster, so that
-    // win turn is a valid starting bound for the branch-and-bound cutoff — the
-    // expensive deep passes then prune lines that can't beat it from the start,
-    // instead of re-discovering the bound from scratch. Lossless: any candidate
-    // that wins on or before the seeded bound is still played out in full.
+    // Fidelity-consistent ranking: each pass ranks candidates at its OWN sub_depth
+    // with a FRESH incumbent (we do NOT seed the decision from the previous,
+    // shallower pass), and we commit the deepest fully-completed pass's own best.
+    // A deeper rollout is the more reliable estimate, so its ranking wins outright —
+    // carrying a shallower pass's (often optimistic) win turn as the incumbent would
+    // let a stale shallow estimate out-rank a deeper-confirmed equal win. The
+    // branch-and-bound cutoff is the WITHIN-pass running best, so SimulateToEnd is
+    // only ever compared at one fidelity per pass and the value tiebreak resolves
+    // genuinely-equal win turns. (Cost: we lose the cross-pass cutoff's head start,
+    // re-discovering the bound each pass — accepted for consistency.)
     Plan best_plan = candidates.front();
-    int  best_win  = max_turns + 1;
 
     for (int sub_depth = 0; sub_depth <= depth - 1; ++sub_depth)
     {
-        Plan pass_best     = best_plan;
-        int  pass_best_win = best_win;
+        Plan pass_best     = candidates.front();
+        int  pass_best_win = max_turns + 1;
+        bool pass_has_best = false;
         bool pass_complete = true;
 
         for (const Plan& plan : candidates)
@@ -1279,27 +1283,27 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (!SimulateEndAndStartNextTurn(copy)) { continue; }
             SimulateLandPlay(copy);
 
-            // Simulate remaining turns with sub_depth lookahead. Pass max() so the
-            // sub-simulation itself runs to completion (the deadline only governs
-            // how far this pass gets through the candidate list); the branch-and-
-            // bound cutoff (pass_best_win) prunes lines that cannot beat the pass
-            // incumbent.
+            // Simulate remaining turns at this pass's sub_depth. Pass max() so the
+            // sub-simulation itself runs to completion (the deadline only governs how
+            // far this pass gets through the candidate list); the within-pass running
+            // best (pass_best_win) is the branch-and-bound cutoff.
             int win_turn = SimulateToEnd(copy, sub_depth, max_turns,
                                          std::chrono::steady_clock::time_point::max(),
                                          pass_best_win);
-            bool better = win_turn < pass_best_win
+            bool better = !pass_has_best
+                       || win_turn < pass_best_win
                        || (win_turn == pass_best_win && plan.value > pass_best.value);
             if (better)
             {
                 pass_best_win = win_turn;
                 pass_best     = plan;
+                pass_has_best = true;
             }
         }
 
         if (!pass_complete) { break; }  // deadline hit: keep last complete pass
 
-        best_plan = pass_best;
-        best_win  = pass_best_win;
+        if (pass_has_best) { best_plan = pass_best; }
     }
 
     return best_plan;
