@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/GameState.h"
 #include "../cards/CardDatabase.h"
+#include "SearchBudget.h"
 #include <chrono>
 #include <string>
 #include <vector>
@@ -43,11 +44,17 @@ public:
     // depth=0 falls back to Solve.  depth=1 simulates one turn ahead using Solve
     // for all subsequent decisions; depth=2 uses depth=1 for subsequent decisions;
     // and so on.
-    // deadline: if now() >= deadline, the search returns the best plan found so
-    // far rather than evaluating remaining candidates.  Pass time_point::max()
-    // (the default) for no timeout.
+    //
+    // budget: deterministic work budget (see SearchBudget). All rollout work is
+    // counted against it; nullptr means unlimited. enforce_budget governs whether
+    // THIS invocation may stop iterative deepening when the budget runs out:
+    //   - true  (top-level decision): applies the start-gate / overrun-guard and
+    //            commits the deepest fully-completed pass.
+    //   - false (rollout sub-search):  runs every pass to completion regardless,
+    //            only consuming from the shared budget (preserves rollout
+    //            fidelity, mirroring the old time_point::max() deadline).
     static Plan SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                    int depth, int max_turns = 20,
-                                   std::chrono::steady_clock::time_point deadline =
-                                       std::chrono::steady_clock::time_point::max());
+                                   SearchBudget* budget = nullptr,
+                                   bool enforce_budget = true);
 };

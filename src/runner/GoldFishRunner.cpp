@@ -154,28 +154,12 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     if (num_threads <= 0) { num_threads = hw_concurrency; }
     num_threads = std::min(num_threads, num_games);
 
-    // Scale the per-thread wall-clock budget to compensate for reduced per-thread
-    // throughput under parallel load, so the search reaches a similar depth — and the
-    // avg win turn stays ~invariant — regardless of thread count.
-    //
-    // Continuous model: a lone thread runs at full single-core turbo. As the machine
-    // fills toward physical-core saturation (~hw_concurrency/2 threads, assuming 2-way
-    // SMT), all-core clock throttling roughly halves per-thread throughput, so we reach
-    // x2 there; beyond that, hyperthread sharing / oversubscription keeps it growing
-    // linearly. The previous formula, ceil(2*threads/hw), stayed at x1 all the way up to
-    // hw/2 and only stepped up past it — so at the common --threads = hw/2 setting it
-    // applied NO compensation and deeper (e.g. depth-4) searches were silently starved
-    // of compute, reading as a spurious "deeper is worse" result.
-    //
-    // This is a heuristic band-aid. The robust fix is to bound the search by a
-    // deterministic node/iteration count instead of wall-clock time, which would make
-    // results both thread-invariant and reproducible; revisit if depth ever matters.
+    // The search budget is now a deterministic work-unit count (virtual ms), not a
+    // wall-clock deadline, so it is thread-invariant by construction: each decision
+    // does the same amount of work regardless of how many threads contend for the
+    // CPU. The old per-thread timeout scaling (a band-aid for wall-clock starvation
+    // under parallel load, and itself a source of nondeterminism) is therefore gone.
     int per_thread_timeout = timeout_ms;
-    if (timeout_ms > 0 && num_threads > 1)
-    {
-        double scale = std::max(1.0, 4.0 * num_threads / static_cast<double>(hw_concurrency));
-        per_thread_timeout = static_cast<int>(std::lround(timeout_ms * scale));
-    }
 
     RunResult result;
     result.seed         = base_seed;

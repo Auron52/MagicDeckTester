@@ -16,13 +16,14 @@ static void PrintUsage(const char* prog)
 {
     std::cerr << "Usage: " << prog
               << " <deckfile> [--games N] [--seed S] [--max-turns T]"
-                 " [--depth D] [--timeout-ms M] [--profile path] [--log-dir path] [--cards-json path]\n"
+                 " [--depth D] [--budget-ms M] [--profile path] [--log-dir path] [--cards-json path]\n"
               << "  <deckfile>      Plain text (.txt) or Cockatrice (.cod) decklist\n"
               << "  --games N       Number of games to simulate (default: 10000)\n"
               << "  --seed S        Base RNG seed (omit to generate randomly)\n"
               << "  --max-turns T   Maximum turns before declaring no-win (default: 20)\n"
               << "  --depth D       Lookahead depth (default: 0; higher = stronger but slower)\n"
-              << "  --timeout-ms M  Per-turn time budget in ms; 0 = unlimited (default: 0)\n"
+              << "  --budget-ms M   Per-decision search budget in deterministic 'virtual ms';\n"
+              << "                  0 = unlimited (default: 0). Alias: --timeout-ms\n"
               << "  --threads N     Worker threads (default: 0 = hardware_concurrency)\n"
               << "  --profile P     Path to a .profile.json file (default: auto-detect deckname.profile.json)\n"
               << "  --log-dir P     Write one JSON game log per game into this directory\n"
@@ -205,8 +206,10 @@ int main(int argc, char* argv[])
                 {
                     lookahead_depth = std::stoi(argv[++i]);
                 }
-                else if (flag == "--timeout-ms")
+                else if (flag == "--timeout-ms" || flag == "--budget-ms")
                 {
+                    // Deterministic search budget in "virtual ms" (see SearchBudget).
+                    // --timeout-ms kept as a back-compat alias for the same knob.
                     timeout_ms = std::stoi(argv[++i]);
                 }
                 else if (flag == "--threads")

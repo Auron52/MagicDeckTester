@@ -1180,20 +1180,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 // pre-combat decisions and Solve for post-combat decisions.
 // Returns the win turn, or max_turns+1 if the game was not won in time.
 static int SimulateToEnd(GameState state, int depth, int max_turns,
-                         std::chrono::steady_clock::time_point deadline,
-                         int cutoff_turn)
+                         SearchBudget* budget, int cutoff_turn)
 {
     while (state.turn_number <= max_turns)
     {
-        if (std::chrono::steady_clock::now() >= deadline) { return max_turns + 1; }
         // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
         // incumbent best win turn, so abandon it (win turn only grows from here).
         // Abort only AFTER cutoff_turn so a win exactly on cutoff_turn still
         // registers for the value tiebreak.
         if (state.turn_number > cutoff_turn) { return max_turns + 1; }
 
+        // Count one work unit per simulated turn-step. The rollout never self
+        // truncates on the budget — it only consumes; the top-level decision
+        // (enforce_budget) is what decides when to stop adding more rollouts.
+        if (budget) { budget->Consume(1); }
+
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens
-        TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(state, true, depth, max_turns, deadline);
+        TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(state, true, depth, max_turns, budget, false);
         ApplyPlanDirect(state, pre_plan, true);
         SimulateAnimateLands(state);
         SimulateTapTokens(state);
@@ -1217,11 +1220,30 @@ static int SimulateToEnd(GameState state, int depth, int max_turns,
 
 // ---- Public API ----
 
+// Estimate-and-skip tuning (deterministic budget). See project-deterministic-budget.
+namespace
+{
+    // Start gate: begin pass k only if its estimated cost <= alpha * remaining
+    // budget; a little over (>1.0) is allowed since the overrun guard backs it up.
+    constexpr double kStartGateAlpha = 1.10;
+    // Bootstrap growth ratio used for pass 1's estimate, before two completed
+    // passes exist to measure a real C_{k-1}/C_{k-2} branching ratio.
+    constexpr double kDefaultGrowth = 6.0;
+    // Overrun guard: once a pass is running past budget, abort + roll back only
+    // when it has spent more than beta * the budget it started with AND finishing
+    // is still expensive (see below). "Almost done" passes always finish.
+    constexpr double kOverrunBeta = 2.0;
+}
+
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
-                                                  std::chrono::steady_clock::time_point deadline)
+                                                  SearchBudget* budget, bool enforce_budget)
 {
-    if (depth <= 0) { return Solve(state, is_pre_combat); }
+    if (depth <= 0)
+    {
+        if (budget) { budget->Consume(1); }
+        return Solve(state, is_pre_combat);
+    }
 
     std::vector<Plan> candidates = EnumeratePlans(state, is_pre_combat);
 
@@ -1236,10 +1258,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
     // Iterative deepening: evaluate EVERY candidate at increasing rollout depth
     // (sub_depth = 0, 1, ... depth-1), and only commit a pass's result once that
-    // pass has fully completed. On a deadline we fall back to the best plan from
-    // the last fully-completed depth, so the decision always reflects a COMPLETE
-    // comparison of all candidates (at some depth) rather than a partial ranking.
-    // This guarantees a low-ranked but winning line is never starved by the clock:
+    // pass has fully completed. When the budget runs out we fall back to the best
+    // plan from the last fully-completed depth, so the decision always reflects a
+    // COMPLETE comparison of all candidates (at some depth) rather than a partial
+    // ranking. This guarantees a low-ranked but winning line is never starved:
     // even the cheap depth-0 pass plays each rollout out and discovers its win.
     //
     // Fidelity-consistent ranking: each pass ranks candidates at its OWN sub_depth
@@ -1252,18 +1274,78 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // only ever compared at one fidelity per pass and the value tiebreak resolves
     // genuinely-equal win turns. (Cost: we lose the cross-pass cutoff's head start,
     // re-discovering the bound each pass — accepted for consistency.)
+    //
+    // Budget control (only when enforce_budget; the rollout sub-search runs every
+    // pass to completion and merely consumes). Two deterministic gates, both keyed
+    // on the running work-unit count — never the clock — so a deeper search makes
+    // the same start/skip/abort decisions and can never come out worse:
+    //   1. START GATE: before pass k, estimate its cost from the measured growth
+    //      of the previous passes and skip the whole pass (committing pass k-1) if
+    //      it clearly won't fit. No point starting a pass that would be cut off
+    //      mid-sweep and discarded anyway.
+    //   2. OVERRUN GUARD: once a pass has started, run it PAST the budget to
+    //      completion — sunk work near completion shouldn't be thrown away. Abort
+    //      and roll back to pass k-1 only when the pass is BOTH well over budget
+    //      AND still expensive to finish. Roll-back is free: each candidate runs on
+    //      a GameState copy, so a pass only touches pass-local state.
     Plan best_plan = candidates.front();
+
+    const bool   gate         = enforce_budget && budget != nullptr;
+    long long    c_prev       = 0;       // cost of pass k-1 (work units)
+    long long    c_prev2      = 0;       // cost of pass k-2
+    bool         have_prev    = false;
+    bool         have_prev2   = false;
 
     for (int sub_depth = 0; sub_depth <= depth - 1; ++sub_depth)
     {
-        Plan pass_best     = candidates.front();
-        int  pass_best_win = max_turns + 1;
-        bool pass_has_best = false;
-        bool pass_complete = true;
+        long long remaining_at_start = budget ? budget->Remaining() : LLONG_MAX;
+
+        // --- Start gate: skip a pass we estimate won't fit (commit pass k-1) ---
+        if (gate && sub_depth > 0)
+        {
+            double ratio    = (have_prev2 && c_prev2 > 0)
+                            ? static_cast<double>(c_prev) / static_cast<double>(c_prev2)
+                            : kDefaultGrowth;
+            double estimate = static_cast<double>(c_prev) * ratio;
+            if (estimate > kStartGateAlpha * static_cast<double>(remaining_at_start))
+            {
+                break;
+            }
+        }
+
+        long long used_before     = budget ? budget->Used() : 0;
+        Plan      pass_best        = candidates.front();
+        int       pass_best_win    = max_turns + 1;
+        bool      pass_has_best    = false;
+        bool      pass_aborted     = false;
+        long long candidates_done  = 0;
 
         for (const Plan& plan : candidates)
         {
-            if (std::chrono::steady_clock::now() >= deadline) { pass_complete = false; break; }
+            // --- Overrun guard: finish if almost done, else abort + roll back ---
+            if (gate && budget->Exhausted() && candidates_done > 0)
+            {
+                long long pass_used       = budget->Used() - used_before;
+                double    avg_per_cand    = static_cast<double>(pass_used)
+                                          / static_cast<double>(candidates_done);
+                long long remaining_cands = static_cast<long long>(candidates.size())
+                                          - candidates_done;
+                double    projected       = avg_per_cand
+                                          * static_cast<double>(remaining_cands);
+                bool      way_over         = static_cast<double>(pass_used)
+                                          > kOverrunBeta * static_cast<double>(remaining_at_start);
+                bool      finish_expensive = projected
+                                          > static_cast<double>(remaining_at_start);
+                if (way_over && finish_expensive)
+                {
+                    pass_aborted = true;
+                    break;
+                }
+            }
+
+            // One work unit for this candidate's inline first turn (combat + post
+            // main); the remaining turns are counted inside SimulateToEnd.
+            if (budget) { budget->Consume(1); }
 
             GameState copy = state;
             ApplyPlanDirect(copy, plan, true);
@@ -1280,16 +1362,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (copy.Opponent().life <= 0) { return plan; }
 
             // End of this turn + start of next
-            if (!SimulateEndAndStartNextTurn(copy)) { continue; }
+            if (!SimulateEndAndStartNextTurn(copy)) { ++candidates_done; continue; }
             SimulateLandPlay(copy);
 
-            // Simulate remaining turns at this pass's sub_depth. Pass max() so the
-            // sub-simulation itself runs to completion (the deadline only governs how
-            // far this pass gets through the candidate list); the within-pass running
-            // best (pass_best_win) is the branch-and-bound cutoff.
-            int win_turn = SimulateToEnd(copy, sub_depth, max_turns,
-                                         std::chrono::steady_clock::time_point::max(),
-                                         pass_best_win);
+            // Simulate remaining turns at this pass's sub_depth. The rollout runs to
+            // completion (enforce_budget=false inside), only consuming budget; the
+            // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
+            int win_turn = SimulateToEnd(copy, sub_depth, max_turns, budget, pass_best_win);
             bool better = !pass_has_best
                        || win_turn < pass_best_win
                        || (win_turn == pass_best_win && plan.value > pass_best.value);
@@ -1299,11 +1378,21 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 pass_best     = plan;
                 pass_has_best = true;
             }
+            ++candidates_done;
         }
 
-        if (!pass_complete) { break; }  // deadline hit: keep last complete pass
+        if (pass_aborted) { break; }  // discard this pass, keep pass k-1
 
         if (pass_has_best) { best_plan = pass_best; }
+
+        // Record this completed pass's cost for the next pass's estimate.
+        if (budget)
+        {
+            c_prev2    = c_prev;
+            have_prev2 = have_prev;
+            c_prev     = budget->Used() - used_before;
+            have_prev  = true;
+        }
     }
 
     return best_plan;

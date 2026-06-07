@@ -12,13 +12,14 @@ static void PrintUsage(const char* prog)
 {
     std::cerr << "Usage: " << prog
               << " <deckfile> [--games N] [--seed S] [--max-turns T]"
-                 " [--depth D] [--timeout-ms M] [--cards-json path]\n"
+                 " [--depth D] [--budget-ms M] [--cards-json path]\n"
               << "  <deckfile>      Plain text (.txt) or Cockatrice (.cod) decklist\n"
               << "  --games N       Number of analysis games (default: 500)\n"
               << "  --seed S        Base RNG seed (omit to generate randomly)\n"
               << "  --max-turns T   Maximum turns per game (default: 20)\n"
               << "  --depth D       Lookahead depth (default: 2; higher = slower but stronger)\n"
-              << "  --timeout-ms M  Per-turn time budget in milliseconds; 0 = unlimited (default: 0)\n"
+              << "  --budget-ms M   Per-decision search budget in deterministic 'virtual ms';\n"
+              << "                  0 = unlimited (default: 0). Alias: --timeout-ms\n"
               << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n"
               << "\nOutputs analysis JSON to stdout.\n";
 }
@@ -62,7 +63,7 @@ int main(int argc, char* argv[])
             {
                 depth = std::stoi(argv[i + 1]);
             }
-            else if (flag == "--timeout-ms")
+            else if (flag == "--timeout-ms" || flag == "--budget-ms")
             {
                 timeout_ms = std::stoi(argv[i + 1]);
             }

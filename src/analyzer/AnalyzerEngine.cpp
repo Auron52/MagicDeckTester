@@ -57,12 +57,9 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
     // Multi-threaded path for depth > 0 (scoring pass, etc.).
     int hw  = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
     int nth = std::min(hw, num_games);
+    // The search budget is a deterministic work-unit count (virtual ms), thread-
+    // invariant by construction, so no per-thread scaling is needed (see GoldFishRunner).
     int per_thread_timeout = timeout_ms;
-    if (timeout_ms > 0 && nth > 1)
-    {
-        int scale = std::max(1, static_cast<int>(std::ceil(2.0 * nth / hw)));
-        per_thread_timeout = timeout_ms * scale;
-    }
 
     int base_count = num_games / nth;
     int extra      = num_games % nth;

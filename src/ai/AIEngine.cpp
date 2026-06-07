@@ -1,5 +1,6 @@
 #include "AIEngine.h"
 #include "TurnSolver.h"
+#include "SearchBudget.h"
 #include "../cards/CardDatabase.h"
 #include "../core/GameEngine.h"
 #include "../core/SpellEffects.h"
@@ -31,8 +32,8 @@ static double ComputeHandScore(const std::vector<Card>& hand,
     return score;
 }
 
-AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int timeout_ms)
-    : m_profile(std::move(profile)), m_lookahead_depth(lookahead_depth), m_timeout_ms(timeout_ms) {}
+AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int budget_ms)
+    : m_profile(std::move(profile)), m_lookahead_depth(lookahead_depth), m_budget_ms(budget_ms) {}
 
 // ============================================================
 // Mulligan
@@ -467,20 +468,18 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
     TurnSolver::Plan plan;
     if (m_lookahead_depth > 0)
     {
-        std::chrono::steady_clock::time_point deadline =
-            std::chrono::steady_clock::time_point::max();
-        if (m_timeout_ms > 0)
-        {
-            deadline = std::chrono::steady_clock::now()
-                     + std::chrono::milliseconds(m_timeout_ms);
-        }
+        // Deterministic work budget for this decision (m_budget_ms is "virtual ms";
+        // <= 0 means unlimited). Replaces the old steady_clock deadline so the
+        // search does identical work — and reaches an identical result — on every
+        // machine and every run for a given seed. See SearchBudget.
+        SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
 
         // Search at full depth every turn. The per-turn depth decrement that used
         // to live here was a workaround for candidate starvation under the timeout;
         // iterative deepening in SolveWithLookahead now guarantees every candidate
         // is evaluated, so later turns no longer need to be shallower.
         plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
-                                              m_lookahead_depth, 20, deadline);
+                                              m_lookahead_depth, 20, &budget, true);
     }
     else
     {

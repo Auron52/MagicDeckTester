@@ -12,11 +12,13 @@ class AIEngine
 public:
     // lookahead_depth: 0 = single-turn heuristic (fast, for the runner);
     //                  N = N-turn lookahead via game simulation (for the analyzer).
-    // timeout_ms:      per-turn time budget for SolveWithLookahead in milliseconds.
-    //                  0 = no timeout (evaluate all candidates).
+    // budget_ms:       per-decision deterministic search budget in "virtual ms"
+    //                  (maps to rollout work units via SearchBudget; see that
+    //                  header). 0 = unlimited. Replaces the old wall-clock timeout
+    //                  so results are reproducible and machine-independent.
     explicit AIEngine(MulliganProfile profile = MulliganProfile::DefaultProfile(),
                       int lookahead_depth = 0,
-                      int timeout_ms = 0);
+                      int budget_ms = 0);
 
     // London mulligan: draw 7, keep or mulligan, bottom N cards on keep after N mulligans.
     // max_turns bounds the rollout horizon used by lookahead bottoming (see below).
@@ -45,7 +47,7 @@ public:
 private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
-    int                      m_timeout_ms        = 0;
+    int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
     bool                     m_lookahead_bottoming = false;
     std::vector<std::string> m_kept_opening_hand;
     GameLogger*              m_logger            = nullptr;
