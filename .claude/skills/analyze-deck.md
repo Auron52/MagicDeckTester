@@ -74,12 +74,23 @@ Apply the **first tier that fits**:
 
 Do not pre-emptively escalate to Tier 4. Attempt Tier 3 first — most mechanics that appear complex can be modelled well enough at Tier 3.
 
+### 2c-bis. Check second-main (post-combat) relevance
+
+By default the engine plays **no post-combat (second) main phase** — in a clairvoyant goldfish, combat creates no new resources, so everything castable is castable in the first main (see the second-main-handling design and `AIEngine::SetSearchPostCombat`). The second main is enabled per-deck only when a card makes it a real decision, i.e. when **combat itself enables a play that was not available before it**. For every card you implement, decide which bucket it is in:
+
+- **Not second-main-relevant** (the vast majority): nothing to do.
+- **Spectacle** — the alternate cost unlocks once the opponent has lost life this turn, so the finisher is cast cheaply *after* the attack. Already handled: `params.spectacle_cost` is detected by `GoldFishRunner::DeckUsesSecondMain`, which flips `SetSearchPostCombat` on. Reasonably implemented; no extra work, but confirm the spell's `spectacle_cost` is set so detection fires.
+- **Resources generated during combat** — e.g. lands untapped in combat (Bear Umbra, Hidden Strings), or mana/triggers from combat damage. These are **not yet modelled**. Treat as a Tier 2/3 gap: (1) add a `CardParams` flag for the mechanic, (2) implement the resource it generates (in `EffectHandler` / combat utilities), and (3) extend `GoldFishRunner::DeckUsesSecondMain` to detect the new flag so `SetSearchPostCombat` turns on for decks that run it. Without step 3 the engine skips the card's post-combat line and under-rates the deck.
+
+If a second-main-relevant card is present but its detection/wiring is missing, this is a real gap — build it, do not defer silently.
+
 ### 2d. Review each implementation
 
 After each card, re-read `.claude/skills/mtg-rules.md` Step 4 (Card Code Review) and verify:
 - Every oracle text clause is either implemented in the C++ pipeline or bracket-noted as an accepted deferral
 - Damage values, targeting types, and all parameters match oracle text exactly
 - No clauses are silently omitted without a bracket note
+- If the card's value depends on the post-combat main (spectacle, combat untap, combat-damage triggers), confirm `GoldFishRunner::DeckUsesSecondMain` detects it so the second main is enabled (see 2c-bis)
 
 ### 2e. Rebuild after all cards
 
