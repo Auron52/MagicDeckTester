@@ -1,10 +1,50 @@
 #include "TurnSolver.h"
+#include "TranspositionTable.h"
 #include "../core/ManaPool.h"
 #include "../core/EffectHandler.h"
 #include "../core/SpellEffects.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <functional>
+#include <iostream>
+#include <sstream>
+#include <unordered_set>
+
+// When true, SolveWithLookahead prints per-pass per-candidate win turn estimates
+// for top-level T1 pre-combat decisions.  Set via TurnSolver::SetTraceSolve().
+static bool s_trace_solve = false;
+
+void TurnSolver::SetTraceSolve(bool enable) { s_trace_solve = enable; }
+bool TurnSolver::GetTraceSolve() { return s_trace_solve; }
+
+static std::string PlanDesc(const TurnSolver::Plan& p)
+{
+    std::ostringstream os;
+    if (!p.vial_activations.empty())
+    {
+        os << "vial[";
+        for (size_t i = 0; i < p.vial_activations.size(); ++i)
+        {
+            if (i) os << ',';
+            os << p.vial_activations[i];
+        }
+        os << "]";
+    }
+    if (!p.spells.empty())
+    {
+        if (!p.vial_activations.empty()) os << ' ';
+        os << "spells[";
+        for (size_t i = 0; i < p.spells.size(); ++i)
+        {
+            if (i) os << ',';
+            os << p.spells[i];
+        }
+        os << "]";
+    }
+    if (p.empty()) os << "<pass>";
+    return os.str();
+}
 
 // ---- Local helpers -------------------------------------------------------
 
@@ -1182,15 +1222,131 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             return a.value > b.value;
         });
 
-    return plans;
+    // Dedup by EFFECT signature. The powerset enumeration treats each copy of a
+    // 4-of as a distinct candidate, so subsets that differ only in WHICH copy they
+    // pick (e.g. Bolt #2 vs Bolt #5) produce byte-identical plans — a 2-16x phantom
+    // blowup. ApplyPlanDirect resolves spells/sacrifices/Vial activations purely by
+    // NAME (it finds the first matching card), so two plans with the same multiset
+    // of names are indistinguishable downstream. Collapsing them is exactly lossless
+    // and removes the duplicate inline-first-turn + transposition lookups they'd
+    // otherwise each incur. Done after the sort so the surviving copy is the
+    // highest-ranked (identical plans share rank, so order is unaffected either way).
+    auto plan_signature = [](const TurnSolver::Plan& p) -> std::string
+    {
+        std::vector<std::string> v = p.vial_activations;
+        std::vector<std::string> s = p.spells;
+        std::vector<std::string> a = p.sacrifice;
+        std::sort(v.begin(), v.end());
+        std::sort(s.begin(), s.end());
+        std::sort(a.begin(), a.end());
+        std::string sig;
+        for (const std::string& n : v) { sig += 'V'; sig += n; }
+        for (const std::string& n : s) { sig += 'S'; sig += n; }
+        for (const std::string& n : a) { sig += 'A'; sig += n; }
+        return sig;
+    };
+    std::unordered_set<std::string> seen;
+    seen.reserve(plans.size() * 2);
+    std::vector<TurnSolver::Plan> deduped;
+    deduped.reserve(plans.size());
+    for (TurnSolver::Plan& p : plans)
+    {
+        if (seen.insert(plan_signature(p)).second) { deduped.push_back(std::move(p)); }
+    }
+
+    return deduped;
+}
+
+// ---- Transposition key over the future-determining state ------------------
+//
+// Folds every game-state field the rollout reads into a 128-bit key, plus the
+// rollout depth. Fields the rollout never reads (graveyard, exile, poison, the
+// always-empty rollout stack contents) are omitted so genuinely-equivalent
+// states share a key. Order-sensitive sequences (hand, battlefield) are folded
+// in order because plan tie-breaks and mana/sacrifice selection read that order.
+// The library is keyed by remaining size + top card (see TranspositionTable.h
+// for why size alone is exact within one decision).
+namespace
+{
+    inline void Fold(TranspositionTable::Key& k, uint64_t v)
+    {
+        k.h1 ^= v + 0x9e3779b97f4a7c15ULL + (k.h1 << 6) + (k.h1 >> 2);
+        k.h2 ^= (v * 0xff51afd7ed558ccdULL) + 0xc4ceb9fe1a85ec53ULL
+              + (k.h2 << 5) + (k.h2 >> 3);
+    }
+
+    inline void FoldName(TranspositionTable::Key& k, const std::string& s)
+    {
+        Fold(k, static_cast<uint64_t>(std::hash<std::string>{}(s)));
+    }
+}
+
+static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns)
+{
+    TranspositionTable::Key k;
+
+    Fold(k, 0x5117); // section tag: scalars
+    Fold(k, static_cast<uint64_t>(depth));
+    Fold(k, static_cast<uint64_t>(max_turns));
+    Fold(k, static_cast<uint64_t>(state.turn_number));
+    Fold(k, static_cast<uint64_t>(state.active_player_index));
+    Fold(k, state.on_the_play ? 1u : 0u);
+    Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
+    Fold(k, static_cast<uint64_t>(state.vial_target_mv));
+    Fold(k, static_cast<uint64_t>(state.stack.size()));
+
+    for (int pi = 0; pi < 2; ++pi)
+    {
+        const Player& p = state.players[pi];
+        Fold(k, 0x9100 + static_cast<uint64_t>(pi)); // section tag: player pi
+        Fold(k, static_cast<uint64_t>(p.life));
+        Fold(k, static_cast<uint64_t>(p.lands_played_this_turn));
+        Fold(k, static_cast<uint64_t>(p.bonus_land_drops_this_turn));
+        Fold(k, static_cast<uint64_t>(p.library.size()));
+        if (!p.library.empty()) { FoldName(k, p.library.front().m_name); }
+
+        Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered)
+        Fold(k, static_cast<uint64_t>(p.hand.size()));
+        for (const Card& c : p.hand) { FoldName(k, c.m_name); }
+
+        Fold(k, 0x57A6 + static_cast<uint64_t>(pi)); // sub-section: staged cards
+        Fold(k, static_cast<uint64_t>(p.staged_cards.size()));
+        for (const StagedCard& sc : p.staged_cards)
+        {
+            FoldName(k, sc.card.m_name);
+            Fold(k, static_cast<uint64_t>(sc.expiry_turn));
+        }
+    }
+
+    Fold(k, 0xB1F1); // section tag: battlefield (ordered)
+    Fold(k, static_cast<uint64_t>(state.battlefield.size()));
+    for (const Permanent& perm : state.battlefield)
+    {
+        FoldName(k, perm.card.m_name);
+        Fold(k, static_cast<uint64_t>(perm.controller_index));
+        Fold(k, perm.tapped ? 1u : 0u);
+        Fold(k, perm.entered_this_turn ? 1u : 0u);
+        Fold(k, perm.is_animated ? 1u : 0u);
+        Fold(k, static_cast<uint64_t>(perm.charge_counters));
+        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
+        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
+        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
+        for (const Counter& ctr : perm.counters)
+        {
+            Fold(k, static_cast<uint64_t>(ctr.type));
+            Fold(k, static_cast<uint64_t>(static_cast<int64_t>(ctr.count)));
+        }
+    }
+
+    return k;
 }
 
 // Simulate from the current state (at the START of a pre-combat main phase,
 // land already played) to game end. Uses SolveWithLookahead(depth) for
 // pre-combat decisions and Solve for post-combat decisions.
 // Returns the win turn, or max_turns+1 if the game was not won in time.
-static int SimulateToEnd(GameState state, int depth, int max_turns,
-                         SearchBudget* budget, int cutoff_turn)
+static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
+                             SearchBudget* budget, int cutoff_turn, TranspositionTable* tt)
 {
     while (state.turn_number <= max_turns)
     {
@@ -1206,7 +1362,7 @@ static int SimulateToEnd(GameState state, int depth, int max_turns,
         if (budget) { budget->Consume(1); }
 
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens
-        TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(state, true, depth, max_turns, budget, false);
+        TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(state, true, depth, max_turns, budget, false, tt);
         ApplyPlanDirect(state, pre_plan, true);
         SimulateAnimateLands(state);
         SimulateTapTokens(state);
@@ -1228,6 +1384,28 @@ static int SimulateToEnd(GameState state, int depth, int max_turns,
     return max_turns + 1;
 }
 
+// Memoizing wrapper around SimulateToEndImpl. On a cache hit the rollout is
+// skipped entirely (and no budget is consumed — avoided recompute is the point).
+// Only REAL win turns (<= max_turns) are cached: they are exact and cutoff-
+// independent, whereas a max_turns+1 result may be a branch-and-bound abort
+// rather than a genuine no-win, so it is never stored. See TranspositionTable.h.
+static int SimulateToEnd(GameState state, int depth, int max_turns,
+                         SearchBudget* budget, int cutoff_turn, TranspositionTable* tt)
+{
+    TranspositionTable::Key key;
+    if (tt != nullptr)
+    {
+        key = BuildSimKey(state, depth, max_turns);
+        const int* cached = tt->Lookup(key);
+        if (cached != nullptr) { return *cached; }
+    }
+
+    int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, tt);
+
+    if (tt != nullptr && result <= max_turns) { tt->Store(key, result); }
+    return result;
+}
+
 // ---- Public API ----
 
 // Estimate-and-skip tuning (deterministic budget). See project-deterministic-budget.
@@ -1247,13 +1425,20 @@ namespace
 
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
-                                                  SearchBudget* budget, bool enforce_budget)
+                                                  SearchBudget* budget, bool enforce_budget,
+                                                  TranspositionTable* tt)
 {
     if (depth <= 0)
     {
         if (budget) { budget->Consume(1); }
         return Solve(state, is_pre_combat);
     }
+
+    // The enforcing top-level call owns the per-decision transposition table and
+    // threads it through the whole recursion; rollout sub-searches reuse the table
+    // they were handed. local_table is only referenced when we create it here.
+    TranspositionTable  local_table;
+    if (tt == nullptr && enforce_budget) { tt = &local_table; }
 
     std::vector<Plan> candidates = EnumeratePlans(state, is_pre_combat);
 
@@ -1330,6 +1515,21 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool      pass_aborted     = false;
         long long candidates_done  = 0;
 
+        // Trace T1 top-level decisions (enforce_budget=true) AND T2 rollout decisions
+        // where depth==3 (fired from the sub_depth=3 pass inside SimulateToEnd).
+        const bool trace_t1 = s_trace_solve && enforce_budget
+                              && state.turn_number == 1 && is_pre_combat;
+        const bool trace_t2 = s_trace_solve && !enforce_budget
+                              && state.turn_number == 2 && depth == 3 && is_pre_combat;
+        const bool trace_this = trace_t1 || trace_t2;
+        if (trace_this)
+        {
+            std::cerr << "[trace] T" << state.turn_number
+                      << (enforce_budget ? " top-level" : " rollout")
+                      << " sub_depth=" << sub_depth
+                      << "  candidates=" << candidates.size() << "\n";
+        }
+
         for (const Plan& plan : candidates)
         {
             // --- Overrun guard: finish if almost done, else abort + roll back ---
@@ -1378,7 +1578,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to
             // completion (enforce_budget=false inside), only consuming budget; the
             // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
-            int win_turn = SimulateToEnd(copy, sub_depth, max_turns, budget, pass_best_win);
+            int win_turn = SimulateToEnd(copy, sub_depth, max_turns, budget, pass_best_win, tt);
+            if (trace_this)
+            {
+                std::cerr << "  " << PlanDesc(plan)
+                          << "  val=" << plan.value
+                          << "  win=" << win_turn << "\n";
+            }
             bool better = !pass_has_best
                        || win_turn < pass_best_win
                        || (win_turn == pass_best_win && plan.value > pass_best.value);
@@ -1391,9 +1597,26 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             ++candidates_done;
         }
 
-        if (pass_aborted) { break; }  // discard this pass, keep pass k-1
+        if (pass_aborted)
+        {
+            if (trace_this)
+            {
+                std::cerr << "  [T" << state.turn_number << " ABORTED — keeping pass "
+                          << (sub_depth-1) << " result]\n";
+            }
+            break;
+        }
 
-        if (pass_has_best) { best_plan = pass_best; }
+        if (pass_has_best)
+        {
+            best_plan = pass_best;
+            if (trace_this)
+            {
+                std::cerr << "  -> T" << state.turn_number << " COMMITTED sub_depth=" << sub_depth
+                          << ": " << PlanDesc(pass_best)
+                          << "  win=" << pass_best_win << "\n";
+            }
+        }
 
         // Record this completed pass's cost for the next pass's estimate.
         if (budget)

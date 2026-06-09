@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+class TranspositionTable;  // per-decision SimulateToEnd memo (see TranspositionTable.h)
+
 // Finds the optimal set of spells to cast in one main phase by exhaustive
 // subset enumeration (O(2^|hand|), tractable for hand sizes up to ~15).
 //
@@ -39,6 +41,10 @@ public:
     // Uses a static evaluation function (no lookahead).
     static Plan Solve(const GameState& state, bool is_pre_combat);
 
+    // Enable per-pass per-candidate trace output for top-level T1 decisions.
+    static void SetTraceSolve(bool enable);
+    static bool GetTraceSolve();
+
     // Returns the plan that leads to the earliest win, evaluated by simulating
     // the rest of the game for each candidate play at this turn.
     // depth=0 falls back to Solve.  depth=1 simulates one turn ahead using Solve
@@ -53,8 +59,13 @@ public:
     //   - false (rollout sub-search):  runs every pass to completion regardless,
     //            only consuming from the shared budget (preserves rollout
     //            fidelity, mirroring the old time_point::max() deadline).
+    //
+    // tt: per-decision transposition table memoizing SimulateToEnd. The enforcing
+    // top-level call creates one when none is supplied and threads it through the
+    // whole recursion; rollout sub-searches forward the table they were given.
     static Plan SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                    int depth, int max_turns = 20,
                                    SearchBudget* budget = nullptr,
-                                   bool enforce_budget = true);
+                                   bool enforce_budget = true,
+                                   TranspositionTable* tt = nullptr);
 };
