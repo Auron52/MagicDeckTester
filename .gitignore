@@ -70,3 +70,10 @@ Testing/
 
 # simulation logs
 logs/
+logs_*/
+
+# A/B harness scratch — kept locally, not committed (scripts, result snapshots, built binaries)
+ab_runs/
+
+# regression test run output (ground truth regression_gt.txt IS committed; result is not)
+test/regression_result.txt
