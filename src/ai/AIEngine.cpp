@@ -5,6 +5,7 @@
 #include "../core/GameEngine.h"
 #include "../core/SpellEffects.h"
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
@@ -432,6 +433,17 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             for (int j = 0; j < hand_size; ++j)
             {
                 allowed[j] = (win_turn[j] == best_win) ? 1 : 0;
+            }
+            if (TurnSolver::GetTraceSolve())
+            {
+                std::cerr << "[bottom_trace depth=" << m_lookahead_depth
+                          << " bottom#" << (i + 1) << "]\n";
+                for (int j = 0; j < hand_size; ++j)
+                {
+                    std::cerr << "  bottom " << ap.hand[j].m_name
+                              << " -> win=" << win_turn[j]
+                              << (allowed[j] ? " *" : "") << "\n";
+                }
             }
         }
 

@@ -5,11 +5,14 @@
 #include <random>
 #include <algorithm>
 #include <vector>
+#include <thread>
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
 #include "runner/GoldFishRunner.h"
 #include "ai/AIEngine.h"
+#include "ai/TurnSolver.h"
 #include "core/GameEngine.h"
+#include "core/GameLogger.h"
 #include "ai/MulliganProfileIO.h"
 
 static void PrintUsage(const char* prog)
@@ -40,13 +43,40 @@ static std::vector<std::string> SortedHandNames(GameState& state)
 
 // Plays a (post-mulligan) state to a win turn at the given lookahead depth.
 // Takes state by value so the caller's copy is preserved for reuse.
+// trace: enable per-pass candidate trace output for the T1 decision.
 static int PlayOutWinTurn(GameState state, const MulliganProfile& profile,
-                          int depth, int timeout_ms, int max_turns)
+                          int depth, int timeout_ms, int max_turns,
+                          bool trace = false)
 {
+    TurnSolver::SetTraceSolve(trace);
     AIEngine   ai(profile, depth, timeout_ms);
     GameEngine engine(ai);
     int win_turn = engine.PlayOut(state, max_turns);
+    TurnSolver::SetTraceSolve(false);
     return win_turn > 0 ? win_turn : max_turns + 1;
+}
+
+// Replays a post-mulligan state with a GameLogger attached, writing the log to log_path.
+// Used by the depth-divergence diagnostic to record the actual game when d3 and d4 diverge.
+static void PlayOutLogged(GameState state, const MulliganProfile& profile,
+                          int depth, int timeout_ms, int max_turns,
+                          uint64_t game_seed,
+                          const std::map<std::string, std::vector<int>>& numbering,
+                          const std::filesystem::path& log_path)
+{
+    GoldFishRunner::AssignCardNumbers(state, numbering);
+
+    GameLogger logger;
+    logger.StartGame("diag_d" + std::to_string(depth), 0, "d1", game_seed, numbering);
+
+    AIEngine   ai(profile, depth, timeout_ms);
+    ai.SetLogger(&logger);
+    GameEngine engine(ai);
+    engine.SetLogger(&logger);
+
+    int win_turn = engine.PlayOut(state, max_turns);
+    logger.EndGame(win_turn);
+    logger.WriteToFile(log_path);
 }
 
 // Diagnostic: attribute the depth-4-worse-than-depth-3 (with --lookahead-bottoming)
@@ -56,80 +86,211 @@ static int PlayOutWinTurn(GameState state, const MulliganProfile& profile,
 // Then play the resulting state out at each depth, forming a 2x2:
 //   W33 = bottom@3, play@3   W34 = bottom@3, play@4 (isolates main-phase depth)
 //   W43 = bottom@4, play@3   W44 = bottom@4, play@4 (W43 isolates bottoming choice)
+//
+// Games are distributed evenly across num_threads (0 = hardware_concurrency).
+// The budget is virtual/deterministic, so results are thread-invariant.
+// Logging and trace work is serialised in a post-pass (bounded by MAX_EXAMPLES).
 static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganProfile& profile,
                                          int num_games, uint64_t base_seed,
-                                         int max_turns, int timeout_ms)
+                                         int max_turns, int timeout_ms,
+                                         int num_threads = 0,
+                                         const std::filesystem::path& log_dir = {},
+                                         bool trace_divergence = false)
 {
-    int    bottom_diff       = 0;
-    int    mainphase_diff    = 0;
-    int    mulliganed        = 0;
+    const int MAX_EXAMPLES = 10;
+
+    bool logging = !log_dir.empty();
+    std::map<std::string, std::vector<int>> numbering;
+    if (logging)
+    {
+        numbering = GoldFishRunner::BuildCardNumbering(deck);
+        std::filesystem::create_directories(log_dir);
+    }
+
+    // Per-game result; pre-allocated so threads write to disjoint indices — no mutex needed.
+    struct GameResult
+    {
+        int W33 = 0, W34 = 0, W43 = 0, W44 = 0;
+        bool bottom_differs    = false;
+        bool mainphase_differs = false;
+        bool mulliganed        = false;
+        std::vector<std::string> hand3;
+        std::vector<std::string> hand4;
+    };
+    std::vector<GameResult> results(num_games);
+
+    // Thread count setup (mirrors GoldFishRunner).
+    int hw = static_cast<int>(std::thread::hardware_concurrency());
+    if (hw < 1) { hw = 1; }
+    if (num_threads <= 0) { num_threads = hw; }
+    num_threads = std::min(num_threads, num_games);
+
+    int base_count = num_games / num_threads;
+    int extra      = num_games % num_threads;
+    int start      = 0;
+
+    std::vector<std::thread> threads;
+    threads.reserve(num_threads);
+
+    for (int t = 0; t < num_threads; ++t)
+    {
+        int count        = base_count + (t < extra ? 1 : 0);
+        int thread_start = start;
+        start           += count;
+
+        threads.emplace_back([&, thread_start, count]()
+        {
+            for (int li = 0; li < count; ++li)
+            {
+                int i = thread_start + li;
+                uint64_t seed = base_seed + static_cast<uint64_t>(i);
+                GameResult& gr = results[i];
+
+                GameState s3 = GoldFishRunner::SetupGame(deck, seed);
+                s3.vial_target_mv = profile.vial_target_mv;
+                GoldFishRunner::PopulateOpponentSpawns(s3, i);
+                AIEngine bot3(profile, 3, timeout_ms);
+                bot3.SetLookaheadBottoming(true);
+                bot3.HandleMulligan(s3, max_turns);
+                gr.hand3 = SortedHandNames(s3);
+
+                GameState s4 = GoldFishRunner::SetupGame(deck, seed);
+                s4.vial_target_mv = profile.vial_target_mv;
+                GoldFishRunner::PopulateOpponentSpawns(s4, i);
+                AIEngine bot4(profile, 4, timeout_ms);
+                bot4.SetLookaheadBottoming(true);
+                bot4.HandleMulligan(s4, max_turns);
+                gr.hand4 = SortedHandNames(s4);
+
+                gr.bottom_differs = (gr.hand3 != gr.hand4);
+                gr.mulliganed     = (static_cast<int>(gr.hand3.size()) < 7);
+
+                gr.W33 = PlayOutWinTurn(s3, profile, 3, timeout_ms, max_turns);
+                gr.W34 = PlayOutWinTurn(s3, profile, 4, timeout_ms, max_turns);
+                gr.W43 = PlayOutWinTurn(s4, profile, 3, timeout_ms, max_turns);
+                gr.W44 = PlayOutWinTurn(s4, profile, 4, timeout_ms, max_turns);
+
+                gr.mainphase_differs = (gr.W34 != gr.W33);
+            }
+        });
+    }
+
+    for (std::thread& th : threads) { th.join(); }
+
+    // Serial post-pass: accumulate counters and print examples in seed order.
+    // Logging and tracing re-run the deterministic mulligan for each diverging game
+    // rather than carrying full GameState copies through the parallel phase.
+    int    bottom_diff     = 0;
+    int    mainphase_diff  = 0;
+    int    mulliganed      = 0;
     double sum33 = 0.0, sum34 = 0.0, sum43 = 0.0, sum44 = 0.0;
-    int    examples_shown    = 0;
-    int    mainphase_shown   = 0;
-    const int MAX_EXAMPLES   = 10;
+    int    examples_shown  = 0;
+    int    mainphase_shown = 0;
 
     for (int i = 0; i < num_games; ++i)
     {
+        const GameResult& gr = results[i];
         uint64_t seed = base_seed + static_cast<uint64_t>(i);
 
-        GameState s3 = GoldFishRunner::SetupGame(deck, seed);
-        s3.vial_target_mv = profile.vial_target_mv;   // match the runner's per-game setup
-        GoldFishRunner::PopulateOpponentSpawns(s3, i);
-        AIEngine  bot3(profile, 3, timeout_ms);
-        bot3.SetLookaheadBottoming(true);
-        bot3.HandleMulligan(s3, max_turns);
-        std::vector<std::string> hand3 = SortedHandNames(s3);
+        if (gr.bottom_differs)    { ++bottom_diff; }
+        if (gr.mainphase_differs) { ++mainphase_diff; }
+        if (gr.mulliganed)        { ++mulliganed; }
+        sum33 += gr.W33; sum34 += gr.W34; sum43 += gr.W43; sum44 += gr.W44;
 
-        GameState s4 = GoldFishRunner::SetupGame(deck, seed);
-        s4.vial_target_mv = profile.vial_target_mv;
-        GoldFishRunner::PopulateOpponentSpawns(s4, i);
-        AIEngine  bot4(profile, 4, timeout_ms);
-        bot4.SetLookaheadBottoming(true);
-        bot4.HandleMulligan(s4, max_turns);
-        std::vector<std::string> hand4 = SortedHandNames(s4);
-
-        bool differs = (hand3 != hand4);
-        if (differs)                                  { ++bottom_diff; }
-        if (static_cast<int>(hand3.size()) < 7)       { ++mulliganed; }
-
-        int W33 = PlayOutWinTurn(s3, profile, 3, timeout_ms, max_turns);
-        int W34 = PlayOutWinTurn(s3, profile, 4, timeout_ms, max_turns);
-        int W43 = PlayOutWinTurn(s4, profile, 3, timeout_ms, max_turns);
-        int W44 = PlayOutWinTurn(s4, profile, 4, timeout_ms, max_turns);
-
-        sum33 += W33; sum34 += W34; sum43 += W43; sum44 += W44;
-
-        // Main-phase divergence: same kept hand (s3), but play depth changes the
-        // win turn -> the depth-3 and depth-4 main-phase decisions differed.
-        if (W34 != W33)
+        if (gr.mainphase_differs && mainphase_shown < MAX_EXAMPLES)
         {
-            ++mainphase_diff;
-            if (mainphase_shown < MAX_EXAMPLES)
+            ++mainphase_shown;
+            std::cout << "[mainphase] seed " << seed << "  W33=" << gr.W33
+                      << " W34=" << gr.W34 << " (spawn pattern " << (i % 10) << ")  hand: ";
+            for (const std::string& n : gr.hand3) { std::cout << n << " | "; }
+            std::cout << "\n";
+
+            if (logging || trace_divergence)
             {
-                ++mainphase_shown;
-                std::cout << "[mainphase] seed " << seed << "  W33=" << W33
-                          << " W34=" << W34 << " (spawn pattern " << (i % 10) << ")  hand: ";
-                for (const std::string& n : hand3) { std::cout << n << " | "; }
-                std::cout << "\n";
+                // Reconstruct the post-mulligan state for this seed (cheap + deterministic).
+                GameState s3 = GoldFishRunner::SetupGame(deck, seed);
+                s3.vial_target_mv = profile.vial_target_mv;
+                GoldFishRunner::PopulateOpponentSpawns(s3, i);
+                AIEngine bot3(profile, 3, timeout_ms);
+                bot3.SetLookaheadBottoming(true);
+                bot3.HandleMulligan(s3, max_turns);
+
+                if (logging)
+                {
+                    std::string prefix = std::to_string(seed);
+                    PlayOutLogged(s3, profile, 3, timeout_ms, max_turns, seed, numbering,
+                                  log_dir / (prefix + "_play3.json"));
+                    PlayOutLogged(s3, profile, 4, timeout_ms, max_turns, seed, numbering,
+                                  log_dir / (prefix + "_play4.json"));
+                    std::cout << "  -> logs: " << prefix << "_play3.json / " << prefix << "_play4.json\n";
+                }
+                if (trace_divergence)
+                {
+                    std::cerr << "\n=== T1 TRACE depth=3 (seed " << seed << ") ===\n";
+                    PlayOutWinTurn(s3, profile, 3, timeout_ms, max_turns, /*trace=*/true);
+                    std::cerr << "\n=== T1 TRACE depth=4 (seed " << seed << ") ===\n";
+                    PlayOutWinTurn(s3, profile, 4, timeout_ms, max_turns, /*trace=*/true);
+                }
             }
         }
 
-        if (differs && examples_shown < MAX_EXAMPLES)
+        if (gr.bottom_differs && examples_shown < MAX_EXAMPLES)
         {
             ++examples_shown;
-            std::cout << "[bottoming] seed " << seed << " (W33=" << W33
-                      << " W34=" << W34 << " W43=" << W43 << " W44=" << W44 << ")\n";
+            std::cout << "[bottoming] seed " << seed << " (W33=" << gr.W33
+                      << " W34=" << gr.W34 << " W43=" << gr.W43 << " W44=" << gr.W44 << ")\n";
             std::cout << "  bottom@3 keeps: ";
-            for (const std::string& n : hand3) { std::cout << n << " | "; }
+            for (const std::string& n : gr.hand3) { std::cout << n << " | "; }
             std::cout << "\n  bottom@4 keeps: ";
-            for (const std::string& n : hand4) { std::cout << n << " | "; }
+            for (const std::string& n : gr.hand4) { std::cout << n << " | "; }
             std::cout << "\n";
+
+            if (logging || trace_divergence)
+            {
+                // Reconstruct both post-mulligan states (cheap + deterministic).
+                GameState s3b = GoldFishRunner::SetupGame(deck, seed);
+                s3b.vial_target_mv = profile.vial_target_mv;
+                GoldFishRunner::PopulateOpponentSpawns(s3b, i);
+                AIEngine bot3b(profile, 3, timeout_ms);
+                bot3b.SetLookaheadBottoming(true);
+                if (trace_divergence)
+                {
+                    std::cerr << "\n=== BOTTOMING TRACE depth=3 (seed " << seed << ") ===\n";
+                    TurnSolver::SetTraceSolve(true);
+                }
+                bot3b.HandleMulligan(s3b, max_turns);
+                TurnSolver::SetTraceSolve(false);
+
+                GameState s4b = GoldFishRunner::SetupGame(deck, seed);
+                s4b.vial_target_mv = profile.vial_target_mv;
+                GoldFishRunner::PopulateOpponentSpawns(s4b, i);
+                AIEngine bot4b(profile, 4, timeout_ms);
+                bot4b.SetLookaheadBottoming(true);
+                if (trace_divergence)
+                {
+                    std::cerr << "\n=== BOTTOMING TRACE depth=4 (seed " << seed << ") ===\n";
+                    TurnSolver::SetTraceSolve(true);
+                }
+                bot4b.HandleMulligan(s4b, max_turns);
+                TurnSolver::SetTraceSolve(false);
+
+                if (logging)
+                {
+                    std::string prefix = std::to_string(seed);
+                    PlayOutLogged(s3b, profile, 3, timeout_ms, max_turns, seed, numbering,
+                                  log_dir / (prefix + "_bottom3_play3.json"));
+                    PlayOutLogged(s4b, profile, 3, timeout_ms, max_turns, seed, numbering,
+                                  log_dir / (prefix + "_bottom4_play3.json"));
+                    std::cout << "  -> logs: " << prefix << "_bottom3_play3.json / "
+                              << prefix << "_bottom4_play3.json\n";
+                }
+            }
         }
     }
 
     double n = static_cast<double>(num_games);
-    std::cout << "\n=== DEPTH DIVERGENCE (" << num_games << " games, timeout "
-              << timeout_ms << "ms, --lookahead-bottoming) ===\n";
+    std::cout << "\n=== DEPTH DIVERGENCE (" << num_games << " games, " << num_threads
+              << " threads, budget " << timeout_ms << "ms, --lookahead-bottoming) ===\n";
     std::cout << "bottoming differs (d3 vs d4 kept hand): " << bottom_diff
               << " (" << (100.0 * bottom_diff / n) << "%)\n";
     std::cout << "main-phase differs (W34 != W33):        " << mainphase_diff
@@ -167,12 +328,14 @@ int main(int argc, char* argv[])
     bool     seed_provided  = false;
     bool     lookahead_bottoming = false;
     bool     diag_depth     = false;
+    bool     trace_t1       = false;
 
     for (int i = 2; i < argc; ++i)
     {
         std::string flag = argv[i];
         if (flag == "--lookahead-bottoming") { lookahead_bottoming = true; continue; }
         if (flag == "--diag-depth")          { diag_depth = true; continue; }
+        if (flag == "--trace")               { trace_t1 = true; continue; }
         try
         {
             if (i + 1 < argc)
@@ -266,7 +429,8 @@ int main(int argc, char* argv[])
 
         if (diag_depth)
         {
-            RunDepthDivergenceDiagnostic(deck, profile, num_games, seed, max_turns, timeout_ms);
+            RunDepthDivergenceDiagnostic(deck, profile, num_games, seed, max_turns, timeout_ms,
+                                         num_threads, log_dir, trace_t1);
             return 0;
         }
 

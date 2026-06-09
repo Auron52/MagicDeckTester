@@ -17,7 +17,7 @@
 // Assigns stable integer IDs to each card copy in the deck.
 // Cards are sorted alphabetically by name; copies of the same name get
 // consecutive numbers (e.g. 4x Lightning Bolt → 1,2,3,4).
-static std::map<std::string, std::vector<int>> BuildCardNumbering(const Decklist& deck)
+std::map<std::string, std::vector<int>> GoldFishRunner::BuildCardNumbering(const Decklist& deck)
 {
     std::set<std::string> unique_names;
     for (const Card& c : deck.mainboard) { unique_names.insert(c.m_name); }
@@ -35,8 +35,8 @@ static std::map<std::string, std::vector<int>> BuildCardNumbering(const Decklist
 
 // Assigns m_number to each card in the shuffled library based on the numbering map.
 // Copies are numbered in the order they appear after shuffling.
-static void AssignCardNumbers(GameState& state,
-                               const std::map<std::string, std::vector<int>>& numbering)
+void GoldFishRunner::AssignCardNumbers(GameState& state,
+                                       const std::map<std::string, std::vector<int>>& numbering)
 {
     std::map<std::string, int> copy_index;
     for (Card& c : state.players[0].library)

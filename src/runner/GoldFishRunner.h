@@ -43,4 +43,9 @@ public:
     // Adds the opponent's blocker pattern for this game index (10-game cycle).
     // Exposed so diagnostics can reproduce the runner's per-game setup exactly.
     static void PopulateOpponentSpawns(GameState& state, int game_index);
+
+    // Card numbering utilities — exposed for diagnostics.
+    static std::map<std::string, std::vector<int>> BuildCardNumbering(const Decklist& deck);
+    static void AssignCardNumbers(GameState& state,
+                                   const std::map<std::string, std::vector<int>>& numbering);
 };

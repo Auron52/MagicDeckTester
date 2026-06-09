@@ -655,6 +655,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (const std::string& extra_name : extra.spells)    { apply_one(extra_name, false); }
             for (const std::string& extra_name : extra.sacrifice) { apply_one(extra_name, true); }
         }
+        else if (!def.card.IsInstant() && !def.card.IsSorcery())
+        {
+            // Non-creature permanent (e.g. Aether Vial, Thrumming Hivepool): place on battlefield.
+            Permanent perm;
+            perm.card              = def.card;
+            perm.controller_index  = state.active_player_index;
+            perm.owner_index       = state.active_player_index;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+        }
 
         // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
         FireOnCastTriggers(state, def);
