@@ -273,6 +273,49 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         return DMG;  // minimal X=1 estimate
     }
 
+    if (def.tmpl == CardTemplate::DrawUntilNonland)
+    {
+        // Estimate how many lands TH will draw (clairvoyant scan of the library top).
+        int estimated_lands = 0;
+        for (const Card& c : state.ActivePlayer().library)
+        {
+            auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+            bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+            if (!is_land) { break; }
+            ++estimated_lands;
+        }
+        // If Land's Edge is already on the battlefield, each drawn land is worth 2 damage.
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            auto pdef = CardDatabase::Instance().Lookup(p.card.m_name);
+            if (pdef && pdef->params.discard_land_damage > 0)
+            {
+                return (estimated_lands + 1) * pdef->params.discard_land_damage * DMG;
+            }
+        }
+        // No Land's Edge on board: card-draw value plus any nonland drawn.
+        return (estimated_lands + 1) * DMG;
+    }
+
+    // Land's Edge: each land already in hand plus any held is worth discard_land_damage damage.
+    if (def.params.discard_land_damage > 0)
+    {
+        int lands_in_hand = 0;
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+            if (cdef && cdef->card.IsLand()) { ++lands_in_hand; }
+        }
+        return lands_in_hand * def.params.discard_land_damage * DMG;
+    }
+
+    // Cascade spells: value = free spell drawn (assume ~3 damage-equivalents on average).
+    if (def.params.cascade_max_mv > 0)
+    {
+        return 3 * DMG;
+    }
+
     // Aether Vial and similar: deploys a creature from hand for free each turn once charged.
     // Score as the best matching creature in hand. Lords boost all existing attackers
     // immediately on deployment (continuous effect, not blocked by summoning sickness);
@@ -427,6 +470,37 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         }
     }
 
+    // Compute damage available from Land's Edge permanents already on the battlefield.
+    // (discard_land_damage > 0 signals the card; rate = damage per land discarded)
+    int lands_edge_rate = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (def && def->params.discard_land_damage > 0)
+        {
+            lands_edge_rate = std::max(lands_edge_rate, def->params.discard_land_damage);
+        }
+    }
+    int lands_in_hand = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        auto def = CardDatabase::Instance().Lookup(ap.hand[i].m_name);
+        if (def && def->card.IsLand()) { ++lands_in_hand; }
+    }
+    int base_lands_edge_dmg = lands_in_hand * lands_edge_rate;
+
+    // Clairvoyant estimate of how many consecutive lands sit on top of the library
+    // (what a Treasure Hunt cast this turn would draw into hand, minus the nonland).
+    int th_lands_estimate = 0;
+    for (const Card& c : ap.library)
+    {
+        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        bool is_land = def ? def->card.IsLand() : c.IsLand();
+        if (!is_land) { break; }
+        ++th_lands_estimate;
+    }
+
     int m = static_cast<int>(cands.size());
     Plan best;
 
@@ -458,6 +532,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         int total_eval        = 0;
         int self_damage       = 0;
         int vial_haste_atk    = 0;
+        // Land's Edge damage added by casting Land's Edge or Treasure Hunt this plan.
+        int plan_le_dmg       = 0;
 
         for (int j = 0; j < m; ++j)
         {
@@ -493,6 +569,40 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             {
                 if (c.card_mv <= src.max_mv) { self_damage += src.damage; }
             }
+
+            // Land's Edge being cast: if no LE is on board yet, this plan enables it.
+            // Add the damage potential from discarding the current hand's lands.
+            if (lands_edge_rate == 0 && c.def.params.discard_land_damage > 0)
+            {
+                plan_le_dmg += lands_in_hand * c.def.params.discard_land_damage;
+            }
+            // Treasure Hunt in a plan where Land's Edge is active (board or this plan):
+            // th_lands_estimate new lands become available for LE discards.
+            if (c.def.tmpl == CardTemplate::DrawUntilNonland)
+            {
+                int active_rate = (lands_edge_rate > 0)
+                    ? lands_edge_rate
+                    : 0;  // LE may also be in this plan; picked up below second pass
+                if (active_rate > 0)
+                {
+                    plan_le_dmg += th_lands_estimate * active_rate;
+                }
+            }
+        }
+
+        // Second pass: if TH is in the plan and LE is being cast this plan (not already on board),
+        // add the TH bonus lands to plan_le_dmg now that we know LE is present.
+        if (lands_edge_rate == 0)
+        {
+            bool has_le  = false;
+            bool has_th  = false;
+            for (int j = 0; j < m; ++j)
+            {
+                if (!(mask & (1 << j))) { continue; }
+                if (cands[j].def.params.discard_land_damage > 0) { has_le = true; }
+                if (cands[j].def.tmpl == CardTemplate::DrawUntilNonland) { has_th = true; }
+            }
+            if (has_le && has_th) { plan_le_dmg += th_lands_estimate * 2; }
         }
 
         if (!pool.CanPay(combined))                          { continue; }
@@ -505,7 +615,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (self_damage >= ap.life) { continue; }
 
         int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
-        bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
+        bool wins = (projected_atk + direct_dmg + base_lands_edge_dmg + plan_le_dmg)
+                    >= state.Opponent().life;
 
         // A winning plan always beats a non-winning plan.
         // Among plans with the same win status, prefer higher total eval.
@@ -695,6 +806,61 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (const std::string& extra_name : extra.spells)    { apply_one(extra_name, false); }
             for (const std::string& extra_name : extra.sacrifice) { apply_one(extra_name, true); }
         }
+        else if (def.tmpl == CardTemplate::DrawUntilNonland)
+        {
+            // Draw cards from the top until a nonland is found (inclusive) into hand.
+            while (!ap.library.empty())
+            {
+                Card c = ap.library.DrawTop();
+                auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+                bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+                ap.hand.push_back(std::move(c));
+                if (!is_land) { break; }
+            }
+            // Draw breakpoint: re-solve so any new castables are played with remaining mana.
+            TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+            for (const std::string& extra_name : extra.vial_activations) { apply_vial(extra_name); }
+            for (const std::string& extra_name : extra.spells)    { apply_one(extra_name, false); }
+            for (const std::string& extra_name : extra.sacrifice) { apply_one(extra_name, true); }
+        }
+        else if (def.params.cascade_max_mv > 0)
+        {
+            // Cascade: exile from top until a nonland with MV < cascade_max_mv is found.
+            int limit = def.params.cascade_max_mv;
+            std::vector<Card> exiled;
+            int cascade_idx = -1;
+            while (!ap.library.empty())
+            {
+                Card c = ap.library.DrawTop();
+                auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+                bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+                int  mv      = cdef ? cdef->card.m_mana_cost.ManaValue()
+                                    : c.m_mana_cost.ManaValue();
+                exiled.push_back(std::move(c));
+                if (!is_land && mv < limit)
+                {
+                    cascade_idx = static_cast<int>(exiled.size()) - 1;
+                    break;
+                }
+            }
+            // All non-target cards return to library bottom in exile order.
+            for (int ei = 0; ei < static_cast<int>(exiled.size()); ++ei)
+            {
+                if (ei == cascade_idx) { continue; }
+                ap.library.push_back(std::move(exiled[ei]));
+            }
+            // Cast the cascade target for free: place it in hand so apply_one finds it.
+            if (cascade_idx >= 0)
+            {
+                const std::string& cname = exiled[cascade_idx].m_name;
+                auto cdef2 = CardDatabase::Instance().Lookup(cname);
+                if (cdef2)
+                {
+                    ap.hand.push_back(cdef2->card);
+                    apply_one(cname, false);
+                }
+            }
+        }
         else if (!def.card.IsInstant() && !def.card.IsSorcery())
         {
             // Non-creature permanent (e.g. Aether Vial, Thrumming Hivepool): place on battlefield.
@@ -730,6 +896,35 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
     for (const std::string& name : plan.spells)    { apply_one(name, false); }
     for (const std::string& name : plan.sacrifice) { apply_one(name, true); }
+
+    // Activate Land's Edge: discard all lands in hand after all spells resolve.
+    // This mirrors GameEngine::MainPhase's post-stack ActivateLandsEdge call.
+    {
+        int rate = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            auto le_def = CardDatabase::Instance().Lookup(p.card.m_name);
+            if (le_def && le_def->params.discard_land_damage > 0)
+            {
+                rate = std::max(rate, le_def->params.discard_land_damage);
+            }
+        }
+        if (rate > 0)
+        {
+            std::vector<Card> keep;
+            for (Card& c : ap.hand)
+            {
+                auto cdef    = CardDatabase::Instance().Lookup(c.m_name);
+                bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+                if (!is_land) { keep.push_back(std::move(c)); continue; }
+                ap.graveyard.push_back(c);
+                state.players[opp_idx].life -= rate;
+                if (rate > 0) { state.opponent_lost_life_this_turn = true; }
+            }
+            ap.hand = std::move(keep);
+        }
+    }
 }
 
 // Deal combat damage: all eligible attackers hit the opponent.

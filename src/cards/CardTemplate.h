@@ -26,6 +26,7 @@ enum class CardTemplate
     PumpSpell,       // Target creature gets +N/+M until end of turn
     LordEffect,      // Creatures of a subtype get +N/+M
     Haste,           // Keyword-only creature (haste granted to others or self)
+    DrawUntilNonland, // Reveal cards until a nonland; put all revealed (incl. nonland) into hand
 };
 
 // Convert template name string (from JSON) to enum.

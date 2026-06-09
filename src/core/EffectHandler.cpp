@@ -96,6 +96,12 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
             return true;
         }
 
+        case CardTemplate::DrawUntilNonland:
+        {
+            ResolveDrawUntilNonland(state, entry, def);
+            return true;
+        }
+
         default:
         {
             // Unknown or Tier 3 custom card — no built-in effect.
@@ -107,6 +113,11 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
             }
             else
             {
+                // Non-permanent custom spell: fire cascade if applicable, then graveyard.
+                if (def.params.cascade_max_mv > 0)
+                {
+                    ResolveCascade(state, entry, def);
+                }
                 MoveToGraveyard(state, entry);
             }
             return true;
@@ -271,4 +282,74 @@ void EffectHandler::ResolvePumpSpell(GameState& state, const StackEntry& entry,
         }
     }
     MoveToGraveyard(state, entry);
+}
+
+void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& entry,
+                                             const CardDefinition& /*def*/)
+{
+    Player& controller = state.players[entry.controller_index];
+    // Reveal cards from the top until a nonland is found; put ALL revealed cards
+    // (including the triggering nonland) into hand (CR oracle: "put all cards
+    // revealed this way into your hand").
+    while (!controller.library.empty())
+    {
+        Card c = controller.library.DrawTop();
+        bool is_land = false;
+        {
+            auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+            is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+        }
+        controller.hand.push_back(std::move(c));
+        if (!is_land) { break; }
+    }
+    MoveToGraveyard(state, entry);
+}
+
+void EffectHandler::ResolveCascade(GameState& state, const StackEntry& entry,
+                                    const CardDefinition& def)
+{
+    Player& controller = state.players[entry.controller_index];
+    int cascade_limit  = def.params.cascade_max_mv;
+
+    // Exile cards from top until a nonland with MV < cascade_limit is found.
+    std::vector<Card> exiled;
+    int cascade_idx = -1;
+    while (!controller.library.empty())
+    {
+        Card c = controller.library.DrawTop();
+        auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+        bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+        int  mv      = cdef ? cdef->card.m_mana_cost.ManaValue()
+                            : c.m_mana_cost.ManaValue();
+        exiled.push_back(std::move(c));
+        if (!is_land && mv < cascade_limit)
+        {
+            cascade_idx = static_cast<int>(exiled.size()) - 1;
+            break;
+        }
+    }
+
+    // Push the cascade target onto the stack so it resolves before the original spell's
+    // graveyard placement (the stack is LIFO; next iteration of ResolveStack pops it).
+    if (cascade_idx >= 0)
+    {
+        const Card& cascade_card = exiled[cascade_idx];
+        auto cdef = CardDatabase::Instance().Lookup(cascade_card.m_name);
+        if (cdef)
+        {
+            StackEntry ce;
+            ce.type             = StackEntry::EntryType::Spell;
+            ce.source           = cdef->card;
+            ce.source.m_number  = cascade_card.m_number;
+            ce.controller_index = entry.controller_index;
+            state.stack.push_back(std::move(ce));
+        }
+    }
+
+    // Remaining exiled cards go to the bottom of the library in the order exiled.
+    for (int i = 0; i < static_cast<int>(exiled.size()); ++i)
+    {
+        if (i == cascade_idx) { continue; }
+        controller.library.push_back(std::move(exiled[i]));
+    }
 }

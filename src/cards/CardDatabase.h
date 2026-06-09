@@ -108,6 +108,19 @@ struct CardParams
     int                      tap_token_toughness = 0;
     std::vector<std::string> tap_token_subtypes;
     std::vector<std::string> tap_token_requires_subtypes;
+
+    // No maximum hand size (e.g. Reliquary Tower). If true, the cleanup-step discard
+    // to 7 is skipped while this permanent is on the battlefield.
+    bool no_max_hand_size = false;
+
+    // Land's Edge pattern: "Discard a land card: deal this much damage to target player."
+    // When > 0 this permanent provides the ability; AI will discard all hand lands for damage.
+    int  discard_land_damage = 0;
+
+    // Cascade: when cast, exile from library top until a nonland card with mana value
+    // strictly less than cascade_max_mv is found; cast it for free; put the rest on the bottom.
+    // 0 = no cascade.
+    int  cascade_max_mv = 0;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

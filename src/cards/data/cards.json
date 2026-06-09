@@ -324,6 +324,176 @@
                 "upkeep_token_toughness": 1,
                 "upkeep_token_subtypes": ["Sliver"]
             }
+        },
+        {
+            "name": "Island",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {U}.",
+            "template": "basic_land",
+            "parameters": { "produces": ["U"] }
+        },
+        {
+            "name": "Reliquary Tower",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {C}. You have no maximum hand size. [Simplified: modelled as a colorless land; no-maximum-hand-size effect implemented.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["C"], "no_max_hand_size": true }
+        },
+        {
+            "name": "Saprazzan Skerry",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Saprazzan Skerry enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Saprazzan Skerry: Add {U}{U}. If there are no depletion counters on it, sacrifice it. [Simplified: modelled as a basic Island; depletion counters and sacrifice not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U"] }
+        },
+        {
+            "name": "Sandstone Needle",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Sandstone Needle enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Sandstone Needle: Add {R}{R}. If there are no depletion counters on it, sacrifice it. [Simplified: modelled as a basic Mountain; depletion counters and sacrifice not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["R"] }
+        },
+        {
+            "name": "Cascade Bluffs",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {C}. {T}: Add {U}{R}. Spend this mana only to cast spells with {U} or {R} in their mana cost or activate abilities of sources with {U} or {R} in their activation cost. [Simplified: modelled as dual U/R land; filter requirement not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U", "R"] }
+        },
+        {
+            "name": "Fiery Islet",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life: Add {U} or {R}. {1}, {T}, Sacrifice Fiery Islet: Draw a card. [Simplified: modelled as dual U/R land; life payment and draw-on-sacrifice not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U", "R"] }
+        },
+        {
+            "name": "Temple of Epiphany",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Temple of Epiphany enters tapped. When it enters, scry 1. {T}: Add {U} or {R}. [Simplified: modelled as dual U/R land; ETB tap and scry not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U", "R"] }
+        },
+        {
+            "name": "Frostboil Snarl",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "As Frostboil Snarl enters, you may reveal an Island or Mountain card from your hand. If you don't, this land enters tapped. {T}: Add {U} or {R}. [Simplified: modelled as dual U/R land; reveal/ETB-tap not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U", "R"] }
+        },
+        {
+            "name": "Steam Vents",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": ["Island", "Mountain"],
+            "keywords": [],
+            "oracle_text": "({T}: Add {U} or {R}.) As Steam Vents enters, you may pay 2 life. If you don't, it enters tapped. [Simplified: modelled as dual U/R land; shock/ETB-tap not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U", "R"] }
+        },
+        {
+            "name": "Ferrous Lake",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {U} or {R}. [Simplified: modelled as dual U/R land.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U", "R"] }
+        },
+        {
+            "name": "Lonely Sandbar",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Lonely Sandbar enters tapped. {T}: Add {U}. Cycling {2} ({2}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Island; cycling not modelled (lands are too valuable to cycle in this deck).]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U"] }
+        },
+        {
+            "name": "Forgotten Cave",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Forgotten Cave enters tapped. {T}: Add {R}. Cycling {R} ({R}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Mountain; cycling not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["R"] }
+        },
+        {
+            "name": "Thundering Falls",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {U} or {R}. [Simplified: modelled as dual U/R land.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U", "R"] }
+        },
+        {
+            "name": "Remote Isle",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Remote Isle enters tapped. {T}: Add {U}. Cycling {2} ({2}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Island; cycling not modelled.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["U"] }
+        },
+        {
+            "name": "Treasure Hunt",
+            "mana_cost": "{1}{U}",
+            "types": ["Sorcery"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Reveal cards from the top of your library until you reveal a nonland card, then put all cards revealed this way into your hand.",
+            "template": "draw_until_nonland",
+            "parameters": {}
+        },
+        {
+            "name": "Land's Edge",
+            "mana_cost": "{1}{R}",
+            "types": ["Enchantment"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Discard a land card: Land's Edge deals 2 damage to target player or planeswalker. [Activated ability: each land discarded to Land's Edge deals 2 damage. Implemented as a post-resolve activated ability in AIEngine::ActivateLandsEdge after each main phase.]",
+            "template": "custom",
+            "parameters": { "discard_land_damage": 2 }
+        },
+        {
+            "name": "Throes of Chaos",
+            "mana_cost": "{2}{R}",
+            "types": ["Sorcery"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Cascade. Retrace. [Cascade: when cast, exile from library top until a nonland with MV < 3 is found, cast it for free. Retrace deferred to Phase 2 (requires casting from graveyard).]",
+            "template": "custom",
+            "parameters": { "cascade_max_mv": 3 }
         }
     ]
 }

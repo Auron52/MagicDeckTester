@@ -38,6 +38,11 @@ public:
 
     void SetLogger(GameLogger* logger) { m_logger = logger; }
 
+    // Discard all lands from hand to each Land's Edge permanent the active player
+    // controls, dealing 2 damage per land per Land's Edge.  Called by GameEngine
+    // after ResolveStack so Treasure Hunt has already resolved and filled the hand.
+    void ActivateLandsEdge(GameState& state);
+
     // When enabled, bottoming evaluates each candidate removal with a full
     // clairvoyant game rollout and bottoms the card whose removal preserves the
     // earliest win (heuristic breaks win-turn ties). More accurate, ~2x slower;

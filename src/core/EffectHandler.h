@@ -23,4 +23,6 @@ private:
     static void ResolveDrawSpell(GameState& state, const StackEntry& entry, const CardDefinition& def);
     static void ResolveDrawX(GameState& state, const StackEntry& entry, const CardDefinition& def);
     static void ResolvePumpSpell(GameState& state, const StackEntry& entry, const CardDefinition& def);
+    static void ResolveDrawUntilNonland(GameState& state, const StackEntry& entry, const CardDefinition& def);
+    static void ResolveCascade(GameState& state, const StackEntry& entry, const CardDefinition& def);
 };

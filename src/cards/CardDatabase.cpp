@@ -18,9 +18,10 @@ CardTemplate CardTemplateFromString(const std::string& name)
     if (name == "draw_spell")       { return CardTemplate::DrawSpell; }
     if (name == "draw_x")           { return CardTemplate::DrawX; }
     if (name == "pump_spell")       { return CardTemplate::PumpSpell; }
-    if (name == "lord_effect")      { return CardTemplate::LordEffect; }
-    if (name == "haste")            { return CardTemplate::Haste; }
-    if (name == "custom")           { return CardTemplate::None; }
+    if (name == "lord_effect")        { return CardTemplate::LordEffect; }
+    if (name == "haste")              { return CardTemplate::Haste; }
+    if (name == "draw_until_nonland") { return CardTemplate::DrawUntilNonland; }
+    if (name == "custom")             { return CardTemplate::None; }
     throw std::runtime_error("Unknown card template: " + name);
 }
 
@@ -38,8 +39,9 @@ const char* CardTemplateToString(CardTemplate t)
         case CardTemplate::DrawX:           return "draw_x";
         case CardTemplate::PumpSpell:       return "pump_spell";
         case CardTemplate::LordEffect:      return "lord_effect";
-        case CardTemplate::Haste:           return "haste";
-        default:                            return "custom";
+        case CardTemplate::Haste:            return "haste";
+        case CardTemplate::DrawUntilNonland: return "draw_until_nonland";
+        default:                             return "custom";
     }
 }
 
@@ -294,6 +296,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.tap_token_subtypes.push_back(s);
     for (const std::string& s : params.value("tap_token_requires_subtypes", json::array()))
         p.tap_token_requires_subtypes.push_back(s);
+
+    p.no_max_hand_size    = params.value("no_max_hand_size",    false);
+    p.discard_land_damage = params.value("discard_land_damage", 0);
+    p.cascade_max_mv      = params.value("cascade_max_mv",      0);
 
     return p;
 }
