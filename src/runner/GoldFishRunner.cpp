@@ -12,6 +12,24 @@
 #include <sstream>
 #include <thread>
 
+// ---- Second-main relevance -------------------------------------------------
+
+// True if the deck contains any card whose value depends on the second
+// (post-combat) main phase. Currently that means spectacle cards: their alternate
+// cost unlocks once the opponent has lost life this turn, so the finisher is
+// cast cheaply AFTER combat. Such decks enable a played/searched second main
+// (see AIEngine::SetSearchPostCombat); for everything else the second main is
+// skipped because combat creates no new resources in a goldfish.
+bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
+{
+    for (const Card& c : deck.mainboard)
+    {
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(c.m_name);
+        if (def && def->params.spectacle_cost.has_value()) { return true; }
+    }
+    return false;
+}
+
 // ---- Card numbering --------------------------------------------------------
 
 // Assigns stable integer IDs to each card copy in the deck.
@@ -166,6 +184,10 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     result.games_played = num_games;
     result.win_turns.resize(num_games, -1);
 
+    // Detect once whether this deck's second main is relevant (e.g. spectacle
+    // finishers cast after combat). All worker AIs get the same setting.
+    const bool needs_second_main = DeckUsesSecondMain(deck);
+
     const bool logging = !log_dir.empty();
     std::map<std::string, std::vector<int>> numbering;
     std::string run_id;
@@ -195,6 +217,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
         {
             AIEngine   ai(profile, lookahead_depth, per_thread_timeout);
             ai.SetLookaheadBottoming(lookahead_bottoming);
+            ai.SetSearchPostCombat(needs_second_main);
             GameEngine engine(ai);
 
             for (int li = 0; li < count; ++li)

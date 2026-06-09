@@ -43,6 +43,7 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
     if (depth == 0)
     {
         AIEngine   ai(profile, 0, 0);
+        ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
         GameEngine engine(ai);
         for (int i = 0; i < num_games; ++i)
         {
@@ -76,6 +77,7 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
         threads.emplace_back([&, thread_start, count]()
         {
             AIEngine   ai(profile, depth, per_thread_timeout);
+            ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
             GameEngine engine(ai);
             for (int li = 0; li < count; ++li)
             {
@@ -545,6 +547,7 @@ AnalysisResult AnalyzerEngine::RunMonteCarlo(
     const MulliganProfile& profile)
 {
     AIEngine   ai(profile, depth, timeout_ms);
+    ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
     GameEngine engine(ai);
 
     RunResult run;

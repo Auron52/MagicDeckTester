@@ -477,25 +477,40 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
 
     TryPlayLand(state);
 
-    TurnSolver::Plan plan;
-    if (m_lookahead_depth > 0)
-    {
-        // Deterministic work budget for this decision (m_budget_ms is "virtual ms";
-        // <= 0 means unlimited). Replaces the old steady_clock deadline so the
-        // search does identical work — and reaches an identical result — on every
-        // machine and every run for a given seed. See SearchBudget.
-        SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
+    // The post-combat (second) main phase does NOTHING unless post-combat search
+    // is explicitly enabled (see SetSearchPostCombat). In a clairvoyant goldfish
+    // combat creates no new resources, so everything castable was already cast in
+    // the first main (casting is timing-neutral there) and the lookahead rollout
+    // likewise plays no second main. An unsearched greedy second main would be an
+    // off-model action the search never evaluated — worse, it could execute a cast
+    // the rollout merely assumed, so model and reality would diverge. Decks whose
+    // combat enables genuine second-main plays (Bear Umbra / Hidden Strings
+    // untapping lands; spectacle costs unlocked by combat damage) turn it on.
+    const bool play_this_phase = is_pre_combat_main || m_search_post_combat;
 
-        // Search at full depth every turn. The per-turn depth decrement that used
-        // to live here was a workaround for candidate starvation under the timeout;
-        // iterative deepening in SolveWithLookahead now guarantees every candidate
-        // is evaluated, so later turns no longer need to be shallower.
-        plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
-                                              m_lookahead_depth, 20, &budget, true);
-    }
-    else
+    TurnSolver::Plan plan;  // empty plan == do nothing this phase
+    if (play_this_phase)
     {
-        plan = TurnSolver::Solve(state, is_pre_combat_main);
+        if (m_lookahead_depth > 0)
+        {
+            // Deterministic work budget for this decision (m_budget_ms is "virtual
+            // ms"; <= 0 means unlimited). Replaces the old steady_clock deadline so
+            // the search does identical work — and reaches an identical result — on
+            // every machine and every run for a given seed. See SearchBudget.
+            SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
+
+            // Search at full depth every turn. The per-turn depth decrement that
+            // used to live here was a workaround for candidate starvation under the
+            // timeout; iterative deepening in SolveWithLookahead now guarantees
+            // every candidate is evaluated, so later turns need not be shallower.
+            plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                                                  m_lookahead_depth, 20, &budget, true,
+                                                  m_search_post_combat);
+        }
+        else
+        {
+            plan = TurnSolver::Solve(state, is_pre_combat_main);
+        }
     }
 
     // Deploy creatures via Aether Vial first (lords boost subsequent spell evals).

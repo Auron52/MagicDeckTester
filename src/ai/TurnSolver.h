@@ -60,6 +60,13 @@ public:
     //            only consuming from the shared budget (preserves rollout
     //            fidelity, mirroring the old time_point::max() deadline).
     //
+    // second_main: when true, the simulation plays a post-combat (second) main
+    // phase each turn (greedy in the rollout), and a top-level is_pre_combat=false
+    // call is treated as a real second-main decision (no combat is re-simulated).
+    // Off for most decks; on only for ones whose combat enables second-main plays
+    // (spectacle unlocked by combat damage, lands untapped in combat). See
+    // AIEngine::SetSearchPostCombat.
+    //
     // tt: per-decision transposition table memoizing SimulateToEnd. The enforcing
     // top-level call creates one when none is supplied and threads it through the
     // whole recursion; rollout sub-searches forward the table they were given.
@@ -67,5 +74,6 @@ public:
                                    int depth, int max_turns = 20,
                                    SearchBudget* budget = nullptr,
                                    bool enforce_budget = true,
+                                   bool second_main = false,
                                    TranspositionTable* tt = nullptr);
 };

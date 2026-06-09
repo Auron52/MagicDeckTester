@@ -48,4 +48,10 @@ public:
     static std::map<std::string, std::vector<int>> BuildCardNumbering(const Decklist& deck);
     static void AssignCardNumbers(GameState& state,
                                    const std::map<std::string, std::vector<int>>& numbering);
+
+    // True if the deck has any card whose value depends on the post-combat (second)
+    // main phase — currently spectacle cards (combat damage unlocks the cheaper cost).
+    // Such decks enable AIEngine::SetSearchPostCombat; everything else skips the
+    // second main. Shared so the runner and analyzer enable it identically.
+    static bool DeckUsesSecondMain(const Decklist& deck);
 };

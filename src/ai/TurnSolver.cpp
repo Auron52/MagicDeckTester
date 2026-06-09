@@ -1281,13 +1281,15 @@ namespace
     }
 }
 
-static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns)
+static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
+                                           bool second_main)
 {
     TranspositionTable::Key k;
 
     Fold(k, 0x5117); // section tag: scalars
     Fold(k, static_cast<uint64_t>(depth));
     Fold(k, static_cast<uint64_t>(max_turns));
+    Fold(k, second_main ? 1u : 0u);
     Fold(k, static_cast<uint64_t>(state.turn_number));
     Fold(k, static_cast<uint64_t>(state.active_player_index));
     Fold(k, state.on_the_play ? 1u : 0u);
@@ -1343,10 +1345,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 
 // Simulate from the current state (at the START of a pre-combat main phase,
 // land already played) to game end. Uses SolveWithLookahead(depth) for
-// pre-combat decisions and Solve for post-combat decisions.
-// Returns the win turn, or max_turns+1 if the game was not won in time.
+// pre-combat decisions. A post-combat (second) main is played only when
+// second_main is set (greedy, via Solve) — see AIEngine::TakeTurn for why it is
+// otherwise skipped. Returns the win turn, or max_turns+1 if not won in time.
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
-                             SearchBudget* budget, int cutoff_turn, TranspositionTable* tt)
+                             SearchBudget* budget, int cutoff_turn,
+                             bool second_main, TranspositionTable* tt)
 {
     while (state.turn_number <= max_turns)
     {
@@ -1362,7 +1366,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         if (budget) { budget->Consume(1); }
 
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens
-        TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(state, true, depth, max_turns, budget, false, tt);
+        TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(
+            state, true, depth, max_turns, budget, false, second_main, tt);
         ApplyPlanDirect(state, pre_plan, true);
         SimulateAnimateLands(state);
         SimulateTapTokens(state);
@@ -1371,11 +1376,18 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         SimulateCombat(state);
         if (state.Opponent().life <= 0) { return state.turn_number; }
 
-        // Post-combat main (no lookahead — single-turn heuristic)
-        TurnSolver::Plan post_plan = TurnSolver::Solve(state, false);
-        ApplyPlanDirect(state, post_plan, false);
-
-        if (state.Opponent().life <= 0) { return state.turn_number; }
+        // Post-combat (second) main, only for second-main-relevant decks (e.g.
+        // spectacle finishers unlocked by combat damage). Played greedily here in
+        // the rollout; the real game searches it. Skipped entirely otherwise — in a
+        // goldfish combat creates no new resources, so everything was castable in
+        // the first main, and modelling a second main the real game skips would let
+        // the search optimise against plays that never happen. See AIEngine::TakeTurn.
+        if (second_main)
+        {
+            TurnSolver::Plan post_plan = TurnSolver::Solve(state, false);
+            ApplyPlanDirect(state, post_plan, false);
+            if (state.Opponent().life <= 0) { return state.turn_number; }
+        }
 
         // End of turn + start of next
         if (!SimulateEndAndStartNextTurn(state)) { return max_turns + 1; }
@@ -1390,17 +1402,18 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
 // independent, whereas a max_turns+1 result may be a branch-and-bound abort
 // rather than a genuine no-win, so it is never stored. See TranspositionTable.h.
 static int SimulateToEnd(GameState state, int depth, int max_turns,
-                         SearchBudget* budget, int cutoff_turn, TranspositionTable* tt)
+                         SearchBudget* budget, int cutoff_turn,
+                         bool second_main, TranspositionTable* tt)
 {
     TranspositionTable::Key key;
     if (tt != nullptr)
     {
-        key = BuildSimKey(state, depth, max_turns);
+        key = BuildSimKey(state, depth, max_turns, second_main);
         const int* cached = tt->Lookup(key);
         if (cached != nullptr) { return *cached; }
     }
 
-    int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, tt);
+    int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
 
     if (tt != nullptr && result <= max_turns) { tt->Store(key, result); }
     return result;
@@ -1426,7 +1439,7 @@ namespace
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
                                                   SearchBudget* budget, bool enforce_budget,
-                                                  TranspositionTable* tt)
+                                                  bool second_main, TranspositionTable* tt)
 {
     if (depth <= 0)
     {
@@ -1558,18 +1571,32 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (budget) { budget->Consume(1); }
 
             GameState copy = state;
-            ApplyPlanDirect(copy, plan, true);
-            SimulateAnimateLands(copy);
-            SimulateTapTokens(copy);
+            if (is_pre_combat)
+            {
+                ApplyPlanDirect(copy, plan, true);
+                SimulateAnimateLands(copy);
+                SimulateTapTokens(copy);
 
-            // Combat this turn
-            SimulateCombat(copy);
-            if (copy.Opponent().life <= 0) { return plan; }
+                // Combat this turn
+                SimulateCombat(copy);
+                if (copy.Opponent().life <= 0) { return plan; }
 
-            // Post-combat main (single-turn)
-            Plan post = Solve(copy, false);
-            ApplyPlanDirect(copy, post, false);
-            if (copy.Opponent().life <= 0) { return plan; }
+                // Post-combat (second) main if this deck wants one (greedy here).
+                if (second_main)
+                {
+                    Plan post = Solve(copy, false);
+                    ApplyPlanDirect(copy, post, false);
+                    if (copy.Opponent().life <= 0) { return plan; }
+                }
+            }
+            else
+            {
+                // Top-level post-combat (second) main decision: combat already
+                // happened this turn, so apply the candidate as a post-combat play
+                // and DON'T re-simulate combat (that would be a phantom second one).
+                ApplyPlanDirect(copy, plan, false);
+                if (copy.Opponent().life <= 0) { return plan; }
+            }
 
             // End of this turn + start of next
             if (!SimulateEndAndStartNextTurn(copy)) { ++candidates_done; continue; }
@@ -1578,7 +1605,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to
             // completion (enforce_budget=false inside), only consuming budget; the
             // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
-            int win_turn = SimulateToEnd(copy, sub_depth, max_turns, budget, pass_best_win, tt);
+            int win_turn = SimulateToEnd(copy, sub_depth, max_turns, budget, pass_best_win,
+                                         second_main, tt);
             if (trace_this)
             {
                 std::cerr << "  " << PlanDesc(plan)

@@ -44,11 +44,33 @@ public:
     // off by default so the analyzer's scoring passes keep their speed.
     void SetLookaheadBottoming(bool enabled) { m_lookahead_bottoming = enabled; }
 
+    // Marks the second (post-combat) main phase as RELEVANT for this deck. OFF by
+    // default, in which case NOTHING happens in the second main: in a clairvoyant
+    // goldfish combat reveals nothing and creates no new resources, so everything
+    // is castable in the first main, and both the real game and the lookahead
+    // rollout skip the second main entirely (kept consistent on purpose).
+    //
+    // Turn it on only for decks whose COMBAT enables genuine second-main plays:
+    //   - lands untapped during combat (e.g. Bear Umbra, Hidden Strings),
+    //   - spectacle costs unlocked by combat damage (the finisher is cast after
+    //     the attack), and similar combat-damage-gated effects.
+    // When on, the second main is SEARCHED at lookahead depths (depth > 0) and
+    // played GREEDILY at depth 0 (the fast runner has no search to run).
+    //
+    // Long-term this should be auto-set by detecting such cards in the deck rather
+    // than a manual toggle. NOTE: the SEARCHED (depth > 0) path is not yet fully
+    // wired — before relying on it, (a) the lookahead's inline first-turn sim must
+    // be made phase-aware (it always simulates a combat step, so a post-combat
+    // invocation double-counts combat), and (b) the rollout must model the second
+    // main under this same gate so the search actually values those plays.
+    void SetSearchPostCombat(bool enabled) { m_search_post_combat = enabled; }
+
 private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
     int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
     bool                     m_lookahead_bottoming = false;
+    bool                     m_search_post_combat  = false;
     std::vector<std::string> m_kept_opening_hand;
     GameLogger*              m_logger            = nullptr;
 
