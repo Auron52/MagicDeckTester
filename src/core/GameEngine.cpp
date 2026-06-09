@@ -187,8 +187,35 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
         m_logger->StartPhase(state.turn_number, is_pre_combat ? "MAIN_1" : "MAIN_2");
     }
 
+    // Initial cast pass.
+    size_t stack_before = state.stack.size();
     m_ai.TakeTurn(state, is_pre_combat);
+
+    // If a DrawUntilNonland (Treasure Hunt) or cascade spell was cast this pass,
+    // its resolution can draw new castable spells into hand (e.g. Land's Edge found
+    // by TH). Give the AI a second opportunity to cast those newly drawn spells.
+    bool may_draw_spells = false;
+    for (size_t i = stack_before; i < state.stack.size(); ++i)
+    {
+        auto def = CardDatabase::Instance().Lookup(state.stack[i].source.m_name);
+        if (!def) { continue; }
+        if (def->tmpl == CardTemplate::DrawUntilNonland || def->params.cascade_max_mv > 0)
+        {
+            may_draw_spells = true;
+            break;
+        }
+    }
     ResolveStack(state);
+
+    if (may_draw_spells)
+    {
+        m_ai.TakeTurn(state, is_pre_combat);
+        ResolveStack(state);
+    }
+
+    // Discard lands to Land's Edge after stack resolves so Treasure Hunt's drawn
+    // lands are in hand and any Land's Edge cast this turn has entered the battlefield.
+    m_ai.ActivateLandsEdge(state);
 
     if (m_logger)
     {
@@ -282,8 +309,17 @@ void GameEngine::CleanupStep(GameState& state)
     state.step = Step::Cleanup;
     Player& ap = state.ActivePlayer();
 
-    // Discard to maximum hand size (7 by default; hand-size modifiers deferred to Phase 1.2)
-    while (ap.hand.size() > 7)
+    // Check for "no maximum hand size" effects (e.g. Reliquary Tower).
+    bool unlimited_hand = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
+    }
+
+    // Discard down to maximum hand size (7 unless unlimited by a permanent).
+    while (!unlimited_hand && ap.hand.size() > 7)
     {
         Card* discard = m_ai.ChooseDiscard(state);
         ap.graveyard.push_back(*discard);

@@ -612,32 +612,55 @@ bool AIEngine::TryPlayLand(GameState& state)
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
 
-    // Prefer multi-color lands (produce wild mana) over colorless-only lands
-    // like Mutavault, so that colored spells remain castable this turn.
-    // Two-pass: first look for a land producing 2+ colors; fall back to any land.
+    auto play_land_iter = [&](std::vector<Card>::iterator it, const CardDefinition& def) -> bool
+    {
+        if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
+        Permanent perm;
+        perm.card              = def.card;
+        perm.card.m_number     = it->m_number;
+        perm.controller_index  = state.active_player_index;
+        perm.owner_index       = state.active_player_index;
+        perm.entered_this_turn = true;
+        state.battlefield.push_back(perm);
+        ap.hand.erase(it);
+        ++ap.lands_played_this_turn;
+        return true;
+    };
+
+    // Pre-pass: when a DrawUntilNonland spell (Treasure Hunt) is in hand, prioritize
+    // no_max_hand_size lands (Reliquary Tower) so they're on the battlefield before
+    // TH resolves — this prevents the drawn cards from being discarded at end of turn.
+    bool has_draw_until_nonland = false;
+    for (const Card& c : ap.hand)
+    {
+        auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland)
+        {
+            has_draw_until_nonland = true;
+            break;
+        }
+    }
+    if (has_draw_until_nonland)
+    {
+        for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+        {
+            auto def = CardDatabase::Instance().Lookup(it->m_name);
+            if (!def || !def->card.IsLand() || !def->params.no_max_hand_size) { continue; }
+            return play_land_iter(it, *def);
+        }
+    }
+
+    // Standard two-pass: prefer multi-color lands (produce wild mana) over
+    // colorless-only lands like Mutavault, so colored spells remain castable.
     for (int pass = 0; pass < 2; ++pass)
     {
         for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
         {
             auto def = CardDatabase::Instance().Lookup(it->m_name);
             if (!def || !def->card.IsLand()) { continue; }
-
             bool is_multi = def->params.produces.size() > 1;
-            if (pass == 0 && !is_multi) { continue; }  // first pass: multi-color only
-
-            if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
-
-            Permanent perm;
-            perm.card              = def->card;
-            perm.card.m_number     = it->m_number;
-            perm.controller_index  = state.active_player_index;
-            perm.owner_index       = state.active_player_index;
-            perm.entered_this_turn = true;
-            state.battlefield.push_back(perm);
-
-            ap.hand.erase(it);
-            ++ap.lands_played_this_turn;
-            return true;
+            if (pass == 0 && !is_multi) { continue; }
+            return play_land_iter(it, *def);
         }
     }
     return false;
@@ -998,6 +1021,29 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     {
         throw std::runtime_error("ChooseDiscard called with empty hand");
     }
+
+    // If a discard_land_damage permanent (Land's Edge) is in hand, never discard it
+    // while lands are available — lands are the ammunition, LE is the win condition.
+    bool has_land_discard_outlet = false;
+    for (const Card& c : ap.hand)
+    {
+        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        if (def && def->params.discard_land_damage > 0)
+        {
+            has_land_discard_outlet = true;
+            break;
+        }
+    }
+    if (has_land_discard_outlet)
+    {
+        for (Card& c : ap.hand)
+        {
+            auto def     = CardDatabase::Instance().Lookup(c.m_name);
+            bool is_land = def ? def->card.IsLand() : c.IsLand();
+            if (is_land) { return &c; }
+        }
+    }
+
     // Prefer discarding non-staged cards (staged cards are in exile and should not
     // be subject to the hand-size discard rule).
     return &(*std::max_element(ap.hand.begin(), ap.hand.end(),
@@ -1010,4 +1056,47 @@ Card* AIEngine::ChooseDiscard(GameState& state)
             int mv_b = db ? db->card.m_mana_cost.ManaValue() : b.m_mana_cost.ManaValue();
             return mv_a < mv_b;
         }));
+}
+
+// ============================================================
+// Land's Edge activation
+// ============================================================
+
+void AIEngine::ActivateLandsEdge(GameState& state)
+{
+    // Find the highest discard_land_damage rate among Land's Edge permanents we control.
+    // (There is normally only one copy of Land's Edge on the battlefield.)
+    int rate = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (def && def->params.discard_land_damage > 0)
+        {
+            rate = std::max(rate, def->params.discard_land_damage);
+        }
+    }
+    if (rate == 0) { return; }
+
+    Player& ap  = state.ActivePlayer();
+    Player& opp = state.Opponent();
+
+    // Discard every land in hand to Land's Edge for `rate` damage each.
+    std::vector<Card> keep;
+    for (Card& c : ap.hand)
+    {
+        auto def     = CardDatabase::Instance().Lookup(c.m_name);
+        bool is_land = def ? def->card.IsLand() : c.IsLand();
+        if (!is_land)
+        {
+            keep.push_back(std::move(c));
+            continue;
+        }
+        // Discard this land as the activation cost; deal damage to opponent.
+        ap.graveyard.push_back(c);
+        opp.life -= rate;
+        if (rate > 0) { state.opponent_lost_life_this_turn = true; }
+        if (m_logger) { m_logger->LogAttack(rate, opp.life); }
+    }
+    ap.hand = std::move(keep);
 }
