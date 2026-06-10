@@ -297,6 +297,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("tap_token_requires_subtypes", json::array()))
         p.tap_token_requires_subtypes.push_back(s);
 
+    p.enters_tapped       = params.value("enters_tapped",       false);
     p.no_max_hand_size    = params.value("no_max_hand_size",    false);
     p.discard_land_damage = params.value("discard_land_damage", 0);
     p.cascade_max_mv      = params.value("cascade_max_mv",      0);

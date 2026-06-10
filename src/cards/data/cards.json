@@ -353,7 +353,7 @@
             "keywords": [],
             "oracle_text": "Saprazzan Skerry enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Saprazzan Skerry: Add {U}{U}. If there are no depletion counters on it, sacrifice it. [Simplified: modelled as a basic Island; depletion counters and sacrifice not modelled.]",
             "template": "basic_land",
-            "parameters": { "produces": ["U"] }
+            "parameters": { "produces": ["U"], "enters_tapped": true }
         },
         {
             "name": "Sandstone Needle",
@@ -363,7 +363,7 @@
             "keywords": [],
             "oracle_text": "Sandstone Needle enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Sandstone Needle: Add {R}{R}. If there are no depletion counters on it, sacrifice it. [Simplified: modelled as a basic Mountain; depletion counters and sacrifice not modelled.]",
             "template": "basic_land",
-            "parameters": { "produces": ["R"] }
+            "parameters": { "produces": ["R"], "enters_tapped": true }
         },
         {
             "name": "Cascade Bluffs",
@@ -371,9 +371,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}: Add {C}. {T}: Add {U}{R}. Spend this mana only to cast spells with {U} or {R} in their mana cost or activate abilities of sources with {U} or {R} in their activation cost. [Simplified: modelled as dual U/R land; filter requirement not modelled.]",
+            "oracle_text": "{T}: Add {C}. {U/R}, {T}: Add {U}{U}, {U}{R}, or {R}{R}. [Simplified: modelled as colorless land; filter ability requires colored input which is not modelled — prevents RT+CB misplay.]",
             "template": "basic_land",
-            "parameters": { "produces": ["U", "R"] }
+            "parameters": { "produces": ["C"] }
         },
         {
             "name": "Fiery Islet",
@@ -393,7 +393,7 @@
             "keywords": [],
             "oracle_text": "Temple of Epiphany enters tapped. When it enters, scry 1. {T}: Add {U} or {R}. [Simplified: modelled as dual U/R land; ETB tap and scry not modelled.]",
             "template": "basic_land",
-            "parameters": { "produces": ["U", "R"] }
+            "parameters": { "produces": ["U", "R"], "enters_tapped": true }
         },
         {
             "name": "Frostboil Snarl",
@@ -433,7 +433,7 @@
             "keywords": [],
             "oracle_text": "Lonely Sandbar enters tapped. {T}: Add {U}. Cycling {2} ({2}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Island; cycling not modelled (lands are too valuable to cycle in this deck).]",
             "template": "basic_land",
-            "parameters": { "produces": ["U"] }
+            "parameters": { "produces": ["U"], "enters_tapped": true }
         },
         {
             "name": "Forgotten Cave",
@@ -443,7 +443,7 @@
             "keywords": [],
             "oracle_text": "Forgotten Cave enters tapped. {T}: Add {R}. Cycling {R} ({R}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Mountain; cycling not modelled.]",
             "template": "basic_land",
-            "parameters": { "produces": ["R"] }
+            "parameters": { "produces": ["R"], "enters_tapped": true }
         },
         {
             "name": "Thundering Falls",
@@ -463,7 +463,7 @@
             "keywords": [],
             "oracle_text": "Remote Isle enters tapped. {T}: Add {U}. Cycling {2} ({2}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Island; cycling not modelled.]",
             "template": "basic_land",
-            "parameters": { "produces": ["U"] }
+            "parameters": { "produces": ["U"], "enters_tapped": true }
         },
         {
             "name": "Treasure Hunt",

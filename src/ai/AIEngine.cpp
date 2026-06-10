@@ -621,6 +621,7 @@ bool AIEngine::TryPlayLand(GameState& state)
         perm.controller_index  = state.active_player_index;
         perm.owner_index       = state.active_player_index;
         perm.entered_this_turn = true;
+        perm.tapped            = def.params.enters_tapped;
         state.battlefield.push_back(perm);
         ap.hand.erase(it);
         ++ap.lands_played_this_turn;
@@ -650,16 +651,25 @@ bool AIEngine::TryPlayLand(GameState& state)
         }
     }
 
-    // Standard two-pass: prefer multi-color lands (produce wild mana) over
-    // colorless-only lands like Mutavault, so colored spells remain castable.
-    for (int pass = 0; pass < 2; ++pass)
+    // Four-pass priority: prefer untapped-entering over tapped-entering, and
+    // multi-color (wild mana) over single-color within each group.
+    //   Pass 0: untapped + multi-color
+    //   Pass 1: untapped + any
+    //   Pass 2: tapped   + multi-color
+    //   Pass 3: tapped   + any
+    for (int pass = 0; pass < 4; ++pass)
     {
+        bool want_untapped = (pass < 2);
+        bool want_multi    = (pass == 0 || pass == 2);
         for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
         {
             auto def = CardDatabase::Instance().Lookup(it->m_name);
             if (!def || !def->card.IsLand()) { continue; }
-            bool is_multi = def->params.produces.size() > 1;
-            if (pass == 0 && !is_multi) { continue; }
+            bool is_tapped = def->params.enters_tapped;
+            bool is_multi  = def->params.produces.size() > 1;
+            if (want_untapped && is_tapped)  { continue; }
+            if (!want_untapped && !is_tapped) { continue; }
+            if (want_multi && !is_multi)     { continue; }
             return play_land_iter(it, *def);
         }
     }

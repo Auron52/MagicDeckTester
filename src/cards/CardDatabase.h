@@ -109,6 +109,11 @@ struct CardParams
     std::vector<std::string> tap_token_subtypes;
     std::vector<std::string> tap_token_requires_subtypes;
 
+    // Enters tapped (e.g. Saprazzan Skerry, Lonely Sandbar, Temple of Epiphany).
+    // If true, the permanent is placed on the battlefield tapped and cannot
+    // produce mana until the next turn's untap step.
+    bool enters_tapped = false;
+
     // No maximum hand size (e.g. Reliquary Tower). If true, the cleanup-step discard
     // to 7 is skipped while this permanent is on the battlefield.
     bool no_max_hand_size = false;
