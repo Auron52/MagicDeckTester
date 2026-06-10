@@ -24,10 +24,24 @@ python scripts/analyze_deck.py <deck_path> --coverage-only
 Parse the JSON output:
 - `missing`: cards not in `src/cards/data/cards.json` at all → must implement before analysis
 - `coverage[*].status == "partial"`:
-  - `deferred`: bracket-noted deferrals (previously accepted) — no action needed
   - `gaps`: oracle text features missing from the current implementation → must fix before analysis
+  - `deferred`: bracket-noted items → **read every bracket note and classify it** (see below)
 
-If `missing` is empty and no `gaps` exist (only accepted deferrals), skip to Stage 4.
+**Classifying bracket notes — this is mandatory, not optional:**
+
+A bracket note is only an accepted deferral if the mechanic is **genuinely Tier 4** (out of scope for the engine). Every other bracket note is a gap that must be implemented.
+
+The following are NOT acceptable deferrals and must be treated as gaps requiring implementation:
+- "Simplified: modelled as a basic land" when the card has additional effects (scry, ETB conditions, sacrifice abilities, depletion counters, cycling, shock costs, draw effects)
+- "Simplified: modelled as a dual land" when the real card has ETB conditions (Frostboil Snarl), life costs (Steam Vents), or sacrifice abilities (Fiery Islet)
+- "Cycling not modelled" — cycling is a Tier 2/3 activated ability
+- "Scry not modelled" — scry is a Tier 2 ETB effect
+- "Depletion counters not modelled" — counter management is Tier 3
+- Any effect that could affect game outcomes and is implementable at Tier 1–3
+
+**Silently leaving out card effects without a bracket note is unacceptable. Bracket-noting a simplification as "deferred" when it is Tier 1–3 is nearly as bad.** The analyze process exists to produce accurate simulations. A card that is 50% implemented is a bug, not a feature.
+
+If `missing` is empty and all bracket notes are confirmed Tier 4 deferrals, skip to Stage 4. Otherwise, all gaps (including reclassified bracket notes) go to Stage 2.
 
 ---
 
@@ -70,9 +84,11 @@ Apply the **first tier that fits**:
 4. Write the cards.json entry using the new template
 5. Build and confirm success
 
-**Tier 4 — genuinely out of scope**: The mechanic requires infrastructure that is explicitly deferred (e.g., full stack with multiple priorities, replacement effects modifying themselves, complex multi-zone loops). **Stop here and check with the user** before proceeding. Present exactly what is unimplemented and why, and propose the bracket-note text. If the user agrees to defer, add the bracket-noted `custom` entry and continue with remaining cards.
+**Tier 4 — genuinely out of scope**: The mechanic requires infrastructure that does not exist and would take more than a session to build correctly (e.g., full stack with multiple priorities, replacement effects modifying themselves, complex multi-zone loops, casting from graveyard before that infrastructure exists). **Stop here and check with the user** before proceeding. Present exactly what is unimplemented and why, and propose the bracket-note text. If the user agrees to defer, add the bracket-noted `custom` entry and continue with remaining cards.
 
 Do not pre-emptively escalate to Tier 4. Attempt Tier 3 first — most mechanics that appear complex can be modelled well enough at Tier 3.
+
+**Tier 4 does NOT include**: scry, cycling, ETB conditions, life payments, depletion counters, sacrifice abilities, filter mana, or any other land or spell mechanic with a clearly defined effect on a known zone. These are all Tier 2 or Tier 3.
 
 ### 2c-bis. Check second-main (post-combat) relevance
 
@@ -103,15 +119,17 @@ Fix any build errors before proceeding to Stage 4.
 
 ---
 
-## Stage 3 — Re-run Coverage Check
+## Stage 3 — Re-run Coverage Check (loop until clean)
 
-After the build succeeds, re-run the coverage check to confirm there are no remaining `gaps`:
+After the build succeeds, re-run the coverage check:
 
 ```
 python scripts/analyze_deck.py <deck_path> --coverage-only
 ```
 
-If new gaps appear (e.g., due to a cards.json mistake), fix them and rebuild. Do not proceed to Stage 4 with outstanding gaps.
+Apply the same bracket-note classification from Stage 1. If any gaps remain — including newly reclassified bracket notes — return to Stage 2 and fix them. Repeat until every bracket note is a confirmed Tier 4 deferral and the build is clean.
+
+**Do not proceed to Stage 4 with any outstanding Tier 1–3 gaps.** A simulation run on a partially-implemented deck produces misleading results and defeats the purpose of the tool.
 
 ---
 

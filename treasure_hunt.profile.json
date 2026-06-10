@@ -1,0 +1,13 @@
+{
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "none",
+    "max_lands": 7,
+    "min_color_sources": {},
+    "min_lands": 0,
+    "min_playable": 0,
+    "required_pieces": ["Treasure Hunt", "Throes of Chaos"],
+    "stop_at": 2
+  },
+  "version": 1
+}
