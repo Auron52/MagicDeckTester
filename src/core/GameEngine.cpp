@@ -40,11 +40,26 @@ static void CollectBoardState(const GameState& state,
 int GameEngine::RunGame(GameState& state, int max_turns)
 {
     m_ai.HandleMulligan(state, max_turns);
+
+    if (m_logger)
+    {
+        const Player& ap = state.ActivePlayer();
+        std::vector<int> nums;
+        std::vector<std::string> names;
+        for (const Card& c : ap.hand)
+        {
+            nums.push_back(c.m_number);
+            names.push_back(c.m_name);
+        }
+        m_logger->LogOpeningHand(nums, names);
+    }
+
     return PlayOut(state, max_turns);
 }
 
 int GameEngine::PlayOut(GameState& state, int max_turns)
 {
+    m_ai.SetMaxTurns(max_turns);
     while (state.turn_number < max_turns)
     {
         if (state.player_lost_on_draw) { return -1; }
@@ -173,7 +188,17 @@ void GameEngine::DrawStep(GameState& state)
         state.player_lost_on_draw = true;
         return;
     }
-    ap.hand.push_back(ap.library.DrawTop());
+    Card drawn = ap.library.DrawTop();
+    if (m_logger)
+    {
+        std::vector<int> bf, hand;
+        CollectBoardState(state, bf, hand);
+        m_logger->StartPhase(state.turn_number, "DRAW");
+        m_logger->LogDraw(drawn.m_number, drawn.m_name);
+        hand.push_back(drawn.m_number);
+        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand);
+    }
+    ap.hand.push_back(std::move(drawn));
     ResolveStack(state);
 }
 
@@ -319,12 +344,25 @@ void GameEngine::CleanupStep(GameState& state)
     }
 
     // Discard down to maximum hand size (7 unless unlimited by a permanent).
+    if (!unlimited_hand && ap.hand.size() > 7 && m_logger)
+    {
+        std::vector<int> bf, hand;
+        CollectBoardState(state, bf, hand);
+        m_logger->StartPhase(state.turn_number, "CLEANUP");
+    }
     while (!unlimited_hand && ap.hand.size() > 7)
     {
         Card* discard = m_ai.ChooseDiscard(state);
+        if (m_logger) { m_logger->LogDiscard(discard->m_number, discard->m_name); }
         ap.graveyard.push_back(*discard);
         ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
             [discard](const Card& c) { return &c == discard; }));
+    }
+    if (m_logger && m_logger->InPhase())
+    {
+        std::vector<int> bf, hand;
+        CollectBoardState(state, bf, hand);
+        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand);
     }
 
     // Remove all damage marks, "until end of turn" boosts, and animation effects (CR 514.2).
@@ -348,7 +386,30 @@ void GameEngine::ResolveStack(GameState& state)
         StackEntry entry = state.stack.back();
         state.stack.pop_back();
         auto def = CardDatabase::Instance().Lookup(entry.source.m_name);
-        if (def) { EffectHandler::Resolve(state, entry, *def); }
+        if (!def) { continue; }
+
+        // For draw spells, capture hand snapshot before resolution so we can log new cards.
+        bool is_draw_spell = (def->tmpl == CardTemplate::DrawUntilNonland
+                              || def->params.draw > 0);
+        std::vector<int> hand_before_nums;
+        if (m_logger && is_draw_spell)
+        {
+            for (const Card& c : state.ActivePlayer().hand)
+            { hand_before_nums.push_back(c.m_number); }
+        }
+
+        EffectHandler::Resolve(state, entry, *def);
+
+        if (m_logger && is_draw_spell)
+        {
+            for (const Card& c : state.ActivePlayer().hand)
+            {
+                bool was_there = std::find(hand_before_nums.begin(), hand_before_nums.end(),
+                                           c.m_number) != hand_before_nums.end();
+                if (!was_there) { m_logger->LogDraw(c.m_number, c.m_name); }
+            }
+        }
+
         CheckStateBasedActions(state);
     }
 }

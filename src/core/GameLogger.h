@@ -25,9 +25,24 @@ public:
 
     void StartPhase(int turn, const std::string& phase);
 
+    // Called once per hand drawn during the mulligan process.
+    // attempt=0 is the initial 7-card hand; each mulligan increments by 1.
+    void LogMulliganAttempt(int attempt,
+                            const std::vector<int>& hand_nums,
+                            const std::vector<std::string>& hand_names,
+                            bool kept);
+
+    // Called once per card bottomed after a keep. Appends to the last attempt.
+    void LogBottomed(int card_num, const std::string& card_name);
+
+    void LogOpeningHand(const std::vector<int>& card_nums,
+                        const std::vector<std::string>& card_names);
+
     void LogPlayLand(int card_num, const std::string& card_name);
     void LogCastSpell(int card_num, const std::string& card_name,
                       const std::string& mana_paid);
+    void LogDraw(int card_num, const std::string& card_name);
+    void LogDiscard(int card_num, const std::string& card_name);
     void LogAttack(int damage, int opp_life_after);
 
     // Captures board state snapshot at the end of the current phase.
@@ -35,12 +50,25 @@ public:
                      const std::vector<int>& battlefield,
                      const std::vector<int>& hand);
 
+    // Returns true if a phase was started but not yet committed.
+    bool InPhase() const { return m_in_phase; }
+
     // win_turn: turn the opponent reached 0 life; -1 if the game was not won.
     void EndGame(int win_turn);
 
     void WriteToFile(const std::filesystem::path& path) const;
 
 private:
+    struct MulliganAttempt
+    {
+        int                      attempt = 0;
+        std::vector<int>         hand_nums;
+        std::vector<std::string> hand_names;
+        bool                     kept    = false;
+        std::vector<int>         bottomed_nums;
+        std::vector<std::string> bottomed_names;
+    };
+
     struct Action
     {
         std::string type;
@@ -67,6 +95,9 @@ private:
     std::string                             m_deck_id;
     uint64_t                                m_seed        = 0;
     std::map<std::string, std::vector<int>> m_numbering;
+    std::vector<MulliganAttempt>            m_mulligan_sequence;
+    std::vector<int>                        m_opening_hand_nums;
+    std::vector<std::string>                m_opening_hand_names;
     std::vector<PhaseEntry>                 m_phases;
     PhaseEntry                              m_current;
     bool                                    m_in_phase    = false;

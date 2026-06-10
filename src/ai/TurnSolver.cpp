@@ -284,17 +284,38 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
             if (!is_land) { break; }
             ++estimated_lands;
         }
-        // If Land's Edge is already on the battlefield, each drawn land is worth 2 damage.
+        // Check for enabling permanents on the battlefield.
+        bool has_no_max_hand = false;
+        bool has_lands_edge  = false;
+        int  lands_edge_rate = 0;
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index) { continue; }
             auto pdef = CardDatabase::Instance().Lookup(p.card.m_name);
-            if (pdef && pdef->params.discard_land_damage > 0)
+            if (!pdef) { continue; }
+            if (pdef->params.no_max_hand_size) { has_no_max_hand = true; }
+            if (pdef->params.discard_land_damage > 0)
             {
-                return (estimated_lands + 1) * pdef->params.discard_land_damage * DMG;
+                has_lands_edge  = true;
+                lands_edge_rate = pdef->params.discard_land_damage;
             }
         }
-        // No Land's Edge on board: card-draw value plus any nonland drawn.
+        // With Land's Edge active, each drawn land converts to direct damage.
+        if (has_lands_edge)
+        {
+            return (estimated_lands + 1) * lands_edge_rate * DMG;
+        }
+        // With Reliquary Tower (no max hand size) but no Land's Edge, the drawn lands
+        // accumulate for a future LE activation.  Card-draw value only; LE combo scored
+        // by the plan evaluator's two-pass logic when LE is also in the plan.
+        if (has_no_max_hand)
+        {
+            return (estimated_lands + 1) * DMG;
+        }
+        // No enabler in play: drawn lands accumulate in hand until a future LE/RT turn.
+        // Value the draw normally; the plan evaluator's two-pass logic handles TH+LE
+        // combos in the same plan, and Fix1 (SimulateEndAndStartNextTurn) ensures the
+        // lookahead correctly models the no-discard case when RT is later in play.
         return (estimated_lands + 1) * DMG;
     }
 
@@ -1029,8 +1050,18 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
 
+    // Check for "no maximum hand size" permanent (e.g. Reliquary Tower) — if present,
+    // skip the discard-to-7 step so the lookahead correctly models turns after RT is played.
+    bool unlimited_hand = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
+    }
+
     // Discard down to hand size 7 (always discard the highest MV card)
-    while (ap.hand.size() > 7)
+    while (!unlimited_hand && ap.hand.size() > 7)
     {
         auto worst = std::max_element(ap.hand.begin(), ap.hand.end(),
             [](const Card& a, const Card& b)

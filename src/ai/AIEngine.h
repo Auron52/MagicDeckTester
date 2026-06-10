@@ -49,6 +49,10 @@ public:
     // off by default so the analyzer's scoring passes keep their speed.
     void SetLookaheadBottoming(bool enabled) { m_lookahead_bottoming = enabled; }
 
+    // Sets the max-turns horizon used by ActivateLandsEdge rollouts (depth > 0).
+    // Called by GameEngine::PlayOut so the value tracks each game's actual limit.
+    void SetMaxTurns(int max_turns) { m_max_turns = max_turns; }
+
     // Marks the second (post-combat) main phase as RELEVANT for this deck. OFF by
     // default, in which case NOTHING happens in the second main: in a clairvoyant
     // goldfish combat reveals nothing and creates no new resources, so everything
@@ -74,8 +78,10 @@ private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
     int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
+    int                      m_max_turns         = 20;  // rollout horizon; kept in sync by SetMaxTurns
     bool                     m_lookahead_bottoming = false;
     bool                     m_search_post_combat  = false;
+    bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts
     std::vector<std::string> m_kept_opening_hand;
     GameLogger*              m_logger            = nullptr;
 
@@ -91,6 +97,10 @@ private:
     // Plays a full clairvoyant game from a (post-mulligan) trial state and returns
     // the win turn, or max_turns + 1 if no win. Suppresses logging during the rollout.
     int RolloutWinTurn(GameState trial, int max_turns);
+
+    // Discards up to `count` lands from hand to Land's Edge at `rate` damage each.
+    // Used by ActivateLandsEdge for both the real game path and rollout comparisons.
+    void DoActivateLandsEdge(GameState& state, int count, int rate);
 
     // --- Turn helpers ---
 

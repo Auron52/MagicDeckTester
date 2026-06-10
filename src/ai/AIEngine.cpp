@@ -46,14 +46,30 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     ap.library.DrawN(7, ap.hand);
 
     int mulligan_count = 0;
-    while (!KeepHand(ap.hand, mulligan_count))
+    while (true)
     {
+        bool keep = static_cast<int>(ap.hand.size()) <= m_profile.stop_at
+                 || KeepHand(ap.hand, mulligan_count);
+
+        if (m_logger)
+        {
+            std::vector<int>         nums;
+            std::vector<std::string> names;
+            for (const Card& c : ap.hand)
+            {
+                nums.push_back(c.m_number);
+                names.push_back(c.m_name);
+            }
+            m_logger->LogMulliganAttempt(mulligan_count, nums, names, keep);
+        }
+
+        if (keep) { break; }
+
         for (Card& c : ap.hand) { ap.library.push_back(c); }
         ap.hand.clear();
         ap.library.Shuffle(state.game_seed + static_cast<uint64_t>(mulligan_count));
         ++mulligan_count;
         ap.library.DrawN(7, ap.hand);
-        if (static_cast<int>(ap.hand.size()) <= m_profile.stop_at) { break; }
     }
 
     if (mulligan_count > 0) { BottomCards(state, mulligan_count, max_turns); }
@@ -395,10 +411,12 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
 int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
 {
     GameLogger* saved = m_logger;
-    m_logger = nullptr;                  // suppress per-decision logging during the rollout
+    m_logger          = nullptr;
+    m_in_rollout      = true;
     GameEngine engine(*this);
     int win_turn = engine.PlayOut(trial, max_turns);
-    m_logger = saved;
+    m_in_rollout = false;
+    m_logger     = saved;
     return win_turn > 0 ? win_turn : max_turns + 1;
 }
 
@@ -450,6 +468,10 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
         int pick = HeuristicBottomPick(ap.hand, allowed);
         if (pick < 0) { pick = 0; }
 
+        if (m_logger)
+        {
+            m_logger->LogBottomed(ap.hand[pick].m_number, ap.hand[pick].m_name);
+        }
         ap.library.push_back(ap.hand[pick]);
         ap.hand.erase(ap.hand.begin() + pick);
     }
@@ -475,7 +497,45 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
         ap_ref.hand.push_back(sc.card);
     }
 
-    TryPlayLand(state);
+    // "TH before land drop" optimisation: when Treasure Hunt is in hand and castable
+    // without an active enabler (RT or LE), defer the land play to the second TakeTurn
+    // pass so a land from TH's draws can be used as the land drop instead.
+    // Only applies in the pre-combat main when no land has been played yet this turn.
+    bool defer_land = false;
+    if (is_pre_combat_main && ap_ref.lands_played_this_turn == 0)
+    {
+        bool has_enabler = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+            if (!def) { continue; }
+            if (def->params.no_max_hand_size || def->params.discard_land_damage > 0)
+            {
+                has_enabler = true;
+                break;
+            }
+        }
+        if (!has_enabler)
+        {
+            ManaPool avail = BuildAvailableMana(state);
+            ManaCost th_cost;
+            th_cost.generic = 1;
+            th_cost.blue    = 1;
+            for (const Card& c : ap_ref.hand)
+            {
+                auto def = CardDatabase::Instance().Lookup(c.m_name);
+                if (!def || def->tmpl != CardTemplate::DrawUntilNonland) { continue; }
+                if (avail.CanPay(th_cost)) { defer_land = true; }
+                break;
+            }
+        }
+    }
+
+    if (!defer_land)
+    {
+        TryPlayLand(state);
+    }
 
     // The post-combat (second) main phase does NOTHING unless post-combat search
     // is explicitly enabled (see SetSearchPostCombat). In a clairvoyant goldfish
@@ -1032,30 +1092,55 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         throw std::runtime_error("ChooseDiscard called with empty hand");
     }
 
-    // If a discard_land_damage permanent (Land's Edge) is in hand, never discard it
-    // while lands are available — lands are the ammunition, LE is the win condition.
-    bool has_land_discard_outlet = false;
+    // Check whether a land-discard outlet (Land's Edge) exists in hand or on battlefield.
+    // When it does, lands are the ammunition and should be discarded in preference to spells.
+    bool has_land_outlet = false;
     for (const Card& c : ap.hand)
     {
         auto def = CardDatabase::Instance().Lookup(c.m_name);
-        if (def && def->params.discard_land_damage > 0)
+        if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
+    }
+    if (!has_land_outlet)
+    {
+        for (const Permanent& p : state.battlefield)
         {
-            has_land_discard_outlet = true;
-            break;
+            if (p.controller_index != state.active_player_index) { continue; }
+            auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+            if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
         }
     }
-    if (has_land_discard_outlet)
+
+    if (has_land_outlet)
     {
         for (Card& c : ap.hand)
         {
+            if (c.m_is_staged) { continue; }
             auto def     = CardDatabase::Instance().Lookup(c.m_name);
             bool is_land = def ? def->card.IsLand() : c.IsLand();
             if (is_land) { return &c; }
         }
     }
 
-    // Prefer discarding non-staged cards (staged cards are in exile and should not
-    // be subject to the hand-size discard rule).
+    // No land-discard outlet, or no land in hand: discard highest-MV spell that is not
+    // a required combo piece.  Required pieces are the engine; discard them last.
+    Card* best_non_req = nullptr;
+    int   best_mv      = -1;
+    for (Card& c : ap.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        bool is_req = false;
+        for (const std::string& piece : m_profile.required_pieces)
+        {
+            if (c.m_name == piece) { is_req = true; break; }
+        }
+        if (is_req) { continue; }
+        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        int  mv  = def ? def->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
+        if (mv > best_mv) { best_mv = mv; best_non_req = &c; }
+    }
+    if (best_non_req) { return best_non_req; }
+
+    // Last resort: max-MV pick including staged cards and required pieces.
     return &(*std::max_element(ap.hand.begin(), ap.hand.end(),
         [](const Card& a, const Card& b)
         {
@@ -1075,38 +1160,96 @@ Card* AIEngine::ChooseDiscard(GameState& state)
 void AIEngine::ActivateLandsEdge(GameState& state)
 {
     // Find the highest discard_land_damage rate among Land's Edge permanents we control.
-    // (There is normally only one copy of Land's Edge on the battlefield.)
     int rate = 0;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
         auto def = CardDatabase::Instance().Lookup(p.card.m_name);
         if (def && def->params.discard_land_damage > 0)
-        {
             rate = std::max(rate, def->params.discard_land_damage);
-        }
     }
     if (rate == 0) { return; }
 
     Player& ap  = state.ActivePlayer();
     Player& opp = state.Opponent();
 
-    // Discard every land in hand to Land's Edge for `rate` damage each.
+    int lands_in_hand = 0;
+    for (const Card& c : ap.hand)
+    {
+        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        if ((def ? def->card.IsLand() : c.IsLand())) { ++lands_in_hand; }
+    }
+    if (lands_in_hand == 0) { return; }
+
+    // Determine effective hand size limit (Reliquary Tower grants unlimited).
+    bool unlimited_hand = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
+    }
+    int max_hand = unlimited_hand ? std::numeric_limits<int>::max() : 7;
+
+    // Lethal threshold: fewest lands needed to kill the opponent this activation.
+    int lethal_lands = (opp.life + rate - 1) / rate;
+
+    // Heuristic: fire all for lethal; fire only excess (cleanup-waste prevention); hold otherwise.
+    int fire_count = 0;
+    if (lands_in_hand >= lethal_lands)
+    {
+        fire_count = lands_in_hand;
+    }
+    else
+    {
+        int hand_size = static_cast<int>(ap.hand.size());
+        int excess    = std::max(0, hand_size - max_hand);
+        fire_count    = std::min(excess, lands_in_hand);
+    }
+
+    // For depth > 0 outside a rollout: compare heuristic amount vs. firing all lands.
+    // The heuristic handles "fire for lethal" and "fire excess to prevent waste";
+    // the search handles the ambiguous "hold" case where early activation might win faster.
+    if (m_lookahead_depth > 0 && !m_in_rollout && fire_count < lands_in_hand)
+    {
+        GameState trial_heuristic = state;
+        DoActivateLandsEdge(trial_heuristic, fire_count, rate);
+        int w_heuristic = RolloutWinTurn(std::move(trial_heuristic), m_max_turns);
+
+        GameState trial_all = state;
+        DoActivateLandsEdge(trial_all, lands_in_hand, rate);
+        int w_all = RolloutWinTurn(std::move(trial_all), m_max_turns);
+
+        if (w_all < w_heuristic) { fire_count = lands_in_hand; }
+    }
+
+    DoActivateLandsEdge(state, fire_count, rate);
+}
+
+void AIEngine::DoActivateLandsEdge(GameState& state, int count, int rate)
+{
+    if (count <= 0) { return; }
+    Player& ap  = state.ActivePlayer();
+    Player& opp = state.Opponent();
+
     std::vector<Card> keep;
+    int fired = 0;
     for (Card& c : ap.hand)
     {
         auto def     = CardDatabase::Instance().Lookup(c.m_name);
         bool is_land = def ? def->card.IsLand() : c.IsLand();
-        if (!is_land)
+        if (is_land && fired < count)
+        {
+            ap.graveyard.push_back(c);
+            opp.life -= rate;
+            if (rate > 0) { state.opponent_lost_life_this_turn = true; }
+            if (m_logger) { m_logger->LogAttack(rate, opp.life); }
+            ++fired;
+        }
+        else
         {
             keep.push_back(std::move(c));
-            continue;
         }
-        // Discard this land as the activation cost; deal damage to opponent.
-        ap.graveyard.push_back(c);
-        opp.life -= rate;
-        if (rate > 0) { state.opponent_lost_life_this_turn = true; }
-        if (m_logger) { m_logger->LogAttack(rate, opp.life); }
     }
     ap.hand = std::move(keep);
 }
