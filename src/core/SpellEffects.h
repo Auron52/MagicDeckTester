@@ -1,5 +1,6 @@
 #pragma once
 #include "GameState.h"
+#include "ManaPool.h"
 #include "../cards/CardDatabase.h"
 
 // Fires on-cast triggers from all permanents on the battlefield (e.g. Eidolon of the
@@ -242,6 +243,209 @@ inline bool CanReplicate(
         }
     }
     return false;
+}
+
+// Mana produced per tap by a source (depletion lands produce 2). Always >= 1.
+inline int ManaProducedPerTap(const CardDefinition& def)
+{
+    return std::max(1, def.params.produces_amount);
+}
+
+// True if `state.active_player` controls an untapped NON-filter mana source producing
+// one of `colors`. A filter land (e.g. Cascade Bluffs) can only make its colours when
+// such a feeder exists, since its filter ability requires a coloured mana input.
+inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
+                                                 const std::vector<Color>& colors)
+{
+    int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (!def || def->params.is_filter) { continue; }
+        bool is_src = (def->tmpl == CardTemplate::BasicLand)
+                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+        if (!is_src) { continue; }
+        for (Color pc : def->params.produces)
+        {
+            for (Color want : colors)
+            {
+                if (pc == want) { return true; }
+            }
+        }
+    }
+    return false;
+}
+
+// Adds one untapped source's mana contribution to an accounting ManaPool, consistent
+// with the floating-pool payment logic in TapForCost / TapForCostDirect:
+//   - depletion / high-yield lands contribute produces_amount of their colour,
+//   - single-colour sources contribute 1 of their colour,
+//   - multi-colour (dual) sources contribute 1 wild,
+//   - filter lands (Cascade Bluffs) contribute 1 wild when a non-filter feeder of one
+//     of their colours exists, else 1 {C} (the colourless-only mode).
+inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def)
+{
+    if (def.params.is_filter)
+    {
+        if (HasUntappedNonFilterSourceProducing(state, def.params.produces)) { ++pool.wild; }
+        else { pool.Add(Color::Colorless); }
+        return;
+    }
+    int amt = ManaProducedPerTap(def);
+    if (def.params.produces.size() == 1)      { pool.Add(def.params.produces[0], amt); }
+    else if (!def.params.produces.empty())    { pool.wild += amt; }
+}
+
+// Decrements one mana of colour `c` from a floating pool. Returns true on success.
+inline bool ConsumeFloating(ManaPool& floating, Color c)
+{
+    switch (c)
+    {
+        case Color::White:     if (floating.white     > 0) { --floating.white;     return true; } break;
+        case Color::Blue:      if (floating.blue      > 0) { --floating.blue;      return true; } break;
+        case Color::Black:     if (floating.black     > 0) { --floating.black;     return true; } break;
+        case Color::Red:       if (floating.red       > 0) { --floating.red;       return true; } break;
+        case Color::Green:     if (floating.green     > 0) { --floating.green;     return true; } break;
+        case Color::Colorless: if (floating.colorless > 0) { --floating.colorless; return true; } break;
+    }
+    return false;
+}
+
+// Consumes one mana of ANY colour from a floating pool (for a generic pip), returning
+// the colour drained via `took`. Returns false if the pool is empty.
+inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
+{
+    const Color order[] = { Color::Colorless, Color::White, Color::Blue,
+                            Color::Black, Color::Red, Color::Green };
+    for (Color c : order)
+    {
+        if (ConsumeFloating(floating, c)) { took = c; return true; }
+    }
+    return false;
+}
+
+// Decides whether a land enters tapped and applies any "as this land enters"
+// payments/choices made on entry. Call while the land card is still in the player's
+// hand (the reveal check scans the hand). Returns true if the land enters tapped.
+//   - Shock land (etb_pay_life_to_untap): the AI pays the life to enter untapped
+//     whenever it can keep at least 1 life — early speed dominates in a goldfish.
+//   - Reveal land (etb_untap_reveal_subtypes): enters untapped iff a card of a listed
+//     subtype (e.g. Island/Mountain) is in hand (Frostboil Snarl).
+//   - Otherwise: the plain enters_tapped flag.
+inline bool LandEntersTapped(GameState& state, const CardDefinition& def)
+{
+    const CardParams& pp = def.params;
+
+    if (pp.etb_pay_life_to_untap > 0)
+    {
+        Player& ap = state.ActivePlayer();
+        if (ap.life > pp.etb_pay_life_to_untap)
+        {
+            ap.life -= pp.etb_pay_life_to_untap;
+            return false;
+        }
+        return true;
+    }
+
+    if (!pp.etb_untap_reveal_subtypes.empty())
+    {
+        const Player& ap = state.ActivePlayer();
+        for (const Card& c : ap.hand)
+        {
+            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+            const std::vector<std::string>& subs = cdef ? cdef->card.m_subtypes : c.m_subtypes;
+            for (const std::string& cs : subs)
+            {
+                for (const std::string& want : pp.etb_untap_reveal_subtypes)
+                {
+                    if (cs == want) { return false; }
+                }
+            }
+        }
+        return true;
+    }
+
+    return pp.enters_tapped;
+}
+
+// Scry N (e.g. Temple of Epiphany): look at the top N cards and bottom the unwanted
+// ones using a deck-aware heuristic, then keep the rest on top in their original
+// order. Heuristic: always keep nonland spells (they are the combo pieces). Keep a
+// land on top when it still helps — a DrawUntilNonland (Treasure Hunt) in hand is fed
+// by lands, or the player controls fewer than two lands and still needs mana —
+// otherwise bottom it to dig toward action.
+inline void ScryTop(GameState& state, int n)
+{
+    Player& ap = state.ActivePlayer();
+
+    bool has_draw_until_nonland = false;
+    for (const Card& c : ap.hand)
+    {
+        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland)
+        {
+            has_draw_until_nonland = true;
+            break;
+        }
+    }
+    int lands_in_play = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++lands_in_play; }
+    }
+
+    std::vector<Card> keep_top;
+    std::vector<Card> bottomed;
+    for (int i = 0; i < n && !ap.library.empty(); ++i)
+    {
+        Card c = ap.library.front();
+        ap.library.erase(ap.library.begin());
+        std::optional<CardDefinition> tdef = CardDatabase::Instance().Lookup(c.m_name);
+        bool is_land = tdef ? tdef->card.IsLand() : c.IsLand();
+        bool keep    = !is_land || has_draw_until_nonland || lands_in_play < 2;
+        if (keep) { keep_top.push_back(std::move(c)); }
+        else      { bottomed.push_back(std::move(c)); }
+    }
+    for (std::vector<Card>::reverse_iterator it = keep_top.rbegin(); it != keep_top.rend(); ++it)
+    {
+        ap.library.insert(ap.library.begin(), std::move(*it));
+    }
+    for (Card& c : bottomed) { ap.library.push_back(std::move(c)); }
+}
+
+// Removes one depletion counter from a land tapped for mana (e.g. Saprazzan Skerry,
+// Sandstone Needle). Call right after marking the source tapped. A counter at 0 is
+// left as a marker that SacrificeDepletedLands then cleans up.
+inline void DecrementDepletionOnTap(Permanent& source)
+{
+    for (Counter& ctr : source.counters)
+    {
+        if (ctr.type == Counter::Type::Depletion && ctr.count > 0) { --ctr.count; return; }
+    }
+}
+
+// Sacrifices any land whose depletion counters have run out (count 0): the depletion
+// lands' "If there are no depletion counters on it, sacrifice it." Safe to call after
+// any batch of mana taps; iterates and erases its own way so it must not run while a
+// caller holds a battlefield reference/iterator.
+inline void SacrificeDepletedLands(GameState& state)
+{
+    for (std::vector<Permanent>::iterator it = state.battlefield.begin();
+         it != state.battlefield.end(); )
+    {
+        bool depleted = false;
+        for (const Counter& c : it->counters)
+        {
+            if (c.type == Counter::Type::Depletion && c.count <= 0) { depleted = true; break; }
+        }
+        if (depleted)
+        {
+            state.players[it->owner_index].graveyard.push_back(it->card);
+            it = state.battlefield.erase(it);
+        }
+        else { ++it; }
+    }
 }
 
 // Fires prowess triggers for all Prowess creatures the active player controls.

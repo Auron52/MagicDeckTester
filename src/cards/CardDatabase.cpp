@@ -303,5 +303,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cascade_max_mv      = params.value("cascade_max_mv",      0);
     p.retrace             = params.value("retrace",             false);
 
+    p.etb_pay_life_to_untap = params.value("etb_pay_life_to_untap", 0);
+    for (const std::string& s : params.value("etb_untap_reveal_subtypes", json::array()))
+        p.etb_untap_reveal_subtypes.push_back(s);
+    p.etb_scry         = params.value("etb_scry", 0);
+    p.tap_self_damage  = params.value("tap_self_damage", 0);
+    if (params.contains("cycling_cost"))
+        p.cycling_cost = ManaCostFromString(params["cycling_cost"].get<std::string>());
+    if (params.contains("sacrifice_draw_cost"))
+        p.sacrifice_draw_cost = ManaCostFromString(params["sacrifice_draw_cost"].get<std::string>());
+    p.enters_tapped_with_depletion = params.value("enters_tapped_with_depletion", 0);
+    p.produces_amount = params.value("produces_amount", 1);
+    p.is_filter       = params.value("is_filter", false);
+
     return p;
 }

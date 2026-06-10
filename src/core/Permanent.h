@@ -4,7 +4,7 @@
 
 struct Counter
 {
-    enum class Type { PlusOnePlusOne, MinusOneMinusOne, Loyalty, Poison };
+    enum class Type { PlusOnePlusOne, MinusOneMinusOne, Loyalty, Poison, Depletion };
     Type type;
     int count = 1;
 };

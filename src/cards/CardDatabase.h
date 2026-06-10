@@ -131,6 +131,49 @@ struct CardParams
     // discarding a land card as an additional cost. It is not exiled, so it returns
     // to the graveyard on resolution and can be retraced again on a later turn.
     bool retrace = false;
+
+    // Shock land (e.g. Steam Vents): "As this land enters, you may pay N life. If you
+    // don't, it enters tapped." The AI pays the life (entering untapped) whenever it
+    // can afford to, since early-game speed dominates in a goldfish.
+    int etb_pay_life_to_untap = 0;
+
+    // Conditional-untap reveal land (e.g. Frostboil Snarl): the land enters tapped
+    // unless the player can reveal a card of one of these subtypes from hand. Empty =
+    // no condition. Checked against m_subtypes of other cards in hand at ETB.
+    std::vector<std::string> etb_untap_reveal_subtypes;
+
+    // ETB scry (e.g. Temple of Epiphany: scry 1). When > 0, look at the top N cards on
+    // ETB and bottom the unwanted ones via a deck-aware heuristic (see ScryTop).
+    int etb_scry = 0;
+
+    // Pain land (e.g. Fiery Islet): tapping this land for mana costs the controller
+    // this much life. Applied at tap time in TapForCost / TapForCostDirect.
+    int tap_self_damage = 0;
+
+    // Cycling (e.g. Lonely Sandbar, Forgotten Cave, Remote Isle): pay this cost and
+    // discard the card from hand to draw a card. Modelled as an activated ability the
+    // AI uses only when the card is surplus (see AIEngine cycling heuristic).
+    std::optional<ManaCost> cycling_cost;
+
+    // Sacrifice-to-draw activated ability (e.g. Fiery Islet: {1}, {T}, Sacrifice: draw
+    // a card). Cost is this mana plus tapping and sacrificing the source.
+    std::optional<ManaCost> sacrifice_draw_cost;
+
+    // Depletion land (e.g. Saprazzan Skerry, Sandstone Needle): enters tapped with this
+    // many depletion counters; each tap removes one and adds two mana of `produces[0]`;
+    // when the last counter is removed the land is sacrificed. 0 = not a depletion land.
+    int enters_tapped_with_depletion = 0;
+
+    // Mana produced per tap (default 1). Depletion lands set this to 2 so one tap yields
+    // two mana of `produces[0]` (the {U}{U} / {R}{R} ability). The extra mana is held in
+    // a local floating pool during a single cost payment.
+    int produces_amount = 1;
+
+    // Filter land (e.g. Cascade Bluffs): "{T}: Add {C}. {U/R}, {T}: Add {U}{U}/{U}{R}/
+    // {R}{R}." Modelled as color-fixing, not ramp: a filter tap is fed one mana of a
+    // `produces` colour from another source, then yields two of `produces`. It can only
+    // make `produces` colours when such a feeder exists; otherwise it taps for {C}.
+    bool is_filter = false;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

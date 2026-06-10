@@ -44,21 +44,9 @@ static std::string PlanDesc(const TurnSolver::Plan& p)
 
 // ---- Local helpers -------------------------------------------------------
 
-// Add a land's mana production to a pool.
-// Single-color lands add to their specific color; multi-color lands add to wild
-// (one tap = one mana of the player's choice, not one of each color).
-static void AddLandToPool(ManaPool& pool, const CardDefinition& def)
-{
-    if (def.params.produces.size() == 1)
-    {
-        pool.Add(def.params.produces[0]);
-    }
-    else if (!def.params.produces.empty())
-    {
-        ++pool.wild;
-    }
-}
-
+// Build the active player's accounting mana pool from untapped sources. Depletion
+// lands contribute 2, multi-color lands 1 wild, filter lands (Cascade Bluffs) 1 wild
+// when fed else 1 {C} — see AddSourceToPool, shared with AIEngine::BuildAvailableMana.
 static ManaPool BuildPool(const GameState& state)
 {
     ManaPool pool;
@@ -70,7 +58,7 @@ static ManaPool BuildPool(const GameState& state)
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap());
         if (!is_land && !is_dork) { continue; }
-        AddLandToPool(pool, *def);
+        AddSourceToPool(pool, state, *def);
     }
     return pool;
 }
@@ -88,7 +76,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap());
         if (!is_land && !is_dork) { continue; }
-        AddLandToPool(pool, *def);
+        AddSourceToPool(pool, state, *def);
     }
     return pool;
 }
@@ -726,52 +714,135 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 //               since non-creature spells cannot be paid with that mana.
 static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_creature = true)
 {
-    int active = state.active_player_index;
+    int      active = state.active_player_index;
+    ManaPool floating;  // mana produced this payment but not yet consumed
 
-    std::function<bool(Color)> tap_color = [&](Color needed) -> bool
+    auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
+        bool is_src = (def.tmpl == CardTemplate::BasicLand)
+                   || (def.tmpl == CardTemplate::ManaDork && p.CanTap());
+        if (!is_src) { return false; }
+        if (def.params.creature_mana_only && !for_creature) { return false; }
+        return true;
+    };
+
+    auto tap_source = [&](Permanent& p, const CardDefinition& def, Color col)
+    {
+        p.tapped = true;
+        DecrementDepletionOnTap(p);
+        if (def.params.tap_self_damage > 0) { state.players[active].life -= def.params.tap_self_damage; }
+        floating.Add(col, ManaProducedPerTap(def));
+    };
+
+    std::function<bool(Color,bool)> produce = [&](Color needed, bool any) -> bool
+    {
+        { ManaPool probe = floating;
+          if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed)) { return true; } }
+
+        // 1) Direct non-filter source.
         for (Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
             std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
-            if (!def) { continue; }
-            bool is_source = (def->tmpl == CardTemplate::BasicLand)
-                          || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
-            if (!is_source) { continue; }
-            if (def->params.creature_mana_only && !for_creature) { continue; }
+            if (!def || def->params.is_filter || !usable(p, *def)) { continue; }
+            Color col;
+            if (any)
+            {
+                if (def->params.produces.empty()) { continue; }
+                col = def->params.produces[0];
+            }
+            else
+            {
+                bool match = false;
+                for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
+                if (!match) { continue; }
+                col = needed;
+            }
+            tap_source(p, *def, col);
+            return true;
+        }
+
+        // 2) Filter land colourless mode ({T}: Add {C}) — for a generic or {C} pip.
+        if (any || needed == Color::Colorless)
+        {
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.tapped) { continue; }
+                std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+                if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
+                p.tapped = true;
+                floating.Add(Color::Colorless, 1);
+                return true;
+            }
+        }
+
+        // 3) Filter mode for a coloured pip: feed one of the filter's colours, yield 2.
+        for (Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || p.tapped) { continue; }
+            std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+            if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
+            Color out;
+            if (any)
+            {
+                if (def->params.produces.empty()) { continue; }
+                out = def->params.produces[0];
+            }
+            else
+            {
+                bool match = false;
+                for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
+                if (!match) { continue; }
+                out = needed;
+            }
+            bool have_input = false;
             for (Color c : def->params.produces)
             {
-                if (c == needed) { p.tapped = true; return true; }
+                ManaPool probe = floating;
+                if (ConsumeFloating(probe, c)) { have_input = true; break; }
             }
+            if (!have_input)
+            {
+                bool fed = false;
+                for (Color ic : def->params.produces)
+                {
+                    for (Permanent& s : state.battlefield)
+                    {
+                        if (s.controller_index != active || s.tapped) { continue; }
+                        std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(s.card.m_name);
+                        if (!sd || sd->params.is_filter || !usable(s, *sd)) { continue; }
+                        bool m = false;
+                        for (Color c : sd->params.produces) { if (c == ic) { m = true; break; } }
+                        if (!m) { continue; }
+                        tap_source(s, *sd, ic);
+                        fed = true; break;
+                    }
+                    if (fed) { break; }
+                }
+                if (!fed) { continue; }
+            }
+            for (Color c : def->params.produces) { if (ConsumeFloating(floating, c)) { break; } }
+            p.tapped = true;
+            floating.Add(out, 2);
+            return true;
         }
         return false;
     };
 
-    for (int i = 0; i < cost.white;     ++i) { if (!tap_color(Color::White))     { return false; } }
-    for (int i = 0; i < cost.blue;      ++i) { if (!tap_color(Color::Blue))      { return false; } }
-    for (int i = 0; i < cost.black;     ++i) { if (!tap_color(Color::Black))     { return false; } }
-    for (int i = 0; i < cost.red;       ++i) { if (!tap_color(Color::Red))       { return false; } }
-    for (int i = 0; i < cost.green;     ++i) { if (!tap_color(Color::Green))     { return false; } }
-    for (int i = 0; i < cost.colorless; ++i) { if (!tap_color(Color::Colorless)) { return false; } }
-
-    for (int i = 0; i < cost.generic; ++i)
+    auto pay = [&](Color needed, bool any) -> bool
     {
-        bool found = false;
-        for (Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != active || p.tapped) { continue; }
-            std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
-            if (!def) { continue; }
-            bool is_source = (def->tmpl == CardTemplate::BasicLand)
-                          || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
-            if (!is_source) { continue; }
-            if (def->params.creature_mana_only && !for_creature) { continue; }
-            p.tapped = true;
-            found = true;
-            break;
-        }
-        if (!found) { return false; }
-    }
+        if (!produce(needed, any)) { return false; }
+        if (any) { Color took; return ConsumeFloatingAny(floating, took); }
+        return ConsumeFloating(floating, needed);
+    };
+
+    for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) { return false; } }
+    for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) { return false; } }
+    for (int i = 0; i < cost.black;     ++i) { if (!pay(Color::Black,     false)) { return false; } }
+    for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) { return false; } }
+    for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) { return false; } }
+    for (int i = 0; i < cost.colorless; ++i) { if (!pay(Color::Colorless, false)) { return false; } }
+    for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) { return false; } }
     return true;
 }
 
@@ -1050,6 +1121,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             ap.hand = std::move(keep);
         }
     }
+
+    // Sacrifice depletion lands (e.g. Saprazzan Skerry) exhausted by this turn's taps.
+    SacrificeDepletedLands(state);
 }
 
 // Deal combat damage: all eligible attackers hit the opponent.
@@ -1245,15 +1319,26 @@ static void SimulateLandPlay(GameState& state)
             bool is_multi = def->params.produces.size() > 1;
             if (pass == 0 && !is_multi) { continue; }
 
+            // Resolve "as this land enters" choices while the card is still in hand.
+            bool tapped = LandEntersTapped(state, *def);
             Permanent perm;
             perm.card              = def->card;
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
+            perm.tapped            = tapped;
+            if (def->params.enters_tapped_with_depletion > 0)
+            {
+                Counter dep;
+                dep.type  = Counter::Type::Depletion;
+                dep.count = def->params.enters_tapped_with_depletion;
+                perm.counters.push_back(dep);
+            }
             state.battlefield.push_back(perm);
 
             ap.hand.erase(it);
             ++ap.lands_played_this_turn;
+            if (def->params.etb_scry > 0) { ScryTop(state, def->params.etb_scry); }
             return;
         }
     }

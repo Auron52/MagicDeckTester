@@ -416,6 +416,9 @@ void GameEngine::ResolveStack(GameState& state)
 
 void GameEngine::CheckStateBasedActions(GameState& state)
 {
+    // Sacrifice depletion lands (e.g. Saprazzan Skerry) whose counters have run out.
+    SacrificeDepletedLands(state);
+
     bool changed = true;
     while (changed)
     {

@@ -107,6 +107,12 @@ private:
     // Play a land from hand if a land drop is available.
     bool TryPlayLand(GameState& state);
 
+    // Conservative "dig when stuck" land abilities: cycling (e.g. Lonely Sandbar) and
+    // sacrifice-to-draw (e.g. Fiery Islet). Only fires when the player has no Land's
+    // Edge outlet and no draw/cascade engine available — i.e. when a surplus land is
+    // genuinely worth more as a fresh card than as mana or ammo. Pre-combat only.
+    void UseSurplusLandAbilities(GameState& state);
+
     // Animate untapped animatable lands (e.g. Mutavault) if mana is available.
     void AnimateLands(GameState& state, ManaPool& available);
 

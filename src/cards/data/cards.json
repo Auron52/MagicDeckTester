@@ -329,7 +329,7 @@
             "name": "Island",
             "mana_cost": "",
             "types": ["Land"],
-            "subtypes": [],
+            "subtypes": ["Island"],
             "keywords": [],
             "oracle_text": "{T}: Add {U}.",
             "template": "basic_land",
@@ -351,9 +351,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Saprazzan Skerry enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Saprazzan Skerry: Add {U}{U}. If there are no depletion counters on it, sacrifice it. [Simplified: modelled as a basic Island; depletion counters and sacrifice not modelled.]",
+            "oracle_text": "Saprazzan Skerry enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Saprazzan Skerry: Add {U}{U}. If there are no depletion counters on it, sacrifice it.",
             "template": "basic_land",
-            "parameters": { "produces": ["U"], "enters_tapped": true }
+            "parameters": { "produces": ["U"], "enters_tapped": true, "enters_tapped_with_depletion": 2, "produces_amount": 2 }
         },
         {
             "name": "Sandstone Needle",
@@ -361,9 +361,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Sandstone Needle enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Sandstone Needle: Add {R}{R}. If there are no depletion counters on it, sacrifice it. [Simplified: modelled as a basic Mountain; depletion counters and sacrifice not modelled.]",
+            "oracle_text": "Sandstone Needle enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Sandstone Needle: Add {R}{R}. If there are no depletion counters on it, sacrifice it.",
             "template": "basic_land",
-            "parameters": { "produces": ["R"], "enters_tapped": true }
+            "parameters": { "produces": ["R"], "enters_tapped": true, "enters_tapped_with_depletion": 2, "produces_amount": 2 }
         },
         {
             "name": "Cascade Bluffs",
@@ -371,9 +371,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}: Add {C}. {U/R}, {T}: Add {U}{U}, {U}{R}, or {R}{R}. [Simplified: modelled as colorless land; filter ability requires colored input which is not modelled — prevents RT+CB misplay.]",
+            "oracle_text": "{T}: Add {C}. {U/R}, {T}: Add {U}{U}, {U}{R}, or {R}{R}.",
             "template": "basic_land",
-            "parameters": { "produces": ["C"] }
+            "parameters": { "produces": ["U", "R"], "is_filter": true }
         },
         {
             "name": "Fiery Islet",
@@ -381,9 +381,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}, Pay 1 life: Add {U} or {R}. {1}, {T}, Sacrifice Fiery Islet: Draw a card. [Simplified: modelled as dual U/R land; life payment and draw-on-sacrifice not modelled.]",
+            "oracle_text": "{T}, Pay 1 life: Add {U} or {R}. {1}, {T}, Sacrifice Fiery Islet: Draw a card.",
             "template": "basic_land",
-            "parameters": { "produces": ["U", "R"] }
+            "parameters": { "produces": ["U", "R"], "tap_self_damage": 1, "sacrifice_draw_cost": "{1}" }
         },
         {
             "name": "Temple of Epiphany",
@@ -391,9 +391,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Temple of Epiphany enters tapped. When it enters, scry 1. {T}: Add {U} or {R}. [Simplified: modelled as dual U/R land; ETB tap and scry not modelled.]",
+            "oracle_text": "Temple of Epiphany enters tapped. When it enters, scry 1. {T}: Add {U} or {R}.",
             "template": "basic_land",
-            "parameters": { "produces": ["U", "R"], "enters_tapped": true }
+            "parameters": { "produces": ["U", "R"], "enters_tapped": true, "etb_scry": 1 }
         },
         {
             "name": "Frostboil Snarl",
@@ -401,9 +401,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "As Frostboil Snarl enters, you may reveal an Island or Mountain card from your hand. If you don't, this land enters tapped. {T}: Add {U} or {R}. [Simplified: modelled as dual U/R land; reveal/ETB-tap not modelled.]",
+            "oracle_text": "As Frostboil Snarl enters, you may reveal an Island or Mountain card from your hand. If you don't, this land enters tapped. {T}: Add {U} or {R}.",
             "template": "basic_land",
-            "parameters": { "produces": ["U", "R"] }
+            "parameters": { "produces": ["U", "R"], "etb_untap_reveal_subtypes": ["Island", "Mountain"] }
         },
         {
             "name": "Steam Vents",
@@ -411,9 +411,9 @@
             "types": ["Land"],
             "subtypes": ["Island", "Mountain"],
             "keywords": [],
-            "oracle_text": "({T}: Add {U} or {R}.) As Steam Vents enters, you may pay 2 life. If you don't, it enters tapped. [Simplified: modelled as dual U/R land; shock/ETB-tap not modelled.]",
+            "oracle_text": "({T}: Add {U} or {R}.) As Steam Vents enters, you may pay 2 life. If you don't, it enters tapped.",
             "template": "basic_land",
-            "parameters": { "produces": ["U", "R"] }
+            "parameters": { "produces": ["U", "R"], "etb_pay_life_to_untap": 2 }
         },
         {
             "name": "Ferrous Lake",
@@ -431,9 +431,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Lonely Sandbar enters tapped. {T}: Add {U}. Cycling {2} ({2}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Island; cycling not modelled (lands are too valuable to cycle in this deck).]",
+            "oracle_text": "Lonely Sandbar enters tapped. {T}: Add {U}. Cycling {U} ({U}, Discard this card: Draw a card.)",
             "template": "basic_land",
-            "parameters": { "produces": ["U"], "enters_tapped": true }
+            "parameters": { "produces": ["U"], "enters_tapped": true, "cycling_cost": "{U}" }
         },
         {
             "name": "Forgotten Cave",
@@ -441,9 +441,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Forgotten Cave enters tapped. {T}: Add {R}. Cycling {R} ({R}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Mountain; cycling not modelled.]",
+            "oracle_text": "Forgotten Cave enters tapped. {T}: Add {R}. Cycling {R} ({R}, Discard this card: Draw a card.)",
             "template": "basic_land",
-            "parameters": { "produces": ["R"], "enters_tapped": true }
+            "parameters": { "produces": ["R"], "enters_tapped": true, "cycling_cost": "{R}" }
         },
         {
             "name": "Thundering Falls",
@@ -461,9 +461,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Remote Isle enters tapped. {T}: Add {U}. Cycling {2} ({2}, Discard this card: Draw a card.) [Simplified: modelled as a tapped Island; cycling not modelled.]",
+            "oracle_text": "Remote Isle enters tapped. {T}: Add {U}. Cycling {2} ({2}, Discard this card: Draw a card.)",
             "template": "basic_land",
-            "parameters": { "produces": ["U"], "enters_tapped": true }
+            "parameters": { "produces": ["U"], "enters_tapped": true, "cycling_cost": "{2}" }
         },
         {
             "name": "Treasure Hunt",
