@@ -21,27 +21,23 @@ bool TurnSolver::GetTraceSolve() { return s_trace_solve; }
 static std::string PlanDesc(const TurnSolver::Plan& p)
 {
     std::ostringstream os;
-    if (!p.vial_activations.empty())
+    auto list_kind = [&](Action::Kind kind, const char* label)
     {
-        os << "vial[";
-        for (size_t i = 0; i < p.vial_activations.size(); ++i)
+        bool first = true;
+        for (const Action& a : p.actions)
         {
-            if (i) os << ',';
-            os << p.vial_activations[i];
+            if (a.kind != kind) { continue; }
+            if (first) { if (os.tellp() > 0) os << ' '; os << label << '['; first = false; }
+            else       { os << ','; }
+            os << a.card_name;
+            if (kind == Action::Kind::DiscardToLandsEdge) { os << "x" << a.discard_lands; }
         }
-        os << "]";
-    }
-    if (!p.spells.empty())
-    {
-        if (!p.vial_activations.empty()) os << ' ';
-        os << "spells[";
-        for (size_t i = 0; i < p.spells.size(); ++i)
-        {
-            if (i) os << ',';
-            os << p.spells[i];
-        }
-        os << "]";
-    }
+        if (!first) { os << ']'; }
+    };
+    list_kind(Action::Kind::ActivateVial,       "vial");
+    list_kind(Action::Kind::CastFromHand,       "spells");
+    list_kind(Action::Kind::CastFromGraveyard,  "retrace");
+    list_kind(Action::Kind::DiscardToLandsEdge, "le");
     if (p.empty()) os << "<pass>";
     return os.str();
 }
@@ -370,38 +366,25 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
     return DMG;  // fallback for other spell types
 }
 
-// ---- TurnSolver::Solve ---------------------------------------------------
-
-TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
+// ---- CollectActions ------------------------------------------------------
+//
+// The single enumeration of action SOURCES, shared by Solve and EnumeratePlans.
+// Returns every candidate play available this main phase as an Action:
+//   - CastFromHand        : each legally-castable non-land spell in hand
+//   - ActivateVial        : each (Aether Vial, matching-MV creature in hand) pair
+//   - CastFromGraveyard   : each retrace card in the graveyard with a land to discard
+// Land's Edge discards are generated as plan-level count variants by the callers,
+// since they depend on the rest of the chosen subset (lands left after retrace).
+// The per-Action valuation scalars are read by each caller's subset evaluator.
+static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_combat*/)
 {
     const Player& ap = state.ActivePlayer();
-    ManaPool pool             = BuildPool(state);
-    ManaPool pool_noncreature = BuildNonCreaturePool(state);
-    int total_lands  = CountLands(state);
-    int pending_atk  = PendingAttackDamage(state);
-    int prowess_attackers   = CountProwessAttackers(state);
-    std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
     bool has_creature_target = HasLegalCreatureTarget(state);
+    int  n = static_cast<int>(ap.hand.size());
 
-    // Build candidate list: non-land cards that are legally castable this phase,
-    // plus zero-cost Aether Vial activations.
-    struct Candidate
-    {
-        int          hand_index;
-        CardDefinition def;
-        ManaCost     cost;
-        int          eval;
-        bool         sacrifice_land;
-        bool         is_noncreature;
-        int          card_mv;        // base MV of the card (used for trigger checks)
-        int          direct_damage;
-        bool         is_vial_activation = false;
-        int          vial_bf_index      = -1;   // battlefield index of the tapped Vial
-        int          vial_attack_power  = 0;    // power this turn if haste (for wins_this_turn)
-    };
+    std::vector<Action> actions;
 
-    std::vector<Candidate> cands;
-    int n = static_cast<int>(ap.hand.size());
+    // --- Hand casts ---
     for (int i = 0; i < n; ++i)
     {
         auto opt = CardDatabase::Instance().Lookup(ap.hand[i].m_name);
@@ -436,13 +419,26 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 direct = def.params.landfall_damage;
             }
         }
-        cands.push_back({i, def, EffectiveCost(def, state), EvalCard(def, state),
-                         def.params.sacrifice_land,
-                         !def.card.IsCreature(),
-                         def.card.m_mana_cost.ManaValue(), direct});
+
+        Action a;
+        a.kind                  = Action::Kind::CastFromHand;
+        a.card_name             = ap.hand[i].m_name;
+        a.hand_index            = i;
+        a.cost                  = EffectiveCost(def, state);
+        a.sacrifice_land        = def.params.sacrifice_land;
+        a.eval                  = EvalCard(def, state);
+        a.direct_damage         = direct;
+        a.is_noncreature        = !def.card.IsCreature();
+        a.card_mv               = def.card.m_mana_cost.ManaValue();
+        a.is_draw               = (def.tmpl == CardTemplate::DrawSpell
+                                   || def.tmpl == CardTemplate::DrawX);
+        a.has_spectacle         = def.params.spectacle_cost.has_value();
+        a.is_draw_until_nonland = (def.tmpl == CardTemplate::DrawUntilNonland);
+        a.discard_land_damage   = def.params.discard_land_damage;
+        actions.push_back(std::move(a));
     }
 
-    // Add zero-cost Aether Vial activation candidates — one per (Vial, creature) pair.
+    // --- Aether Vial activations: one per (Vial, creature) pair ---
     {
         constexpr int DMG = 100;
         int bf_size = static_cast<int>(state.battlefield.size());
@@ -474,22 +470,78 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 int attacks = ExpectedAttacks(state);
                 if (!haste && attacks > 0) { --attacks; }
 
-                Candidate c;
-                c.hand_index        = i;
-                c.def               = *copt;
-                c.cost              = ManaCost{};
-                c.eval              = power * attacks * DMG;
-                c.sacrifice_land    = false;
-                c.is_noncreature    = false;
-                c.card_mv           = target_mv;
-                c.direct_damage     = 0;
-                c.is_vial_activation = true;
-                c.vial_bf_index      = vi;
-                c.vial_attack_power  = haste ? power : 0;
-                cands.push_back(c);
+                Action a;
+                a.kind              = Action::Kind::ActivateVial;
+                a.card_name         = ap.hand[i].m_name;
+                a.hand_index        = i;
+                a.eval              = power * attacks * DMG;
+                a.is_noncreature    = false;
+                a.card_mv           = target_mv;
+                a.vial_bf_index     = vi;
+                a.vial_attack_power = haste ? power : 0;
+                actions.push_back(std::move(a));
             }
         }
     }
+
+    // --- Retrace: cast a retrace card from the graveyard (Throes of Chaos) ---
+    // Additional cost: discard a land card from hand. The card is not exiled, so it
+    // returns to the graveyard and can be retraced again on a later turn. One Action
+    // per distinct card name (apply finds the first matching copy in the graveyard).
+    {
+        int lands_in_hand = 0;
+        for (const Card& c : ap.hand)
+        {
+            auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+            if (cdef ? cdef->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
+        }
+        if (lands_in_hand > 0)
+        {
+            std::unordered_set<std::string> seen_gy;
+            for (const Card& gc : ap.graveyard)
+            {
+                auto gdef = CardDatabase::Instance().Lookup(gc.m_name);
+                if (!gdef || !gdef->params.retrace) { continue; }
+                bool timing_ok = gdef->card.IsInstant()
+                              || gdef->card.HasKeyword(Keyword::Flash)
+                              || state.stack.empty();
+                if (!timing_ok) { continue; }
+                if (gdef->card.m_mana_cost.has_x) { continue; }
+                if (!seen_gy.insert(gc.m_name).second) { continue; }
+
+                Action a;
+                a.kind                  = Action::Kind::CastFromGraveyard;
+                a.card_name             = gc.m_name;
+                a.hand_index            = -1;            // sourced from graveyard, not hand
+                a.cost                  = EffectiveCost(*gdef, state);
+                a.discard_lands         = 1;            // discard one land as the retrace cost
+                a.eval                  = EvalCard(*gdef, state);
+                a.is_noncreature        = !gdef->card.IsCreature();
+                a.card_mv               = gdef->card.m_mana_cost.ManaValue();
+                a.is_draw_until_nonland = (gdef->tmpl == CardTemplate::DrawUntilNonland);
+                a.discard_land_damage   = gdef->params.discard_land_damage;
+                actions.push_back(std::move(a));
+            }
+        }
+    }
+
+    return actions;
+}
+
+// ---- TurnSolver::Solve ---------------------------------------------------
+
+TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
+{
+    const Player& ap = state.ActivePlayer();
+    ManaPool pool             = BuildPool(state);
+    ManaPool pool_noncreature = BuildNonCreaturePool(state);
+    int total_lands  = CountLands(state);
+    int pending_atk  = PendingAttackDamage(state);
+    int prowess_attackers   = CountProwessAttackers(state);
+    std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
+
+    std::vector<Action> cands = CollectActions(state, is_pre_combat);
+    int n = static_cast<int>(ap.hand.size());
 
     // Compute damage available from Land's Edge permanents already on the battlefield.
     // (discard_land_damage > 0 signals the card; rate = damage per land discarded)
@@ -537,8 +589,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             for (int k = j + 1; k < m; ++k)
             {
                 if (!(mask & (1 << k))) { continue; }
-                if (cands[j].hand_index == cands[k].hand_index) { valid = false; break; }
-                if (cands[j].is_vial_activation && cands[k].is_vial_activation
+                if (cands[j].hand_index >= 0
+                    && cands[j].hand_index == cands[k].hand_index) { valid = false; break; }
+                if (cands[j].kind == Action::Kind::ActivateVial
+                    && cands[k].kind == Action::Kind::ActivateVial
                     && cands[j].vial_bf_index == cands[k].vial_bf_index)
                 { valid = false; break; }
             }
@@ -553,13 +607,15 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         int total_eval        = 0;
         int self_damage       = 0;
         int vial_haste_atk    = 0;
+        int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
         // Land's Edge damage added by casting Land's Edge or Treasure Hunt this plan.
         int plan_le_dmg       = 0;
 
         for (int j = 0; j < m; ++j)
         {
             if (!(mask & (1 << j))) { continue; }
-            const Candidate& c = cands[j];
+            const Action& c = cands[j];
+            discard_lands_used += c.discard_lands;
 
             combined.white     += c.cost.white;
             combined.blue      += c.cost.blue;
@@ -593,13 +649,13 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
             // Land's Edge being cast: if no LE is on board yet, this plan enables it.
             // Add the damage potential from discarding the current hand's lands.
-            if (lands_edge_rate == 0 && c.def.params.discard_land_damage > 0)
+            if (lands_edge_rate == 0 && c.discard_land_damage > 0)
             {
-                plan_le_dmg += lands_in_hand * c.def.params.discard_land_damage;
+                plan_le_dmg += lands_in_hand * c.discard_land_damage;
             }
             // Treasure Hunt in a plan where Land's Edge is active (board or this plan):
             // th_lands_estimate new lands become available for LE discards.
-            if (c.def.tmpl == CardTemplate::DrawUntilNonland)
+            if (c.is_draw_until_nonland)
             {
                 int active_rate = (lands_edge_rate > 0)
                     ? lands_edge_rate
@@ -620,8 +676,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             for (int j = 0; j < m; ++j)
             {
                 if (!(mask & (1 << j))) { continue; }
-                if (cands[j].def.params.discard_land_damage > 0) { has_le = true; }
-                if (cands[j].def.tmpl == CardTemplate::DrawUntilNonland) { has_th = true; }
+                if (cands[j].discard_land_damage > 0) { has_le = true; }
+                if (cands[j].is_draw_until_nonland) { has_th = true; }
             }
             if (has_le && has_th) { plan_le_dmg += th_lands_estimate * 2; }
         }
@@ -629,6 +685,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (!pool.CanPay(combined))                          { continue; }
         if (!pool_noncreature.CanPay(noncreature_combined))  { continue; }
         if (sacrifice_count > total_lands)                   { continue; }
+        if (discard_lands_used > lands_in_hand)              { continue; }
 
         // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so
         // they resolve BEFORE the spell. A plan that kills us via self-damage cannot win —
@@ -646,17 +703,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
         if (better)
         {
-            best.spells.clear();
-            best.sacrifice.clear();
-            best.vial_activations.clear();
+            best.actions.clear();
             for (int j = 0; j < m; ++j)
             {
                 if (!(mask & (1 << j))) { continue; }
-                const Candidate& c = cands[j];
-                const std::string& name = ap.hand[c.hand_index].m_name;
-                if (c.is_vial_activation) { best.vial_activations.push_back(name); }
-                else if (c.sacrifice_land) { best.sacrifice.push_back(name); }
-                else                       { best.spells.push_back(name); }
+                best.actions.push_back(cands[j]);
             }
             best.value          = total_eval;
             best.wins_this_turn = wins;
@@ -762,23 +813,41 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             return;
         }
     };
-    for (const std::string& name : plan.vial_activations) { apply_vial(name); }
+    // Forward-declared so apply_one's draw breakpoints can re-apply a freshly solved
+    // sub-plan (newly drawn castables) through the same canonical-order dispatch.
+    std::function<void(const std::vector<Action>&)> apply_plan_actions;
 
-    std::function<void(const std::string&, bool)> apply_one;
-    apply_one = [&](const std::string& name, bool is_sacrifice)
+    std::function<void(const std::string&, bool, bool, int)> apply_one;
+    apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands)
     {
         std::optional<CardDefinition> opt = CardDatabase::Instance().Lookup(name);
         if (!opt) { return; }
         const CardDefinition& def = *opt;
 
-        std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
+        std::vector<Card>& zone = from_graveyard ? ap.graveyard : ap.hand;
+        std::vector<Card>::iterator it = std::find_if(zone.begin(), zone.end(),
             [&name](const Card& c) { return c.m_name == name; });
-        if (it == ap.hand.end()) { return; }
+        if (it == zone.end()) { return; }
 
         bool is_creature = def.card.IsCreature();
         ManaCost ec = EffectiveCost(def, state);
         if (!TapForCostDirect(state, ec, is_creature)) { return; }
-        ap.hand.erase(it);
+        zone.erase(it);
+
+        // Retrace additional cost: discard `discard_lands` land cards from hand.
+        // (The mana cost was paid above; CollectActions ensured enough lands exist.)
+        if (from_graveyard && discard_lands > 0)
+        {
+            int discarded = 0;
+            for (std::vector<Card>::iterator hit = ap.hand.begin();
+                 hit != ap.hand.end() && discarded < discard_lands; )
+            {
+                std::optional<CardDefinition> hdef = CardDatabase::Instance().Lookup(hit->m_name);
+                bool is_land = hdef ? hdef->card.IsLand() : hit->IsLand();
+                if (is_land) { ap.graveyard.push_back(*hit); hit = ap.hand.erase(hit); ++discarded; }
+                else         { ++hit; }
+            }
+        }
 
         if (def.tmpl == CardTemplate::DirectDamage)
         {
@@ -823,9 +892,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Draw breakpoint: re-solve with updated hand and remaining mana so
             // newly revealed cards can be cast with mana still available this turn.
             TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-            for (const std::string& extra_name : extra.vial_activations) { apply_vial(extra_name); }
-            for (const std::string& extra_name : extra.spells)    { apply_one(extra_name, false); }
-            for (const std::string& extra_name : extra.sacrifice) { apply_one(extra_name, true); }
+            apply_plan_actions(extra.actions);
         }
         else if (def.tmpl == CardTemplate::DrawUntilNonland)
         {
@@ -840,9 +907,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             // Draw breakpoint: re-solve so any new castables are played with remaining mana.
             TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-            for (const std::string& extra_name : extra.vial_activations) { apply_vial(extra_name); }
-            for (const std::string& extra_name : extra.spells)    { apply_one(extra_name, false); }
-            for (const std::string& extra_name : extra.sacrifice) { apply_one(extra_name, true); }
+            apply_plan_actions(extra.actions);
         }
         else if (def.params.cascade_max_mv > 0)
         {
@@ -878,7 +943,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (cdef2)
                 {
                     ap.hand.push_back(cdef2->card);
-                    apply_one(cname, false);
+                    apply_one(cname, false, false, 0);
                 }
             }
         }
@@ -896,6 +961,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
         FireOnCastTriggers(state, def);
         FireProwess(state, def);
+
+        // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
+        // MoveToGraveyard). This makes a retrace card recur and keeps the inline
+        // graveyard faithful; nothing reads the graveyard for decks without retrace.
+        if (def.card.IsInstant() || def.card.IsSorcery())
+        {
+            ap.graveyard.push_back(def.card);
+        }
 
         if (is_sacrifice)
         {
@@ -915,8 +988,39 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     };
 
-    for (const std::string& name : plan.spells)    { apply_one(name, false); }
-    for (const std::string& name : plan.sacrifice) { apply_one(name, true); }
+    // Canonical execution order, applied within each kind in plan order:
+    //   ActivateVial -> hand casts (non-sacrifice) -> hand casts (sacrifice-land)
+    //   -> graveyard casts (Retrace).  (DiscardToLandsEdge is added in a later phase.)
+    apply_plan_actions = [&](const std::vector<Action>& acts)
+    {
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::ActivateVial) { apply_vial(a.card_name); }
+        }
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            {
+                apply_one(a.card_name, false, false, 0);
+            }
+        }
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
+            {
+                apply_one(a.card_name, true, false, 0);
+            }
+        }
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::CastFromGraveyard)
+            {
+                apply_one(a.card_name, false, true, a.discard_lands);
+            }
+        }
+    };
+
+    apply_plan_actions(plan.actions);
 
     // Activate Land's Edge: discard all lands in hand after all spells resolve.
     // This mirrors GameEngine::MainPhase's post-stack ActivateLandsEdge call.
@@ -1177,107 +1281,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     int           pending_atk     = PendingAttackDamage(state);
     int           prowess_attackers    = CountProwessAttackers(state);
     std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
-    bool          has_target      = HasLegalCreatureTarget(state);
 
-    struct Candidate
-    {
-        int         hand_index;
-        ManaCost    cost;
-        int         eval;
-        bool        sacrifice_land;
-        bool        is_noncreature;
-        int         card_mv;
-        bool        is_draw;
-        bool        has_spectacle;
-        int         direct_damage;
-        bool        is_vial_activation = false;
-        int         vial_bf_index      = -1;
-        int         vial_attack_power  = 0;
-    };
-
-    std::vector<Candidate> cands;
+    // Shared enumeration of all action sources (hand casts + Vial + retrace; LE in a
+    // later phase). The subset machinery below reads the per-Action valuation scalars.
+    std::vector<Action> cands = CollectActions(state, is_pre_combat);
     int n = static_cast<int>(ap.hand.size());
-    for (int i = 0; i < n; ++i)
+
+    // Lands in hand: the shared budget for additional discard costs (retrace, LE).
+    int lands_in_hand = 0;
+    for (const Card& c : ap.hand)
     {
-        std::optional<CardDefinition> opt = CardDatabase::Instance().Lookup(ap.hand[i].m_name);
-        if (!opt || opt->card.IsLand()) { continue; }
-        const CardDefinition& def = *opt;
-
-        bool timing_ok = def.card.IsInstant()
-                      || def.card.HasKeyword(Keyword::Flash)
-                      || state.stack.empty();
-        if (!timing_ok) { continue; }
-
-        Targeting tgt = def.params.targeting;
-        if ((tgt == Targeting::Creature || tgt == Targeting::Multi) && !has_target) { continue; }
-        if (def.card.m_mana_cost.has_x) { continue; }
-
-        Candidate c;
-        c.hand_index     = i;
-        c.cost           = EffectiveCost(def, state);
-        c.eval           = EvalCard(def, state);
-        c.sacrifice_land = def.params.sacrifice_land;
-        c.is_noncreature = !def.card.IsCreature();
-        c.card_mv        = def.card.m_mana_cost.ManaValue();
-        c.is_draw        = (def.tmpl == CardTemplate::DrawSpell || def.tmpl == CardTemplate::DrawX);
-        c.has_spectacle  = def.params.spectacle_cost.has_value();
-        if (def.tmpl == CardTemplate::DirectDamage
-            && def.params.targeting != Targeting::Creature)
-        {
-            c.direct_damage = def.params.damage;
-            if (def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
-            {
-                c.direct_damage = def.params.landfall_damage;
-            }
-        }
-        else
-        {
-            c.direct_damage = 0;
-        }
-        cands.push_back(c);
-    }
-
-    // Add zero-cost Aether Vial activation candidates.
-    {
-        constexpr int DMG = 100;
-        int bf_size = static_cast<int>(state.battlefield.size());
-        for (int vi = 0; vi < bf_size; ++vi)
-        {
-            const Permanent& vp = state.battlefield[vi];
-            if (vp.controller_index != state.active_player_index || vp.tapped) { continue; }
-            std::optional<CardDefinition> vdef =
-                CardDatabase::Instance().Lookup(vp.card.m_name);
-            if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
-
-            int target_mv = vp.charge_counters;
-            for (int i = 0; i < n; ++i)
-            {
-                std::optional<CardDefinition> copt =
-                    CardDatabase::Instance().Lookup(ap.hand[i].m_name);
-                if (!copt || !copt->card.IsCreature()) { continue; }
-                if (copt->card.m_mana_cost.ManaValue() != target_mv) { continue; }
-
-                auto [lord_pb, lord_tb] = ComputeLordBonus(
-                    copt->card, state.battlefield, state.active_player_index);
-                bool ds = copt->card.HasKeyword(Keyword::DoubleStrike)
-                       || HasDoubleStrikeFromLords(copt->card, state.battlefield,
-                                                   state.active_player_index);
-                int power = (copt->card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
-                bool haste = copt->card.HasKeyword(Keyword::Haste)
-                          || HasHasteFromLords(copt->card, state.battlefield,
-                                               state.active_player_index);
-                int attacks = ExpectedAttacks(state);
-                if (!haste && attacks > 0) { --attacks; }
-
-                Candidate c{};
-                c.hand_index         = i;
-                c.eval               = power * attacks * DMG;
-                c.is_vial_activation = true;
-                c.vial_bf_index      = vi;
-                c.vial_attack_power  = haste ? power : 0;
-                cands.push_back(c);
-            }
-        }
+        auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+        if (cdef ? cdef->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
     }
 
     int m = static_cast<int>(cands.size());
@@ -1294,8 +1309,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (int k = j + 1; k < m; ++k)
             {
                 if (!(mask & (1 << k))) { continue; }
-                if (cands[j].hand_index == cands[k].hand_index) { valid = false; break; }
-                if (cands[j].is_vial_activation && cands[k].is_vial_activation
+                if (cands[j].hand_index >= 0
+                    && cands[j].hand_index == cands[k].hand_index) { valid = false; break; }
+                if (cands[j].kind == Action::Kind::ActivateVial
+                    && cands[k].kind == Action::Kind::ActivateVial
                     && cands[j].vial_bf_index == cands[k].vial_bf_index)
                 { valid = false; break; }
             }
@@ -1310,11 +1327,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int total_eval        = 0;
         int self_damage       = 0;
         int vial_haste_atk    = 0;
+        int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
 
         for (int j = 0; j < m; ++j)
         {
             if (!(mask & (1 << j))) { continue; }
-            const Candidate& c = cands[j];
+            const Action& c = cands[j];
+            discard_lands_used += c.discard_lands;
             combined.white     += c.cost.white;
             combined.blue      += c.cost.blue;
             combined.black     += c.cost.black;
@@ -1346,6 +1365,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (!pool.CanPay(combined))                          { continue; }
         if (!pool_noncreature.CanPay(noncreature_combined))  { continue; }
         if (sacrifice_count > total_lands)                   { continue; }
+        if (discard_lands_used > lands_in_hand)              { continue; }
 
         if (self_damage >= ap.life) { continue; }
 
@@ -1357,11 +1377,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (int j = 0; j < m; ++j)
         {
             if (!(mask & (1 << j))) { continue; }
-            const Candidate& c = cands[j];
-            const std::string& name = ap.hand[c.hand_index].m_name;
-            if (c.is_vial_activation) { plan.vial_activations.push_back(name); }
-            else if (c.sacrifice_land) { plan.sacrifice.push_back(name); }
-            else                       { plan.spells.push_back(name); }
+            plan.actions.push_back(cands[j]);
         }
         plans.push_back(std::move(plan));
     }
@@ -1380,7 +1396,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     std::vector<TriggerCand> triggers;
     for (int i = 0; i < m; ++i)
     {
-        const Candidate& c = cands[i];
+        const Action& c = cands[i];
         if (c.direct_damage > 0 && !c.has_spectacle && !c.sacrifice_land)
         {
             triggers.push_back({i, c.cost, c.direct_damage, c.eval});
@@ -1394,7 +1410,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     for (int i = 0; i < m; ++i)
     {
-        const Candidate& draw = cands[i];
+        const Action& draw = cands[i];
         if (!draw.is_draw || !draw.has_spectacle) { continue; }
 
         ManaCost spectacle_cost = draw.cost; // already set to Spectacle cost if active
@@ -1428,11 +1444,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int direct_dmg = 0;
         if (trigger)
         {
-            plan.spells.push_back(ap.hand[trigger->idx].m_name);
+            // NOTE: legacy quirk preserved for byte-identical results — the trigger's
+            // name is taken from ap.hand[trigger->idx], where trigger->idx is a
+            // *candidate* index (lands are skipped when building candidates), not a
+            // hand index. When the hand holds lands these diverge and the named card
+            // may not be the intended trigger. Faithfully reproduced here; fixing it
+            // is a separate behaviour change requiring a burn ground-truth regen.
+            Action ta = cands[trigger->idx];
+            ta.card_name = ap.hand[trigger->idx].m_name;
+            plan.actions.push_back(ta);  // cheap damage spell unlocks Spectacle
             plan.value += trigger->eval;
             direct_dmg += trigger->damage;
         }
-        plan.spells.push_back(ap.hand[draw.hand_index].m_name);
+        plan.actions.push_back(draw);  // draw spell at its Spectacle cost
         plan.value += draw.eval;
         plan.wins_this_turn = (pending_atk + direct_dmg) >= state.Opponent().life;
         plans.push_back(std::move(plan));
@@ -1459,16 +1483,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // highest-ranked (identical plans share rank, so order is unaffected either way).
     auto plan_signature = [](const TurnSolver::Plan& p) -> std::string
     {
-        std::vector<std::string> v = p.vial_activations;
-        std::vector<std::string> s = p.spells;
-        std::vector<std::string> a = p.sacrifice;
+        std::vector<std::string> v, s, a, g, l;
+        for (const Action& act : p.actions)
+        {
+            switch (act.kind)
+            {
+                case Action::Kind::ActivateVial:      v.push_back(act.card_name); break;
+                case Action::Kind::CastFromHand:
+                    (act.sacrifice_land ? a : s).push_back(act.card_name);        break;
+                case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
+                case Action::Kind::DiscardToLandsEdge:
+                    l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
+            }
+        }
         std::sort(v.begin(), v.end());
         std::sort(s.begin(), s.end());
         std::sort(a.begin(), a.end());
+        std::sort(g.begin(), g.end());
+        std::sort(l.begin(), l.end());
         std::string sig;
         for (const std::string& n : v) { sig += 'V'; sig += n; }
         for (const std::string& n : s) { sig += 'S'; sig += n; }
         for (const std::string& n : a) { sig += 'A'; sig += n; }
+        for (const std::string& n : g) { sig += 'G'; sig += n; }
+        for (const std::string& n : l) { sig += 'L'; sig += n; }
         return sig;
     };
     std::unordered_set<std::string> seen;
@@ -1543,6 +1581,28 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         {
             FoldName(k, sc.card.m_name);
             Fold(k, static_cast<uint64_t>(sc.expiry_turn));
+        }
+
+        // Graveyard: the rollout reads it only via Retrace, so fold it ONLY when it
+        // holds a retrace-castable card. Decks without retrace never fold it and keep
+        // the exact key — and identical TT/budget behaviour — they had before. Folded
+        // order-insensitively (commutative sum of name hashes): two states differing
+        // only in cast/discard order share a key, so this never adds spurious misses.
+        {
+            uint64_t gy_acc       = 0;
+            bool     gy_retraceable = false;
+            for (const Card& c : p.graveyard)
+            {
+                gy_acc += static_cast<uint64_t>(std::hash<std::string>{}(c.m_name));
+                std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+                if (cdef && cdef->params.retrace) { gy_retraceable = true; }
+            }
+            if (gy_retraceable)
+            {
+                Fold(k, 0x6748 + static_cast<uint64_t>(pi)); // sub-section: graveyard (retrace live)
+                Fold(k, static_cast<uint64_t>(p.graveyard.size()));
+                Fold(k, gy_acc);
+            }
         }
     }
 

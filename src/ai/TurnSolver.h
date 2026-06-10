@@ -8,6 +8,44 @@
 
 class TranspositionTable;  // per-decision SimulateToEnd memo (see TranspositionTable.h)
 
+// A single atomic play the active player can make in a main phase. Unifies the
+// formerly-separate action sources (hand cast, Aether Vial activation, Land's Edge
+// discard, graveyard retrace) so enumeration, evaluation and execution each handle
+// one collection rather than several parallel special cases.
+//
+// The valuation scalars (eval, direct_damage, ...) are populated by CollectActions
+// at enumeration time and read by the subset evaluators; the apply/execute paths
+// re-derive costs and effects from the card definition, so they ignore those fields.
+struct Action
+{
+    enum class Kind
+    {
+        CastFromHand,        // cast a spell from hand
+        CastFromGraveyard,   // Retrace: cast from graveyard, discarding a land as an additional cost
+        ActivateVial,        // Aether Vial: put a creature from hand onto the battlefield
+        DiscardToLandsEdge,  // discard `discard_lands` lands from hand to a Land's Edge for damage
+    };
+
+    Kind        kind           = Kind::CastFromHand;
+    std::string card_name;             // source card (creature name for ActivateVial)
+    int         hand_index     = -1;   // hand index of the source/creature at enumeration time
+    ManaCost    cost;                  // effective mana cost (enumeration feasibility only)
+    bool        sacrifice_land = false;// additional cost: sacrifice a land (e.g. Shard Volley)
+    int         discard_lands  = 0;    // Retrace = 1; for DiscardToLandsEdge = lands to discard
+    int         vial_bf_index  = -1;   // ActivateVial: battlefield index of the tapped Vial
+
+    // Valuation / win-check scalars (mirror the former per-function Candidate fields).
+    int  eval                  = 0;
+    int  direct_damage         = 0;
+    bool is_noncreature        = true;
+    int  card_mv               = 0;
+    int  vial_attack_power     = 0;    // power this turn if a hasted Vial drop (wins_this_turn)
+    bool is_draw               = false;// DrawSpell / DrawX (Plan-B draw-early variants)
+    bool has_spectacle         = false;// has a spectacle alternate cost (Plan-B)
+    bool is_draw_until_nonland = false;// Treasure Hunt (Solve's LE/TH combo valuation)
+    int  discard_land_damage   = 0;    // if this card IS a Land's Edge being cast (Solve)
+};
+
 // Finds the optimal set of spells to cast in one main phase by exhaustive
 // subset enumeration (O(2^|hand|), tractable for hand sizes up to ~15).
 //
@@ -23,18 +61,14 @@ class TurnSolver
 public:
     struct Plan
     {
-        // Spells to execute in order: regular spells first, sacrifice-land last.
-        std::vector<std::string> spells;
-        std::vector<std::string> sacrifice;
-        // Creatures to deploy via Aether Vial (zero mana cost, execute before spells).
-        std::vector<std::string> vial_activations;
+        // The set of plays to execute this main phase. Execution order is canonical
+        // (ActivateVial -> hand casts -> sacrifice-land casts -> graveyard casts ->
+        // Land's Edge discards), applied by ApplyPlanDirect / AIEngine::TakeTurn.
+        std::vector<Action> actions;
         int  value          = -1;   // -1 = nothing castable
         bool wins_this_turn = false;
 
-        bool empty() const
-        {
-            return spells.empty() && sacrifice.empty() && vial_activations.empty();
-        }
+        bool empty() const { return actions.empty(); }
     };
 
     // Returns the highest-value feasible plan for one main phase.

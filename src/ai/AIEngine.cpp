@@ -573,16 +573,16 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
         }
     }
 
-    // Deploy creatures via Aether Vial first (lords boost subsequent spell evals).
-    for (const std::string& name : plan.vial_activations)
+    // Deploy a creature from hand via Aether Vial (lords boost subsequent spell evals).
+    auto deploy_via_vial = [&](const std::string& name)
     {
         std::optional<CardDefinition> copt = CardDatabase::Instance().Lookup(name);
-        if (!copt || !copt->card.IsCreature()) { continue; }
+        if (!copt || !copt->card.IsCreature()) { return; }
         int mv = copt->card.m_mana_cost.ManaValue();
         Player& ap_v = state.ActivePlayer();
         auto hand_it = std::find_if(ap_v.hand.begin(), ap_v.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
-        if (hand_it == ap_v.hand.end()) { continue; }
+        if (hand_it == ap_v.hand.end()) { return; }
         int bf_sz = static_cast<int>(state.battlefield.size());
         for (int vi = 0; vi < bf_sz; ++vi)
         {
@@ -604,10 +604,9 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
             state.battlefield[vi].tapped = true;  // index access — safe after push_back
             break;
         }
-    }
+    };
 
-    // Execute: regular spells first so their lands are tapped before
-    // sacrifice-land spells fire, minimising the cost of the sacrifice.
+    // Cast a spell from hand by name.
     auto cast_by_name = [&](const std::string& name)
     {
         Player& ap = state.ActivePlayer();
@@ -618,8 +617,80 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
         CastSpellFromHand(state, *it, available);
     };
 
-    for (const std::string& name : plan.spells)    { cast_by_name(name); }
-    for (const std::string& name : plan.sacrifice) { cast_by_name(name); }
+    // Cast a Retrace card from the graveyard, discarding `discard_lands` lands as the
+    // additional cost. The card is removed from the graveyard onto the stack; on
+    // resolution EffectHandler::MoveToGraveyard returns it (Retrace does not exile),
+    // so it remains available to retrace again on a later turn.
+    auto cast_from_graveyard = [&](const std::string& name, int discard_lands)
+    {
+        Player& ap = state.ActivePlayer();
+        auto git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
+            [&name](const Card& c) { return c.m_name == name; });
+        if (git == ap.graveyard.end()) { return; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(name);
+        if (!def) { return; }
+
+        // Pay the mana cost first; abort cleanly (graveyard untouched) if unpayable.
+        ManaPool available = BuildAvailableMana(state);
+        ManaCost effective = EffectiveCost(*def, state);
+        if (!available.CanPay(effective)) { return; }
+        if (!TapForCost(state, effective, available, def->card.IsCreature())) { return; }
+
+        // Additional cost: discard `discard_lands` land cards from hand to the graveyard.
+        int discarded = 0;
+        for (auto hit = ap.hand.begin(); hit != ap.hand.end() && discarded < discard_lands; )
+        {
+            std::optional<CardDefinition> hdef = CardDatabase::Instance().Lookup(hit->m_name);
+            bool is_land = hdef ? hdef->card.IsLand() : hit->IsLand();
+            if (is_land)
+            {
+                if (m_logger) { m_logger->LogDiscard(hit->m_number, hit->m_name); }
+                ap.graveyard.push_back(*hit);
+                hit = ap.hand.erase(hit);
+                ++discarded;
+            }
+            else { ++hit; }
+        }
+
+        // Remove the source from the graveyard (re-find: push_back above may reallocate).
+        git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
+            [&name](const Card& c) { return c.m_name == name; });
+        int number = (git != ap.graveyard.end()) ? git->m_number : 0;
+        if (git != ap.graveyard.end()) { ap.graveyard.erase(git); }
+
+        StackEntry entry;
+        entry.type             = StackEntry::EntryType::Spell;
+        entry.source           = def->card;
+        entry.source.m_number  = number;
+        entry.controller_index = state.active_player_index;
+        // Retrace cards in this set (Throes of Chaos) target nothing; if a future
+        // retrace card needs targets, mirror CastSpellFromHand's targeting switch here.
+
+        if (m_logger) { m_logger->LogCastSpell(number, name, effective.ToString() + " (retrace)"); }
+        state.stack.push_back(std::move(entry));
+        FireOnCastTriggers(state, *def);
+        FireProwess(state, *def);
+    };
+
+    // Canonical execution order: Vial deployments first (lords live before spell casts),
+    // then regular spells (their lands tap first), then sacrifice-land spells, then
+    // graveyard (Retrace) casts last.
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); }
+    }
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { cast_by_name(a.card_name); }
+    }
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land) { cast_by_name(a.card_name); }
+    }
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::CastFromGraveyard) { cast_from_graveyard(a.card_name, a.discard_lands); }
+    }
 
     // Animate lands and activate tap-token abilities with mana remaining after spells.
     // Only in pre-combat main so any resulting creatures can attack this turn.

@@ -491,9 +491,9 @@
             "types": ["Sorcery"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Cascade. Retrace. [Cascade: when cast, exile from library top until a nonland with MV < 3 is found, cast it for free. Retrace deferred to Phase 2 (requires casting from graveyard).]",
+            "oracle_text": "Cascade. Retrace.",
             "template": "custom",
-            "parameters": { "cascade_max_mv": 3 }
+            "parameters": { "cascade_max_mv": 3, "retrace": true }
         }
     ]
 }

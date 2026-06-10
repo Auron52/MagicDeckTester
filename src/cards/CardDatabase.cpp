@@ -301,6 +301,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.no_max_hand_size    = params.value("no_max_hand_size",    false);
     p.discard_land_damage = params.value("discard_land_damage", 0);
     p.cascade_max_mv      = params.value("cascade_max_mv",      0);
+    p.retrace             = params.value("retrace",             false);
 
     return p;
 }

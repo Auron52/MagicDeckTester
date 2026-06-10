@@ -126,6 +126,11 @@ struct CardParams
     // strictly less than cascade_max_mv is found; cast it for free; put the rest on the bottom.
     // 0 = no cascade.
     int  cascade_max_mv = 0;
+
+    // Retrace (e.g. Throes of Chaos): this card may be cast from the graveyard by
+    // discarding a land card as an additional cost. It is not exiled, so it returns
+    // to the graveyard on resolution and can be retraced again on a later turn.
+    bool retrace = false;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.
