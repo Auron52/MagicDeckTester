@@ -196,7 +196,6 @@ Card CardDatabase::BuildCardFromJson(const json& entry) const
 {
     Card card;
     card.m_name = entry.value("name", std::string{});
-    card.m_id   = card.m_name;  // use name as ID until Scryfall IDs are stored
 
     std::string cost_str = entry.value("mana_cost", std::string{});
     card.m_mana_cost = ManaCostFromString(cost_str);
@@ -224,8 +223,6 @@ Card CardDatabase::BuildCardFromJson(const json& entry) const
     {
         card.m_toughness = entry["toughness"].get<int>();
     }
-
-    card.m_oracle_text = entry.value("oracle_text", std::string{});
 
     return card;
 }

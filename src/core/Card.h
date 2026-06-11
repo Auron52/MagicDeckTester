@@ -44,7 +44,11 @@ struct ManaCost
 
 struct Card
 {
-    std::string m_id;           // placeholder until CardDatabase is implemented (Phase 1.2)
+    // NB: this struct is deep-copied once per search node (~0.55 copies/node), so
+    // every member here is paid for on the hot path. Fields that are never read
+    // during simulation are deliberately kept OUT of it -- e.g. a card's oracle
+    // text and Scryfall id live only on the CardDefinition in CardDatabase, since
+    // dispatch is by template/params, not by parsing rules text at runtime.
     std::string m_name;
     int         m_number    = 0;    // per-copy stable ID (1–60); assigned at deck setup
     bool        m_is_staged = false; // true while the card is a staged (exiled) card in hand
@@ -56,7 +60,6 @@ struct Card
     std::optional<int>     m_power;      // null for non-creatures
     std::optional<int>     m_toughness;
     std::vector<Keyword>   m_keywords;
-    std::string            m_oracle_text;
 
     bool IsLand()     const { return HasType(CardType::Land); }
     bool IsCreature() const { return HasType(CardType::Creature); }
