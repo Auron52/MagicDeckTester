@@ -14,6 +14,7 @@
 #include "core/GameEngine.h"
 #include "core/GameLogger.h"
 #include "ai/MulliganProfileIO.h"
+#include "ai/Profiler.h"
 
 static void PrintUsage(const char* prog)
 {
@@ -470,6 +471,8 @@ int main(int argc, char* argv[])
         {
             std::cerr << "Game logs written to " << log_dir.string() << "\n";
         }
+
+        PROF_REPORT(std::cerr);
     }
     catch (const std::exception& e)
     {

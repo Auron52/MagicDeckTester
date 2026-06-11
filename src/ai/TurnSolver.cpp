@@ -1,5 +1,6 @@
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
+#include "Profiler.h"
 #include "../core/ManaPool.h"
 #include "../core/EffectHandler.h"
 #include "../core/SpellEffects.h"
@@ -859,6 +860,7 @@ static void SimulateLandPlay(GameState& state);
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat)
 {
+    PROF_INC(applyplan_calls);
     Player& ap  = state.ActivePlayer();
     int opp_idx = 1 - state.active_player_index;
 
@@ -1403,6 +1405,7 @@ static void SimulateLandPlay(GameState& state)
 // whichever leads to the earliest win.
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
+    PROF_INC(enumerate_calls);
     const Player& ap              = state.ActivePlayer();
     ManaPool      pool            = BuildPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
@@ -1754,6 +1757,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 
     auto add_for_land = [&](const std::string& land_name)
     {
+        PROF_INC(gamestate_copies);
         GameState copy = state;
         if (!land_name.empty() && !PlayLandByName(copy, land_name)) { return; }
 
@@ -1968,12 +1972,14 @@ static int SimulateToEnd(GameState state, int depth, int max_turns,
                          SearchBudget* budget, int cutoff_turn,
                          bool second_main, TranspositionTable* tt)
 {
+    PROF_INC(gamestate_copies);  // the by-value `state` parameter is a full deep clone
     TranspositionTable::Key key;
     if (tt != nullptr)
     {
         key = BuildSimKey(state, depth, max_turns, second_main);
+        PROF_INC(tt_lookups);
         const int* cached = tt->Lookup(key);
-        if (cached != nullptr) { return *cached; }
+        if (cached != nullptr) { PROF_INC(tt_hits); return *cached; }
     }
 
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
@@ -2137,6 +2143,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // main); the remaining turns are counted inside SimulateToEnd.
             if (budget) { budget->Consume(1); }
 
+            PROF_INC(gamestate_copies);
             GameState copy = state;
             if (is_pre_combat)
             {

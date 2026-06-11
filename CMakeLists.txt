@@ -4,6 +4,11 @@ project(MagicDeckTester CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Opt-in deterministic hot-path profiling (see src/ai/Profiler.h). OFF by default
+# so normal builds carry zero instrumentation overhead. Enable a separate build
+# tree with:  cmake -S . -B build-prof -DMTG_PROFILE=ON
+option(MTG_PROFILE "Enable deterministic search profiling counters" OFF)
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -33,6 +38,9 @@ add_library(mtg-core STATIC
 )
 target_include_directories(mtg-core PUBLIC src)
 target_link_libraries(mtg-core PUBLIC pugixml::pugixml nlohmann_json::nlohmann_json)
+if(MTG_PROFILE)
+    target_compile_definitions(mtg-core PUBLIC MTG_PROFILE)
+endif()
 
 # Runner: goldfish simulator
 add_executable(mtg src/main.cpp)

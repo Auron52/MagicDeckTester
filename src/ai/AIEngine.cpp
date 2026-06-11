@@ -1,6 +1,7 @@
 #include "AIEngine.h"
 #include "TurnSolver.h"
 #include "SearchBudget.h"
+#include "Profiler.h"
 #include "../cards/CardDatabase.h"
 #include "../core/GameEngine.h"
 #include "../core/SpellEffects.h"
@@ -573,6 +574,7 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
             plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                   m_lookahead_depth, m_max_turns,
                                                   &budget, true, m_search_post_combat);
+            PROF_ADD_NODES(budget.Used());
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 TryPlaySpecificLand(state, plan.land_to_play);

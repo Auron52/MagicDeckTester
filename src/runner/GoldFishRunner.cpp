@@ -2,6 +2,7 @@
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
 #include "../ai/AIEngine.h"
+#include "../ai/Profiler.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -241,7 +242,16 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                     engine.SetLogger(&logger);
                 }
 
+                PROF_RESET_GAME();
+#ifdef MTG_PROFILE
+                std::chrono::steady_clock::time_point game_t0 = std::chrono::steady_clock::now();
+#endif
                 int win_turn = engine.RunGame(state, max_turns);
+#ifdef MTG_PROFILE
+                double game_ms = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - game_t0).count();
+                PROF_RECORD_GAME(gi, game_ms);
+#endif
                 result.win_turns[gi] = win_turn;
 
                 if (logging)
@@ -253,6 +263,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                     logger.WriteToFile(log_path);
                 }
             }
+            PROF_FLUSH_THREAD();
         });
     }
 
