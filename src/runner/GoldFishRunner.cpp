@@ -3,6 +3,7 @@
 #include "../core/GameLogger.h"
 #include "../ai/AIEngine.h"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <chrono>
 #include <iomanip>
@@ -199,30 +200,33 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
         run_id    = MakeRunId(base_seed);
     }
 
-    // Divide games evenly across threads; first (num_games % num_threads) threads get one extra.
+    // Dynamic self-scheduling: rather than statically partitioning games into
+    // contiguous per-thread chunks (which leaves a single thread grinding the tail
+    // alone whenever a slow game lands late in its chunk), every worker pulls the
+    // next game index from a shared atomic counter as soon as it finishes one. All
+    // cores stay busy until fewer games remain than there are threads, so the tail
+    // is bounded by one slow game per core instead of a whole chunk. This is
+    // lossless and deterministic: each game gi is fully independent and indexed by
+    // gi (seed = base_seed + gi), so which thread runs it cannot change the result.
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
 
-    int base_count = num_games / num_threads;
-    int extra      = num_games % num_threads;
-    int start      = 0;
+    std::atomic<int> next_game{0};
 
     for (int t = 0; t < num_threads; ++t)
     {
-        int count        = base_count + (t < extra ? 1 : 0);
-        int thread_start = start;
-        start           += count;
-
-        threads.emplace_back([&, thread_start, count]()
+        threads.emplace_back([&]()
         {
             AIEngine   ai(profile, lookahead_depth, per_thread_timeout);
             ai.SetLookaheadBottoming(lookahead_bottoming);
             ai.SetSearchPostCombat(needs_second_main);
             GameEngine engine(ai);
 
-            for (int li = 0; li < count; ++li)
+            for (;;)
             {
-                int gi = thread_start + li;
+                int gi = next_game.fetch_add(1, std::memory_order_relaxed);
+                if (gi >= num_games) { break; }
+
                 GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi));
                 state.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(state, base_game_index + gi);
