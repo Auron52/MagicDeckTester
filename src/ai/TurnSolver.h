@@ -68,6 +68,16 @@ public:
         int  value          = -1;   // -1 = nothing castable
         bool wins_this_turn = false;
 
+        // Land drop folded into the plan (searched alongside spells). When
+        // land_decided is true the executor plays exactly land_to_play this turn
+        // ("" == a deliberate defer / no land available); when false the land was
+        // not searched (depth-0 static Solve plans) and the executor falls back to
+        // the greedy land heuristic. Folding the land into the plan keeps the land
+        // choice consistent between the real game and the lookahead rollout — the
+        // rollout re-searches lands every turn exactly as the real game does.
+        bool        land_decided = false;
+        std::string land_to_play;
+
         bool empty() const { return actions.empty(); }
     };
 
@@ -104,6 +114,11 @@ public:
     // tt: per-decision transposition table memoizing SimulateToEnd. The enforcing
     // top-level call creates one when none is supplied and threads it through the
     // whole recursion; rollout sub-searches forward the table they were given.
+    //
+    // When is_pre_combat is true and the active player still has a land drop, the
+    // land choice is folded into the candidate enumeration (each candidate carries
+    // its land_to_play) and searched alongside the spells. The same fold runs in
+    // the rollout, so the land decision is consistent between real game and rollout.
     static Plan SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                    int depth, int max_turns = 20,
                                    SearchBudget* budget = nullptr,

@@ -107,6 +107,10 @@ private:
     // Play a land from hand if a land drop is available.
     bool TryPlayLand(GameState& state);
 
+    // Play a specific land (by name) from hand. Used by the land search in TakeTurn
+    // to apply a chosen candidate to the real state or a search copy.
+    bool TryPlaySpecificLand(GameState& state, const std::string& name);
+
     // Conservative "dig when stuck" land abilities: cycling (e.g. Lonely Sandbar) and
     // sacrifice-to-draw (e.g. Fiery Islet). Only fires when the player has no Land's
     // Edge outlet and no draw/cascade engine available — i.e. when a surplus land is

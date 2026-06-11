@@ -851,10 +851,31 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
 // tapped at the end, so the remaining pool is always correct at each step.
 // Draw spells act as breakpoints: after drawing, Solve re-runs on the updated
 // state so newly revealed cards can be cast with remaining mana this turn.
+// Land-play helpers (defined below, near the land enumeration). PlayLandByName plays
+// a specific named land; SimulateLandPlay is the greedy fallback used when a plan did
+// not search the land (depth-0 static plans).
+static bool PlayLandByName(GameState& state, const std::string& name);
+static void SimulateLandPlay(GameState& state);
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat)
 {
     Player& ap  = state.ActivePlayer();
     int opp_idx = 1 - state.active_player_index;
+
+    // Land drop first, so the land's mana is available to the spells that follow.
+    // A searched plan (land_decided) plays exactly its chosen land ("" == a deliberate
+    // defer); an unsearched plan (depth-0 static Solve) falls back to greedy land play.
+    if (is_pre_combat)
+    {
+        if (plan.land_decided)
+        {
+            if (!plan.land_to_play.empty()) { PlayLandByName(state, plan.land_to_play); }
+        }
+        else
+        {
+            SimulateLandPlay(state);
+        }
+    }
 
     // Deploy creatures via Aether Vial before casting spells so lord effects are live.
     auto apply_vial = [&](const std::string& name)
@@ -1301,9 +1322,51 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     return true;
 }
 
-// Play a land from hand (one land drop per turn).
-// Prefers multi-color lands over colorless-only lands (e.g. Mutavault) so that
-// colored spells remain castable. Two-pass: multi-color first, then any land.
+// Play a specific named land from hand onto the battlefield, resolving its
+// enters-tapped / depletion / scry effects. Returns false if the land drop is
+// unavailable or no such card is in hand. Shared by the greedy fallback
+// (SimulateLandPlay) and the searched land fold (ApplyPlanDirect) so both produce
+// byte-identical placement for the same card.
+static bool PlayLandByName(GameState& state, const std::string& name)
+{
+    Player& ap = state.ActivePlayer();
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+
+    for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+    {
+        if (it->m_name != name) { continue; }
+        auto def = CardDatabase::Instance().Lookup(it->m_name);
+        if (!def || !def->card.IsLand()) { continue; }
+
+        // Resolve "as this land enters" choices while the card is still in hand.
+        bool tapped = LandEntersTapped(state, *def);
+        Permanent perm;
+        perm.card              = def->card;
+        perm.controller_index  = state.active_player_index;
+        perm.owner_index       = state.active_player_index;
+        perm.entered_this_turn = true;
+        perm.tapped            = tapped;
+        if (def->params.enters_tapped_with_depletion > 0)
+        {
+            Counter dep;
+            dep.type  = Counter::Type::Depletion;
+            dep.count = def->params.enters_tapped_with_depletion;
+            perm.counters.push_back(dep);
+        }
+        state.battlefield.push_back(perm);
+
+        ap.hand.erase(it);
+        ++ap.lands_played_this_turn;
+        if (def->params.etb_scry > 0) { ScryTop(state, def->params.etb_scry); }
+        return true;
+    }
+    return false;
+}
+
+// Greedy land play: one land drop per turn, preferring multi-color lands over
+// colorless-only lands (e.g. Mutavault) so colored spells stay castable.
+// Two-pass: multi-color first, then any land. Used as the fallback when a plan did
+// not search its land (depth-0 static Solve plans and the rollout horizon leaf).
 static void SimulateLandPlay(GameState& state)
 {
     Player& ap = state.ActivePlayer();
@@ -1311,34 +1374,15 @@ static void SimulateLandPlay(GameState& state)
 
     for (int pass = 0; pass < 2; ++pass)
     {
-        for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+        for (const Card& c : ap.hand)
         {
-            auto def = CardDatabase::Instance().Lookup(it->m_name);
+            auto def = CardDatabase::Instance().Lookup(c.m_name);
             if (!def || !def->card.IsLand()) { continue; }
 
             bool is_multi = def->params.produces.size() > 1;
             if (pass == 0 && !is_multi) { continue; }
 
-            // Resolve "as this land enters" choices while the card is still in hand.
-            bool tapped = LandEntersTapped(state, *def);
-            Permanent perm;
-            perm.card              = def->card;
-            perm.controller_index  = state.active_player_index;
-            perm.owner_index       = state.active_player_index;
-            perm.entered_this_turn = true;
-            perm.tapped            = tapped;
-            if (def->params.enters_tapped_with_depletion > 0)
-            {
-                Counter dep;
-                dep.type  = Counter::Type::Depletion;
-                dep.count = def->params.enters_tapped_with_depletion;
-                perm.counters.push_back(dep);
-            }
-            state.battlefield.push_back(perm);
-
-            ap.hand.erase(it);
-            ++ap.lands_played_this_turn;
-            if (def->params.etb_scry > 0) { ScryTop(state, def->params.etb_scry); }
+            PlayLandByName(state, c.m_name);
             return;
         }
     }
@@ -1606,6 +1650,153 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     return deduped;
 }
 
+// Land-folded candidate enumeration: the land drop is searched alongside the spells.
+//
+// When a pre-combat land drop is available, for each DISTINCT playable land in hand
+// (deduped by static effect signature so 4-ofs and mechanically-identical lands
+// collapse to one representative) plus a DEFER option (play no land), we play that
+// land on a copy, enumerate the spell subsets on the resulting board, and tag every
+// plan with its land_to_play. A "play this land, cast nothing" baseline is always
+// included so a turn may legally develop only its land. SolveWithLookahead runs this
+// at every searched turn — in the real game AND in the rollout — so the land choice is
+// modelled identically end to end (no greedy-rollout / searched-reality divergence,
+// which otherwise makes searched land choices play out worse than the greedy heuristic).
+static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
+                                                            bool is_pre_combat)
+{
+    const Player& ap = state.ActivePlayer();
+    bool drop_available = is_pre_combat
+                       && ap.lands_played_this_turn < ap.LandDropsAvailable();
+
+    if (!drop_available)
+    {
+        // Nothing to decide; mark land as resolved so ApplyPlanDirect does not fall
+        // back to greedy land play for these searched plans.
+        std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, is_pre_combat);
+        for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
+        return plans;
+    }
+
+    // Static effect signature: two lands with the same signature are interchangeable
+    // for the search (identical mana, ETB, and abilities), so only one need be tried.
+    auto land_sig = [](const CardParams& pp) -> std::string
+    {
+        std::string s;
+        std::vector<int> prod;
+        for (Color c : pp.produces) { prod.push_back(static_cast<int>(c)); }
+        std::sort(prod.begin(), prod.end());
+        for (int c : prod) { s += std::to_string(c); s += ','; }
+        s += "n" + std::to_string(pp.produces_amount);
+        s += pp.enters_tapped ? "T" : "U";
+        s += "l" + std::to_string(pp.etb_pay_life_to_untap);
+        for (const std::string& sub : pp.etb_untap_reveal_subtypes) { s += "r" + sub; }
+        s += "s" + std::to_string(pp.etb_scry);
+        s += "d" + std::to_string(pp.enters_tapped_with_depletion);
+        s += pp.no_max_hand_size      ? "H" : "-";
+        s += pp.is_filter             ? "F" : "-";
+        s += pp.cycling_cost          ? "C" : "-";
+        s += pp.sacrifice_draw_cost   ? "D" : "-";
+        return s;
+    };
+
+    std::vector<std::string>        land_names;   // representatives, in hand order
+    std::unordered_set<std::string> seen_sig;
+    for (const Card& c : ap.hand)
+    {
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(c.m_name);
+        if (!def || !def->card.IsLand()) { continue; }
+        if (seen_sig.insert(land_sig(def->params)).second) { land_names.push_back(c.m_name); }
+    }
+
+    // Greedy land the heuristic (AIEngine::TryPlayLand) would play from this hand.
+    // Used ONLY as the last-resort ordering tiebreak below: when the search is
+    // genuinely indifferent between land lines (equal win-turn AND equal first-turn
+    // value), we default to the proven heuristic rather than to hand order. The
+    // clairvoyant rollout often rates two land choices identically at the horizon,
+    // and letting an arbitrary order decide picks a land that plays out marginally
+    // worse than greedy in the realized game (the small fold-vs-greedy regressions).
+    // Mirrors TryPlayLand's TH pre-pass + four-pass (untapped/tapped x multi/any).
+    auto greedy_land_name = [&]() -> std::string
+    {
+        bool has_draw_until_nonland = false;
+        for (const Card& c : ap.hand)
+        {
+            std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+            if (d && d->tmpl == CardTemplate::DrawUntilNonland) { has_draw_until_nonland = true; break; }
+        }
+        if (has_draw_until_nonland)
+        {
+            for (const Card& c : ap.hand)
+            {
+                std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+                if (d && d->card.IsLand() && d->params.no_max_hand_size) { return c.m_name; }
+            }
+        }
+        for (int pass = 0; pass < 4; ++pass)
+        {
+            bool want_untapped = (pass < 2);
+            bool want_multi    = (pass == 0 || pass == 2);
+            for (const Card& c : ap.hand)
+            {
+                std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+                if (!d || !d->card.IsLand()) { continue; }
+                bool is_tapped = d->params.enters_tapped;
+                bool is_multi  = d->params.produces.size() > 1;
+                if (want_untapped == is_tapped) { continue; }
+                if (want_multi && !is_multi)    { continue; }
+                return c.m_name;
+            }
+        }
+        return std::string();
+    }();
+
+    std::vector<TurnSolver::Plan> all;
+
+    auto add_for_land = [&](const std::string& land_name)
+    {
+        GameState copy = state;
+        if (!land_name.empty() && !PlayLandByName(copy, land_name)) { return; }
+
+        // "Play this land, cast nothing" baseline (neutral value 0).
+        TurnSolver::Plan idle;
+        idle.value        = 0;
+        idle.land_decided = true;
+        idle.land_to_play = land_name;
+        all.push_back(std::move(idle));
+
+        std::vector<TurnSolver::Plan> plans = EnumeratePlans(copy, is_pre_combat);
+        for (TurnSolver::Plan& p : plans)
+        {
+            p.land_decided = true;
+            p.land_to_play = land_name;
+            all.push_back(std::move(p));
+        }
+    };
+
+    for (const std::string& ln : land_names) { add_for_land(ln); }
+    add_for_land("");   // defer: play no land this turn
+
+    // Winning plans first, then by value — matches EnumeratePlans' ordering so the
+    // win-this-turn shortcut in SolveWithLookahead still returns the best winning plan.
+    // Final tiebreak (only fires on equal wins AND equal value, i.e. true search
+    // indifference): order the greedy land's plans first. SolveWithLookahead replaces
+    // its incumbent only on a STRICTLY better rollout win-turn or STRICTLY higher
+    // value, so among equal-value/equal-win-turn candidates it keeps the first one —
+    // this ordering makes that first one the greedy land, defaulting indifferent ties
+    // to the proven heuristic without overriding any strictly-better searched line.
+    std::stable_sort(all.begin(), all.end(),
+        [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
+        {
+            if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
+            if (a.value != b.value) { return a.value > b.value; }
+            bool a_greedy = (a.land_to_play == greedy_land_name);
+            bool b_greedy = (b.land_to_play == greedy_land_name);
+            return a_greedy > b_greedy;
+        });
+
+    return all;
+}
+
 // ---- Transposition key over the future-determining state ------------------
 //
 // Folds every game-state field the rollout reads into a 128-bit key, plus the
@@ -1760,9 +1951,10 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             if (state.Opponent().life <= 0) { return state.turn_number; }
         }
 
-        // End of turn + start of next
+        // End of turn + start of next. The next turn's land drop is searched as part
+        // of that turn's plan (folded into SolveWithLookahead / played by
+        // ApplyPlanDirect), so no greedy land play happens here.
         if (!SimulateEndAndStartNextTurn(state)) { return max_turns + 1; }
-        SimulateLandPlay(state);
     }
     return max_turns + 1;
 }
@@ -1824,7 +2016,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     TranspositionTable  local_table;
     if (tt == nullptr && enforce_budget) { tt = &local_table; }
 
-    std::vector<Plan> candidates = EnumeratePlans(state, is_pre_combat);
+    // Candidate set is land-folded: when a land drop is available this enumerates
+    // every (land choice x spell subset) plus a defer option, each plan tagged with
+    // its land_to_play. The same fold runs in the rollout (SimulateToEndImpl calls
+    // this per turn), so the land choice is searched consistently end to end.
+    std::vector<Plan> candidates = EnumeratePlansWithLand(state, is_pre_combat);
 
     // Candidates are sorted highest-value first, so the first winning plan
     // (if any) is also the highest-value winning plan.
@@ -1969,9 +2165,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (copy.Opponent().life <= 0) { return plan; }
             }
 
-            // End of this turn + start of next
+            // End of this turn + start of next. The next turn's land drop is searched
+            // inside SimulateToEnd's per-turn SolveWithLookahead, so no greedy land
+            // play happens here.
             if (!SimulateEndAndStartNextTurn(copy)) { ++candidates_done; continue; }
-            SimulateLandPlay(copy);
 
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to
             // completion (enforce_budget=false inside), only consuming budget; the

@@ -498,46 +498,6 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
         ap_ref.hand.push_back(sc.card);
     }
 
-    // "TH before land drop" optimisation: when Treasure Hunt is in hand and castable
-    // without an active enabler (RT or LE), defer the land play to the second TakeTurn
-    // pass so a land from TH's draws can be used as the land drop instead.
-    // Only applies in the pre-combat main when no land has been played yet this turn.
-    bool defer_land = false;
-    if (is_pre_combat_main && ap_ref.lands_played_this_turn == 0)
-    {
-        bool has_enabler = false;
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            auto def = CardDatabase::Instance().Lookup(p.card.m_name);
-            if (!def) { continue; }
-            if (def->params.no_max_hand_size || def->params.discard_land_damage > 0)
-            {
-                has_enabler = true;
-                break;
-            }
-        }
-        if (!has_enabler)
-        {
-            ManaPool avail = BuildAvailableMana(state);
-            ManaCost th_cost;
-            th_cost.generic = 1;
-            th_cost.blue    = 1;
-            for (const Card& c : ap_ref.hand)
-            {
-                auto def = CardDatabase::Instance().Lookup(c.m_name);
-                if (!def || def->tmpl != CardTemplate::DrawUntilNonland) { continue; }
-                if (avail.CanPay(th_cost)) { defer_land = true; }
-                break;
-            }
-        }
-    }
-
-    if (!defer_land)
-    {
-        TryPlayLand(state);
-    }
-
     // The post-combat (second) main phase does NOTHING unless post-combat search
     // is explicitly enabled (see SetSearchPostCombat). In a clairvoyant goldfish
     // combat creates no new resources, so everything castable was already cast in
@@ -550,23 +510,73 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
     const bool play_this_phase = is_pre_combat_main || m_search_post_combat;
 
     TurnSolver::Plan plan;  // empty plan == do nothing this phase
+
     if (play_this_phase)
     {
+        // The land drop is searched (folded into SolveWithLookahead) ONLY for the
+        // depth>0 first main. Every other case keeps the pre-fold greedy land play:
+        //   - depth 0 (fast greedy runner): the search needs a rollout, so depth 0
+        //     uses the 4-pass heuristic plus the Treasure-Hunt defer special-case;
+        //   - the second main at any depth: a land may still be playable post-combat
+        //     (e.g. one revealed by Light Up the Stage), played greedily as before.
+        const bool fold_land = (m_lookahead_depth > 0 && is_pre_combat_main);
+
+        if (!fold_land)
+        {
+            if (is_pre_combat_main && ap_ref.lands_played_this_turn == 0)
+            {
+                // "TH before land drop" heuristic: when Treasure Hunt is castable and no
+                // enabler (RT/LE) is in play, defer the land drop to the second TakeTurn
+                // pass so a land drawn by TH (possibly Reliquary Tower) can be used.
+                bool defer_land = false;
+                bool has_enabler = false;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+                    if (!def) { continue; }
+                    if (def->params.no_max_hand_size || def->params.discard_land_damage > 0)
+                    { has_enabler = true; break; }
+                }
+                if (!has_enabler)
+                {
+                    ManaPool avail = BuildAvailableMana(state);
+                    ManaCost th_cost;
+                    th_cost.generic = 1;
+                    th_cost.blue    = 1;
+                    for (const Card& c : ap_ref.hand)
+                    {
+                        auto def = CardDatabase::Instance().Lookup(c.m_name);
+                        if (!def || def->tmpl != CardTemplate::DrawUntilNonland) { continue; }
+                        if (avail.CanPay(th_cost)) { defer_land = true; }
+                        break;
+                    }
+                }
+                if (!defer_land) { TryPlayLand(state); }
+            }
+            else
+            {
+                // Second main: play a land if a drop still remains (matches the
+                // pre-fold unconditional land play).
+                TryPlayLand(state);
+            }
+        }
+
         if (m_lookahead_depth > 0)
         {
-            // Deterministic work budget for this decision (m_budget_ms is "virtual
-            // ms"; <= 0 means unlimited). Replaces the old steady_clock deadline so
-            // the search does identical work — and reaches an identical result — on
-            // every machine and every run for a given seed. See SearchBudget.
+            // Lookahead. When fold_land is set the land drop is FOLDED INTO the search:
+            // SolveWithLookahead enumerates each (land choice x spell subset) plus a
+            // defer option and searches them together, and the same fold runs in its
+            // rollout, so the land decision is modelled identically in the real game
+            // and the rollout. We then play the chosen land before executing spells.
             SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
-
-            // Search at full depth every turn. The per-turn depth decrement that
-            // used to live here was a workaround for candidate starvation under the
-            // timeout; iterative deepening in SolveWithLookahead now guarantees
-            // every candidate is evaluated, so later turns need not be shallower.
             plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
-                                                  m_lookahead_depth, 20, &budget, true,
-                                                  m_search_post_combat);
+                                                  m_lookahead_depth, m_max_turns,
+                                                  &budget, true, m_search_post_combat);
+            if (fold_land && plan.land_decided && !plan.land_to_play.empty())
+            {
+                TryPlaySpecificLand(state, plan.land_to_play);
+            }
         }
         else
         {
@@ -739,6 +749,43 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
 }
 
 // ---- Land drop ----
+
+// Play a specific named land from hand. Mirrors TryPlayLand's per-card logic;
+// used by the land search in TakeTurn to apply the chosen candidate.
+bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name)
+{
+    Player& ap = state.ActivePlayer();
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+    {
+        if (it->m_name != name) { continue; }
+        auto def = CardDatabase::Instance().Lookup(it->m_name);
+        if (!def || !def->card.IsLand()) { continue; }
+
+        if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
+        bool tapped = LandEntersTapped(state, *def);
+        Permanent perm;
+        perm.card              = def->card;
+        perm.card.m_number     = it->m_number;
+        perm.controller_index  = state.active_player_index;
+        perm.owner_index       = state.active_player_index;
+        perm.entered_this_turn = true;
+        perm.tapped            = tapped;
+        if (def->params.enters_tapped_with_depletion > 0)
+        {
+            Counter dep;
+            dep.type  = Counter::Type::Depletion;
+            dep.count = def->params.enters_tapped_with_depletion;
+            perm.counters.push_back(dep);
+        }
+        state.battlefield.push_back(perm);
+        ap.hand.erase(it);
+        ++ap.lands_played_this_turn;
+        if (def->params.etb_scry > 0) { ScryTop(state, def->params.etb_scry); }
+        return true;
+    }
+    return false;
+}
 
 bool AIEngine::TryPlayLand(GameState& state)
 {
