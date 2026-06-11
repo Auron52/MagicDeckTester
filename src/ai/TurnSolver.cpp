@@ -1968,11 +1968,16 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
 // Only REAL win turns (<= max_turns) are cached: they are exact and cutoff-
 // independent, whereas a max_turns+1 result may be a branch-and-bound abort
 // rather than a genuine no-win, so it is never stored. See TranspositionTable.h.
-static int SimulateToEnd(GameState state, int depth, int max_turns,
+// Takes the rollout's starting state by rvalue reference: the sole caller passes a
+// throwaway scratch copy it no longer needs, so binding (and, on a miss, mutating)
+// it in place avoids a full GameState deep clone of the whole state on every call —
+// previously the by-value parameter cloned ~60 cards even when the very next line
+// returned a transposition-table hit. The TT key is read before any mutation, so
+// the result is byte-identical to the by-value version.
+static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                          SearchBudget* budget, int cutoff_turn,
                          bool second_main, TranspositionTable* tt)
 {
-    PROF_INC(gamestate_copies);  // the by-value `state` parameter is a full deep clone
     TranspositionTable::Key key;
     if (tt != nullptr)
     {
@@ -2180,8 +2185,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to
             // completion (enforce_budget=false inside), only consuming budget; the
             // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
-            int win_turn = SimulateToEnd(copy, sub_depth, max_turns, budget, pass_best_win,
-                                         second_main, tt);
+            int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
+                                         pass_best_win, second_main, tt);
             if (trace_this)
             {
                 std::cerr << "  " << PlanDesc(plan)
