@@ -81,3 +81,13 @@ When the user asks to **analyze a deck**, **add a new deck**, or **run the simul
 3. **Analyze** — run `scripts/analyze_deck.py` to build and run the C++ simulator
 
 This workflow requires no external API calls — all generation and review happens in the conversation.
+
+## Regression Testing Skill
+
+When the user asks to **run regression tests**, **smoke/overnight test**, **A/B a change**, **update/rebaseline ground truth**, or **add a deck to the test suite**, read `.claude/skills/regression-testing.md` first. It is the authoritative guide for the `test/` harness.
+
+```
+Read `.claude/skills/regression-testing.md` and [run / accept / A/B / extend] ...
+```
+
+Key points it covers: the three modes (smoke < 15 min, regression < 45 min, overnight < 8 h) with disjoint seeds; reading the `<games_won>/<avg_win_turn>` fingerprint and per-case logs/timings; the **accept flow** (`regression.sh <mode> --accept` promotes an inspected run into ground truth — never hand-edit or re-run to regenerate); using the suite itself as the A/B harness; and how to add a deck within the shared per-mode time budgets.

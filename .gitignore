@@ -75,5 +75,10 @@ logs_*/
 # A/B harness scratch — kept locally, not committed (scripts, result snapshots, built binaries)
 ab_runs/
 
-# regression test run output (ground truth regression_gt.txt IS committed; result is not)
+# regression test run output (ground truth regression_gt.txt IS committed; the
+# rest is transient: per-mode summaries, per-case logs, and the results/<mode>.env
+# fingerprints that 'regression.sh --accept' promotes into the ground truth)
 test/regression_result.txt
+test/regression_result_*.txt
+test/logs/
+test/results/
