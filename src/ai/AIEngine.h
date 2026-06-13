@@ -85,6 +85,22 @@ private:
     std::vector<std::string> m_kept_opening_hand;
     GameLogger*              m_logger            = nullptr;
 
+    // Shared transposition table for the clairvoyant bottoming loop (BottomCards).
+    // Non-null only for the duration of that loop; nullptr during the real game and
+    // the in-search rollout, so every other SolveWithLookahead keeps its own
+    // per-decision local table (behaviour byte-identical to before). Bottoming runs
+    // a full lookahead PlayOut per candidate removal over a FIXED library, and each
+    // of those playouts re-rolls the same overlapping late-game turns; pointing every
+    // TakeTurn at one shared table lets later turns/candidates reuse memoised exact
+    // win turns instead of rebuilding a table from scratch ~(count*hand_size) times.
+    // Lossless: the TT stores only exact real win turns keyed by SimulateToEnd's
+    // inputs. The key folds library size+front but not the tail, so two candidate
+    // states that bury a DIFFERENT card share a key — benign here because the bottomed
+    // card sits at the library bottom, far below the max_turns (=20) draw horizon, so
+    // no rollout can ever draw the differing card. Validated by a byte-identical
+    // regression check. See project-cross-turn-reuse / project-search-optimizations.
+    TranspositionTable*      m_shared_tt           = nullptr;
+
     // --- Mulligan helpers ---
     bool KeepHand(const std::vector<Card>& hand, int mulligan_count) const;
     void BottomCards(GameState& state, int count, int max_turns);

@@ -1,5 +1,6 @@
 #include "AIEngine.h"
 #include "TurnSolver.h"
+#include "TranspositionTable.h"
 #include "SearchBudget.h"
 #include "Profiler.h"
 #include "../cards/CardDatabase.h"
@@ -426,6 +427,16 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 {
     Player& ap = state.ActivePlayer();
 
+    // One transposition table shared across every candidate rollout of this whole
+    // bottoming pass: each RolloutWinTurn plays a full lookahead game over the same
+    // fixed library, so later turns/candidates reuse memoised exact win turns rather
+    // than rebuilding a fresh table ~(count*hand_size) times. Scoped to this loop only
+    // (m_shared_tt restored to its prior value on return), so the real game and any
+    // enclosing rollout are unaffected and byte-identical. See m_shared_tt.
+    TranspositionTable  shared_tt;
+    TranspositionTable* saved_tt = m_shared_tt;
+    m_shared_tt = m_lookahead_bottoming ? &shared_tt : saved_tt;
+
     for (int i = 0; i < count && !ap.hand.empty(); ++i)
     {
         int hand_size = static_cast<int>(ap.hand.size());
@@ -477,6 +488,8 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
         ap.library.push_back(ap.hand[pick]);
         ap.hand.erase(ap.hand.begin() + pick);
     }
+
+    m_shared_tt = saved_tt;
 }
 
 // ============================================================
@@ -570,11 +583,16 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
             // defer option and searches them together, and the same fold runs in its
             // rollout, so the land decision is modelled identically in the real game
             // and the rollout. We then play the chosen land before executing spells.
+            // m_shared_tt is non-null only during the bottoming loop (BottomCards), so
+            // every TakeTurn of that loop's rollouts shares one table; nullptr in normal
+            // play, where SolveWithLookahead keeps its own per-decision table as before.
             SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
             plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                   m_lookahead_depth, m_max_turns,
-                                                  &budget, true, m_search_post_combat);
+                                                  &budget, true, m_search_post_combat,
+                                                  m_shared_tt);
             PROF_ADD_NODES(budget.Used());
+
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 TryPlaySpecificLand(state, plan.land_to_play);
