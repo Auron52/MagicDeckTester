@@ -537,6 +537,11 @@ AnalysisResult AnalyzerEngine::Run(const Decklist& deck, int num_games,
     result.hand_score_threshold = threshold;
     std::cerr << "  Card scores computed. Hand threshold: " << threshold << "\n";
 
+    // Persist the scores into the saved profile so the runner can apply them as a
+    // bottoming tiebreak (AIEngine::CardScore) without re-running the analyzer.
+    result.mulligan_profile.card_scores          = result.card_scores;
+    result.mulligan_profile.hand_score_threshold = result.hand_score_threshold;
+
     return result;
 }
 

@@ -110,6 +110,19 @@ private:
     int HeuristicBottomPick(const std::vector<Card>& hand,
                             const std::vector<char>& allowed) const;
 
+    // Per-card "keep value" derived from the deck analysis (card_scores): the
+    // empirical marginal win-turn improvement of the (copy_index+1)-th copy in
+    // the opening hand, clamped to >= 0. copy_index is 0-based: index 0 is the
+    // first copy's marginal, index 1 the second copy's (typically smaller —
+    // diminishing returns), and so on. Indices past the recorded vector clamp to
+    // its last entry. Lords and other payload cards score high on the first copy;
+    // lands and support cards ~0. Used purely as a bottoming tiebreak — among
+    // removals the lookahead judged win-equal, prefer to bottom the copy with the
+    // lowest marginal (keep the payload; bottom a redundant 2nd copy before a
+    // unique card). Returns 0.0 when the profile carries no scores, so the
+    // tiebreak is inert (bottoming byte-identical) for decks analysed without it.
+    double CardScore(const std::string& name, int copy_index) const;
+
     // Plays a full clairvoyant game from a (post-mulligan) trial state and returns
     // the win turn, or max_turns + 1 if no win. Suppresses logging during the rollout.
     int RolloutWinTurn(GameState trial, int max_turns);

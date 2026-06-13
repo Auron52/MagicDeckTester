@@ -221,6 +221,27 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
     return true;
 }
 
+double AIEngine::CardScore(const std::string& name, int copy_index) const
+{
+    std::map<std::string, std::vector<double>>::const_iterator it =
+        m_profile.card_scores.find(name);
+    if (it == m_profile.card_scores.end() || it->second.empty())
+    {
+        return 0.0;
+    }
+    // Value the specific copy being bottomed: index 0 = first copy's marginal,
+    // index 1 = second copy's (typically smaller — diminishing returns). A hand
+    // holding a redundant 2nd copy of a lord thus scores that copy at [1], so it
+    // bottoms before a unique card scored at [0]. Clamp the index to the recorded
+    // vector (some cards only have a first-copy sample).
+    int idx = std::min(std::max(0, copy_index),
+                       static_cast<int>(it->second.size()) - 1);
+    // Clamp negatives to zero: they are selection-bias artifacts (e.g. Aether
+    // Vial tests slow because Vial hands hold fewer creatures), not a signal to
+    // bottom the card preferentially. See ComputeHandScore for the same rationale.
+    return std::max(0.0, it->second[idx]);
+}
+
 int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
                                  const std::vector<char>& allowed) const
 {
@@ -256,6 +277,20 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
         return needed;
     };
 
+    // Number of copies of a named card currently in the passed hand. Bottoming a
+    // candidate removes the n-th copy, whose marginal keep-value is the (n-1)-th
+    // entry of card_scores (0-based) — so a redundant 2nd copy is valued by its
+    // smaller second-copy marginal, not the headline first-copy one.
+    auto copy_count = [&](const std::string& name) -> int
+    {
+        int n = 0;
+        for (const Card& c : hand)
+        {
+            if (c.m_name == name) { ++n; }
+        }
+        return n;
+    };
+
     int chosen = -1;
 
     if (land_count > m_profile.min_lands + 1)
@@ -285,9 +320,10 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
             demand[Color::Colorless] += cost.colorless;
         }
 
-        int best_total_deficit  = std::numeric_limits<int>::max();
-        int best_uncastable     = std::numeric_limits<int>::max();
-        int best_usefulness     = std::numeric_limits<int>::max();
+        int    best_total_deficit  = std::numeric_limits<int>::max();
+        int    best_uncastable     = std::numeric_limits<int>::max();
+        int    best_usefulness     = std::numeric_limits<int>::max();
+        double best_land_score     = 0.0;
 
         for (int j = 0; j < static_cast<int>(hand.size()); ++j)
         {
@@ -350,18 +386,26 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
                 second_better = total_deficit  == best_total_deficit
                              && uncastable_cnt <  best_uncastable;
             }
+            double land_score = CardScore(hand[j].m_name,
+                                          copy_count(hand[j].m_name) - 1);
+
             bool prefer = (chosen == -1)
                        || first_better
                        || second_better
                        || (uncastable_cnt == best_uncastable
                            && total_deficit == best_total_deficit
-                           && usefulness   <  best_usefulness);
+                           && usefulness   <  best_usefulness)
+                       || (uncastable_cnt == best_uncastable
+                           && total_deficit == best_total_deficit
+                           && usefulness   == best_usefulness
+                           && land_score   <  best_land_score);
 
             if (prefer)
             {
                 best_total_deficit = total_deficit;
                 best_uncastable    = uncastable_cnt;
                 best_usefulness    = usefulness;
+                best_land_score    = land_score;
                 chosen             = j;
             }
         }
@@ -375,9 +419,13 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
         //              A 4-drop with 3 on-colour lands has deficit 1 (any land helps).
         //              An off-colour 1-drop with 1 wrong-colour land also has deficit 1
         //              (needs a specific colour), but is worth keeping because MV is lower.
-        //   Secondary: MV descending — among equal deficits, bottom the more expensive card.
-        int best_deficit = -1;
-        int best_mv      = -1;
+        //   Secondary: analysis score ascending — among equally castable spells,
+        //              bottom the lowest-scored card (keep the lords/payload). Inert
+        //              when the profile carries no card_scores (all scores 0.0).
+        //   Tertiary:  MV descending — among equal score, bottom the more expensive card.
+        int    best_deficit = -1;
+        double best_score   = 0.0;
+        int    best_mv      = -1;
 
         for (int j = 0; j < static_cast<int>(hand.size()); ++j)
         {
@@ -386,26 +434,44 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
             bool is_land = def ? def->card.IsLand() : hand[j].IsLand();
             if (is_land) { continue; }
 
-            int deficit = def ? one_deficit(def->card.m_mana_cost, pool, land_count) : 0;
-            int mv      = def ? def->card.m_mana_cost.ManaValue()
-                              : hand[j].m_mana_cost.ManaValue();
+            int    deficit = def ? one_deficit(def->card.m_mana_cost, pool, land_count) : 0;
+            double score   = CardScore(hand[j].m_name,
+                                       copy_count(hand[j].m_name) - 1);
+            int    mv      = def ? def->card.m_mana_cost.ManaValue()
+                                 : hand[j].m_mana_cost.ManaValue();
 
             bool prefer = (chosen == -1)
                        || (deficit > best_deficit)
-                       || (deficit == best_deficit && mv > best_mv);
+                       || (deficit == best_deficit && score < best_score)
+                       || (deficit == best_deficit && score == best_score && mv > best_mv);
 
-            if (prefer) { chosen = j; best_deficit = deficit; best_mv = mv; }
+            if (prefer)
+            {
+                chosen       = j;
+                best_deficit = deficit;
+                best_score   = score;
+                best_mv      = mv;
+            }
         }
     }
 
     // Fallback: the branch found no eligible card of its preferred type (e.g. the
-    // allowed set is all lands while we're in the spell branch). Bottom the first
-    // allowed card — under lookahead these are all win-equal anyway.
+    // allowed set is all lands while we're in the spell branch). Under lookahead
+    // these are all win-equal, so bottom the lowest-scored among them (keep the
+    // payload); with no card_scores this reduces to the first allowed card.
     if (chosen == -1)
     {
+        double best_score = 0.0;
         for (int j = 0; j < static_cast<int>(hand.size()); ++j)
         {
-            if (allowed[j]) { chosen = j; break; }
+            if (!allowed[j]) { continue; }
+            double score = CardScore(hand[j].m_name,
+                                     copy_count(hand[j].m_name) - 1);
+            if (chosen == -1 || score < best_score)
+            {
+                chosen     = j;
+                best_score = score;
+            }
         }
     }
     return chosen;
