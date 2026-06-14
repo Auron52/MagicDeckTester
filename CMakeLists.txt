@@ -34,6 +34,7 @@ add_library(mtg-core STATIC
     src/ai/AIEngine.cpp
     src/ai/TurnSolver.cpp
     src/runner/GoldFishRunner.cpp
+    src/runner/BatchRunner.cpp
     src/cards/CardDatabase.cpp
 )
 target_include_directories(mtg-core PUBLIC src)

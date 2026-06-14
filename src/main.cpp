@@ -9,6 +9,7 @@
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
 #include "runner/GoldFishRunner.h"
+#include "runner/BatchRunner.h"
 #include "ai/AIEngine.h"
 #include "ai/TurnSolver.h"
 #include "core/GameEngine.h"
@@ -313,6 +314,54 @@ int main(int argc, char* argv[])
     {
         PrintUsage(argv[0]);
         return 1;
+    }
+
+    // Batch mode: pool every game from every job in a manifest into one work queue.
+    //   mtg.exe --batch <manifest.json> [--threads N] [--cards-json P]
+    if (std::string(argv[1]) == "--batch")
+    {
+        std::filesystem::path manifest;
+        std::filesystem::path cards_json  = "src/cards/data/cards.json";
+        int                   num_threads = 0;
+        for (int i = 2; i < argc; ++i)
+        {
+            std::string flag = argv[i];
+            if (flag == "--threads"    && i + 1 < argc) { num_threads = std::stoi(argv[++i]); }
+            else if (flag == "--cards-json" && i + 1 < argc) { cards_json = argv[++i]; }
+            else if (manifest.empty())                  { manifest = flag; }
+        }
+        if (manifest.empty())
+        {
+            std::cerr << "Usage: " << argv[0]
+                      << " --batch <manifest.json> [--threads N] [--cards-json P]\n";
+            return 1;
+        }
+        try
+        {
+            if (std::filesystem::exists(cards_json))
+            {
+                CardDatabase::Instance().LoadFromJson(cards_json);
+            }
+            std::vector<BatchJobResult> results = BatchRunner::RunManifest(manifest, num_threads);
+            int total_games = 0;
+            for (const BatchJobResult& r : results) { total_games += r.games_played; }
+            std::cout << "=== BATCH (" << results.size() << " jobs, "
+                      << total_games << " games) ===\n";
+            for (const BatchJobResult& r : results)
+            {
+                double pct = r.games_played > 0
+                             ? 100.0 * r.games_won / r.games_played : 0.0;
+                std::cout << r.name << ": played=" << r.games_played
+                          << " won=" << r.games_won << " (" << pct << "%)"
+                          << " avg=" << r.average_win_turn << "\n";
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Error: " << e.what() << "\n";
+            return 1;
+        }
+        return 0;
     }
 
     std::filesystem::path deck_path    = argv[1];
