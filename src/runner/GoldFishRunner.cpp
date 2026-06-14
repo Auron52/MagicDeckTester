@@ -7,6 +7,8 @@
 #include <atomic>
 #include <cmath>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <iomanip>
 #include <map>
 #include <numeric>
@@ -253,6 +255,11 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 PROF_RECORD_GAME(gi, game_ms);
 #endif
                 result.win_turns[gi] = win_turn;
+                // Diagnostic (MTG_DUMP_WINS, inert by default): per-game win turn, for
+                // per-game A/B diffs between builds (e.g. `join` two runs to find the
+                // games a change moved). Single-thread for ordered output.
+                if (std::getenv("MTG_DUMP_WINS"))
+                { std::fprintf(stderr, "[win] gi=%d wt=%d\n", gi, win_turn); }
 
                 if (logging)
                 {

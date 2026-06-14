@@ -5,6 +5,7 @@
 #include "../cards/CardDatabase.h"
 #include "MulliganProfile.h"
 #include "TurnSolver.h"
+#include <functional>
 #include <vector>
 
 class AIEngine
@@ -28,7 +29,18 @@ public:
     const std::vector<std::string>& GetKeptOpeningHand() const { return m_kept_opening_hand; }
 
     // Called each main phase. Plays lands, casts spells, activates abilities.
-    void TakeTurn(GameState& state, bool is_pre_combat_main);
+    //
+    // resolve_stack: if supplied, called after EACH individual cast so the stack
+    // resolves before the next spell is cast. We don't model priority, so this is how
+    // we reproduce legal sequential play within a main phase: a creature is on the
+    // battlefield (lords/prowess see it) and a damage spell has dealt its damage
+    // (spectacle is unlocked) before the following spell is cast — matching the
+    // lookahead rollout, which resolves each cast immediately. With no callback the
+    // casts are batched (legacy behaviour). Returns true if a draw-engine spell
+    // (DrawUntilNonland / cascade) was cast, so the caller can give the AI a second
+    // pass to play the newly drawn cards.
+    bool TakeTurn(GameState& state, bool is_pre_combat_main,
+                  const std::function<void(GameState&)>& resolve_stack = {});
 
     // Returns pointers to battlefield permanents that will attack this turn.
     std::vector<Permanent*> DeclareAttackers(GameState& state);
@@ -100,6 +112,24 @@ private:
     // no rollout can ever draw the differing card. Validated by a byte-identical
     // regression check. See project-cross-turn-reuse / project-search-optimizations.
     TranspositionTable*      m_shared_tt           = nullptr;
+
+    // --- Non-convergence detector (env-gated by MTG_FLAG_NONCONV; read-only) ---
+    // Tracks, per game, the EARLIEST exhaustively-verified win turn the search has
+    // proved so far (m_nonconv_best_win) and the real turn it was proved on
+    // (m_nonconv_best_turn). Reset each game in HandleMulligan. A win is
+    // "exhaustively verified" iff the committing pass ran at full depth
+    // (sub_depth == m_lookahead_depth - 1), the win is within the horizon, and the
+    // win sits inside that pass's branched lookahead (win - turn <= sub_depth). When
+    // a later turn verifies a win that EXCEEDS an earlier verified win, the search
+    // failed to converge to the earlier proof — a bug we want to surface, not paper
+    // over. See project-cross-turn-reuse.
+    int                      m_nonconv_best_win    = 0;
+    int                      m_nonconv_best_turn   = 0;
+
+    // Reports a non-convergence (later verified win > earlier verified win) for the
+    // committed decision to stderr. No-op unless MTG_FLAG_NONCONV is set.
+    void FlagNonConvergence(const GameState& state, const TurnSolver::Plan& plan,
+                            int committed_win, int committed_sub_depth);
 
     // --- Mulligan helpers ---
     bool KeepHand(const std::vector<Card>& hand, int mulligan_count) const;

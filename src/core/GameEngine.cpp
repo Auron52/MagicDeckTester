@@ -211,29 +211,19 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
         m_logger->StartPhase(state.turn_number, is_pre_combat ? "MAIN_1" : "MAIN_2");
     }
 
-    // Initial cast pass.
-    size_t stack_before = state.stack.size();
-    m_ai.TakeTurn(state, is_pre_combat);
+    // Initial cast pass. The AI resolves each cast before the next (we don't model
+    // priority, so this reproduces legal sequential play: prowess/lords/spectacle and
+    // on-cast triggers see the up-to-date board and life). TakeTurn returns whether it
+    // cast a draw-engine spell (DrawUntilNonland / cascade) whose resolution can put
+    // new castable spells in hand (e.g. Land's Edge found by Treasure Hunt).
+    auto resolver = [this](GameState& s) { ResolveStack(s); };
+    bool may_draw_spells = m_ai.TakeTurn(state, is_pre_combat, resolver);
+    ResolveStack(state);  // resolve any trailing entries; usually empty after sequential casts
 
-    // If a DrawUntilNonland (Treasure Hunt) or cascade spell was cast this pass,
-    // its resolution can draw new castable spells into hand (e.g. Land's Edge found
-    // by TH). Give the AI a second opportunity to cast those newly drawn spells.
-    bool may_draw_spells = false;
-    for (size_t i = stack_before; i < state.stack.size(); ++i)
-    {
-        auto def = CardDatabase::Instance().Lookup(state.stack[i].source.m_name);
-        if (!def) { continue; }
-        if (def->tmpl == CardTemplate::DrawUntilNonland || def->params.cascade_max_mv > 0)
-        {
-            may_draw_spells = true;
-            break;
-        }
-    }
-    ResolveStack(state);
-
+    // Give the AI a second opportunity to cast those newly drawn spells.
     if (may_draw_spells)
     {
-        m_ai.TakeTurn(state, is_pre_combat);
+        m_ai.TakeTurn(state, is_pre_combat, resolver);
         ResolveStack(state);
     }
 

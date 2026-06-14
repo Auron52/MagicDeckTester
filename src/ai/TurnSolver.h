@@ -119,10 +119,17 @@ public:
     // land choice is folded into the candidate enumeration (each candidate carries
     // its land_to_play) and searched alongside the spells. The same fold runs in
     // the rollout, so the land decision is consistent between real game and rollout.
+    // out_committed_win / out_committed_sub_depth (optional): report the committed
+    // pass's exact win turn and the rollout sub_depth that proved it, so the caller
+    // can detect non-convergence (a later turn's verified win exceeding an earlier
+    // one). A win-this-turn reports (turn, depth-1); an empty / depth<=0 decision
+    // reports (max_turns+1, 0) i.e. "no verified win".
     static Plan SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                    int depth, int max_turns = 20,
                                    SearchBudget* budget = nullptr,
                                    bool enforce_budget = true,
                                    bool second_main = false,
-                                   TranspositionTable* tt = nullptr);
+                                   TranspositionTable* tt = nullptr,
+                                   int* out_committed_win = nullptr,
+                                   int* out_committed_sub_depth = nullptr);
 };

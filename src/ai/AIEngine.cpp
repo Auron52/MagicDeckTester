@@ -7,11 +7,23 @@
 #include "../core/GameEngine.h"
 #include "../core/SpellEffects.h"
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <sstream>
 #include <stdexcept>
+
+// Non-convergence detector gate, read once. When set (MTG_FLAG_NONCONV in the
+// environment), TakeTurn checks each committed decision and prints a [nonconv]
+// record whenever a later turn's verified win turn exceeds one proved earlier.
+static const bool s_flag_nonconv = std::getenv("MTG_FLAG_NONCONV") != nullptr;
+
+// Trajectory probe: when MTG_NONCONV_TRACE_SEED matches a game's seed, dump every
+// real pre-combat decision (turn, committed_win, opp life/creatures, hand, plan).
+static const char*     s_trace_seed_env = std::getenv("MTG_NONCONV_TRACE_SEED");
+static const long long s_trace_seed     = s_trace_seed_env ? std::atoll(s_trace_seed_env) : -1;
 
 static double ComputeHandScore(const std::vector<Card>& hand,
     const std::map<std::string, std::vector<double>>& card_scores)
@@ -47,6 +59,10 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
 {
     Player& ap = state.ActivePlayer();
     ap.library.DrawN(7, ap.hand);
+
+    // New game: reset the per-game non-convergence baseline.
+    m_nonconv_best_win  = max_turns + 1;
+    m_nonconv_best_turn = 0;
 
     int mulligan_count = 0;
     while (true)
@@ -477,6 +493,60 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
     return chosen;
 }
 
+void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan& plan,
+                                  int committed_win, int committed_sub_depth)
+{
+    const int turn = state.turn_number;
+
+    // A win is exhaustively VERIFIED only when the committing pass ran at full
+    // depth, the win is within the horizon, and the win sits inside that pass's
+    // branched lookahead (so "no earlier win" was actually proved, not assumed).
+    const bool verified = committed_sub_depth == m_lookahead_depth - 1
+                       && committed_win <= m_max_turns
+                       && committed_win - turn <= committed_sub_depth;
+    if (!verified) { return; }
+
+    // First verified win of the game, or an even earlier proof: adopt it.
+    if (committed_win <= m_nonconv_best_win)
+    {
+        m_nonconv_best_win  = committed_win;
+        m_nonconv_best_turn = turn;
+        return;
+    }
+
+    // Later turn's verified win EXCEEDS one already proved earlier => non-convergence.
+    std::ostringstream os;
+    os << "[nonconv] seed=" << state.game_seed
+       << " turn=" << turn
+       << " verified_win_now=" << committed_win
+       << " EXCEEDS earlier verified_win=" << m_nonconv_best_win
+       << " proven_at_turn=" << m_nonconv_best_turn;
+
+    os << " | hand=";
+    bool first = true;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        os << (first ? "" : ", ") << c.m_name;
+        first = false;
+    }
+
+    os << " | plan=";
+    if (plan.land_decided && !plan.land_to_play.empty()) { os << "[land " << plan.land_to_play << "] "; }
+    if (plan.actions.empty()) { os << "(idle)"; }
+    first = true;
+    for (const Action& a : plan.actions)
+    {
+        const char* kind = a.kind == Action::Kind::ActivateVial      ? "vial:"
+                         : a.kind == Action::Kind::CastFromGraveyard ? "retrace:"
+                         : a.kind == Action::Kind::DiscardToLandsEdge ? "LE:"
+                         : "";
+        os << (first ? "" : ", ") << kind << a.card_name;
+        first = false;
+    }
+    os << "\n";
+    std::cerr << os.str();
+}
+
 int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
 {
     GameLogger* saved = m_logger;
@@ -562,8 +632,16 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 // TakeTurn
 // ============================================================
 
-void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
+bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
+                        const std::function<void(GameState&)>& resolve_stack)
 {
+    // Resolve the stack after a cast when a resolver was supplied (real game path);
+    // a no-op when batched (no resolver) or when the stack is empty (e.g. Vial).
+    auto resolve_now = [&]()
+    {
+        if (resolve_stack && !state.stack.empty()) { resolve_stack(state); }
+    };
+    bool cast_draw_engine = false;
     // Merge any unexpired staged cards into hand so the solver and casting logic
     // can treat them as playable. They are marked m_is_staged = true so we can
     // identify and restore unplayed ones afterward. The expiry is preserved in
@@ -574,7 +652,8 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
     for (StagedCard& sc : staged_snapshot)
     {
         if (sc.expiry_turn < state.turn_number) { continue; }  // end-of-next-turn expiry (CR 406)
-        sc.card.m_is_staged = true;
+        sc.card.m_is_staged     = true;
+        sc.card.m_staged_expiry = sc.expiry_turn;  // travels with the card so the rollout can expire it
         ap_ref.hand.push_back(sc.card);
     }
 
@@ -653,11 +732,68 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
             // every TakeTurn of that loop's rollouts shares one table; nullptr in normal
             // play, where SolveWithLookahead keeps its own per-decision table as before.
             SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
+            int committed_win       = m_max_turns + 1;
+            int committed_sub_depth = 0;
             plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                   m_lookahead_depth, m_max_turns,
                                                   &budget, true, m_search_post_combat,
-                                                  m_shared_tt);
+                                                  m_shared_tt,
+                                                  &committed_win, &committed_sub_depth);
             PROF_ADD_NODES(budget.Used());
+
+            // Non-convergence detection: only meaningful for real-game pre-combat
+            // decisions (not the rollout's own searches, not second mains).
+            if (s_flag_nonconv && !m_in_rollout && is_pre_combat_main)
+            {
+                FlagNonConvergence(state, plan, committed_win, committed_sub_depth);
+            }
+
+            // Trajectory probe for one game (MTG_NONCONV_TRACE_SEED).
+            if (!m_in_rollout && is_pre_combat_main
+                && static_cast<long long>(state.game_seed) == s_trace_seed)
+            {
+                int opp_creatures = 0;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index && p.card.IsCreature())
+                    { ++opp_creatures; }
+                }
+                std::ostringstream os;
+                os << "[traj] seed=" << state.game_seed
+                   << " turn=" << state.turn_number
+                   << " committed_win=" << committed_win
+                   << " sub_depth=" << committed_sub_depth
+                   << " opp_life=" << state.Opponent().life
+                   << " opp_creatures=" << opp_creatures
+                   << " | hand=";
+                bool tfirst = true;
+                for (const Card& c : state.ActivePlayer().hand)
+                { os << (tfirst ? "" : ", ") << c.m_name << (c.m_is_staged ? "*" : ""); tfirst = false; }
+                os << " | staged=";
+                for (const StagedCard& sc : state.ActivePlayer().staged_cards)
+                { os << sc.card.m_name << "(exp" << sc.expiry_turn << ") "; }
+                os << " | libtop=";
+                {
+                    const Player& tp = state.ActivePlayer();
+                    for (int li = 0; li < 3 && li < static_cast<int>(tp.library.size()); ++li)
+                    { os << tp.library[li].m_name << "; "; }
+                }
+                os << " | plan=";
+                if (plan.land_decided && !plan.land_to_play.empty())
+                { os << "[land " << plan.land_to_play << "] "; }
+                if (plan.actions.empty()) { os << "(idle)"; }
+                tfirst = true;
+                for (const Action& a : plan.actions)
+                {
+                    const char* k = a.kind == Action::Kind::ActivateVial      ? "vial:"
+                                  : a.kind == Action::Kind::CastFromGraveyard ? "retrace:"
+                                  : a.kind == Action::Kind::DiscardToLandsEdge ? "LE:"
+                                  : "";
+                    os << (tfirst ? "" : ", ") << k << a.card_name; tfirst = false;
+                }
+                os << "\n";
+                std::cerr << os.str();
+            }
 
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
@@ -769,24 +905,38 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
         FireProwess(state, *def);
     };
 
+    // Note whether an action casts a draw-engine spell (DrawUntilNonland / cascade);
+    // the caller gives a second pass so the AI can play the newly drawn cards.
+    auto note_draw_engine = [&](const std::string& name)
+    {
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(name);
+        if (d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0))
+        { cast_draw_engine = true; }
+    };
+
     // Canonical execution order: Vial deployments first (lords live before spell casts),
     // then regular spells (their lands tap first), then sacrifice-land spells, then
-    // graveyard (Retrace) casts last.
+    // graveyard (Retrace) casts last. Each cast is resolved before the next (when a
+    // resolver was supplied) so same-phase interactions (prowess, lords, spectacle,
+    // on-cast triggers) see the up-to-date board/life, matching the lookahead rollout.
     for (const Action& a : plan.actions)
     {
-        if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); }
+        if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { cast_by_name(a.card_name); }
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+        { cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
-        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land) { cast_by_name(a.card_name); }
+        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
+        { cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
-        if (a.kind == Action::Kind::CastFromGraveyard) { cast_from_graveyard(a.card_name, a.discard_lands); }
+        if (a.kind == Action::Kind::CastFromGraveyard)
+        { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
     }
 
     // Animate lands and activate tap-token abilities with mana remaining after spells.
@@ -832,6 +982,8 @@ void AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main)
         if (!c.m_is_staged) { regular_hand.push_back(c); }
     }
     ap_after.hand = std::move(regular_hand);
+
+    return cast_draw_engine;
 }
 
 // ---- Land drop ----

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <sstream>
@@ -16,6 +17,20 @@
 // When true, SolveWithLookahead prints per-pass per-candidate win turn estimates
 // for top-level T1 pre-combat decisions.  Set via TurnSolver::SetTraceSolve().
 static bool s_trace_solve = false;
+
+// Diagnostic (env-gated, inert by default): MTG_TRACE_PLAYOUT_SEED/_TURN replay the
+// committed plan from one real decision and trace the rollout's believed winning
+// line (per-turn opponent life). The companion of the non-convergence detector
+// (AIEngine MTG_FLAG_NONCONV): when the detector flags a turn whose earlier-proven
+// win the later search can't reproduce, this prints exactly what line the rollout
+// thought would win, so the rollout-vs-reality divergence can be pinpointed.
+// g_trace_arm makes only the OUTERMOST SimulateToEndImpl print (nested rollout
+// sub-searches disarm it).
+static const char*     s_tp_seed_env = std::getenv("MTG_TRACE_PLAYOUT_SEED");
+static const long long s_tp_seed     = s_tp_seed_env ? std::atoll(s_tp_seed_env) : -1;
+static const char*     s_tp_turn_env = std::getenv("MTG_TRACE_PLAYOUT_TURN");
+static const int       s_tp_turn     = s_tp_turn_env ? std::atoi(s_tp_turn_env) : -1;
+static thread_local bool g_trace_arm = false;
 
 void TurnSolver::SetTraceSolve(bool enable) { s_trace_solve = enable; }
 bool TurnSolver::GetTraceSolve() { return s_trace_solve; }
@@ -946,11 +961,51 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
         if (def.tmpl == CardTemplate::DirectDamage)
         {
+            // Mirror EffectHandler::ResolveDirectDamage so the rollout's life total
+            // matches the real game. Previously only Any/Player targeting dealt face
+            // damage, so Searing Blaze (Multi) and Searing Blood (Creature) were inert
+            // here while the win-check and the real engine both counted their damage —
+            // a phantom-early-win source.
             Targeting t = def.params.targeting;
+            int dmg = def.params.damage;
+            if (def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
+            {
+                dmg = def.params.landfall_damage;
+            }
+
             if (t == Targeting::Any || t == Targeting::Player)
             {
-                state.players[opp_idx].life -= def.params.damage;
-                if (def.params.damage > 0) { state.opponent_lost_life_this_turn = true; }
+                state.players[opp_idx].life -= dmg;
+                if (dmg > 0) { state.opponent_lost_life_this_turn = true; }
+            }
+            else if (t == Targeting::Creature || t == Targeting::Multi)
+            {
+                // Both require an opponent creature; with none the spell has no legal
+                // target and is not cast (mirrors CastSpellFromHand's early return).
+                int ci = -1;
+                for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                {
+                    const Permanent& bp = state.battlefield[bi];
+                    if (bp.controller_index != state.active_player_index && bp.card.IsCreature())
+                    { ci = bi; break; }
+                }
+                if (ci >= 0)
+                {
+                    if (t == Targeting::Multi)  // Searing Blaze also hits the player
+                    {
+                        state.players[opp_idx].life -= dmg;
+                        if (dmg > 0) { state.opponent_lost_life_this_turn = true; }
+                    }
+                    Permanent& tgt = state.battlefield[ci];
+                    tgt.damage += dmg;
+                    // Death trigger (Searing Blood): if the creature now has lethal damage.
+                    if (def.params.death_trigger_damage > 0
+                        && tgt.damage >= tgt.EffectiveToughness())
+                    {
+                        state.players[opp_idx].life -= def.params.death_trigger_damage;
+                        state.opponent_lost_life_this_turn = true;
+                    }
+                }
             }
         }
         else if (is_creature)
@@ -982,7 +1037,26 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (def.tmpl == CardTemplate::DrawSpell)
         {
             int n = std::min(def.params.draw, static_cast<int>(ap.library.size()));
-            ap.library.DrawN(n, ap.hand);
+            if (def.params.stages_cards)
+            {
+                // Mirror ResolveDrawSpell: the cards are exiled and playable only until
+                // the end of the controller's next turn (CR 406). Carry that expiry on
+                // the card so the rollout expires them (see SimulateToEndImpl) instead
+                // of keeping them forever — the latter let the rollout win with cards
+                // the real game had already lost (a phantom-early-win source).
+                int expiry = state.turn_number + 1;
+                for (int d = 0; d < n; ++d)
+                {
+                    Card c = ap.library.DrawTop();
+                    c.m_is_staged     = true;
+                    c.m_staged_expiry = expiry;
+                    ap.hand.push_back(std::move(c));
+                }
+            }
+            else
+            {
+                ap.library.DrawN(n, ap.hand);
+            }
 
             // Draw breakpoint: re-solve with updated hand and remaining mana so
             // newly revealed cards can be cast with mana still available this turn.
@@ -1984,7 +2058,15 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 
         Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered)
         Fold(k, static_cast<uint64_t>(p.hand.size()));
-        for (const Card& c : p.hand) { FoldName(k, c.m_name); }
+        for (const Card& c : p.hand)
+        {
+            FoldName(k, c.m_name);
+            // A staged card's expiry changes when it can still be played, so two hands
+            // with identical names but different staged expiries are different rollout
+            // states. Folded ONLY when staged, so non-staging decks keep their exact
+            // prior key (byte-identical results).
+            if (c.m_is_staged) { Fold(k, static_cast<uint64_t>(c.m_staged_expiry)); }
+        }
 
         Fold(k, 0x57A6 + static_cast<uint64_t>(pi)); // sub-section: staged cards
         Fold(k, static_cast<uint64_t>(p.staged_cards.size()));
@@ -2049,6 +2131,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt)
 {
+    const bool trace_pl = g_trace_arm;   // only the outermost diagnostic playout prints
+    g_trace_arm = false;
     while (state.turn_number <= max_turns)
     {
         // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
@@ -2062,16 +2146,54 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // (enforce_budget) is what decides when to stop adding more rollouts.
         if (budget) { budget->Consume(1); }
 
+        // Expire staged (Light Up the Stage) cards whose play window has passed,
+        // mirroring AIEngine::TakeTurn's expiry check (CR 406). Without this the
+        // rollout would keep casting cards the real game has already lost. The hand
+        // only ever holds staged cards for staging decks, so this is a no-op (and
+        // byte-identical) for every other deck.
+        {
+            Player& rp = state.ActivePlayer();
+            rp.hand.erase(std::remove_if(rp.hand.begin(), rp.hand.end(),
+                [&](const Card& c)
+                {
+                    return c.m_is_staged && c.m_staged_expiry < state.turn_number;
+                }), rp.hand.end());
+        }
+
+        if (trace_pl)
+        {
+            std::cerr << "  [pl] >>> turn=" << state.turn_number << " hand_before=[";
+            for (const Card& c : state.ActivePlayer().hand)
+            { std::cerr << c.m_name << (c.m_is_staged ? "*" : "") << "; "; }
+            std::cerr << "] lib_top=";
+            const Player& tp = state.ActivePlayer();
+            std::cerr << (tp.library.empty() ? "(none)" : tp.library.front().m_name) << "\n";
+        }
+
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens
         TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(
             state, true, depth, max_turns, budget, false, second_main, tt);
+        int life_before_pl = state.Opponent().life;
         ApplyPlanDirect(state, pre_plan, true);
         SimulateAnimateLands(state);
         SimulateTapTokens(state);
 
         // Combat
         SimulateCombat(state);
-        if (state.Opponent().life <= 0) { return state.turn_number; }
+        if (trace_pl)
+        {
+            std::cerr << "  [pl] turn=" << state.turn_number
+                      << " opp " << life_before_pl << "->" << state.Opponent().life
+                      << "  " << PlanDesc(pre_plan) << "  hand_after=[";
+            for (const Card& c : state.ActivePlayer().hand)
+            { std::cerr << c.m_name << (c.m_is_staged ? "*" : "") << "; "; }
+            std::cerr << "]\n";
+        }
+        if (state.Opponent().life <= 0)
+        {
+            if (trace_pl) { std::cerr << "  [pl] WIN at turn " << state.turn_number << "\n"; }
+            return state.turn_number;
+        }
 
         // Post-combat (second) main, only for second-main-relevant decks (e.g.
         // spectacle finishers unlocked by combat damage). Played greedily here in
@@ -2144,11 +2266,22 @@ namespace
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,
                                                   SearchBudget* budget, bool enforce_budget,
-                                                  bool second_main, TranspositionTable* tt)
+                                                  bool second_main, TranspositionTable* tt,
+                                                  int* out_committed_win,
+                                                  int* out_committed_sub_depth)
 {
+    // Report the committed pass's (win turn, sub_depth) to the caller's optional
+    // out-params. Used by the non-convergence detector; every return path calls it.
+    auto report = [&](int win, int sub_depth)
+    {
+        if (out_committed_win)       { *out_committed_win = win; }
+        if (out_committed_sub_depth) { *out_committed_sub_depth = sub_depth; }
+    };
+
     if (depth <= 0)
     {
         if (budget) { budget->Consume(1); }
+        report(max_turns + 1, 0);   // greedy fallback is not an exhaustively-verified win
         return Solve(state, is_pre_combat);
     }
 
@@ -2168,10 +2301,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // (if any) is also the highest-value winning plan.
     for (const Plan& p : candidates)
     {
-        if (p.wins_this_turn) { return p; }
+        if (p.wins_this_turn) { report(state.turn_number, depth - 1); return p; }
     }
 
-    if (candidates.empty()) { return Plan{}; }
+    if (candidates.empty()) { report(max_turns + 1, 0); return Plan{}; }
+
+    // Track the committed pass's win turn / sub_depth for non-convergence reporting.
+    int committed_win       = max_turns + 1;
+    int committed_sub_depth = 0;
 
     // Iterative deepening: evaluate EVERY candidate at increasing rollout depth
     // (sub_depth = 0, 1, ... depth-1), and only commit a pass's result once that
@@ -2348,7 +2485,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
         if (pass_has_best)
         {
-            best_plan = pass_best;
+            best_plan           = pass_best;
+            committed_win       = pass_best_win;
+            committed_sub_depth = sub_depth;
             if (trace_this)
             {
                 std::cerr << "  -> T" << state.turn_number << " COMMITTED sub_depth=" << sub_depth
@@ -2367,5 +2506,34 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         }
     }
 
+    // Diagnostic (MTG_TRACE_PLAYOUT_*): replay the committed plan and trace the
+    // rollout's believed winning line. Inert unless the env seed/turn match.
+    if (enforce_budget && s_tp_seed >= 0
+        && static_cast<long long>(state.game_seed) == s_tp_seed
+        && state.turn_number == s_tp_turn)
+    {
+        std::cerr << "[playout] seed=" << state.game_seed << " turn=" << state.turn_number
+                  << " committed_win=" << committed_win
+                  << " sub_depth=" << committed_sub_depth
+                  << "  best_plan=" << PlanDesc(best_plan) << "\n";
+        GameState dbg = state;
+        int life0 = dbg.Opponent().life;
+        ApplyPlanDirect(dbg, best_plan, is_pre_combat);
+        SimulateAnimateLands(dbg);
+        SimulateTapTokens(dbg);
+        SimulateCombat(dbg);
+        std::cerr << "  [pl] turn=" << dbg.turn_number << " opp " << life0 << "->"
+                  << dbg.Opponent().life << " (committed turn)\n";
+        if (dbg.Opponent().life > 0 && SimulateEndAndStartNextTurn(dbg))
+        {
+            g_trace_arm = true;
+            int w = SimulateToEndImpl(dbg, committed_sub_depth, max_turns,
+                                      nullptr, max_turns + 1, second_main, nullptr);
+            g_trace_arm = false;
+            std::cerr << "  [pl] rollout returned win=" << w << "\n";
+        }
+    }
+
+    report(committed_win, committed_sub_depth);
     return best_plan;
 }
