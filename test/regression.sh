@@ -8,10 +8,12 @@
 #   --overnight   deep multi-seed sweep, target < 8 h, run while you sleep
 #
 # Each case is (deck x depth x seed x games x budget), defined in
-# regression_cases.sh. For every case we:
-#   * write the binary's FULL output to test/logs/<mode>/<key>.log (+ .err),
-#   * record wall time (per case and total),
-#   * record the fingerprint "<games_won>/<avg_win_turn>" to
+# regression_cases.sh. The whole matrix is emitted as ONE manifest and run via
+# `mtg.exe --batch`, which pools every game of every case into a single work queue
+# so the suite pays one load-imbalance tail instead of one per case (results are
+# byte-identical to per-case runs -- see docs/design/batch-runner.md). We then:
+#   * write the manifest and full batch output to test/logs/<mode>/ (+ batch.err),
+#   * record each case's fingerprint "<games_won>/<avg_win_turn>" to
 #     test/results/<mode>.env,
 #   * compare that fingerprint to the committed ground truth in regression_gt.txt
 #     (keyed <deck>_<mode>_d<depth>_s<seed>).
@@ -122,7 +124,6 @@ fi
 [ -f "$GT" ] && source "$GT" 2>/dev/null || true
 
 PASS=0; FAIL=0; NEW=0
-TOTAL_START=$(date +%s)
 
 log() { echo "$1"; echo "$1" >> "$OUT"; }
 
@@ -131,32 +132,49 @@ log() { echo "$1"; echo "$1" >> "$OUT"; }
 log "=== REGRESSION ($MODE) $(date) ==="
 log "(threads=$THREADS; binary=$BIN; logs in $LOGDIR)"
 
-run_case() {
-  local deck=$1 depth=$2 seed=$3 games=$4 budget=$5
-  local file=${DECK_FILE[$deck]} prof=${DECK_PROF[$deck]}
-  local key="${deck}_${MODE}_d${depth}_s${seed}"
-  local logf="$LOGDIR/${key}.log"
+# Emit the whole case matrix as one batch manifest. `mtg.exe --batch` pools every
+# game of every case into a single atomic work queue, so the suite pays ONE
+# load-imbalance tail instead of one per case (the old per-case sweep stranded a
+# core on each config's slowest game). Results are validated byte-identical to the
+# per-case runs, so the ground truth is unchanged. See docs/design/batch-runner.md.
+MANIFEST="$LOGDIR/manifest.json"
+{
+  echo '{ "jobs": ['
+  first=1
+  for spec in "${CASES[@]}"; do
+    # shellcheck disable=SC2086
+    set -- $spec; deck=$1; depth=$2; seed=$3; games=$4; budget=$5
+    file=${DECK_FILE[$deck]}; prof=${DECK_PROF[$deck]}
+    name="${deck}_${MODE}_d${depth}_s${seed}"
+    if [ "$depth" -gt 0 ]; then lb=true; bud=$budget; else lb=false; bud=0; fi
+    [ $first -eq 1 ] && first=0 || printf ',\n'
+    printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "depth": %s, "budget_ms": %s, "lookahead_bottoming": %s }' \
+      "$name" "$file" "$prof" "$games" "$seed" "$depth" "$bud" "$lb"
+  done
+  printf '\n] }\n'
+} > "$MANIFEST"
 
-  local flags=(--games "$games" --seed "$seed" --threads "$THREADS" --depth "$depth")
-  if [ "$depth" -gt 0 ]; then
-    flags+=(--budget-ms "$budget" --lookahead-bottoming)
-  fi
+TOTAL_START=$(date +%s)
+BATCH_OUT=$("$BIN" --batch "$MANIFEST" --threads "$THREADS" 2>"$LOGDIR/batch.err")
+TOTAL=$(( $(date +%s) - TOTAL_START ))
+printf '%s\n' "$BATCH_OUT" > "$LOGDIR/batch.log"
 
-  local t0 t1 out won awt got expected wall status
-  t0=$(date +%s)
-  out=$("$BIN" "$file" --profile "$prof" "${flags[@]}" 2>"$LOGDIR/${key}.err")
-  t1=$(date +%s)
-  printf '%s\n' "$out" > "$logf"
-  wall=$((t1 - t0))
-
-  won=$(printf '%s\n' "$out" | grep "Games won"    | sed -E 's/.*won *: *([0-9]+).*/\1/')
-  awt=$(printf '%s\n' "$out" | grep "Avg win turn" | sed 's/.*: //')
-  got="${won}/${awt}"
+# Parse one "<name>: played=P won=W (pct%) avg=A" line per job into the existing
+# won/avg fingerprint, in matrix order, and compare to ground truth.
+CUR_DECK=""
+for spec in "${CASES[@]}"; do
+  # shellcheck disable=SC2086
+  set -- $spec; deck=$1; depth=$2; seed=$3
+  if [ "$deck" != "$CUR_DECK" ]; then CUR_DECK="$deck"; log ""; log "-- $CUR_DECK --"; fi
+  key="${deck}_${MODE}_d${depth}_s${seed}"
+  line=$(printf '%s\n' "$BATCH_OUT" | grep "^${key}: ")
+  won=$(printf '%s\n' "$line" | sed -nE 's/.*won=([0-9]+).*/\1/p')
+  awt=$(printf '%s\n' "$line" | sed -nE 's/.*avg=([0-9.]+).*/\1/p')
   expected="${!key-}"
-
   if [ -z "$won" ] || [ -z "$awt" ]; then
     status="FAIL"; got="(no output)"; FAIL=$((FAIL+1))
   else
+    got="${won}/${awt}"
     echo "$key=$got" >> "$RESULTS"           # record for a later --accept
     if [ -z "$expected" ]; then
       status="NEW "; expected="<none>"; NEW=$((NEW+1))
@@ -166,20 +184,11 @@ run_case() {
       status="FAIL"; FAIL=$((FAIL+1))
     fi
   fi
-  log "$(printf '  %s  %-26s exp=%-12s got=%-12s %5ss' "$status" "$key" "$expected" "$got" "$wall")"
-}
-
-CUR_DECK=""
-for spec in "${CASES[@]}"; do
-  # shellcheck disable=SC2086
-  set -- $spec
-  if [ "$1" != "$CUR_DECK" ]; then CUR_DECK="$1"; log ""; log "-- $CUR_DECK --"; fi
-  run_case "$@"
+  log "$(printf '  %s  %-26s exp=%-12s got=%-12s' "$status" "$key" "$expected" "$got")"
 done
 
-TOTAL=$(( $(date +%s) - TOTAL_START ))
 log ""
-log "Result: $PASS passed, $FAIL failed, $NEW new   (total wall ${TOTAL}s = $((TOTAL/60))m$((TOTAL%60))s)"
+log "Result: $PASS passed, $FAIL failed, $NEW new   (batch makespan ${TOTAL}s = $((TOTAL/60))m$((TOTAL%60))s)"
 if [ "$FAIL" -eq 0 ]; then
   [ "$NEW" -gt 0 ] && log "ALL PASS ($NEW new key(s); inspect, then 'bash test/regression.sh $MODEFLAG --accept' to record)" \
                    || log "ALL PASS"
