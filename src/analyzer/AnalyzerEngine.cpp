@@ -6,6 +6,7 @@
 #include "../cards/CardDatabase.h"
 #include "../runner/GoldFishRunner.h"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -16,6 +17,46 @@
 #include <thread>
 
 using json = nlohmann::json;
+
+namespace
+{
+int HardwareThreads()
+{
+    int hw = static_cast<int>(std::thread::hardware_concurrency());
+    return hw < 1 ? 1 : hw;
+}
+
+// Run fn(i) for every i in [0, n) across worker threads that each pull the next
+// index from a shared atomic counter (dynamic self-scheduling, like
+// GoldFishRunner). All cores stay busy until fewer items remain than threads, so
+// a single slow item can only tail by one core rather than stranding a whole
+// static chunk. fn must write only to slot i (no shared mutable state), and index
+// i must fully determine slot i's work, so completion order cannot change any
+// result -- the caller's reduction must likewise be order-independent (or done in
+// a fixed order) to stay deterministic.
+template <class Fn>
+void ParallelFor(int n, Fn fn)
+{
+    if (n <= 0) { return; }
+    int nth = std::min(HardwareThreads(), n);
+    std::atomic<int> next{0};
+    std::vector<std::thread> threads;
+    threads.reserve(nth);
+    for (int t = 0; t < nth; ++t)
+    {
+        threads.emplace_back([&]()
+        {
+            for (;;)
+            {
+                int i = next.fetch_add(1, std::memory_order_relaxed);
+                if (i >= n) { break; }
+                fn(i);
+            }
+        });
+    }
+    for (std::thread& th : threads) { th.join(); }
+}
+} // namespace
 
 // ============================================================
 // Internal helpers
@@ -32,59 +73,63 @@ double AnalyzerEngine::AverageWinTurn(const std::vector<GameRecord>& records, in
     return records.empty() ? 0.0 : sum / static_cast<double>(records.size());
 }
 
-std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
+std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecordsSerial(
     const Decklist& deck, const MulliganProfile& profile,
     int num_games, uint64_t seed, int max_turns,
     int depth, int timeout_ms)
 {
     std::vector<GameRecord> records(num_games);
-
-    // Single-threaded fast path for depth=0 (used heavily by the optimiser).
-    if (depth == 0)
+    AIEngine   ai(profile, depth, timeout_ms);
+    ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
+    GameEngine engine(ai);
+    for (int i = 0; i < num_games; ++i)
     {
-        AIEngine   ai(profile, 0, 0);
-        ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
-        GameEngine engine(ai);
-        for (int i = 0; i < num_games; ++i)
-        {
-            GameState state  = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(i));
-            state.vial_target_mv = profile.vial_target_mv;
-            records[i].win_turn  = engine.RunGame(state, max_turns);
-            records[i].opening_hand = ai.GetKeptOpeningHand();
-        }
-        return records;
+        GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(i));
+        state.vial_target_mv    = profile.vial_target_mv;
+        records[i].win_turn     = engine.RunGame(state, max_turns);
+        records[i].opening_hand = ai.GetKeptOpeningHand();
     }
+    return records;
+}
 
-    // Multi-threaded path for depth > 0 (scoring pass, etc.).
-    int hw  = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
-    int nth = std::min(hw, num_games);
-    // The search budget is a deterministic work-unit count (virtual ms), thread-
-    // invariant by construction, so no per-thread scaling is needed (see GoldFishRunner).
-    int per_thread_timeout = timeout_ms;
+std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
+    const Decklist& deck, const MulliganProfile& profile,
+    int num_games, uint64_t seed, int max_turns,
+    int depth, int timeout_ms)
+{
+    // Dynamic self-scheduling over games (see ParallelFor / GoldFishRunner): each
+    // worker keeps its own AIEngine and pulls the next game index from a shared
+    // atomic counter, so the deep scoring pass no longer strands one thread on a
+    // slow game at the tail of a static chunk. Lossless and deterministic: game gi
+    // is seeded by gi alone (seed + gi) and written to records[gi], so which worker
+    // runs it cannot change the result. The budget is a deterministic node count
+    // (virtual ms), thread-invariant by construction, so no per-thread scaling.
+    //
+    // Callers that are ALREADY parallel over their own units (e.g. GridSearchLands
+    // over configs) must use RunForRecordsSerial instead to avoid oversubscription.
+    std::vector<GameRecord> records(num_games);
+    if (num_games <= 0) { return records; }
 
-    int base_count = num_games / nth;
-    int extra      = num_games % nth;
-    int start      = 0;
+    const bool needs_second_main = GoldFishRunner::DeckUsesSecondMain(deck);
+    int nth = std::min(HardwareThreads(), num_games);
+    std::atomic<int> next_game{0};
     std::vector<std::thread> threads;
     threads.reserve(nth);
 
     for (int t = 0; t < nth; ++t)
     {
-        int count        = base_count + (t < extra ? 1 : 0);
-        int thread_start = start;
-        start           += count;
-
-        threads.emplace_back([&, thread_start, count]()
+        threads.emplace_back([&]()
         {
-            AIEngine   ai(profile, depth, per_thread_timeout);
-            ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
+            AIEngine   ai(profile, depth, timeout_ms);
+            ai.SetSearchPostCombat(needs_second_main);
             GameEngine engine(ai);
-            for (int li = 0; li < count; ++li)
+            for (;;)
             {
-                int gi          = thread_start + li;
+                int gi = next_game.fetch_add(1, std::memory_order_relaxed);
+                if (gi >= num_games) { break; }
                 GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(gi));
-                state.vial_target_mv = profile.vial_target_mv;
-                records[gi].win_turn    = engine.RunGame(state, max_turns);
+                state.vial_target_mv     = profile.vial_target_mv;
+                records[gi].win_turn     = engine.RunGame(state, max_turns);
                 records[gi].opening_hand = ai.GetKeptOpeningHand();
             }
         });
@@ -221,11 +266,6 @@ MulliganProfile AnalyzerEngine::GridSearchLands(
     int games_per_config, uint64_t seed, int max_turns,
     double& best_win_turn)
 {
-    MulliganProfile best      = base_profile;
-    best_win_turn             = std::numeric_limits<double>::max();
-    uint64_t        seed_step = static_cast<uint64_t>(games_per_config);
-    uint64_t        offset    = 0;
-
     static const CurveCheck  CURVE_VALUES[] = {
         CurveCheck::None, CurveCheck::TwoDrop,
         CurveCheck::OneDrop, CurveCheck::OneAndTwo
@@ -234,6 +274,10 @@ MulliganProfile AnalyzerEngine::GridSearchLands(
         BottomOrder::CountFirst, BottomOrder::TotalFirst
     };
 
+    // Enumerate every config in a fixed order. Each config's seed offset is its
+    // index, exactly as the old serial offset counter assigned it, so seeds (and
+    // therefore results) are unchanged.
+    std::vector<MulliganProfile> configs;
     for (int min_l = 1; min_l <= 3; ++min_l)
     for (int max_l = min_l; max_l <= 5; ++max_l)
     for (int stop  = 3; stop  <= 5; ++stop)
@@ -246,17 +290,33 @@ MulliganProfile AnalyzerEngine::GridSearchLands(
         profile.stop_at          = stop;
         profile.curve_check      = cc;
         profile.bottom_order     = bo;
+        configs.push_back(profile);
+    }
 
-        std::vector<GameRecord> records = RunForRecords(
-            deck, profile, games_per_config, seed + offset * seed_step, max_turns);
+    // Evaluate configs in parallel -- they are independent. The inner game loop is
+    // SERIAL (RunForRecordsSerial) because this loop already saturates the cores;
+    // nesting a parallel game loop inside would oversubscribe.
+    const uint64_t seed_step = static_cast<uint64_t>(games_per_config);
+    std::vector<double> avgs(configs.size(), std::numeric_limits<double>::max());
+    ParallelFor(static_cast<int>(configs.size()), [&](int ci)
+    {
+        std::vector<GameRecord> records = RunForRecordsSerial(
+            deck, configs[ci], games_per_config,
+            seed + static_cast<uint64_t>(ci) * seed_step, max_turns);
+        avgs[ci] = AverageWinTurn(records, max_turns);
+    });
 
-        double avg = AverageWinTurn(records, max_turns);
-        if (avg < best_win_turn)
+    // Reduce in config order with strict-< so ties resolve to the first config,
+    // identical to the old serial scan.
+    MulliganProfile best = base_profile;
+    best_win_turn        = std::numeric_limits<double>::max();
+    for (std::size_t ci = 0; ci < configs.size(); ++ci)
+    {
+        if (avgs[ci] < best_win_turn)
         {
-            best_win_turn = avg;
-            best          = profile;
+            best_win_turn = avgs[ci];
+            best          = configs[ci];
         }
-        ++offset;
     }
     return best;
 }
@@ -510,30 +570,35 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
 // Public API
 // ============================================================
 
-AnalysisResult AnalyzerEngine::Run(const Decklist& deck, int num_games,
-                                    uint64_t base_seed, int max_turns,
-                                    int depth, int timeout_ms)
+AnalysisResult AnalyzerEngine::Run(const Decklist& deck, uint64_t base_seed, int max_turns)
 {
+    // The analyzer's sole job is PREPARATION: produce the deck's profile (optimised
+    // mulligan + per-card scores). It deliberately does NOT run a headline win-rate
+    // simulation -- that EVALUATION belongs to the regression suite (mtg.exe), which
+    // schedules games far better. So there are no --games/--depth/--budget knobs:
+    // the scoring methodology below is fixed.
+    AnalysisResult result;
+    result.seed = base_seed;
+
     int vial_target_mv = ComputeVialTargetMv(deck);
     OptResult opt = OptimizeMulligan(deck, base_seed, max_turns, vial_target_mv);
     opt.profile.vial_target_mv = vial_target_mv;
-    AnalysisResult result = RunMonteCarlo(
-        deck, num_games, base_seed, max_turns, depth, timeout_ms, opt.profile);
     result.mulligan_profile = opt.profile;
     result.mulligan_flags   = opt.flags;
 
-    // Compute per-card marginal scores from a dedicated scoring pass.
-    // Uses depth=2 so the lookahead captures delayed-value cards (e.g. Aether Vial
-    // only looks bad at depth=0 because the greedy AI can't plan for its future ticks).
+    // Per-card marginal scores from a dedicated scoring pass. Depth 5 lets the
+    // lookahead value delayed-payoff cards (e.g. Aether Vial looks bad at depth 0
+    // because the greedy AI can't plan its future ticks). Fixed methodology.
     const int      SCORING_GAMES  = 2000;
     const int      SCORING_DEPTH  = 5;
+    const int      SCORING_BUDGET = 200;   // deterministic virtual-ms node budget
     const uint64_t SCORING_OFFSET = 3'000'000ULL;
     std::cerr << "  Computing card scores (" << SCORING_GAMES << " games, depth=" << SCORING_DEPTH << ")...\n";
     std::vector<GameRecord> scoring_records = RunForRecords(
         deck, opt.profile, SCORING_GAMES, base_seed + SCORING_OFFSET, max_turns,
-        SCORING_DEPTH, /*timeout_ms=*/200);
+        SCORING_DEPTH, SCORING_BUDGET);
     double threshold = 0.0;
-    result.card_scores         = ComputeCardScores(scoring_records, max_turns, &threshold);
+    result.card_scores          = ComputeCardScores(scoring_records, max_turns, &threshold);
     result.hand_score_threshold = threshold;
     std::cerr << "  Card scores computed. Hand threshold: " << threshold << "\n";
 
@@ -545,67 +610,19 @@ AnalysisResult AnalyzerEngine::Run(const Decklist& deck, int num_games,
     return result;
 }
 
-AnalysisResult AnalyzerEngine::RunMonteCarlo(
-    const Decklist& deck, int num_games,
-    uint64_t base_seed, int max_turns,
-    int depth, int timeout_ms,
-    const MulliganProfile& profile)
-{
-    AIEngine   ai(profile, depth, timeout_ms);
-    ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
-    GameEngine engine(ai);
-
-    RunResult run;
-    run.seed         = base_seed;
-    run.games_played = num_games;
-    run.win_turns.reserve(num_games);
-
-    for (int i = 0; i < num_games; ++i)
-    {
-        GameState state = GoldFishRunner::SetupGame(deck, base_seed + static_cast<uint64_t>(i));
-        state.vial_target_mv = profile.vial_target_mv;
-        int win_turn = engine.RunGame(state, max_turns);
-        run.win_turns.push_back(win_turn);
-        if (win_turn > 0) { ++run.games_won; }
-    }
-
-    if (run.games_won > 0)
-    {
-        long long sum = 0;
-        int count = 0;
-        for (int t : run.win_turns) { if (t > 0) { sum += t; ++count; } }
-        run.average_win_turn = static_cast<double>(sum) / count;
-    }
-
-    AnalysisResult result;
-    result.deck_name        = "deck";
-    result.seed             = run.seed;
-    result.games_played     = run.games_played;
-    result.games_won        = run.games_won;
-    result.average_win_turn = run.average_win_turn;
-
-    // Win-turn distribution (turn 0 bucket = games not won within max_turns).
-    for (int t : run.win_turns) { ++result.win_turn_histogram[t > 0 ? t : 0]; }
-
-    return result;
-}
-
 // ============================================================
 // JSON serialisation
 // ============================================================
 
 std::string AnalysisResultToJson(const AnalysisResult& result)
 {
+    // The analyzer is a profile generator, not an evaluator: it emits the deck
+    // identity, the optimised mulligan profile, the auto-required-piece flags, and
+    // the per-card scores. Win-rate/avg-win-turn metrics now come from the
+    // regression suite (mtg.exe), so they are deliberately not reported here.
     json j;
-    j["deck_name"]         = result.deck_name;
-    j["seed"]              = result.seed;
-    j["games_played"]      = result.games_played;
-    j["games_won"]         = result.games_won;
-    j["average_win_turn"]  = result.average_win_turn;
-    j["win_rate"]          = result.games_played > 0
-                             ? static_cast<double>(result.games_won) / result.games_played
-                             : 0.0;
-
+    j["deck_name"]        = result.deck_name;
+    j["seed"]             = result.seed;
     j["mulligan_profile"] = MulliganProfileToJsonObj(result.mulligan_profile);
 
     // Flags for auto-added required pieces
@@ -624,18 +641,6 @@ std::string AnalysisResultToJson(const AnalysisResult& result)
     }
     j["mulligan_flags"] = flags;
 
-    json turns = json::array();
-    for (const TurnStats& ts : result.turn_stats)
-    {
-        json t;
-        t["turn"]       = ts.turn;
-        t["avg_damage"] = ts.avg_damage;
-        t["avg_hand"]   = ts.avg_hand;
-        t["avg_board"]  = ts.avg_board;
-        turns.push_back(t);
-    }
-    j["turn_stats"] = turns;
-
     if (!result.card_scores.empty())
     {
         json cs = json::object();
@@ -647,16 +652,6 @@ std::string AnalysisResultToJson(const AnalysisResult& result)
         }
         j["card_scores"]          = cs;
         j["hand_score_threshold"] = result.hand_score_threshold;
-    }
-
-    if (!result.win_turn_histogram.empty())
-    {
-        json hist = json::object();
-        for (const std::pair<const int, int>& kv : result.win_turn_histogram)
-        {
-            hist[std::to_string(kv.first)] = kv.second;
-        }
-        j["win_turn_histogram"] = hist;
     }
 
     return j.dump(2);

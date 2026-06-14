@@ -47,11 +47,6 @@ def ParseArgs():
                    help="Report coverage and exit without building or analyzing")
     p.add_argument("--no-rebuild",   action="store_true",
                    help="Skip cmake rebuild")
-    p.add_argument("--games",        type=int, default=500)
-    p.add_argument("--depth",        type=int, default=None,
-                   help="Lookahead depth passed to mtg-analyze (default: binary default of 2)")
-    p.add_argument("--budget-ms",    type=int, default=None,
-                   help="Per-decision search budget in virtual ms (0=unlimited)")
     p.add_argument("--cards-json",   default=None,
                    help="Override path to cards.json")
     return p.parse_args()
@@ -290,20 +285,16 @@ def RebuildProject() -> bool:
 # Run C++ analyzer
 # ---------------------------------------------------------------------------
 
-def RunAnalyzer(deck_path: Path, num_games: int, cards_json: Path,
-                depth: int | None = None, budget_ms: int | None = None) -> dict:
+def RunAnalyzer(deck_path: Path, cards_json: Path) -> dict:
+    # The analyzer is a fixed-recipe profile generator: it takes no game-count,
+    # depth, or budget knobs. Win-rate evaluation is the regression suite's job.
     if not ANALYZER_BIN.exists():
         raise RuntimeError(f"Analyzer binary not found: {ANALYZER_BIN}")
     cmd = [
         str(ANALYZER_BIN),
         str(deck_path),
-        "--games", str(num_games),
         "--cards-json", str(cards_json),
     ]
-    if depth is not None:
-        cmd += ["--depth", str(depth)]
-    if budget_ms is not None:
-        cmd += ["--budget-ms", str(budget_ms)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"Analyzer failed:\n{result.stderr}")
@@ -363,9 +354,8 @@ def Main():
             sys.exit(1)
 
     # 6. Analyze
-    print(f"  Running analyzer ({args.games} games)...", file=sys.stderr)
-    analysis = RunAnalyzer(deck_path, args.games, cards_json,
-                           depth=args.depth, budget_ms=args.budget_ms)
+    print("  Running analyzer (generating profile)...", file=sys.stderr)
+    analysis = RunAnalyzer(deck_path, cards_json)
 
     # Write card scores and threshold into the profile if the analyzer produced them.
     profile_updates: dict = {}

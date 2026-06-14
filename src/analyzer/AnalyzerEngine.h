@@ -6,14 +6,6 @@
 #include <string>
 #include <vector>
 
-struct TurnStats
-{
-    int turn            = 0;
-    double avg_damage   = 0.0;
-    double avg_hand     = 0.0;
-    double avg_board    = 0.0;
-};
-
 // A card found to significantly affect win rate when present in the opening hand.
 // Automatically added to required_pieces after multi-round confirmation; flagged
 // so the user can verify the heuristic is correct for their deck.
@@ -26,29 +18,27 @@ struct RequiredPieceFlag
     double      improvement;       // baseline_win_turn - win_turn_required (positive = better)
 };
 
+// The analyzer's product: the deck's prepared profile. It carries no win-rate
+// metrics by design -- evaluation (win%, avg win turn) is the regression suite's
+// job, not the analyzer's.
 struct AnalysisResult
 {
     std::string deck_name;
-    uint64_t    seed             = 0;
-    int         games_played     = 0;
-    int         games_won        = 0;
-    double      average_win_turn = 0.0;
-    std::vector<TurnStats>         turn_stats;
+    uint64_t    seed = 0;
     MulliganProfile                mulligan_profile;
     std::vector<RequiredPieceFlag> mulligan_flags;
     std::map<std::string, std::vector<double>> card_scores;
     double      hand_score_threshold = 0.0;
-    // Win-turn distribution: turn -> count of games won on that turn (turn 0 = did
-    // not win within max_turns). Enables threshold metrics like P(win <= T), which
-    // matter more than the mean for a racing game.
-    std::map<int, int> win_turn_histogram;
 };
 
 class AnalyzerEngine
 {
 public:
-    AnalysisResult Run(const Decklist& deck, int num_games, uint64_t base_seed,
-                       int max_turns = 20, int depth = 2, int timeout_ms = 0);
+    // Produces the deck's profile (optimised mulligan + per-card scores). Does NOT
+    // run a headline win-rate simulation -- that is the regression suite's job --
+    // so there are no game-count/depth/budget knobs; the scoring methodology is
+    // fixed internally.
+    AnalysisResult Run(const Decklist& deck, uint64_t base_seed, int max_turns = 20);
 
     // Per-game record: win turn + the hand that was kept after mulliganing.
     struct GameRecord
@@ -57,9 +47,19 @@ public:
         std::vector<std::string> opening_hand;
     };
 
-    // Runs games and captures the kept opening hand for each game.
+    // Runs games and captures the kept opening hand for each game. Parallelises
+    // over games with dynamic self-scheduling (no static-chunk tail). Callers that
+    // are already parallel over their own units must use RunForRecordsSerial.
     // depth=0 (greedy) is fast; higher depth captures look-ahead value of cards like Aether Vial.
     static std::vector<GameRecord> RunForRecords(
+        const Decklist& deck, const MulliganProfile& profile,
+        int num_games, uint64_t seed, int max_turns,
+        int depth = 0, int timeout_ms = 0);
+
+    // Single-threaded variant: runs the games on the calling thread. Used inside
+    // already-parallel loops (e.g. GridSearchLands over configs) to avoid nesting
+    // a second layer of threads.
+    static std::vector<GameRecord> RunForRecordsSerial(
         const Decklist& deck, const MulliganProfile& profile,
         int num_games, uint64_t seed, int max_turns,
         int depth = 0, int timeout_ms = 0);
@@ -100,11 +100,6 @@ private:
 
     // Returns the most common creature MV if the deck contains Aether Vial, else 0.
     static int ComputeVialTargetMv(const Decklist& deck);
-
-    AnalysisResult RunMonteCarlo(
-        const Decklist& deck, int num_games, uint64_t base_seed,
-        int max_turns, int depth, int timeout_ms,
-        const MulliganProfile& profile);
 };
 
 std::string AnalysisResultToJson(const AnalysisResult& result);

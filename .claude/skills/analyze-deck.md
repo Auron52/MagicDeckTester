@@ -133,17 +133,24 @@ Apply the same bracket-note classification from Stage 1. If any gaps remain — 
 
 ---
 
-## Stage 4 — Run the C++ Analyzer
+## Stage 4 — Generate the Profile
 
 ```
-python scripts/analyze_deck.py <deck_path> --games 500 --no-rebuild
+python scripts/analyze_deck.py <deck_path> --no-rebuild
 ```
+
+The analyzer is a fixed-recipe **profile generator** — it produces the deck's
+`<deck>.profile.json` (optimised mulligan + per-card scores) and takes no
+game-count/depth/budget knobs. It does NOT report win-rate; **evaluation is the
+regression suite's job** (see the regression-testing skill / `test/regression.sh`).
 
 Parse the JSON output:
-- `analysis.average_win_turn`: key metric
-- `analysis.win_rate`: percentage of games won
-- `analysis.mulligan_profile`: the optimised mulligan settings
+- `analysis.mulligan_profile`: the optimised mulligan settings (also written to disk)
+- `analysis.card_scores` / `analysis.hand_score_threshold`: per-card keep values
 - `analysis.mulligan_flags`: required-piece flags worth reviewing with the user
+
+For win% / average win turn, run the deck through the regression suite after the
+profile is written.
 
 ---
 
@@ -151,8 +158,8 @@ Parse the JSON output:
 
 Present a concise summary:
 1. **Cards implemented this run**: list any new/updated implementations, noting the tier used for each
-2. **Average win turn**: from the analysis
-3. **Mulligan profile**: the optimised settings
+2. **Mulligan profile**: the optimised settings (and notable card scores / required-piece flags)
+3. **Win rate / average win turn**: from a regression-suite run on the new profile (the analyzer no longer reports these)
 4. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
 5. **Suggested next steps**: any Tier 4 deferrals worth revisiting, or interesting profile observations
 
