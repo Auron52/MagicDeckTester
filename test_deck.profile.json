@@ -1,12 +1,58 @@
 {
+  "card_scores": {
+    "Eidolon of the Great Revel": [
+      -0.06744959710343768,
+      -0.2238129170175549
+    ],
+    "Goblin Guide": [
+      1.0083703176464027,
+      0.7032118342983447
+    ],
+    "Light Up the Stage": [
+      0.42289270314496896,
+      0.11758474576271194
+    ],
+    "Lightning Bolt": [
+      0.15010694585162643,
+      -0.13477633477633422
+    ],
+    "Monastery Swiftspear": [
+      0.36011311340634844,
+      0.3304264841384761
+    ],
+    "Searing Blaze": [
+      -0.290174759382257,
+      -0.24197109813952444
+    ],
+    "Searing Blood": [
+      -0.5396244126741898,
+      -0.6534909909909912
+    ],
+    "Shard Volley": [
+      -0.17603262810052023,
+      0.18643067846607675
+    ],
+    "Skullcrack": [
+      0.2559412901855449,
+      0.339107365792759
+    ]
+  },
+  "hand_score_threshold": 0.15856472124250964,
   "mulligan": {
+    "bottom_order": "count_first",
     "curve_check": "one_drop",
     "max_lands": 4,
-    "min_color_sources": {},
+    "min_color_sources": {
+      "R": 2
+    },
     "min_lands": 1,
     "min_playable": 0,
-    "required_pieces": [],
-    "stop_at": 3
+    "required_pieces": [
+      "Goblin Guide",
+      "Monastery Swiftspear",
+      "Eidolon of the Great Revel"
+    ],
+    "stop_at": 4
   },
   "version": 1
 }

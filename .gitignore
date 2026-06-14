@@ -82,3 +82,4 @@ test/regression_result.txt
 test/regression_result_*.txt
 test/logs/
 test/results/
+test/ab_scratch/
