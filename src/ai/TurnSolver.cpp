@@ -1384,6 +1384,39 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             p.entered_this_turn = false;
         }
     }
+    // Materialise any passive opponent creatures scheduled for this turn, mirroring
+    // GameEngine::StartTurnStep. Without this the rollout never sees the opponent's
+    // board, so creature-targeted burn (Searing Blaze / Searing Blood) is wrongly
+    // treated as having no legal target: the search undervalues those cards and misses
+    // lines that use them. (Baseline SolveWithLookahead re-decides every turn against
+    // the real board so it compensated; commit-the-line replays the search's line and
+    // could not.) Token shape/flags match GameEngine exactly so rollout == real game.
+    //
+    // ENV-GATED to the experimental full-depth path: it is a genuine baseline-rollout
+    // bug too, but fixing it for baseline changes a (clairvoyant-noise) game and would
+    // need a vetted ground-truth regen, so for now the default mode stays byte-identical
+    // and only commit-the-line (which uniquely cannot re-decide) gets the spawn model.
+    static const bool s_fd_opp_spawns = std::getenv("MTG_FULL_DEPTH") != nullptr;
+    if (s_fd_opp_spawns)
+    {
+        int opp_index = 1 - state.active_player_index;
+        for (const OpponentSpawn& spawn : state.opponent_spawns)
+        {
+            if (spawn.turn != state.turn_number) { continue; }
+            Card token;
+            token.m_name      = std::to_string(spawn.power) + "/"
+                              + std::to_string(spawn.toughness) + " Creature";
+            token.m_types     = { CardType::Creature };
+            token.m_power     = spawn.power;
+            token.m_toughness = spawn.toughness;
+            Permanent perm;
+            perm.card             = token;
+            perm.controller_index = opp_index;
+            perm.owner_index      = opp_index;
+            state.battlefield.push_back(perm);
+        }
+    }
+
     Player& ap_upkeep = state.ActivePlayer();
     for (Permanent& p : state.battlefield)
     {
