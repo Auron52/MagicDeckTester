@@ -2403,6 +2403,37 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             std::cerr << " | " << (pp.is_pre_combat ? "pre:" : "2nd:") << PlanDesc(pp.plan);
         }
         std::cerr << "\n";
+
+        // Replay the committed line on a copy and print the search's PREDICTED opp
+        // life after each phase, mirroring FSLineWin/FSLineTail's own simulation. Diff
+        // this against the realised [traj] opp_life to pinpoint where ApplyPlanDirect/
+        // SimulateCombat over-counts vs real execution.
+        GameState copy  = state;
+        bool      first = true;
+        for (const PhasePlan& pp : line.phases)
+        {
+            if (pp.is_pre_combat && !first)
+            {
+                if (!SimulateEndAndStartNextTurn(copy)) { break; }
+                ExpireStagedCards(copy);
+            }
+            if (pp.is_pre_combat)
+            {
+                ApplyPlanDirect(copy, pp.plan, true);
+                SimulateAnimateLands(copy);
+                SimulateTapTokens(copy);
+                SimulateCombat(copy);
+            }
+            else
+            {
+                ApplyPlanDirect(copy, pp.plan, false);
+            }
+            std::cerr << "[fd-pred]   turn=" << copy.turn_number
+                      << (pp.is_pre_combat ? " pre " : " 2nd ")
+                      << "opp_life=" << copy.Opponent().life
+                      << "  " << PlanDesc(pp.plan) << "\n";
+            first = false;
+        }
     }
     return line;
 }
