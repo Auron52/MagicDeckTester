@@ -62,6 +62,20 @@ static double ComputeHandScore(const std::vector<Card>& hand,
 AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int budget_ms)
     : m_profile(std::move(profile)), m_lookahead_depth(lookahead_depth), m_budget_ms(budget_ms) {}
 
+void AIEngine::OnGameEnd(const GameState& state, int win_turn)
+{
+    if (!s_fd_oracle) { return; }
+    // win_turn <= 0 means the game ended without a win (loss / timeout).
+    const int realized = win_turn > 0 ? win_turn : m_max_turns + 1;
+    if (m_fd_best_win <= m_max_turns && realized > m_fd_best_win)
+    {
+        std::cerr << "[fd-diverge] seed=" << state.game_seed
+                  << " realized_win=" << realized
+                  << " predicted_win=" << m_fd_best_win
+                  << " proven_at_turn=" << m_fd_best_turn << "\n";
+    }
+}
+
 // ============================================================
 // Mulligan
 // ============================================================
@@ -770,21 +784,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLine(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat);
 
-                    // Oracle: a recompute whose searched win exceeds an earlier line's
-                    // means the committed line we just finished replaying did NOT realise
-                    // its predicted win -> the rollout (ApplyPlanDirect/SimulateCombat)
-                    // diverged from real execution somewhere in the replayed turns.
-                    if (s_fd_oracle && !m_in_rollout
-                        && m_fd_best_win <= m_max_turns && line.win_turn > m_fd_best_win)
-                    {
-                        std::cerr << "[fd-diverge] seed=" << state.game_seed
-                                  << " turn=" << state.turn_number
-                                  << " predicted_win=" << m_fd_best_win
-                                  << " proven_at_turn=" << m_fd_best_turn
-                                  << " recomputed_win=" << line.win_turn
-                                  << " opp_life=" << state.Opponent().life << "\n";
-                    }
-                    if (line.win_turn < m_fd_best_win)
+                    // Oracle: track the EARLIEST win any line predicted this game. The
+                    // realised win is compared against it at game end (OnGameEnd) — NOT
+                    // per recompute, because a pre-combat recompute happens before that
+                    // turn's combat and so can't see a win that arrives via combat, which
+                    // made the old per-recompute flag fire on games that won on time.
+                    if (s_fd_oracle && !m_in_rollout && line.win_turn < m_fd_best_win)
                     {
                         m_fd_best_win  = line.win_turn;
                         m_fd_best_turn = state.turn_number;

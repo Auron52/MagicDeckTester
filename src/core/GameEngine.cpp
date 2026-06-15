@@ -54,7 +54,9 @@ int GameEngine::RunGame(GameState& state, int max_turns)
         m_logger->LogOpeningHand(nums, names);
     }
 
-    return PlayOut(state, max_turns);
+    int win_turn = PlayOut(state, max_turns);
+    m_ai.OnGameEnd(state, win_turn);
+    return win_turn;
 }
 
 int GameEngine::PlayOut(GameState& state, int max_turns)

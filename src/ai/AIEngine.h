@@ -26,6 +26,13 @@ public:
     // max_turns bounds the rollout horizon used by lookahead bottoming (see below).
     void HandleMulligan(GameState& state, int max_turns = 20);
 
+    // Called once by GameEngine::RunGame after a real game finishes (not for
+    // rollouts, which bypass RunGame). Drives the full-depth fidelity oracle
+    // (MTG_FD_ORACLE): flags when the realised win turn is worse than the earliest
+    // win any committed line predicted this game — a genuine commit-line divergence,
+    // compared at game end so it never fires on games that win on time via combat.
+    void OnGameEnd(const GameState& state, int win_turn);
+
     // Returns the card names of the hand kept after the most recent HandleMulligan call.
     const std::vector<std::string>& GetKeptOpeningHand() const { return m_kept_opening_hand; }
 
