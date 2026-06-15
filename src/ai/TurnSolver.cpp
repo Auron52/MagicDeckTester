@@ -2295,13 +2295,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // no-win — making any tap-out play look strictly worse than idling. The
         // baseline rollout always advances past an empty second main; mirror that.
         post.push_back(TurnSolver::Plan{});
-        for (const TurnSolver::Plan& q : post)
-        {
-            if (q.wins_this_turn)
-            {
-                return { state.turn_number, { { false, q } } };
-            }
-        }
+        // NOTE: we do NOT shortcut on the projected `wins_this_turn` flag here. That
+        // projection (pending_atk + direct_dmg >= opp life) can over-count what the
+        // actual ApplyPlanDirect + SimulateCombat deals, and trusting it would commit
+        // a phantom win turn the replayed line never realises. The loop below decides
+        // lethality by actually simulating, so the committed line's win turn always
+        // matches replaying it. (Baseline SolveWithLookahead can trust the projection
+        // because it re-decides every turn; commit-the-line locks the line in.)
         TurnSolver::SearchLine best;
         best.win_turn = max_turns + 1;
         for (const TurnSolver::Plan& q : post)
@@ -2352,14 +2352,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         return { w, {} };
     }
 
+    // No projected-`wins_this_turn` shortcut: lethality is decided by actually
+    // simulating each plan below, so the committed line's win turn always matches
+    // replaying it (the projection can over-count vs ApplyPlanDirect+SimulateCombat).
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
-    for (const TurnSolver::Plan& p : pre)
-    {
-        if (p.wins_this_turn)  // hard floor
-        {
-            return { state.turn_number, { { true, p } } };
-        }
-    }
 
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
