@@ -1,4 +1,4 @@
-# Regression ground truth -- commit cbfed4a  date 2026-06-14
+# Regression ground truth -- commit 23480ab  date 2026-06-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -7,9 +7,9 @@
 slivers_smoke_d0_s1001=1000/4.777
 slivers_smoke_d3_s1001=250/4.308
 slivers_smoke_d5_s1001=150/4.27333
-burn_smoke_d0_s1001=1000/4.866
-burn_smoke_d3_s1001=300/4.59333
-burn_smoke_d5_s1001=250/4.632
+burn_smoke_d0_s1001=1000/4.889
+burn_smoke_d3_s1001=300/4.61667
+burn_smoke_d5_s1001=250/4.652
 th_smoke_d0_s1001=951/5.70032
 th_smoke_d3_s1001=150/4.14667
 th_smoke_d5_s1001=75/4
@@ -20,11 +20,11 @@ slivers_regression_d3_s2002=400/4.305
 slivers_regression_d3_s3003=400/4.28
 slivers_regression_d5_s2002=300/4.28
 slivers_regression_d5_s3003=300/4.25333
-burn_regression_d0_s2002=1000/4.851
-burn_regression_d3_s2002=500/4.632
-burn_regression_d3_s3003=500/4.52
-burn_regression_d5_s2002=500/4.63
-burn_regression_d5_s3003=500/4.52
+burn_regression_d0_s2002=1000/4.858
+burn_regression_d3_s2002=500/4.63
+burn_regression_d3_s3003=500/4.528
+burn_regression_d5_s2002=500/4.628
+burn_regression_d5_s3003=500/4.528
 th_regression_d0_s2002=945/5.88571
 th_regression_d3_s2002=498/4.23092
 th_regression_d3_s3003=496/4.01613
@@ -32,3 +32,39 @@ th_regression_d5_s2002=300/4.13333
 th_regression_d5_s3003=297/3.95286
 
 # --- overnight ---
+slivers_overnight_d0_s4004=2000/4.763
+slivers_overnight_d0_s5005=2000/4.767
+slivers_overnight_d0_s6006=2000/4.7825
+slivers_overnight_d0_s7007=2000/4.7705
+slivers_overnight_d3_s4004=1000/4.291
+slivers_overnight_d3_s5005=1000/4.277
+slivers_overnight_d3_s6006=1000/4.303
+slivers_overnight_d3_s7007=1000/4.283
+slivers_overnight_d5_s4004=1000/4.28
+slivers_overnight_d5_s5005=1000/4.266
+slivers_overnight_d5_s6006=1000/4.293
+slivers_overnight_d5_s7007=1000/4.262
+burn_overnight_d0_s4004=2000/4.8875
+burn_overnight_d0_s5005=1999/4.90345
+burn_overnight_d0_s6006=1999/4.94697
+burn_overnight_d0_s7007=2000/4.888
+burn_overnight_d3_s4004=1000/4.593
+burn_overnight_d3_s5005=999/4.5976
+burn_overnight_d3_s6006=999/4.64865
+burn_overnight_d3_s7007=999/4.63063
+burn_overnight_d5_s4004=1000/4.593
+burn_overnight_d5_s5005=999/4.5976
+burn_overnight_d5_s6006=999/4.64865
+burn_overnight_d5_s7007=999/4.63063
+th_overnight_d0_s4004=1901/5.62388
+th_overnight_d0_s5005=1892/5.57452
+th_overnight_d0_s6006=1894/5.6642
+th_overnight_d0_s7007=1906/5.72718
+th_overnight_d3_s4004=989/4.21537
+th_overnight_d3_s5005=992/4.16129
+th_overnight_d3_s6006=994/4.14688
+th_overnight_d3_s7007=993/4.20947
+th_overnight_d5_s4004=993/4.22155
+th_overnight_d5_s5005=997/4.1675
+th_overnight_d5_s6006=998/4.12525
+th_overnight_d5_s7007=995/4.1598

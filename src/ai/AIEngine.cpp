@@ -905,13 +905,31 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         FireProwess(state, *def);
     };
 
-    // Note whether an action casts a draw-engine spell (DrawUntilNonland / cascade);
-    // the caller gives a second pass so the AI can play the newly drawn cards.
+    // Note whether an action casts a draw-engine spell (DrawUntilNonland / cascade /
+    // a staging draw like Light Up the Stage); the caller gives a second pass so the
+    // AI can play the newly drawn/staged cards. stages_cards is included so a spell
+    // like Light Up the Stage gets the same draw-breakpoint the rollout's
+    // ApplyPlanDirect already models (cast the draw spell, then re-solve and cast the
+    // freshly revealed cards with the remaining mana). See stage_draw_break below.
     auto note_draw_engine = [&](const std::string& name)
     {
         std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(name);
-        if (d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0))
+        if (d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
+                  || d->params.stages_cards))
         { cast_draw_engine = true; }
+    };
+
+    // True for a draw spell that stages cards (e.g. Light Up the Stage). After casting
+    // one we must STOP executing the rest of this pass's plan and defer it to the
+    // second pass: the staged cards are revealed only after the spell resolves, and
+    // they compete for the same mana as the plan's remaining spells. Continuing the
+    // plan here would spend that mana (the rollout instead re-solves post-draw and
+    // lets the planned spell fall away when the freshly revealed cards are better),
+    // so the second pass re-solves from the post-draw state with the mana intact.
+    auto stage_draw_break = [&](const std::string& name) -> bool
+    {
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(name);
+        return d && d->params.stages_cards;
     };
 
     // Canonical execution order: Vial deployments first (lords live before spell casts),
@@ -919,6 +937,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // graveyard (Retrace) casts last. Each cast is resolved before the next (when a
     // resolver was supplied) so same-phase interactions (prowess, lords, spectacle,
     // on-cast triggers) see the up-to-date board/life, matching the lookahead rollout.
+    // Set once a staging draw spell is cast: defer the rest of the plan to the second
+    // pass (which re-solves from the post-draw state with the remaining mana), so the
+    // real game executes the same draw-breakpoint line the rollout searches.
+    bool staged_break = false;
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
@@ -926,15 +948,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
-        { cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now(); }
+        {
+            cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now();
+            if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+        }
     }
     for (const Action& a : plan.actions)
     {
+        if (staged_break) { break; }
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
         { cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
+        if (staged_break) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
         { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
     }
@@ -949,37 +976,31 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         ActivateTapTokens(state, remaining);
     }
 
-    // Restore any unplayed staged cards from hand back to staged_cards.
-    // Walk the snapshot to match cards that are still in hand (by m_number when
-    // non-zero, by name as fallback). Those no longer in hand were cast.
+    // Restore any unplayed staged cards (still flagged m_is_staged in hand) back to
+    // staged_cards, removing them from hand. Cards that were cast were already removed
+    // from hand; expired ones were dropped at the merge above. The expiry travels on
+    // the card (m_staged_expiry, set at the merge), so no snapshot walk is needed.
+    // IMPORTANT: the card must be REMOVED from hand here, not merely flag-cleared and
+    // kept -- doing the latter leaves a permanent (non-staged, never-expiring) hand
+    // duplicate of a card also pushed to staged_cards. That was latent until a staging
+    // spell (Light Up the Stage) got a second TakeTurn pass with its staged cards still
+    // unplayed, which ran this restore on a non-empty merge and duplicated them.
     Player& ap_after = state.ActivePlayer();
-    for (const StagedCard& orig : staged_snapshot)
-    {
-        bool still_in_hand = false;
-        for (Card& c : ap_after.hand)
-        {
-            if (!c.m_is_staged) { continue; }
-            bool match = (orig.card.m_number != 0)
-                         ? (c.m_number == orig.card.m_number)
-                         : (c.m_name    == orig.card.m_name);
-            if (match)
-            {
-                c.m_is_staged  = false; // clear flag; card moves back to staged
-                still_in_hand  = true;
-                StagedCard sc;
-                sc.card        = c;
-                sc.expiry_turn = orig.expiry_turn;
-                ap_after.staged_cards.push_back(sc);
-                break;
-            }
-        }
-        (void)still_in_hand;
-    }
-    // Remove staged cards from the hand (they've been moved back to staged_cards).
     std::vector<Card> regular_hand;
-    for (const Card& c : ap_after.hand)
+    for (Card& c : ap_after.hand)
     {
-        if (!c.m_is_staged) { regular_hand.push_back(c); }
+        if (c.m_is_staged)
+        {
+            c.m_is_staged = false;
+            StagedCard sc;
+            sc.card        = c;
+            sc.expiry_turn = c.m_staged_expiry;
+            ap_after.staged_cards.push_back(sc);
+        }
+        else
+        {
+            regular_hand.push_back(c);
+        }
     }
     ap_after.hand = std::move(regular_hand);
 

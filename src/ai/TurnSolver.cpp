@@ -998,13 +998,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     }
                     Permanent& tgt = state.battlefield[ci];
                     tgt.damage += dmg;
+                    bool lethal = tgt.damage >= tgt.EffectiveToughness();
                     // Death trigger (Searing Blood): if the creature now has lethal damage.
-                    if (def.params.death_trigger_damage > 0
-                        && tgt.damage >= tgt.EffectiveToughness())
+                    if (def.params.death_trigger_damage > 0 && lethal)
                     {
                         state.players[opp_idx].life -= def.params.death_trigger_damage;
                         state.opponent_lost_life_this_turn = true;
                     }
+                    // State-based action: a creature with lethal damage is destroyed.
+                    // Without this the rollout keeps the dead creature on the battlefield
+                    // as a phantom target, so a later creature-targeting burn (Searing
+                    // Blaze/Blood) "re-kills" it and invents face damage -> phantom early
+                    // win. Mirrors the real engine's SBA after damage is dealt.
+                    if (lethal) { state.battlefield.erase(state.battlefield.begin() + ci); }
                 }
             }
         }
@@ -2426,14 +2432,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
                 // Combat this turn
                 SimulateCombat(copy);
-                if (copy.Opponent().life <= 0) { return plan; }
+                if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
 
                 // Post-combat (second) main if this deck wants one (greedy here).
                 if (second_main)
                 {
                     Plan post = Solve(copy, false);
                     ApplyPlanDirect(copy, post, false);
-                    if (copy.Opponent().life <= 0) { return plan; }
+                    if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
                 }
             }
             else
@@ -2442,7 +2448,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // happened this turn, so apply the candidate as a post-combat play
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 ApplyPlanDirect(copy, plan, false);
-                if (copy.Opponent().life <= 0) { return plan; }
+                if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
             }
 
             // End of this turn + start of next. The next turn's land drop is searched
