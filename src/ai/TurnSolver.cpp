@@ -2252,6 +2252,161 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     return result;
 }
 
+// ---- Full-depth search (experimental, MTG_FULL_DEPTH) -------------------------
+//
+// "depth N" here means: fully search N COMPLETE turns (pre-combat main + combat +
+// optional second main), branching over EVERY plan at each phase, then estimate
+// the tail with a greedy rollout. Objective = earliest win turn, with
+// branch-and-bound: a this-turn win is the hard floor; any branch that cannot
+// beat the running best is pruned (`cutoff`). Contrast SolveWithLookahead, which
+// reduces future-turn fidelity (shallower rollout + greedy second main).
+
+static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
+                                        int cutoff, bool second_main);
+
+// Expire staged (Light Up the Stage) cards whose play window has passed, mirroring
+// SimulateToEndImpl's top-of-turn expiry and AIEngine::TakeTurn's merge skip (CR
+// 406). Without this the full-depth search keeps casting cards the real game has
+// already lost, over-valuing deferral and picking a slower line. No-op for decks
+// that never stage cards (hand never holds m_is_staged cards).
+static void ExpireStagedCards(GameState& state)
+{
+    Player& rp = state.ActivePlayer();
+    rp.hand.erase(std::remove_if(rp.hand.begin(), rp.hand.end(),
+        [&](const Card& c) { return c.m_is_staged && c.m_staged_expiry < state.turn_number; }),
+        rp.hand.end());
+}
+
+// `state` is positioned just AFTER this turn's combat, opponent still alive.
+// Returns the best line (min win turn) for the optional second main this turn plus
+// `depth` further complete turns. The returned line is prefixed with the chosen
+// second-main phase (when second_main) and continues with the recursed turns.
+// `cutoff` is the incumbent best (a line that cannot win by it is abandoned).
+static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
+                                         int cutoff, bool second_main)
+{
+    if (second_main)
+    {
+        std::vector<TurnSolver::Plan> post = EnumeratePlans(state, false);
+        // Always allow casting nothing in the second main and just advancing the
+        // turn. EnumeratePlans returns an empty vector when no post-combat play is
+        // castable (e.g. the pre-combat main tapped out), so without this the loop
+        // below would never run and the whole line would be (wrongly) scored as a
+        // no-win — making any tap-out play look strictly worse than idling. The
+        // baseline rollout always advances past an empty second main; mirror that.
+        post.push_back(TurnSolver::Plan{});
+        for (const TurnSolver::Plan& q : post)
+        {
+            if (q.wins_this_turn)
+            {
+                return { state.turn_number, { { false, q } } };
+            }
+        }
+        TurnSolver::SearchLine best;
+        best.win_turn = max_turns + 1;
+        for (const TurnSolver::Plan& q : post)
+        {
+            GameState s2 = state;
+            ApplyPlanDirect(s2, q, false);
+            if (s2.Opponent().life <= 0)
+            {
+                return { state.turn_number, { { false, q } } };
+            }
+            if (!SimulateEndAndStartNextTurn(s2)) { continue; }
+            ExpireStagedCards(s2);
+            TurnSolver::SearchLine sub =
+                FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main);
+            if (sub.win_turn < best.win_turn)
+            {
+                best.win_turn = sub.win_turn;
+                best.phases.clear();
+                best.phases.push_back({ false, q });
+                best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+            }
+            if (best.win_turn <= state.turn_number + 1) { break; }
+        }
+        return best;
+    }
+
+    GameState s = state;
+    if (!SimulateEndAndStartNextTurn(s)) { return { max_turns + 1, {} }; }
+    ExpireStagedCards(s);
+    return FSLineWin(s, depth, max_turns, cutoff, second_main);
+}
+
+// `state` is positioned at the START of the active player's pre-combat main (land
+// not yet played; EnumeratePlansWithLand folds the land choice). Returns the best
+// line (min win turn) fully searching `depth` complete turns from here, prefixed
+// with the chosen pre-combat phase.
+static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
+                                        int cutoff, bool second_main)
+{
+    if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
+    if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
+    if (depth <= 0)
+    {
+        // Tail estimate beyond the horizon: greedy rollout to game end, no committed
+        // plays (the caller re-searches once it exhausts the committed line).
+        GameState leaf = state;
+        int w = SimulateToEnd(std::move(leaf), 0, max_turns, nullptr, cutoff, second_main, nullptr);
+        return { w, {} };
+    }
+
+    std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
+    for (const TurnSolver::Plan& p : pre)
+    {
+        if (p.wins_this_turn)  // hard floor
+        {
+            return { state.turn_number, { { true, p } } };
+        }
+    }
+
+    TurnSolver::SearchLine best;
+    best.win_turn = max_turns + 1;
+    for (const TurnSolver::Plan& p : pre)
+    {
+        GameState s = state;
+        ApplyPlanDirect(s, p, true);
+        SimulateAnimateLands(s);
+        SimulateTapTokens(s);
+        SimulateCombat(s);
+        if (s.Opponent().life <= 0)  // win this turn -> floor
+        {
+            return { state.turn_number, { { true, p } } };
+        }
+
+        TurnSolver::SearchLine tail =
+            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main);
+        if (tail.win_turn < best.win_turn)
+        {
+            best.win_turn = tail.win_turn;
+            best.phases.clear();
+            best.phases.push_back({ true, p });
+            best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+        }
+        if (best.win_turn <= state.turn_number + 1) { break; }
+    }
+    return best;
+}
+
+TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
+                                                  int max_turns, bool second_main)
+{
+    SearchLine line = FSLineWin(state, depth, max_turns, max_turns + 1, second_main);
+
+    static const bool fd_trace = std::getenv("MTG_FD_TRACE") != nullptr;
+    if (fd_trace)
+    {
+        std::cerr << "[fd] T" << state.turn_number << " LINE win=" << line.win_turn;
+        for (const PhasePlan& pp : line.phases)
+        {
+            std::cerr << " | " << (pp.is_pre_combat ? "pre:" : "2nd:") << PlanDesc(pp.plan);
+        }
+        std::cerr << "\n";
+    }
+    return line;
+}
+
 // ---- Public API ----
 
 // Estimate-and-skip tuning (deterministic budget). See project-deterministic-budget.

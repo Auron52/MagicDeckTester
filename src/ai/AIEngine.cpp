@@ -20,6 +20,17 @@
 // record whenever a later turn's verified win turn exceeds one proved earlier.
 static const bool s_flag_nonconv = std::getenv("MTG_FLAG_NONCONV") != nullptr;
 
+// Experimental: route pre-combat (and second-main) decisions through the
+// full-depth commit-the-line search instead of SolveWithLookahead, so "depth N"
+// means fully searching N complete turns. A/B gate only.
+static const bool s_full_depth = std::getenv("MTG_FULL_DEPTH") != nullptr;
+
+// Commit-the-line fidelity oracle (MTG_FD_ORACLE): when a recomputed line's searched
+// win exceeds an earlier line's, the committed line we just replayed did NOT realise
+// its predicted win — a rollout/real-execution divergence. Flag the seed + turn so it
+// can be traced. Only meaningful with s_full_depth.
+static const bool s_fd_oracle = std::getenv("MTG_FD_ORACLE") != nullptr;
+
 // Trajectory probe: when MTG_NONCONV_TRACE_SEED matches a game's seed, dump every
 // real pre-combat decision (turn, committed_win, opp life/creatures, hand, plan).
 static const char*     s_trace_seed_env = std::getenv("MTG_NONCONV_TRACE_SEED");
@@ -63,6 +74,11 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // New game: reset the per-game non-convergence baseline.
     m_nonconv_best_win  = max_turns + 1;
     m_nonconv_best_turn = 0;
+
+    // New game: drop any committed full-depth line from a previous game.
+    m_committed_line.clear();
+    m_fd_best_win  = max_turns + 1;
+    m_fd_best_turn = 0;
 
     int mulligan_count = 0;
     while (true)
@@ -552,8 +568,15 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
     GameLogger* saved = m_logger;
     m_logger          = nullptr;
     m_in_rollout      = true;
+    // The rollout PlayOut shares this AIEngine by reference, so isolate its committed
+    // full-depth line: stash the real game's line, run the rollout on a fresh empty
+    // line, then restore. Otherwise the rollout would consume/overwrite the line the
+    // real game is mid-way through replaying.
+    std::deque<TurnSolver::PhasePlan> saved_line = std::move(m_committed_line);
+    m_committed_line.clear();
     GameEngine engine(*this);
     int win_turn = engine.PlayOut(trial, max_turns);
+    m_committed_line = std::move(saved_line);
     m_in_rollout = false;
     m_logger     = saved;
     return win_turn > 0 ? win_turn : max_turns + 1;
@@ -734,11 +757,66 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
             int committed_win       = m_max_turns + 1;
             int committed_sub_depth = 0;
-            plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
-                                                  m_lookahead_depth, m_max_turns,
-                                                  &budget, true, m_search_post_combat,
-                                                  m_shared_tt,
-                                                  &committed_win, &committed_sub_depth);
+            if (s_full_depth)
+            {
+                // Full-depth commit-the-line path: fully searches m_lookahead_depth
+                // complete turns (no reduced rollout / greedy second main) and REPLAYS
+                // the committed line phase by phase, so the realised win equals the
+                // searched win. The whole line is computed once at a pre-combat main
+                // when exhausted; each phase then pops its plan. No budget gating and
+                // no non-convergence accounting yet (committed_win left unset).
+                if (is_pre_combat_main && m_committed_line.empty())
+                {
+                    TurnSolver::SearchLine line = TurnSolver::FullSearchLine(
+                        state, m_lookahead_depth, m_max_turns, m_search_post_combat);
+
+                    // Oracle: a recompute whose searched win exceeds an earlier line's
+                    // means the committed line we just finished replaying did NOT realise
+                    // its predicted win -> the rollout (ApplyPlanDirect/SimulateCombat)
+                    // diverged from real execution somewhere in the replayed turns.
+                    if (s_fd_oracle && !m_in_rollout
+                        && m_fd_best_win <= m_max_turns && line.win_turn > m_fd_best_win)
+                    {
+                        std::cerr << "[fd-diverge] seed=" << state.game_seed
+                                  << " turn=" << state.turn_number
+                                  << " predicted_win=" << m_fd_best_win
+                                  << " proven_at_turn=" << m_fd_best_turn
+                                  << " recomputed_win=" << line.win_turn
+                                  << " opp_life=" << state.Opponent().life << "\n";
+                    }
+                    if (line.win_turn < m_fd_best_win)
+                    {
+                        m_fd_best_win  = line.win_turn;
+                        m_fd_best_turn = state.turn_number;
+                    }
+
+                    for (const TurnSolver::PhasePlan& pp : line.phases)
+                    {
+                        m_committed_line.push_back(pp);
+                    }
+                }
+
+                if (!m_committed_line.empty()
+                    && m_committed_line.front().is_pre_combat == is_pre_combat_main)
+                {
+                    plan = m_committed_line.front().plan;
+                    m_committed_line.pop_front();
+                }
+                else
+                {
+                    // No searched play for this phase (unsearched tail beyond the
+                    // horizon, or a phase the line skipped): idle, don't desync.
+                    plan = TurnSolver::Plan{};
+                }
+            }
+            else
+            {
+                plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                                                      m_lookahead_depth, m_max_turns,
+                                                      &budget, true, m_search_post_combat,
+                                                      m_shared_tt,
+                                                      &committed_win, &committed_sub_depth);
+            }
             PROF_ADD_NODES(budget.Used());
 
             // Non-convergence detection: only meaningful for real-game pre-combat

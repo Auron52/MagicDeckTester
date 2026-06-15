@@ -5,6 +5,7 @@
 #include "../cards/CardDatabase.h"
 #include "MulliganProfile.h"
 #include "TurnSolver.h"
+#include <deque>
 #include <functional>
 #include <vector>
 
@@ -112,6 +113,21 @@ private:
     // no rollout can ever draw the differing card. Validated by a byte-identical
     // regression check. See project-cross-turn-reuse / project-search-optimizations.
     TranspositionTable*      m_shared_tt           = nullptr;
+
+    // --- Full-depth commit-the-line (env-gated by MTG_FULL_DEPTH) ---
+    // The remaining phases of the optimal line found by the last FullSearchLine, in
+    // execution order (pre-combat, then second main when used, across the searched
+    // turns). When set, TakeTurn REPLAYS the front phase instead of re-searching, so
+    // the realised win matches the searched win (no per-turn re-deciding drift).
+    // Recomputed at a pre-combat main once exhausted; reset per game in HandleMulligan
+    // and saved/restored around rollouts in RolloutWinTurn (the rollout PlayOut shares
+    // this AIEngine by reference, so its play must not consume the real game's line).
+    std::deque<TurnSolver::PhasePlan> m_committed_line;
+
+    // Oracle (MTG_FD_ORACLE): earliest searched win predicted this game and the turn
+    // it was predicted, to flag when a later recompute degrades below it (divergence).
+    int m_fd_best_win  = 21;
+    int m_fd_best_turn = 0;
 
     // --- Non-convergence detector (env-gated by MTG_FLAG_NONCONV; read-only) ---
     // Tracks, per game, the EARLIEST exhaustively-verified win turn the search has

@@ -132,4 +132,43 @@ public:
                                    TranspositionTable* tt = nullptr,
                                    int* out_committed_win = nullptr,
                                    int* out_committed_sub_depth = nullptr);
+
+    // One committed phase of a full-depth line: the plan to execute and whether it
+    // is the pre-combat (true) or post-combat second main (false) of its turn.
+    struct PhasePlan
+    {
+        bool is_pre_combat = true;
+        Plan plan;
+    };
+
+    // The optimal line found by a full-depth search: the win turn it achieves and
+    // the exact sequence of per-turn phase plans (pre-combat, then second main when
+    // the deck uses one) over the fully-searched turns. Empty `phases` means no
+    // play was searched (depth 0 or no candidates).
+    struct SearchLine
+    {
+        int win_turn = 0;
+        std::vector<PhasePlan> phases;
+    };
+
+    // FULL-DEPTH search (experimental, env-gated via MTG_FULL_DEPTH). Unlike
+    // SolveWithLookahead — which iterative-deepens the PRE-COMBAT decision and
+    // approximates every future turn with a reduced-depth rollout plus a GREEDY
+    // second main — this fully searches `depth` COMPLETE turns: at every turn it
+    // branches over both the pre-combat plans (EnumeratePlansWithLand) and, when
+    // second_main is set, the post-combat plans (EnumeratePlans), advancing the
+    // turn and recursing. Beyond `depth` turns a greedy rollout (SimulateToEnd at
+    // depth 0) estimates the tail. The objective is the EARLIEST win turn, with
+    // branch-and-bound pruning: a plan that wins the current turn is the hard
+    // floor, and any branch that cannot beat the best win found so far is abandoned.
+    // Deterministic (no RNG), so thread-invariant.
+    //
+    // Returns the WHOLE optimal line (commit-the-line), not just the next plan, so
+    // the caller can REPLAY the exact searched sequence instead of re-deciding each
+    // turn. Re-deciding makes the realised win drift below the searched win (the
+    // search idles on an optimistic continuation its turn-by-turn policy never
+    // reproduces); replaying the committed line makes realised == searched within
+    // the horizon. `state` must be positioned at the start of a pre-combat main.
+    static SearchLine FullSearchLine(const GameState& state, int depth,
+                                     int max_turns, bool second_main);
 };
