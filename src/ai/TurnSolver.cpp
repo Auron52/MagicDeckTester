@@ -2424,9 +2424,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             {
                 ApplyPlanDirect(copy, pp.plan, false);
             }
+            int my_creatures = 0;
+            for (const Permanent& perm : copy.battlefield)
+            {
+                if (perm.controller_index == copy.active_player_index && perm.card.IsCreature())
+                { ++my_creatures; }
+            }
             std::cerr << "[fd-pred]   turn=" << copy.turn_number
                       << (pp.is_pre_combat ? " pre " : " 2nd ")
                       << "opp_life=" << copy.Opponent().life
+                      << " my_creatures=" << my_creatures
                       << "  " << PlanDesc(pp.plan) << "\n";
             first = false;
         }
