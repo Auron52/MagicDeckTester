@@ -112,7 +112,20 @@ if [ "$ACCEPT" = 1 ]; then
     emit_mode overnight  OVERNIGHT_CASES
   } > "$GT.tmp"
   mv "$GT.tmp" "$GT"
-  echo "Accepted $MODE results into $GT."
+
+  # Promote this mode's per-game logs (from the last run) into the committed
+  # ground-truth logs, so future runs diff against the accepted per-game outcomes.
+  mkdir -p test/gt_logs
+  promoted=0
+  for spec in "${CASES[@]}"; do
+    # shellcheck disable=SC2086
+    set -- $spec; deck=$1; depth=$2; seed=$3
+    key="${deck}_${MODE}_d${depth}_s${seed}"
+    if [ -f "$LOGDIR/wins/${key}.wins" ]; then
+      cp "$LOGDIR/wins/${key}.wins" "test/gt_logs/${key}.wins"; promoted=$((promoted+1))
+    fi
+  done
+  echo "Accepted $MODE results into $GT (and $promoted per-game log(s) into test/gt_logs/)."
   exit 0
 fi
 
@@ -155,9 +168,15 @@ MANIFEST="$LOGDIR/manifest.json"
 } > "$MANIFEST"
 
 TOTAL_START=$(date +%s)
-BATCH_OUT=$("$BIN" --batch "$MANIFEST" --threads "$THREADS" 2>"$LOGDIR/batch.err")
+BATCH_OUT=$("$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$LOGDIR/wins" 2>"$LOGDIR/batch.err")
 TOTAL=$(( $(date +%s) - TOTAL_START ))
 printf '%s\n' "$BATCH_OUT" > "$LOGDIR/batch.log"
+
+# Per-game ground-truth logs live in test/gt_logs/<key>.wins (committed). The batch
+# run just wrote this run's per-game win turns to $LOGDIR/wins/<key>.wins. We diff
+# them so the report names EXACTLY which games changed -- the cheap built-in version
+# of the mandatory pre-accept per-game analysis (no rebuilding the old binary).
+GTLOGS=test/gt_logs
 
 # Parse one "<name>: played=P won=W (pct%) avg=A" line per job into the existing
 # won/avg fingerprint, in matrix order, and compare to ground truth.
@@ -185,6 +204,22 @@ for spec in "${CASES[@]}"; do
     fi
   fi
   log "$(printf '  %s  %-26s exp=%-12s got=%-12s' "$status" "$key" "$expected" "$got")"
+
+  # Per-game diff against committed ground-truth logs. Lists every game whose win
+  # turn moved (old -> new), so changed games can be inspected before --accept.
+  new_wins="$LOGDIR/wins/${key}.wins"; gt_wins="$GTLOGS/${key}.wins"
+  if [ -f "$new_wins" ] && [ -f "$gt_wins" ]; then
+    diffs=$(awk 'FNR==NR{o[$1]=$2;next} ($1 in o)&&o[$1]!=$2{print "      gi="$1": "o[$1]" -> "$2}' \
+                "$gt_wins" "$new_wins")
+    if [ -n "$diffs" ]; then
+      nch=$(printf '%s\n' "$diffs" | grep -c .)
+      log "      >> $nch game(s) changed vs ground-truth log (inspect before --accept):"
+      printf '%s\n' "$diffs" | head -20 | while IFS= read -r dl; do log "$dl"; done
+      [ "$nch" -gt 20 ] && log "      ... ($((nch-20)) more)"
+    fi
+  elif [ -f "$new_wins" ] && [ ! -f "$gt_wins" ]; then
+    log "      >> no ground-truth log yet ($GTLOGS/${key}.wins) -- will be created on --accept"
+  fi
 done
 
 log ""

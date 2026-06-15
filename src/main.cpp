@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -308,6 +309,24 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
               << "   [total             (W44-W33): " << ((sum44 - sum33) / n) << "]\n";
 }
 
+// Per-game ground-truth log: one "<game_index> <win_turn>" line per game (win_turn
+// <= 0 means no win within max_turns). Written to <dir>/<name>.wins. These are the
+// committed regression ground truth at the per-game level, so a later run can diff
+// new logs against them to see EXACTLY which games changed -- without rebuilding the
+// old binary. The fingerprint (won/avg) is derivable from this, but the per-game log
+// is what makes "analyze every changed game before --accept" a cheap built-in diff.
+static void WriteGameLog(const std::filesystem::path& dir, const std::string& name,
+                         const std::vector<int>& win_turns)
+{
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::ofstream out(dir / (name + ".wins"));
+    for (int gi = 0; gi < static_cast<int>(win_turns.size()); ++gi)
+    {
+        out << gi << ' ' << win_turns[gi] << '\n';
+    }
+}
+
 int main(int argc, char* argv[])
 {
     if (argc < 2)
@@ -322,12 +341,14 @@ int main(int argc, char* argv[])
     {
         std::filesystem::path manifest;
         std::filesystem::path cards_json  = "src/cards/data/cards.json";
+        std::filesystem::path game_log_dir;
         int                   num_threads = 0;
         for (int i = 2; i < argc; ++i)
         {
             std::string flag = argv[i];
             if (flag == "--threads"    && i + 1 < argc) { num_threads = std::stoi(argv[++i]); }
             else if (flag == "--cards-json" && i + 1 < argc) { cards_json = argv[++i]; }
+            else if (flag == "--game-log-dir" && i + 1 < argc) { game_log_dir = argv[++i]; }
             else if (manifest.empty())                  { manifest = flag; }
         }
         if (manifest.empty())
@@ -354,6 +375,10 @@ int main(int argc, char* argv[])
                 std::cout << r.name << ": played=" << r.games_played
                           << " won=" << r.games_won << " (" << pct << "%)"
                           << " avg=" << r.average_win_turn << "\n";
+                if (!game_log_dir.empty())
+                {
+                    WriteGameLog(game_log_dir, r.name, r.win_turns);
+                }
             }
         }
         catch (const std::exception& e)
