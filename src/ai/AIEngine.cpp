@@ -836,10 +836,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 && static_cast<long long>(state.game_seed) == s_trace_seed)
             {
                 int opp_creatures = 0;
+                int my_creatures  = 0;
                 for (const Permanent& p : state.battlefield)
                 {
                     if (p.controller_index != state.active_player_index && p.card.IsCreature())
                     { ++opp_creatures; }
+                    if (p.controller_index == state.active_player_index && p.card.IsCreature())
+                    { ++my_creatures; }
                 }
                 std::ostringstream os;
                 os << "[traj] seed=" << state.game_seed
@@ -848,6 +851,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                    << " sub_depth=" << committed_sub_depth
                    << " opp_life=" << state.Opponent().life
                    << " opp_creatures=" << opp_creatures
+                   << " my_creatures=" << my_creatures
                    << " | hand=";
                 bool tfirst = true;
                 for (const Card& c : state.ActivePlayer().hand)
@@ -1015,6 +1019,65 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         return d && d->params.stages_cards;
     };
 
+    // A spell whose resolution reveals new cards to play (Light Up the Stage staging,
+    // Treasure Hunt's DrawUntilNonland, cascade) -- the same set ApplyPlanDirect
+    // re-solves after.
+    auto is_draw_engine = [&](const std::string& name) -> bool
+    {
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(name);
+        return d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
+                     || d->params.stages_cards);
+    };
+
+    // Inline draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): re-solve from
+    // the post-draw state and cast the freshly revealed cards in canonical order,
+    // recursing on further draws. Mirrors ApplyPlanDirect's DrawSpell/DrawUntilNonland
+    // re-solve. Needed because the committed line has only ONE plan per phase, so the
+    // normal staged-spell mechanism -- defer to a second TakeTurn pass that re-solves --
+    // never fires (that pass finds the next committed phase, mismatches, and idles), and
+    // the search's board (which includes these casts, e.g. a staged Goblin Guide that
+    // then attacks) would not be reproduced. The committed plan's own later actions that
+    // this re-solve already cast become no-ops (cast_by_name finds nothing).
+    std::function<void()> replay_draw_breakpoint = [&]()
+    {
+        // The just-resolved staging spell put its revealed cards into staged_cards (the
+        // real resolution path), but Solve only sees the hand. Merge unexpired staged
+        // cards into hand first (mirroring the top-of-TakeTurn merge and ApplyPlanDirect
+        // staging directly into hand) so the re-solve can actually cast them this turn.
+        Player& rp = state.ActivePlayer();
+        std::vector<StagedCard> snap = rp.staged_cards;
+        rp.staged_cards.clear();
+        for (StagedCard& sc : snap)
+        {
+            if (sc.expiry_turn < state.turn_number) { continue; }
+            sc.card.m_is_staged     = true;
+            sc.card.m_staged_expiry = sc.expiry_turn;
+            rp.hand.push_back(sc.card);
+        }
+
+        TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat_main);
+        for (const Action& a : extra.actions)
+        { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
+        for (const Action& a : extra.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            {
+                cast_by_name(a.card_name); resolve_now();
+                if (is_draw_engine(a.card_name)) { replay_draw_breakpoint(); }
+            }
+        }
+        for (const Action& a : extra.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
+            { cast_by_name(a.card_name); resolve_now(); }
+        }
+        for (const Action& a : extra.actions)
+        {
+            if (a.kind == Action::Kind::CastFromGraveyard)
+            { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
+        }
+    };
+
     // Canonical execution order: Vial deployments first (lords live before spell casts),
     // then regular spells (their lands tap first), then sacrifice-land spells, then
     // graveyard (Retrace) casts last. Each cast is resolved before the next (when a
@@ -1033,7 +1096,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
         {
             cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now();
-            if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+            if (s_full_depth && is_draw_engine(a.card_name))
+            {
+                // Commit-the-line: cast the revealed cards inline (no deferred pass).
+                replay_draw_breakpoint();
+            }
+            else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
         }
     }
     for (const Action& a : plan.actions)
