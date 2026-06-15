@@ -82,7 +82,46 @@ Commit `regression_gt.txt` together with the code/profile change that justified
 the new numbers.
 
 Typical rebaseline cycle after a deliberate change:
-`run → inspect FAILs/deltas → --accept → (optional) re-run to confirm all PASS`.
+`run → inspect FAILs/deltas → analyze per-game → --accept → (optional) re-run to confirm all PASS`.
+
+### MANDATORY before `--accept`: analyze the games that changed
+
+**Any** fingerprint change is a behavior change and must be understood at the
+**per-game** level before acceptance. **Never accept on the strength of an
+unchanged or "flat" aggregate** — a flat `avg_win_turn` routinely hides equal
+numbers of improvements and regressions that cancel out, and a *reduced* flag /
+non-convergence count can be **masking** (e.g. predictions becoming uniformly
+more pessimistic) rather than a real fidelity gain. Aggregate metrics cannot tell
+these apart; only the individual games can. Do not assume a change is benign
+without this analysis.
+
+For every changed config, diff the per-game win turns (old binary vs new) and
+read the actual lines of the games that moved:
+
+```bash
+# dump per-game win turns from each build (MTG_DUMP_WINS), then diff
+MTG_DUMP_WINS=1 ./build/Release/mtg.exe <deck> --seed S --games N --depth D \
+  --budget-ms B --lookahead-bottoming --threads 1 2>&1 | grep '^\[win\]' > new.txt
+git stash && cmake --build build --config Release --target mtg   # build OLD
+MTG_DUMP_WINS=1 ./build/Release/mtg.exe ... > old.txt            # same args
+git stash pop && cmake --build build --config Release --target mtg
+awk 'FNR==NR{if(match($0,/gi=([0-9]+) wt=(-?[0-9]+)/,a))o[a[1]]=a[2];next}
+     {if(match($0,/gi=([0-9]+) wt=(-?[0-9]+)/,a)&&a[2]!=o[a[1]])
+        print "gi="a[1]": "o[a[1]]" -> "a[2]}' old.txt new.txt
+```
+
+Then for each changed game, trace it in both builds
+(`MTG_NONCONV_TRACE_SEED=<seed>` with the single-game form
+`--seed <base+gi> --games 1 --game-index <gi>`) and confirm **every** moved game
+makes sense: faster games win via a legal, genuinely-better line (not a new
+phantom — verify mana/targets/zones), and slower games are an understood,
+acceptable consequence of the change (not a real misplay). If a "win-faster"
+game turns out to rely on a rules violation, or a "win-slower" game is the search
+committing a worse decision (e.g. **budget starvation** — confirm by re-running
+that game at a much larger `--budget-ms`; if a bigger budget recovers the good
+line, the change starved the search), do **not** accept — fix the root cause
+first. Acceptance certifies you have explained the deltas, not merely that the
+top-line number looks unchanged.
 
 ---
 
