@@ -783,8 +783,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // no non-convergence accounting yet (committed_win left unset).
                 if (is_pre_combat_main && m_committed_line.empty())
                 {
+                    // m_shared_tt is non-null only during the bottoming loop, where
+                    // the shared table lets sibling FullSearchLine calls reuse each
+                    // other's tail rollouts; otherwise FullSearchLine owns a per-call
+                    // table. Either way the greedy tail leaves are now memoized — the
+                    // deep search no longer re-rolls identical leaf states. Lossless:
+                    // SimulateToEnd is a pure function of its key.
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLine(
-                        state, m_lookahead_depth, m_max_turns, m_search_post_combat);
+                        state, m_lookahead_depth, m_max_turns, m_search_post_combat,
+                        m_shared_tt);
 
                     // Oracle: track the EARLIEST win any line predicted this game. The
                     // realised win is compared against it at game end (OnGameEnd) — NOT

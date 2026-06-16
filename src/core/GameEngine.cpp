@@ -118,7 +118,7 @@ void GameEngine::UntapStep(GameState& state)
         Card token;
         token.m_name      = std::to_string(spawn.power) + "/"
                           + std::to_string(spawn.toughness) + " Creature";
-        token.m_types     = { CardType::Creature };
+        token.AddType(CardType::Creature);
         token.m_power     = spawn.power;
         token.m_toughness = spawn.toughness;
 

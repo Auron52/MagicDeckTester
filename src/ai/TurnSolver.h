@@ -190,6 +190,13 @@ public:
     // search idles on an optimistic continuation its turn-by-turn policy never
     // reproduces); replaying the committed line makes realised == searched within
     // the horizon. `state` must be positioned at the start of a pre-combat main.
+    //
+    // `tt` memoizes the greedy tail rollouts (leaf SimulateToEnd) across the whole
+    // branch-and-bound tree, exactly as SolveWithLookahead does — the deep search
+    // revisits the same leaf states many times. When null, a per-call local table
+    // is created; the result is byte-identical either way (SimulateToEnd is a pure
+    // deterministic function of its key), the table only avoids recompute.
     static SearchLine FullSearchLine(const GameState& state, int depth,
-                                     int max_turns, bool second_main);
+                                     int max_turns, bool second_main,
+                                     TranspositionTable* tt = nullptr);
 };

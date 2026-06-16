@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include <cstdint>
 
 enum class CardType { Land, Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Battle };
 enum class Color { White, Blue, Black, Red, Green, Colorless };
@@ -49,61 +50,46 @@ struct Card
     // during simulation are deliberately kept OUT of it -- e.g. a card's oracle
     // text and Scryfall id live only on the CardDefinition in CardDatabase, since
     // dispatch is by template/params, not by parsing rules text at runtime.
+    //
+    // The small-enum sets (types / supertypes / colors / keywords) are stored as
+    // bitmasks rather than std::vector. Each enum has < 32 distinct values, so a
+    // membership set fits in one uint32_t: copying is a register move (no per-copy
+    // heap allocation) and Has*() is an O(1) bit test instead of a linear scan.
+    // This is the dominant clone cost on the hot path -- every card formerly paid
+    // a heap alloc/free for its (always non-empty) type set on each GameState copy.
+    // Subtypes stay a vector<string>: they are string-matched (lord subtype checks)
+    // and would need an intern table to pack, which the lord paths don't justify.
     std::string m_name;
     int         m_number    = 0;    // per-copy stable ID (1–60); assigned at deck setup
     bool        m_is_staged = false; // true while the card is a staged (exiled) card in hand
     int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
     ManaCost m_mana_cost;
     std::vector<std::string> m_subtypes; // creature/land subtypes (e.g. "Sliver", "Goblin", "Mountain")
-    std::vector<Supertype> m_supertypes;
-    std::vector<CardType>  m_types;
-    std::vector<Color>     m_colors;
+    uint32_t    m_type_mask      = 0;    // set of CardType  (see Bit())
+    uint32_t    m_supertype_mask = 0;    // set of Supertype
+    uint32_t    m_color_mask     = 0;    // set of Color
+    uint32_t    m_keyword_mask   = 0;    // set of Keyword
     std::optional<int>     m_power;      // null for non-creatures
     std::optional<int>     m_toughness;
-    std::vector<Keyword>   m_keywords;
+
+    // The enum value's ordinal is its bit index; every enum above has < 32 values.
+    static constexpr uint32_t Bit(CardType t)  { return 1u << static_cast<int>(t); }
+    static constexpr uint32_t Bit(Supertype s) { return 1u << static_cast<int>(s); }
+    static constexpr uint32_t Bit(Color c)     { return 1u << static_cast<int>(c); }
+    static constexpr uint32_t Bit(Keyword k)   { return 1u << static_cast<int>(k); }
+
+    void AddType(CardType t)       { m_type_mask      |= Bit(t); }
+    void AddSupertype(Supertype s) { m_supertype_mask |= Bit(s); }
+    void AddColor(Color c)         { m_color_mask     |= Bit(c); }
+    void AddKeyword(Keyword k)     { m_keyword_mask   |= Bit(k); }
 
     bool IsLand()     const { return HasType(CardType::Land); }
     bool IsCreature() const { return HasType(CardType::Creature); }
     bool IsInstant()  const { return HasType(CardType::Instant); }
     bool IsSorcery()  const { return HasType(CardType::Sorcery); }
 
-    bool HasType(CardType t)       const;
-    bool HasSupertype(Supertype s) const;
-    bool HasKeyword(Keyword k)     const;
+    bool HasType(CardType t)       const { return (m_type_mask      & Bit(t)) != 0; }
+    bool HasSupertype(Supertype s) const { return (m_supertype_mask & Bit(s)) != 0; }
+    bool HasColor(Color c)         const { return (m_color_mask     & Bit(c)) != 0; }
+    bool HasKeyword(Keyword k)     const { return (m_keyword_mask   & Bit(k)) != 0; }
 };
-
-inline bool Card::HasType(CardType t) const
-{
-    for (CardType ct : m_types)
-    {
-        if (ct == t)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-inline bool Card::HasSupertype(Supertype s) const
-{
-    for (Supertype st : m_supertypes)
-    {
-        if (st == s)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-inline bool Card::HasKeyword(Keyword k) const
-{
-    for (Keyword kw : m_keywords)
-    {
-        if (kw == k)
-        {
-            return true;
-        }
-    }
-    return false;
-}

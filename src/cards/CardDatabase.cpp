@@ -202,12 +202,12 @@ Card CardDatabase::BuildCardFromJson(const json& entry) const
 
     for (const std::string& t : entry.value("types", json::array()))
     {
-        card.m_types.push_back(CardTypeFromString(t));
+        card.AddType(CardTypeFromString(t));
     }
 
     for (const std::string& k : entry.value("keywords", json::array()))
     {
-        card.m_keywords.push_back(KeywordFromString(k));
+        card.AddKeyword(KeywordFromString(k));
     }
 
     for (const std::string& s : entry.value("subtypes", json::array()))

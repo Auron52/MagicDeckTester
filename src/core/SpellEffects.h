@@ -222,7 +222,7 @@ inline void CreateToken(
     token.card.m_name      = std::to_string(power) + "/" + std::to_string(toughness);
     if (!subtypes.empty()) { token.card.m_name += " " + subtypes[0]; }
     token.card.m_name     += " Token";
-    token.card.m_types     = { CardType::Creature };
+    token.card.AddType(CardType::Creature);
     token.card.m_subtypes  = subtypes;
     token.card.m_power     = power;
     token.card.m_toughness = toughness;

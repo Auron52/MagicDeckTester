@@ -1469,7 +1469,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             Card token;
             token.m_name      = std::to_string(spawn.power) + "/"
                               + std::to_string(spawn.toughness) + " Creature";
-            token.m_types     = { CardType::Creature };
+            token.AddType(CardType::Creature);
             token.m_power     = spawn.power;
             token.m_toughness = spawn.toughness;
             Permanent perm;
@@ -2358,8 +2358,22 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
 // beat the running best is pruned (`cutoff`). Contrast SolveWithLookahead, which
 // reduces future-turn fidelity (shallower rollout + greedy second main).
 
+// Interior-node memo for the full-depth search: maps a pre-combat-main state
+// (+ remaining search depth, folded into the key) to the optimal SearchLine from
+// it. Different opening sequences that transpose to the same later board reuse one
+// another's result instead of re-searching the whole subtree -- the big cost the
+// leaf SimulateToEnd table does NOT touch. Like that table it is per-FullSearchLine
+// scope (one fixed root library, so library size uniquely identifies remaining
+// content -- the cached line's draw-dependent breakpoint_actions stay valid) and
+// caches ONLY genuine wins (win_turn <= max_turns): a winning line is cutoff-
+// independent (pruning never removes a strictly-earlier win, and selection replaces
+// only on strict improvement), whereas a no-win may be a branch-and-bound abort.
+using FSLineCache = std::unordered_map<TranspositionTable::Key, TurnSolver::SearchLine,
+                                       TranspositionTable::KeyHash>;
+
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
-                                        int cutoff, bool second_main);
+                                        int cutoff, bool second_main, TranspositionTable* tt,
+                                        FSLineCache* lc);
 
 // Expire staged (Light Up the Stage) cards whose play window has passed, mirroring
 // SimulateToEndImpl's top-of-turn expiry and AIEngine::TakeTurn's merge skip (CR
@@ -2380,7 +2394,8 @@ static void ExpireStagedCards(GameState& state)
 // second-main phase (when second_main) and continues with the recursed turns.
 // `cutoff` is the incumbent best (a line that cannot win by it is abandoned).
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
-                                         int cutoff, bool second_main)
+                                         int cutoff, bool second_main, TranspositionTable* tt,
+                                         FSLineCache* lc)
 {
     if (second_main)
     {
@@ -2415,7 +2430,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             if (!SimulateEndAndStartNextTurn(s2)) { continue; }
             ExpireStagedCards(s2);
             TurnSolver::SearchLine sub =
-                FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main);
+                FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc);
             if (sub.win_turn < best.win_turn)
             {
                 best.win_turn = sub.win_turn;
@@ -2433,7 +2448,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     GameState s = state;
     if (!SimulateEndAndStartNextTurn(s)) { return { max_turns + 1, {} }; }
     ExpireStagedCards(s);
-    return FSLineWin(s, depth, max_turns, cutoff, second_main);
+    return FSLineWin(s, depth, max_turns, cutoff, second_main, tt, lc);
 }
 
 // `state` is positioned at the START of the active player's pre-combat main (land
@@ -2441,7 +2456,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
 // line (min win turn) fully searching `depth` complete turns from here, prefixed
 // with the chosen pre-combat phase.
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
-                                        int cutoff, bool second_main)
+                                        int cutoff, bool second_main, TranspositionTable* tt,
+                                        FSLineCache* lc)
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
@@ -2450,8 +2466,19 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // Tail estimate beyond the horizon: greedy rollout to game end, no committed
         // plays (the caller re-searches once it exhausts the committed line).
         GameState leaf = state;
-        int w = SimulateToEnd(std::move(leaf), 0, max_turns, nullptr, cutoff, second_main, nullptr);
+        int w = SimulateToEnd(std::move(leaf), 0, max_turns, nullptr, cutoff, second_main, tt);
         return { w, {} };
+    }
+
+    // Interior-node memo: a transposed re-entry at this (state, depth) returns the
+    // already-computed optimal line. depth is folded into the key, so different
+    // remaining depths never collide. See FSLineCache.
+    TranspositionTable::Key key;
+    if (lc != nullptr)
+    {
+        key = BuildSimKey(state, depth, max_turns, second_main);
+        FSLineCache::const_iterator it = lc->find(key);
+        if (it != lc->end()) { return it->second; }
     }
 
     // No projected-`wins_this_turn` shortcut: lethality is decided by actually
@@ -2473,11 +2500,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         {
             TurnSolver::Plan p_rec = p;
             p_rec.breakpoint_actions = std::move(bp);
-            return { state.turn_number, { { true, std::move(p_rec) } } };
+            TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+            // A this-turn win is the earliest possible from here, so it is the final
+            // optimal line for this node -- cache it (cutoff-independent).
+            if (lc != nullptr) { lc->emplace(key, win); }
+            return win;
         }
 
         TurnSolver::SearchLine tail =
-            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main);
+            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc);
         if (tail.win_turn < best.win_turn)
         {
             best.win_turn = tail.win_turn;
@@ -2489,13 +2520,33 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
         if (best.win_turn <= state.turn_number + 1) { break; }
     }
+
+    // Cache only a genuine win; a no-win (best.win_turn > max_turns) may be a
+    // cutoff abort rather than a true dead end, so it is never stored (mirrors
+    // SimulateToEnd / the leaf table).
+    if (lc != nullptr && best.win_turn <= max_turns) { lc->emplace(key, best); }
     return best;
 }
 
 TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
-                                                  int max_turns, bool second_main)
+                                                  int max_turns, bool second_main,
+                                                  TranspositionTable* tt)
 {
-    SearchLine line = FSLineWin(state, depth, max_turns, max_turns + 1, second_main);
+    // Memoize the greedy tail rollouts across the whole branch-and-bound tree. The
+    // deep search revisits identical leaf states many times; without a table each
+    // is a fresh full rollout. When the caller hands no table (the common non-
+    // bottoming path), own a per-call one. Mirrors SolveWithLookahead's local_table.
+    // Byte-identical to nullptr (SimulateToEnd is a pure function of its key); the
+    // table only skips recompute.
+    TranspositionTable local_table;
+    if (tt == nullptr) { tt = &local_table; }
+
+    // Interior-node line memo. Always per-call (never shared like the bottoming int
+    // table): it caches draw-dependent lines, valid only under THIS call's single
+    // fixed root library (library size => remaining content). See FSLineCache.
+    FSLineCache line_cache;
+
+    SearchLine line = FSLineWin(state, depth, max_turns, max_turns + 1, second_main, tt, &line_cache);
 
     static const bool fd_trace = std::getenv("MTG_FD_TRACE") != nullptr;
     if (fd_trace)
