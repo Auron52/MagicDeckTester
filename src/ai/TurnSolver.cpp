@@ -2440,8 +2440,15 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 q_rec.breakpoint_actions = std::move(bp);
                 best.phases.push_back({ false, std::move(q_rec) });
                 best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+
+                // Stop at the first VERIFIED win (within horizon) -- the pass minimum.
+                // Same reasoning as FSLineWin; the second-main FSLineWin runs at turn+1
+                // with `depth` more turns, so its horizon edge is state.turn_number+depth.
+                if (sub.win_turn <= state.turn_number + depth)
+                {
+                    return best;
+                }
             }
-            if (best.win_turn <= state.turn_number + 1) { break; }
         }
         return best;
     }
@@ -2521,8 +2528,25 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             p_rec.breakpoint_actions = std::move(bp);
             best.phases.push_back({ true, std::move(p_rec) });
             best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+
+            // Stop at the first VERIFIED win (within this node's horizon, found by real
+            // simulation -- not the greedy leaf). Under the iterative-deepening caller
+            // (FullSearchLine) a pass runs only after every shallower pass found no win,
+            // and every node in a pass shares the same horizon edge, so any in-horizon
+            // win is at that edge = the global minimum. Hence the FIRST one found is
+            // optimal; no later plan can beat it (only tie), so commit and return. This
+            // is the sound, general form of the old `best<=turn+1` sibling break, which
+            // assumed lethal plans sort first and so skipped a later this-turn kill (the
+            // slivers regression). Greedy-tail estimates (beyond the horizon) are NOT
+            // mutually tied, so they fall through to keep min-tracking. NOTE: this
+            // couples FSLineWin's correctness to that calling convention -- it is not a
+            // standalone earliest-win finder.
+            if (tail.win_turn <= state.turn_number + depth - 1)
+            {
+                if (lc != nullptr) { lc->emplace(key, best); }
+                return best;
+            }
         }
-        if (best.win_turn <= state.turn_number + 1) { break; }
     }
 
     // Cache only a genuine win; a no-win (best.win_turn > max_turns) may be a
