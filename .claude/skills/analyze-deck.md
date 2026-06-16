@@ -49,6 +49,8 @@ If `missing` is empty and all bracket notes are confirmed Tier 4 deferrals, skip
 
 For every card in `missing` or with `gaps`, work through the escalation ladder below. **Complete all cards before moving to Stage 3.** Only involve the user when escalation tier 4 is reached.
 
+**Guiding principle — implement FAITHFULLY for accurate results.** Model every card exactly as its real Oracle text and mana cost specify; the simulator's value comes from accuracy, so an approximation that diverges from the real card silently corrupts the analysis. The ONLY case where a simplification is acceptable is when it **provably changes nothing for goldfishing** (a single passive opponent that never blocks, casts, or gains/prevents life — so e.g. flying, first strike, and "target opponent" vs "each opponent" collapse to the same outcome). Even then, prefer faithful and bracket-note the simplification with WHY it is inert. When unsure whether a detail matters, implement it faithfully rather than guess. Real bugs this caught: a land modelled as a free dual that actually costs `{1}` to tap (Ferrous Lake), a land missing its enters-tapped + surveil (Thundering Falls), an animated land wrongly granted haste (Mutavault), and life loss modelled as damage (Leeching Sliver).
+
 ### 2a. Fetch oracle text
 
 Use WebFetch to get the authoritative oracle text from Scryfall:
@@ -58,6 +60,8 @@ GET https://api.scryfall.com/cards/named?exact=<url-encoded card name>
 Key fields: `oracle_text`, `type_line`, `mana_cost`, `power`, `toughness`, `keywords`.
 
 **Always fetch from Scryfall — never rely on a bracket note's description of the "real" mechanic.** Bracket notes are written by an LLM and may mischaracterise or misremember the oracle text. The Scryfall response is the only authoritative source. This applies equally when implementing a previously deferred card: fetch first, implement from the live oracle text.
+
+**Copy `mana_cost` VERBATIM from the Scryfall JSON — do NOT type a cost from memory.** This warning is separate from the oracle-text one above and is just as important: the mana cost is a small, "obvious-feeling" field, which is exactly why recalled-but-wrong costs slip past a general "fetch from Scryfall" instruction (real bugs found this way: Land's Edge entered `{1}{R}` for `{1}{R}{R}`, Skullcrack `{R}{R}` for `{1}{R}`, Throes of Chaos `{2}{R}` for `{3}{R}`). The model's confidence in the cost is what defeats the warning, so do not trust it — paste the field. For any MV-derived parameter (e.g. `cascade_max_mv` must equal the card's `cmc`), derive it from the fetched `cmc`, never from memory. After writing or editing any card, **run the mechanical guard in Stage 2d** — a prose reminder alone has repeatedly failed to catch this.
 
 ### 2b. Consult the rules skill
 
@@ -107,6 +111,16 @@ After each card, re-read `.claude/skills/mtg-rules.md` Step 4 (Card Code Review)
 - Damage values, targeting types, and all parameters match oracle text exactly
 - No clauses are silently omitted without a bracket note
 - If the card's value depends on the post-combat main (spectacle, combat untap, combat-damage triggers), confirm `GoldFishRunner::DeckUsesSecondMain` detects it so the second main is enabled (see 2c-bis)
+
+### 2d-bis. Audit costs against Scryfall (mandatory mechanical gate)
+
+A prose "fetch from Scryfall" reminder has repeatedly failed to stop a recalled-but-wrong mana cost from slipping in (see 2a). So after writing/editing cards — and before trusting any analysis — run the mechanical check, which does not depend on the model choosing to be careful:
+
+```
+python scripts/audit_card_costs.py
+```
+
+It fetches every costed `cards.json` entry's `mana_cost`/`cmc` from Scryfall and reports any divergence (and cross-checks `cascade_max_mv == cmc`), exiting non-zero on a mismatch. **Fix every mismatch by pasting the Scryfall value — do not rationalise a difference.** Only proceed when it reports "All mana costs match Scryfall" (cards that 429 are rate-limit transients, not failures; re-run or verify them by hand). Treat a non-zero exit as a hard stop, exactly like a build error.
 
 ### 2e. Rebuild after all cards
 

@@ -284,12 +284,14 @@ void GameEngine::CombatPhase(GameState& state)
     std::vector<const Permanent*> attacker_ptrs;
     attacker_ptrs.reserve(attackers.size());
     for (const Permanent* p : attackers) { attacker_ptrs.push_back(p); }
-    int trigger_dmg = CountAttackTriggerDamage(
+    int trigger_life_loss = CountAttackTriggerLifeLoss(
         state.battlefield, state.active_player_index, attacker_ptrs);
-    if (trigger_dmg > 0)
+    if (trigger_life_loss > 0)
     {
-        opp.life -= trigger_dmg;
-        total_combat_dmg += trigger_dmg;
+        // Life loss, not combat damage: reduce life directly and mark the lost-life flag
+        // (drives spectacle). Folded into total_combat_dmg only for the attack log total.
+        opp.life -= trigger_life_loss;
+        total_combat_dmg += trigger_life_loss;
         state.opponent_lost_life_this_turn = true;
     }
 

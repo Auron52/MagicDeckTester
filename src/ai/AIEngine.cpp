@@ -1268,7 +1268,8 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name)
         state.battlefield.push_back(perm);
         ap.hand.erase(it);
         ++ap.lands_played_this_turn;
-        if (def->params.etb_scry > 0) { ScryTop(state, def->params.etb_scry); }
+        if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry); }
+        if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil); }
         return true;
     }
     return false;
@@ -1302,8 +1303,10 @@ bool AIEngine::TryPlayLand(GameState& state)
         state.battlefield.push_back(perm);
         ap.hand.erase(it);
         ++ap.lands_played_this_turn;
-        // ETB scry (e.g. Temple of Epiphany), after the land is on the battlefield.
-        if (def.params.etb_scry > 0) { ScryTop(state, def.params.etb_scry); }
+        // ETB scry/surveil (e.g. Temple of Epiphany scry; Thundering Falls surveil),
+        // after the land is on the battlefield.
+        if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }
+        if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil); }
         return true;
     };
 
@@ -1548,7 +1551,10 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
 
     // Ensure floating can satisfy one pip: `any` = generic, else specific colour
     // `needed`. Taps at most one producing source (a filter may also tap one feeder).
-    std::function<bool(Color,bool)> produce = [&](Color needed, bool any) -> bool
+    // allow_ramp: may a ramp filter (Ferrous Lake) be used? false when called to FEED a
+    // ramp filter's {1}, so ramp filters never feed each other (avoids recursion; the
+    // unmodelled ramp->ramp chain is inert unless 2+ ramp filters are the ONLY sources).
+    std::function<bool(Color,bool,bool)> produce = [&](Color needed, bool any, bool allow_ramp) -> bool
     {
         { ManaPool probe = floating;
           if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed)) { return true; } }
@@ -1558,7 +1564,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
         {
             if (p.controller_index != active || p.tapped) { continue; }
             std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
-            if (!def || def->params.is_filter || !usable(p, *def)) { continue; }
+            if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
             Color col;
             if (any)
             {
@@ -1627,7 +1633,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
                     {
                         if (s.controller_index != active || s.tapped) { continue; }
                         std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(s.card.m_name);
-                        if (!sd || sd->params.is_filter || !usable(s, *sd)) { continue; }
+                        if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
                         bool m = false;
                         for (Color c : sd->params.produces) { if (c == ic) { m = true; break; } }
                         if (!m) { continue; }
@@ -1644,12 +1650,40 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
             if (available.wild > 0) { --available.wild; }  // filter counted as 1 wild in the pool
             return true;
         }
+
+        // 4) Ramp filter (e.g. Ferrous Lake: {1},{T}: Add {U}{R}). Pay {1} generic from any
+        //    other untapped source (incl. a filter's {C}), then yield one of each produces
+        //    colour. No free mode; allow_ramp=false in the feed call prevents ramp chains.
+        if (allow_ramp)
+        {
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.tapped) { continue; }
+                std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+                if (!def || !def->params.ramp_filter || !usable(p, *def)) { continue; }
+                if (!any)
+                {
+                    bool match = false;
+                    for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
+                    if (!match) { continue; }
+                }
+                else if (def->params.produces.empty()) { continue; }
+                // Pay the {1}: use floating if any, else feed one mana from a non-ramp source.
+                if (floating.Total() == 0 && !produce(Color::Colorless, true, false)) { continue; }
+                Color took;
+                if (!ConsumeFloatingAny(floating, took)) { continue; }
+                p.tapped = true;
+                for (Color c : def->params.produces) { floating.Add(c, 1); }
+                if (available.wild > 0) { --available.wild; }  // ramp filter counted as 1 wild
+                return true;
+            }
+        }
         return false;
     };
 
     auto pay = [&](Color needed, bool any) -> bool
     {
-        if (!produce(needed, any)) { return false; }
+        if (!produce(needed, any, true)) { return false; }
         if (any) { Color took; return ConsumeFloatingAny(floating, took); }
         return ConsumeFloating(floating, needed);
     };

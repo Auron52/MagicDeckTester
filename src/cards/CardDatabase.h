@@ -57,7 +57,7 @@ struct CardParams
 
     // Attack trigger: deal this much damage to the opponent per attacker that matches
     // subtypes_affected (e.g. Leeching Sliver: 1 per attacking Sliver).
-    int attack_trigger_damage = 0;
+    int attack_trigger_life_loss = 0;
 
     // Keyword lords: grant the named keyword to all creatures matching subtypes_affected.
     bool grants_haste        = false;  // Cloudshredder Sliver, Thrumming Hivepool
@@ -146,6 +146,11 @@ struct CardParams
     // ETB and bottom the unwanted ones via a deck-aware heuristic (see ScryTop).
     int etb_scry = 0;
 
+    // ETB surveil (e.g. Thundering Falls: surveil 1). Like etb_scry but unwanted cards go
+    // to the GRAVEYARD instead of the library bottom (true deck thinning). Same keep/bin
+    // heuristic as ScryTop; see SurveilTop.
+    int etb_surveil = 0;
+
     // Pain land (e.g. Fiery Islet): tapping this land for mana costs the controller
     // this much life. Applied at tap time in TapForCost / TapForCostDirect.
     int tap_self_damage = 0;
@@ -174,6 +179,13 @@ struct CardParams
     // `produces` colour from another source, then yields two of `produces`. It can only
     // make `produces` colours when such a feeder exists; otherwise it taps for {C}.
     bool is_filter = false;
+
+    // Ramp filter (e.g. Ferrous Lake: "{1}, {T}: Add {U}{R}"). Distinct from is_filter:
+    // the activation cost is {1} GENERIC (any mana, including a filter's {C}), not a
+    // coloured pip, and there is NO free mode — it produces nothing without a feeder.
+    // When fed it yields ONE of EACH `produces` colour (net +1 mana). Modelled in the
+    // mana pool as +1 wild iff another untapped source can pay the {1}, else 0.
+    bool ramp_filter = false;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

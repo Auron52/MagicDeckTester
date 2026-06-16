@@ -133,7 +133,7 @@ static int PendingAttackDamage(const GameState& state)
         dmg += base_pw * (ds ? 2 : 1);
         attackers.push_back(&p);
     }
-    dmg += CountAttackTriggerDamage(state.battlefield, state.active_player_index, attackers);
+    dmg += CountAttackTriggerLifeLoss(state.battlefield, state.active_player_index, attackers);
     return dmg;
 }
 
@@ -751,7 +751,9 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
         floating.Add(col, ManaProducedPerTap(def));
     };
 
-    std::function<bool(Color,bool)> produce = [&](Color needed, bool any) -> bool
+    // allow_ramp: may a ramp filter (Ferrous Lake) be used? false when feeding a ramp
+    // filter's {1} so ramp filters never feed each other. Mirrors AIEngine::TapForCost.
+    std::function<bool(Color,bool,bool)> produce = [&](Color needed, bool any, bool allow_ramp) -> bool
     {
         { ManaPool probe = floating;
           if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed)) { return true; } }
@@ -761,7 +763,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
         {
             if (p.controller_index != active || p.tapped) { continue; }
             std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
-            if (!def || def->params.is_filter || !usable(p, *def)) { continue; }
+            if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
             Color col;
             if (any)
             {
@@ -827,7 +829,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
                     {
                         if (s.controller_index != active || s.tapped) { continue; }
                         std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(s.card.m_name);
-                        if (!sd || sd->params.is_filter || !usable(s, *sd)) { continue; }
+                        if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
                         bool m = false;
                         for (Color c : sd->params.produces) { if (c == ic) { m = true; break; } }
                         if (!m) { continue; }
@@ -843,12 +845,38 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
             floating.Add(out, 2);
             return true;
         }
+
+        // 4) Ramp filter (e.g. Ferrous Lake: {1},{T}: Add {U}{R}). Pay {1} generic from any
+        //    other untapped source (incl. a filter's {C}), then yield one of each produces
+        //    colour. No free mode; allow_ramp=false in the feed call prevents ramp chains.
+        if (allow_ramp)
+        {
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.tapped) { continue; }
+                std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+                if (!def || !def->params.ramp_filter || !usable(p, *def)) { continue; }
+                if (!any)
+                {
+                    bool match = false;
+                    for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
+                    if (!match) { continue; }
+                }
+                else if (def->params.produces.empty()) { continue; }
+                if (floating.Total() == 0 && !produce(Color::Colorless, true, false)) { continue; }
+                Color took;
+                if (!ConsumeFloatingAny(floating, took)) { continue; }
+                p.tapped = true;
+                for (Color c : def->params.produces) { floating.Add(c, 1); }
+                return true;
+            }
+        }
         return false;
     };
 
     auto pay = [&](Color needed, bool any) -> bool
     {
-        if (!produce(needed, any)) { return false; }
+        if (!produce(needed, any, true)) { return false; }
         if (any) { Color took; return ConsumeFloatingAny(floating, took); }
         return ConsumeFloating(floating, needed);
     };
@@ -1290,11 +1318,11 @@ static void SimulateCombat(GameState& state)
         if (!p.card.HasKeyword(Keyword::Vigilance)) { p.tapped = true; }
         attackers.push_back(&p);
     }
-    int trigger_dmg = CountAttackTriggerDamage(
+    int trigger_life_loss = CountAttackTriggerLifeLoss(
         state.battlefield, state.active_player_index, attackers);
-    if (trigger_dmg > 0)
+    if (trigger_life_loss > 0)
     {
-        state.players[opp_idx].life -= trigger_dmg;
+        state.players[opp_idx].life -= trigger_life_loss;
         state.opponent_lost_life_this_turn = true;
     }
 }
@@ -1520,7 +1548,8 @@ static bool PlayLandByName(GameState& state, const std::string& name)
 
         ap.hand.erase(it);
         ++ap.lands_played_this_turn;
-        if (def->params.etb_scry > 0) { ScryTop(state, def->params.etb_scry); }
+        if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry); }
+        if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil); }
         return true;
     }
     return false;

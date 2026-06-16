@@ -1,35 +1,35 @@
-# Regression ground truth -- commit 89d88b9  date 2026-06-15
+# Regression ground truth -- commit 84ffeea  date 2026-06-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-slivers_smoke_d0_s1001=1000/4.777
-slivers_smoke_d3_s1001=250/4.308
-slivers_smoke_d5_s1001=150/4.27333
+slivers_smoke_d0_s1001=1000/4.778
+slivers_smoke_d3_s1001=250/4.316
+slivers_smoke_d5_s1001=150/4.28
 burn_smoke_d0_s1001=1000/4.889
 burn_smoke_d3_s1001=300/4.61667
 burn_smoke_d5_s1001=250/4.652
-th_smoke_d0_s1001=951/5.70032
-th_smoke_d3_s1001=150/4.14667
-th_smoke_d5_s1001=75/4
+th_smoke_d0_s1001=937/6.67022
+th_smoke_d3_s1001=149/4.58389
+th_smoke_d5_s1001=74/4.54054
 
 # --- regression ---
-slivers_regression_d0_s2002=1000/4.784
-slivers_regression_d3_s2002=400/4.305
-slivers_regression_d3_s3003=400/4.28
-slivers_regression_d5_s2002=300/4.28
-slivers_regression_d5_s3003=300/4.25333
+slivers_regression_d0_s2002=1000/4.786
+slivers_regression_d3_s2002=400/4.31
+slivers_regression_d3_s3003=400/4.2875
+slivers_regression_d5_s2002=300/4.28333
+slivers_regression_d5_s3003=300/4.26333
 burn_regression_d0_s2002=1000/4.858
 burn_regression_d3_s2002=500/4.63
 burn_regression_d3_s3003=500/4.528
 burn_regression_d5_s2002=500/4.628
 burn_regression_d5_s3003=500/4.528
-th_regression_d0_s2002=945/5.88571
-th_regression_d3_s2002=498/4.23092
-th_regression_d3_s3003=496/4.01613
-th_regression_d5_s2002=300/4.13333
-th_regression_d5_s3003=297/3.95286
+th_regression_d0_s2002=924/6.85714
+th_regression_d3_s2002=496/4.68952
+th_regression_d3_s3003=495/4.61414
+th_regression_d5_s2002=298/4.61745
+th_regression_d5_s3003=298/4.55369
 
 # --- overnight ---
 slivers_overnight_d0_s4004=2000/4.763

@@ -122,16 +122,21 @@ inline bool HasDoubleStrikeFromLords(
 }
 
 // Returns true if any lord on the battlefield grants haste to creature's subtype.
+// all_creature_types: the attacker is an animated land (e.g. Mutavault), which has
+// EVERY creature type, so it matches any typed haste lord (e.g. Cloudshredder Sliver's
+// Sliver haste) — needed because the land's printed m_subtypes is empty.
 inline bool HasHasteFromLords(
     const Card&                    creature,
     const std::vector<Permanent>&  battlefield,
-    int                            controller_index)
+    int                            controller_index,
+    bool                           all_creature_types = false)
 {
     for (const Permanent& lord : battlefield)
     {
         if (lord.controller_index != controller_index) { continue; }
         std::optional<CardDefinition> ldef = CardDatabase::Instance().Lookup(lord.card.m_name);
         if (!ldef || !ldef->params.grants_haste) { continue; }
+        if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
         for (const std::string& sub : ldef->params.subtypes_affected)
         {
             for (const std::string& cs : creature.m_subtypes)
@@ -154,15 +159,23 @@ inline bool CanAttackFull(
     if (!p.card.IsCreature() && !p.is_animated) { return false; }
     if (p.tapped)                               { return false; }
     if (p.card.HasKeyword(Keyword::Defender))   { return false; }
-    if (!p.entered_this_turn || p.is_animated)  { return true; }
+    // Summoning sickness applies to animated lands too: an animated Mutavault may attack
+    // only if the LAND has been controlled since before this turn (entered_this_turn is
+    // false), or it has haste. Mutavault grants NO haste itself, so a land animated the
+    // turn it was played cannot attack unless a haste lord (e.g. Cloudshredder Sliver,
+    // which hastes the animated land as it is every creature type) grants it.
+    if (!p.entered_this_turn)                   { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
-    return HasHasteFromLords(p.card, battlefield, controller_index);
+    return HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated);
 }
 
-// Returns the total extra damage dealt to the opponent by attack triggers (e.g. Leeching
-// Sliver: 1 per attacking Sliver). Iterates the battlefield for permanents with
-// attack_trigger_damage > 0, counts attackers matching their subtypes_affected.
-inline int CountAttackTriggerDamage(
+// Returns the total LIFE the opponent LOSES from attack triggers (e.g. Leeching Sliver:
+// "defending player loses 1 life" per attacking Sliver). This is life loss, NOT combat
+// damage -- it is unaffected by damage prevention/replacement and does not trigger
+// "deals damage" effects or lifelink (none modelled, but kept distinct so a future
+// damage-interaction card cannot wrongly include it). Iterates the battlefield for
+// permanents with attack_trigger_life_loss > 0, counting attackers matching subtypes.
+inline int CountAttackTriggerLifeLoss(
     const std::vector<Permanent>&         battlefield,
     int                                   controller_index,
     const std::vector<const Permanent*>&  attackers)
@@ -172,7 +185,7 @@ inline int CountAttackTriggerDamage(
     {
         if (src.controller_index != controller_index) { continue; }
         std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(src.card.m_name);
-        if (!def || def->params.attack_trigger_damage <= 0) { continue; }
+        if (!def || def->params.attack_trigger_life_loss <= 0) { continue; }
 
         int count = 0;
         for (const Permanent* atk : attackers)
@@ -190,7 +203,7 @@ inline int CountAttackTriggerDamage(
                 if (matches) { ++count; break; }
             }
         }
-        total += def->params.attack_trigger_damage * count;
+        total += def->params.attack_trigger_life_loss * count;
     }
     return total;
 }
@@ -261,7 +274,7 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
     {
         if (p.controller_index != active || p.tapped) { continue; }
         std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
-        if (!def || def->params.is_filter) { continue; }
+        if (!def || def->params.is_filter || def->params.ramp_filter) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
         if (!is_src) { continue; }
@@ -283,12 +296,37 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
 //   - multi-colour (dual) sources contribute 1 wild,
 //   - filter lands (Cascade Bluffs) contribute 1 wild when a non-filter feeder of one
 //     of their colours exists, else 1 {C} (the colourless-only mode).
+// True if the controller has any untapped mana source that can pay a generic {1} WITHOUT
+// itself being a ramp filter -- i.e. a feeder for a ramp filter's activation cost. A
+// basic land / mana dork pays directly; a filter (Cascade Bluffs) pays via its {C} mode.
+inline bool HasUntappedRampFeeder(const GameState& state)
+{
+    int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (!def || def->params.ramp_filter) { continue; }
+        bool is_src = (def->tmpl == CardTemplate::BasicLand)
+                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+        if (is_src) { return true; }
+    }
+    return false;
+}
+
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def)
 {
     if (def.params.is_filter)
     {
         if (HasUntappedNonFilterSourceProducing(state, def.params.produces)) { ++pool.wild; }
         else { pool.Add(Color::Colorless); }
+        return;
+    }
+    if (def.params.ramp_filter)
+    {
+        // {1},{T}: Add (each produces colour). Net +1 mana iff a feeder pays the {1};
+        // no free mode, so contributes nothing when nothing else is untapped to feed it.
+        if (HasUntappedRampFeeder(state)) { ++pool.wild; }
         return;
     }
     int amt = ManaProducedPerTap(def);
@@ -411,6 +449,44 @@ inline void ScryTop(GameState& state, int n)
         ap.library.insert(ap.library.begin(), std::move(*it));
     }
     for (Card& c : bottomed) { ap.library.push_back(std::move(c)); }
+}
+
+// Surveil N (e.g. Thundering Falls): like ScryTop, but unwanted cards go to the GRAVEYARD
+// instead of the library bottom -- true deck thinning. Uses the same deck-aware keep/bin
+// heuristic as ScryTop: keep nonlands always; keep lands only while they are still useful
+// (a DrawUntilNonland in hand wants land fuel, or fewer than two lands are in play),
+// otherwise bin the surplus land to the graveyard to dig toward action.
+inline void SurveilTop(GameState& state, int n)
+{
+    Player& ap = state.ActivePlayer();
+
+    bool has_draw_until_nonland = false;
+    for (const Card& c : ap.hand)
+    {
+        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { has_draw_until_nonland = true; break; }
+    }
+    int lands_in_play = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++lands_in_play; }
+    }
+
+    std::vector<Card> keep_top;
+    for (int i = 0; i < n && !ap.library.empty(); ++i)
+    {
+        Card c = ap.library.front();
+        ap.library.erase(ap.library.begin());
+        std::optional<CardDefinition> tdef = CardDatabase::Instance().Lookup(c.m_name);
+        bool is_land = tdef ? tdef->card.IsLand() : c.IsLand();
+        bool keep    = !is_land || has_draw_until_nonland || lands_in_play < 2;
+        if (keep) { keep_top.push_back(std::move(c)); }
+        else      { ap.graveyard.push_back(std::move(c)); }  // surveil bins to graveyard
+    }
+    for (std::vector<Card>::reverse_iterator it = keep_top.rbegin(); it != keep_top.rend(); ++it)
+    {
+        ap.library.insert(ap.library.begin(), std::move(*it));
+    }
 }
 
 // Removes one depletion counter from a land tapped for mana (e.g. Saprazzan Skerry,

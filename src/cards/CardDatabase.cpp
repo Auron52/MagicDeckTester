@@ -265,7 +265,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.stages_cards           = params.value("stages_cards", false);
     p.death_trigger_damage   = params.value("death_trigger_damage", 0);
     p.scales_per_matching    = params.value("scales_per_matching", false);
-    p.attack_trigger_damage  = params.value("attack_trigger_damage", 0);
+    p.attack_trigger_life_loss  = params.value("attack_trigger_life_loss", 0);
     p.grants_haste           = params.value("grants_haste", false);
     p.grants_double_strike   = params.value("grants_double_strike", false);
     p.affinity_for_subtype   = params.value("affinity_for_subtype", false);
@@ -304,6 +304,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("etb_untap_reveal_subtypes", json::array()))
         p.etb_untap_reveal_subtypes.push_back(s);
     p.etb_scry         = params.value("etb_scry", 0);
+    p.etb_surveil      = params.value("etb_surveil", 0);
     p.tap_self_damage  = params.value("tap_self_damage", 0);
     if (params.contains("cycling_cost"))
         p.cycling_cost = ManaCostFromString(params["cycling_cost"].get<std::string>());
@@ -312,6 +313,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.enters_tapped_with_depletion = params.value("enters_tapped_with_depletion", 0);
     p.produces_amount = params.value("produces_amount", 1);
     p.is_filter       = params.value("is_filter", false);
+    p.ramp_filter     = params.value("ramp_filter", false);
 
     return p;
 }

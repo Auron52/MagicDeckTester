@@ -71,7 +71,7 @@
         },
         {
             "name": "Skullcrack",
-            "mana_cost": "{R}{R}",
+            "mana_cost": "{1}{R}",
             "types": ["Instant"],
             "keywords": [],
             "oracle_text": "Players can't gain life this turn. Damage can't be prevented this turn.\nSkullcrack deals 3 damage to any target. [Life-gain lock and damage-prevention lock not modelled]",
@@ -129,7 +129,7 @@
             "keywords": [],
             "power": 1,
             "toughness": 1,
-            "oracle_text": "All Sliver creatures get +1/+1.",
+            "oracle_text": "Sliver creatures you control get +1/+1.",
             "template": "lord_effect",
             "parameters": { "subtypes_affected": ["Sliver"], "power_bonus": 1, "tough_bonus": 1 }
         },
@@ -203,7 +203,7 @@
             "toughness": 1,
             "oracle_text": "Whenever a Sliver you control attacks, defending player loses 1 life.",
             "template": "vanilla_creature",
-            "parameters": { "attack_trigger_damage": 1, "subtypes_affected": ["Sliver"] }
+            "parameters": { "attack_trigger_life_loss": 1, "subtypes_affected": ["Sliver"] }
         },
         {
             "name": "Hibernation Sliver",
@@ -292,7 +292,7 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}: Add {C}. {1}: Until end of turn, this land becomes a 2/2 creature with all creature types (including Sliver) and gains haste. It's still a land.",
+            "oracle_text": "{T}: Add {C}. {1}: This land becomes a 2/2 creature with all creature types until end of turn. It's still a land. [No haste: an animated Mutavault is subject to summoning sickness unless it has been controlled since before this turn or a haste lord (Cloudshredder Sliver) is in play.]",
             "template": "basic_land",
             "parameters": { "produces": ["C"], "can_animate": true, "animate_power": 2, "animate_toughness": 2, "animate_cost": "{1}" }
         },
@@ -421,9 +421,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}: Add {U} or {R}. [Simplified: modelled as dual U/R land.]",
+            "oracle_text": "{1}, {T}: Add {U}{R}.",
             "template": "basic_land",
-            "parameters": { "produces": ["U", "R"] }
+            "parameters": { "produces": ["U", "R"], "ramp_filter": true }
         },
         {
             "name": "Lonely Sandbar",
@@ -449,11 +449,11 @@
             "name": "Thundering Falls",
             "mana_cost": "",
             "types": ["Land"],
-            "subtypes": [],
+            "subtypes": ["Island", "Mountain"],
             "keywords": [],
-            "oracle_text": "{T}: Add {U} or {R}. [Simplified: modelled as dual U/R land.]",
+            "oracle_text": "({T}: Add {U} or {R}.) This land enters tapped. When this land enters, surveil 1.",
             "template": "basic_land",
-            "parameters": { "produces": ["U", "R"] }
+            "parameters": { "produces": ["U", "R"], "enters_tapped": true, "etb_surveil": 1 }
         },
         {
             "name": "Remote Isle",
@@ -477,7 +477,7 @@
         },
         {
             "name": "Land's Edge",
-            "mana_cost": "{1}{R}",
+            "mana_cost": "{1}{R}{R}",
             "types": ["Enchantment"],
             "subtypes": [],
             "keywords": [],
@@ -487,13 +487,13 @@
         },
         {
             "name": "Throes of Chaos",
-            "mana_cost": "{2}{R}",
+            "mana_cost": "{3}{R}",
             "types": ["Sorcery"],
             "subtypes": [],
             "keywords": [],
             "oracle_text": "Cascade. Retrace.",
             "template": "custom",
-            "parameters": { "cascade_max_mv": 3, "retrace": true }
+            "parameters": { "cascade_max_mv": 4, "retrace": true }
         }
     ]
 }
