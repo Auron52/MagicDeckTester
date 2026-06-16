@@ -775,12 +775,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             int committed_sub_depth = 0;
             if (s_full_depth)
             {
-                // Full-depth commit-the-line path: fully searches m_lookahead_depth
-                // complete turns (no reduced rollout / greedy second main) and REPLAYS
-                // the committed line phase by phase, so the realised win equals the
-                // searched win. The whole line is computed once at a pre-combat main
-                // when exhausted; each phase then pops its plan. No budget gating and
-                // no non-convergence accounting yet (committed_win left unset).
+                // Full-depth commit-the-line path: searches up to m_lookahead_depth
+                // complete turns (no reduced rollout / greedy second main) via iterative
+                // deepening under `budget`'s start gate, and REPLAYS the committed line
+                // phase by phase, so the realised win equals the searched win. The whole
+                // line is computed once at a pre-combat main when exhausted; each phase
+                // then pops its plan. No non-convergence accounting yet (committed_win
+                // left unset).
                 if (is_pre_combat_main && m_committed_line.empty())
                 {
                     // m_shared_tt is non-null only during the bottoming loop, where
@@ -789,9 +790,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // table. Either way the greedy tail leaves are now memoized — the
                     // deep search no longer re-rolls identical leaf states. Lossless:
                     // SimulateToEnd is a pure function of its key.
+                    int searched_depth = m_lookahead_depth;
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLine(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
-                        m_shared_tt);
+                        m_shared_tt, &budget, &searched_depth);
 
                     // Oracle: track the EARLIEST win any line predicted this game. The
                     // realised win is compared against it at game end (OnGameEnd) — NOT
@@ -805,16 +807,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
 
                     // Commit-only-verified: keep the WHOLE line only when it reaches a
-                    // win VERIFIED inside the fully-searched horizon (win turn within
-                    // turn + depth - 1, found by real simulation, not the greedy tail).
-                    // When the win is only a greedy-tail ESTIMATE beyond the horizon,
-                    // don't lock in `depth` turns on it -- commit just THIS turn and
-                    // re-search next turn, like baseline's per-turn re-deciding. (We
-                    // still RANK this turn's play with the search; we just don't commit
-                    // future turns on an unverified estimate.) Targets the greedy-leaf
-                    // off-by-one regressions without losing the realise-the-win benefit.
+                    // win VERIFIED inside the SEARCHED horizon (win turn within turn +
+                    // searched_depth - 1, found by real simulation, not the greedy tail).
+                    // searched_depth is the depth FullSearchLine actually reached -- the
+                    // budget start gate can commit a pass shallower than m_lookahead_depth,
+                    // so using the nominal depth here would misjudge a shallow greedy-tail
+                    // estimate as verified and lock in an unverified line (turning a
+                    // baseline win into a loss). When the win is only an estimate beyond
+                    // the searched horizon, commit just THIS turn and re-search next turn,
+                    // like baseline's per-turn re-deciding. (We still RANK this turn's play
+                    // with the search; we just don't commit future turns on an estimate.)
                     const bool verified_win =
-                        line.win_turn <= state.turn_number + m_lookahead_depth - 1;
+                        line.win_turn <= state.turn_number + searched_depth - 1;
                     if (!verified_win && !line.phases.empty())
                     {
                         // Keep the current turn only: its pre-combat phase plus any

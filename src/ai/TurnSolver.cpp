@@ -2373,7 +2373,7 @@ using FSLineCache = std::unordered_map<TranspositionTable::Key, TurnSolver::Sear
 
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
-                                        FSLineCache* lc);
+                                        FSLineCache* lc, SearchBudget* budget);
 
 // Expire staged (Light Up the Stage) cards whose play window has passed, mirroring
 // SimulateToEndImpl's top-of-turn expiry and AIEngine::TakeTurn's merge skip (CR
@@ -2395,7 +2395,7 @@ static void ExpireStagedCards(GameState& state)
 // `cutoff` is the incumbent best (a line that cannot win by it is abandoned).
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
-                                         FSLineCache* lc)
+                                         FSLineCache* lc, SearchBudget* budget)
 {
     if (second_main)
     {
@@ -2418,6 +2418,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         best.win_turn = max_turns + 1;
         for (const TurnSolver::Plan& q : post)
         {
+            if (budget) { budget->Consume(1); }   // one interior node (plan applied)
             GameState s2 = state;
             std::vector<Action> bp;
             ApplyPlanDirect(s2, q, false, &bp);
@@ -2430,7 +2431,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             if (!SimulateEndAndStartNextTurn(s2)) { continue; }
             ExpireStagedCards(s2);
             TurnSolver::SearchLine sub =
-                FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc);
+                FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
             if (sub.win_turn < best.win_turn)
             {
                 best.win_turn = sub.win_turn;
@@ -2448,7 +2449,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     GameState s = state;
     if (!SimulateEndAndStartNextTurn(s)) { return { max_turns + 1, {} }; }
     ExpireStagedCards(s);
-    return FSLineWin(s, depth, max_turns, cutoff, second_main, tt, lc);
+    return FSLineWin(s, depth, max_turns, cutoff, second_main, tt, lc, budget);
 }
 
 // `state` is positioned at the START of the active player's pre-combat main (land
@@ -2457,16 +2458,18 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
 // with the chosen pre-combat phase.
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
-                                        FSLineCache* lc)
+                                        FSLineCache* lc, SearchBudget* budget)
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
     if (depth <= 0)
     {
         // Tail estimate beyond the horizon: greedy rollout to game end, no committed
-        // plays (the caller re-searches once it exhausts the committed line).
+        // plays (the caller re-searches once it exhausts the committed line). The
+        // rollout only CONSUMES the budget (enforce_budget is false inside), so it
+        // never truncates -- the start gate alone reads the budget, between passes.
         GameState leaf = state;
-        int w = SimulateToEnd(std::move(leaf), 0, max_turns, nullptr, cutoff, second_main, tt);
+        int w = SimulateToEnd(std::move(leaf), 0, max_turns, budget, cutoff, second_main, tt);
         return { w, {} };
     }
 
@@ -2490,6 +2493,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     best.win_turn = max_turns + 1;
     for (const TurnSolver::Plan& p : pre)
     {
+        if (budget) { budget->Consume(1); }   // one interior node (plan applied)
         GameState s = state;
         std::vector<Action> bp;
         ApplyPlanDirect(s, p, true, &bp);
@@ -2508,7 +2512,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
 
         TurnSolver::SearchLine tail =
-            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc);
+            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
         if (tail.win_turn < best.win_turn)
         {
             best.win_turn = tail.win_turn;
@@ -2528,9 +2532,27 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     return best;
 }
 
+// Estimate-and-skip tuning (deterministic budget), shared by FullSearchLine's
+// iterative-deepening start gate and SolveWithLookahead. See
+// project-deterministic-budget.
+namespace
+{
+    // Start gate: begin pass k only if its estimated cost <= alpha * remaining
+    // budget; a little over (>1.0) is allowed since the overrun guard backs it up.
+    constexpr double kStartGateAlpha = 1.10;
+    // Bootstrap growth ratio used for pass 1's estimate, before two completed
+    // passes exist to measure a real C_{k-1}/C_{k-2} branching ratio.
+    constexpr double kDefaultGrowth = 6.0;
+    // Overrun guard: once a pass is running past budget, abort + roll back only
+    // when it has spent more than beta * the budget it started with AND finishing
+    // is still expensive (see below). "Almost done" passes always finish.
+    constexpr double kOverrunBeta = 2.0;
+}
+
 TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
                                                   int max_turns, bool second_main,
-                                                  TranspositionTable* tt)
+                                                  TranspositionTable* tt, SearchBudget* budget,
+                                                  int* out_committed_depth)
 {
     // Memoize the greedy tail rollouts across the whole branch-and-bound tree. The
     // deep search revisits identical leaf states many times; without a table each
@@ -2546,7 +2568,60 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // fixed root library (library size => remaining content). See FSLineCache.
     FSLineCache line_cache;
 
-    SearchLine line = FSLineWin(state, depth, max_turns, max_turns + 1, second_main, tt, &line_cache);
+    // Iterative deepening with a deterministic START GATE (mirrors SolveWithLookahead).
+    // Search 1, 2, ... `depth` complete turns and commit the deepest pass that fits the
+    // budget. Both memo tables are SHARED across passes and keyed by (state, remaining-
+    // depth), so pass L+1 reuses every node pass L already solved at the same remaining
+    // depth and only expands its new top layer -- the re-search is almost entirely cache
+    // hits. The start gate skips a pass whose estimated cost won't fit the remaining
+    // budget (committing the prior, deepest-fitted pass); a pass that DOES start always
+    // runs to completion (no mid-pass abort/overrun-guard yet). With no budget (nullptr)
+    // or a generous one every pass runs, so the committed line is pass `depth`'s --
+    // byte-identical to the former single FSLineWin(depth) call.
+    // depth <= 0 keeps the former single call (its FSLineWin greedy-leaf fallback);
+    // depth >= 1 deepens 1..depth. Either way the LAST committed pass is FSLineWin(depth).
+    SearchLine line;
+    line.win_turn = max_turns + 1;
+    int committed_depth = depth;             // depth actually searched for `line`
+
+    long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
+    bool      have_prev = false, have_prev2 = false;
+
+    for (int pass_depth = (depth >= 1 ? 1 : depth); pass_depth <= depth; ++pass_depth)
+    {
+        // Start gate: skip (and commit the prior pass) when the next pass clearly
+        // won't fit. Keyed on the running work-unit count, never the clock, so a
+        // deeper search makes the same skip decision and can never come out worse.
+        if (budget != nullptr && have_prev)
+        {
+            double ratio    = (have_prev2 && c_prev2 > 0)
+                            ? static_cast<double>(c_prev) / static_cast<double>(c_prev2)
+                            : kDefaultGrowth;
+            double estimate = static_cast<double>(c_prev) * ratio;
+            if (estimate > kStartGateAlpha * static_cast<double>(budget->Remaining()))
+            {
+                break;
+            }
+        }
+
+        long long used_before = budget ? budget->Used() : 0;
+        line = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt,
+                         &line_cache, budget);
+        committed_depth = pass_depth;
+        long long cost = (budget ? budget->Used() : 0) - used_before;
+
+        c_prev2 = c_prev;   have_prev2 = have_prev;
+        c_prev  = cost;     have_prev  = true;
+
+        // Stop at the first VERIFIED win (within this pass's searched horizon). A
+        // deeper pass only extends the horizon to LATER turns, so it can never find
+        // an earlier win -- this line is already optimal. Lossless: the shallowest
+        // verified win equals the depth-`depth` search's min win (same first-value-
+        // order line). A win turn BEYOND the horizon is a greedy-tail estimate, so we
+        // keep deepening to verify or beat it (until the start gate / `depth` stops).
+        if (line.win_turn <= state.turn_number + pass_depth - 1) { break; }
+    }
+    if (out_committed_depth != nullptr) { *out_committed_depth = committed_depth; }
 
     static const bool fd_trace = std::getenv("MTG_FD_TRACE") != nullptr;
     if (fd_trace)
@@ -2600,21 +2675,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 }
 
 // ---- Public API ----
-
-// Estimate-and-skip tuning (deterministic budget). See project-deterministic-budget.
-namespace
-{
-    // Start gate: begin pass k only if its estimated cost <= alpha * remaining
-    // budget; a little over (>1.0) is allowed since the overrun guard backs it up.
-    constexpr double kStartGateAlpha = 1.10;
-    // Bootstrap growth ratio used for pass 1's estimate, before two completed
-    // passes exist to measure a real C_{k-1}/C_{k-2} branching ratio.
-    constexpr double kDefaultGrowth = 6.0;
-    // Overrun guard: once a pass is running past budget, abort + roll back only
-    // when it has spent more than beta * the budget it started with AND finishing
-    // is still expensive (see below). "Almost done" passes always finish.
-    constexpr double kOverrunBeta = 2.0;
-}
 
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
                                                   int depth, int max_turns,

@@ -196,7 +196,23 @@ public:
     // revisits the same leaf states many times. When null, a per-call local table
     // is created; the result is byte-identical either way (SimulateToEnd is a pure
     // deterministic function of its key), the table only avoids recompute.
+    //
+    // `budget` drives iterative deepening: the search runs passes of 1..depth complete
+    // turns and a deterministic start gate skips a pass that won't fit the remaining
+    // budget, committing the deepest pass that did fit. It also stops early at the
+    // first pass that finds a win VERIFIED within its horizon (a deeper pass can only
+    // push the win later), which is lossless. nullptr (or a generous budget) still
+    // commits a verified win at the shallowest pass that finds it; with no verified
+    // win it runs every pass and commits depth -- byte-identical to a single search.
+    //
+    // out_committed_depth (optional) receives the depth actually searched for the
+    // committed line (= the last pass run). The caller needs it to tell a VERIFIED
+    // win (win_turn <= turn + committed_depth - 1) from a greedy-tail ESTIMATE: the
+    // start gate can commit a pass shallower than `depth`, so the nominal depth would
+    // misjudge a shallow estimate as verified.
     static SearchLine FullSearchLine(const GameState& state, int depth,
                                      int max_turns, bool second_main,
-                                     TranspositionTable* tt = nullptr);
+                                     TranspositionTable* tt = nullptr,
+                                     SearchBudget* budget = nullptr,
+                                     int* out_committed_depth = nullptr);
 };
