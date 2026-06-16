@@ -44,6 +44,18 @@ struct Action
     bool has_spectacle         = false;// has a spectacle alternate cost (Plan-B)
     bool is_draw_until_nonland = false;// Treasure Hunt (Solve's LE/TH combo valuation)
     int  discard_land_damage   = 0;    // if this card IS a Land's Edge being cast (Solve)
+
+    // Commit-the-line (MTG_FULL_DEPTH) faithful replay of DYNAMIC draw turns: the
+    // exact casts the search's draw-breakpoint re-solve made right AFTER this card's
+    // resolution revealed new cards (DrawSpell staging / DrawUntilNonland / the
+    // cascade target it free-cast). Recorded by ApplyPlanDirect when building the
+    // committed line, in execution order, nested (a recorded cast that is itself a
+    // draw engine carries its own breakpoint_casts). AIEngine replays this script
+    // verbatim instead of re-solving, so the realised turn matches the searched one
+    // (the re-solve diverged on land-drop/mana state -> phantom wins). Empty for
+    // non-draw cards and for decks/turns with no breakpoint. See
+    // project-full-depth-search (TH oracle class).
+    std::vector<Action> breakpoint_casts;
 };
 
 // Finds the optimal set of spells to cast in one main phase by exhaustive
@@ -77,6 +89,15 @@ public:
         // rollout re-searches lands every turn exactly as the real game does.
         bool        land_decided = false;
         std::string land_to_play;
+
+        // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
+        // re-solve(s) made this phase, after a main `actions` draw engine revealed new
+        // cards. Top-level (triggered by the main plan); each entry nests its own
+        // breakpoint_casts. Populated by ApplyPlanDirect's out_breakpoint only when
+        // building the committed line; AIEngine replays it verbatim (no re-solve) so
+        // the realised turn matches the search. Empty for static turns. See
+        // Action::breakpoint_casts and project-full-depth-search.
+        std::vector<Action> breakpoint_actions;
 
         bool empty() const { return actions.empty(); }
     };

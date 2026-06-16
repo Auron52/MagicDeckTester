@@ -706,6 +706,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     const bool play_this_phase = is_pre_combat_main || m_search_post_combat;
 
     TurnSolver::Plan plan;  // empty plan == do nothing this phase
+    bool fd_plan_committed = false;  // full-depth: plan came from the committed line
+                                     // (carries a recorded breakpoint script to replay)
 
     if (play_this_phase)
     {
@@ -827,12 +829,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 {
                     plan = m_committed_line.front().plan;
                     m_committed_line.pop_front();
+                    fd_plan_committed = true;
                 }
                 else
                 {
                     // No committed play for this phase: the search found no win at all
                     // (even the greedy tail), so don't idle the turn away -- develop via
-                    // the static heuristic and re-search next turn.
+                    // the static heuristic and re-search next turn. This plan carries no
+                    // recorded breakpoint, so a draw engine in it re-solves (below).
                     plan = TurnSolver::Solve(state, is_pre_combat_main);
                 }
             }
@@ -1051,21 +1055,30 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      || d->params.stages_cards);
     };
 
-    // Inline draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): re-solve from
-    // the post-draw state and cast the freshly revealed cards in canonical order,
-    // recursing on further draws. Mirrors ApplyPlanDirect's DrawSpell/DrawUntilNonland
-    // re-solve. Needed because the committed line has only ONE plan per phase, so the
-    // normal staged-spell mechanism -- defer to a second TakeTurn pass that re-solves --
-    // never fires (that pass finds the next committed phase, mismatches, and idles), and
-    // the search's board (which includes these casts, e.g. a staged Goblin Guide that
-    // then attacks) would not be reproduced. The committed plan's own later actions that
-    // this re-solve already cast become no-ops (cast_by_name finds nothing).
-    std::function<void()> replay_draw_breakpoint = [&]()
+    // SCRIPTED draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): cast the
+    // EXACT cards the search recorded (plan.breakpoint_actions / Action::breakpoint_casts)
+    // after a draw engine revealed them, instead of RE-SOLVING from the post-draw state.
+    // The earlier re-solve diverged from the search on land-drop/mana state (it could
+    // play a phantom extra land, or fail to afford a card the search had), so the realised
+    // turn missed wins the search had verified within the horizon (e.g. Treasure Hunt +
+    // Land's Edge: the search's breakpoint cast Land's Edge and discarded the drawn lands
+    // for lethal, but the real re-solve left Land's Edge in hand). Replaying the verbatim
+    // script keeps the real game in lockstep with the committed line. Recurses on each
+    // recorded cast's own nested breakpoint_casts (a recorded draw engine that revealed
+    // further cards). See project-full-depth-search (TH oracle class).
+    std::function<void(const std::vector<Action>&)> replay_recorded =
+        [&](const std::vector<Action>& recs)
     {
+        if (std::getenv("MTG_FD_TRACE") != nullptr)
+        {
+            std::fprintf(stderr, "[replay-bp] turn=%d recs=%d:", state.turn_number, (int)recs.size());
+            for (const Action& a : recs) { std::fprintf(stderr, " %s", a.card_name.c_str()); }
+            std::fprintf(stderr, "\n");
+        }
         // The just-resolved staging spell put its revealed cards into staged_cards (the
-        // real resolution path), but Solve only sees the hand. Merge unexpired staged
-        // cards into hand first (mirroring the top-of-TakeTurn merge and ApplyPlanDirect
-        // staging directly into hand) so the re-solve can actually cast them this turn.
+        // real resolution path), but the cast helpers only see the hand. Merge unexpired
+        // staged cards into hand first (mirroring the top-of-TakeTurn merge and
+        // ApplyPlanDirect staging directly into hand) so cast_by_name can find them.
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -1077,6 +1090,35 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             rp.hand.push_back(sc.card);
         }
 
+        for (const Action& a : recs)
+        {
+            if (a.kind == Action::Kind::ActivateVial)
+            { deploy_via_vial(a.card_name); resolve_now(); }
+            else if (a.kind == Action::Kind::CastFromHand)
+            { cast_by_name(a.card_name); resolve_now(); }
+            else if (a.kind == Action::Kind::CastFromGraveyard)
+            { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
+            // Nested breakpoint casts this recorded draw engine itself revealed.
+            if (!a.breakpoint_casts.empty()) { replay_recorded(a.breakpoint_casts); }
+        }
+    };
+
+    // Fallback draw breakpoint for the NON-committed full-depth plan (the develop-when-
+    // stuck Solve plan, which carries no recorded script): re-solve from the post-draw
+    // state and cast revealed cards, recursing on further draws. This is the rare
+    // no-win-found path, so the re-solve's land/mana drift is harmless (no win to miss).
+    std::function<void()> resolve_draw_breakpoint = [&]()
+    {
+        Player& rp = state.ActivePlayer();
+        std::vector<StagedCard> snap = rp.staged_cards;
+        rp.staged_cards.clear();
+        for (StagedCard& sc : snap)
+        {
+            if (sc.expiry_turn < state.turn_number) { continue; }
+            sc.card.m_is_staged     = true;
+            sc.card.m_staged_expiry = sc.expiry_turn;
+            rp.hand.push_back(sc.card);
+        }
         TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat_main);
         for (const Action& a : extra.actions)
         { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
@@ -1085,7 +1127,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
             {
                 cast_by_name(a.card_name); resolve_now();
-                if (is_draw_engine(a.card_name)) { replay_draw_breakpoint(); }
+                if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(); }
             }
         }
         for (const Action& a : extra.actions)
@@ -1109,6 +1151,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // pass (which re-solves from the post-draw state with the remaining mana), so the
     // real game executes the same draw-breakpoint line the rollout searches.
     bool staged_break = false;
+    bool bp_replayed  = false;  // commit-the-line: recorded breakpoint replayed once
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
@@ -1120,8 +1163,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
-                // Commit-the-line: cast the revealed cards inline (no deferred pass).
-                replay_draw_breakpoint();
+                // Commit-the-line: a committed plan replays the verbatim recorded
+                // breakpoint script (no re-solve) right after the draw engine revealed
+                // its cards; the develop-when-stuck fallback plan has no script, so it
+                // re-solves (the rare no-win path).
+                if (fd_plan_committed)
+                {
+                    if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; }
+                }
+                else { resolve_draw_breakpoint(); }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
         }
@@ -1177,7 +1227,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     ap_after.hand = std::move(regular_hand);
 
-    return cast_draw_engine;
+    // Commit-the-line (full-depth) handles the draw breakpoint INLINE (replay_recorded
+    // for a committed plan, resolve_draw_breakpoint for the fallback), so it must NOT
+    // request the legacy second TakeTurn pass -- that pass would wrongly consume the
+    // NEXT committed phase during this same turn (the desync that left TH's predicted
+    // Treasure Hunt + Land's Edge win unrealised). Only the legacy path uses it.
+    return s_full_depth ? false : cast_draw_engine;
 }
 
 // ---- Land drop ----

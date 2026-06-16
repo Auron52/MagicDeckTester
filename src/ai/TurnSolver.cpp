@@ -874,11 +874,21 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
 static bool PlayLandByName(GameState& state, const std::string& name);
 static void SimulateLandPlay(GameState& state);
 
-static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat)
+static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
+                            std::vector<Action>* out_breakpoint = nullptr)
 {
     PROF_INC(applyplan_calls);
     Player& ap  = state.ActivePlayer();
     int opp_idx = 1 - state.active_player_index;
+
+    // Commit-the-line recording (out_breakpoint != null, set only when building the
+    // committed line): capture the casts each draw-breakpoint re-solve makes so the
+    // AIEngine replay can reproduce them verbatim. sink_stack.back() is the container
+    // for casts of the breakpoint currently being applied; an empty stack means we are
+    // at the main-plan level (those casts are NOT recorded -- the committed plan.actions
+    // already holds them -- but a main draw engine's OWN re-solve records into the
+    // top-level out_breakpoint). See Action::breakpoint_casts.
+    std::vector<std::vector<Action>*> sink_stack;
 
     // Land drop first, so the land's mana is available to the spells that follow.
     // A searched plan (land_decided) plays exactly its chosen land ("" == a deliberate
@@ -943,6 +953,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         ManaCost ec = EffectiveCost(def, state);
         if (!TapForCostDirect(state, ec, is_creature)) { return; }
         zone.erase(it);
+
+        // Commit-the-line recording: if inside a breakpoint re-solve (sink_stack
+        // non-empty), record THIS cast into the current sink so AIEngine can replay it
+        // verbatim; its own draw-breakpoint casts nest under my_bp_sink. A main-plan
+        // cast (empty stack) is not recorded -- the committed plan.actions already holds
+        // it -- but its re-solve still records into the top-level out_breakpoint.
+        std::vector<Action>* my_bp_sink = out_breakpoint;
+        if (out_breakpoint && !sink_stack.empty())
+        {
+            Action rec;
+            rec.kind = from_graveyard ? Action::Kind::CastFromGraveyard
+                                      : Action::Kind::CastFromHand;
+            rec.card_name      = name;
+            rec.sacrifice_land = is_sacrifice;
+            rec.discard_lands  = discard_lands;
+            sink_stack.back()->push_back(rec);
+            my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
+        }
 
         // Retrace additional cost: discard `discard_lands` land cards from hand.
         // (The mana cost was paid above; CollectActions ensured enough lands exist.)
@@ -1067,7 +1095,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Draw breakpoint: re-solve with updated hand and remaining mana so
             // newly revealed cards can be cast with mana still available this turn.
             TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+            if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
             apply_plan_actions(extra.actions);
+            if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
         }
         else if (def.tmpl == CardTemplate::DrawUntilNonland)
         {
@@ -1082,7 +1112,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             // Draw breakpoint: re-solve so any new castables are played with remaining mana.
             TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+            if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
             apply_plan_actions(extra.actions);
+            if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
         }
         else if (def.params.cascade_max_mv > 0)
         {
@@ -2343,10 +2375,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         for (const TurnSolver::Plan& q : post)
         {
             GameState s2 = state;
-            ApplyPlanDirect(s2, q, false);
+            std::vector<Action> bp;
+            ApplyPlanDirect(s2, q, false, &bp);
             if (s2.Opponent().life <= 0)
             {
-                return { state.turn_number, { { false, q } } };
+                TurnSolver::Plan q_rec = q;
+                q_rec.breakpoint_actions = std::move(bp);
+                return { state.turn_number, { { false, std::move(q_rec) } } };
             }
             if (!SimulateEndAndStartNextTurn(s2)) { continue; }
             ExpireStagedCards(s2);
@@ -2356,7 +2391,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             {
                 best.win_turn = sub.win_turn;
                 best.phases.clear();
-                best.phases.push_back({ false, q });
+                TurnSolver::Plan q_rec = q;
+                q_rec.breakpoint_actions = std::move(bp);
+                best.phases.push_back({ false, std::move(q_rec) });
                 best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
             }
             if (best.win_turn <= state.turn_number + 1) { break; }
@@ -2398,13 +2435,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     for (const TurnSolver::Plan& p : pre)
     {
         GameState s = state;
-        ApplyPlanDirect(s, p, true);
+        std::vector<Action> bp;
+        ApplyPlanDirect(s, p, true, &bp);
         SimulateAnimateLands(s);
         SimulateTapTokens(s);
         SimulateCombat(s);
         if (s.Opponent().life <= 0)  // win this turn -> floor
         {
-            return { state.turn_number, { { true, p } } };
+            TurnSolver::Plan p_rec = p;
+            p_rec.breakpoint_actions = std::move(bp);
+            return { state.turn_number, { { true, std::move(p_rec) } } };
         }
 
         TurnSolver::SearchLine tail =
@@ -2413,7 +2453,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         {
             best.win_turn = tail.win_turn;
             best.phases.clear();
-            best.phases.push_back({ true, p });
+            TurnSolver::Plan p_rec = p;
+            p_rec.breakpoint_actions = std::move(bp);
+            best.phases.push_back({ true, std::move(p_rec) });
             best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
         }
         if (best.win_turn <= state.turn_number + 1) { break; }
