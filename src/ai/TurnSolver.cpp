@@ -32,6 +32,23 @@ static const char*     s_tp_turn_env = std::getenv("MTG_TRACE_PLAYOUT_TURN");
 static const int       s_tp_turn     = s_tp_turn_env ? std::atoi(s_tp_turn_env) : -1;
 static thread_local bool g_trace_arm = false;
 
+// Fidelity of the full-depth search's BEYOND-HORIZON leaf estimate (FSLineWin's
+// `depth<=0` tail). This is the policy that ranks plans whose payoff lies past the
+// searched horizon -- e.g. a combo deck (Treasure Hunt) whose lethal turn is several
+// turns out. A greedy depth-0 rollout (the original value) develops such lines too
+// weakly: it mis-ranked TH's setup turn and predicted a ~turn-19 win where baseline
+// (whose own leaf rolls out WITH lookahead, sub_depth up to depth-1) reached turn 5.
+// A 1-ply lookahead leaf fixes this -- it matches baseline's rollout fidelity closely
+// enough to rank combo setup correctly, and across slivers/burn/TH at d3 and d5 it
+// makes the committed-line search BEAT baseline. We cap it at 1 rather than the full
+// depth-1: a deeper leaf is run at EVERY node of the B^depth tree (not just the root
+// like baseline) and so blows the per-decision budget -- a depth-2 leaf measured ~11x
+// slower for only a marginal further gain. Env-overridable as the active tuning lever
+// for the leaf estimator (it is the slot a learned eval will eventually replace -- see
+// project-search-distillation). See project-full-depth-search (TH leaf-depth finding).
+static const char* s_fd_leaf_depth_env = std::getenv("MTG_FD_LEAF_DEPTH");
+static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_leaf_depth_env) : 1;
+
 void TurnSolver::SetTraceSolve(bool enable) { s_trace_solve = enable; }
 bool TurnSolver::GetTraceSolve() { return s_trace_solve; }
 
@@ -2471,12 +2488,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
     if (depth <= 0)
     {
-        // Tail estimate beyond the horizon: greedy rollout to game end, no committed
+        // Tail estimate beyond the horizon: roll out to game end at s_fd_leaf_depth
+        // fidelity (default 1 = a 1-ply lookahead; see s_fd_leaf_depth), no committed
         // plays (the caller re-searches once it exhausts the committed line). The
         // rollout only CONSUMES the budget (enforce_budget is false inside), so it
         // never truncates -- the start gate alone reads the budget, between passes.
         GameState leaf = state;
-        int w = SimulateToEnd(std::move(leaf), 0, max_turns, budget, cutoff, second_main, tt);
+        int w = SimulateToEnd(std::move(leaf), s_fd_leaf_depth, max_turns, budget, cutoff, second_main, tt);
         return { w, {} };
     }
 
