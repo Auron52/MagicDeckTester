@@ -795,6 +795,27 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         m_fd_best_turn = state.turn_number;
                     }
 
+                    // Commit-only-verified: keep the WHOLE line only when it reaches a
+                    // win VERIFIED inside the fully-searched horizon (win turn within
+                    // turn + depth - 1, found by real simulation, not the greedy tail).
+                    // When the win is only a greedy-tail ESTIMATE beyond the horizon,
+                    // don't lock in `depth` turns on it -- commit just THIS turn and
+                    // re-search next turn, like baseline's per-turn re-deciding. (We
+                    // still RANK this turn's play with the search; we just don't commit
+                    // future turns on an unverified estimate.) Targets the greedy-leaf
+                    // off-by-one regressions without losing the realise-the-win benefit.
+                    const bool verified_win =
+                        line.win_turn <= state.turn_number + m_lookahead_depth - 1;
+                    if (!verified_win && !line.phases.empty())
+                    {
+                        // Keep the current turn only: its pre-combat phase plus any
+                        // immediate second main (everything before the next pre-combat).
+                        size_t keep = 1;
+                        while (keep < line.phases.size()
+                               && !line.phases[keep].is_pre_combat) { ++keep; }
+                        line.phases.resize(keep);
+                    }
+
                     for (const TurnSolver::PhasePlan& pp : line.phases)
                     {
                         m_committed_line.push_back(pp);
@@ -809,9 +830,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 else
                 {
-                    // No searched play for this phase (unsearched tail beyond the
-                    // horizon, or a phase the line skipped): idle, don't desync.
-                    plan = TurnSolver::Plan{};
+                    // No committed play for this phase: the search found no win at all
+                    // (even the greedy tail), so don't idle the turn away -- develop via
+                    // the static heuristic and re-search next turn.
+                    plan = TurnSolver::Solve(state, is_pre_combat_main);
                 }
             }
             else

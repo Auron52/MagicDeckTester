@@ -1388,14 +1388,17 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // GameEngine::StartTurnStep. Without this the rollout never sees the opponent's
     // board, so creature-targeted burn (Searing Blaze / Searing Blood) is wrongly
     // treated as having no legal target: the search undervalues those cards and misses
-    // lines that use them. (Baseline SolveWithLookahead re-decides every turn against
-    // the real board so it compensated; commit-the-line replays the search's line and
-    // could not.) Token shape/flags match GameEngine exactly so rollout == real game.
+    // lines that use them. Token shape/flags match GameEngine exactly so the rollout's
+    // board == the real game's.
     //
-    // ENV-GATED to the experimental full-depth path: it is a genuine baseline-rollout
-    // bug too, but fixing it for baseline changes a (clairvoyant-noise) game and would
-    // need a vetted ground-truth regen, so for now the default mode stays byte-identical
-    // and only commit-the-line (which uniquely cannot re-decide) gets the spawn model.
+    // GATED to the experimental full-depth path (MTG_FULL_DEPTH). Measured rationale,
+    // not a punt: BASELINE SolveWithLookahead re-decides every turn against the REAL
+    // board, so it already handles opponent creatures where it matters (the actual
+    // play) and gains NOTHING from modelling them in its rollout -- enabling it for
+    // baseline left burn/slivers' fingerprints unchanged and only perturbed 3 games via
+    // rollout/bottoming noise (burn gi=278 5->6; th d3 s2002 gi=72 4->5, gi=97 5->6),
+    // all slightly worse, 0 better. Only commit-the-line, which REPLAYS the search's
+    // line and cannot re-decide, actually needs the rollout's board to be accurate.
     static const bool s_fd_opp_spawns = std::getenv("MTG_FULL_DEPTH") != nullptr;
     if (s_fd_opp_spawns)
     {
