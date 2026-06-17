@@ -24,6 +24,9 @@ struct Action
         CastFromGraveyard,   // Retrace: cast from graveyard, discarding a land as an additional cost
         ActivateVial,        // Aether Vial: put a creature from hand onto the battlefield
         DiscardToLandsEdge,  // discard `discard_lands` lands from hand to a Land's Edge for damage
+        PlayLand,            // play `card_name` as the turn's land drop (recorded in a draw
+                             // breakpoint so commit-the-line replay reproduces a land revealed
+                             // and played post-draw, e.g. a Light Up the Stage land)
     };
 
     Kind        kind           = Kind::CastFromHand;

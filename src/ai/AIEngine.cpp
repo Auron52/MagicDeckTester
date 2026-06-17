@@ -1117,7 +1117,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
         for (const Action& a : recs)
         {
-            if (a.kind == Action::Kind::ActivateVial)
+            if (a.kind == Action::Kind::PlayLand)
+            { TryPlaySpecificLand(state, a.card_name); }
+            else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
             { cast_by_name(a.card_name); resolve_now(); }

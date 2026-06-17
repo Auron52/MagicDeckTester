@@ -917,7 +917,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
 // a specific named land; SimulateLandPlay is the greedy fallback used when a plan did
 // not search the land (depth-0 static plans).
 static bool PlayLandByName(GameState& state, const std::string& name);
-static void SimulateLandPlay(GameState& state);
+static std::string SimulateLandPlay(GameState& state);
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr)
@@ -981,6 +981,33 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Forward-declared so apply_one's draw breakpoints can re-apply a freshly solved
     // sub-plan (newly drawn castables) through the same canonical-order dispatch.
     std::function<void(const std::vector<Action>&)> apply_plan_actions;
+
+    // Play a revealed land as the turn's land drop inside a staged-draw breakpoint
+    // (pre-combat only), mirroring the real engine's draw-engine second pass
+    // (AIEngine::TryPlayLand). A Light Up the Stage land revealed by the draw frees
+    // mana for the freshly revealed spells; without this the search under-developed
+    // vs the real game (the gi=561 class: real cast a creature a turn earlier off the
+    // revealed land). Records the played land (Kind::PlayLand) into `sink` so
+    // commit-the-line replay reproduces it. Used only by the DrawSpell (stages_cards)
+    // branch -- for Treasure Hunt's DrawUntilNonland the revealed lands are Land's
+    // Edge ammo, not a land drop. Always mutates state; records only while building a
+    // committed line (out_breakpoint && sink non-null).
+    auto play_breakpoint_land = [&](std::vector<Action>* sink)
+    {
+        // Full-depth only (mirrors s_fd_opp_spawns): keeps the baseline engine and its
+        // regression ground truth byte-frozen as the held-out A/B reference. The single
+        // rebaseline happens when full-depth becomes the default engine.
+        static const bool s_fd = std::getenv("MTG_FULL_DEPTH") != nullptr;
+        if (!s_fd || !is_pre_combat) { return; }
+        std::string played = SimulateLandPlay(state);
+        if (!played.empty() && out_breakpoint != nullptr && sink != nullptr)
+        {
+            Action la;
+            la.kind      = Action::Kind::PlayLand;
+            la.card_name = played;
+            sink->push_back(la);
+        }
+    };
 
     std::function<void(const std::string&, bool, bool, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands)
@@ -1137,10 +1164,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ap.library.DrawN(n, ap.hand);
             }
 
-            // Draw breakpoint: re-solve with updated hand and remaining mana so
-            // newly revealed cards can be cast with mana still available this turn.
-            TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+            // Draw breakpoint: play a revealed land (the real engine's second pass
+            // does), then re-solve with updated hand and remaining mana so newly
+            // revealed cards can be cast with mana still available this turn.
             if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+            play_breakpoint_land(my_bp_sink);
+            TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
             apply_plan_actions(extra.actions);
             if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
         }
@@ -1155,7 +1184,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ap.hand.push_back(std::move(c));
                 if (!is_land) { break; }
             }
-            // Draw breakpoint: re-solve so any new castables are played with remaining mana.
+            // Draw breakpoint: re-solve so any new castables are played with remaining
+            // mana. NOTE: no breakpoint land play here (unlike the DrawSpell branch) --
+            // for Treasure Hunt the revealed lands are Land's Edge ammo, not a land
+            // drop; that interaction is handled with Land's Edge (see Step 2).
             TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
             if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
             apply_plan_actions(extra.actions);
@@ -1576,10 +1608,10 @@ static bool PlayLandByName(GameState& state, const std::string& name)
 // colorless-only lands (e.g. Mutavault) so colored spells stay castable.
 // Two-pass: multi-color first, then any land. Used as the fallback when a plan did
 // not search its land (depth-0 static Solve plans and the rollout horizon leaf).
-static void SimulateLandPlay(GameState& state)
+static std::string SimulateLandPlay(GameState& state)
 {
     Player& ap = state.ActivePlayer();
-    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return; }
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return std::string(); }
 
     for (int pass = 0; pass < 2; ++pass)
     {
@@ -1591,10 +1623,12 @@ static void SimulateLandPlay(GameState& state)
             bool is_multi = def->params.produces.size() > 1;
             if (pass == 0 && !is_multi) { continue; }
 
-            PlayLandByName(state, c.m_name);
-            return;
+            std::string name = c.m_name;
+            PlayLandByName(state, name);
+            return name;
         }
     }
+    return std::string();
 }
 
 // Returns candidate plans for the current turn for use by SolveWithLookahead.
@@ -1951,6 +1985,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
+                case Action::Kind::PlayLand: break;  // never appears in plan.actions
             }
         }
         std::sort(v.begin(), v.end());
