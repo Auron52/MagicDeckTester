@@ -1,6 +1,10 @@
-# Keep shell scripts (and Python helpers) LF, regardless of a contributor's
-# core.autocrlf setting, so they run under bash/python in the Linux dev container.
-# Without this, a Windows clone with autocrlf=true rewrites *.sh to CRLF and bash
-# fails with "$'\r': command not found".
-*.sh  text eol=lf
-*.py  text eol=lf
+# Normalize all text files to LF in the repository and on checkout, regardless of
+# a contributor's core.autocrlf setting. Without this, a Windows clone with
+# autocrlf=true rewrites files to CRLF, producing whole-file diffs (and, for *.sh,
+# bash failures: "$'\r': command not found"). text=auto lets git auto-detect and
+# leave binary files untouched.
+* text=auto eol=lf
+
+# Belt-and-suspenders for files that MUST stay LF to run in the Linux container.
+*.sh text eol=lf
+*.py text eol=lf
