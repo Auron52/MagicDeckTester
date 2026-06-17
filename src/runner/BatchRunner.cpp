@@ -1,6 +1,7 @@
 #include "BatchRunner.h"
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
+#include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
 #include "../ai/MulliganProfileIO.h"
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <fstream>
+#include <iostream>
 #include <optional>
 #include <stdexcept>
 #include <thread>
@@ -131,10 +133,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             return a.job < b.job;
         });
 
-    int hw = static_cast<int>(std::thread::hardware_concurrency());
-    if (hw < 1) { hw = 1; }
-    if (num_threads <= 0) { num_threads = hw; }
+    int requested = num_threads;
+    num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
     num_threads = std::min<int>(num_threads, std::max<std::size_t>(1, items.size()));
+    concurrency_util::LogWorkerThreads(std::cerr, "batch", requested, num_threads);
 
     std::atomic<std::size_t> cursor{0};
     std::vector<std::thread> threads;

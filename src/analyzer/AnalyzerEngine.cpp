@@ -4,6 +4,7 @@
 #include "../ai/MulliganProfile.h"
 #include "../ai/MulliganProfileIO.h"
 #include "../cards/CardDatabase.h"
+#include "../core/HardwareConcurrency.h"
 #include "../runner/GoldFishRunner.h"
 #include <algorithm>
 #include <atomic>
@@ -22,8 +23,9 @@ namespace
 {
 int HardwareThreads()
 {
-    int hw = static_cast<int>(std::thread::hardware_concurrency());
-    return hw < 1 ? 1 : hw;
+    // Affinity-aware (see HardwareConcurrency.h) -- avoids a transiently-low
+    // online-CPU reading at launch under-parallelizing the analyzer.
+    return concurrency_util::AffinityCpuCount();
 }
 
 // Run fn(i) for every i in [0, n) across worker threads that each pull the next

@@ -15,6 +15,7 @@
 #include "ai/TurnSolver.h"
 #include "core/GameEngine.h"
 #include "core/GameLogger.h"
+#include "core/HardwareConcurrency.h"
 #include "ai/MulliganProfileIO.h"
 #include "ai/Profiler.h"
 
@@ -30,7 +31,7 @@ static void PrintUsage(const char* prog)
               << "  --depth D       Lookahead depth (default: 0; higher = stronger but slower)\n"
               << "  --budget-ms M   Per-decision search budget in deterministic 'virtual ms';\n"
               << "                  0 = unlimited (default: 0). Alias: --timeout-ms\n"
-              << "  --threads N     Worker threads (default: 0 = hardware_concurrency)\n"
+              << "  --threads N     Worker threads (default: 0 = auto, affinity-based CPU count)\n"
               << "  --profile P     Path to a .profile.json file (default: auto-detect deckname.profile.json)\n"
               << "  --log-dir P     Write one JSON game log per game into this directory\n"
               << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n";
@@ -123,9 +124,7 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
     std::vector<GameResult> results(num_games);
 
     // Thread count setup (mirrors GoldFishRunner).
-    int hw = static_cast<int>(std::thread::hardware_concurrency());
-    if (hw < 1) { hw = 1; }
-    if (num_threads <= 0) { num_threads = hw; }
+    num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
     num_threads = std::min(num_threads, num_games);
 
     int base_count = num_games / num_threads;

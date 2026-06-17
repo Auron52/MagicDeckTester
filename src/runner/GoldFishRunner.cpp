@@ -1,6 +1,7 @@
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
+#include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/Profiler.h"
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>
+#include <iostream>
 #include <map>
 #include <numeric>
 #include <set>
@@ -170,11 +172,10 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                                int lookahead_depth, int timeout_ms, int num_threads,
                                bool lookahead_bottoming)
 {
-    int hw_concurrency = static_cast<int>(std::thread::hardware_concurrency());
-    if (hw_concurrency < 1) { hw_concurrency = 1; }
-
-    if (num_threads <= 0) { num_threads = hw_concurrency; }
+    int requested = num_threads;
+    num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
     num_threads = std::min(num_threads, num_games);
+    concurrency_util::LogWorkerThreads(std::cerr, "goldfish", requested, num_threads);
 
     // The search budget is now a deterministic work-unit count (virtual ms), not a
     // wall-clock deadline, so it is thread-invariant by construction: each decision
