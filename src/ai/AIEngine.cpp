@@ -844,11 +844,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 else
                 {
-                    // No committed play for this phase: the search found no win at all
-                    // (even the greedy tail), so don't idle the turn away -- develop via
-                    // the static heuristic and re-search next turn. This plan carries no
-                    // recorded breakpoint, so a draw engine in it re-solves (below).
-                    plan = TurnSolver::Solve(state, is_pre_combat_main);
+                    // No committed play for this phase: the search verified no win in
+                    // horizon (even the greedy tail found none), so there is no line to
+                    // commit. Rank this turn with the SAME full lookahead baseline uses
+                    // -- on a FRESH budget so it is exactly the baseline decision -- not
+                    // the static depth-0 Solve, which under-develops multi-turn combo
+                    // setups: on a Treasure Hunt game (gi=129) static Solve idled ~10
+                    // turns and won at 15 where the lookahead develops and wins at 6.
+                    // This makes full-depth a strict superset of baseline -- it plays the
+                    // baseline turn whenever it has no verified win to commit -- so it can
+                    // never be worse than baseline when no win is in sight. Re-searches
+                    // next turn; once a win enters the horizon the verified line is
+                    // committed as usual. This plan carries no recorded breakpoint, so a
+                    // draw engine in it re-solves (below).
+                    SearchBudget fallback_budget = SearchBudget::FromVirtualMs(m_budget_ms);
+                    plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                                                          m_lookahead_depth, m_max_turns,
+                                                          &fallback_budget, true,
+                                                          m_search_post_combat, m_shared_tt,
+                                                          &committed_win, &committed_sub_depth);
                 }
             }
             else
