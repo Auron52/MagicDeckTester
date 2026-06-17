@@ -1,0 +1,69 @@
+// C++20 dev container for MagicDeckTester. No custom Dockerfile: we consume
+// Microsoft's prebuilt C++ image (Ubuntu 24.04 -> gcc-13/g++-13, gdb, git, and
+// a recent CMake >= 3.28 already on PATH) and add the two missing tools via a
+// one-line apt command below.
+//
+// See .devcontainer/README.md for usage and the Windows-vs-Linux caveats.
+{
+  "name": "MagicDeckTester (C++20)",
+  "image": "mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04",
+
+  // Capabilities the egress firewall (init-firewall.sh) needs to program the
+  // container's own netfilter rules. These do NOT grant access to the host's
+  // network; they only let iptables/ipset run inside the container's namespace.
+  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
+
+  // Add what the base image lacks, without a Dockerfile. Runs at create time with
+  // full network (before the firewall is applied), which is why apt mirrors need
+  // no allowlist entry:
+  //   ninja-build       -> the "Ninja Multi-Config" generator, so the Linux build
+  //                        mirrors the Windows multi-config layout (binaries land
+  //                        in build/Release/, just without the ".exe" suffix).
+  //   python3 / python  -> scripts/analyze_deck.py + scripts/audit_card_costs.py
+  //                        (pure stdlib; python-is-python3 makes `python` work,
+  //                        matching how the skills invoke the scripts).
+  //   iptables ipset dnsutils jq curl ca-certificates -> the egress firewall.
+  "onCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build python3 python-is-python3 iptables ipset dnsutils jq curl ca-certificates",
+
+  // Keep the Linux CMake build tree in a Docker volume mounted over build/. The
+  // host's Windows build/ (a Visual Studio cache) is bind-mounted underneath and
+  // would otherwise make `cmake -G "Ninja Multi-Config"` fail with a generator
+  // mismatch. The volume shadows it ONLY inside the container, so the Windows
+  // build is left untouched -- and build artifacts get native FS performance.
+  "mounts": [
+    "source=mdt-build,target=${containerWorkspaceFolder}/build,type=volume"
+  ],
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools-extension-pack",
+        "ms-python.python"
+      ],
+      "settings": {
+        "cmake.generator": "Ninja Multi-Config",
+        "cmake.buildDirectory": "${workspaceFolder}/build",
+        "cmake.configureOnOpen": true,
+        "cmake.configureArgs": ["-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"],
+        "C_Cpp.default.cppStandard": "c++20",
+        "C_Cpp.default.compilerPath": "/usr/bin/g++",
+        "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+        "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  // The build/ volume is created root-owned; hand it to the non-root user, then
+  // configure once (this triggers the FetchContent download of pugixml + json,
+  // so it needs network on first run). Build with:
+  //   cmake --build build --config Release
+  "postCreateCommand": "sudo chown -R vscode:vscode build && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+
+  // Apply the egress firewall on every start (a restart clears the container's
+  // iptables rules). It runs AFTER postCreate, so the first dependency fetch is
+  // unaffected. Edit the allowlist at the top of init-firewall.sh.
+  "postStartCommand": "sudo bash .devcontainer/init-firewall.sh",
+
+  "remoteUser": "vscode"
+}

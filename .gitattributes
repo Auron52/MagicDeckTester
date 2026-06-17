@@ -1,0 +1,6 @@
+# Keep shell scripts (and Python helpers) LF, regardless of a contributor's
+# core.autocrlf setting, so they run under bash/python in the Linux dev container.
+# Without this, a Windows clone with autocrlf=true rewrites *.sh to CRLF and bash
+# fails with "$'\r': command not found".
+*.sh  text eol=lf
+*.py  text eol=lf

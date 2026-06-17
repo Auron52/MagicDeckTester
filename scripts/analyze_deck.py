@@ -24,6 +24,7 @@ Options:
 
 import argparse
 import json
+import platform
 import re
 import subprocess
 import sys
@@ -34,7 +35,11 @@ REPO_ROOT    = Path(__file__).parent.parent.resolve()
 CARDS_JSON   = REPO_ROOT / "src" / "cards" / "data" / "cards.json"
 CUSTOM_DIR   = REPO_ROOT / "src" / "cards" / "custom"
 BUILD_DIR    = REPO_ROOT / "build"
-ANALYZER_BIN = BUILD_DIR / "Release" / "mtg-analyze.exe"
+# Multi-config CMake generators (Visual Studio on Windows, Ninja Multi-Config in
+# the Linux dev container) both place the binary under build/Release/; only the
+# executable suffix differs by platform.
+EXE_SUFFIX   = ".exe" if platform.system() == "Windows" else ""
+ANALYZER_BIN = BUILD_DIR / "Release" / f"mtg-analyze{EXE_SUFFIX}"
 
 # ---------------------------------------------------------------------------
 # CLI

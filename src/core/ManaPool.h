@@ -1,5 +1,6 @@
 #pragma once
 #include "Card.h"
+#include <algorithm>  // std::max
 
 // Tracks mana currently available to a player for paying costs.
 // Does not include mana held by untapped sources — see AIEngine::BuildAvailableMana

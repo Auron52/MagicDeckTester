@@ -39,7 +39,10 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Multi-config build layout: build/Release/mtg.exe on Windows (MSVC),
+# build/Release/mtg in the Linux dev container (Ninja Multi-Config).
 BIN=./build/Release/mtg.exe
+[ -f "$BIN" ] || BIN=./build/Release/mtg
 GT=test/regression_gt.txt
 THREADS=${THREADS:-0}
 

@@ -2,6 +2,7 @@
 #include "GameState.h"
 #include "ManaPool.h"
 #include "../cards/CardDatabase.h"
+#include <algorithm>
 #include <limits>
 
 // Land's Edge firing heuristic: how many lands to discard to a Land's Edge of the
