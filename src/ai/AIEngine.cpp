@@ -1999,8 +1999,7 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     }
     if (rate == 0) { return; }
 
-    Player& ap  = state.ActivePlayer();
-    Player& opp = state.Opponent();
+    Player& ap = state.ActivePlayer();
 
     int lands_in_hand = 0;
     for (const Card& c : ap.hand)
@@ -2010,31 +2009,10 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     }
     if (lands_in_hand == 0) { return; }
 
-    // Determine effective hand size limit (Reliquary Tower grants unlimited).
-    bool unlimited_hand = false;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index) { continue; }
-        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
-        if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
-    }
-    int max_hand = unlimited_hand ? std::numeric_limits<int>::max() : 7;
-
-    // Lethal threshold: fewest lands needed to kill the opponent this activation.
-    int lethal_lands = (opp.life + rate - 1) / rate;
-
-    // Heuristic: fire all for lethal; fire only excess (cleanup-waste prevention); hold otherwise.
-    int fire_count = 0;
-    if (lands_in_hand >= lethal_lands)
-    {
-        fire_count = lands_in_hand;
-    }
-    else
-    {
-        int hand_size = static_cast<int>(ap.hand.size());
-        int excess    = std::max(0, hand_size - max_hand);
-        fire_count    = std::min(excess, lands_in_hand);
-    }
+    // Base firing count (shared with the search's ApplyPlanDirect so both model the
+    // same Land's Edge damage): fire all for lethal; else only the excess over the max
+    // hand size; else hold. See LandsEdgeHeuristicFireCount.
+    int fire_count = LandsEdgeHeuristicFireCount(state, rate);
 
     // For depth > 0 outside a rollout: compare heuristic amount vs. firing all lands.
     // The heuristic handles "fire for lethal" and "fire excess to prevent waste";

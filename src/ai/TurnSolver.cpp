@@ -1306,8 +1306,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
     apply_plan_actions(plan.actions);
 
-    // Activate Land's Edge: discard all lands in hand after all spells resolve.
-    // This mirrors GameEngine::MainPhase's post-stack ActivateLandsEdge call.
+    // Activate Land's Edge after all spells resolve (mirrors GameEngine::MainPhase's
+    // post-stack ActivateLandsEdge call).
     {
         int rate = 0;
         for (const Permanent& p : state.battlefield)
@@ -1321,15 +1321,29 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         if (rate > 0)
         {
+            // Baseline fires ALL lands (its rollouts are frozen as the held-out ground
+            // truth). Full-depth uses the real engine's conditional heuristic so the
+            // search does not over-count the Land's Edge burst -- the gi=947 class: the
+            // search fired every drawn land for opp -24 at T5 where the real engine holds
+            // them (fire only for lethal / cleanup excess), slipping the win to T10.
+            static const bool s_fd = std::getenv("MTG_FULL_DEPTH") != nullptr;
+            int fire_count = s_fd ? LandsEdgeHeuristicFireCount(state, rate)
+                                  : std::numeric_limits<int>::max();
+
             std::vector<Card> keep;
+            int fired = 0;
             for (Card& c : ap.hand)
             {
                 auto cdef    = CardDatabase::Instance().Lookup(c.m_name);
                 bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
-                if (!is_land) { keep.push_back(std::move(c)); continue; }
-                ap.graveyard.push_back(c);
-                state.players[opp_idx].life -= rate;
-                if (rate > 0) { state.opponent_lost_life_this_turn = true; }
+                if (is_land && fired < fire_count)
+                {
+                    ap.graveyard.push_back(c);
+                    state.players[opp_idx].life -= rate;
+                    state.opponent_lost_life_this_turn = true;
+                    ++fired;
+                }
+                else { keep.push_back(std::move(c)); }
             }
             ap.hand = std::move(keep);
         }
@@ -1451,16 +1465,51 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
     }
 
-    // Discard down to hand size 7 (always discard the highest MV card)
+    // Discard down to hand size 7. Full-depth mirrors AIEngine::ChooseDiscard: when a
+    // Land's Edge outlet exists (the lands are ammunition, the spells are the combo)
+    // shed a LAND first; otherwise shed the highest-MV card. Baseline keeps the
+    // highest-MV-only rule (frozen as the held-out ground truth). Without this the
+    // search kept every drawn land as Land's Edge ammo while the real game discards
+    // lands here, so the search over-counted Land's Edge damage across turns (gi=947).
+    static const bool s_fd_discard = std::getenv("MTG_FULL_DEPTH") != nullptr;
+    bool has_land_outlet = false;
+    if (s_fd_discard)
+    {
+        for (const Card& c : ap.hand)
+        {
+            auto def = CardDatabase::Instance().Lookup(c.m_name);
+            if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
+        }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (has_land_outlet) { break; }
+            if (p.controller_index != state.active_player_index) { continue; }
+            auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+            if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; }
+        }
+    }
     while (!unlimited_hand && ap.hand.size() > 7)
     {
-        auto worst = std::max_element(ap.hand.begin(), ap.hand.end(),
-            [](const Card& a, const Card& b)
+        std::vector<Card>::iterator victim = ap.hand.end();
+        if (has_land_outlet)
+        {
+            for (std::vector<Card>::iterator it = ap.hand.begin(); it != ap.hand.end(); ++it)
             {
-                return a.m_mana_cost.ManaValue() < b.m_mana_cost.ManaValue();
-            });
-        ap.graveyard.push_back(*worst);
-        ap.hand.erase(worst);
+                auto def     = CardDatabase::Instance().Lookup(it->m_name);
+                bool is_land = def ? def->card.IsLand() : it->IsLand();
+                if (is_land) { victim = it; break; }
+            }
+        }
+        if (victim == ap.hand.end())
+        {
+            victim = std::max_element(ap.hand.begin(), ap.hand.end(),
+                [](const Card& a, const Card& b)
+                {
+                    return a.m_mana_cost.ManaValue() < b.m_mana_cost.ManaValue();
+                });
+        }
+        ap.graveyard.push_back(*victim);
+        ap.hand.erase(victim);
     }
 
     // Reset per-turn damage marks, "until end of turn" power/toughness boosts, and

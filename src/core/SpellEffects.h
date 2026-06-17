@@ -2,6 +2,44 @@
 #include "GameState.h"
 #include "ManaPool.h"
 #include "../cards/CardDatabase.h"
+#include <limits>
+
+// Land's Edge firing heuristic: how many lands to discard to a Land's Edge of the
+// given `rate` this activation. Fire all when it is lethal; otherwise fire only the
+// excess over the max hand size (so those lands are not simply discarded to the
+// end-of-turn cleanup for nothing); otherwise hold. Shared by the real engine
+// (AIEngine::ActivateLandsEdge) and the search's inline executor (ApplyPlanDirect) so
+// both model the same Land's Edge damage. Does NOT include the real engine's depth>0
+// rollout comparison (fire-all-if-faster) -- that is a real-game-only refinement layered
+// on top of this base policy.
+inline int LandsEdgeHeuristicFireCount(const GameState& state, int rate)
+{
+    if (rate <= 0) { return 0; }
+    const Player& ap  = state.players[state.active_player_index];
+    const Player& opp = state.players[1 - state.active_player_index];
+
+    int lands_in_hand = 0;
+    for (const Card& c : ap.hand)
+    {
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(c.m_name);
+        if (def ? def->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
+    }
+    if (lands_in_hand == 0) { return 0; }
+
+    bool unlimited_hand = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
+    }
+    int max_hand = unlimited_hand ? std::numeric_limits<int>::max() : 7;
+
+    int lethal_lands = (opp.life + rate - 1) / rate;
+    if (lands_in_hand >= lethal_lands) { return lands_in_hand; }
+    int excess = std::max(0, static_cast<int>(ap.hand.size()) - max_hand);
+    return std::min(excess, lands_in_hand);
+}
 
 // Fires on-cast triggers from all permanents on the battlefield (e.g. Eidolon of the
 // Great Revel). Deals damage to the active player for each permanent whose trigger
