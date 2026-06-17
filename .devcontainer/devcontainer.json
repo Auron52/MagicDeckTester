@@ -69,7 +69,15 @@
         "C_Cpp.default.compilerPath": "/usr/bin/g++",
         "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
         "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
-        "terminal.integrated.defaultProfile.linux": "bash"
+        "terminal.integrated.defaultProfile.linux": "bash",
+
+        // Run Claude Code in bypass-permissions mode by default IN THIS CONTAINER,
+        // so it won't prompt before running commands. This is the point of the
+        // container: the egress firewall + build volume contain the blast radius.
+        // Applied as the container's Machine ("Remote") settings on rebuild.
+        // NOTE: committed, so anyone who builds this container gets this default.
+        "claudeCode.allowDangerouslySkipPermissions": true,
+        "claudeCode.initialPermissionMode": "bypassPermissions"
       }
     }
   },
