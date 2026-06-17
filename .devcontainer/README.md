@@ -11,7 +11,9 @@ A reproducible Linux C++20 environment for MagicDeckTester, for VS Code + Docker
 
 On first creation the container will:
 
-- pull `mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04` (gcc-13, gdb, cmake, git),
+- build a one-layer image on `mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04`
+  (gcc-13, gdb, cmake, git; the layer only pre-creates `~/.vscode-server` — see the
+  Dockerfile header),
 - `apt-get install` Ninja and Python (`onCreateCommand`),
 - configure CMake into `build/` with the **Ninja Multi-Config** generator
   (`postCreateCommand`). This step **downloads pugixml + nlohmann_json** via
@@ -87,9 +89,54 @@ Non-essential traffic (telemetry, error reporting, auto-updates) is disabled via
 the firewall blocks. (That also pins the version — to upgrade, rebuild the container,
 which reinstalls the latest via npm.)
 
-> Not allowlisted: the VS Code Marketplace. If your C/C++ or Python extensions fail
-> to install inside the container, that's the firewall blocking
-> `marketplace.visualstudio.com` — tell me and I'll add the VS Code domains.
+See "Editor extensions behind the firewall" below for the Claude **VS Code
+extension** (vs. the CLI used here).
+
+## Editor extensions behind the firewall
+
+The extensions listed in `devcontainer.json` (`anthropic.claude-code`,
+`ms-vscode.cpptools-extension-pack`, `ms-python.python`) install into the container's
+VS Code Server, which downloads them from the **Marketplace**. The Marketplace uses
+wildcard CDN hosts (`*.gallerycdn.vsassets.io`, `*.vscode-cdn.net`, …) on shared,
+rotating IPs that the IP-allowlist firewall can't cleanly pin — so they will **not**
+auto-install while the firewall is locked down.
+
+The approach: **install them with egress briefly lifted**, then re-lock. There's a
+script that does the whole thing — run it from a container terminal:
+
+```bash
+bash .devcontainer/install-extensions.sh
+```
+
+It lifts the firewall, runs `code --install-extension` for each, and re-applies the
+firewall on exit (via a `trap`, so egress is restored even if an install fails or you
+Ctrl-C). After it finishes, the Claude extension uses the same CLI + login above.
+
+<details><summary>Manual equivalent</summary>
+
+```bash
+sudo iptables -P OUTPUT ACCEPT            # 1. open egress temporarily
+```
+Then install (Extensions view → "Install in Dev Container", or run `claude` once to
+auto-install its own extension), then:
+```bash
+sudo bash .devcontainer/init-firewall.sh  # 2. re-apply the default-deny firewall
+```
+</details>
+
+**Persistence:** this is a one-time step. Installed extensions are kept in the
+`mdt-vscode-extensions` volume, so they survive both restarts and full rebuilds. (On
+rebuild they load from the volume without touching the Marketplace — they just won't
+auto-update; to refresh, briefly lift egress again and let VS Code update them.)
+
+This persistence is why the project carries a one-line `Dockerfile`: it pre-creates
+`~/.vscode-server` owned by `vscode` so the extensions volume mounts cleanly. Without
+it, the volume makes that dir root-owned and the VS Code server's startup
+(`mkdir ~/.vscode-server/bin`) fails before any lifecycle hook can fix ownership.
+
+> Prefer not to lift the firewall at all? The `claude` **CLI** in the integrated
+> terminal is the full experience and needs none of this. To allowlist the
+> Marketplace permanently instead (looser egress), ask and I'll add the domains.
 
 ## How the build directory is isolated
 

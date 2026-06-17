@@ -1,12 +1,13 @@
-// C++20 dev container for MagicDeckTester. No custom Dockerfile: we consume
-// Microsoft's prebuilt C++ image (Ubuntu 24.04 -> gcc-13/g++-13, gdb, git, and
-// a recent CMake >= 3.28 already on PATH) and add the two missing tools via a
-// one-line apt command below.
+// C++20 dev container for MagicDeckTester. Built on Microsoft's prebuilt C++ image
+// (Ubuntu 24.04 -> gcc-13/g++-13, gdb, git, and a recent CMake >= 3.28 already on
+// PATH). The Dockerfile is a single layer that only pre-creates ~/.vscode-server so
+// the extensions volume can persist editor extensions across rebuilds (see the
+// Dockerfile header). Everything else is added below via the Node feature + apt.
 //
 // See .devcontainer/README.md for usage and the Windows-vs-Linux caveats.
 {
   "name": "MagicDeckTester (C++20)",
-  "image": "mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04",
+  "build": { "dockerfile": "Dockerfile" },
 
   // Capabilities the egress firewall (init-firewall.sh) needs to program the
   // container's own netfilter rules. These do NOT grant access to the host's
@@ -39,14 +40,25 @@
     "source=mdt-build,target=${containerWorkspaceFolder}/build,type=volume",
     // Persist the Claude Code login (~/.claude/.credentials.json) across rebuilds,
     // so you only run `/login` once.
-    "source=mdt-claude,target=/home/vscode/.claude,type=volume"
+    "source=mdt-claude,target=/home/vscode/.claude,type=volume",
+    // Persist VS Code Server extensions across rebuilds, so the one-time
+    // firewall-lifted install of Claude/C++/Python is not repeated. Works because
+    // the Dockerfile pre-creates ~/.vscode-server vscode-owned; postCreateCommand
+    // also chowns this subdir in case an older root-owned volume is reused.
+    "source=mdt-vscode-extensions,target=/home/vscode/.vscode-server/extensions,type=volume"
   ],
 
   "customizations": {
     "vscode": {
+      // Installed into the container's VS Code Server, which downloads them from
+      // the Marketplace -- a set of wildcard CDN hosts the IP-allowlist firewall
+      // can't cleanly pin. Install them ONCE with egress briefly lifted (see README
+      // "Editor extensions behind the firewall"); the mdt-vscode-extensions volume
+      // then keeps them across rebuilds.
       "extensions": [
         "ms-vscode.cpptools-extension-pack",
-        "ms-python.python"
+        "ms-python.python",
+        "anthropic.claude-code"
       ],
       "settings": {
         "cmake.generator": "Ninja Multi-Config",
@@ -69,12 +81,14 @@
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
 
-  // Install the Claude Code CLI, hand the root-owned volumes (build/, ~/.claude)
-  // to the non-root user, then configure CMake once (this triggers the
-  // FetchContent download of pugixml + json, so it needs network on first run).
-  // All run at create time with full network, before the firewall is applied.
+  // Install the Claude Code CLI, hand the root-owned volumes (build/, ~/.claude,
+  // and the extensions volume -- chowned here in case an older root-owned one is
+  // reused; the parent ~/.vscode-server is already vscode-owned from the image) to
+  // the non-root user, then configure CMake once (this triggers the FetchContent
+  // download of pugixml + json, so it needs network on first run). All run at
+  // create time with full network, before the firewall is applied.
   // Build with:  cmake --build build --config Release
-  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && sudo chown -R vscode:vscode build /home/vscode/.claude && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && sudo chown -R vscode:vscode build /home/vscode/.claude /home/vscode/.vscode-server/extensions && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
 
   // Apply the egress firewall on every start (a restart clears the container's
   // iptables rules). It runs AFTER postCreate, so the first dependency fetch is
