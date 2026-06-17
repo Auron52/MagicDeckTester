@@ -13,12 +13,15 @@
 #
 # ---------------------------------------------------------------------------
 # Allowlist knob: extra hostnames to permit. Comment a line out to deny it.
-#   api.scryfall.com -> ONLY used by scripts/audit_card_costs.py (the card mana-
+#   api.anthropic.com -> the Claude Code CLI. Covers both `/login` (the browser
+#   step runs on the HOST, the container only talks to the API) and normal use.
+#   api.scryfall.com  -> ONLY used by scripts/audit_card_costs.py (the card mana-
 #   cost audit). The build, the simulator (mtg), the analyzer (mtg-analyze), and
 #   the regression suite make NO network calls, so if you won't run the cost
-#   audit inside the container you can safely remove this line.
+#   audit inside the container you can safely remove that line.
 # ---------------------------------------------------------------------------
 ALLOWED_HOSTS=(
+  api.anthropic.com
   api.scryfall.com
 )
 

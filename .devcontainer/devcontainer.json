@@ -13,6 +13,11 @@
   // network; they only let iptables/ipset run inside the container's namespace.
   "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
 
+  // Node.js (for the Claude Code CLI, installed in postCreateCommand below).
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+
   // Add what the base image lacks, without a Dockerfile. Runs at create time with
   // full network (before the firewall is applied), which is why apt mirrors need
   // no allowlist entry:
@@ -31,7 +36,10 @@
   // mismatch. The volume shadows it ONLY inside the container, so the Windows
   // build is left untouched -- and build artifacts get native FS performance.
   "mounts": [
-    "source=mdt-build,target=${containerWorkspaceFolder}/build,type=volume"
+    "source=mdt-build,target=${containerWorkspaceFolder}/build,type=volume",
+    // Persist the Claude Code login (~/.claude/.credentials.json) across rebuilds,
+    // so you only run `/login` once.
+    "source=mdt-claude,target=/home/vscode/.claude,type=volume"
   ],
 
   "customizations": {
@@ -54,11 +62,19 @@
     }
   },
 
-  // The build/ volume is created root-owned; hand it to the non-root user, then
-  // configure once (this triggers the FetchContent download of pugixml + json,
-  // so it needs network on first run). Build with:
-  //   cmake --build build --config Release
-  "postCreateCommand": "sudo chown -R vscode:vscode build && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  // Claude Code runs behind the egress firewall, so turn off its non-essential
+  // traffic (telemetry, error reporting, and the auto-updater) -- those would
+  // otherwise repeatedly hit hosts that are not on the allowlist.
+  "remoteEnv": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
+
+  // Install the Claude Code CLI, hand the root-owned volumes (build/, ~/.claude)
+  // to the non-root user, then configure CMake once (this triggers the
+  // FetchContent download of pugixml + json, so it needs network on first run).
+  // All run at create time with full network, before the firewall is applied.
+  // Build with:  cmake --build build --config Release
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && sudo chown -R vscode:vscode build /home/vscode/.claude && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
 
   // Apply the egress firewall on every start (a restart clears the container's
   // iptables rules). It runs AFTER postCreate, so the first dependency fetch is

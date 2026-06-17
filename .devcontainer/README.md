@@ -63,6 +63,34 @@ Adding or changing cards works fully in the container — the three stages from
    python scripts/analyze_deck.py <deck>.txt
    ```
 
+## Claude Code in the container
+
+The Claude Code CLI is installed (Node feature + `npm i -g @anthropic-ai/claude-code`
+in `postCreateCommand`) and `api.anthropic.com` is allowlisted in the firewall. To
+use it:
+
+```bash
+claude        # first run: type /login and open the printed URL in your host browser
+```
+
+The browser login happens on your **host**; the container only talks to
+`api.anthropic.com`. Your credentials are stored under `~/.claude`, which is a
+persisted Docker volume (`mdt-claude`), so you authenticate **once** and it survives
+rebuilds. To sign out / reset, remove the volume: `docker volume rm mdt-claude`.
+
+Running Claude *inside* the container lets it drive the Linux/GCC toolchain directly
+(build, run `./build/Release/mtg`, run the regression suite). You can still run Claude
+on the Windows host against the same files — the two don't conflict.
+
+Non-essential traffic (telemetry, error reporting, auto-updates) is disabled via
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` so Claude doesn't repeatedly hit hosts
+the firewall blocks. (That also pins the version — to upgrade, rebuild the container,
+which reinstalls the latest via npm.)
+
+> Not allowlisted: the VS Code Marketplace. If your C/C++ or Python extensions fail
+> to install inside the container, that's the firewall blocking
+> `marketplace.visualstudio.com` — tell me and I'll add the VS Code domains.
+
 ## How the build directory is isolated
 
 The host's `build/` (a Windows Visual Studio cache) is bind-mounted into the
