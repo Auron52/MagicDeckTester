@@ -1943,7 +1943,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             triggers.push_back({i, c.cost, c.direct_damage, c.eval});
         }
     }
-    std::sort(triggers.begin(), triggers.end(),
+    std::stable_sort(triggers.begin(), triggers.end(),
         [](const TriggerCand& a, const TriggerCand& b)
         {
             return a.cost.ManaValue() < b.cost.ManaValue();
@@ -2006,7 +2006,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Sort so the highest-value plans are simulated first.  When a timeout fires
     // the search returns the best plan found so far, so we want the most promising
     // candidates evaluated before cheaper ones.
-    std::sort(plans.begin(), plans.end(),
+    std::stable_sort(plans.begin(), plans.end(),
         [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
             if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
