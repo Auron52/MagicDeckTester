@@ -1,6 +1,8 @@
 # Deck Analysis Skill
 
-Use this skill when the user asks to analyze a deck, add a new deck, or run a simulation on a deck file. It orchestrates the full workflow: coverage check → implement all gaps → run the C++ analyzer. **Do not stop between stages to ask for user approval unless a genuine design decision is required.**
+Use this skill when the user asks to analyze a deck, add a new deck, or run a simulation on a deck file. It orchestrates the full workflow: coverage check → implement all gaps → run the C++ analyzer → **verify (mismatch harnesses + multi-depth sanity) and iterate to convergence**. **Do not stop between stages to ask for user approval unless a genuine design decision is required.**
+
+**Convergence, not a one-way pipeline.** Stages 1–4 are necessary but not sufficient: a clean coverage check and a generated profile do not prove the deck is correctly modelled or correctly *played*. Stage 5 stress-tests the result, and **any issue it finds — a card-implementation bug OR an AI/search issue — sends you back to Stage 2 (fix) → 2d (review) → 2d-bis (cost audit) → Stage 4 (regenerate profile) → Stage 5 (re-verify). Loop until every Stage 5 check passes.** A deck is only "analyzed" once it converges.
 
 ---
 
@@ -168,14 +170,59 @@ profile is written.
 
 ---
 
-## Stage 5 — Report to User
+## Stage 5 — Verify: mismatch harnesses + multi-depth sanity (loop to convergence)
+
+A clean coverage check and a generated profile do NOT mean the deck is correctly modelled or correctly played. Stage 5 runs the deck through the verification harnesses and a multi-depth sanity sweep, and **reads the actual games**. Run everything at depth > 0 (the harnesses and the interesting decisions only exist when the search runs). Results are deterministic and thread-invariant (see the regression-testing skill), so every flagged seed/turn reproduces exactly for tracing — use `--threads 1` for ordered output.
+
+### 5a. Mismatch harnesses (env-gated, inert by default)
+
+These catch the search lying to itself or to the executor. **A single flagged line is a real defect — root-cause it, never average it away.**
+
+- **Non-convergence** (`MTG_FLAG_NONCONV`): a sound search's proven win turn can only get *earlier* as a game progresses. If a later turn "verifies" a WORSE win than one already proved, the search is inconsistent. Emits to stderr:
+  `[nonconv] seed=… turn=… verified_win_now=W EXCEEDS earlier verified_win=W' proven_at_turn=… | hand=…`
+- **Commit-the-line fidelity oracle** (`MTG_FD_ORACLE`, requires `MTG_FULL_DEPTH`): the committed line predicted a win by turn P but the REAL game realized it later. Emits:
+  `[fd-diverge] seed=… realized_win=R predicted_win=P proven_at_turn=T` — a rollout-vs-real-execution divergence, usually a card whose effect the rollout models differently than the executor.
+
+Run the deck across the suite's seeds at the suite depths, capturing stderr:
+```
+MTG_FLAG_NONCONV=1 ./build/Release/mtg <deck> --games N --seed S --depth 3 \
+  --budget-ms B --lookahead-bottoming --threads 1 2>&1 | grep '\[nonconv\]'
+MTG_FULL_DEPTH=1 MTG_FD_ORACLE=1 ./build/Release/mtg <deck> --games N --seed S --depth 5 \
+  --budget-ms B --lookahead-bottoming --threads 1 2>&1 | grep '\[fd-diverge\]'
+```
+For each flagged seed, reproduce the single game (`--seed <S+gi> --games 1 --game-index <gi> --log-dir <dir>`) and read the log to classify: if the rollout and the executor disagree about a card's effect → **card-implementation bug** (fix the card); if it is pure search inconsistency with the card modelled correctly → **AI/search issue**. Either way it forces the convergence loop.
+
+### 5b. Multi-depth sanity sweep (you read the results)
+
+Run the deck at depth 0, 3, and 5 and judge whether the numbers make sense — do not just record them:
+- **Monotonicity**: deeper search should be ≥ as good — wins non-decreasing, avg win turn non-increasing *given adequate budget*. A depth that plays WORSE than a shallower one is a red flag.
+- **Plausibility**: the win turns must match the deck's realistic clock. A deck whose intended line wins ~T4 but that the suite settings win ~T11 is mis-playing — inspect it.
+- **Per-game inspection of outliers**: dump per-game win turns (`MTG_DUMP_WINS=1 … 2>&1 | grep '^\[win\]'`), diff across depths (or vs a known-good arm), and **READ the games that moved or look slow**. Template: the Treasure Hunt / Land's Edge case — the deck cast its draw engine *before* its payoff and discarded the drawn lands at cleanup, wasting the combo; the log made it obvious where `boardAfter`/hand told the real story (ignore rolled-back rollout actions that can leak into the log).
+
+### 5c. Budget-starvation check (search decks)
+
+If 5b shows a deck winning much slower than its line should, confirm the cause before blaming the AI: re-run the slow game at a much larger `--budget-ms`. If a bigger budget recovers the good line (monotonically), the suite budget is **starving** this deck — note the threshold for the suite's time-budget sizing; it is not a logic bug. (Seen on Treasure Hunt: the Land's Edge combo needs ~b2000 at d5; b200 starves it.)
+
+### Convergence criteria
+
+Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
+1. Coverage clean (Stage 3) and costs audit clean (2d-bis).
+2. **Zero `[nonconv]` and zero `[fd-diverge]` lines** across the tested seeds.
+3. Multi-depth results are monotonic and plausible, with **every outlier game explained** (legitimate line, budget starvation, or a fixed bug — not an unexplained slowdown).
+
+Only a deck that satisfies all three is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
+
+---
+
+## Stage 6 — Report to User
 
 Present a concise summary:
 1. **Cards implemented this run**: list any new/updated implementations, noting the tier used for each
 2. **Mulligan profile**: the optimised settings (and notable card scores / required-piece flags)
 3. **Win rate / average win turn**: from a regression-suite run on the new profile (the analyzer no longer reports these)
-4. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
-5. **Suggested next steps**: any Tier 4 deferrals worth revisiting, or interesting profile observations
+4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, and any budget-starvation threshold noted
+5. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
+6. **Suggested next steps**: any Tier 4 deferrals worth revisiting, or interesting profile observations
 
 Ask the user if they want to explore any aspect further (e.g. comparing card choices, investigating a specific mechanic, or revisiting a deferred implementation).
 
