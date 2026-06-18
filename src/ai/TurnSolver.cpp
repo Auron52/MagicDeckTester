@@ -995,10 +995,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // committed line (out_breakpoint && sink non-null).
     auto play_breakpoint_land = [&](std::vector<Action>* sink)
     {
-        // Full-depth only (mirrors s_fd_opp_spawns): keeps the baseline engine and its
-        // regression ground truth byte-frozen as the held-out A/B reference. The single
-        // rebaseline happens when full-depth becomes the default engine.
-        static const bool s_fd = std::getenv("MTG_FULL_DEPTH") != nullptr;
+        // Default engine behavior (mirrors s_fd_opp_spawns); MTG_LEGACY_SEARCH opts
+        // back into the held-out baseline (byte-frozen old ground truth) for A/Bs.
+        static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
         if (!s_fd || !is_pre_combat) { return; }
         std::string played = SimulateLandPlay(state);
         if (!played.empty() && out_breakpoint != nullptr && sink != nullptr)
@@ -1322,12 +1321,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         if (rate > 0)
         {
-            // Baseline fires ALL lands (its rollouts are frozen as the held-out ground
-            // truth). Full-depth uses the real engine's conditional heuristic so the
-            // search does not over-count the Land's Edge burst -- the gi=947 class: the
-            // search fired every drawn land for opp -24 at T5 where the real engine holds
-            // them (fire only for lethal / cleanup excess), slipping the win to T10.
-            static const bool s_fd = std::getenv("MTG_FULL_DEPTH") != nullptr;
+            // Default uses the real engine's conditional heuristic so the search does
+            // not over-count the Land's Edge burst -- the gi=947 class: the search fired
+            // every drawn land for opp -24 at T5 where the real engine holds them (fire
+            // only for lethal / cleanup excess), slipping the win to T10. The legacy
+            // baseline (MTG_LEGACY_SEARCH) fires ALL lands -- its rollouts are frozen as
+            // the held-out ground truth.
+            static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
             int fire_count = s_fd ? LandsEdgeHeuristicFireCount(state, rate)
                                   : std::numeric_limits<int>::max();
 
@@ -1466,13 +1466,13 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
     }
 
-    // Discard down to hand size 7. Full-depth mirrors AIEngine::ChooseDiscard: when a
+    // Discard down to hand size 7. Default mirrors AIEngine::ChooseDiscard: when a
     // Land's Edge outlet exists (the lands are ammunition, the spells are the combo)
-    // shed a LAND first; otherwise shed the highest-MV card. Baseline keeps the
-    // highest-MV-only rule (frozen as the held-out ground truth). Without this the
-    // search kept every drawn land as Land's Edge ammo while the real game discards
-    // lands here, so the search over-counted Land's Edge damage across turns (gi=947).
-    static const bool s_fd_discard = std::getenv("MTG_FULL_DEPTH") != nullptr;
+    // shed a LAND first; otherwise shed the highest-MV card. The legacy baseline
+    // (MTG_LEGACY_SEARCH) keeps the highest-MV-only rule (frozen as the held-out ground
+    // truth). Without this the search kept every drawn land as Land's Edge ammo while
+    // the real game discards lands here, over-counting Land's Edge damage (gi=947).
+    static const bool s_fd_discard = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
     bool has_land_outlet = false;
     if (s_fd_discard)
     {
@@ -1550,15 +1550,15 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // lines that use them. Token shape/flags match GameEngine exactly so the rollout's
     // board == the real game's.
     //
-    // GATED to the experimental full-depth path (MTG_FULL_DEPTH). Measured rationale,
-    // not a punt: BASELINE SolveWithLookahead re-decides every turn against the REAL
-    // board, so it already handles opponent creatures where it matters (the actual
-    // play) and gains NOTHING from modelling them in its rollout -- enabling it for
-    // baseline left burn/slivers' fingerprints unchanged and only perturbed 3 games via
-    // rollout/bottoming noise (burn gi=278 5->6; th d3 s2002 gi=72 4->5, gi=97 5->6),
-    // all slightly worse, 0 better. Only commit-the-line, which REPLAYS the search's
-    // line and cannot re-decide, actually needs the rollout's board to be accurate.
-    static const bool s_fd_opp_spawns = std::getenv("MTG_FULL_DEPTH") != nullptr;
+    // ON for the default (commit-the-line) engine; OFF under MTG_LEGACY_SEARCH.
+    // Measured rationale, not a punt: BASELINE SolveWithLookahead re-decides every turn
+    // against the REAL board, so it already handles opponent creatures where it matters
+    // (the actual play) and gains NOTHING from modelling them in its rollout -- enabling
+    // it for baseline left burn/slivers' fingerprints unchanged and only perturbed 3
+    // games via rollout/bottoming noise (burn gi=278 5->6; th d3 s2002 gi=72 4->5, gi=97
+    // 5->6), all slightly worse, 0 better. Only commit-the-line, which REPLAYS the
+    // search's line and cannot re-decide, actually needs the rollout's board accurate.
+    static const bool s_fd_opp_spawns = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
     if (s_fd_opp_spawns)
     {
         int opp_index = 1 - state.active_player_index;
@@ -2524,6 +2524,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             GameState s2 = state;
             std::vector<Action> bp;
             ApplyPlanDirect(s2, q, false, &bp);
+            // Self-lethal second main (Eidolon on-cast self-damage) -> we die to the
+            // triggers before the spell resolves; not a viable line. See FSLineWin.
+            if (s2.ActivePlayer().life <= 0) { continue; }
             if (s2.Opponent().life <= 0)
             {
                 TurnSolver::Plan q_rec = q;
@@ -2607,6 +2610,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         GameState s = state;
         std::vector<Action> bp;
         ApplyPlanDirect(s, p, true, &bp);
+        // A plan that kills the active player via its own on-cast triggers (Eidolon of
+        // the Great Revel) or self-damage cannot win: those triggers go on top of the
+        // spell and resolve BEFORE it (CR 603.3), so we die to them before our spell or
+        // combat deals any damage. Skip the line entirely -- mirrors the baseline plan
+        // guard (`self_damage >= ap.life`) so commit-the-line never commits a suicide
+        // (burn gi=492: two Eidolons + an extra Goblin Guide = 8 self-damage at 6 life).
+        if (s.ActivePlayer().life <= 0) { continue; }
         SimulateAnimateLands(s);
         SimulateTapTokens(s);
         SimulateCombat(s);

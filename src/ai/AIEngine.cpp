@@ -20,10 +20,14 @@
 // record whenever a later turn's verified win turn exceeds one proved earlier.
 static const bool s_flag_nonconv = std::getenv("MTG_FLAG_NONCONV") != nullptr;
 
-// Experimental: route pre-combat (and second-main) decisions through the
-// full-depth commit-the-line search instead of SolveWithLookahead, so "depth N"
-// means fully searching N complete turns. A/B gate only.
-static const bool s_full_depth = std::getenv("MTG_FULL_DEPTH") != nullptr;
+// Route pre-combat (and second-main) decisions through the full-depth
+// commit-the-line search instead of SolveWithLookahead, so "depth N" means fully
+// searching N complete turns. This is now the DEFAULT engine (validated by the
+// overnight A/B: better-or-equal on every case, 0 regressions). Set MTG_LEGACY_SEARCH
+// to opt back into the old SolveWithLookahead baseline -- the held-out reference kept
+// reproducible for future A/Bs. (The old MTG_FULL_DEPTH opt-in is gone; setting it is
+// harmless as full depth is the default now.)
+static const bool s_full_depth = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
 
 // Commit-the-line fidelity oracle (MTG_FD_ORACLE): when a recomputed line's searched
 // win exceeds an earlier line's, the committed line we just replayed did NOT realise
