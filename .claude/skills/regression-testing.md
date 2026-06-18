@@ -5,6 +5,12 @@ results, updating ground truth, and A/B-testing changes. Read this before
 running any regression, changing the test matrix, adding a deck to the suite, or
 rebaselining ground truth.
 
+> **The one rule that keeps getting skipped:** never `--accept` (or commit new
+> ground truth) on the basis of an aggregate fingerprint or a plausible
+> *explanation* of why it moved. Every changed game must be diffed and explained
+> **per game, before acceptance**, against the prior committed code — see the
+> **"MANDATORY before `--accept`"** section below. An explanation is not a measurement.
+
 The harness lives in `test/`:
 
 | File | Role | Committed? |
@@ -82,46 +88,86 @@ Commit `regression_gt.txt` together with the code/profile change that justified
 the new numbers.
 
 Typical rebaseline cycle after a deliberate change:
-`run → inspect FAILs/deltas → analyze per-game → --accept → (optional) re-run to confirm all PASS`.
+`run → inspect FAILs/deltas → analyze EVERY changed game per-game → --accept → (optional) re-run to confirm all PASS`.
+The per-game analysis comes **before** `--accept`, always.
 
-### MANDATORY before `--accept`: analyze the games that changed
+### MANDATORY before `--accept`: analyze every changed game (a hard gate)
 
-**Any** fingerprint change is a behavior change and must be understood at the
-**per-game** level before acceptance. **Never accept on the strength of an
-unchanged or "flat" aggregate** — a flat `avg_win_turn` routinely hides equal
-numbers of improvements and regressions that cancel out, and a *reduced* flag /
-non-convergence count can be **masking** (e.g. predictions becoming uniformly
-more pessimistic) rather than a real fidelity gain. Aggregate metrics cannot tell
-these apart; only the individual games can. Do not assume a change is benign
-without this analysis.
+This is the step that most often gets skipped — do not skip it. **You may not
+`--accept` (or commit new ground truth) until you have diffed the individual
+games that changed and explained each one.** A plausible-sounding *narrative* for
+an aggregate shift is NOT a substitute for measuring it per game.
 
-For every changed config, diff the per-game win turns (old binary vs new) and
-read the actual lines of the games that moved:
+The rules — all of them, every time:
+
+1. **Analyze BEFORE accepting, never after.** The order is
+   `run → per-game diff → explain every delta → --accept → commit`. If you have
+   already accepted/committed and *then* go analyze, you did it wrong. `--accept`
+   *certifies* the analysis is already done.
+2. **Aggregates certify nothing.** A flat `avg_win_turn` routinely hides equal
+   improvements and regressions cancelling; a *better* aggregate can still hide a
+   won→lost; a *reduced* `[nonconv]`/`[fd-diverge]` count can be predictions
+   becoming uniformly more pessimistic (**masking**), not a fidelity gain. Never
+   reason "the totals look fine/better, so it's safe."
+3. **Never explain by inference from another mode or deck.** "Smoke and
+   regression improved, so the overnight change is the same kind of thing" is NOT
+   allowed — measure the mode you are accepting, on **its own seeds**. Different
+   seeds expose different games (in practice a won→lost appeared at exactly one
+   overnight seed and nowhere in smoke/regression).
+4. **Enumerate the win↔loss flips explicitly.** List every `X → -1` (won→lost)
+   and `-1 → X` (lost→won). **Every won→lost must be individually root-caused**,
+   no matter how net-positive the totals are — one unexplained won→lost blocks
+   acceptance.
+5. **Diff against the right baseline: the prior committed code (the change you
+   are certifying), not the stale ground truth.** When the GT is itself stale
+   (e.g. it predates an earlier switch), diffing the new binary against the stale
+   GT conflates two changes. To isolate the change under test, A/B the new binary
+   vs the immediately-prior committed code.
+6. **Verify the two A/B arms actually differ before trusting the diff.** The
+   classic trap: if your change is already committed, `git stash` stashes nothing,
+   both builds are identical, and a clean "0 changes" diff is *meaningless*. Build
+   the baseline by checking out the **parent revision of the changed files**
+   (`git checkout <C>~1 -- <files>`), and sanity-check that a config you *expect*
+   to move actually shows nonzero diffs before believing any clean result.
+
+Recipe (isolates THIS change; works whether or not it is already committed):
 
 ```bash
-# dump per-game win turns from each build (MTG_DUMP_WINS), then diff
-MTG_DUMP_WINS=1 ./build/Release/mtg.exe <deck> --seed S --games N --depth D \
-  --budget-ms B --lookahead-bottoming --threads 1 2>&1 | grep '^\[win\]' > new.txt
-git stash && cmake --build build --config Release --target mtg   # build OLD
-MTG_DUMP_WINS=1 ./build/Release/mtg.exe ... > old.txt            # same args
-git stash pop && cmake --build build --config Release --target mtg
-awk 'FNR==NR{if(match($0,/gi=([0-9]+) wt=(-?[0-9]+)/,a))o[a[1]]=a[2];next}
-     {if(match($0,/gi=([0-9]+) wt=(-?[0-9]+)/,a)&&a[2]!=o[a[1]])
-        print "gi="a[1]": "o[a[1]]" -> "a[2]}' old.txt new.txt
+# NEW arm = current HEAD (your change). Dump + normalize per-game win turns:
+MTG_DUMP_WINS=1 ./build/Release/mtg <deck> --seed S --games N --depth D \
+  --budget-ms B --lookahead-bottoming --threads 1 2>&1 \
+  | sed -E 's/.*gi=([0-9]+) wt=(-?[0-9]+).*/\1 \2/' | sort -n > new.txt
+
+# BASELINE arm = committed code WITHOUT your change. If the change is already
+# committed as <C>, check out its PARENT for the touched files (NOT git stash —
+# that is a no-op on committed files and silently gives you two identical arms):
+git checkout <C>~1 -- <changed files>
+cmake --build build --config Release
+MTG_DUMP_WINS=1 ./build/Release/mtg <deck> ... --threads 1 2>&1 \
+  | sed -E 's/.*gi=([0-9]+) wt=(-?[0-9]+).*/\1 \2/' | sort -n > old.txt
+git checkout HEAD -- <changed files>; cmake --build build --config Release
+
+# SANITY (rule 6): the arms MUST differ for a config you expect to change.
+diff old.txt new.txt | grep -c '^[<>]'        # 0 here on an expected-change config => invalid A/B
+
+# Classify every delta and surface win<->loss flips loudly (rule 4):
+awk 'FNR==NR{o[$1]=$2;next} ($1 in o)&&o[$1]!=$2{
+       t=(o[$1]<=0&&$2>0)?"LOST->WON":($2<=0&&o[$1]>0)?"WON->LOST":($2<o[$1])?"faster":"SLOWER";
+       print t" gi="$1": "o[$1]" -> "$2}' old.txt new.txt | sort | uniq -c
 ```
 
-Then for each changed game, trace it in both builds
-(`MTG_NONCONV_TRACE_SEED=<seed>` with the single-game form
-`--seed <base+gi> --games 1 --game-index <gi>`) and confirm **every** moved game
-makes sense: faster games win via a legal, genuinely-better line (not a new
-phantom — verify mana/targets/zones), and slower games are an understood,
-acceptable consequence of the change (not a real misplay). If a "win-faster"
-game turns out to rely on a rules violation, or a "win-slower" game is the search
-committing a worse decision (e.g. **budget starvation** — confirm by re-running
-that game at a much larger `--budget-ms`; if a bigger budget recovers the good
-line, the change starved the search), do **not** accept — fix the root cause
-first. Acceptance certifies you have explained the deltas, not merely that the
-top-line number looks unchanged.
+Then reproduce each moved game single-game in BOTH builds
+(`--seed <base+gi> --games 1 --game-index <gi> --log-dir <dir>`, or
+`MTG_NONCONV_TRACE_SEED=<seed>`) and read the log. Confirm **every** moved game
+makes sense: faster games win via a legal, genuinely-better line (not a phantom —
+verify mana/targets/zones); slower games and **every** won→lost are an
+understood, acceptable consequence (not a real misplay, rules violation, or
+**budget starvation** — confirm starvation by re-running that game at a much
+larger `--budget-ms`; if a bigger budget recovers the good line, the change
+starved the search). Decks with no relevant cards must stay **byte-identical
+PASS** — a FAIL there is collateral damage, not an accept-able delta. If any moved
+game fails this, fix the root cause before accepting. Acceptance certifies you
+have explained the deltas — not that the top-line number looks unchanged.
 
 ---
 
