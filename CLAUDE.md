@@ -18,6 +18,13 @@ The application is in early development — no build system, test runner, or sou
   `logs_*` directory. This keeps the repo root uncluttered. Both `logs/` and
   `logs_*/` are gitignored, so this is purely about tidiness, not tracking.
 
+- **Deck files live under `decks/`, not the repo root.** Each deck is a
+  decklist (`decks/<name>.txt`) plus its generated profile
+  (`decks/<name>.profile.json`); the analyzer writes the profile next to the
+  deck. Reference decks by their `decks/` path (e.g.
+  `scripts/analyze_deck.py decks/<name>.txt`); the regression harness's
+  `DECK_FILE`/`DECK_PROF` maps in `test/regression_cases.sh` already point there.
+
 ## MTG Rules Skill
 
 This project has a custom skill at `.claude/skills/mtg-rules.md` that **all agents working in this repository must use**. It is the authoritative reference for both MTG rules correctness and implementation patterns.
