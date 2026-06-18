@@ -19,8 +19,8 @@ GAMES=${GAMES:-100}
 SEED=${SEED:-4004}
 BUDGETS=${BUDGETS:-"200 500 1000 2000"}
 DECKS=${DECKS:-"burn slivers th"}
-declare -A DECK=( [burn]=test_deck.txt [slivers]=slivers_vial.txt [th]=treasure_hunt.txt )
-declare -A PROF=( [burn]=test_deck.profile.json [slivers]=slivers_vial.profile.json [th]=treasure_hunt.profile.json )
+declare -A DECK=( [burn]=decks/test_deck.txt [slivers]=decks/slivers_vial.txt [th]=decks/treasure_hunt.txt )
+declare -A PROF=( [burn]=decks/test_deck.profile.json [slivers]=decks/slivers_vial.profile.json [th]=decks/treasure_hunt.profile.json )
 
 SUM="$OUT/summary.txt"
 : > "$SUM"

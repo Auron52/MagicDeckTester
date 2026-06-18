@@ -13,9 +13,9 @@ rm -rf "$OUT" && mkdir -p "$OUT/fd" "$OUT/base"
 SEEDS="4004 5005 6006 7007"
 # deck=file=profile
 DECKS=(
-  "slivers=slivers_vial.txt=slivers_vial.profile.json"
-  "burn=test_deck.txt=test_deck.profile.json"
-  "th=treasure_hunt.txt=treasure_hunt.profile.json"
+  "slivers=decks/slivers_vial.txt=decks/slivers_vial.profile.json"
+  "burn=decks/test_deck.txt=decks/test_deck.profile.json"
+  "th=decks/treasure_hunt.txt=decks/treasure_hunt.profile.json"
 )
 # depth=games=budget  (d0 omitted: full-depth==baseline at depth 0)
 CFGS=( "3=1000=100" "5=600=200" )

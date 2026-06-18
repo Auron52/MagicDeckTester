@@ -15,14 +15,14 @@
 # See test/TIMINGS.md for the measured per-case costs these counts are sized from.
 
 declare -A DECK_FILE=(
-  [slivers]=slivers_vial.txt
-  [burn]=test_deck.txt
-  [th]=treasure_hunt.txt
+  [slivers]=decks/slivers_vial.txt
+  [burn]=decks/test_deck.txt
+  [th]=decks/treasure_hunt.txt
 )
 declare -A DECK_PROF=(
-  [slivers]=slivers_vial.profile.json
-  [burn]=test_deck.profile.json
-  [th]=treasure_hunt.profile.json
+  [slivers]=decks/slivers_vial.profile.json
+  [burn]=decks/test_deck.profile.json
+  [th]=decks/treasure_hunt.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007

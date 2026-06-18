@@ -31,7 +31,7 @@ The tooling scripts work unchanged inside the container — they auto-detect the
 Linux binary names:
 
 ```bash
-python scripts/analyze_deck.py treasure_hunt.txt --coverage-only
+python scripts/analyze_deck.py decks/treasure_hunt.txt --coverage-only
 bash   test/regression.sh --smoke
 ```
 

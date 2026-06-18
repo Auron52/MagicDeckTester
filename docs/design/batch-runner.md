@@ -40,8 +40,8 @@ matches the single-run path's per-thread engine lifetime exactly.
 {
   "jobs": [
     { "name": "slivers_regression_d5_s2002",
-      "deck": "slivers_vial.txt",
-      "profile": "slivers_vial.profile.json",   // optional; else deckname.profile.json
+      "deck": "decks/slivers_vial.txt",
+      "profile": "decks/slivers_vial.profile.json",   // optional; else deckname.profile.json
       "games": 300, "seed": 2002,
       "depth": 5, "budget_ms": 200,             // optional, default 0
       "max_turns": 20,                          // optional, default 20
