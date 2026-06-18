@@ -445,6 +445,120 @@ inline bool LandEntersTapped(GameState& state, const CardDefinition& def)
     return pp.enters_tapped;
 }
 
+// Shared "dig when stuck" gate (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar,
+// Forgotten Cave, Fiery Islet). Decides whether the active player should consider
+// spending a surplus land to draw toward action (chiefly Treasure Hunt). The SAME gate
+// is consulted by the search (CollectActions, so the clairvoyant rollout models the dig)
+// and by the depth-0 executor heuristic (UseSurplusLandAbilities), keeping the rollout
+// and the real game consistent.
+//
+// We dig only when there is no better card source already in hand/yard, and we do NOT
+// dig when we can already win. Crucially we DO still dig with a Land's Edge in hand or
+// play (we need Treasure Hunt to refill its ammo) UNLESS the hand already holds enough
+// lands to be lethal through Land's Edge — then we fire rather than dig.
+inline bool ShouldConsiderDig(const GameState& state)
+{
+    const Player& ap  = state.ActivePlayer();
+    const int opp_idx = 1 - state.active_player_index;
+
+    int lands_in_hand = 0;
+    int le_rate       = 0;     // Land's Edge damage-per-land, from EITHER zone (in play, or
+                               // in hand and about to be deployed -- both make it our clock).
+    for (const Card& c : ap.hand)
+    {
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+        if (!d) { continue; }
+        if (d->tmpl == CardTemplate::DrawUntilNonland) { return false; }  // Treasure Hunt: cast it
+        if (d->params.cascade_max_mv > 0)              { return false; }  // Throes: another engine
+        if (d->params.discard_land_damage > 0) { le_rate = std::max(le_rate, d->params.discard_land_damage); }
+        if (d->card.IsLand())                  { ++lands_in_hand; }
+    }
+    for (const Card& c : ap.graveyard)
+    {
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+        if (d && d->params.retrace) { return false; }   // retrace engine available
+    }
+
+    int lands_controlled = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.card.IsLand()) { ++lands_controlled; }
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (d && d->params.discard_land_damage > 0)
+        {
+            le_rate = std::max(le_rate, d->params.discard_land_damage);
+        }
+    }
+    if (lands_controlled < 2) { return false; }          // don't strand ourselves on mana
+
+    // With a Land's Edge available (in play OR in hand to deploy) we ALREADY have a clock:
+    // fire lands for damage every turn. The dig is for FINDING Treasure Hunt to refill ammo,
+    // so it is only worth a turn when we are SHORT on ammo. Don't dig once the hand alone
+    // already carries a serious threat -- "enough lands in hand" (the user's carve-out):
+    //   - lethal now (lands * rate >= opp life), or
+    //   - at least half the opponent's life already in Land's Edge ammo.
+    // Without any Land's Edge, lands have no outlet, so we always dig to find one / a TH.
+    if (le_rate > 0)
+    {
+        const int opp_life = state.players[opp_idx].life;
+        if (lands_in_hand * le_rate >= opp_life)     { return false; }  // already lethal
+        if (lands_in_hand * le_rate * 2 >= opp_life) { return false; }  // >= half: enough clock
+    }
+    return true;
+}
+
+// Picks the dig source to use this iteration, given the gate (ShouldConsiderDig) has
+// already passed and `pool` is the currently available mana. Prefers cycling a land from
+// hand (no permanent lost) over sacrificing a land in play; within each, takes the first
+// affordable one in zone order (deterministic). Returns "" if none is affordable.
+// out_is_sac distinguishes sac-draw (battlefield) from cycling (hand). The caller pays
+// the cost and performs the discard/sacrifice + draw via its own mana path.
+inline std::string SelectDigSource(const GameState& state, const ManaPool& pool, bool& out_is_sac)
+{
+    const Player& ap = state.ActivePlayer();
+    out_is_sac = false;
+    // Cycling: a land in hand whose cycling cost is affordable.
+    for (const Card& c : ap.hand)
+    {
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+        if (!d || !d->params.cycling_cost.has_value()) { continue; }
+        if (!pool.CanPay(d->params.cycling_cost.value())) { continue; }
+        return c.m_name;
+    }
+    // Sacrifice-to-draw: an untapped land in play (e.g. Fiery Islet) whose cost is affordable.
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (!d || !d->params.sacrifice_draw_cost.has_value()) { continue; }
+        if (!pool.CanPay(d->params.sacrifice_draw_cost.value())) { continue; }
+        out_is_sac = true;
+        return p.card.m_name;
+    }
+    return "";
+}
+
+// Cheap precondition: does the active player have ANY dig source at all (a cycling land
+// in hand or a sac-draw land in play)? Decks without these (burn, slivers) skip the dig
+// machinery entirely, keeping their behavior byte-identical.
+inline bool HasAnyDigSource(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    for (const Card& c : ap.hand)
+    {
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+        if (d && d->params.cycling_cost.has_value()) { return true; }
+    }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (d && d->params.sacrifice_draw_cost.has_value()) { return true; }
+    }
+    return false;
+}
+
 // Scry N (e.g. Temple of Epiphany): look at the top N cards and bottom the unwanted
 // ones using a deck-aware heuristic, then keep the rest on top in their original
 // order. Heuristic: always keep nonland spells (they are the combo pieces). Keep a

@@ -1345,6 +1345,92 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
     apply_plan_actions(plan.actions);
 
+    // Dig when stuck (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar, Forgotten
+    // Cave, Fiery Islet): spend a surplus land to draw toward action -- chiefly Treasure
+    // Hunt, whose reveal refills Land's Edge ammo. Done in the rollout so the clairvoyant
+    // search MODELS the dig (a Treasure Hunt dug within the horizon pulls the win earlier);
+    // each dig is recorded into out_breakpoint (Kind::DigDraw, post-draw casts nested in
+    // breakpoint_casts) so the executor replays the dug line verbatim rather than
+    // re-solving (which drifts on land/mana state and would miss the win). Only decks with
+    // a dig source enter the loop, so burn/slivers stay byte-identical. ShouldConsiderDig
+    // encodes when NOT to dig (a draw engine already in hand, a retrace engine in the
+    // graveyard, fewer than two lands, or Land's Edge already lethal from the hand).
+    if (is_pre_combat && HasAnyDigSource(state))
+    {
+        int dig_guard = 0;
+        while (dig_guard++ < 16 && ShouldConsiderDig(state) && !ap.library.empty())
+        {
+            ManaPool pool = BuildPool(state);
+            bool is_sac = false;
+            std::string src = SelectDigSource(state, pool, is_sac);
+            if (src.empty()) { break; }
+            std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(src);
+            if (!sd) { break; }
+
+            if (is_sac)
+            {
+                // {cost},{T},Sacrifice: tap the source first (the {T}) so it isn't its own
+                // mana source, pay the remaining mana, then sacrifice it.
+                int idx = -1;
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                {
+                    const Permanent& p = state.battlefield[i];
+                    if (p.controller_index == state.active_player_index
+                        && !p.tapped && p.card.m_name == src) { idx = i; break; }
+                }
+                if (idx < 0) { break; }
+                state.battlefield[idx].tapped = true;
+                if (!TapForCostDirect(state, sd->params.sacrifice_draw_cost.value(), false))
+                {
+                    state.battlefield[idx].tapped = false;
+                    break;
+                }
+                ap.graveyard.push_back(state.battlefield[idx].card);
+                state.battlefield.erase(state.battlefield.begin() + idx);
+            }
+            else
+            {
+                if (!TapForCostDirect(state, sd->params.cycling_cost.value(), false)) { break; }
+                std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
+                    [&src](const Card& c) { return c.m_name == src; });
+                if (it == ap.hand.end()) { break; }
+                ap.graveyard.push_back(*it);
+                ap.hand.erase(it);
+            }
+
+            // Draw one. Record EVERY dig (even a land) so the executor replays the exact
+            // cycle/sacrifice sequence and stays in library/hand sync.
+            Card drawn = ap.library.DrawTop();
+            std::optional<CardDefinition> ddef = CardDatabase::Instance().Lookup(drawn.m_name);
+            bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
+            ap.hand.push_back(std::move(drawn));
+
+            std::vector<Action>* my_bp_sink = out_breakpoint;
+            if (out_breakpoint)
+            {
+                Action rec;
+                rec.kind          = Action::Kind::DigDraw;
+                rec.card_name     = src;
+                rec.dig_sacrifice = is_sac;
+                out_breakpoint->push_back(rec);
+                my_bp_sink = &out_breakpoint->back().breakpoint_casts;
+            }
+
+            // Dig THROUGH lands toward the first nonland (Treasure Hunt is a nonland). On a
+            // land we keep digging; on a nonland we re-solve so the found action is cast
+            // THIS turn (exactly like the DrawUntilNonland breakpoint), then stop -- once
+            // we have action we are no longer stuck.
+            if (!drew_land)
+            {
+                if (out_breakpoint) { sink_stack.push_back(my_bp_sink); }
+                TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+                apply_plan_actions(extra.actions);
+                if (out_breakpoint) { sink_stack.pop_back(); }
+                break;
+            }
+        }
+    }
+
     // Activate Land's Edge after all spells resolve (mirrors GameEngine::MainPhase's
     // post-stack ActivateLandsEdge call).
     {

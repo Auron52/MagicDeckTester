@@ -27,6 +27,11 @@ struct Action
         PlayLand,            // play `card_name` as the turn's land drop (recorded in a draw
                              // breakpoint so commit-the-line replay reproduces a land revealed
                              // and played post-draw, e.g. a Light Up the Stage land)
+        DigDraw,             // activate a surplus-land card-draw ability to dig toward action
+                             // (Treasure Hunt): cycle a land from hand (dig_sacrifice=false) or
+                             // {cost},{T},Sacrifice a land in play (dig_sacrifice=true). Draws one
+                             // card, then re-solves the phase exactly like a DrawUntilNonland draw
+                             // engine, so a dug Treasure Hunt is cast the same turn.
     };
 
     Kind        kind           = Kind::CastFromHand;
@@ -36,6 +41,10 @@ struct Action
     bool        sacrifice_land = false;// additional cost: sacrifice a land (e.g. Shard Volley)
     int         discard_lands  = 0;    // Retrace = 1; for DiscardToLandsEdge = lands to discard
     int         vial_bf_index  = -1;   // ActivateVial: battlefield index of the tapped Vial
+    bool        dig_sacrifice  = false;// DigDraw: true = sacrifice a land in play (sac-draw, e.g.
+                                       // Fiery Islet); false = cycle a land from hand (e.g. Lonely
+                                       // Sandbar). card_name = the source land; cost = its
+                                       // cycling_cost / sacrifice_draw_cost.
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;

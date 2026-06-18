@@ -1183,7 +1183,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { cast_by_name(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
-            // Nested breakpoint casts this recorded draw engine itself revealed.
+            else if (a.kind == Action::Kind::DigDraw)
+            { PerformDig(state, a.card_name, a.dig_sacrifice); }
+            // Nested breakpoint casts this recorded draw engine (or dug Treasure Hunt) revealed.
             if (!a.breakpoint_casts.empty()) { replay_recorded(a.breakpoint_casts); }
         }
     };
@@ -1274,11 +1276,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
     }
 
+    // Commit-the-line: replay any recorded dig (Kind::DigDraw) the draw-engine breakpoint
+    // above did not already replay. A flooded turn whose only action is digging for
+    // Treasure Hunt casts no draw engine from plan.actions, so nothing triggered
+    // replay_recorded -- replay the recorded script here so the realised turn performs the
+    // exact cycles/sacrifices and dug-Treasure-Hunt line the search committed.
+    if (!staged_break && fd_plan_committed && !bp_replayed && !plan.breakpoint_actions.empty())
+    {
+        replay_recorded(plan.breakpoint_actions);
+        bp_replayed = true;
+    }
+
     // Animate lands and activate tap-token abilities with mana remaining after spells.
     // Only in pre-combat main so any resulting creatures can attack this turn.
     if (is_pre_combat_main)
     {
-        UseSurplusLandAbilities(state);
+        // Reactive dig only on the non-committed paths (depth 0, or the develop-when-stuck
+        // fallback that carries no recorded script); committed turns already replayed their
+        // recorded digs above, so running it again would dig a second, off-line time.
+        if (!fd_plan_committed) { UseSurplusLandAbilities(state); }
         ManaPool remaining = BuildAvailableMana(state);
         AnimateLands(state, remaining);
         ActivateTapTokens(state, remaining);
@@ -1454,74 +1470,78 @@ void AIEngine::UseSurplusLandAbilities(GameState& state)
 {
     Player& ap = state.ActivePlayer();
     if (!state.stack.empty()) { return; }   // let pending spells resolve first
-    if (ap.library.empty())   { return; }
+    if (!HasAnyDigSource(state)) { return; }
 
-    // Gate: only dig when a surplus land is worth more as a card than as mana/ammo.
-    // Skip if any Land's Edge outlet exists (lands are ammo) or any draw/cascade/retrace
-    // engine is available (the deck already has a better card source this turn).
-    int active = state.active_player_index;
-    for (const Card& c : ap.hand)
+    // Reactive "dig when stuck" used on the depth-0 / develop-when-stuck paths (full-depth
+    // committed turns replay the search's recorded digs instead). Dig THROUGH lands toward
+    // the first nonland (Treasure Hunt), exactly like the search rollout's loop, so the
+    // decision (which source, how far) matches; the difference is only that this path does
+    // not re-solve to cast a dug Treasure Hunt the same turn (it is cast next turn). The
+    // gate (ShouldConsiderDig) keeps digging with Land's Edge in hand/play -- we still need
+    // Treasure Hunt to refill ammo -- and stops only when a draw engine is already in hand,
+    // a retrace engine sits in the yard, or Land's Edge is already lethal from the hand.
+    int guard = 0;
+    while (guard++ < 16 && ShouldConsiderDig(state) && !ap.library.empty())
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
-        if (!d) { continue; }
-        if (d->params.discard_land_damage > 0) { return; }            // Land's Edge in hand
-        if (d->tmpl == CardTemplate::DrawUntilNonland) { return; }    // Treasure Hunt in hand
-        if (d->params.cascade_max_mv > 0)       { return; }           // Throes of Chaos in hand
-    }
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != active) { continue; }
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
-        if (d && d->params.discard_land_damage > 0) { return; }       // Land's Edge in play
-    }
-    for (const Card& c : ap.graveyard)
-    {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
-        if (d && d->params.retrace) { return; }                       // retrace engine available
-    }
-
-    int lands_controlled = 0;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index == active && p.card.IsLand()) { ++lands_controlled; }
-    }
-    if (lands_controlled < 2) { return; }   // don't strand ourselves on mana
-
-    // Cycling: discard a cycling land from hand to draw a card, if its cost is payable.
-    for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
-    {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(it->m_name);
-        if (!d || !d->params.cycling_cost.has_value()) { continue; }
         ManaPool avail = BuildAvailableMana(state);
-        if (!avail.CanPay(d->params.cycling_cost.value())) { continue; }
-        if (!TapForCost(state, d->params.cycling_cost.value(), avail, false)) { continue; }
+        bool is_sac = false;
+        std::string src = SelectDigSource(state, avail, is_sac);
+        if (src.empty()) { break; }
+        // PerformDig returns whether the drawn card was a land; on a nonland (action found)
+        // we stop digging. A false-ish "could not perform" also returns false -> stop.
+        if (!PerformDig(state, src, is_sac)) { break; }
+    }
+}
+
+bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_sacrifice)
+{
+    Player& ap = state.ActivePlayer();
+    std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(source);
+    if (!sd) { return false; }
+
+    if (is_sacrifice)
+    {
+        if (!sd->params.sacrifice_draw_cost.has_value()) { return false; }
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index == state.active_player_index
+                && !p.tapped && p.card.m_name == source) { idx = i; break; }
+        }
+        if (idx < 0) { return false; }
+        ManaPool avail = BuildAvailableMana(state);
+        state.battlefield[idx].tapped = true;  // {T}; tap before paying so it isn't its own source
+        if (!TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false))
+        {
+            state.battlefield[idx].tapped = false;
+            return false;
+        }
+        if (m_logger) { m_logger->LogDiscard(state.battlefield[idx].card.m_number, source); }
+        ap.graveyard.push_back(state.battlefield[idx].card);
+        state.battlefield.erase(state.battlefield.begin() + idx);
+    }
+    else
+    {
+        if (!sd->params.cycling_cost.has_value()) { return false; }
+        ManaPool avail = BuildAvailableMana(state);
+        if (!avail.CanPay(sd->params.cycling_cost.value())) { return false; }
+        std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
+            [&source](const Card& c) { return c.m_name == source; });
+        if (it == ap.hand.end()) { return false; }
+        if (!TapForCost(state, sd->params.cycling_cost.value(), avail, false)) { return false; }
         if (m_logger) { m_logger->LogDiscard(it->m_number, it->m_name); }
         ap.graveyard.push_back(*it);
         ap.hand.erase(it);
-        ap.hand.push_back(ap.library.DrawTop());
-        return;   // one dig action per main phase is plenty for this heuristic
     }
 
-    // Sacrifice-to-draw (e.g. Fiery Islet): pay the cost, tap + sacrifice the land, draw.
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-    {
-        Permanent& p = state.battlefield[i];
-        if (p.controller_index != active || p.tapped) { continue; }
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
-        if (!d || !d->params.sacrifice_draw_cost.has_value()) { continue; }
-        ManaPool avail = BuildAvailableMana(state);
-        if (!avail.CanPay(d->params.sacrifice_draw_cost.value())) { continue; }
-        p.tapped = true;  // {T} cost; tap before paying the mana so it isn't its own source
-        if (!TapForCost(state, d->params.sacrifice_draw_cost.value(), avail, false))
-        {
-            p.tapped = false;
-            continue;
-        }
-        ap.graveyard.push_back(p.card);
-        state.battlefield.erase(state.battlefield.begin() + i);
-        ap.hand.push_back(ap.library.DrawTop());
-        return;
-    }
+    if (ap.library.empty()) { return false; }
+    Card drawn = ap.library.DrawTop();
+    std::optional<CardDefinition> ddef = CardDatabase::Instance().Lookup(drawn.m_name);
+    bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
+    if (m_logger) { m_logger->LogDraw(drawn.m_number, drawn.m_name); }
+    ap.hand.push_back(std::move(drawn));
+    return drew_land;
 }
 
 // ---- Land animation (e.g. Mutavault) ----

@@ -218,11 +218,20 @@ private:
     // to apply a chosen candidate to the real state or a search copy.
     bool TryPlaySpecificLand(GameState& state, const std::string& name);
 
-    // Conservative "dig when stuck" land abilities: cycling (e.g. Lonely Sandbar) and
-    // sacrifice-to-draw (e.g. Fiery Islet). Only fires when the player has no Land's
-    // Edge outlet and no draw/cascade engine available — i.e. when a surplus land is
-    // genuinely worth more as a fresh card than as mana or ammo. Pre-combat only.
+    // "Dig when stuck" land abilities: cycling (e.g. Lonely Sandbar) and sacrifice-to-draw
+    // (e.g. Fiery Islet) to draw toward Treasure Hunt. Gated by ShouldConsiderDig (no draw
+    // engine in hand, no retrace in yard, >=2 lands, Land's Edge not already lethal). Used
+    // on the depth-0 / develop-when-stuck paths; full-depth committed turns instead replay
+    // the search's recorded dig (PerformDig). Pre-combat only.
     void UseSurplusLandAbilities(GameState& state);
+
+    // Mechanically perform one dig: cycle the named land from hand (is_sacrifice=false) or
+    // {cost},{T},Sacrifice it from the battlefield (is_sacrifice=true), pay the cost, and
+    // draw a card. Returns whether the drawn card was a LAND (so the reactive caller may
+    // keep digging through lands toward action); false also if the dig could not be
+    // performed. The post-draw casts on a committed line are replayed separately by the
+    // caller (the DigDraw's nested breakpoint_casts).
+    bool PerformDig(GameState& state, const std::string& source, bool is_sacrifice);
 
     // Animate untapped animatable lands (e.g. Mutavault) if mana is available.
     void AnimateLands(GameState& state, ManaPool& available);
