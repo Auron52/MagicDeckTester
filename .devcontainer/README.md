@@ -92,6 +92,29 @@ which reinstalls the latest via npm.)
 See "Editor extensions behind the firewall" below for the Claude **VS Code
 extension** (vs. the CLI used here).
 
+## Git: committing & pushing as dtippett-bot
+
+This repo is configured (repo-local) so commits are authored/committed as
+**dtippett-bot `<dtippett@agentmail.to>`**, and its github.com credential helper is
+`gh` — so pushes authenticate as whoever `gh` is logged in as. To make the container
+push as the bot (instead of VS Code forwarding the host's account), authenticate the
+container's `gh` once:
+
+```bash
+gh auth login        # choose GitHub.com -> HTTPS -> log in as dtippett-bot
+```
+
+The browser step runs on your **host**; the container only reaches `github.com`
+(allowlisted). The login persists in the `mdt-gh` volume, so it survives rebuilds
+(`docker volume rm mdt-gh` to reset). After that, `git commit`/`git push` — and Claude
+running in the container — act entirely as dtippett-bot; the host's Auron52 account is
+never involved here. Verify with:
+
+```bash
+gh api user --jq .login                 # -> dtippett-bot
+git ls-remote origin >/dev/null && echo OK
+```
+
 ## Editor extensions behind the firewall
 
 The extensions listed in `devcontainer.json` (`anthropic.claude-code`,

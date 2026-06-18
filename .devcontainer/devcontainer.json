@@ -1,8 +1,8 @@
 // C++20 dev container for MagicDeckTester. Built on Microsoft's prebuilt C++ image
 // (Ubuntu 24.04 -> gcc-13/g++-13, gdb, git, and a recent CMake >= 3.28 already on
-// PATH). The Dockerfile is a single layer that only pre-creates ~/.vscode-server so
-// the extensions volume can persist editor extensions across rebuilds (see the
-// Dockerfile header). Everything else is added below via the Node feature + apt.
+// PATH). The Dockerfile is a single layer that only pre-creates a couple of
+// vscode-owned dirs so their persistence volumes mount cleanly (see the Dockerfile
+// header). Everything else is added below via features (Node, GitHub CLI) + apt.
 //
 // See .devcontainer/README.md for usage and the Windows-vs-Linux caveats.
 {
@@ -14,9 +14,13 @@
   // network; they only let iptables/ipset run inside the container's namespace.
   "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
 
-  // Node.js (for the Claude Code CLI, installed in postCreateCommand below).
+  // Node.js (for the Claude Code CLI, installed in postCreateCommand below) and
+  // the GitHub CLI (so `gh auth login` can authenticate git as the dtippett-bot
+  // account inside the container -- the repo-local credential helper already
+  // points at `gh`, so once it's authed, commits/pushes go through as the bot).
   "features": {
-    "ghcr.io/devcontainers/features/node:1": {}
+    "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
 
   // Add what the base image lacks, without a Dockerfile. Runs at create time with
@@ -45,7 +49,11 @@
     // firewall-lifted install of Claude/C++/Python is not repeated. Works because
     // the Dockerfile pre-creates ~/.vscode-server vscode-owned; postCreateCommand
     // also chowns this subdir in case an older root-owned volume is reused.
-    "source=mdt-vscode-extensions,target=/home/vscode/.vscode-server/extensions,type=volume"
+    "source=mdt-vscode-extensions,target=/home/vscode/.vscode-server/extensions,type=volume",
+    // Persist the `gh` login (dtippett-bot) across rebuilds, so you only run
+    // `gh auth login` once. Same pattern: the Dockerfile pre-creates ~/.config/gh
+    // vscode-owned; postCreateCommand also chowns it for the reused-volume case.
+    "source=mdt-gh,target=/home/vscode/.config/gh,type=volume"
   ],
 
   "customizations": {
@@ -96,7 +104,7 @@
   // download of pugixml + json, so it needs network on first run). All run at
   // create time with full network, before the firewall is applied.
   // Build with:  cmake --build build --config Release
-  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && sudo chown -R vscode:vscode build /home/vscode/.claude /home/vscode/.vscode-server/extensions && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && sudo chown -R vscode:vscode build /home/vscode/.claude /home/vscode/.vscode-server/extensions /home/vscode/.config/gh && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
 
   // Apply the egress firewall on every start (a restart clears the container's
   // iptables rules). It runs AFTER postCreate, so the first dependency fetch is
