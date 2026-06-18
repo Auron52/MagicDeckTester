@@ -68,8 +68,9 @@ vcpkg_installed/
 Testing/
 .cache/
 
-# simulation logs
-logs/
+# simulation logs (keep the dir itself via .gitkeep so it ships in a fresh clone)
+logs/*
+!logs/.gitkeep
 logs_*/
 
 # A/B harness scratch — kept locally, not committed (scripts, result snapshots, built binaries)
