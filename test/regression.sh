@@ -137,6 +137,27 @@ if [ ! -f "$BIN" ]; then
   echo "ERROR: $BIN not found. Run cmake --build build --config Release first." >&2
   exit 1
 fi
+
+# Snapshot the binary into the run dir and execute the COPY. A long run can then
+# overlap with rebuilds of build/Release/mtg (iterating on other work) without
+# hitting ETXTBSY ("Text file busy", which the linker raises when it opens a running
+# executable for write) or silently swapping the binary mid-run. The snapshot is
+# what every batch invocation below uses; the source binary is free to be rebuilt.
+BIN_SNAPSHOT="$LOGDIR/mtg.run"
+cp -f "$BIN" "$BIN_SNAPSHOT"
+# Provenance stamp: record the exact version this run (and any --accept'd GT) came from.
+# When the tree is dirty, save the working diff so a re-baseline from uncommitted changes
+# stays reconstructable as git_hash + mtg.run.diff (see test/snapshot_bin.sh).
+{
+  echo "git_hash=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  if git diff --quiet HEAD 2>/dev/null; then echo "git_state=clean"; else
+    echo "git_state=dirty"; git diff HEAD > "$BIN_SNAPSHOT.diff" 2>/dev/null || true
+    echo "diff=mtg.run.diff"
+  fi
+  echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$BIN_SNAPSHOT.meta" 2>/dev/null || true
+BIN="$BIN_SNAPSHOT"
+
 [ -f "$GT" ] && source "$GT" 2>/dev/null || true
 
 PASS=0; FAIL=0; NEW=0
