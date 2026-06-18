@@ -99,3 +99,13 @@ Read `.claude/skills/regression-testing.md` and [run / accept / A/B / extend] ..
 ```
 
 Key points it covers: the three modes (smoke < 15 min, regression < 45 min, overnight < 8 h) with disjoint seeds; reading the `<games_won>/<avg_win_turn>` fingerprint and per-case logs/timings; the **accept flow** (`regression.sh <mode> --accept` promotes an inspected run into ground truth — never hand-edit or re-run to regenerate); using the suite itself as the A/B harness; and how to add a deck within the shared per-mode time budgets.
+
+## Claude-Play Runner Skill
+
+When the user asks to **run the claude-play oracle / claude runner**, **have Claude play a deck**, or **sweep games with Claude to find bugs/misplays**, read `.claude/skills/claude-play.md` first. It is the authoritative guide for the opt-in `--claude-play` mode (a Claude agent drives main-phase decisions for verification).
+
+```
+Read `.claude/skills/claude-play.md` and [play / sweep / verify a flag] ...
+```
+
+**Rule 0 it enforces:** always read the *deck's* cards from `src/cards/data/cards.json` (mana cost, P/T, oracle text, parameters) before reasoning about or flagging any card — Claude's card recall is unreliable, and unverified flags are usually card-data mistakes. It also covers the stateless-replay protocol (`--choices`/`--reveal`, exit-70 decision dumps), how to play competently, what counts as a real bug flag vs a false positive, and how to run a sweep comparing Claude to the search.

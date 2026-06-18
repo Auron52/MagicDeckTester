@@ -203,6 +203,19 @@ Run the deck at depth 0, 3, and 5 and judge whether the numbers make sense — d
 
 If 5b shows a deck winning much slower than its line should, confirm the cause before blaming the AI: re-run the slow game at a much larger `--budget-ms`. If a bigger budget recovers the good line (monotonically), the suite budget is **starving** this deck — note the threshold for the suite's time-budget sizing; it is not a logic bug. (Seen on Treasure Hunt: the Land's Edge combo needs ~b2000 at d5; b200 starves it.)
 
+### 5d. (optional) Claude-play sweep
+
+For an extra, independent verification, run the **claude-play oracle** (read
+`.claude/skills/claude-play.md`): a Claude agent plays a sample of games and flags
+illegal/missing plans, wrong state transitions, or games it wins earlier than the
+search. Its flags feed this same convergence loop — an engine/card bug it surfaces goes
+back to Stage 2; an AI/search issue is handled like any 5b outlier. It is a backstop,
+not a gate (a guided Claude rarely beats the search, so treat win-turn deltas as a weak
+signal and the legality/invariant flags as the strong one). When the runner flags a
+suspected **data** error (engine faithfully matches cards.json but the result looks
+wrong), resolve it against Scryfall exactly as in 2a/2d-bis — that backstops the
+non-cost fields the cost audit does not check (P/T, trigger thresholds, other params).
+
 ### Convergence criteria
 
 Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
