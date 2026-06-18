@@ -203,18 +203,37 @@ Run the deck at depth 0, 3, and 5 and judge whether the numbers make sense — d
 
 If 5b shows a deck winning much slower than its line should, confirm the cause before blaming the AI: re-run the slow game at a much larger `--budget-ms`. If a bigger budget recovers the good line (monotonically), the suite budget is **starving** this deck — note the threshold for the suite's time-budget sizing; it is not a logic bug. (Seen on Treasure Hunt: the Land's Edge combo needs ~b2000 at d5; b200 starves it.)
 
-### 5d. (optional) Claude-play sweep
+### 5d. Claude-play validation sweep (100 games)
 
-For an extra, independent verification, run the **claude-play oracle** (read
-`.claude/skills/claude-play.md`): a Claude agent plays a sample of games and flags
-illegal/missing plans, wrong state transitions, or games it wins earlier than the
-search. Its flags feed this same convergence loop — an engine/card bug it surfaces goes
-back to Stage 2; an AI/search issue is handled like any 5b outlier. It is a backstop,
-not a gate (a guided Claude rarely beats the search, so treat win-turn deltas as a weak
-signal and the legality/invariant flags as the strong one). When the runner flags a
-suspected **data** error (engine faithfully matches cards.json but the result looks
-wrong), resolve it against Scryfall exactly as in 2a/2d-bis — that backstops the
-non-cost fields the cost audit does not check (P/T, trigger thresholds, other params).
+As the final verification step, run a **100-game claude-play sweep** — an independent
+correctness sweep where a Claude agent (not the encoded AI) drives each game's
+main-phase decisions and flags illegal/missing plans, wrong state transitions, or games
+it wins earlier than the search. Read `.claude/skills/claude-play.md` first (especially
+**Rule 0** — read the deck's cards from `src/cards/data/cards.json` before judging
+anything).
+
+**How to run it.** Pick a base seed disjoint from the regression suite's seeds (so the
+sample is fresh, not games the suite already covered) and sweep game-indices `0..99`
+(each game replays deterministically from `base_seed + game_index`). Fan the games out
+with the **Workflow engine — one agent per game** — each agent reads the deck's
+cards.json entries once, benchmarks the search for its game, plays the stateless-replay
+protocol to completion, and returns `{ai_win, claude_win, choices, flags[], summary}`
+(see "Running a sweep" in the claude-play skill). 100 agents exceed the concurrency cap
+and queue; that is expected. Aggregate the returned objects, do not re-derive them.
+
+**What it gates.** This is a **backstop, not a hard gate on win-turn deltas**: a guided
+Claude rarely beats the strong, clairvoyant search, so treat `claude_win < ai_win` as a
+*weak* signal (inspect the search, but a slower Claude is usually just Claude playing
+worse). The **strong** signal is the legality/invariant flags — an illegal/impossible
+plan, a missing legal play, or a wrong state delta. **Every such flag must be
+root-caused, never averaged away**, and feeds this same convergence loop: an engine/card
+bug goes back to Stage 2; a pure search issue is handled like any 5b outlier. When the
+runner flags a suspected **data** error (the engine faithfully matches cards.json but
+the result still looks wrong), resolve it against Scryfall exactly as in 2a/2d-bis — that
+backstops the non-cost fields the cost audit does not check (P/T, trigger thresholds,
+other behavioral params). A flag verified as a false positive (a card-data misread by the
+agent — the most common kind, per the prototype sweeps) is not a defect; record it as
+dismissed with the reason.
 
 ### Convergence criteria
 
@@ -222,6 +241,7 @@ Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
 1. Coverage clean (Stage 3) and costs audit clean (2d-bis).
 2. **Zero `[nonconv]` and zero `[fd-diverge]` lines** across the tested seeds.
 3. Multi-depth results are monotonic and plausible, with **every outlier game explained** (legitimate line, budget starvation, or a fixed bug — not an unexplained slowdown).
+4. The 100-game claude-play sweep (5d) ran, and **every legality/invariant flag is resolved** — fixed (engine/card/data bug) or dismissed with a reason (verified false positive). Win-turn deltas are noted but do not block.
 
 Only a deck that satisfies all three is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
 
@@ -233,7 +253,7 @@ Present a concise summary:
 1. **Cards implemented this run**: list any new/updated implementations, noting the tier used for each
 2. **Mulligan profile**: the optimised settings (and notable card scores / required-piece flags)
 3. **Win rate / average win turn**: from a regression-suite run on the new profile (the analyzer no longer reports these)
-4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, and any budget-starvation threshold noted
+4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, any budget-starvation threshold noted, and the 100-game claude-play sweep result (games played, flags raised and their resolution, win-turn comparison vs the search)
 5. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
 6. **Suggested next steps**: any Tier 4 deferrals worth revisiting, or interesting profile observations
 

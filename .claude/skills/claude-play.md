@@ -187,6 +187,13 @@ protocol, and returns `{ai_win, claude_win, choices, flags[], summary}`. Aggrega
 engine-bug candidate (verify, then fix via the analyze-deck convergence loop). For a
 large sweep, fan the players out with the Workflow engine (one agent per game).
 
+This is the mechanism behind **analyze-deck Stage 5d**, the final 100-game validation
+sweep: pick a base seed disjoint from the regression suite's seeds, fan game-indices
+`0..99` out with the Workflow engine (one agent per game; 100 exceed the concurrency cap
+and queue — expected), and feed the aggregated flags back into that skill's convergence
+loop. Legality/invariant flags are the gating signal; win-turn deltas are weak. Any real
+issue found gets investigated and fixed, not averaged away.
+
 **Expectation-setting:** against the strong, clairvoyant search a guided Claude is
 competitive but rarely faster (the first 30-game sweep found 0 misplay candidates).
 The oracle's proven worth is **bug-finding**, not beating the AI. Treat win-turn
