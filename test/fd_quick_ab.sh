@@ -9,7 +9,7 @@
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 BIN=./build/Release/mtg.exe
-OUT=logs_fd_quick
+OUT=logs/fd_quick
 rm -rf "$OUT" && mkdir -p "$OUT/fd" "$OUT/base"
 
 SEEDS="5005 6006"

@@ -10,6 +10,14 @@ MagicDeckTester simulates Magic: The Gathering games to compare card and deck pe
 
 The application is in early development — no build system, test runner, or source files exist yet. When commands are established, update this file with how to build, run, and test the project.
 
+## Repository Conventions
+
+- **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
+  Any script or command that writes game logs, batch output, or A/B scratch must
+  target a subdirectory of `logs/` (e.g. `logs/fd_quick`), not a root-level
+  `logs_*` directory. This keeps the repo root uncluttered. Both `logs/` and
+  `logs_*/` are gitignored, so this is purely about tidiness, not tracking.
+
 ## MTG Rules Skill
 
 This project has a custom skill at `.claude/skills/mtg-rules.md` that **all agents working in this repository must use**. It is the authoritative reference for both MTG rules correctness and implementation patterns.
