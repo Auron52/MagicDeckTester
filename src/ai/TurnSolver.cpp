@@ -899,14 +899,34 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
         return ConsumeFloating(floating, needed);
     };
 
-    for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) { return false; } }
-    for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) { return false; } }
-    for (int i = 0; i < cost.black;     ++i) { if (!pay(Color::Black,     false)) { return false; } }
-    for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) { return false; } }
-    for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) { return false; } }
-    for (int i = 0; i < cost.colorless; ++i) { if (!pay(Color::Colorless, false)) { return false; } }
-    for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) { return false; } }
-    return true;
+    // Greedy-first, then a backtracking fallback for filter chains the greedy strands
+    // (e.g. Throes of Chaos via a Cascade Bluffs + Ferrous Lake chain). Snapshot so the
+    // greedy's success path is byte-identical (no GT churn) and only previously-FAILING
+    // casts gain the chain solution. See TapForCostBacktrack.
+    const std::vector<Permanent> bf_pre = state.battlefield;
+    const int life_pre = state.players[active].life;
+    auto greedy = [&]() -> bool
+    {
+        for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) return false; }
+        for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) return false; }
+        for (int i = 0; i < cost.black;     ++i) { if (!pay(Color::Black,     false)) return false; }
+        for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) return false; }
+        for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) return false; }
+        for (int i = 0; i < cost.colorless; ++i) { if (!pay(Color::Colorless, false)) return false; }
+        for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) return false; }
+        return true;
+    };
+    if (greedy()) { return true; }
+    // Greedy failed: try the backtracking solver from a clean board.
+    const std::vector<Permanent> bf_greedy_fail = state.battlefield;
+    const int life_greedy_fail = state.players[active].life;
+    state.battlefield        = bf_pre;
+    state.players[active].life = life_pre;
+    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{})) { return true; }
+    // Total failure: restore the greedy's exact end-state to match prior behaviour.
+    state.battlefield        = bf_greedy_fail;
+    state.players[active].life = life_greedy_fail;
+    return false;
 }
 
 // Apply a plan to the game state sequentially (bypassing the stack).
@@ -1009,6 +1029,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     };
 
+    // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
+    // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
+    bool cascade_free = false;
     std::function<void(const std::string&, bool, bool, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands)
     {
@@ -1022,8 +1045,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (it == zone.end()) { return; }
 
         bool is_creature = def.card.IsCreature();
+        // Cascade casts its target for FREE (CR 702.84). Consume the one-shot flag here,
+        // before any nested casts, so exactly THIS cast skips its mana cost.
+        bool free_cast = cascade_free;
+        cascade_free = false;
         ManaCost ec = EffectiveCost(def, state);
-        if (!TapForCostDirect(state, ec, is_creature)) { return; }
+        if (!free_cast && !TapForCostDirect(state, ec, is_creature)) { return; }
         zone.erase(it);
 
         // Commit-the-line recording: if inside a breakpoint re-solve (sink_stack
@@ -1058,6 +1085,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 else         { ++hit; }
             }
         }
+
+        // On-cast triggers (Eidolon of the Great Revel) and Prowess fire when the spell
+        // is CAST -- before it resolves AND before this spell's own permanent (if a
+        // creature/enchantment) enters the battlefield. Fire them HERE, ahead of the
+        // resolution branch below, to mirror the real engine: CastSpellFromHand pushes
+        // the spell onto the stack and only then fires on-cast triggers, so the spell is
+        // NOT yet on the battlefield and a permanent with its own on-cast trigger does
+        // not trigger on its own cast (Eidolon casting Eidolon deals 0, not 2). Firing
+        // after the branch (the old position) placed the creature first, so Eidolon
+        // self-triggered -- over-counting rollout self-damage by 2 per Eidolon cast.
+        FireOnCastTriggers(state, def);
+        FireProwess(state, def);
 
         if (def.tmpl == CardTemplate::DirectDamage)
         {
@@ -1227,6 +1266,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (cdef2)
                 {
                     ap.hand.push_back(cdef2->card);
+                    cascade_free = true;   // cascade cast pays no mana
                     apply_one(cname, false, false, 0);
                 }
             }
@@ -1242,9 +1282,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             state.battlefield.push_back(perm);
         }
 
-        // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
-        FireOnCastTriggers(state, def);
-        FireProwess(state, def);
+        // (On-cast triggers + Prowess already fired above, at cast time, before the
+        // resolution branch -- see the note there.)
 
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
         // MoveToGraveyard). This makes a retrace card recur and keeps the inline
@@ -3086,4 +3125,19 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
     report(committed_win, committed_sub_depth);
     return best_plan;
+}
+
+// --- External-controller hooks (Claude-play / human-play prototype) -------------
+// Thin public wrappers around the file-static enumeration + application the solver
+// uses internally, so an external decision provider gets the exact same legal plans
+// and identical execution. See TurnSolver.h.
+std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& state,
+                                                             bool is_pre_combat)
+{
+    return EnumeratePlansWithLand(state, is_pre_combat);
+}
+
+void TurnSolver::ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat)
+{
+    ApplyPlanDirect(state, plan, is_pre_combat);
 }

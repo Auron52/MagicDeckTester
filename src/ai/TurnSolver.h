@@ -113,6 +113,16 @@ public:
     static void SetTraceSolve(bool enable);
     static bool GetTraceSolve();
 
+    // --- External-controller hooks (Claude-play / human-play prototype) ---------
+    // Expose the same candidate enumeration and plan application the solver uses, so
+    // an external decision provider can be offered the legal main-phase plans and have
+    // its chosen plan executed identically to a searched one. EnumerateMainPlans folds
+    // the land choice for a pre-combat main (each Plan carries its land_to_play), just
+    // like the search; ApplyPlan runs the canonical execution order (land, casts, Land's
+    // Edge) via the same path the rollouts use. Not used by the normal AI path.
+    static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
+    static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
+
     // Returns the plan that leads to the earliest win, evaluated by simulating
     // the rest of the game for each candidate play at this turn.
     // depth=0 falls back to Solve.  depth=1 simulates one turn ahead using Solve

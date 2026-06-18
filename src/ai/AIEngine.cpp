@@ -709,6 +709,49 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // untapping lands; spectacle costs unlocked by combat damage) turn it on.
     const bool play_this_phase = is_pre_combat_main || m_search_post_combat;
 
+    // External-controller intercept (Claude-play / human-play prototype, opt-in via
+    // SetExternalChooser; inert otherwise so the normal autonomous AI path is
+    // unchanged). Offer the SAME candidate plans the solver would search and execute
+    // the chosen one, bypassing the search. Self-contained: ApplyPlan is the rollout-
+    // style direct application -- it applies the same life/board/draw effects and fires
+    // the same on-cast triggers that decide win/loss, so win-turn outcomes are faithful
+    // (log fidelity is lower than the stack-based real path, fine for a flag-generating
+    // sweep). Combat and cleanup discard stay on the engine heuristics.
+    if (m_external_chooser && play_this_phase)
+    {
+        std::vector<TurnSolver::Plan> plans =
+            TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
+        if (!plans.empty())
+        {
+            int idx = m_external_chooser(state, plans, is_pre_combat_main);
+            if (idx >= 0 && idx < static_cast<int>(plans.size()))
+            {
+                TurnSolver::ApplyPlan(state, plans[idx], is_pre_combat_main);
+            }
+            // (idx < 0 or out of range => pass / cast nothing this phase)
+        }
+
+        // Restore unplayed staged cards (mirror the normal end-of-TakeTurn restore):
+        // cards cast were removed from hand; the rest, still flagged m_is_staged, go
+        // back to staged_cards so they expire correctly (CR 406).
+        Player& ap_after = state.ActivePlayer();
+        std::vector<Card> regular_hand;
+        for (Card& c : ap_after.hand)
+        {
+            if (c.m_is_staged)
+            {
+                c.m_is_staged = false;
+                StagedCard sc;
+                sc.card        = c;
+                sc.expiry_turn = c.m_staged_expiry;
+                ap_after.staged_cards.push_back(sc);
+            }
+            else { regular_hand.push_back(c); }
+        }
+        ap_after.hand = std::move(regular_hand);
+        return false;  // ApplyPlan resolved draw-engine re-solves inline; no second pass
+    }
+
     TurnSolver::Plan plan;  // empty plan == do nothing this phase
     bool fd_plan_committed = false;  // full-depth: plan came from the committed line
                                      // (carries a recorded breakpoint script to replay)
@@ -1723,16 +1766,33 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
         return ConsumeFloating(floating, needed);
     };
 
-    // Pay coloured requirements first (most restrictive), then generic.
-    for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) { return false; } }
-    for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) { return false; } }
-    for (int i = 0; i < cost.black;     ++i) { if (!pay(Color::Black,     false)) { return false; } }
-    for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) { return false; } }
-    for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) { return false; } }
-    for (int i = 0; i < cost.colorless; ++i) { if (!pay(Color::Colorless, false)) { return false; } }
-    for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) { return false; } }
-
-    return true;
+    // Greedy-first, then a backtracking fallback for filter chains the greedy strands
+    // (mirrors TurnSolver::TapForCostDirect, so the rollout and the real game stay in
+    // sync). Snapshot so the greedy success path is byte-identical (no GT churn) and only
+    // previously-FAILING casts gain the chain solution. See TapForCostBacktrack.
+    const std::vector<Permanent> bf_pre = state.battlefield;
+    const int life_pre = state.players[active].life;
+    auto greedy = [&]() -> bool
+    {
+        // Pay coloured requirements first (most restrictive), then generic.
+        for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) return false; }
+        for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) return false; }
+        for (int i = 0; i < cost.black;     ++i) { if (!pay(Color::Black,     false)) return false; }
+        for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) return false; }
+        for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) return false; }
+        for (int i = 0; i < cost.colorless; ++i) { if (!pay(Color::Colorless, false)) return false; }
+        for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) return false; }
+        return true;
+    };
+    if (greedy()) { return true; }
+    const std::vector<Permanent> bf_greedy_fail = state.battlefield;
+    const int life_greedy_fail = state.players[active].life;
+    state.battlefield        = bf_pre;
+    state.players[active].life = life_pre;
+    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{})) { return true; }
+    state.battlefield        = bf_greedy_fail;
+    state.players[active].life = life_greedy_fail;
+    return false;
 }
 
 // ---- Spell selection ----

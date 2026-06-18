@@ -539,6 +539,93 @@ inline void DecrementDepletionOnTap(Permanent& source)
     }
 }
 
+// Backtracking mana-payment FALLBACK for filter-heavy boards the per-pip greedy
+// solvers (TurnSolver::TapForCostDirect / AIEngine::TapForCost) cannot solve. The
+// greedy taps plain sources directly per pip and can strand filter lands (Cascade
+// Bluffs `is_filter`, Ferrous Lake `ramp_filter`) that need a feeder, so a legal cost
+// that requires a filter CHAIN (a plain seed -> filter -> filter -> ...) is wrongly
+// rejected. This searches source ACTIVATIONS with backtracking, checking CanPay at each
+// node, and finds a chaining solution if one exists. On success it leaves the chosen
+// sources tapped in `state` (mirroring the greedy's tap side-effects: depletion decrement
+// and tap self-damage); on failure it leaves `state` exactly as it found it. Intended to
+// run ONLY after the greedy fails, so every payment the greedy already solves stays
+// byte-identical. `floating` carries mana produced-but-unconsumed down the recursion.
+inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
+                                bool for_creature, ManaPool floating)
+{
+    if (floating.CanPay(cost)) { return true; }
+    const int active = state.active_player_index;
+    const int n      = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        if (state.battlefield[i].controller_index != active || state.battlefield[i].tapped)
+        { continue; }
+        std::optional<CardDefinition> def =
+            CardDatabase::Instance().Lookup(state.battlefield[i].card.m_name);
+        if (!def) { continue; }
+        const bool is_src = (def->tmpl == CardTemplate::BasicLand)
+                         || (def->tmpl == CardTemplate::ManaDork && state.battlefield[i].CanTap());
+        if (!is_src) { continue; }
+        if (def->params.creature_mana_only && !for_creature) { continue; }
+
+        const std::vector<Color>& produces = def->params.produces;
+        const std::vector<Permanent> bf_snap = state.battlefield;  // undo across this source's options
+        const int life_snap = state.players[active].life;
+
+        // Physically tap source i, recurse with `next` floating, undo on failure.
+        auto activate = [&](const ManaPool& next) -> bool
+        {
+            state.battlefield[i].tapped = true;
+            DecrementDepletionOnTap(state.battlefield[i]);
+            if (def->params.tap_self_damage > 0)
+            { state.players[active].life -= def->params.tap_self_damage; }
+            if (TapForCostBacktrack(state, cost, for_creature, next)) { return true; }
+            state.battlefield        = bf_snap;
+            state.players[active].life = life_snap;
+            return false;
+        };
+
+        if (def->params.is_filter)
+        {
+            { ManaPool f = floating; f.Add(Color::Colorless, 1); if (activate(f)) { return true; } }  // {T}: Add {C}
+            if (floating.Total() >= 1 && !produces.empty())                                            // feed 1, Add 2
+            {
+                for (Color c1 : produces) for (Color c2 : produces)
+                {
+                    ManaPool f = floating; Color took;
+                    if (!ConsumeFloatingAny(f, took)) { break; }
+                    f.Add(c1, 1); f.Add(c2, 1);
+                    if (activate(f)) { return true; }
+                }
+            }
+        }
+        else if (def->params.ramp_filter)
+        {
+            if (floating.Total() >= 1 && !produces.empty())   // {1},{T}: feed 1, Add one of each colour
+            {
+                ManaPool f = floating; Color took;
+                if (ConsumeFloatingAny(f, took))
+                {
+                    for (Color c : produces) { f.Add(c, 1); }
+                    if (activate(f)) { return true; }
+                }
+            }
+        }
+        else
+        {
+            const int amt = ManaProducedPerTap(*def);
+            if (produces.empty())
+            { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f)) { return true; } }
+            else
+            {
+                for (Color c : produces)
+                { ManaPool f = floating; f.Add(c, amt); if (activate(f)) { return true; } }
+            }
+        }
+    }
+    return false;
+}
+
 // Sacrifices any land whose depletion counters have run out (count 0): the depletion
 // lands' "If there are no depletion counters on it, sacrifice it." Safe to call after
 // any batch of mana taps; iterates and erases its own way so it must not run while a

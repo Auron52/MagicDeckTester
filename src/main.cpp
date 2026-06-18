@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <vector>
 #include <thread>
+#include <sstream>
+#include <cstdlib>
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
 #include "runner/GoldFishRunner.h"
@@ -43,6 +45,227 @@ static std::vector<std::string> SortedHandNames(GameState& state)
     for (const Card& c : state.ActivePlayer().hand) { names.push_back(c.m_name); }
     std::sort(names.begin(), names.end());
     return names;
+}
+
+// ---- Claude-play / human-play prototype (opt-in; --claude-play) ---------------
+// An external decision provider drives the goldfish's MAIN phases (combat + cleanup
+// stay on the engine heuristics). Stateless-replay protocol: each process run replays
+// the deterministic game (fixed seed + game-index) applying the pre-supplied --choices,
+// and when it reaches the first un-chosen main-phase decision it prints that decision
+// (current legal info + the enumerated legal plans) and exits with code 70. The driver
+// (a Claude agent) reads it, appends a plan index, and re-invokes. When every decision
+// is supplied the game finishes and the result (win turn) is printed. Purpose: a flag-
+// generating verification sweep -- a game Claude wins earlier than the AI, or a plan
+// set that looks wrong, is a flag for the analyzer's convergence loop to investigate.
+static void JsonStr(std::ostream& os, const std::string& s)
+{
+    os << '"';
+    for (char c : s)
+    {
+        if (c == '"' || c == '\\') { os << '\\' << c; }
+        else                        { os << c; }
+    }
+    os << '"';
+}
+
+static void JsonNameArray(std::ostream& os, const std::vector<std::string>& names)
+{
+    os << '[';
+    for (size_t i = 0; i < names.size(); ++i)
+    {
+        if (i) { os << ", "; }
+        JsonStr(os, names[i]);
+    }
+    os << ']';
+}
+
+static std::vector<std::string> BattlefieldNames(const GameState& s, int controller)
+{
+    std::vector<std::string> names;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller) { names.push_back(p.card.m_name); }
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+// One-line human-readable summary of a candidate plan (land drop + casts).
+static std::string SummarizePlan(const TurnSolver::Plan& plan)
+{
+    std::ostringstream os;
+    if (plan.land_decided && !plan.land_to_play.empty()) { os << "land=" << plan.land_to_play << "; "; }
+    else if (plan.land_decided)                           { os << "land=none; "; }
+    std::vector<std::string> casts;
+    for (const Action& a : plan.actions)
+    {
+        std::string tag;
+        switch (a.kind)
+        {
+            case Action::Kind::CastFromHand:      tag = a.card_name; break;
+            case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
+            case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
+            case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
+            default:                              tag = a.card_name + " (other)"; break;
+        }
+        if (a.sacrifice_land) { tag += " +sac-land"; }
+        if (a.discard_lands)  { tag += " +discard" + std::to_string(a.discard_lands); }
+        casts.push_back(tag);
+    }
+    if (casts.empty()) { os << "cast: (nothing)"; }
+    else
+    {
+        os << "cast: ";
+        for (size_t i = 0; i < casts.size(); ++i) { if (i) os << ", "; os << casts[i]; }
+    }
+    return os.str();
+}
+
+// Writes the decision as a JSON object (no markers) to `os`. Used for both the live
+// stdout dump (wrapped in <<<CLAUDE_DECISION>>> markers by the caller) and the per-game
+// trace log written on game completion (--log-dir).
+static void WriteDecisionJson(std::ostream& os, const GameState& s,
+                              const std::vector<TurnSolver::Plan>& plans,
+                              bool is_pre_combat, int decision_index, int reveal_count)
+{
+    const Player& me  = s.ActivePlayer();
+    int           opp = 1 - s.active_player_index;
+    std::vector<std::string> hand;
+    for (const Card& c : me.hand) { hand.push_back(c.m_name); }
+    std::sort(hand.begin(), hand.end());
+    std::vector<std::string> gy;
+    for (const Card& c : me.graveyard) { gy.push_back(c.m_name); }
+    std::sort(gy.begin(), gy.end());
+
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"phase\": \"" << (is_pre_combat ? "pre_main" : "post_main") << "\",\n";
+    os << "  \"on_the_play\": " << (s.on_the_play ? "true" : "false") << ",\n";
+    os << "  \"me\": { \"life\": " << me.life << ", \"battlefield\": ";
+    JsonNameArray(os, BattlefieldNames(s, s.active_player_index));
+    // Aether Vial charge counters (a Vial deploys a creature whose MV EQUALS its
+    // counters) — exposed so the player needn't guess the Vial's state.
+    {
+        std::vector<int> vials;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+            if (d && d->params.upkeep_adds_charge) { vials.push_back(p.charge_counters); }
+        }
+        os << ", \"vial_counters\": [";
+        for (size_t i = 0; i < vials.size(); ++i) { if (i) os << ", "; os << vials[i]; }
+        os << "]";
+    }
+    // Hand as {name, cost, mv} objects so the player judges affordability from the real
+    // card data, not memory (the slivers false positives came from guessing costs).
+    os << ", \"hand\": [";
+    for (size_t i = 0; i < hand.size(); ++i)
+    {
+        if (i) { os << ", "; }
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(hand[i]);
+        os << "{ \"name\": "; JsonStr(os, hand[i]);
+        os << ", \"cost\": "; JsonStr(os, d ? d->card.m_mana_cost.ToString() : std::string());
+        os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0) << " }";
+    }
+    os << "]";
+    os << ", \"graveyard\": "; JsonNameArray(os, gy);
+    os << ", \"library_size\": " << me.library.size();
+    if (reveal_count > 0)
+    {
+        // Optional partial clairvoyance (--reveal N): the next N draws, in draw order
+        // (library top = index 0). A small "accessible part" of the library, not the
+        // whole thing -- enough foresight to plan a line without full clairvoyance.
+        int n = std::min(reveal_count, static_cast<int>(me.library.size()));
+        std::vector<std::string> up;
+        for (int k = 0; k < n; ++k) { up.push_back(me.library[k].m_name); }
+        os << ", \"upcoming_draws\": ";
+        JsonNameArray(os, up);
+    }
+    os << " },\n";
+    os << "  \"opponent\": { \"life\": " << s.players[opp].life << ", \"battlefield\": ";
+    JsonNameArray(os, BattlefieldNames(s, opp));
+    os << " },\n";
+    os << "  \"plans\": [\n";
+    for (size_t i = 0; i < plans.size(); ++i)
+    {
+        os << "    { \"index\": " << i << ", \"summary\": ";
+        JsonStr(os, SummarizePlan(plans[i]));
+        os << (i + 1 < plans.size() ? " },\n" : " }\n");
+    }
+    os << "  ],\n";
+    os << "  \"note\": \"reply with one plan index (0-based), or -1 to pass / cast nothing\"\n";
+    os << "}\n";
+}
+
+static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
+                         uint64_t seed, int game_index, int max_turns,
+                         int lookahead_depth, int timeout_ms, std::vector<int> choices,
+                         int reveal_count, const std::filesystem::path& log_dir)
+{
+    GameState state = GoldFishRunner::SetupGame(deck, seed);
+    state.vial_target_mv = profile.vial_target_mv;
+    GoldFishRunner::PopulateOpponentSpawns(state, game_index);
+
+    AIEngine ai(profile, lookahead_depth, timeout_ms);
+    size_t cursor = 0;
+    int decisions_made = 0;
+    std::vector<std::string> trace;   // one entry per RESOLVED decision (for --log-dir)
+    ai.SetExternalChooser(
+        [&](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
+        {
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    // Record this resolved decision (state + plans + the chosen index).
+                    // Only the completing full-CSV run writes the trace file (below).
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);   // distinct code: "more input needed"
+        });
+
+    GameEngine engine(ai);
+    int win_turn = engine.RunGame(state, max_turns);
+    bool won = win_turn > 0 && win_turn <= max_turns;
+
+    // Game completed (every decision was supplied). Write the per-game trace if asked.
+    if (!log_dir.empty())
+    {
+        std::error_code ec;
+        std::filesystem::create_directories(log_dir, ec);
+        std::ostringstream fn;
+        fn << "claude_s" << seed << "_gi" << game_index << ".json";
+        std::ofstream out(log_dir / fn.str());
+        out << "{\n  \"seed\": " << seed << ", \"game_index\": " << game_index
+            << ", \"win_turn\": " << (won ? win_turn : -1)
+            << ", \"won\": " << (won ? "true" : "false") << ",\n  \"decisions\": [\n";
+        for (size_t i = 0; i < trace.size(); ++i)
+        {
+            out << "    " << trace[i] << (i + 1 < trace.size() ? ",\n" : "\n");
+        }
+        out << "  ]\n}\n";
+        std::cerr << "Claude-play trace written to " << (log_dir / fn.str()).string() << "\n";
+    }
+
+    std::cout << "<<<CLAUDE_RESULT>>>\n{ \"win_turn\": " << (won ? win_turn : -1)
+              << ", \"won\": " << (won ? "true" : "false")
+              << ", \"decisions_made\": " << decisions_made << " }\n<<<END_RESULT>>>\n";
+    return 0;
 }
 
 // Plays a (post-mulligan) state to a win turn at the given lookahead depth.
@@ -403,6 +626,9 @@ int main(int argc, char* argv[])
     bool     lookahead_bottoming = false;
     bool     diag_depth     = false;
     bool     trace_t1       = false;
+    bool        claude_play = false;
+    std::string choices_str;          // comma-separated plan indices for --claude-play
+    int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
 
     for (int i = 2; i < argc; ++i)
     {
@@ -410,6 +636,7 @@ int main(int argc, char* argv[])
         if (flag == "--lookahead-bottoming") { lookahead_bottoming = true; continue; }
         if (flag == "--diag-depth")          { diag_depth = true; continue; }
         if (flag == "--trace")               { trace_t1 = true; continue; }
+        if (flag == "--claude-play")         { claude_play = true; continue; }
         try
         {
             if (i + 1 < argc)
@@ -438,6 +665,14 @@ int main(int argc, char* argv[])
                 else if (flag == "--game-index")
                 {
                     base_game_index = std::stoi(argv[++i]);
+                }
+                else if (flag == "--choices")
+                {
+                    choices_str = argv[++i];
+                }
+                else if (flag == "--reveal")
+                {
+                    reveal_count = std::stoi(argv[++i]);
                 }
                 else if (flag == "--depth")
                 {
@@ -506,6 +741,19 @@ int main(int argc, char* argv[])
             RunDepthDivergenceDiagnostic(deck, profile, num_games, seed, max_turns, timeout_ms,
                                          num_threads, log_dir, trace_t1);
             return 0;
+        }
+
+        if (claude_play)
+        {
+            std::vector<int> choices;
+            std::stringstream ss(choices_str);
+            std::string tok;
+            while (std::getline(ss, tok, ','))
+            {
+                if (!tok.empty()) { choices.push_back(std::stoi(tok)); }
+            }
+            return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
+                                 lookahead_depth, timeout_ms, choices, reveal_count, log_dir);
         }
 
         GoldFishRunner runner;

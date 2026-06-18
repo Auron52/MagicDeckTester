@@ -94,6 +94,16 @@ public:
     // main under this same gate so the search actually values those plays.
     void SetSearchPostCombat(bool enabled) { m_search_post_combat = enabled; }
 
+    // External main-phase decision provider (Claude-play / human-play prototype).
+    // Signature: (state, legal_plans, is_pre_combat_main) -> chosen plan index, or -1
+    // to pass (cast nothing). When set, TakeTurn offers the SAME candidate plans the
+    // solver would search and executes the chosen one instead of searching -- so an
+    // external player drives the main phases while combat/discard stay on the engine
+    // heuristics. Inert when unset (normal AI path). See TurnSolver::EnumerateMainPlans.
+    using ExternalChooser =
+        std::function<int(const GameState&, const std::vector<TurnSolver::Plan>&, bool)>;
+    void SetExternalChooser(ExternalChooser chooser) { m_external_chooser = std::move(chooser); }
+
 private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
@@ -104,6 +114,7 @@ private:
     bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts
     std::vector<std::string> m_kept_opening_hand;
     GameLogger*              m_logger            = nullptr;
+    ExternalChooser          m_external_chooser;          // unset => normal AI path
 
     // Shared transposition table for the clairvoyant bottoming loop (BottomCards).
     // Non-null only for the duration of that loop; nullptr during the real game and
