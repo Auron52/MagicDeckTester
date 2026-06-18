@@ -673,6 +673,17 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 // TakeTurn
 // ============================================================
 
+bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial) const
+{
+    // Default heuristic (unchanged behaviour): charge up to the deck's dominant creature
+    // MV (vial_target_mv), so the Vial deploys creatures at maximum efficiency.
+    int optimal = (state.vial_target_mv > 0) ? state.vial_target_mv : vial.charge_counters;
+    bool heuristic = vial.charge_counters < optimal;
+    // An external controller (claude-play / human-play) may decide differently.
+    if (m_external_vial_chooser) { return m_external_vial_chooser(state, vial, heuristic); }
+    return heuristic;
+}
+
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {

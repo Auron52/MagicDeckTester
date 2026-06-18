@@ -139,6 +139,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
 
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"main_phase\",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"phase\": \"" << (is_pre_combat ? "pre_main" : "post_main") << "\",\n";
     os << "  \"on_the_play\": " << (s.on_the_play ? "true" : "false") << ",\n";
@@ -199,6 +200,33 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     os << "}\n";
 }
 
+// Vial-as-a-choice decision: whether to add a charge counter to an Aether Vial this
+// upkeep. The reply is 1 (add a counter) or 0 (hold). `heuristic` is the default the
+// encoded AI would take.
+static void WriteVialDecisionJson(std::ostream& os, const GameState& s,
+                                  const Permanent& vial, int decision_index, bool heuristic)
+{
+    const Player& me  = s.ActivePlayer();
+    int           opp = 1 - s.active_player_index;
+    std::vector<std::string> hand;
+    for (const Card& c : me.hand) { hand.push_back(c.m_name); }
+    std::sort(hand.begin(), hand.end());
+
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"vial_charge\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"vial\": "; JsonStr(os, vial.card.m_name);
+    os << ", \"current_counters\": " << vial.charge_counters << ",\n";
+    os << "  \"heuristic_default\": " << (heuristic ? 1 : 0) << ",\n";
+    os << "  \"me\": { \"life\": " << me.life << ", \"hand\": "; JsonNameArray(os, hand);
+    os << " },\n";
+    os << "  \"opponent\": { \"life\": " << s.players[opp].life << " },\n";
+    os << "  \"note\": \"reply 1 to add a charge counter this upkeep, 0 to hold. Aether "
+          "Vial deploys a creature whose mana value EQUALS its counter count.\"\n";
+    os << "}\n";
+}
+
 static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          uint64_t seed, int game_index, int max_turns,
                          int lookahead_depth, int timeout_ms, std::vector<int> choices,
@@ -237,6 +265,35 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);   // distinct code: "more input needed"
+        });
+
+    // Vial-as-a-choice: claude decides each Aether Vial upkeep charge. Shares the single
+    // --choices stream + cursor with the main chooser (consulted at upkeep, before the
+    // main phase). Reply 1 = add a counter, 0 = hold. (Future default: only surface this
+    // when the decision is genuinely ambiguous, not every upkeep.)
+    ai.SetExternalVialChooser(
+        [&](const GameState& s, const Permanent& vial, bool heuristic) -> bool
+        {
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteVialDecisionJson(ss, s, vial, di, heuristic);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen != 0;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteVialDecisionJson(std::cout, s, vial, di, heuristic);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
         });
 
     GameEngine engine(ai);

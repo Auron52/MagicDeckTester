@@ -104,6 +104,19 @@ public:
         std::function<int(const GameState&, const std::vector<TurnSolver::Plan>&, bool)>;
     void SetExternalChooser(ExternalChooser chooser) { m_external_chooser = std::move(chooser); }
 
+    // Aether Vial upkeep charge decision (Vial-as-a-choice). The DEFAULT is the current
+    // heuristic (charge up to the deck's dominant creature MV, vial_target_mv), so the
+    // normal AI and its ground truth are unchanged. When an external vial chooser is set
+    // (claude-play / human-play), it decides instead -- so a different controller can
+    // hold the Vial at a chosen count. Its bool arg is the heuristic's default choice.
+    using ExternalVialChooser =
+        std::function<bool(const GameState&, const Permanent&, bool)>;
+    void SetExternalVialChooser(ExternalVialChooser c) { m_external_vial_chooser = std::move(c); }
+
+    // True if a charge counter should be added to `vial` this upkeep (called by
+    // GameEngine). Defaults to the heuristic; consults the external vial chooser if set.
+    bool DecideVialCharge(const GameState& state, const Permanent& vial) const;
+
 private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
@@ -115,6 +128,7 @@ private:
     std::vector<std::string> m_kept_opening_hand;
     GameLogger*              m_logger            = nullptr;
     ExternalChooser          m_external_chooser;          // unset => normal AI path
+    ExternalVialChooser      m_external_vial_chooser;     // unset => heuristic charge
 
     // Shared transposition table for the clairvoyant bottoming loop (BottomCards).
     // Non-null only for the duration of that loop; nullptr during the real game and

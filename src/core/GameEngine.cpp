@@ -145,10 +145,10 @@ void GameEngine::UpkeepStep(GameState& state)
         std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
         if (!def || !def->params.upkeep_adds_charge) { continue; }
 
-        // Use the deck's precomputed dominant creature MV as the target — deck composition
-        // is stable and not subject to hand-variance like a per-upkeep hand scan would be.
-        int optimal = (state.vial_target_mv > 0) ? state.vial_target_mv : p.charge_counters;
-        if (p.charge_counters < optimal) { ++p.charge_counters; }
+        // Vial-as-a-choice: the charge decision is delegated to the AI. Its default is the
+        // same heuristic as before (charge up to the deck's dominant creature MV), so the
+        // normal AI is byte-identical; an external controller (claude-play) can override.
+        if (m_ai.DecideVialCharge(state, p)) { ++p.charge_counters; }
     }
 
     // Upkeep token creation (e.g. Thrumming Hivepool: create two 1/1 Sliver tokens).

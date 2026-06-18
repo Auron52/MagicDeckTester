@@ -116,6 +116,12 @@ decision and exits:
   accumulated CSV (e.g. ``→`"2"`→`"2,0"`→`"2,0,1"`…). Never drop earlier choices.
 - `-1` passes (cast nothing). When you see `<<<CLAUDE_RESULT>>> { "win_turn": N … }`
   `<<<END_RESULT>>>` (exit 0) the game is over.
+- **Each decision has a `type`.** `"main_phase"` (the default — reply a plan index as
+  above). `"vial_charge"` — an Aether Vial upkeep charge decision: reply **1** to add a
+  charge counter this upkeep or **0** to hold (the Vial deploys a creature whose mana
+  value EQUALS its counters; the JSON gives `current_counters` and the AI's
+  `heuristic_default`). Both decision types share the one `--choices` stream in the
+  order they occur (a turn's vial_charge comes before its main_phase).
 - `--reveal N` exposes the top N upcoming draws (partial clairvoyance). The search is
   fully clairvoyant; reveal gives the player a fair-ish, limited foresight.
 
