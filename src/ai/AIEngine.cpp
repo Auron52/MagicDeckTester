@@ -1259,7 +1259,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // request the legacy second TakeTurn pass -- that pass would wrongly consume the
     // NEXT committed phase during this same turn (the desync that left TH's predicted
     // Treasure Hunt + Land's Edge win unrealised). Only the legacy path uses it.
-    return s_full_depth ? false : cast_draw_engine;
+    // Only the full-depth SEARCH (depth>0) handles the draw breakpoint inline; at
+    // depth 0 there is no search, so we must still request the legacy second pass or
+    // the draw engine never gets cast (TH d0 collapses). Gate the suppression on a
+    // live search.
+    return (s_full_depth && m_lookahead_depth > 0) ? false : cast_draw_engine;
 }
 
 // ---- Land drop ----
