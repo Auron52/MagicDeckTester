@@ -150,6 +150,15 @@ static Keyword KeywordFromString(const std::string& s)
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
+static Supertype SupertypeFromString(const std::string& s)
+{
+    if (s == "Legendary") { return Supertype::Legendary; }
+    if (s == "Basic")     { return Supertype::Basic; }
+    if (s == "Snow")      { return Supertype::Snow; }
+    if (s == "World")     { return Supertype::World; }
+    throw std::runtime_error("Unknown supertype: " + s);
+}
+
 static Color ColorFromString(const std::string& s)
 {
     if (s == "W") { return Color::White; }
@@ -208,6 +217,11 @@ Card CardDatabase::BuildCardFromJson(const json& entry) const
     for (const std::string& k : entry.value("keywords", json::array()))
     {
         card.AddKeyword(KeywordFromString(k));
+    }
+
+    for (const std::string& s : entry.value("supertypes", json::array()))
+    {
+        card.AddSupertype(SupertypeFromString(s));
     }
 
     for (const std::string& s : entry.value("subtypes", json::array()))
@@ -314,6 +328,30 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.produces_amount = params.value("produces_amount", 1);
     p.is_filter       = params.value("is_filter", false);
     p.ramp_filter     = params.value("ramp_filter", false);
+
+    // --- Knights tribal extensions ---
+    p.affects_all_creatures        = params.value("affects_all_creatures", false);
+    p.lord_excludes_self           = params.value("lord_excludes_self", false);
+    p.power_equals_creature_count  = params.value("power_equals_creature_count", false);
+
+    p.cast_trigger_subtype         = params.value("cast_trigger_subtype", std::string{});
+    p.cast_trigger_creates_tokens  = params.value("cast_trigger_creates_tokens", 0);
+    p.cast_token_power             = params.value("cast_token_power", 0);
+    p.cast_token_toughness         = params.value("cast_token_toughness", 0);
+    for (const std::string& s : params.value("cast_token_subtypes", json::array()))
+        p.cast_token_subtypes.push_back(s);
+
+    p.attack_creates_tokens        = params.value("attack_creates_tokens", 0);
+    p.attack_token_power           = params.value("attack_token_power", 0);
+    p.attack_token_toughness       = params.value("attack_token_toughness", 0);
+    for (const std::string& s : params.value("attack_token_subtypes", json::array()))
+        p.attack_token_subtypes.push_back(s);
+
+    p.etb_dig_count                = params.value("etb_dig_count", 0);
+    for (const std::string& s : params.value("etb_dig_subtypes", json::array()))
+        p.etb_dig_subtypes.push_back(s);
+    for (const std::string& s : params.value("etb_dig_requires_subtypes", json::array()))
+        p.etb_dig_requires_subtypes.push_back(s);
 
     return p;
 }

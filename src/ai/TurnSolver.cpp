@@ -127,31 +127,112 @@ static int CountLands(const GameState& state)
     return n;
 }
 
+// Color-producibility gate for a chosen action subset. ManaPool::CanPay stores every
+// multi-color land as one "wild" mana that satisfies ANY single colored pip — an
+// over-approximation for a land that produces only a SUBSET of colors (e.g. Tournament
+// Grounds = W/R/B cannot pay {U}). That let the enumerator OFFER hard-casts the executor
+// then cannot pay (a silent no-op; found by the Knights claude-play sweep). This gate
+// rejects a subset only when it requires a colored pip of a color that NO untapped source
+// can produce at all. That is the maximally-conservative necessary condition: it can never
+// reject a plan the real payment would allow whenever the controller has at least one
+// source of each needed color (true for burn/slivers/TH on their own seeds), so those
+// decks stay byte-identical; it prunes exactly the restricted-color phantom (a {U} cost
+// with zero blue sources). It deliberately does NOT model count/contention/filter-yield
+// (those mis-estimate amounts and would false-reject payable RR/filter-chain plans), so a
+// rarer "needs 2 of a color, only 1 source" phantom is left to the rollout's real payment,
+// which already no-ops it. Cheap and deterministic.
+static bool SubsetPayable(const GameState& state, const std::vector<Action>& cands,
+                          const std::vector<int>& sel)
+{
+    // Colors required by the chosen casts (Vial deploys cost no mana).
+    bool need[5] = {false,false,false,false,false};  // W,U,B,R,G ({C}/generic via CanPay)
+    bool any = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }
+        if (a.cost.white > 0) { need[0] = true; any = true; }
+        if (a.cost.blue  > 0) { need[1] = true; any = true; }
+        if (a.cost.black > 0) { need[2] = true; any = true; }
+        if (a.cost.red   > 0) { need[3] = true; any = true; }
+        if (a.cost.green > 0) { need[4] = true; any = true; }
+    }
+    if (!any) { return true; }
+
+    // Colors at least one untapped source can produce.
+    bool have[5] = {false,false,false,false,false};
+    int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (!def) { continue; }
+        bool is_src = (def->tmpl == CardTemplate::BasicLand)
+                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+        if (!is_src) { continue; }
+        for (Color c : def->params.produces)
+        {
+            switch (c)
+            {
+                case Color::White: have[0] = true; break;
+                case Color::Blue:  have[1] = true; break;
+                case Color::Black: have[2] = true; break;
+                case Color::Red:   have[3] = true; break;
+                case Color::Green: have[4] = true; break;
+                default: break;
+            }
+        }
+    }
+    for (int i = 0; i < 5; ++i) { if (need[i] && !have[i]) { return false; } }
+    return true;
+}
+
 static int PendingAttackDamage(const GameState& state)
 {
     int dmg = 0;
+    int active = state.active_player_index;
     std::vector<const Permanent*> attackers;
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index != state.active_player_index) { continue; }
-        if (!CanAttackFull(p, state.battlefield, state.active_player_index)) { continue; }
+        if (p.controller_index != active) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
-            p.card, state.battlefield, state.active_player_index, animated);
+            p.card, state.battlefield, active, animated, &p);
         bool ds = animated
-            ? HasDoubleStrikeFromLords(p.card, state.battlefield, state.active_player_index, true)
+            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, state.active_player_index));
+               || HasDoubleStrikeFromLords(p.card, state.battlefield, active));
         int base_pw = p.EffectivePower() + lord_pb;
-        if (animated)
+        std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (adef)
         {
-            std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(p.card.m_name);
-            if (adef) { base_pw += adef->params.animate_power; }
+            if (animated) { base_pw += adef->params.animate_power; }
+            base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
         dmg += base_pw * (ds ? 2 : 1);
         attackers.push_back(&p);
     }
-    dmg += CountAttackTriggerLifeLoss(state.battlefield, state.active_player_index, attackers);
+    dmg += CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
+
+    // Estimate attack-trigger tokens (Adeline) for this turn only: const path cannot create
+    // them, so add their immediate damage (token base power + anthem bonus) if attacking.
+    if (!attackers.empty())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+            if (!d || d->params.attack_creates_tokens <= 0) { continue; }
+            Card tok;
+            tok.AddType(CardType::Creature);
+            tok.m_subtypes = d->params.attack_token_subtypes;
+            tok.m_power    = d->params.attack_token_power;
+            auto [tpb, ttb] = ComputeLordBonus(tok, state.battlefield, active, false, nullptr);
+            dmg += d->params.attack_creates_tokens
+                 * (d->params.attack_token_power + tpb);
+        }
+    }
     return dmg;
 }
 
@@ -268,7 +349,11 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state.battlefield, state.active_player_index);
         bool ds = def.card.HasKeyword(Keyword::DoubleStrike)
                || HasDoubleStrikeFromLords(def.card, state.battlefield, state.active_player_index);
-        int power = (def.card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+        // Adeline (power = creatures you control): estimate as the current creature count
+        // plus 1 for herself entering. Her printed power is 0, so without this she scores 0.
+        int dyn = def.params.power_equals_creature_count
+                  ? CreatureCount(state, state.active_player_index) + 1 : 0;
+        int power = (def.card.m_power.value_or(0) + dyn + lord_pb) * (ds ? 2 : 1);
         if (power <= 0) { return 0; }
 
         // Haste (from the card or from a lord already on board) attacks this turn;
@@ -709,6 +794,14 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (!pool_noncreature.CanPay(noncreature_combined))  { continue; }
         if (sacrifice_count > total_lands)                   { continue; }
         if (discard_lands_used > lands_in_hand)              { continue; }
+        {
+            // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U}
+            // hard-cast off a W/R/B-only land). Strict tightening; inert for decks whose
+            // lands produce the colors they need.
+            std::vector<int> sel;
+            for (int j = 0; j < m; ++j) { if (mask & (1 << j)) { sel.push_back(j); } }
+            if (!SubsetPayable(state, cands, sel)) { continue; }
+        }
 
         // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so
         // they resolve BEFORE the spell. A plan that kills us via self-damage cannot win —
@@ -996,6 +1089,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             state.battlefield.push_back(perm);
             ap.hand.erase(hand_it);
             state.battlefield[vi].tapped = true;  // access by index — push_back may reallocate
+            // ETB dig / legend rule also apply to Vial-deployed creatures (Vial is not a
+            // cast, so no on-cast trigger, but the ETB still happens).
+            if (copt->params.etb_dig_count > 0)
+            {
+                PerformEtbDig(state, state.active_player_index, copt->params,
+                              &state.battlefield.back());
+            }
+            if (copt->card.HasSupertype(Supertype::Legendary))
+            {
+                EnforceLegendRule(state, state.active_player_index);
+            }
             return;
         }
     };
@@ -1161,6 +1265,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
             state.battlefield.push_back(perm);
+
+            // ETB library dig (Acclaimed Contender): performed inline so the clairvoyant
+            // rollout sees the dug card in hand for later turns. The real game does the
+            // SAME deterministic dig at resolution (EffectHandler), reaching identical
+            // hand/library state -- no breakpoint/replay needed (the dug card is cast on a
+            // later turn, not re-solved this turn). Use the just-pushed permanent as self.
+            if (def.params.etb_dig_count > 0)
+            {
+                PerformEtbDig(state, state.active_player_index, def.params,
+                              &state.battlefield.back());
+            }
+
+            // Legend rule: a duplicate legendary just cast is put into the graveyard, so a
+            // second copy of a legendary lord confers no benefit (the search then avoids
+            // casting it). No-op for non-legendary creatures.
+            if (def.card.HasSupertype(Supertype::Legendary))
+            {
+                EnforceLegendRule(state, state.active_player_index);
+            }
 
             // Replicate: if Hatchery Sliver (or the card itself) grants replicate,
             // pay the mana cost additional times to create token copies.
@@ -1483,23 +1606,50 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 static void SimulateCombat(GameState& state)
 {
     int opp_idx = 1 - state.active_player_index;
-    std::vector<const Permanent*> attackers;
-    for (Permanent& p : state.battlefield)
+    int active  = state.active_player_index;
+
+    // Legend rule before declaring attackers (mirror GameEngine::CombatPhase): a duplicate
+    // legendary lord cannot double-count its buff. No-op without legendaries.
+    EnforceLegendRule(state, active);
+
+    // Eligible attacker indices BEFORE any token creation (push_back keeps indices stable).
+    std::vector<int> atk_idx;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
-        if (p.controller_index != state.active_player_index) { continue; }
-        if (!CanAttackFull(p, state.battlefield, state.active_player_index)) { continue; }
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        atk_idx.push_back(i);
+    }
+
+    // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
+    if (!atk_idx.empty())
+    {
+        int tok_start = FireAttackCreateTokens(state, active);
+        for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            atk_idx.push_back(i);
+        }
+    }
+
+    std::vector<const Permanent*> attackers;
+    attackers.reserve(atk_idx.size());
+    for (int idx : atk_idx)
+    {
+        Permanent& p = state.battlefield[idx];
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
-            p.card, state.battlefield, state.active_player_index, animated);
+            p.card, state.battlefield, active, animated, &p);
         bool ds = animated
-            ? HasDoubleStrikeFromLords(p.card, state.battlefield, state.active_player_index, true)
+            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, state.active_player_index));
+               || HasDoubleStrikeFromLords(p.card, state.battlefield, active));
         int base_pw = p.EffectivePower() + lord_pb;
-        if (animated)
+        std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (adef)
         {
-            std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(p.card.m_name);
-            if (adef) { base_pw += adef->params.animate_power; }
+            if (animated) { base_pw += adef->params.animate_power; }
+            base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
         int power = base_pw * (ds ? 2 : 1);
         state.players[opp_idx].life -= power;
@@ -1507,8 +1657,7 @@ static void SimulateCombat(GameState& state)
         if (!p.card.HasKeyword(Keyword::Vigilance)) { p.tapped = true; }
         attackers.push_back(&p);
     }
-    int trigger_life_loss = CountAttackTriggerLifeLoss(
-        state.battlefield, state.active_player_index, attackers);
+    int trigger_life_loss = CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
     if (trigger_life_loss > 0)
     {
         state.players[opp_idx].life -= trigger_life_loss;
@@ -1710,8 +1859,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (p.controller_index != state.active_player_index) { continue; }
         std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
         if (!def || !def->params.upkeep_adds_charge) { continue; }
-        int optimal = (state.vial_target_mv > 0) ? state.vial_target_mv : p.charge_counters;
-        if (p.charge_counters < optimal) { ++p.charge_counters; }
+        // Hand-aware charge policy, shared with the real engine (AIEngine::DecideVialCharge)
+        // so the rollout models the same charge the executor will make.
+        if (WantVialCharge(state, p)) { ++p.charge_counters; }
     }
 
     // Upkeep token creation (e.g. Thrumming Hivepool). Iterate over initial size only.
@@ -2005,6 +2155,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (!pool_noncreature.CanPay(noncreature_combined))  { return; }
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
+        // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
+        if (!SubsetPayable(state, cands, sel))               { return; }
 
         if (self_damage >= ap.life) { return; }
 

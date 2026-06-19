@@ -186,6 +186,62 @@ struct CardParams
     // When fed it yields ONE of EACH `produces` colour (net +1 mana). Modelled in the
     // mana pool as +1 wild iff another untapped source can pay the {1}, else 0.
     bool ramp_filter = false;
+
+    // --- Knights tribal (white aggro) extensions ---
+
+    // Anthem for ALL creatures you control (e.g. Benalish Marshal: "Other creatures you
+    // control get +1/+1"). On a lord_effect this applies power_bonus/tough_bonus to every
+    // creature the controller controls, regardless of subtype. Distinct from
+    // subtypes_affected (which matches only listed subtypes). Empty subtypes_affected has
+    // always meant "match nothing"; this flag is the explicit "match all creatures" case.
+    bool affects_all_creatures = false;
+
+    // Lord that excludes itself from its own buff (e.g. "Other Knights you control get
+    // +1/+1" — Inspiring Veteran, Knight Exemplar, Benalish Marshal, Marshal of Zhalfir,
+    // Haytham Kenway). When true, the lord does NOT apply its bonus to the very permanent
+    // granting it. Default false keeps the existing "All/your Slivers get +1/+1" lords
+    // (which DO buff themselves) byte-identical.
+    bool lord_excludes_self = false;
+
+    // Characteristic-defining ability: this creature's power equals the number of
+    // creatures its controller controls (e.g. Adeline, Resplendent Cathar, printed */4).
+    // Set card power to 0 in JSON; the count is added on top of counters/temp/lords at
+    // damage time. Counts every creature the controller controls (including itself and
+    // tokens), plus animated lands.
+    bool power_equals_creature_count = false;
+
+    // Cast-trigger token creation (e.g. Worthy Knight: "Whenever you cast a Knight spell,
+    // create a 1/1 white Human token"). When cast_trigger_creates_tokens > 0, casting a
+    // spell whose subtypes include cast_trigger_subtype makes that many tokens with the
+    // given P/T and subtypes. Fired from FireOnCastTriggers (both real game and rollout).
+    std::string              cast_trigger_subtype;       // subtype the CAST spell must have
+    int                      cast_trigger_creates_tokens = 0;
+    int                      cast_token_power     = 0;
+    int                      cast_token_toughness = 0;
+    std::vector<std::string> cast_token_subtypes;
+
+    // Attack-trigger token creation (e.g. Adeline, Resplendent Cathar: "Whenever you
+    // attack, for each opponent, create a 1/1 white Human token that's tapped and
+    // attacking"). When attack_creates_tokens > 0, declaring at least one attacker makes
+    // that many tokens (per opponent = 1 in goldfish) which are tapped and deal combat
+    // damage this turn, then persist. Fired at combat (real game + rollout).
+    int                      attack_creates_tokens = 0;
+    int                      attack_token_power     = 0;
+    int                      attack_token_toughness = 0;
+    std::vector<std::string> attack_token_subtypes;
+
+    // ETB library dig (e.g. Acclaimed Contender: "When this enters, if you control another
+    // Knight, look at the top five cards of your library. You may reveal a Knight ... and
+    // put it into your hand. Put the rest on the bottom of your library."). When
+    // etb_dig_count > 0 and the controller controls another creature whose subtype is in
+    // etb_dig_requires_subtypes (empty = no condition), look at the top etb_dig_count
+    // cards, move the first whose subtype is in etb_dig_subtypes into hand, and put the
+    // rest on the bottom (deterministic order; the printed "random order" is unobservable
+    // in goldfishing). Done at resolution (EffectHandler) and in the rollout
+    // (ApplyPlanDirect); the dug card is cast on a later turn (no same-turn re-solve).
+    int                      etb_dig_count = 0;
+    std::vector<std::string> etb_dig_subtypes;
+    std::vector<std::string> etb_dig_requires_subtypes;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

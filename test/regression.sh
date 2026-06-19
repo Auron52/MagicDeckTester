@@ -183,6 +183,10 @@ MANIFEST="$LOGDIR/manifest.json"
     set -- $spec; deck=$1; depth=$2; seed=$3; games=$4; budget=$5
     file=${DECK_FILE[$deck]}; prof=${DECK_PROF[$deck]}
     name="${deck}_${MODE}_d${depth}_s${seed}"
+    # depth>0 searches with bottoming + its budget; depth 0 is the clean greedy baseline
+    # (bottoming OFF). The engine default is now bottoming-ON, so d0 must opt out explicitly
+    # here: its greedy bottoming rollout cannot discriminate on a deep (London) mulligan and
+    # can bottom the deck's payoff (TH gi=63), a d0-only misplay we keep out of ground truth.
     if [ "$depth" -gt 0 ]; then lb=true; bud=$budget; else lb=false; bud=0; fi
     [ $first -eq 1 ] && first=0 || printf ',\n'
     printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "depth": %s, "budget_ms": %s, "lookahead_bottoming": %s }' \

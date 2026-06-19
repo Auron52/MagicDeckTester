@@ -494,6 +494,190 @@
             "oracle_text": "Cascade. Retrace.",
             "template": "custom",
             "parameters": { "cascade_max_mv": 4, "retrace": true }
+        },
+        {
+            "name": "Plains",
+            "mana_cost": "",
+            "types": ["Land"],
+            "supertypes": ["Basic"],
+            "subtypes": ["Plains"],
+            "keywords": [],
+            "oracle_text": "({T}: Add {W}.)",
+            "template": "basic_land",
+            "parameters": { "produces": ["W"] }
+        },
+        {
+            "name": "Tournament Grounds",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {C}.\n{T}: Add {R}, {W}, or {B}. Spend this mana only to cast a Knight or Equipment spell. [Knight/Equipment color restriction inert: the only non-Knight nonland spell in the deck (Aether Vial) costs {1} generic, payable by {C}. Modelled as producing W/R/B; note the engine treats any multi-color source as wild, so it can also pay U/G — a known dual-land approximation that slightly over-fixes the deck's blue (Haytham/Marshal).]",
+            "template": "basic_land",
+            "parameters": { "produces": ["W", "R", "B"] }
+        },
+        {
+            "name": "Dauntless Bodyguard",
+            "mana_cost": "{W}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 1,
+            "oracle_text": "As this creature enters, choose another creature you control.\nSacrifice this creature: The chosen creature gains indestructible until end of turn. [ETB choice + sacrifice-for-indestructible inert in goldfishing: the passive opponent deals no damage and casts no removal, so indestructible never matters and sacrificing this 2/1 is never correct.]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Venerable Knight",
+            "mana_cost": "{W}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 1,
+            "oracle_text": "When this creature dies, put a +1/+1 counter on target Knight you control. [Death trigger inert in goldfishing: creatures never die (no blockers, no opponent removal), so this never fires.]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Worthy Knight",
+            "mana_cost": "{1}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Whenever you cast a Knight spell, create a 1/1 white Human creature token. [Simplified: the real card's 'three or more tokens -> exchange for a 2/2 Knight' clause is not modelled; the 1/1 Human tokens are kept (a minor under-count of late-game power).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "cast_trigger_subtype": "Knight",
+                "cast_trigger_creates_tokens": 1,
+                "cast_token_power": 1,
+                "cast_token_toughness": 1,
+                "cast_token_subtypes": ["Human"]
+            }
+        },
+        {
+            "name": "Acclaimed Contender",
+            "mana_cost": "{2}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": [],
+            "power": 3,
+            "toughness": 3,
+            "oracle_text": "When this creature enters, if you control another Knight, look at the top five cards of your library. You may reveal a Knight, Aura, Equipment, or legendary artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order. [Only Knight is dug for: the deck contains no Auras/Equipment/legendary artifacts. The dug card enters hand and is cast a later turn (no same-turn re-solve).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "etb_dig_count": 5,
+                "etb_dig_subtypes": ["Knight"],
+                "etb_dig_requires_subtypes": ["Knight"]
+            }
+        },
+        {
+            "name": "Knight Exemplar",
+            "mana_cost": "{1}{W}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": ["First Strike"],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "First strike\nOther Knight creatures you control get +1/+1 and have indestructible. [Indestructible grant + first strike inert in goldfishing (no blockers, no opponent removal); the +1/+1 Knight lord is modelled.]",
+            "template": "lord_effect",
+            "parameters": {
+                "subtypes_affected": ["Knight"],
+                "power_bonus": 1,
+                "tough_bonus": 1,
+                "lord_excludes_self": true
+            }
+        },
+        {
+            "name": "Inspiring Veteran",
+            "mana_cost": "{R}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Other Knights you control get +1/+1.",
+            "template": "lord_effect",
+            "parameters": {
+                "subtypes_affected": ["Knight"],
+                "power_bonus": 1,
+                "tough_bonus": 1,
+                "lord_excludes_self": true
+            }
+        },
+        {
+            "name": "Marshal of Zhalfir",
+            "mana_cost": "{W}{U}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Other Knights you control get +1/+1.\n{W}{U}, {T}: Tap another target creature. [Tap-ability inert in goldfishing: the passive opponent has no creatures worth tapping and tapping your own is never correct; the +1/+1 Knight lord is modelled.]",
+            "template": "lord_effect",
+            "parameters": {
+                "subtypes_affected": ["Knight"],
+                "power_bonus": 1,
+                "tough_bonus": 1,
+                "lord_excludes_self": true
+            }
+        },
+        {
+            "name": "Benalish Marshal",
+            "mana_cost": "{W}{W}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": [],
+            "power": 3,
+            "toughness": 3,
+            "oracle_text": "Other creatures you control get +1/+1.",
+            "template": "lord_effect",
+            "parameters": {
+                "affects_all_creatures": true,
+                "power_bonus": 1,
+                "tough_bonus": 1,
+                "lord_excludes_self": true
+            }
+        },
+        {
+            "name": "Haytham Kenway",
+            "mana_cost": "{2}{W}{U}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": [],
+            "power": 3,
+            "toughness": 3,
+            "oracle_text": "Protection from Assassins\nOther Knights you control get +2/+2 and have protection from Assassins.\nWhen Haytham Kenway enters, for each opponent, exile up to one target creature that player controls until Haytham Kenway leaves the battlefield. [Protection + ETB exile inert in goldfishing: the opponent MAY control creatures (passive spawns), but they never block or attack, so exiling one cannot change the race to 20 and no Knights card cares about opponent creatures; protection from Assassins never matters (no Assassins; the opponent never targets Haytham). The +2/+2 Knight lord and the legend rule (3 copies) are modelled.]",
+            "template": "lord_effect",
+            "parameters": {
+                "subtypes_affected": ["Knight"],
+                "power_bonus": 2,
+                "tough_bonus": 2,
+                "lord_excludes_self": true
+            }
+        },
+        {
+            "name": "Adeline, Resplendent Cathar",
+            "mana_cost": "{1}{W}{W}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Human", "Knight"],
+            "keywords": ["Vigilance"],
+            "power": 0,
+            "toughness": 4,
+            "oracle_text": "Vigilance\nAdeline's power is equal to the number of creatures you control.\nWhenever you attack, for each opponent, create a 1/1 white Human creature token that's tapped and attacking that player or a planeswalker they control. [Printed power '*' modelled as power_equals_creature_count (base 0 + count). One token per attack (single opponent), tapped and attacking.]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "power_equals_creature_count": true,
+                "attack_creates_tokens": 1,
+                "attack_token_power": 1,
+                "attack_token_toughness": 1,
+                "attack_token_subtypes": ["Human"]
+            }
         }
     ]
 }

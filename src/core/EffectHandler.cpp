@@ -1,4 +1,5 @@
 #include "EffectHandler.h"
+#include "SpellEffects.h"
 #include <algorithm>
 
 // ---- Helpers ----
@@ -131,6 +132,15 @@ void EffectHandler::ResolveVanillaCreature(GameState& state, const StackEntry& e
                                             const CardDefinition& def)
 {
     EnterBattlefield(state, entry, def);
+
+    // ETB library dig (Acclaimed Contender): deterministic, identical to the rollout's
+    // ApplyPlanDirect dig, so the realised hand/library matches the searched line. The
+    // just-entered creature is the last on the battlefield; pass it as `self` so the
+    // "control another Knight" condition excludes it.
+    if (def.params.etb_dig_count > 0 && !state.battlefield.empty())
+    {
+        PerformEtbDig(state, entry.controller_index, def.params, &state.battlefield.back());
+    }
 }
 
 void EffectHandler::ResolveManaDork(GameState& state, const StackEntry& entry,

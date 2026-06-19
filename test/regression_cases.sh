@@ -18,11 +18,13 @@ declare -A DECK_FILE=(
   [slivers]=decks/slivers_vial.txt
   [burn]=decks/test_deck.txt
   [th]=decks/treasure_hunt.txt
+  [knights]=decks/Knights.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial.profile.json
   [burn]=decks/test_deck.profile.json
   [th]=decks/treasure_hunt.profile.json
+  [knights]=decks/Knights.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -39,6 +41,9 @@ SMOKE_CASES=(
   "th      0 1001 1000 0"
   "th      3 1001  150 100"
   "th      5 1001   75 200"
+  "knights 0 1001 1000 0"
+  "knights 3 1001  250 100"
+  "knights 5 1001  150 200"
 )
 
 # regression: ~40 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -61,6 +66,13 @@ REGRESSION_CASES=(
   "th      3 3003  500 100"
   "th      5 2002  300 200"
   "th      5 3003  300 200"
+  # knights: big creature/lord boards make EnumeratePlans subsets large, so d3/d5 are
+  # relatively heavy (~0.15-0.18s/game); kept to modest counts to stay within the mode budget.
+  "knights 0 2002 1000 0"
+  "knights 3 2002  300 100"
+  "knights 3 3003  300 100"
+  "knights 5 2002  250 200"
+  "knights 5 3003  250 200"
 )
 
 # overnight: ~80 min wide multi-seed sweep -- 4 seeds, large game counts for
@@ -102,4 +114,16 @@ OVERNIGHT_CASES=(
   "th      5 5005 1000 200"
   "th      5 6006 1000 200"
   "th      5 7007 1000 200"
+  "knights 0 4004 2000 0"
+  "knights 0 5005 2000 0"
+  "knights 0 6006 2000 0"
+  "knights 0 7007 2000 0"
+  "knights 3 4004 1000 100"
+  "knights 3 5005 1000 100"
+  "knights 3 6006 1000 100"
+  "knights 3 7007 1000 100"
+  "knights 5 4004 1000 200"
+  "knights 5 5005 1000 200"
+  "knights 5 6006 1000 200"
+  "knights 5 7007 1000 200"
 )

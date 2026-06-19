@@ -675,10 +675,11 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 
 bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial) const
 {
-    // Default heuristic (unchanged behaviour): charge up to the deck's dominant creature
-    // MV (vial_target_mv), so the Vial deploys creatures at maximum efficiency.
-    int optimal = (state.vial_target_mv > 0) ? state.vial_target_mv : vial.charge_counters;
-    bool heuristic = vial.charge_counters < optimal;
+    // Hand-aware charge policy (shared with the rollout): hold while a creature of the
+    // current MV is in hand to deploy, otherwise climb toward a bigger creature in hand
+    // (up to Haytham's MV 4), else pre-charge toward the deck's dominant MV. See
+    // WantVialCharge.
+    bool heuristic = WantVialCharge(state, vial);
     // An external controller (claude-play / human-play) may decide differently.
     if (m_external_vial_chooser) { return m_external_vial_chooser(state, vial, heuristic); }
     return heuristic;
@@ -1031,6 +1032,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             state.battlefield.push_back(perm);
             ap_v.hand.erase(hand_it);
             state.battlefield[vi].tapped = true;  // index access — safe after push_back
+            // ETB dig / legend rule for Vial-deployed creatures (mirrors the rollout's
+            // apply_vial; Vial is not a cast so no on-cast trigger fires).
+            if (copt->params.etb_dig_count > 0)
+            {
+                PerformEtbDig(state, state.active_player_index, copt->params,
+                              &state.battlefield.back());
+            }
+            if (copt->card.HasSupertype(Supertype::Legendary))
+            {
+                EnforceLegendRule(state, state.active_player_index);
+            }
             break;
         }
     };

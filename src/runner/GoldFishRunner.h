@@ -34,7 +34,7 @@ public:
                   int lookahead_depth = 0,
                   int timeout_ms = 0,
                   int num_threads = 0,    // 0 = use hardware_concurrency
-                  bool lookahead_bottoming = false);
+                  bool lookahead_bottoming = true);   // ON by default; CLI --no-lookahead-bottoming opts out
 
     // Build the initial GameState for a single game with the given seed.
     // Shared by the runner and the analyzer.

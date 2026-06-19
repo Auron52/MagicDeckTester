@@ -680,7 +680,7 @@ int main(int argc, char* argv[])
     int      num_threads    = 0;
     uint64_t seed           = 0;
     bool     seed_provided  = false;
-    bool     lookahead_bottoming = false;
+    bool     lookahead_bottoming = true;   // ON by default; opt out with --no-lookahead-bottoming
     bool     diag_depth     = false;
     bool     trace_t1       = false;
     bool        claude_play = false;
@@ -690,7 +690,8 @@ int main(int argc, char* argv[])
     for (int i = 2; i < argc; ++i)
     {
         std::string flag = argv[i];
-        if (flag == "--lookahead-bottoming") { lookahead_bottoming = true; continue; }
+        if (flag == "--lookahead-bottoming")    { lookahead_bottoming = true;  continue; }  // now the default; kept for back-compat
+        if (flag == "--no-lookahead-bottoming") { lookahead_bottoming = false; continue; }  // opt out (A/B isolation)
         if (flag == "--diag-depth")          { diag_depth = true; continue; }
         if (flag == "--trace")               { trace_t1 = true; continue; }
         if (flag == "--claude-play")         { claude_play = true; continue; }

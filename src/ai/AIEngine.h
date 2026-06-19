@@ -122,7 +122,7 @@ private:
     int                      m_lookahead_depth   = 0;
     int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
     int                      m_max_turns         = 20;  // rollout horizon; kept in sync by SetMaxTurns
-    bool                     m_lookahead_bottoming = false;
+    bool                     m_lookahead_bottoming = true;   // ON by default (opt out via runners)
     bool                     m_search_post_combat  = false;
     bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts
     std::vector<std::string> m_kept_opening_hand;

@@ -42,20 +42,59 @@ inline int LandsEdgeHeuristicFireCount(const GameState& state, int rate)
     return std::min(excess, lands_in_hand);
 }
 
+// Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
+inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&);
+
 // Fires on-cast triggers from all permanents on the battlefield (e.g. Eidolon of the
-// Great Revel). Deals damage to the active player for each permanent whose trigger
-// condition is met. Called at cast time from both AIEngine (real game) and
-// ApplyPlanDirect (lookahead).
+// Great Revel; Worthy Knight). Called at cast time from both AIEngine (real game) and
+// ApplyPlanDirect (lookahead). Two trigger families:
+//   - on_cast_trigger_*: deal damage to the active player when they cast a spell with
+//     MV <= on_cast_trigger_max_mv (Eidolon of the Great Revel).
+//   - cast_trigger_creates_tokens: create tokens when they cast a spell whose subtypes
+//     include cast_trigger_subtype (Worthy Knight: cast a Knight -> 1/1 Human token).
+// Aether Vial deployment is NOT a cast, so it never reaches here -- correct (CR 601.2).
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 {
     int mv = cast_def.card.m_mana_cost.ManaValue();
-    for (const Permanent& p : state.battlefield)
+    int active = state.active_player_index;
+
+    // Token specs are collected first: CreateToken push_backs onto the battlefield, which
+    // would invalidate a range-for over it. Iterate the original size by index, then create.
+    struct TokenSpec { int n, p, t; std::vector<std::string> subs; };
+    std::vector<TokenSpec> to_create;
+
+    int bf_size = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < bf_size; ++i)
     {
+        const Permanent& p = state.battlefield[i];
         std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
         if (!def) { continue; }
-        if (def->params.on_cast_trigger_max_mv <= 0) { continue; }
-        if (mv > def->params.on_cast_trigger_max_mv) { continue; }
-        state.players[state.active_player_index].life -= def->params.on_cast_trigger_damage;
+
+        if (def->params.on_cast_trigger_max_mv > 0 && mv <= def->params.on_cast_trigger_max_mv)
+        {
+            state.players[active].life -= def->params.on_cast_trigger_damage;
+        }
+
+        if (def->params.cast_trigger_creates_tokens > 0 && !def->params.cast_trigger_subtype.empty())
+        {
+            bool subtype_match = false;
+            for (const std::string& cs : cast_def.card.m_subtypes)
+            {
+                if (cs == def->params.cast_trigger_subtype) { subtype_match = true; break; }
+            }
+            if (subtype_match)
+            {
+                to_create.push_back({def->params.cast_trigger_creates_tokens,
+                                     def->params.cast_token_power,
+                                     def->params.cast_token_toughness,
+                                     def->params.cast_token_subtypes});
+            }
+        }
+    }
+
+    for (const TokenSpec& s : to_create)
+    {
+        for (int k = 0; k < s.n; ++k) { CreateToken(state, active, s.p, s.t, s.subs); }
     }
 }
 
@@ -66,11 +105,16 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 // all creature types and therefore match any lord.
 // For lords with scales_per_matching = true (e.g. Predatory Sliver), the bonus scales
 // with the number of other matching permanents on the battlefield.
+// `self` (when non-null) is the permanent whose bonus we are computing; a lord with
+// lord_excludes_self ("Other ... get +1/+1") does not apply to itself. Pass the
+// battlefield permanent at combat/damage time; pass nullptr for hand-card evaluation
+// (the card is not yet a lord on the battlefield, so there is nothing to exclude).
 inline std::pair<int,int> ComputeLordBonus(
     const Card&                    creature,
     const std::vector<Permanent>&  battlefield,
     int                            controller_index,
-    bool                           all_creature_types = false)
+    bool                           all_creature_types = false,
+    const Permanent*               self               = nullptr)
 {
     int pb = 0, tb = 0;
     for (const Permanent& lord : battlefield)
@@ -79,8 +123,16 @@ inline std::pair<int,int> ComputeLordBonus(
         std::optional<CardDefinition> ldef = CardDatabase::Instance().Lookup(lord.card.m_name);
         if (!ldef || ldef->tmpl != CardTemplate::LordEffect) { continue; }
 
+        // "Other ..." lords do not buff themselves (CR layer 7c): skip when the lord IS
+        // the creature being evaluated. Identity by address within this same battlefield.
+        if (ldef->params.lord_excludes_self && self != nullptr && &lord == self) { continue; }
+
         bool matches = false;
-        if (all_creature_types && !ldef->params.subtypes_affected.empty())
+        if (ldef->params.affects_all_creatures)
+        {
+            matches = true;   // anthem for every creature you control (Benalish Marshal)
+        }
+        else if (all_creature_types && !ldef->params.subtypes_affected.empty())
         {
             matches = true;
         }
@@ -269,6 +321,233 @@ inline void CreateToken(
     token.owner_index      = controller_index;
     token.entered_this_turn = true;
     state.battlefield.push_back(token);
+}
+
+// Number of creatures `controller_index` controls (including itself and tokens, plus
+// animated lands). Used for characteristic-defining power (Adeline: power = creatures
+// you control).
+inline int CreatureCount(const GameState& state, int controller_index)
+{
+    int count = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller_index) { continue; }
+        if (p.card.IsCreature() || p.is_animated)   { ++count; }
+    }
+    return count;
+}
+
+// Extra base power from a characteristic-defining ability (Adeline: power = number of
+// creatures you control). Returns 0 for ordinary creatures. The card's printed power is
+// 0 (printed *), so this is the whole base power before counters/temp/lords.
+inline int DynamicBasePower(const CardDefinition& def, const GameState& state, int controller_index)
+{
+    if (def.params.power_equals_creature_count) { return CreatureCount(state, controller_index); }
+    return 0;
+}
+
+// Fires "whenever you attack, create N tokens tapped and attacking" triggers (Adeline,
+// Resplendent Cathar: one 1/1 white Human per opponent = 1 in a single-opponent goldfish).
+// Only call when the active player is actually attacking (>= 1 declared attacker). Creates
+// the tokens TAPPED (they are "tapped and attacking") and returns the battlefield index
+// where the new tokens begin, so the caller adds [start, end) to this combat's attackers
+// (they bypass summoning sickness for this attack, then persist and attack normally next
+// turn). Token specs are gathered before creation to avoid range invalidation.
+inline int FireAttackCreateTokens(GameState& state, int controller_index)
+{
+    int start = static_cast<int>(state.battlefield.size());
+
+    struct TokenSpec { int n, p, t; std::vector<std::string> subs; };
+    std::vector<TokenSpec> to_create;
+    for (int i = 0; i < start; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller_index) { continue; }
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        if (!def || def->params.attack_creates_tokens <= 0) { continue; }
+        to_create.push_back({def->params.attack_creates_tokens,
+                             def->params.attack_token_power,
+                             def->params.attack_token_toughness,
+                             def->params.attack_token_subtypes});
+    }
+    for (const TokenSpec& s : to_create)
+    {
+        for (int k = 0; k < s.n; ++k)
+        {
+            CreateToken(state, controller_index, s.p, s.t, s.subs);
+            state.battlefield.back().tapped = true;   // tapped and attacking
+        }
+    }
+    return start;
+}
+
+// Legend rule (CR 704.5j) for `controller_index`: if they control two or more legendary
+// permanents with the same name, all but one are put into the graveyard. Goldfish-minimal:
+// keep the OLDEST (lowest battlefield index) of each name and sacrifice the rest. Decks
+// with no legendaries (burn, slivers) are untouched (no legendary permanents -> no-op).
+// Called at combat start so duplicate legendary lords (e.g. Haytham Kenway x3) cannot
+// double-count their continuous buffs in the damage step.
+inline void EnforceLegendRule(GameState& state, int controller_index)
+{
+    std::vector<std::string> seen;
+    for (std::vector<Permanent>::iterator it = state.battlefield.begin();
+         it != state.battlefield.end(); )
+    {
+        if (it->controller_index != controller_index
+            || !it->card.HasSupertype(Supertype::Legendary))
+        {
+            ++it;
+            continue;
+        }
+        bool duplicate = false;
+        for (const std::string& nm : seen) { if (nm == it->card.m_name) { duplicate = true; break; } }
+        if (duplicate)
+        {
+            state.players[it->owner_index].graveyard.push_back(it->card);
+            it = state.battlefield.erase(it);
+        }
+        else
+        {
+            seen.push_back(it->card.m_name);
+            ++it;
+        }
+    }
+}
+
+// ETB library dig (Acclaimed Contender: "if you control another Knight, look at the top
+// five, you may reveal a Knight and put it into your hand; put the rest on the bottom").
+// `self` is the permanent that just entered (excluded from the "control another <subtype>"
+// condition). Operates on `controller_index`'s library/hand. Deterministic: takes the
+// FIRST library card (top-down) whose subtype is in etb_dig_subtypes into hand, then puts
+// the other examined cards on the bottom in examined order (printed "random order" is
+// unobservable in a goldfish). Returns true if a card was put into hand. Used identically
+// by the real game (EffectHandler at resolution) and the rollout (ApplyPlanDirect) so both
+// reach the same hand/library state; the dug card is cast on a later turn (no re-solve).
+inline bool PerformEtbDig(GameState& state, int controller_index,
+                          const CardParams& pp, const Permanent* self)
+{
+    if (pp.etb_dig_count <= 0) { return false; }
+
+    // Condition: control another creature whose subtype is in etb_dig_requires_subtypes.
+    if (!pp.etb_dig_requires_subtypes.empty())
+    {
+        bool have = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller_index) { continue; }
+            if (&p == self)                              { continue; }
+            if (!p.card.IsCreature())                    { continue; }
+            for (const std::string& want : pp.etb_dig_requires_subtypes)
+            {
+                for (const std::string& cs : p.card.m_subtypes)
+                {
+                    if (cs == want) { have = true; break; }
+                }
+                if (have) { break; }
+            }
+            if (have) { break; }
+        }
+        if (!have) { return false; }
+    }
+
+    Player& ap = state.players[controller_index];
+
+    std::vector<Card> examined;
+    int n = std::min(pp.etb_dig_count, static_cast<int>(ap.library.size()));
+    for (int i = 0; i < n; ++i)
+    {
+        examined.push_back(ap.library.front());
+        ap.library.erase(ap.library.begin());
+    }
+
+    int take = -1;
+    for (int i = 0; i < static_cast<int>(examined.size()) && take < 0; ++i)
+    {
+        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(examined[i].m_name);
+        const std::vector<std::string>& subs = d ? d->card.m_subtypes : examined[i].m_subtypes;
+        for (const std::string& want : pp.etb_dig_subtypes)
+        {
+            for (const std::string& cs : subs) { if (cs == want) { take = i; break; } }
+            if (take >= 0) { break; }
+        }
+    }
+
+    bool took = false;
+    if (take >= 0) { ap.hand.push_back(examined[take]); took = true; }
+    for (int i = 0; i < static_cast<int>(examined.size()); ++i)
+    {
+        if (i == take) { continue; }
+        ap.library.push_back(std::move(examined[i]));   // rest to the bottom
+    }
+    return took;
+}
+
+// Hand-aware Aether Vial charge decision: should the active player add a charge counter
+// to `vial` this upkeep? The Vial deploys (in the main phase) a creature whose mana value
+// EQUALS the counter count, so the optimal level depends on the actual hand, not a fixed
+// deck target:
+//   - HOLD if the hand has an undeployed creature whose MV == current counters: ticking
+//     would strand it (covers "multiple 2-drops, stay on 2" and "1-drops, stay on 1").
+//   - else TICK if the hand has a creature with MV > current counters: climb toward it
+//     (lets the Vial reach MV 4 for Haytham Kenway when no cheaper creature competes).
+//   - else (no relevant creature in hand) fall back to speculative pre-charging toward the
+//     deck's dominant MV (state.vial_target_mv) — preserves the old "charge the Vial early
+//     while you have no creatures yet, so it is ready when you draw one" behavior.
+// Shared by the real engine (AIEngine::DecideVialCharge) and the rollout
+// (SimulateBeginningPhase) so both model the same charge policy. Does NOT resolve the
+// lethal/tempo tradeoff (deploy a cheaper creature now vs. climb to a lethal bigger one) —
+// that is left to a future bounded search branch.
+inline bool WantVialCharge(const GameState& state, const Permanent& vial)
+{
+    const int c      = vial.charge_counters;
+    const int target = state.vial_target_mv;     // deck's productive ("dominant MV") ceiling
+    if (target <= 0) { return false; }
+    const Player& ap = state.players[state.active_player_index];
+
+    // Only creatures at or above the current counter matter: the counter never goes back
+    // down, so a creature whose MV is BELOW c can no longer be deployed by this Vial and is
+    // irrelevant to the decision (e.g. once we have climbed to 3 for a 3-drop, leftover
+    // 2-drops in hand are unreachable and must not keep us from climbing to a finisher).
+    int count_at    = 0;   // creatures in hand of exactly the current MV
+    int count_next  = 0;   // creatures at exactly the next level (c+1) — the climb target
+    int count_above = 0;   // creatures of any higher MV (includes count_next)
+    for (const Card& card : ap.hand)
+    {
+        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(card.m_name);
+        if (!def || !def->card.IsCreature()) { continue; }
+        int mv = def->card.m_mana_cost.ManaValue();
+        if (mv == c)          { ++count_at; }
+        else if (mv == c + 1) { ++count_next; ++count_above; }
+        else if (mv > c)      { ++count_above; }
+        // mv < c: unreachable (counter only climbs) — ignored.
+    }
+
+    // We can deploy a creature at this level (and it is worth holding the counter low for —
+    // a 1-drop is trivially hard-cast, so never hold below MV 2):
+    if (count_at >= 1 && c >= 2)
+    {
+        // Prefer climbing to the NEXT level when it has a creature to deploy, since getting
+        // the bigger body down sooner usually beats banking one more cheap free deploy
+        // (the cheap creature is easy to hard-cast). EXCEPT hold when we have significantly
+        // more creatures stuck at THIS level (margin of 2 — the "lots of 2-drops" carve-out:
+        // then the free deploys we'd forgo by climbing outweigh the tempo). If the next
+        // level is EMPTY (e.g. 2-drops + a far finisher with no 3-drop), we hold and deploy
+        // here, climbing toward the finisher only later once this level is exhausted — never
+        // wasting a turn climbing through an empty level. The exact margin is a heuristic
+        // knob; the fine tempo call (and lethal/value of a specific creature) is search work.
+        constexpr int SIGNIFICANTLY_MORE = 2;
+        if (count_next >= 1 && count_at < count_next + SIGNIFICANTLY_MORE) { return true; }
+        return false;   // hold and deploy at this level
+    }
+
+    // Nothing (worth holding) to deploy at this level: climb toward any bigger creature in
+    // hand (reaches a finisher like Haytham once the cheaper levels are exhausted), keyed off
+    // the current counter so unreachable below-c creatures are ignored.
+    if (count_above >= 1) { return true; }
+
+    // No creature at or above this level: pre-charge toward the deck's productive target
+    // (keeps the Vial climbing while creature-light so it is ready when one is drawn).
+    return c < target;
 }
 
 // Returns true if the creature `def` gets replicate when cast this turn.

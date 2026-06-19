@@ -58,7 +58,7 @@ Job ParseJob(const json& jspec)
     j.depth               = jspec.value("depth", 0);
     j.budget_ms           = jspec.value("budget_ms", 0);
     j.max_turns           = jspec.value("max_turns", 20);
-    j.lookahead_bottoming = jspec.value("lookahead_bottoming", false);
+    j.lookahead_bottoming = jspec.value("lookahead_bottoming", true);   // ON by default
 
     // Profile: explicit "profile" path, else auto-detect deckname.profile.json
     // (mirrors the single-run mtg.exe behaviour exactly).

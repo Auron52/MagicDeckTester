@@ -248,31 +248,61 @@ void GameEngine::CombatPhase(GameState& state)
     state.step = Step::BeginCombat;
     ResolveStack(state);
 
+    // Legend rule (CR 704.5j): a duplicate legendary (e.g. a second Haytham Kenway) is
+    // put into the graveyard before attackers are declared, so duplicate legendary lords
+    // cannot double-count their continuous buffs. No-op for decks with no legendaries.
+    EnforceLegendRule(state, state.active_player_index);
+
     state.step = Step::DeclareAttackers;
-    std::vector<Permanent*> attackers = m_ai.DeclareAttackers(state);
+    std::vector<Permanent*> declared = m_ai.DeclareAttackers(state);
     ResolveStack(state);
 
     if (m_logger) { m_logger->StartPhase(state.turn_number, "COMBAT"); }
 
     state.step = Step::CombatDamage;
     Player& opp = state.Opponent();
-    int total_combat_dmg = 0;
-    for (Permanent* attacker : attackers)
+
+    // Convert the declared attackers to stable indices BEFORE any token creation (which
+    // push_backs onto the battlefield and would invalidate the pointers). Appending tokens
+    // does not shift existing indices.
+    std::vector<int> atk_idx;
+    atk_idx.reserve(declared.size());
+    for (Permanent* p : declared)
     {
+        atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
+    }
+
+    // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
+    // least one creature is attacking; the new tokens deal damage this combat too.
+    if (!atk_idx.empty())
+    {
+        int tok_start = FireAttackCreateTokens(state, state.active_player_index);
+        for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            atk_idx.push_back(i);
+        }
+    }
+
+    int total_combat_dmg = 0;
+    for (int idx : atk_idx)
+    {
+        Permanent* attacker = &state.battlefield[idx];
         bool animated = attacker->is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
-            attacker->card, state.battlefield, state.active_player_index, animated);
+            attacker->card, state.battlefield, state.active_player_index, animated, attacker);
         bool ds = animated
             ? HasDoubleStrikeFromLords(attacker->card, state.battlefield, state.active_player_index, true)
             : (attacker->card.HasKeyword(Keyword::DoubleStrike)
                || HasDoubleStrikeFromLords(attacker->card, state.battlefield, state.active_player_index));
         int animate_pw = 0;
-        if (animated)
+        int dynamic_pw = 0;
+        std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(attacker->card.m_name);
+        if (adef)
         {
-            std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(attacker->card.m_name);
-            if (adef) { animate_pw = adef->params.animate_power; }
+            if (animated) { animate_pw = adef->params.animate_power; }
+            dynamic_pw = DynamicBasePower(*adef, state, state.active_player_index);
         }
-        int base_power = animate_pw + attacker->EffectivePower() + lord_pb;
+        int base_power = animate_pw + dynamic_pw + attacker->EffectivePower() + lord_pb;
         int power = base_power * (ds ? 2 : 1);
         opp.life -= power;
         total_combat_dmg += power;
@@ -282,8 +312,8 @@ void GameEngine::CombatPhase(GameState& state)
 
     // Attack triggers (e.g. Leeching Sliver: each attacking Sliver costs the opponent 1 life).
     std::vector<const Permanent*> attacker_ptrs;
-    attacker_ptrs.reserve(attackers.size());
-    for (const Permanent* p : attackers) { attacker_ptrs.push_back(p); }
+    attacker_ptrs.reserve(atk_idx.size());
+    for (int idx : atk_idx) { attacker_ptrs.push_back(&state.battlefield[idx]); }
     int trigger_life_loss = CountAttackTriggerLifeLoss(
         state.battlefield, state.active_player_index, attacker_ptrs);
     if (trigger_life_loss > 0)
@@ -382,8 +412,10 @@ void GameEngine::ResolveStack(GameState& state)
         if (!def) { continue; }
 
         // For draw spells, capture hand snapshot before resolution so we can log new cards.
+        // ETB-dig creatures (Acclaimed Contender) also add a card to hand on resolution.
         bool is_draw_spell = (def->tmpl == CardTemplate::DrawUntilNonland
-                              || def->params.draw > 0);
+                              || def->params.draw > 0
+                              || def->params.etb_dig_count > 0);
         std::vector<int> hand_before_nums;
         if (m_logger && is_draw_spell)
         {

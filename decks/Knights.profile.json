@@ -1,0 +1,76 @@
+{
+  "card_scores": {
+    "Acclaimed Contender": [
+      -0.13186054338869369,
+      0.1318903318903315
+    ],
+    "Adeline, Resplendent Cathar": [
+      0.11524867457712684
+    ],
+    "Aether Vial": [
+      -0.11324746034364885,
+      -0.3635467980295566
+    ],
+    "Benalish Marshal": [
+      0.05156621040562914,
+      -0.18533220286727303
+    ],
+    "Dauntless Bodyguard": [
+      0.16433550347580628,
+      0.09296623231049495
+    ],
+    "Haytham Kenway": [
+      0.05244750060237635
+    ],
+    "Inspiring Veteran": [
+      0.1682240577261478,
+      0.006659769817664696
+    ],
+    "Knight Exemplar": [
+      0.0070453739808584714,
+      -0.09610215053763493
+    ],
+    "Marshal of Zhalfir": [
+      0.09079905176955183,
+      -0.06804511278195502
+    ],
+    "Plains": [
+      -0.0016814131217017803,
+      -0.08344469720460612,
+      -0.12146261543044456
+    ],
+    "Secluded Courtyard": [
+      0.17103458234062519,
+      0.031207133058984482
+    ],
+    "Tournament Grounds": [
+      0.03597443862186722,
+      0.08207607309817266
+    ],
+    "Unclaimed Territory": [
+      0.13103610159147472,
+      0.11901870293903283
+    ],
+    "Venerable Knight": [
+      0.2057904700508839,
+      0.015451996479809438
+    ],
+    "Worthy Knight": [
+      0.07440837323085692,
+      -0.13781104199066796
+    ]
+  },
+  "hand_score_threshold": 0.2452848038678525,
+  "mulligan": {
+    "bottom_order": "total_first",
+    "curve_check": "one_and_two",
+    "max_lands": 4,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 1,
+    "required_pieces": [],
+    "stop_at": 3
+  },
+  "version": 1,
+  "vial_target_mv": 3
+}
