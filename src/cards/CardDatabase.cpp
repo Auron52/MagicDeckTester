@@ -47,11 +47,10 @@ const char* CardTemplateToString(CardTemplate t)
 
 // ---- CardDatabase ----
 
-CardDatabase& CardDatabase::Instance()
-{
-    static CardDatabase instance;
-    return instance;
-}
+// Eager singleton storage. Instance() (inline in the header) just returns this, so the
+// hot path pays no per-call init guard. Default-constructed (empty map) at static-init
+// time; populated by LoadFromJson from main. See the header for why this is safe.
+CardDatabase CardDatabase::s_instance;
 
 void CardDatabase::LoadFromJson(const std::filesystem::path& path)
 {

@@ -336,7 +336,13 @@ struct CardDefinition
 class CardDatabase
 {
 public:
-    static CardDatabase& Instance();
+    // Eagerly-constructed static singleton (s_instance, defined in the .cpp). Inline +
+    // non-function-local so each call is a plain address load with NO per-call
+    // thread-safe-init guard -- the Meyers function-local-static form cost ~6% of a
+    // search game in guard-acquire loads on the hot Lookup/LookupCached path (callgrind).
+    // Safe to init eagerly: nothing constructs or uses the DB during static init (Register
+    // is unused; LoadFromJson runs from main), so there is no static-init-order hazard.
+    static CardDatabase& Instance() { return s_instance; }
 
     // Load all card definitions from a JSON file.
     // Can be called multiple times to load multiple files.
@@ -376,4 +382,6 @@ private:
     CardParams BuildParamsFromJson(const nlohmann::json& params) const;
 
     std::unordered_map<std::string, CardDefinition> m_cards;
+
+    static CardDatabase s_instance;   // eager singleton storage (see Instance())
 };

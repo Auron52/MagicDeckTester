@@ -2,15 +2,110 @@
 #include "Card.h"
 #include <vector>
 #include <random>
-#include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 
-class Library : public std::vector<Card>
+// Draw-from-top library backed by a single vector with a TOP CURSOR.
+//
+// Draws advance an index (m_top) instead of erasing element 0, so DrawTop is O(1)
+// rather than shifting the whole remaining library on every draw. That front-erase
+// (erase(begin())) was ~7.6% of a search game -- callgrind, vector<Card>::_M_erase.
+//
+// The already-drawn prefix [0, m_top) is dead weight; the COPY constructor/assignment
+// drop it (they copy only the live window [m_top, end)), so a deep-copied state -- the
+// search's hot path -- carries only the live library and pays the SAME copy cost as the
+// old erase-shrink form (one backing alloc + n_live Card copies). Net effect: the
+// per-draw O(n) shift disappears, the per-node copy cost is unchanged.
+//
+// Everything observable is identical to the old `: public std::vector<Card>` form --
+// the draw ORDER, size(), front()/operator[0]=top, the shuffle order -- so games stay
+// BYTE-IDENTICAL (no ground-truth re-baseline). The public surface mirrors exactly the
+// std::vector<Card> members the engine used, but every index/iterator is relative to the
+// live window [m_top, end).
+class Library
 {
 public:
-    using std::vector<Card>::vector;
+    using value_type     = Card;
+    using iterator       = std::vector<Card>::iterator;
+    using const_iterator = std::vector<Card>::const_iterator;
 
-    // Cross-platform deterministic shuffle.
+    Library() = default;
+
+    // Copy drops the drawn prefix: a deep-copied state only needs the live library, and
+    // dropping keeps the per-node copy cost equal to the old (erase-shrunk) vector form.
+    Library(const Library& o)
+        : m_cards(o.m_cards.begin() + static_cast<std::ptrdiff_t>(o.m_top), o.m_cards.end())
+    {
+    }
+    Library& operator=(const Library& o)
+    {
+        if (this != &o)
+        {
+            m_cards.assign(o.m_cards.begin() + static_cast<std::ptrdiff_t>(o.m_top), o.m_cards.end());
+            m_top = 0;
+        }
+        return *this;
+    }
+    Library(Library&&) noexcept            = default;
+    Library& operator=(Library&&) noexcept = default;
+
+    // --- size / access over the live window [m_top, end) ---
+    bool        empty() const { return m_top >= m_cards.size(); }
+    std::size_t size()  const { return m_cards.size() - m_top; }
+
+    Card&       front()       { return m_cards[m_top]; }
+    const Card& front() const { return m_cards[m_top]; }
+
+    Card&       operator[](std::size_t i)       { return m_cards[m_top + i]; }
+    const Card& operator[](std::size_t i) const { return m_cards[m_top + i]; }
+
+    iterator       begin()       { return m_cards.begin() + static_cast<std::ptrdiff_t>(m_top); }
+    iterator       end()         { return m_cards.end(); }
+    const_iterator begin() const { return m_cards.begin() + static_cast<std::ptrdiff_t>(m_top); }
+    const_iterator end()   const { return m_cards.end(); }
+
+    // --- mutation (forwarded; the passed iterators already point into the live window) ---
+    void push_back(const Card& c) { m_cards.push_back(c); }
+    void push_back(Card&& c)      { m_cards.push_back(std::move(c)); }
+
+    iterator erase(const_iterator pos)                 { return m_cards.erase(pos); }
+    iterator insert(const_iterator pos, const Card& c) { return m_cards.insert(pos, c); }
+    iterator insert(const_iterator pos, Card&& c)      { return m_cards.insert(pos, std::move(c)); }
+
+    template <class InputIt>
+    void assign(InputIt first, InputIt last)
+    {
+        m_cards.assign(first, last);
+        m_top = 0;
+    }
+
+    // --- draws ---
+    // Throws if the library is empty -- drawing from an empty library is a loss condition.
+    Card DrawTop()
+    {
+        if (empty())
+        {
+            // TODO: store an m_owner_index on Library at construction time, then throw a
+            // DrawLossException carrying that index. GameEngine catches it and sets the loss
+            // on the correct player (CR 704.5b). Required for mill win conditions where the
+            // opponent is forced to draw from an empty library.
+            throw std::runtime_error("DrawTop called on empty library");
+        }
+        // Move the top card out and advance the cursor (O(1), no shift). The vacated slot
+        // joins the dead prefix and is never read again (dropped on the next copy).
+        return std::move(m_cards[m_top++]);
+    }
+
+    // Draws exactly n cards from the top and appends them to destination.
+    void DrawN(int n, std::vector<Card>& destination)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            destination.push_back(DrawTop());
+        }
+    }
+
+    // Cross-platform deterministic shuffle of the LIVE window [m_top, end).
     //
     // std::mt19937_64 is bit-portable, but std::shuffle is implementation-defined:
     // libstdc++ and MSVC consume the engine differently, so the SAME seed yields a
@@ -26,12 +121,17 @@ public:
     //
     // A simpler hand-rolled Fisher-Yates would also be portable but would change the
     // order and require a one-time ground-truth re-baseline; deferred intentionally.
+    //
+    // Shuffling the live window [m_top, end) (n = size()) reproduces the old whole-vector
+    // shuffle byte-for-byte: at game setup m_top == 0, and on a mulligan the live window
+    // holds exactly the same cards in the same order as the old (erase-shrunk) vector, so
+    // the same algorithm over n cards yields the same permutation.
     void Shuffle(uint64_t seed)
     {
-        std::mt19937_64 rng(seed);
+        std::mt19937_64   rng(seed);
         const std::size_t n = size();
         if (n < 2) { return; }
-        Library& a = *this;
+        auto at = [&](std::size_t k) -> Card& { return m_cards[m_top + k]; };
 
         // _Rng_from_urng<ptrdiff_t, mt19937_64>::operator()(index): produce an
         // unbiased value in [0, index). For mt19937_64 (min=0, max=2^64-1) the
@@ -56,32 +156,11 @@ public:
         for (std::size_t i = 1; i < n; ++i)
         {
             std::uint64_t off = rng_index(static_cast<std::uint64_t>(i + 1)); // [0, i]
-            if (off != i) { std::swap(a[i], a[static_cast<std::size_t>(off)]); }
+            if (off != i) { std::swap(at(i), at(static_cast<std::size_t>(off))); }
         }
     }
 
-    // Draws exactly n cards from the top and appends them to destination.
-    // Throws if the library runs out — drawing from an empty library is a loss condition.
-    void DrawN(int n, std::vector<Card>& destination)
-    {
-        for (int i = 0; i < n; ++i)
-        {
-            destination.push_back(DrawTop());
-        }
-    }
-
-    Card DrawTop()
-    {
-        if (empty())
-        {
-            // TODO: store an m_owner_index on Library at construction time, then throw
-            // a DrawLossException carrying that index. GameEngine catches it and sets the
-            // loss on the correct player (CR 704.5b). Required for mill win conditions
-            // where the opponent is forced to draw from an empty library.
-            throw std::runtime_error("DrawTop called on empty library");
-        }
-        Card c = front();
-        erase(begin());
-        return c;
-    }
+private:
+    std::vector<Card> m_cards;
+    std::size_t       m_top = 0;   // index of the current top; live library is [m_top, size())
 };
