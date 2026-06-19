@@ -29,7 +29,7 @@ Preferable the UI would play out approximately like a video, with motions being 
 
 Once this phase is completed this will be a helpful application for testing decklists.
 
-5. (optional) Upgrade the UI to take human input, so their decisions can be an input into AI behaviour. This step would preferably not 
+5. (optional) Upgrade the UI to take human input, so their decisions can be an input into AI behaviour.
 
 PHASE 2
 

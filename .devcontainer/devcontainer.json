@@ -9,10 +9,12 @@
   "name": "MagicDeckTester (C++20)",
   "build": { "dockerfile": "Dockerfile" },
 
-  // Capabilities the egress firewall (init-firewall.sh) needs to program the
-  // container's own netfilter rules. These do NOT grant access to the host's
-  // network; they only let iptables/ipset run inside the container's namespace.
-  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
+  // Capabilities:
+  //   NET_ADMIN/NET_RAW -> let the egress firewall (init-firewall.sh) program the
+  //                        container's OWN netfilter rules (no host network access).
+  //   PERFMON           -> let `perf` call perf_event_open for sampling (the WSL2
+  //                        kernel defaults to perf_event_paranoid=2).
+  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW", "--cap-add=PERFMON"],
 
   // Node.js (for the Claude Code CLI, installed in postCreateCommand below) and
   // the GitHub CLI (so `gh auth login` can authenticate git as the dtippett-bot
@@ -23,9 +25,9 @@
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
 
-  // Add what the base image lacks, without a Dockerfile. Runs at create time with
-  // full network (before the firewall is applied), which is why apt mirrors need
-  // no allowlist entry:
+  // Runtime tooling the base image lacks, apt-installed at create time with full
+  // network (before the firewall is applied), which is why apt mirrors need no
+  // allowlist entry (perf is in the Dockerfile instead -- it's image-stable):
   //   ninja-build       -> the "Ninja Multi-Config" generator, so the Linux build
   //                        mirrors the Windows multi-config layout (binaries land
   //                        in build/Release/, just without the ".exe" suffix).

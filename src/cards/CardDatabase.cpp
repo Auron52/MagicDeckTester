@@ -90,14 +90,20 @@ void CardDatabase::Register(const std::string& name, CardFactory factory)
     m_cards[name] = std::move(def);
 }
 
-std::optional<CardDefinition> CardDatabase::Lookup(const std::string& name) const
+const CardDefinition* CardDatabase::Lookup(const std::string& name) const
 {
     auto it = m_cards.find(name);
     if (it == m_cards.end())
     {
-        return std::nullopt;
+        return nullptr;
     }
-    return it->second;
+    // The database is a lifetime singleton (Instance()) whose entries are never
+    // erased or relocated after load, so handing out a pointer into the map is
+    // safe. Returning a pointer (vs. the old by-value std::optional<CardDefinition>)
+    // avoids deep-copying the whole definition -- including its many vector<string>
+    // members -- on every one of the 150+ hot-path call sites. (callgrind 2026-06-19:
+    // that by-value copy was ~38% of a search-heavy game.)
+    return &it->second;
 }
 
 bool CardDatabase::IsImplemented(const std::string& name) const
@@ -147,6 +153,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Flash")         { return Keyword::Flash; }
     if (s == "Menace")        { return Keyword::Menace; }
     if (s == "Prowess")       { return Keyword::Prowess; }
+    if (s == "Exalted")       { return Keyword::Exalted; }
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -352,6 +359,25 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.etb_dig_subtypes.push_back(s);
     for (const std::string& s : params.value("etb_dig_requires_subtypes", json::array()))
         p.etb_dig_requires_subtypes.push_back(s);
+
+    // --- Anti-Lifegain (Tainted Remedy / Aria of Flame) ---
+    p.lifegain_to_loss          = params.value("lifegain_to_loss", false);
+    p.opponent_lifegain         = params.value("opponent_lifegain", 0);
+    p.etb_opponent_lifegain     = params.value("etb_opponent_lifegain", 0);
+    p.verse_damage              = params.value("verse_damage", false);
+    p.alt_lifegain_cost         = params.value("alt_lifegain_cost", 0);
+    p.alt_cost_requires_subtype = params.value("alt_cost_requires_subtype", std::string{});
+    p.destroy_all_enchantments  = params.value("destroy_all_enchantments", false);
+    p.tutor_to_hand             = params.value("tutor_to_hand", false);
+    p.tutor_to_top              = params.value("tutor_to_top", false);
+    for (const std::string& s : params.value("tutor_types", json::array()))
+        p.tutor_types.push_back(s);
+    p.tutor_heuristic           = params.value("tutor_heuristic", std::string{});
+    p.controller_lifegain_equals_power = params.value("controller_lifegain_equals_power", false);
+    p.tap_opponent_lifegain     = params.value("tap_opponent_lifegain", 0);
+    for (const std::string& s : params.value("fetch_land_types", json::array()))
+        p.fetch_land_types.push_back(s);
+    p.target_own_creature       = params.value("target_own_creature", false);
 
     return p;
 }

@@ -142,7 +142,7 @@ void GameEngine::UpkeepStep(GameState& state)
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || !def->params.upkeep_adds_charge) { continue; }
 
         // Vial-as-a-choice: the charge decision is delegated to the AI. Its default is the
@@ -158,7 +158,7 @@ void GameEngine::UpkeepStep(GameState& state)
     {
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != state.active_player_index) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.upkeep_creates_tokens <= 0) { continue; }
         for (int t = 0; t < def->params.upkeep_creates_tokens; ++t)
         {
@@ -283,6 +283,10 @@ void GameEngine::CombatPhase(GameState& state)
         }
     }
 
+    // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
+    int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
+                        ? CountExalted(state.battlefield, state.active_player_index) : 0;
+
     int total_combat_dmg = 0;
     for (int idx : atk_idx)
     {
@@ -296,13 +300,13 @@ void GameEngine::CombatPhase(GameState& state)
                || HasDoubleStrikeFromLords(attacker->card, state.battlefield, state.active_player_index));
         int animate_pw = 0;
         int dynamic_pw = 0;
-        std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(attacker->card.m_name);
+        const CardDefinition* adef = CardDatabase::Instance().LookupCached(attacker->card);
         if (adef)
         {
             if (animated) { animate_pw = adef->params.animate_power; }
             dynamic_pw = DynamicBasePower(*adef, state, state.active_player_index);
         }
-        int base_power = animate_pw + dynamic_pw + attacker->EffectivePower() + lord_pb;
+        int base_power = animate_pw + dynamic_pw + attacker->EffectivePower() + lord_pb + exalted_bonus;
         int power = base_power * (ds ? 2 : 1);
         opp.life -= power;
         total_combat_dmg += power;
@@ -362,7 +366,7 @@ void GameEngine::CleanupStep(GameState& state)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
-        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        auto def = CardDatabase::Instance().LookupCached(p.card);
         if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
     }
 
@@ -408,7 +412,7 @@ void GameEngine::ResolveStack(GameState& state)
     {
         StackEntry entry = state.stack.back();
         state.stack.pop_back();
-        auto def = CardDatabase::Instance().Lookup(entry.source.m_name);
+        auto def = CardDatabase::Instance().LookupCached(entry.source);
         if (!def) { continue; }
 
         // For draw spells, capture hand snapshot before resolution so we can log new cards.

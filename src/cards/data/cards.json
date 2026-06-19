@@ -678,6 +678,465 @@
                 "attack_token_toughness": 1,
                 "attack_token_subtypes": ["Human"]
             }
+        },
+        {
+            "name": "Forest",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "supertypes": [
+                "Basic"
+            ],
+            "subtypes": [
+                "Forest"
+            ],
+            "keywords": [],
+            "oracle_text": "({T}: Add {G}.)",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "G"
+                ]
+            }
+        },
+        {
+            "name": "Temple Garden",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [
+                "Forest",
+                "Plains"
+            ],
+            "keywords": [],
+            "oracle_text": "({T}: Add G or W.) As this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "G",
+                    "W"
+                ],
+                "etb_pay_life_to_untap": 2
+            }
+        },
+        {
+            "name": "Overgrown Tomb",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [
+                "Swamp",
+                "Forest"
+            ],
+            "keywords": [],
+            "oracle_text": "({T}: Add B or G.) As this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "B",
+                    "G"
+                ],
+                "etb_pay_life_to_untap": 2
+            }
+        },
+        {
+            "name": "Stomping Ground",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [
+                "Mountain",
+                "Forest"
+            ],
+            "keywords": [],
+            "oracle_text": "({T}: Add R or G.) As this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "R",
+                    "G"
+                ],
+                "etb_pay_life_to_untap": 2
+            }
+        },
+        {
+            "name": "Blood Crypt",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [
+                "Swamp",
+                "Mountain"
+            ],
+            "keywords": [],
+            "oracle_text": "({T}: Add B or R.) As this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "B",
+                    "R"
+                ],
+                "etb_pay_life_to_untap": 2
+            }
+        },
+        {
+            "name": "Godless Shrine",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [
+                "Plains",
+                "Swamp"
+            ],
+            "keywords": [],
+            "oracle_text": "({T}: Add W or B.) As this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "B"
+                ],
+                "etb_pay_life_to_untap": 2
+            }
+        },
+        {
+            "name": "Windswept Heath",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "B",
+                    "R",
+                    "G"
+                ],
+                "fetch_land_types": [
+                    "Forest",
+                    "Plains"
+                ]
+            }
+        },
+        {
+            "name": "Marsh Flats",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Swamp card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "B",
+                    "R",
+                    "G"
+                ],
+                "fetch_land_types": [
+                    "Plains",
+                    "Swamp"
+                ]
+            }
+        },
+        {
+            "name": "Bloodstained Mire",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "B",
+                    "R",
+                    "G"
+                ],
+                "fetch_land_types": [
+                    "Swamp",
+                    "Mountain"
+                ]
+            }
+        },
+        {
+            "name": "Wooded Foothills",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "B",
+                    "R",
+                    "G"
+                ],
+                "fetch_land_types": [
+                    "Mountain",
+                    "Forest"
+                ]
+            }
+        },
+        {
+            "name": "Grove of the Burnwillows",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {C}.\n{T}: Add {R} or {G}. Each opponent gains 1 life. [Modelled as an R/G dual whose every (coloured) tap makes the opponent gain 1 -> a 1-damage drip with Tainted Remedy out. The colourless-only {C} mode (no lifegain) is not modelled; the engine always taps it for R/G, so the drip applies to every tap (a slight overcount of the drip, only relevant under Remedy).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "R",
+                    "G"
+                ],
+                "tap_opponent_lifegain": 1
+            }
+        },
+        {
+            "name": "Birds of Paradise",
+            "mana_cost": "{G}",
+            "types": [
+                "Creature"
+            ],
+            "subtypes": [
+                "Bird"
+            ],
+            "keywords": [
+                "Flying"
+            ],
+            "power": 0,
+            "toughness": 1,
+            "oracle_text": "Flying\n{T}: Add one mana of any color.",
+            "template": "mana_dork",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "U",
+                    "B",
+                    "R",
+                    "G"
+                ]
+            }
+        },
+        {
+            "name": "Ignoble Hierarch",
+            "mana_cost": "{G}",
+            "types": [
+                "Creature"
+            ],
+            "subtypes": [
+                "Goblin",
+                "Shaman"
+            ],
+            "keywords": [
+                "Exalted"
+            ],
+            "power": 0,
+            "toughness": 1,
+            "oracle_text": "Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)\n{T}: Add {B}, {R}, or {G}.",
+            "template": "mana_dork",
+            "parameters": {
+                "produces": [
+                    "B",
+                    "R",
+                    "G"
+                ]
+            }
+        },
+        {
+            "name": "Skyshroud Cutter",
+            "mana_cost": "{3}{G}",
+            "types": [
+                "Creature"
+            ],
+            "subtypes": [
+                "Beast"
+            ],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have each other player gain 5 life.\n[Alt cost modelled: free 2/2 that makes the opponent gain 5 (-> 5 damage with Tainted Remedy out).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "alt_lifegain_cost": 5,
+                "alt_cost_requires_subtype": "Forest"
+            }
+        },
+        {
+            "name": "Plague Drone",
+            "mana_cost": "{3}{B}",
+            "types": [
+                "Creature"
+            ],
+            "subtypes": [
+                "Demon"
+            ],
+            "keywords": [
+                "Flying"
+            ],
+            "power": 3,
+            "toughness": 3,
+            "oracle_text": "Flying\nRot Fly — If an opponent would gain life, that player loses that much life instead. [Rot Fly modelled as a Tainted Remedy-style replacement (lifegain_to_loss).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "lifegain_to_loss": true
+            }
+        },
+        {
+            "name": "Tainted Remedy",
+            "mana_cost": "{2}{B}",
+            "types": [
+                "Enchantment"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "If an opponent would gain life, that player loses that much life instead.",
+            "template": "custom",
+            "parameters": {
+                "lifegain_to_loss": true
+            }
+        },
+        {
+            "name": "Aria of Flame",
+            "mana_cost": "{2}{R}",
+            "types": [
+                "Enchantment"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "When this enchantment enters, each opponent gains 10 life.\nWhenever you cast an instant or sorcery spell, put a verse counter on this enchantment, then it deals damage equal to the number of verse counters on it to target player or planeswalker. [ETB lifegain routed through OpponentGainsLife (10 damage with Tainted Remedy out); verse damage targets the opponent.]",
+            "template": "custom",
+            "parameters": {
+                "etb_opponent_lifegain": 10,
+                "verse_damage": true
+            }
+        },
+        {
+            "name": "Fiery Justice",
+            "mana_cost": "{R}{G}{W}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Fiery Justice deals 5 damage divided as you choose among any number of targets. Target opponent gains 5 life. [Divided damage modelled as 5 to the opponent's face (optimal vs a passive opponent); the +5 opponent lifegain is reversed to -5 with Tainted Remedy, for 10 total.]",
+            "template": "direct_damage",
+            "parameters": {
+                "damage": 5,
+                "targeting": "any",
+                "opponent_lifegain": 5
+            }
+        },
+        {
+            "name": "Swords to Plowshares",
+            "mana_cost": "{W}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Exile target creature. Its controller gains life equal to its power. [Exile + the controller-lifegain rider: targeting an opponent creature with Tainted Remedy out deals damage equal to its power. Inert without Remedy vs a passive opponent.]",
+            "template": "removal",
+            "parameters": {
+                "damage": 1,
+                "targeting": "creature",
+                "controller_lifegain_equals_power": true
+            }
+        },
+        {
+            "name": "Invigorate",
+            "mana_cost": "{2}{G}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have an opponent gain 3 life.\nTarget creature gets +4/+4 until end of turn. [+4/+4 modelled on your own best attacker (until end of turn). Alt cost: free, opponent gains 3 (-> 3 damage with Tainted Remedy), offered only while a Remedy effect is active.]",
+            "template": "pump_spell",
+            "parameters": {
+                "power_bonus": 4,
+                "tough_bonus": 4,
+                "targeting": "creature",
+                "target_own_creature": true,
+                "alt_lifegain_cost": 3,
+                "alt_cost_requires_subtype": "Forest"
+            }
+        },
+        {
+            "name": "Reverent Silence",
+            "mana_cost": "{3}{G}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have each other player gain 6 life.\nDestroy all enchantments. [Alt cost: free, opponent gains 6 (-> 6 damage with Tainted Remedy). Destroy-all-enchantments includes your own Aria/Remedy -- the search avoids casting it when it would break the combo.]",
+            "template": "custom",
+            "parameters": {
+                "destroy_all_enchantments": true,
+                "alt_lifegain_cost": 6,
+                "alt_cost_requires_subtype": "Forest"
+            }
+        },
+        {
+            "name": "Idyllic Tutor",
+            "mana_cost": "{2}{W}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Search your library for an enchantment card, reveal it, put it into your hand, then shuffle. [Tutor target: intended default is SEARCHED (pending); this deck uses the enabler_then_wincon heuristic override -- fetch Tainted Remedy first (the only fetchable enabler) while no Remedy/Plague Drone effect is active, else Aria of Flame.]",
+            "template": "custom",
+            "parameters": {
+                "tutor_to_hand": true,
+                "tutor_types": [
+                    "Enchantment"
+                ],
+                "tutor_heuristic": "enabler_then_wincon"
+            }
+        },
+        {
+            "name": "Enlightened Tutor",
+            "mana_cost": "{W}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top. [Tutor target: SEARCHED by default (pending); this deck uses the enabler_then_wincon heuristic override (Tainted Remedy first, else Aria). Placed on top -> drawn next turn.]",
+            "template": "custom",
+            "parameters": {
+                "tutor_to_top": true,
+                "tutor_types": [
+                    "Artifact",
+                    "Enchantment"
+                ],
+                "tutor_heuristic": "enabler_then_wincon"
+            }
         }
     ]
 }

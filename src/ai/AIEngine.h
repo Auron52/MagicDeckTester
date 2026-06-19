@@ -215,8 +215,10 @@ private:
     bool TryPlayLand(GameState& state);
 
     // Play a specific land (by name) from hand. Used by the land search in TakeTurn
-    // to apply a chosen candidate to the real state or a search copy.
-    bool TryPlaySpecificLand(GameState& state, const std::string& name);
+    // to apply a chosen candidate to the real state or a search copy. fetch_target names
+    // the searched fetchland target (Plan::fetch_target); empty -> heuristic top pick.
+    bool TryPlaySpecificLand(GameState& state, const std::string& name,
+                             const std::string& fetch_target = "");
 
     // "Dig when stuck" land abilities: cycling (e.g. Lonely Sandbar) and sacrifice-to-draw
     // (e.g. Fiery Islet) to draw toward Treasure Hunt. Gated by ShouldConsiderDig (no draw
@@ -249,7 +251,10 @@ private:
                     bool for_creature = true);
 
     // Remove a spell from hand, tap sources to pay, and push a StackEntry.
-    void CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available);
+    // alt_lifegain > 0 casts via an alternative cost (Invigorate / Skyshroud Cutter / Reverent
+    // Silence): pay no mana and instead make the opponent gain alt_lifegain life.
+    void CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
+                           int alt_lifegain = 0, const std::string& tutor_target = "");
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;

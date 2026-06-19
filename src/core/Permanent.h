@@ -23,6 +23,7 @@ struct Permanent
     int       temp_power_bonus     = 0;    // accumulated "until end of turn" boosts; reset each cleanup
     int       temp_tough_bonus     = 0;
     int       charge_counters      = 0;    // Aether Vial charge counter count
+    int       verse_counters       = 0;    // Aria of Flame verse counter count
     bool      is_animated          = false; // land animated as a creature (e.g. Mutavault); reset each cleanup
 
     int  EffectivePower()     const;

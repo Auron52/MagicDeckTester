@@ -45,6 +45,17 @@ struct Action
                                        // Fiery Islet); false = cycle a land from hand (e.g. Lonely
                                        // Sandbar). card_name = the source land; cost = its
                                        // cycling_cost / sacrifice_draw_cost.
+    bool        alt_cost       = false;// CastFromHand via an alternative cost (Invigorate /
+                                       // Skyshroud Cutter / Reverent Silence): pay no mana and
+                                       // instead make the opponent gain alt_lifegain life (-> that
+                                       // much damage with Tainted Remedy). cost is empty.
+    int         alt_lifegain   = 0;    // opponent lifegain paid as the alt cost (see alt_cost)
+    std::string tutor_target;          // CastFromHand of a tutor: the specific library card to
+                                       // fetch. When the heuristic is UNSURE, CollectActions emits
+                                       // one variant per candidate (same hand_index -> mutually
+                                       // exclusive) so the search picks; one variant when it is
+                                       // sure. Empty for non-tutors (PerformTutor falls back to
+                                       // the heuristic's top pick).
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;
@@ -101,6 +112,15 @@ public:
         // rollout re-searches lands every turn exactly as the real game does.
         bool        land_decided = false;
         std::string land_to_play;
+
+        // Fetchland search target (Pass 2 of the real-fetch model): when land_to_play is a
+        // fetchland and FetchCandidates returned MORE THAN ONE legal target, the land
+        // enumeration emits one Plan variant per candidate, each carrying the chosen target
+        // here so the rollout (PlayLandByName -> PerformFetch) and the realised game
+        // (TryPlaySpecificLand) fetch the SAME land. Empty == use the heuristic's top pick
+        // (the single-candidate / Pass-1 case). Parallels Action::tutor_target for the
+        // [[heuristic-then-search]] "heuristic narrows, search decides" land choice.
+        std::string fetch_target;
 
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new

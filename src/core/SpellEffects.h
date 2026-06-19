@@ -4,6 +4,7 @@
 #include "../cards/CardDatabase.h"
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 
 // Land's Edge firing heuristic: how many lands to discard to a Land's Edge of the
 // given `rate` this activation. Fire all when it is lethal; otherwise fire only the
@@ -22,7 +23,7 @@ inline int LandsEdgeHeuristicFireCount(const GameState& state, int rate)
     int lands_in_hand = 0;
     for (const Card& c : ap.hand)
     {
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (def ? def->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
     }
     if (lands_in_hand == 0) { return 0; }
@@ -31,7 +32,7 @@ inline int LandsEdgeHeuristicFireCount(const GameState& state, int rate)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
     }
     int max_hand = unlimited_hand ? std::numeric_limits<int>::max() : 7;
@@ -44,6 +45,265 @@ inline int LandsEdgeHeuristicFireCount(const GameState& state, int rate)
 
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&);
+
+// ---- Anti-Lifegain (Tainted Remedy / Aria of Flame) shared helpers ----------
+//
+// These back the Anti-Lifegain deck, whose entire damage output flows through "an
+// opponent gains life" effects that a Tainted Remedy (or Plague Drone's Rot Fly) turns
+// into life LOSS. All of them are used identically by the real engine (EffectHandler /
+// AIEngine) and the search rollout (TurnSolver) so both model the reversal the same way.
+
+// True if `controller_index` controls a permanent whose ability replaces opponent life
+// GAIN with life LOSS (Tainted Remedy; Plague Drone's Rot Fly).
+inline bool RemedyActive(const GameState& state, int controller_index)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller_index) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        if (def && def->params.lifegain_to_loss) { return true; }
+    }
+    return false;
+}
+
+// True if the named card is a lifegain_to_loss enabler (Tainted Remedy / Plague Drone). Used
+// to cast enablers FIRST within a turn so same-turn payloads resolve with the enabler active.
+inline bool IsLifegainToLossCard(const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    return d && d->params.lifegain_to_loss;
+}
+
+// Apply "the opponent gains `amount` life" from an effect `controller_index` controls.
+// With a Tainted Remedy / Plague Drone in play the gain is replaced by an equal life LOSS
+// (CR 614.12) -- toward the goldfish win. Marks opponent_lost_life_this_turn when life
+// actually decreases (spectacle bookkeeping). Without the replacement the opponent simply
+// gains the life (setting the clock back), which is faithful: casting these riders without
+// a Remedy out genuinely helps the opponent, and the clairvoyant search will sequence the
+// Remedy first.
+inline void OpponentGainsLife(GameState& state, int controller_index, int amount)
+{
+    if (amount <= 0) { return; }
+    int opp = 1 - controller_index;
+    if (RemedyActive(state, controller_index))
+    {
+        state.players[opp].life -= amount;
+        state.opponent_lost_life_this_turn = true;
+    }
+    else
+    {
+        state.players[opp].life += amount;
+    }
+}
+
+// True if `controller_index` controls a permanent with the given subtype (e.g. "Forest").
+// Backs the alt-cost condition "If you control a Forest, rather than pay this spell's mana
+// cost ...". Land subtypes (Forest/Plains/...) are stored in the card's m_subtypes.
+inline bool ControlsSubtype(const GameState& state, int controller_index,
+                            const std::string& subtype)
+{
+    if (subtype.empty()) { return true; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller_index) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        const std::vector<std::string>& subs = def ? def->card.m_subtypes : p.card.m_subtypes;
+        for (const std::string& s : subs) { if (s == subtype) { return true; } }
+    }
+    return false;
+}
+
+// True if `card`'s card-type set includes the named type ("Enchantment"/"Artifact"/
+// "Creature"/"Land"/"Instant"/"Sorcery"). Used by tutor type filters.
+inline bool CardMatchesTypeName(const Card& card, const std::string& type_name)
+{
+    if (type_name == "Enchantment") { return card.HasType(CardType::Enchantment); }
+    if (type_name == "Artifact")    { return card.HasType(CardType::Artifact); }
+    if (type_name == "Creature")    { return card.IsCreature(); }
+    if (type_name == "Land")        { return card.IsLand(); }
+    if (type_name == "Instant")     { return card.IsInstant(); }
+    if (type_name == "Sorcery")     { return card.IsSorcery(); }
+    return false;
+}
+
+// Tutor decision (Idyllic / Enlightened): returns the ORDERED list of library card NAMES the
+// tutor should consider fetching. This is the first instance of the intended general pattern --
+// a deck/archetype heuristic returns a CANDIDATE SET, and the caller treats it as:
+//   - exactly ONE candidate  => the heuristic made a CLEAR decision (no search), or
+//   - MORE THAN ONE candidate => the heuristic is UNSURE; the search enumerates each as a
+//     mutually-exclusive plan variant and keeps the best ("search sometimes").
+// (Down the road this heuristic moves to a deck/archetype file behind a decision interface;
+// for now it lives here.) Returns {} when the library holds no legal target (tutor whiffs).
+//
+// The anti-lifegain rule: fetch a combo ENABLER (lifegain_to_loss) while we have none we can
+// get online soon; otherwise fetch the WINCON (verse_damage = Aria). "Online soon" = a Remedy
+// ACTIVE, or one in HAND we can AFFORD (Tainted Remedy {2}{B} is cheap; Plague Drone {3}{B} we
+// cannot yet pay for is NOT). The one genuinely uncertain case -- a held-but-unaffordable
+// Plague Drone as our ONLY enabler -- is returned as TWO candidates (enabler + wincon) for the
+// search to decide, rather than guessed.
+inline std::vector<std::string> TutorCandidates(const GameState& state, int controller_index,
+                                                const CardParams& pp)
+{
+    const Player& ap = state.players[controller_index];
+
+    // Best enabler / wincon / any matching card available in the library.
+    std::string enabler_name, wincon_name, any_name;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
+        const Card& card = def ? def->card : lc;
+        bool type_ok = false;
+        for (const std::string& t : pp.tutor_types) { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+        if (!type_ok) { continue; }
+        if (any_name.empty()) { any_name = lc.m_name; }
+        if (def && def->params.lifegain_to_loss && enabler_name.empty()) { enabler_name = lc.m_name; }
+        if (def && def->params.verse_damage      && wincon_name.empty())  { wincon_name  = lc.m_name; }
+    }
+
+    // Do we already have an enabler we can get online soon?
+    bool ready_enabler = RemedyActive(state, controller_index);
+    bool unaffordable_enabler_in_hand = false;
+    if (!ready_enabler)
+    {
+        int sources = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork)) { ++sources; }
+        }
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || !d->params.lifegain_to_loss) { continue; }
+            if (sources >= d->card.m_mana_cost.ManaValue()) { ready_enabler = true; break; }
+            unaffordable_enabler_in_hand = true;
+        }
+    }
+
+    std::vector<std::string> out;
+    if (ready_enabler)
+    {
+        // Clear: have an enabler coming -> fetch the wincon (fall back to enabler/any).
+        const std::string& pick = !wincon_name.empty() ? wincon_name
+                                : !enabler_name.empty() ? enabler_name : any_name;
+        if (!pick.empty()) { out.push_back(pick); }
+    }
+    else if (unaffordable_enabler_in_hand && !enabler_name.empty() && !wincon_name.empty())
+    {
+        // UNSURE: only enabler is a held-but-unaffordable Plague Drone -> let the search pick
+        // between coming online cheaper now (enabler) vs. having the payoff ready (wincon).
+        out.push_back(enabler_name);
+        out.push_back(wincon_name);
+    }
+    else
+    {
+        // Clear: no enabler available -> fetch one (fall back to wincon/any).
+        const std::string& pick = !enabler_name.empty() ? enabler_name
+                                : !wincon_name.empty() ? wincon_name : any_name;
+        if (!pick.empty()) { out.push_back(pick); }
+    }
+    return out;
+}
+
+// Execute a tutor (Idyllic / Enlightened): fetch `target_name` from the library and move it to
+// hand (to_hand) or the top of the library (to_top). When target_name is empty, fall back to
+// the heuristic's top candidate (TutorCandidates) -- so any path that doesn't carry a searched
+// choice still plays the heuristic. The library is treated as already shuffled (the remaining
+// order past the tutored card is a goldfish-irrelevant simplification that keeps the real game
+// and rollout byte-consistent). Shared by EffectHandler (real) and ApplyPlanDirect (rollout).
+inline void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
+                         const std::string& target_name = "")
+{
+    std::string want = target_name;
+    if (want.empty())
+    {
+        std::vector<std::string> cands = TutorCandidates(state, controller_index, pp);
+        if (cands.empty()) { return; }
+        want = cands.front();
+    }
+    Player& ap = state.players[controller_index];
+    int idx = -1;
+    for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+    {
+        if (ap.library[i].m_name == want) { idx = i; break; }
+    }
+    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    Card c = ap.library[idx];
+    ap.library.erase(ap.library.begin() + idx);
+    if (pp.tutor_to_hand)     { ap.hand.push_back(std::move(c)); }
+    else if (pp.tutor_to_top) { ap.library.insert(ap.library.begin(), std::move(c)); }
+}
+
+// Exalted (Ignoble Hierarch): "Whenever a creature you control attacks ALONE, that creature
+// gets +1/+1 until end of turn" -- once per Exalted ability the controller has. Returns the
+// total +1/+1 bonus to apply to a lone attacker = the number of Exalted permanents controlled.
+// Returns 0 (inert) for any deck whose permanents have no Exalted keyword. Callers apply it
+// only when exactly one creature attacks.
+inline int CountExalted(const std::vector<Permanent>& battlefield, int controller_index)
+{
+    int n = 0;
+    for (const Permanent& p : battlefield)
+    {
+        if (p.controller_index == controller_index && p.card.HasKeyword(Keyword::Exalted)) { ++n; }
+    }
+    return n;
+}
+
+// Forward declaration: CanAttackFull is defined later in this header.
+inline bool CanAttackFull(const Permanent&, const std::vector<Permanent>&, int);
+
+// Battlefield index of the controller's best attacker (highest effective power among creatures
+// that can attack this turn), or -1. Used to target an own-creature pump (Invigorate) at the
+// creature whose extra damage matters most.
+inline int FindBestOwnAttacker(const GameState& state, int controller_index)
+{
+    int best = -1, best_pw = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller_index) { continue; }
+        if (!CanAttackFull(p, state.battlefield, controller_index)) { continue; }
+        int pw = p.EffectivePower();
+        if (pw > best_pw) { best_pw = pw; best = i; }
+    }
+    return best;
+}
+
+// True if a free alt-cost payload `def` in `controller_index`'s hand should be AUTO-FIRED now:
+// it has an alt lifegain cost, is SAFE (not Reverent's destroy-all-enchantments, which stays a
+// search decision), a Remedy is active so the opponent's "gain" becomes damage, the alt-cost
+// subtype (a Forest) is controlled, and -- if it needs an own creature (Invigorate's pump) --
+// one exists to target. Firing such a payload is strictly good in a goldfish (free face
+// damage), so it is applied deterministically rather than enumerated as a search choice (which
+// would blow up the plan count, since free actions are never mana-pruned). Shared by the
+// rollout (ApplyPlanDirect) and the real engine (AIEngine) so both fire the same payloads.
+inline bool CanAutoFireAltPayload(const GameState& state, int controller_index,
+                                  const CardDefinition& def)
+{
+    if (def.params.alt_lifegain_cost <= 0)        { return false; }
+    if (def.params.destroy_all_enchantments)      { return false; }   // risky -> searched
+    if (!RemedyActive(state, controller_index))   { return false; }
+    if (!ControlsSubtype(state, controller_index, def.params.alt_cost_requires_subtype)) { return false; }
+    if (def.params.target_own_creature && FindBestOwnAttacker(state, controller_index) < 0) { return false; }
+    return true;
+}
+
+// Destroy all enchantment permanents (Reverent Silence) -- including the caster's own Aria of
+// Flame / Tainted Remedy. Each goes to its owner's graveyard. Shared by both paths.
+inline void DestroyAllEnchantments(GameState& state)
+{
+    for (std::vector<Permanent>::iterator it = state.battlefield.begin();
+         it != state.battlefield.end(); )
+    {
+        if (it->card.HasType(CardType::Enchantment))
+        {
+            state.players[it->owner_index].graveyard.push_back(it->card);
+            it = state.battlefield.erase(it);
+        }
+        else { ++it; }
+    }
+}
 
 // Fires on-cast triggers from all permanents on the battlefield (e.g. Eidolon of the
 // Great Revel; Worthy Knight). Called at cast time from both AIEngine (real game) and
@@ -67,12 +327,24 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
     for (int i = 0; i < bf_size; ++i)
     {
         const Permanent& p = state.battlefield[i];
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
 
         if (def->params.on_cast_trigger_max_mv > 0 && mv <= def->params.on_cast_trigger_max_mv)
         {
             state.players[active].life -= def->params.on_cast_trigger_damage;
+        }
+
+        // Aria of Flame verse engine: casting an instant or sorcery puts a verse counter on
+        // this enchantment, then it deals (verse counters) damage to the opponent. This is
+        // real damage (not a lifegain event), so Tainted Remedy does not touch it. Aria is
+        // not on the battlefield when it is itself cast, so it never self-triggers.
+        if (def->params.verse_damage
+            && (cast_def.card.IsInstant() || cast_def.card.IsSorcery()))
+        {
+            state.battlefield[i].verse_counters += 1;
+            state.players[1 - active].life -= state.battlefield[i].verse_counters;
+            state.opponent_lost_life_this_turn = true;
         }
 
         if (def->params.cast_trigger_creates_tokens > 0 && !def->params.cast_trigger_subtype.empty())
@@ -120,7 +392,7 @@ inline std::pair<int,int> ComputeLordBonus(
     for (const Permanent& lord : battlefield)
     {
         if (lord.controller_index != controller_index) { continue; }
-        std::optional<CardDefinition> ldef = CardDatabase::Instance().Lookup(lord.card.m_name);
+        const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
         if (!ldef || ldef->tmpl != CardTemplate::LordEffect) { continue; }
 
         // "Other ..." lords do not buff themselves (CR layer 7c): skip when the lord IS
@@ -198,7 +470,7 @@ inline bool HasDoubleStrikeFromLords(
     for (const Permanent& lord : battlefield)
     {
         if (lord.controller_index != controller_index) { continue; }
-        std::optional<CardDefinition> ldef = CardDatabase::Instance().Lookup(lord.card.m_name);
+        const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
         if (!ldef || !ldef->params.grants_double_strike) { continue; }
         if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
         for (const std::string& sub : ldef->params.subtypes_affected)
@@ -225,7 +497,7 @@ inline bool HasHasteFromLords(
     for (const Permanent& lord : battlefield)
     {
         if (lord.controller_index != controller_index) { continue; }
-        std::optional<CardDefinition> ldef = CardDatabase::Instance().Lookup(lord.card.m_name);
+        const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
         if (!ldef || !ldef->params.grants_haste) { continue; }
         if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
         for (const std::string& sub : ldef->params.subtypes_affected)
@@ -275,7 +547,7 @@ inline int CountAttackTriggerLifeLoss(
     for (const Permanent& src : battlefield)
     {
         if (src.controller_index != controller_index) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(src.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(src.card);
         if (!def || def->params.attack_trigger_life_loss <= 0) { continue; }
 
         int count = 0;
@@ -363,7 +635,7 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index)
     {
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != controller_index) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.attack_creates_tokens <= 0) { continue; }
         to_create.push_back({def->params.attack_creates_tokens,
                              def->params.attack_token_power,
@@ -463,7 +735,7 @@ inline bool PerformEtbDig(GameState& state, int controller_index,
     int take = -1;
     for (int i = 0; i < static_cast<int>(examined.size()) && take < 0; ++i)
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(examined[i].m_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(examined[i]);
         const std::vector<std::string>& subs = d ? d->card.m_subtypes : examined[i].m_subtypes;
         for (const std::string& want : pp.etb_dig_subtypes)
         {
@@ -513,7 +785,7 @@ inline bool WantVialCharge(const GameState& state, const Permanent& vial)
     int count_above = 0;   // creatures of any higher MV (includes count_next)
     for (const Card& card : ap.hand)
     {
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
         if (!def || !def->card.IsCreature()) { continue; }
         int mv = def->card.m_mana_cost.ManaValue();
         if (mv == c)          { ++count_at; }
@@ -562,7 +834,7 @@ inline bool CanReplicate(
     for (const Permanent& p : battlefield)
     {
         if (p.controller_index != controller_index) { continue; }
-        std::optional<CardDefinition> ldef = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* ldef = CardDatabase::Instance().LookupCached(p.card);
         if (!ldef || !ldef->params.grants_replicate_to_subtypes) { continue; }
         for (const std::string& sub : ldef->params.subtypes_affected)
         {
@@ -591,7 +863,7 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.is_filter || def->params.ramp_filter) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
@@ -623,7 +895,7 @@ inline bool HasUntappedRampFeeder(const GameState& state)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.ramp_filter) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
@@ -708,7 +980,7 @@ inline bool LandEntersTapped(GameState& state, const CardDefinition& def)
         const Player& ap = state.ActivePlayer();
         for (const Card& c : ap.hand)
         {
-            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+            const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
             const std::vector<std::string>& subs = cdef ? cdef->card.m_subtypes : c.m_subtypes;
             for (const std::string& cs : subs)
             {
@@ -745,7 +1017,7 @@ inline bool ShouldConsiderDig(const GameState& state)
                                // in hand and about to be deployed -- both make it our clock).
     for (const Card& c : ap.hand)
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d) { continue; }
         if (d->tmpl == CardTemplate::DrawUntilNonland) { return false; }  // Treasure Hunt: cast it
         if (d->params.cascade_max_mv > 0)              { return false; }  // Throes: another engine
@@ -754,7 +1026,7 @@ inline bool ShouldConsiderDig(const GameState& state)
     }
     for (const Card& c : ap.graveyard)
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d && d->params.retrace) { return false; }   // retrace engine available
     }
 
@@ -763,7 +1035,7 @@ inline bool ShouldConsiderDig(const GameState& state)
     {
         if (p.controller_index != state.active_player_index) { continue; }
         if (p.card.IsLand()) { ++lands_controlled; }
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.discard_land_damage > 0)
         {
             le_rate = std::max(le_rate, d->params.discard_land_damage);
@@ -800,7 +1072,7 @@ inline std::string SelectDigSource(const GameState& state, const ManaPool& pool,
     // Cycling: a land in hand whose cycling cost is affordable.
     for (const Card& c : ap.hand)
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || !d->params.cycling_cost.has_value()) { continue; }
         if (!pool.CanPay(d->params.cycling_cost.value())) { continue; }
         return c.m_name;
@@ -809,7 +1081,7 @@ inline std::string SelectDigSource(const GameState& state, const ManaPool& pool,
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !d->params.sacrifice_draw_cost.has_value()) { continue; }
         if (!pool.CanPay(d->params.sacrifice_draw_cost.value())) { continue; }
         out_is_sac = true;
@@ -826,13 +1098,13 @@ inline bool HasAnyDigSource(const GameState& state)
     const Player& ap = state.ActivePlayer();
     for (const Card& c : ap.hand)
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d && d->params.cycling_cost.has_value()) { return true; }
     }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.sacrifice_draw_cost.has_value()) { return true; }
     }
     return false;
@@ -851,7 +1123,7 @@ inline void ScryTop(GameState& state, int n)
     bool has_draw_until_nonland = false;
     for (const Card& c : ap.hand)
     {
-        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
         if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland)
         {
             has_draw_until_nonland = true;
@@ -870,7 +1142,7 @@ inline void ScryTop(GameState& state, int n)
     {
         Card c = ap.library.front();
         ap.library.erase(ap.library.begin());
-        std::optional<CardDefinition> tdef = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* tdef = CardDatabase::Instance().LookupCached(c);
         bool is_land = tdef ? tdef->card.IsLand() : c.IsLand();
         bool keep    = !is_land || has_draw_until_nonland || lands_in_play < 2;
         if (keep) { keep_top.push_back(std::move(c)); }
@@ -895,7 +1167,7 @@ inline void SurveilTop(GameState& state, int n)
     bool has_draw_until_nonland = false;
     for (const Card& c : ap.hand)
     {
-        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
         if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { has_draw_until_nonland = true; break; }
     }
     int lands_in_play = 0;
@@ -909,7 +1181,7 @@ inline void SurveilTop(GameState& state, int n)
     {
         Card c = ap.library.front();
         ap.library.erase(ap.library.begin());
-        std::optional<CardDefinition> tdef = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* tdef = CardDatabase::Instance().LookupCached(c);
         bool is_land = tdef ? tdef->card.IsLand() : c.IsLand();
         bool keep    = !is_land || has_draw_until_nonland || lands_in_play < 2;
         if (keep) { keep_top.push_back(std::move(c)); }
@@ -918,6 +1190,256 @@ inline void SurveilTop(GameState& state, int n)
     for (std::vector<Card>::reverse_iterator it = keep_top.rbegin(); it != keep_top.rend(); ++it)
     {
         ap.library.insert(ap.library.begin(), std::move(*it));
+    }
+}
+
+// ---- Fetchland resolution (Windswept Heath etc.) ------------------------------
+//
+// Puts a land described by `def` onto the active player's battlefield, resolving its
+// enters-tapped / shock / reveal-untap / depletion / scry / surveil effects. Does NOT
+// touch the hand or the land-drop count -- it only constructs the permanent and applies
+// its on-entry effects, so it can serve both a hand land drop (not currently wired this
+// way to keep that path byte-identical) and a fetchland pulling a land from the library.
+// `card_number` (when >= 0) stamps the permanent's card number for real-game logging.
+inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1)
+{
+    bool tapped = LandEntersTapped(state, def);
+    Permanent perm;
+    perm.card              = def.card;
+    if (card_number >= 0) { perm.card.m_number = card_number; }
+    perm.controller_index  = state.active_player_index;
+    perm.owner_index       = state.active_player_index;
+    perm.entered_this_turn = true;
+    perm.tapped            = tapped;
+    if (def.params.enters_tapped_with_depletion > 0)
+    {
+        Counter dep;
+        dep.type  = Counter::Type::Depletion;
+        dep.count = def.params.enters_tapped_with_depletion;
+        perm.counters.push_back(dep);
+    }
+    state.battlefield.push_back(perm);
+    if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }
+    if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil); }
+}
+
+// Fetchland target decision (Windswept Heath etc.): returns the NARROWED list of library
+// land NAMES this fetchland should consider, best first. Another instance of the heuristic-
+// then-search pattern (see TutorCandidates): when the heuristic has a CLEAR best it returns
+// exactly ONE candidate (no search); only when several are genuinely equivalent on the things
+// the heuristic can judge -- a real "which colour to commit to" tradeoff -- does it return
+// more than one for the search to decide (Pass 2). Returns {} when no library land matches.
+//
+// Priority (user's rule for THIS deck -- a 4-colour shell that is EASY on colour: one source
+// of each of W/B/R/G plus a Forest lets it cast everything; R/G/W must come from DISTINCT
+// sources for Fiery Justice {R}{G}{W}):
+//   (0) FOREST FIRST when we don't already control/hold one -- a Forest unlocks the mana dorks
+//       ({G}) AND the free alt-cost spells ("If you control a Forest, ... ", modelled as
+//       alt_cost_requires_subtype). Generalised: prefer a candidate carrying the subtype that
+//       an alt-cost card in hand requires, if we don't already have that subtype in play/hand.
+//   (1) a colour NEEDED THIS TURN (coloured pip of a nonland hand card we can't yet make);
+//   (2) deck-wide fixing -- a colour the deck wants we are MISSING across battlefield + the
+//       other (non-fetch) lands in hand (drives toward "one of each W/B/R/G");
+//   (3) breadth toward colours not on our battlefield; multi-colour dual/shock over a basic.
+// Dedups by name. The fetchland's own [W,B,R,G] `produces` and any OTHER fetchland in hand are
+// excluded from "colours we have" (their colour is the thing being resolved / unknown).
+inline std::vector<std::string> FetchCandidates(const GameState& state, int controller_index,
+                                                const CardParams& fetch_pp)
+{
+    const Player& ap = state.players[controller_index];
+
+    auto add_colors = [](std::vector<bool>& set, const std::vector<Color>& cs)
+    {
+        for (Color c : cs) { set[static_cast<int>(c)] = true; }
+    };
+    constexpr int NC = 6;   // Color enum cardinality (W,U,B,R,G,C)
+
+    // Colours we already have on the battlefield (lands + mana dorks we control).
+    std::vector<bool> have(NC, false);
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork) { add_colors(have, d->params.produces); }
+    }
+    // Plus colours from OTHER (non-fetch) lands in hand -- part of the deck-fixing equation.
+    std::vector<bool> have_or_hand = have;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || !d->card.IsLand() || !d->params.fetch_land_types.empty()) { continue; }
+        add_colors(have_or_hand, d->params.produces);
+    }
+
+    // Critical subtype (e.g. "Forest"): the subtype an alt-cost card in HAND requires
+    // ("If you control a Forest, rather than pay ...") -- a Forest also makes {G} for the
+    // dorks. We only weight it when we DON'T already control/hold that subtype.
+    std::string crit_subtype;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && !d->params.alt_cost_requires_subtype.empty())
+        { crit_subtype = d->params.alt_cost_requires_subtype; break; }
+    }
+    bool have_crit = crit_subtype.empty()
+                  || ControlsSubtype(state, controller_index, crit_subtype);
+    if (!have_crit)   // also satisfied by a non-fetch land of that subtype already in hand
+    {
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || !d->card.IsLand() || !d->params.fetch_land_types.empty()) { continue; }
+            for (const std::string& s : d->card.m_subtypes) { if (s == crit_subtype) { have_crit = true; break; } }
+            if (have_crit) { break; }
+        }
+    }
+    bool want_crit = !crit_subtype.empty() && !have_crit;
+
+    // Colours wanted this turn (coloured pips of nonland cards in hand) and deck-wide.
+    std::vector<bool> want_turn(NC, false), want_deck(NC, false);
+    auto note_cost = [&](const Card& card, std::vector<bool>& set)
+    {
+        const ManaCost& mc = card.m_mana_cost;
+        if (mc.white > 0)  { set[static_cast<int>(Color::White)] = true; }
+        if (mc.blue  > 0)  { set[static_cast<int>(Color::Blue)]  = true; }
+        if (mc.black > 0)  { set[static_cast<int>(Color::Black)] = true; }
+        if (mc.red   > 0)  { set[static_cast<int>(Color::Red)]   = true; }
+        if (mc.green > 0)  { set[static_cast<int>(Color::Green)] = true; }
+    };
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const Card& card = d ? d->card : c;
+        if (card.IsLand()) { continue; }
+        note_cost(card, want_turn);
+        note_cost(card, want_deck);
+    }
+    for (const Card& c : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const Card& card = d ? d->card : c;
+        if (card.IsLand()) { continue; }
+        note_cost(card, want_deck);
+    }
+
+    // Score each distinct candidate land (subtype in fetch_land_types) and sort best-first.
+    // dup_pref is the LOWEST-priority tiebreak: among otherwise-equal options prefer a White
+    // source, then a Green one -- the only two colours this deck ever wants in MULTIPLES
+    // (White for Fiery Justice {W} + Swords {W} in a turn; Green for the {G} dorks + the free
+    // {G}-gated spells + Fiery Justice {G}). It rarely changes the win, but collapses the
+    // common early-game "which Forest dual" tie to ONE candidate, so the search needn't branch.
+    struct Cand { std::string name; int gives_crit, s_turn, s_deck, s_breadth, multi, dup_pref, shock, order; };
+    std::vector<Cand> cands;
+    std::unordered_set<std::string> seen;
+    int order = 0;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        const Card& card = d ? d->card : lc;
+        if (!card.IsLand()) { continue; }
+        bool type_ok = false;
+        for (const std::string& want : fetch_pp.fetch_land_types)
+        {
+            for (const std::string& cs : card.m_subtypes) { if (cs == want) { type_ok = true; break; } }
+            if (type_ok) { break; }
+        }
+        if (!type_ok) { continue; }
+        if (!seen.insert(lc.m_name).second) { continue; }
+
+        // Does this candidate carry the critical subtype we still need (Forest unlock)?
+        int gives_crit = 0;
+        if (want_crit)
+        {
+            for (const std::string& cs : card.m_subtypes) { if (cs == crit_subtype) { gives_crit = 1; break; } }
+        }
+
+        const std::vector<Color>& prod = d ? d->params.produces : std::vector<Color>{};
+        int s_turn = 0, s_deck = 0, s_breadth = 0;
+        for (Color c : prod)
+        {
+            int ci = static_cast<int>(c);
+            if (want_turn[ci] && !have[ci])         { ++s_turn; }
+            if (want_deck[ci] && !have_or_hand[ci]) { ++s_deck; }
+            if (!have[ci] && ci != static_cast<int>(Color::Colorless)) { ++s_breadth; }
+        }
+        int multi = static_cast<int>(prod.size()) > 1 ? 1 : 0;
+        bool pw = false, pg = false;
+        for (Color c : prod)
+        {
+            if (c == Color::White) { pw = true; }
+            if (c == Color::Green) { pg = true; }
+        }
+        int dup_pref = (pw ? 2 : 0) + (pg ? 1 : 0);   // White preferred, then Green
+        // Final deterministic tiebreak: prefer a shock dual (etb_pay_life_to_untap > 0) over a
+        // basic -- "consistently pick one shock land; if none, a basic" (the life is irrelevant
+        // in a goldfish, and a dual fixes two colours). Combined with the keys above this leaves
+        // a single best, so the fetch is decided by the heuristic and never branches the search.
+        int shock = (d && d->params.etb_pay_life_to_untap > 0) ? 1 : 0;
+        cands.push_back({lc.m_name, gives_crit, s_turn, s_deck, s_breadth, multi, dup_pref, shock, order++});
+    }
+
+    std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
+    {
+        if (a.gives_crit != b.gives_crit) { return a.gives_crit > b.gives_crit; }
+        if (a.s_turn     != b.s_turn)     { return a.s_turn     > b.s_turn; }
+        if (a.s_deck     != b.s_deck)     { return a.s_deck     > b.s_deck; }
+        if (a.s_breadth  != b.s_breadth)  { return a.s_breadth  > b.s_breadth; }
+        if (a.multi      != b.multi)      { return a.multi      > b.multi; }
+        if (a.dup_pref   != b.dup_pref)   { return a.dup_pref   > b.dup_pref; }
+        if (a.shock      != b.shock)      { return a.shock      > b.shock; }
+        return a.order < b.order;
+    });
+
+    // Per the deck owner: when flooding it does not matter which equivalent land we get -- just
+    // pick ONE deterministically. So return exactly the single best candidate (never a tied
+    // group), which means a fetch is always decided by the heuristic and the search never
+    // branches over fetch targets (no enumeration blow-up on flooded hands). Returns {} only on
+    // a true whiff (no legal target left).
+    std::vector<std::string> out;
+    if (!cands.empty()) { out.push_back(cands.front().name); }
+    return out;
+}
+
+// Execute a fetchland (Windswept Heath etc.): pull `target_name` (empty -> the heuristic's
+// top FetchCandidates pick) from the library, make it enter the battlefield (resolving the
+// fetched land's own enters-tapped/shock choice), and pay 1 life. The caller is responsible
+// for removing the fetchland from hand, using its land drop, and sending it to the graveyard
+// -- PerformFetch only resolves the search-and-put-into-play. The library order past the
+// fetched card is a goldfish-irrelevant simplification (no shuffle modelled). Shared by the
+// real engine (AIEngine) and the rollout (TurnSolver/ApplyPlanDirect) so both fetch alike.
+inline void PerformFetch(GameState& state, int controller_index,
+                         const CardParams& fetch_pp, const std::string& target_name = "")
+{
+    Player& ap = state.players[controller_index];
+    ap.life -= 1;   // pay 1 life (irrelevant vs a passive opponent, but faithful)
+
+    std::string want = target_name;
+    if (want.empty())
+    {
+        std::vector<std::string> cands = FetchCandidates(state, controller_index, fetch_pp);
+        if (cands.empty()) { return; }   // whiff: no legal target (life already paid)
+        want = cands.front();
+    }
+    int idx = -1;
+    for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+    {
+        if (ap.library[i].m_name == want) { idx = i; break; }
+    }
+    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    Card lc = ap.library[idx];
+    ap.library.erase(ap.library.begin() + idx);
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
+    if (def) { EnterLand(state, *def, lc.m_number); }
+    else
+    {
+        // Unknown card: still put it onto the battlefield as a plain untapped land.
+        Permanent perm;
+        perm.card              = lc;
+        perm.controller_index  = state.active_player_index;
+        perm.owner_index       = state.active_player_index;
+        perm.entered_this_turn = true;
+        state.battlefield.push_back(perm);
     }
 }
 
@@ -953,8 +1475,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     {
         if (state.battlefield[i].controller_index != active || state.battlefield[i].tapped)
         { continue; }
-        std::optional<CardDefinition> def =
-            CardDatabase::Instance().Lookup(state.battlefield[i].card.m_name);
+        const CardDefinition* def =
+            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!def) { continue; }
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && state.battlefield[i].CanTap());
@@ -964,6 +1486,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         const std::vector<Color>& produces = def->params.produces;
         const std::vector<Permanent> bf_snap = state.battlefield;  // undo across this source's options
         const int life_snap = state.players[active].life;
+        const int opp_life_snap = state.players[1 - active].life;   // for tap_opponent_lifegain undo
+        const bool oll_snap = state.opponent_lost_life_this_turn;
 
         // Physically tap source i, recurse with `next` floating, undo on failure.
         auto activate = [&](const ManaPool& next) -> bool
@@ -972,9 +1496,15 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             DecrementDepletionOnTap(state.battlefield[i]);
             if (def->params.tap_self_damage > 0)
             { state.players[active].life -= def->params.tap_self_damage; }
+            // Grove of the Burnwillows drip (opponent gains -> loses with Remedy). Restored
+            // below on failure alongside the active player's life.
+            if (def->params.tap_opponent_lifegain > 0)
+            { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
             if (TapForCostBacktrack(state, cost, for_creature, next)) { return true; }
-            state.battlefield        = bf_snap;
+            state.battlefield          = bf_snap;
             state.players[active].life = life_snap;
+            state.players[1 - active].life      = opp_life_snap;
+            state.opponent_lost_life_this_turn  = oll_snap;
             return false;
         };
 

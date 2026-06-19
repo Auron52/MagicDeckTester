@@ -111,10 +111,28 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                 || def.card.HasType(CardType::Artifact) || def.card.IsLand())
             {
                 EnterBattlefield(state, entry, def);
+                // ETB "each opponent gains N life" (Aria of Flame) -> reversed to damage by
+                // a Tainted Remedy / Plague Drone via OpponentGainsLife.
+                if (def.params.etb_opponent_lifegain > 0)
+                {
+                    OpponentGainsLife(state, entry.controller_index,
+                                      def.params.etb_opponent_lifegain);
+                }
             }
             else
             {
-                // Non-permanent custom spell: fire cascade if applicable, then graveyard.
+                // Non-permanent custom spell: tutor / destroy-all-enchantments / cascade,
+                // then graveyard.
+                if (def.params.tutor_to_hand || def.params.tutor_to_top)
+                {
+                    // Fetch the searched target carried on the stack entry (empty -> the
+                    // heuristic's top pick), matching the rollout's ApplyPlanDirect.
+                    PerformTutor(state, entry.controller_index, def.params, entry.tutor_target);
+                }
+                if (def.params.destroy_all_enchantments)
+                {
+                    DestroyAllEnchantments(state);
+                }
                 if (def.params.cascade_max_mv > 0)
                 {
                     ResolveCascade(state, entry, def);
@@ -194,6 +212,13 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         }
     }
 
+    // Rider "target opponent gains N life" (Fiery Justice) -> reversed to damage by a
+    // Tainted Remedy / Plague Drone via OpponentGainsLife.
+    if (def.params.opponent_lifegain > 0)
+    {
+        OpponentGainsLife(state, entry.controller_index, def.params.opponent_lifegain);
+    }
+
     MoveToGraveyard(state, entry);
 }
 
@@ -217,6 +242,11 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
             && t.permanent_index < static_cast<int>(state.battlefield.size()))
         {
             Permanent& target = state.battlefield[t.permanent_index];
+            // Rider (Swords to Plowshares): the exiled creature's controller gains life equal
+            // to its power. Via OpponentGainsLife so a Tainted Remedy turns the opponent's
+            // gain into damage equal to the creature's power. Captured before the erase.
+            int tgt_controller = target.controller_index;
+            int tgt_power      = target.EffectivePower();
             if (def.params.damage > 0)  // exile
             {
                 state.exile.push_back(target.card);
@@ -226,6 +256,15 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
                 state.players[target.controller_index].graveyard.push_back(target.card);
             }
             state.battlefield.erase(state.battlefield.begin() + t.permanent_index);
+
+            // The exiled creature's controller gains `power` life. OpponentGainsLife(X) makes
+            // (1-X) gain, so pass (1 - tgt_controller). When tgt_controller is the opponent
+            // (the usual goldfish case) this routes through OUR Tainted Remedy, turning the
+            // opponent's gain into `power` damage; on our own creature it just gives us life.
+            if (def.params.controller_lifegain_equals_power && tgt_power > 0)
+            {
+                OpponentGainsLife(state, 1 - tgt_controller, tgt_power);
+            }
         }
     }
     MoveToGraveyard(state, entry);
@@ -280,15 +319,9 @@ void EffectHandler::ResolvePumpSpell(GameState& state, const StackEntry& entry,
             && t.permanent_index < static_cast<int>(state.battlefield.size()))
         {
             Permanent& target = state.battlefield[t.permanent_index];
-            // Apply +N/+M as a +1/+1 counter equivalent for now.
-            // TODO: implement "until end of turn" tracking in Phase 1.2+.
-            Counter bonus;
-            bonus.type  = Counter::Type::PlusOnePlusOne;
-            bonus.count = std::min(def.params.power_bonus, def.params.tough_bonus);
-            if (bonus.count > 0)
-            {
-                target.counters.push_back(bonus);
-            }
+            // "+N/+M until end of turn" (Invigorate): temp bonuses, reset each cleanup step.
+            target.temp_power_bonus += def.params.power_bonus;
+            target.temp_tough_bonus += def.params.tough_bonus;
         }
     }
     MoveToGraveyard(state, entry);
@@ -306,7 +339,7 @@ void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& 
         Card c = controller.library.DrawTop();
         bool is_land = false;
         {
-            auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+            auto cdef = CardDatabase::Instance().LookupCached(c);
             is_land = cdef ? cdef->card.IsLand() : c.IsLand();
         }
         controller.hand.push_back(std::move(c));
@@ -327,7 +360,7 @@ void EffectHandler::ResolveCascade(GameState& state, const StackEntry& entry,
     while (!controller.library.empty())
     {
         Card c = controller.library.DrawTop();
-        auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+        auto cdef = CardDatabase::Instance().LookupCached(c);
         bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
         int  mv      = cdef ? cdef->card.m_mana_cost.ManaValue()
                             : c.m_mana_cost.ManaValue();
@@ -344,7 +377,7 @@ void EffectHandler::ResolveCascade(GameState& state, const StackEntry& entry,
     if (cascade_idx >= 0)
     {
         const Card& cascade_card = exiled[cascade_idx];
-        auto cdef = CardDatabase::Instance().Lookup(cascade_card.m_name);
+        auto cdef = CardDatabase::Instance().LookupCached(cascade_card);
         if (cdef)
         {
             StackEntry ce;

@@ -46,6 +46,18 @@ public:
 
     bool Exhausted() const { return !Unlimited() && m_used >= m_limit; }
 
+    // Mid-pass OVERRUN guard. The iterative-deepening start gate only decides whether to
+    // BEGIN a pass (from an estimate); a pass whose real cost explodes far past the estimate
+    // would otherwise run to completion unbounded (a single flooded turn deep in a line can
+    // branch orders of magnitude beyond the ~6x growth assumption -> a multi-minute / hung
+    // search). SetOverrunLimit arms an ABSOLUTE used-unit ceiling for the running pass; the
+    // recursion polls Overrun() and bails out so the caller can roll back to the last pass
+    // that completed. Set to 0 to disarm (the default -> no guard, so unset callers and
+    // unlimited budgets are byte-identical to before). Normal passes finish far under any
+    // sane ceiling, so the guard never fires for them (parity preserved).
+    void SetOverrunLimit(long long abs_units) { m_overrun_limit = abs_units; }
+    bool Overrun() const { return m_overrun_limit > 0 && m_used >= m_overrun_limit; }
+
     // Units left before exhaustion, clamped to >= 0 (LLONG_MAX if unlimited).
     // Clamping keeps the start-gate / overrun arithmetic well-behaved once the
     // budget has been overrun by a pass running to completion.
@@ -57,6 +69,7 @@ public:
     }
 
 private:
-    long long m_limit = 0;   // 0 (or negative) == unlimited
-    long long m_used  = 0;
+    long long m_limit         = 0;   // 0 (or negative) == unlimited
+    long long m_used          = 0;
+    long long m_overrun_limit = 0;   // 0 == disarmed (no mid-pass abort)
 };

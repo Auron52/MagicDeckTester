@@ -1,0 +1,105 @@
+{
+  "card_scores": {
+    "Aria of Flame": [
+      0.29107114491018304,
+      -0.44350893161906946
+    ],
+    "Birds of Paradise": [
+      0.20928145293279155,
+      -0.5064004096262158
+    ],
+    "Blood Crypt": [
+      0.07034266409266365
+    ],
+    "Bloodstained Mire": [
+      -0.11304366682994527,
+      0.07068452380952372
+    ],
+    "Enlightened Tutor": [
+      0.19400297607121164
+    ],
+    "Fiery Justice": [
+      0.14792007984483035
+    ],
+    "Forest": [
+      0.014355537512700245
+    ],
+    "Godless Shrine": [
+      -0.16239470939453593
+    ],
+    "Grove of the Burnwillows": [
+      -0.0010558829062272679
+    ],
+    "Idyllic Tutor": [
+      0.05935050391937313
+    ],
+    "Ignoble Hierarch": [
+      0.5038219434812836,
+      0.012131467247906258
+    ],
+    "Invigorate": [
+      -0.028731193887037598,
+      0.09283634245777517
+    ],
+    "Marsh Flats": [
+      -0.08442876771322538
+    ],
+    "Overgrown Tomb": [
+      0.05375862315844948
+    ],
+    "Plague Drone": [
+      0.5715497417725333,
+      -0.30435910742086136
+    ],
+    "Reverent Silence": [
+      -0.1234421444090481,
+      -0.2733806793873539
+    ],
+    "Skyshroud Cutter": [
+      -0.15983933234217496,
+      -0.12219695198418545
+    ],
+    "Stomping Ground": [
+      0.07510901796616043
+    ],
+    "Swords to Plowshares": [
+      -0.3702642854371412
+    ],
+    "Tainted Remedy": [
+      0.4270722824301014,
+      -0.6674191353825218
+    ],
+    "Temple Garden": [
+      -0.11727270261540212
+    ],
+    "Windswept Heath": [
+      0.06099951346582255,
+      -0.22671229551963457
+    ],
+    "Wooded Foothills": [
+      0.005567940608633748,
+      -0.1624872924432399
+    ]
+  },
+  "hand_score_threshold": 0.2659543096326016,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "one_drop",
+    "max_lands": 5,
+    "min_color_sources": {
+      "B": 1,
+      "G": 1,
+      "R": 1,
+      "W": 1
+    },
+    "min_lands": 2,
+    "min_playable": 1,
+    "required_pieces": [
+      "Tainted Remedy",
+      "Plague Drone",
+      "Idyllic Tutor"
+    ],
+    "stop_at": 4
+  },
+  "version": 1
+}

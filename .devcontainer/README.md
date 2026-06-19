@@ -175,6 +175,32 @@ Linux build, remove the volume: `docker volume rm mdt-build`.
 > want `-DMTG_PROFILE=ON` builds in the container, add a second volume mount over
 > `build-prof/` the same way.
 
+## Profiling with perf
+
+`perf` is installed (generic `linux-tools` symlinked onto `PATH`) and the container
+has `--cap-add=PERFMON`, so you can sample the simulator. Profile an optimized build
+*with* debug info so symbols/call-graphs resolve:
+
+```bash
+cmake --build build --config RelWithDebInfo
+perf record -g --call-graph dwarf ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
+perf report            # or: perf script | <FlameGraph>/stackcollapse-perf.pl | ...
+perf stat ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
+```
+
+Notes / caveats (Docker Desktop + WSL2 kernel):
+- The perf binary is Ubuntu's **generic** one, not an exact match for the
+  `*-microsoft-standard-WSL2` kernel (no apt package matches it). User-space sampling
+  of `mtg` works; some kernel-side features may not.
+- If perf reports `Permission denied` despite `CAP_PERFMON`, lower the paranoid level
+  (this affects the shared WSL2 VM and may need `--cap-add=SYS_ADMIN`):
+  ```bash
+  sudo sysctl kernel.perf_event_paranoid=1
+  ```
+- For pure call-graph/instruction profiling with no kernel dependency, `valgrind
+  --tool=callgrind` (already in the image) or the in-code `-DMTG_PROFILE=ON` build are
+  alternatives — slower, but exact and portable.
+
 ## Egress firewall (default-deny)
 
 The container restricts outbound network access. `init-firewall.sh` runs on every

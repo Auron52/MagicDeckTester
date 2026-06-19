@@ -4,6 +4,7 @@
 #include "../core/ManaPool.h"
 #include "../core/EffectHandler.h"
 #include "../core/SpellEffects.h"
+#include "../core/Trace.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -88,7 +89,7 @@ static ManaPool BuildPool(const GameState& state)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap());
@@ -106,7 +107,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.creature_mana_only) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap());
@@ -165,7 +166,7 @@ static bool SubsetPayable(const GameState& state, const std::vector<Action>& can
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
@@ -204,7 +205,7 @@ static int PendingAttackDamage(const GameState& state)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
                || HasDoubleStrikeFromLords(p.card, state.battlefield, active));
         int base_pw = p.EffectivePower() + lord_pb;
-        std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
         if (adef)
         {
             if (animated) { base_pw += adef->params.animate_power; }
@@ -215,6 +216,10 @@ static int PendingAttackDamage(const GameState& state)
     }
     dmg += CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
 
+    // Exalted (Ignoble Hierarch): a creature attacking ALONE gets +1/+1 per Exalted ability.
+    if (static_cast<int>(attackers.size()) == 1)
+    { dmg += CountExalted(state.battlefield, active); }
+
     // Estimate attack-trigger tokens (Adeline) for this turn only: const path cannot create
     // them, so add their immediate damage (token base power + anthem bonus) if attacking.
     if (!attackers.empty())
@@ -222,7 +227,7 @@ static int PendingAttackDamage(const GameState& state)
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != active) { continue; }
-            std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d || d->params.attack_creates_tokens <= 0) { continue; }
             Card tok;
             tok.AddType(CardType::Creature);
@@ -249,7 +254,7 @@ static std::vector<TriggerSource> CollectTriggerSources(const GameState& state)
     std::vector<TriggerSource> sources;
     for (const Permanent& p : state.battlefield)
     {
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.on_cast_trigger_max_mv <= 0) { continue; }
         sources.push_back({def->params.on_cast_trigger_max_mv,
                            def->params.on_cast_trigger_damage});
@@ -383,7 +388,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         int estimated_lands = 0;
         for (const Card& c : state.ActivePlayer().library)
         {
-            auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+            auto cdef = CardDatabase::Instance().LookupCached(c);
             bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
             if (!is_land) { break; }
             ++estimated_lands;
@@ -395,7 +400,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index) { continue; }
-            auto pdef = CardDatabase::Instance().Lookup(p.card.m_name);
+            auto pdef = CardDatabase::Instance().LookupCached(p.card);
             if (!pdef) { continue; }
             if (pdef->params.no_max_hand_size) { has_no_max_hand = true; }
             if (pdef->params.discard_land_damage > 0)
@@ -429,7 +434,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         int lands_in_hand = 0;
         for (const Card& c : state.ActivePlayer().hand)
         {
-            auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+            auto cdef = CardDatabase::Instance().LookupCached(c);
             if (cdef && cdef->card.IsLand()) { ++lands_in_hand; }
         }
         return lands_in_hand * def.params.discard_land_damage * DMG;
@@ -452,7 +457,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         int target_mv = state.vial_target_mv;
         for (const Card& c : state.ActivePlayer().hand)
         {
-            std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+            const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
             if (!cdef || !cdef->card.IsCreature()) { continue; }
             if (target_mv > 0 && cdef->card.m_mana_cost.ManaValue() != target_mv) { continue; }
             auto [lord_pb, lord_tb] = ComputeLordBonus(cdef->card, state.battlefield,
@@ -495,7 +500,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
     // --- Hand casts ---
     for (int i = 0; i < n; ++i)
     {
-        auto opt = CardDatabase::Instance().Lookup(ap.hand[i].m_name);
+        auto opt = CardDatabase::Instance().LookupCached(ap.hand[i]);
         if (!opt || opt->card.IsLand()) { continue; }
         const CardDefinition& def = *opt;
         // Sorceries/non-flash spells require an empty stack and a main phase.
@@ -504,15 +509,82 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                       || state.stack.empty();
         if (!timing_ok) { continue; }
 
-        // Skip spells that need a creature target when none exists.
+        // Skip spells that need a creature target when none exists. An own-creature pump
+        // (Invigorate) needs one of OUR attackers; other creature-targeting spells need an
+        // opponent creature.
         Targeting t = def.params.targeting;
-        if ((t == Targeting::Creature || t == Targeting::Multi) && !has_creature_target)
+        if (t == Targeting::Creature && def.params.target_own_creature)
+        {
+            if (FindBestOwnAttacker(state, state.active_player_index) < 0) { continue; }
+        }
+        else if ((t == Targeting::Creature || t == Targeting::Multi) && !has_creature_target)
         {
             continue;
         }
 
         // Skip X spells (X=0 is useless; proper X selection is future work).
         if (def.card.m_mana_cost.has_x) { continue; }
+
+        // Alternative cost (Invigorate / Skyshroud Cutter / Reverent Silence): "If you control
+        // a Forest, rather than pay this spell's mana cost, you may have an opponent gain N
+        // life" (-> N damage with a Remedy active). These free payloads split into two kinds:
+        //   * SAFE (Invigorate / Skyshroud): firing one is strictly good under a Remedy (free
+        //     face damage, no downside), so it is NOT a search choice -- it is AUTO-FIRED
+        //     deterministically after the casts (FireSafeAltPayloads, see ApplyPlanDirect /
+        //     AIEngine). Keeping them out of the action set avoids a free-subset enumeration
+        //     blow-up (free actions are never mana-pruned, so flooded hands exploded the plan
+        //     count). They are therefore not emitted here at all.
+        //   * RISKY (Reverent Silence: destroy_all_enchantments wipes our OWN Aria/Remedy):
+        //     this stays a genuine SEARCH decision, offered as a free action only with a Remedy
+        //     already active, so the search weighs the board wipe against keeping the combo.
+        if (def.params.alt_lifegain_cost > 0
+            && ControlsSubtype(state, state.active_player_index, def.params.alt_cost_requires_subtype))
+        {
+            if (def.params.destroy_all_enchantments
+                && RemedyActive(state, state.active_player_index))
+            {
+                constexpr int DMG = 100;
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = ManaCost{};             // free (alt cost is the opponent lifegain)
+                a.alt_cost       = true;
+                a.alt_lifegain   = def.params.alt_lifegain_cost;
+                a.eval           = def.params.alt_lifegain_cost * DMG;
+                a.direct_damage  = def.params.alt_lifegain_cost;
+                a.is_noncreature = !def.card.IsCreature();
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                actions.push_back(std::move(a));
+            }
+            continue;   // safe alts: auto-fired (not enumerated); risky alt handled above
+        }
+
+        // Tutor: the heuristic (TutorCandidates) returns a NARROWED candidate set. One
+        // candidate = a clear heuristic decision; several = the heuristic pruned the options
+        // but cannot distinguish them, so emit one cast variant per candidate (all sharing this
+        // hand_index, hence mutually exclusive in the plan enumerator) and let the search pick.
+        // Narrowing to the few cards that matter keeps the search's branching factor small --
+        // the general "heuristic narrows, search decides the rest" pattern.
+        if (def.params.tutor_to_hand || def.params.tutor_to_top)
+        {
+            std::vector<std::string> cands = TutorCandidates(state, state.active_player_index, def.params);
+            if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
+            for (const std::string& tgt : cands)
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(def, state);
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = !def.card.IsCreature();
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.tutor_target   = tgt;
+                actions.push_back(std::move(a));
+            }
+            continue;
+        }
 
         // Only count damage that actually reaches the opponent's life total.
         // Creature-only targeting (e.g. Searing Blood) deals damage to a permanent,
@@ -554,15 +626,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         {
             const Permanent& vp = state.battlefield[vi];
             if (vp.controller_index != state.active_player_index || vp.tapped) { continue; }
-            std::optional<CardDefinition> vdef =
-                CardDatabase::Instance().Lookup(vp.card.m_name);
+            const CardDefinition* vdef =
+                CardDatabase::Instance().LookupCached(vp.card);
             if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
 
             int target_mv = vp.charge_counters;
             for (int i = 0; i < n; ++i)
             {
-                std::optional<CardDefinition> copt =
-                    CardDatabase::Instance().Lookup(ap.hand[i].m_name);
+                const CardDefinition* copt =
+                    CardDatabase::Instance().LookupCached(ap.hand[i]);
                 if (!copt || !copt->card.IsCreature()) { continue; }
                 if (copt->card.m_mana_cost.ManaValue() != target_mv) { continue; }
 
@@ -600,7 +672,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         int lands_in_hand = 0;
         for (const Card& c : ap.hand)
         {
-            auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+            auto cdef = CardDatabase::Instance().LookupCached(c);
             if (cdef ? cdef->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
         }
         if (lands_in_hand > 0)
@@ -608,7 +680,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             std::unordered_set<std::string> seen_gy;
             for (const Card& gc : ap.graveyard)
             {
-                auto gdef = CardDatabase::Instance().Lookup(gc.m_name);
+                auto gdef = CardDatabase::Instance().LookupCached(gc);
                 if (!gdef || !gdef->params.retrace) { continue; }
                 bool timing_ok = gdef->card.IsInstant()
                               || gdef->card.HasKeyword(Keyword::Flash)
@@ -657,7 +729,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
-        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        auto def = CardDatabase::Instance().LookupCached(p.card);
         if (def && def->params.discard_land_damage > 0)
         {
             lands_edge_rate = std::max(lands_edge_rate, def->params.discard_land_damage);
@@ -666,7 +738,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     int lands_in_hand = 0;
     for (int i = 0; i < n; ++i)
     {
-        auto def = CardDatabase::Instance().Lookup(ap.hand[i].m_name);
+        auto def = CardDatabase::Instance().LookupCached(ap.hand[i]);
         if (def && def->card.IsLand()) { ++lands_in_hand; }
     }
     int base_lands_edge_dmg = lands_in_hand * lands_edge_rate;
@@ -676,7 +748,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     int th_lands_estimate = 0;
     for (const Card& c : ap.library)
     {
-        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        auto def = CardDatabase::Instance().LookupCached(c);
         bool is_land = def ? def->card.IsLand() : c.IsLand();
         if (!is_land) { break; }
         ++th_lands_estimate;
@@ -859,6 +931,10 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
         p.tapped = true;
         DecrementDepletionOnTap(p);
         if (def.params.tap_self_damage > 0) { state.players[active].life -= def.params.tap_self_damage; }
+        // Grove of the Burnwillows: each coloured tap makes the opponent gain 1 (-> 1 damage
+        // with Tainted Remedy out). Mirrored in AIEngine::TapForCost and TapForCostBacktrack.
+        if (def.params.tap_opponent_lifegain > 0)
+        { OpponentGainsLife(state, active, def.params.tap_opponent_lifegain); }
         floating.Add(col, ManaProducedPerTap(def));
     };
 
@@ -873,7 +949,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
         for (Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
-            std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
             Color col;
             if (any)
@@ -898,7 +974,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
             for (Permanent& p : state.battlefield)
             {
                 if (p.controller_index != active || p.tapped) { continue; }
-                std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
                 if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
                 p.tapped = true;
                 floating.Add(Color::Colorless, 1);
@@ -910,7 +986,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
         for (Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
-            std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
             Color out;
             if (any)
@@ -939,7 +1015,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
                     for (Permanent& s : state.battlefield)
                     {
                         if (s.controller_index != active || s.tapped) { continue; }
-                        std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(s.card.m_name);
+                        const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
                         bool m = false;
                         for (Color c : sd->params.produces) { if (c == ic) { m = true; break; } }
@@ -965,7 +1041,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
             for (Permanent& p : state.battlefield)
             {
                 if (p.controller_index != active || p.tapped) { continue; }
-                std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
                 if (!def || !def->params.ramp_filter || !usable(p, *def)) { continue; }
                 if (!any)
                 {
@@ -1030,7 +1106,8 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
 // Land-play helpers (defined below, near the land enumeration). PlayLandByName plays
 // a specific named land; SimulateLandPlay is the greedy fallback used when a plan did
 // not search the land (depth-0 static plans).
-static bool PlayLandByName(GameState& state, const std::string& name);
+static bool PlayLandByName(GameState& state, const std::string& name,
+                           const std::string& fetch_target = "");
 static std::string SimulateLandPlay(GameState& state);
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
@@ -1056,7 +1133,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         if (plan.land_decided)
         {
-            if (!plan.land_to_play.empty()) { PlayLandByName(state, plan.land_to_play); }
+            if (!plan.land_to_play.empty()) { PlayLandByName(state, plan.land_to_play, plan.fetch_target); }
         }
         else
         {
@@ -1067,7 +1144,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Deploy creatures via Aether Vial before casting spells so lord effects are live.
     auto apply_vial = [&](const std::string& name)
     {
-        std::optional<CardDefinition> copt = CardDatabase::Instance().Lookup(name);
+        const CardDefinition* copt = CardDatabase::Instance().Lookup(name);
         if (!copt || !copt->card.IsCreature()) { return; }
         int mv = copt->card.m_mana_cost.ManaValue();
         auto hand_it = std::find_if(ap.hand.begin(), ap.hand.end(),
@@ -1078,7 +1155,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             Permanent& vp = state.battlefield[vi];
             if (vp.controller_index != state.active_player_index || vp.tapped) { continue; }
-            std::optional<CardDefinition> vdef = CardDatabase::Instance().Lookup(vp.card.m_name);
+            const CardDefinition* vdef = CardDatabase::Instance().LookupCached(vp.card);
             if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
             if (vp.charge_counters != mv) { continue; }
             Permanent perm;
@@ -1136,10 +1213,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int)> apply_one;
-    apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands)
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&)> apply_one;
+    apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
+                    bool alt_cost, int alt_lifegain, const std::string& tutor_target)
     {
-        std::optional<CardDefinition> opt = CardDatabase::Instance().Lookup(name);
+        const CardDefinition* opt = CardDatabase::Instance().Lookup(name);
         if (!opt) { return; }
         const CardDefinition& def = *opt;
 
@@ -1154,8 +1232,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         bool free_cast = cascade_free;
         cascade_free = false;
         ManaCost ec = EffectiveCost(def, state);
-        if (!free_cast && !TapForCostDirect(state, ec, is_creature)) { return; }
+        if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
         zone.erase(it);
+
+        // Alternative cost paid as "an opponent gains alt_lifegain life" (Invigorate / Skyshroud
+        // Cutter / Reverent Silence) -> reversed to damage by a Tainted Remedy / Plague Drone.
+        // Paid at cast (before on-cast triggers), then the spell resolves its normal effect.
+        if (alt_cost) { OpponentGainsLife(state, state.active_player_index, alt_lifegain); }
 
         // Commit-the-line recording: if inside a breakpoint re-solve (sink_stack
         // non-empty), record THIS cast into the current sink so AIEngine can replay it
@@ -1171,6 +1254,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.card_name      = name;
             rec.sacrifice_land = is_sacrifice;
             rec.discard_lands  = discard_lands;
+            rec.alt_cost       = alt_cost;
+            rec.alt_lifegain   = alt_lifegain;
+            rec.tutor_target   = tutor_target;
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -1183,7 +1269,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (std::vector<Card>::iterator hit = ap.hand.begin();
                  hit != ap.hand.end() && discarded < discard_lands; )
             {
-                std::optional<CardDefinition> hdef = CardDatabase::Instance().Lookup(hit->m_name);
+                const CardDefinition* hdef = CardDatabase::Instance().Lookup(hit->m_name);
                 bool is_land = hdef ? hdef->card.IsLand() : hit->IsLand();
                 if (is_land) { ap.graveyard.push_back(*hit); hit = ap.hand.erase(hit); ++discarded; }
                 else         { ++hit; }
@@ -1255,6 +1341,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // win. Mirrors the real engine's SBA after damage is dealt.
                     if (lethal) { state.battlefield.erase(state.battlefield.begin() + ci); }
                 }
+            }
+            // Rider "target opponent gains N life" (Fiery Justice) -> reversed to damage by a
+            // Tainted Remedy / Plague Drone. Mirrors EffectHandler::ResolveDirectDamage.
+            if (def.params.opponent_lifegain > 0)
+            {
+                OpponentGainsLife(state, state.active_player_index, def.params.opponent_lifegain);
             }
         }
         else if (is_creature)
@@ -1341,7 +1433,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             while (!ap.library.empty())
             {
                 Card c = ap.library.DrawTop();
-                auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+                auto cdef = CardDatabase::Instance().LookupCached(c);
                 bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
                 ap.hand.push_back(std::move(c));
                 if (!is_land) { break; }
@@ -1364,7 +1456,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             while (!ap.library.empty())
             {
                 Card c = ap.library.DrawTop();
-                auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+                auto cdef = CardDatabase::Instance().LookupCached(c);
                 bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
                 int  mv      = cdef ? cdef->card.m_mana_cost.ManaValue()
                                     : c.m_mana_cost.ManaValue();
@@ -1390,19 +1482,75 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0);
+                    apply_one(cname, false, false, 0, false, 0, std::string{});
                 }
+            }
+        }
+        else if (def.tmpl == CardTemplate::Removal)
+        {
+            // Removal (Swords to Plowshares): exile/destroy the first opponent creature and
+            // apply the controller-lifegain rider (-> damage with Tainted Remedy). Mirrors
+            // EffectHandler::ResolveRemoval. CollectActions only offers this with a legal
+            // opponent creature target present.
+            int ci = -1;
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                const Permanent& bp = state.battlefield[bi];
+                if (bp.controller_index != state.active_player_index && bp.card.IsCreature())
+                { ci = bi; break; }
+            }
+            if (ci >= 0)
+            {
+                int tgt_controller = state.battlefield[ci].controller_index;
+                int tgt_power      = state.battlefield[ci].EffectivePower();
+                if (def.params.damage > 0) { state.exile.push_back(state.battlefield[ci].card); }
+                else { state.players[tgt_controller].graveyard.push_back(state.battlefield[ci].card); }
+                state.battlefield.erase(state.battlefield.begin() + ci);
+                if (def.params.controller_lifegain_equals_power && tgt_power > 0)
+                {
+                    OpponentGainsLife(state, 1 - tgt_controller, tgt_power);
+                }
+            }
+        }
+        else if (def.params.tutor_to_hand || def.params.tutor_to_top)
+        {
+            // Tutor (Idyllic / Enlightened): fetch the SEARCHED target (tutor_target); empty
+            // falls back to the heuristic's top pick. Identical to the real game (EffectHandler)
+            // so the clairvoyant rollout sees the same fetched card.
+            PerformTutor(state, state.active_player_index, def.params, tutor_target);
+        }
+        else if (def.params.destroy_all_enchantments)
+        {
+            DestroyAllEnchantments(state);
+        }
+        else if (def.tmpl == CardTemplate::PumpSpell)
+        {
+            // "+N/+M until end of turn" (Invigorate) on the controller's best attacker, so the
+            // rollout's combat reflects the pump. Mirrors EffectHandler::ResolvePumpSpell.
+            int ti = def.params.target_own_creature
+                     ? FindBestOwnAttacker(state, state.active_player_index)
+                     : -1;
+            if (ti >= 0)
+            {
+                state.battlefield[ti].temp_power_bonus += def.params.power_bonus;
+                state.battlefield[ti].temp_tough_bonus += def.params.tough_bonus;
             }
         }
         else if (!def.card.IsInstant() && !def.card.IsSorcery())
         {
-            // Non-creature permanent (e.g. Aether Vial, Thrumming Hivepool): place on battlefield.
+            // Non-creature permanent (e.g. Aether Vial, Tainted Remedy, Aria of Flame): place
+            // on battlefield, then apply any ETB "each opponent gains N life" (Aria of Flame)
+            // -> reversed to damage by a Tainted Remedy / Plague Drone.
             Permanent perm;
             perm.card              = def.card;
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
             state.battlefield.push_back(perm);
+            if (def.params.etb_opponent_lifegain > 0)
+            {
+                OpponentGainsLife(state, state.active_player_index, def.params.etb_opponent_lifegain);
+            }
         }
 
         // (On-cast triggers + Prowess already fired above, at cast time, before the
@@ -1437,6 +1585,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Canonical execution order, applied within each kind in plan order:
     //   ActivateVial -> hand casts (non-sacrifice) -> hand casts (sacrifice-land)
     //   -> graveyard casts (Retrace).  (DiscardToLandsEdge is added in a later phase.)
+    // Within non-sacrifice hand casts, ENABLERS (lifegain_to_loss: Tainted Remedy / Plague
+    // Drone) go first so a same-turn payload (a free alt-cost spell, Aria's ETB, a Fiery
+    // Justice rider) resolves with the enabler already active -> damage instead of healing.
+    // No-op for decks without lifegain_to_loss cards: pass 1 is empty and pass 2 == the old
+    // single loop, so their execution stays byte-identical.
+    auto is_enabler_cast = [](const Action& a)
+    {
+        return a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
+            && IsLifegainToLossCard(a.card_name);
+    };
     apply_plan_actions = [&](const std::vector<Action>& acts)
     {
         for (const Action& a : acts)
@@ -1445,24 +1603,54 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         for (const Action& a : acts)
         {
-            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            if (is_enabler_cast(a))
             {
-                apply_one(a.card_name, false, false, 0);
+                apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+            }
+        }
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler_cast(a))
+            {
+                apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{});
             }
+        }
+
+        // Auto-fire safe alt payloads (Invigorate / Skyshroud) once everything else has
+        // resolved and a Remedy is live -> each is free face damage. Deterministic (not a
+        // search choice), so no enumeration blow-up; re-scan after each because firing one
+        // mutates the hand (and can add a verse trigger). No-op for decks without alt cards.
+        // Hard termination guard: each pass must REMOVE the chosen card from hand; if a cast
+        // does not (a fizzled/uncastable alt), stop -- never spin on the same card.
+        for (;;)
+        {
+            Player& ap2 = state.ActivePlayer();
+            int target = -1; int amt = 0;
+            for (int i = 0; i < static_cast<int>(ap2.hand.size()); ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap2.hand[i]);
+                if (d && CanAutoFireAltPayload(state, state.active_player_index, *d))
+                { target = i; amt = d->params.alt_lifegain_cost; break; }
+            }
+            if (target < 0) { break; }
+            std::string nm = ap2.hand[target].m_name;
+            size_t before = ap2.hand.size();
+            apply_one(nm, false, false, 0, true, amt, std::string{});
+            if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
 
@@ -1487,7 +1675,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bool is_sac = false;
             std::string src = SelectDigSource(state, pool, is_sac);
             if (src.empty()) { break; }
-            std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(src);
+            const CardDefinition* sd = CardDatabase::Instance().Lookup(src);
             if (!sd) { break; }
 
             if (is_sac)
@@ -1524,7 +1712,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Draw one. Record EVERY dig (even a land) so the executor replays the exact
             // cycle/sacrifice sequence and stays in library/hand sync.
             Card drawn = ap.library.DrawTop();
-            std::optional<CardDefinition> ddef = CardDatabase::Instance().Lookup(drawn.m_name);
+            const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
             bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
             ap.hand.push_back(std::move(drawn));
 
@@ -1561,7 +1749,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index) { continue; }
-            auto le_def = CardDatabase::Instance().Lookup(p.card.m_name);
+            auto le_def = CardDatabase::Instance().LookupCached(p.card);
             if (le_def && le_def->params.discard_land_damage > 0)
             {
                 rate = std::max(rate, le_def->params.discard_land_damage);
@@ -1583,7 +1771,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             int fired = 0;
             for (Card& c : ap.hand)
             {
-                auto cdef    = CardDatabase::Instance().Lookup(c.m_name);
+                auto cdef    = CardDatabase::Instance().LookupCached(c);
                 bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
                 if (is_land && fired < fire_count)
                 {
@@ -1632,6 +1820,10 @@ static void SimulateCombat(GameState& state)
         }
     }
 
+    // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
+    int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
+                        ? CountExalted(state.battlefield, active) : 0;
+
     std::vector<const Permanent*> attackers;
     attackers.reserve(atk_idx.size());
     for (int idx : atk_idx)
@@ -1644,8 +1836,8 @@ static void SimulateCombat(GameState& state)
             ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
                || HasDoubleStrikeFromLords(p.card, state.battlefield, active));
-        int base_pw = p.EffectivePower() + lord_pb;
-        std::optional<CardDefinition> adef = CardDatabase::Instance().Lookup(p.card.m_name);
+        int base_pw = p.EffectivePower() + lord_pb + exalted_bonus;
+        const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
         if (adef)
         {
             if (animated) { base_pw += adef->params.animate_power; }
@@ -1675,8 +1867,8 @@ static void SimulateTapTokens(GameState& state)
     {
         if (state.battlefield[i].controller_index != active
             || state.battlefield[i].tapped) { continue; }
-        std::optional<CardDefinition> def =
-            CardDatabase::Instance().Lookup(state.battlefield[i].card.m_name);
+        const CardDefinition* def =
+            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!def || !def->params.tap_token_cost.has_value()) { continue; }
 
         if (!def->params.tap_token_requires_subtypes.empty())
@@ -1715,7 +1907,7 @@ static void SimulateAnimateLands(GameState& state)
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped || p.is_animated) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || !def->params.can_animate || !def->params.animate_cost.has_value()) { continue; }
         if (TapForCostDirect(state, def->params.animate_cost.value(), false))
         {
@@ -1736,7 +1928,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
-        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        auto def = CardDatabase::Instance().LookupCached(p.card);
         if (def && def->params.no_max_hand_size) { unlimited_hand = true; break; }
     }
 
@@ -1752,14 +1944,14 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     {
         for (const Card& c : ap.hand)
         {
-            auto def = CardDatabase::Instance().Lookup(c.m_name);
+            auto def = CardDatabase::Instance().LookupCached(c);
             if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
         }
         for (const Permanent& p : state.battlefield)
         {
             if (has_land_outlet) { break; }
             if (p.controller_index != state.active_player_index) { continue; }
-            auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+            auto def = CardDatabase::Instance().LookupCached(p.card);
             if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; }
         }
     }
@@ -1857,7 +2049,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || !def->params.upkeep_adds_charge) { continue; }
         // Hand-aware charge policy, shared with the real engine (AIEngine::DecideVialCharge)
         // so the rollout models the same charge the executor will make.
@@ -1869,8 +2061,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     for (int i = 0; i < upkeep_bf_size; ++i)
     {
         if (state.battlefield[i].controller_index != state.active_player_index) { continue; }
-        std::optional<CardDefinition> def =
-            CardDatabase::Instance().Lookup(state.battlefield[i].card.m_name);
+        const CardDefinition* def =
+            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!def || def->params.upkeep_creates_tokens <= 0) { continue; }
         for (int t = 0; t < def->params.upkeep_creates_tokens; ++t)
         {
@@ -1892,7 +2084,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 // unavailable or no such card is in hand. Shared by the greedy fallback
 // (SimulateLandPlay) and the searched land fold (ApplyPlanDirect) so both produce
 // byte-identical placement for the same card.
-static bool PlayLandByName(GameState& state, const std::string& name)
+static bool PlayLandByName(GameState& state, const std::string& name,
+                           const std::string& fetch_target)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
@@ -1902,6 +2095,19 @@ static bool PlayLandByName(GameState& state, const std::string& name)
         if (it->m_name != name) { continue; }
         auto def = CardDatabase::Instance().Lookup(it->m_name);
         if (!def || !def->card.IsLand()) { continue; }
+
+        // Fetchland: the land drop sacrifices the fetchland to search out a real land.
+        // fetch_target names the searched choice (Pass 2); empty -> PerformFetch falls back
+        // to FetchCandidates' top heuristic pick (Pass 1 / single-candidate).
+        if (!def->params.fetch_land_types.empty())
+        {
+            Card fetchland = *it;
+            ap.hand.erase(it);
+            ++ap.lands_played_this_turn;
+            ap.graveyard.push_back(fetchland);
+            PerformFetch(state, state.active_player_index, def->params, fetch_target);
+            return true;
+        }
 
         // Resolve "as this land enters" choices while the card is still in hand.
         bool tapped = LandEntersTapped(state, *def);
@@ -1942,7 +2148,7 @@ static std::string SimulateLandPlay(GameState& state)
     {
         for (const Card& c : ap.hand)
         {
-            auto def = CardDatabase::Instance().Lookup(c.m_name);
+            auto def = CardDatabase::Instance().LookupCached(c);
             if (!def || !def->card.IsLand()) { continue; }
 
             bool is_multi = def->params.produces.size() > 1;
@@ -1989,7 +2195,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     int lands_in_hand = 0;
     for (const Card& c : ap.hand)
     {
-        auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+        auto cdef = CardDatabase::Instance().LookupCached(c);
         if (cdef ? cdef->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
     }
 
@@ -2233,8 +2439,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
         ManaCost spectacle_cost = draw.cost; // already set to Spectacle cost if active
         // If Spectacle not yet active, we need a trigger first; use the Spectacle cost directly.
-        std::optional<CardDefinition> draw_def =
-            CardDatabase::Instance().Lookup(ap.hand[draw.hand_index].m_name);
+        const CardDefinition* draw_def =
+            CardDatabase::Instance().LookupCached(ap.hand[draw.hand_index]);
         if (!draw_def || !draw_def->params.spectacle_cost.has_value()) { continue; }
         ManaCost spectacle_only = draw_def->params.spectacle_cost.value();
 
@@ -2386,6 +2592,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         s += pp.is_filter             ? "F" : "-";
         s += pp.cycling_cost          ? "C" : "-";
         s += pp.sacrifice_draw_cost   ? "D" : "-";
+        // Fetchlands with different target colours are NOT interchangeable; distinguish
+        // them. Empty for ordinary lands -> sig unchanged (other decks byte-identical).
+        for (const std::string& ft : pp.fetch_land_types) { s += "f" + ft; }
         return s;
     };
 
@@ -2393,7 +2602,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     std::unordered_set<std::string> seen_sig;
     for (const Card& c : ap.hand)
     {
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def || !def->card.IsLand()) { continue; }
         if (seen_sig.insert(land_sig(def->params)).second) { land_names.push_back(c.m_name); }
     }
@@ -2411,14 +2620,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         bool has_draw_until_nonland = false;
         for (const Card& c : ap.hand)
         {
-            std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && d->tmpl == CardTemplate::DrawUntilNonland) { has_draw_until_nonland = true; break; }
         }
         if (has_draw_until_nonland)
         {
             for (const Card& c : ap.hand)
             {
-                std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (d && d->card.IsLand() && d->params.no_max_hand_size) { return c.m_name; }
             }
         }
@@ -2428,7 +2637,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             bool want_multi    = (pass == 0 || pass == 2);
             for (const Card& c : ap.hand)
             {
-                std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(c.m_name);
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (!d || !d->card.IsLand()) { continue; }
                 bool is_tapped = d->params.enters_tapped;
                 bool is_multi  = d->params.produces.size() > 1;
@@ -2442,17 +2651,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 
     std::vector<TurnSolver::Plan> all;
 
-    auto add_for_land = [&](const std::string& land_name)
+    auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target)
     {
         PROF_INC(gamestate_copies);
         GameState copy = state;
-        if (!land_name.empty() && !PlayLandByName(copy, land_name)) { return; }
+        if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target)) { return; }
 
         // "Play this land, cast nothing" baseline (neutral value 0).
         TurnSolver::Plan idle;
         idle.value        = 0;
         idle.land_decided = true;
         idle.land_to_play = land_name;
+        idle.fetch_target = fetch_target;
         all.push_back(std::move(idle));
 
         std::vector<TurnSolver::Plan> plans = EnumeratePlans(copy, is_pre_combat);
@@ -2460,12 +2670,35 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         {
             p.land_decided = true;
             p.land_to_play = land_name;
+            p.fetch_target = fetch_target;
             all.push_back(std::move(p));
         }
     };
 
-    for (const std::string& ln : land_names) { add_for_land(ln); }
-    add_for_land("");   // defer: play no land this turn
+    // Pass 2 of the real-fetch model: a fetchland whose FetchCandidates returns MORE THAN
+    // ONE legal target is a genuine search choice (which colours to commit to). Emit one
+    // land-variant per candidate so the rollout picks the best, capped at the heuristic's
+    // top few (it orders best-first; lower-ranked targets are strictly worse on colour and
+    // a basic always ranks last, so the cap drops only clearly-inferior fetches). A single
+    // candidate (or none) plays the heuristic top pick with no extra branching (Pass 1).
+    constexpr int kMaxFetchSearchTargets = 2;
+    for (const std::string& ln : land_names)
+    {
+        const CardDefinition* ld = CardDatabase::Instance().Lookup(ln);
+        if (ld && !ld->params.fetch_land_types.empty())
+        {
+            std::vector<std::string> cands =
+                FetchCandidates(state, state.active_player_index, ld->params);
+            if (cands.size() > 1)
+            {
+                int n = std::min(static_cast<int>(cands.size()), kMaxFetchSearchTargets);
+                for (int i = 0; i < n; ++i) { add_for_land(ln, cands[i]); }
+                continue;
+            }
+        }
+        add_for_land(ln, "");   // ordinary land, or fetchland with <=1 candidate (heuristic)
+    }
+    add_for_land("", "");   // defer: play no land this turn
 
     // Winning plans first, then by value — matches EnumeratePlans' ordering so the
     // win-this-turn shortcut in SolveWithLookahead still returns the best winning plan.
@@ -2485,6 +2718,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             return a_greedy > b_greedy;
         });
 
+    TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
+          state.turn_number, all.size(), land_names.size(), ap.hand.size());
     return all;
 }
 
@@ -2569,7 +2804,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             for (const Card& c : p.graveyard)
             {
                 gy_acc += static_cast<uint64_t>(std::hash<std::string>{}(c.m_name));
-                std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+                const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
                 if (cdef && cdef->params.retrace) { gy_retraceable = true; }
             }
             if (gy_retraceable)
@@ -2623,10 +2858,16 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // registers for the value tiebreak.
         if (state.turn_number > cutoff_turn) { return max_turns + 1; }
 
-        // Count one work unit per simulated turn-step. The rollout never self
-        // truncates on the budget — it only consumes; the top-level decision
-        // (enforce_budget) is what decides when to stop adding more rollouts.
+        // Count one work unit per simulated turn-step. The rollout normally never self
+        // truncates on the budget — it only consumes; the top-level decision decides when
+        // to stop adding more rollouts. EXCEPTION: the mid-pass OVERRUN ceiling (armed by
+        // FullSearchLine). A pathological no-early-win decision spawns a huge number of these
+        // deep leaf rollouts; once the pass has blown kOverrunBeta x the whole budget, bail
+        // out here too (return no-win) so the leaf can't run unbounded. Overrun() is false
+        // unless armed (m_overrun_limit==0 on the baseline path / normal decisions), so this
+        // is byte-identical for every non-pathological rollout.
         if (budget) { budget->Consume(1); }
+        if (budget && budget->Overrun()) { return max_turns + 1; }
 
         // Expire staged (Light Up the Stage) cards whose play window has passed,
         // mirroring AIEngine::TakeTurn's expiry check (CR 406). Without this the
@@ -2776,6 +3017,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget)
 {
+    // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
+    if (budget && budget->Overrun()) { return { max_turns + 1, {} }; }
     if (second_main)
     {
         std::vector<TurnSolver::Plan> post = EnumeratePlans(state, false);
@@ -2851,6 +3094,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
+    // Mid-pass overrun: this pass has blown far past its budget estimate; bail out with a
+    // no-win so FullSearchLine rolls back to the last completed pass (see SetOverrunLimit).
+    if (budget && budget->Overrun())   { return { max_turns + 1, {} }; }
     if (depth <= 0)
     {
         // Tail estimate beyond the horizon: roll out to game end at s_fd_leaf_depth
@@ -2958,9 +3204,18 @@ namespace
     // passes exist to measure a real C_{k-1}/C_{k-2} branching ratio.
     constexpr double kDefaultGrowth = 6.0;
     // Overrun guard: once a pass is running past budget, abort + roll back only
-    // when it has spent more than beta * the budget it started with AND finishing
-    // is still expensive (see below). "Almost done" passes always finish.
-    constexpr double kOverrunBeta = 2.0;
+    // when it has spent more than the ceiling below. "Almost done" passes always finish.
+    // The ceiling is max(beta*budget, FLOOR): for small per-decision budgets beta*budget
+    // is tiny (th d3: 2*9000=18k units) and collides with a LEGITIMATE deep pass that
+    // genuinely needs ~2x budget, aborting it and changing the result (this broke th d3
+    // s3003 game 278's win turn). The absolute FLOOR keeps the guard above any normal
+    // completing pass (well under ~1e5 units for the suite decks) while staying far below
+    // a true no-win runaway (millions of units), so normal games of every deck remain
+    // byte-identical and only a genuine runaway aborts. Calibrated with the pathological
+    // antilife deck OUT of the suite; revisit if NODES_PER_VIRTUAL_MS is rebased.
+    // See search-perf-investigation memory.
+    constexpr double    kOverrunBeta  = 2.0;
+    constexpr long long kOverrunFloor = 1000000;
 }
 
 TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
@@ -2997,6 +3252,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     SearchLine line;
     line.win_turn = max_turns + 1;
     int committed_depth = depth;             // depth actually searched for `line`
+    SearchLine prev_line = line;             // last pass that COMPLETED (overrun rollback target)
+    int        prev_committed = committed_depth;
 
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
     bool      have_prev = false, have_prev2 = false;
@@ -3019,10 +3276,37 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         }
 
         long long used_before = budget ? budget->Used() : 0;
-        line = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt,
-                         &line_cache, budget);
+        // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost
+        // blows past kOverrunBeta x the whole decision budget it is pathological -- abort
+        // and keep the last completed pass. Normal passes finish far under this ceiling, so
+        // the guard never fires for them (parity preserved). Only for a limited budget.
+        if (budget != nullptr && !budget->Unlimited())
+        {
+            long long beta_ceiling = static_cast<long long>(
+                kOverrunBeta * static_cast<double>(budget->Limit()));
+            budget->SetOverrunLimit(used_before + std::max(beta_ceiling, kOverrunFloor));
+        }
+        SearchLine attempt = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt,
+                                       &line_cache, budget);
+        bool aborted = (budget != nullptr && budget->Overrun());
+        if (budget != nullptr) { budget->SetOverrunLimit(0); }   // disarm
+
+        if (aborted)
+        {
+            // Runaway pass: discard its partial result, commit the last completed pass.
+            TRACE("search", "T%d pass=%d OVERRUN abort (used=%lld limit=%lld) -> commit depth=%d",
+                  state.turn_number, pass_depth,
+                  budget ? budget->Used() : 0, budget ? budget->Limit() : 0, prev_committed);
+            line = prev_line; committed_depth = prev_committed;
+            break;
+        }
+
+        line = attempt;
         committed_depth = pass_depth;
+        prev_line = line; prev_committed = committed_depth;   // this pass completed
         long long cost = (budget ? budget->Used() : 0) - used_before;
+        TRACE("search", "T%d pass=%d done win=%d cost=%lld used=%lld",
+              state.turn_number, pass_depth, line.win_turn, cost, budget ? budget->Used() : 0);
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;

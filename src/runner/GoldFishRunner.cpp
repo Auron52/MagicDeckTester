@@ -30,7 +30,7 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
 {
     for (const Card& c : deck.mainboard)
     {
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (def && def->params.spectacle_cost.has_value()) { return true; }
     }
     return false;

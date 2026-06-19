@@ -143,7 +143,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
     int land_count = 0;
     for (const Card& c : hand)
     {
-        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        auto def = CardDatabase::Instance().LookupCached(c);
         bool is_land = def ? def->card.IsLand() : c.IsLand();
         if (is_land) { ++land_count; }
     }
@@ -173,7 +173,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
             int sources = 0;
             for (const Card& c : hand)
             {
-                auto def = CardDatabase::Instance().Lookup(c.m_name);
+                auto def = CardDatabase::Instance().LookupCached(c);
                 if (!def) { continue; }
                 bool is_mana_source = (def->tmpl == CardTemplate::BasicLand)
                                    || (def->tmpl == CardTemplate::ManaDork);
@@ -199,7 +199,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
         int wild_mana = 0;
         for (const Card& c : hand)
         {
-            auto def = CardDatabase::Instance().Lookup(c.m_name);
+            auto def = CardDatabase::Instance().LookupCached(c);
             if (!def || !def->card.IsLand()) { continue; }
             ++total_land_mana;
             if (def->params.produces.size() == 1)
@@ -215,7 +215,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
         int playable = 0;
         for (const Card& c : hand)
         {
-            auto def = CardDatabase::Instance().Lookup(c.m_name);
+            auto def = CardDatabase::Instance().LookupCached(c);
             if (!def || def->card.IsLand()) { continue; }
             const ManaCost& cost = def->card.m_mana_cost;
             if (total_land_mana < cost.ManaValue()) { continue; }
@@ -238,7 +238,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
         int count_mv2 = 0;  // spells with MV <= 2 (includes MV <= 1)
         for (const Card& c : hand)
         {
-            auto def     = CardDatabase::Instance().Lookup(c.m_name);
+            auto def     = CardDatabase::Instance().LookupCached(c);
             bool is_land = def ? def->card.IsLand() : c.IsLand();
             if (is_land) { continue; }
             int mv = def ? def->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
@@ -301,7 +301,7 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
     int land_count = 0;
     for (const Card& c : hand)
     {
-        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        auto def = CardDatabase::Instance().LookupCached(c);
         if (!def || !def->card.IsLand()) { continue; }
         ++land_count;
         for (Color produced : def->params.produces) { ++pool[produced]; }
@@ -359,7 +359,7 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
         std::map<Color, int> demand;
         for (const Card& hc : hand)
         {
-            auto sdef = CardDatabase::Instance().Lookup(hc.m_name);
+            auto sdef = CardDatabase::Instance().LookupCached(hc);
             if (!sdef || sdef->card.IsLand()) { continue; }
             const ManaCost& cost = sdef->card.m_mana_cost;
             demand[Color::White]     += cost.white;
@@ -378,7 +378,7 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
         for (int j = 0; j < static_cast<int>(hand.size()); ++j)
         {
             if (!allowed[j]) { continue; }
-            auto def     = CardDatabase::Instance().Lookup(hand[j].m_name);
+            auto def     = CardDatabase::Instance().LookupCached(hand[j]);
             bool is_land = def ? def->card.IsLand() : hand[j].IsLand();
             if (!is_land) { continue; }
 
@@ -405,7 +405,7 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
             int uncastable_cnt = 0;
             for (const Card& hc : hand)
             {
-                auto sdef = CardDatabase::Instance().Lookup(hc.m_name);
+                auto sdef = CardDatabase::Instance().LookupCached(hc);
                 if (!sdef || sdef->card.IsLand()) { continue; }
                 int d = one_deficit(sdef->card.m_mana_cost, tmp_pool, land_count - 1);
                 total_deficit += d;
@@ -480,7 +480,7 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
         for (int j = 0; j < static_cast<int>(hand.size()); ++j)
         {
             if (!allowed[j]) { continue; }
-            auto def     = CardDatabase::Instance().Lookup(hand[j].m_name);
+            auto def     = CardDatabase::Instance().LookupCached(hand[j]);
             bool is_land = def ? def->card.IsLand() : hand[j].IsLand();
             if (is_land) { continue; }
 
@@ -790,7 +790,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 for (const Permanent& p : state.battlefield)
                 {
                     if (p.controller_index != state.active_player_index) { continue; }
-                    auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+                    auto def = CardDatabase::Instance().LookupCached(p.card);
                     if (!def) { continue; }
                     if (def->params.no_max_hand_size || def->params.discard_land_damage > 0)
                     { has_enabler = true; break; }
@@ -803,7 +803,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     th_cost.blue    = 1;
                     for (const Card& c : ap_ref.hand)
                     {
-                        auto def = CardDatabase::Instance().Lookup(c.m_name);
+                        auto def = CardDatabase::Instance().LookupCached(c);
                         if (!def || def->tmpl != CardTemplate::DrawUntilNonland) { continue; }
                         if (avail.CanPay(th_cost)) { defer_land = true; }
                         break;
@@ -994,7 +994,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
-                TryPlaySpecificLand(state, plan.land_to_play);
+                TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target);
             }
         }
         else
@@ -1006,7 +1006,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Deploy a creature from hand via Aether Vial (lords boost subsequent spell evals).
     auto deploy_via_vial = [&](const std::string& name)
     {
-        std::optional<CardDefinition> copt = CardDatabase::Instance().Lookup(name);
+        const CardDefinition* copt = CardDatabase::Instance().Lookup(name);
         if (!copt || !copt->card.IsCreature()) { return; }
         int mv = copt->card.m_mana_cost.ManaValue();
         Player& ap_v = state.ActivePlayer();
@@ -1018,8 +1018,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             Permanent& vp = state.battlefield[vi];
             if (vp.controller_index != state.active_player_index || vp.tapped) { continue; }
-            std::optional<CardDefinition> vdef =
-                CardDatabase::Instance().Lookup(vp.card.m_name);
+            const CardDefinition* vdef =
+                CardDatabase::Instance().LookupCached(vp.card);
             if (!vdef || !vdef->params.upkeep_adds_charge) { continue; }
             if (vp.charge_counters != mv) { continue; }
             if (m_logger) { m_logger->LogCastSpell(hand_it->m_number, name, "Vial"); }
@@ -1048,14 +1048,26 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     };
 
     // Cast a spell from hand by name.
-    auto cast_by_name = [&](const std::string& name)
+    auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "")
     {
         Player& ap = state.ActivePlayer();
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);
-        CastSpellFromHand(state, *it, available);
+        CastSpellFromHand(state, *it, available, 0, tutor_target);
+    };
+
+    // Cast a spell from hand via its alternative cost (Invigorate / Skyshroud Cutter /
+    // Reverent Silence): no mana, the opponent gains alt_lifegain (-> damage with Remedy).
+    auto cast_alt = [&](const std::string& name, int alt_lifegain)
+    {
+        Player& ap = state.ActivePlayer();
+        auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
+            [&name](const Card& c) { return c.m_name == name; });
+        if (it == ap.hand.end()) { return; }
+        ManaPool available = BuildAvailableMana(state);
+        CastSpellFromHand(state, *it, available, alt_lifegain);
     };
 
     // Cast a Retrace card from the graveyard, discarding `discard_lands` lands as the
@@ -1068,7 +1080,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         auto git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (git == ap.graveyard.end()) { return; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(name);
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
         if (!def) { return; }
 
         // Pay the mana cost first; abort cleanly (graveyard untouched) if unpayable.
@@ -1081,7 +1093,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         int discarded = 0;
         for (auto hit = ap.hand.begin(); hit != ap.hand.end() && discarded < discard_lands; )
         {
-            std::optional<CardDefinition> hdef = CardDatabase::Instance().Lookup(hit->m_name);
+            const CardDefinition* hdef = CardDatabase::Instance().Lookup(hit->m_name);
             bool is_land = hdef ? hdef->card.IsLand() : hit->IsLand();
             if (is_land)
             {
@@ -1121,7 +1133,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // freshly revealed cards with the remaining mana). See stage_draw_break below.
     auto note_draw_engine = [&](const std::string& name)
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(name);
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
                   || d->params.stages_cards))
         { cast_draw_engine = true; }
@@ -1136,7 +1148,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // so the second pass re-solves from the post-draw state with the mana intact.
     auto stage_draw_break = [&](const std::string& name) -> bool
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(name);
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         return d && d->params.stages_cards;
     };
 
@@ -1145,7 +1157,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // re-solves after.
     auto is_draw_engine = [&](const std::string& name) -> bool
     {
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(name);
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         return d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
                      || d->params.stages_cards);
     };
@@ -1192,7 +1204,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
-            { cast_by_name(a.card_name); resolve_now(); }
+            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::DigDraw)
@@ -1225,14 +1237,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
             {
-                cast_by_name(a.card_name); resolve_now();
+                cast_by_name(a.card_name, a.tutor_target); resolve_now();
                 if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(); }
             }
         }
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { cast_by_name(a.card_name); resolve_now(); }
+            { cast_by_name(a.card_name, a.tutor_target); resolve_now(); }
         }
         for (const Action& a : extra.actions)
         {
@@ -1255,11 +1267,28 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
     }
+    // Enabler-first: cast lifegain_to_loss spells (Tainted Remedy / Plague Drone) before any
+    // other hand cast and resolve each, so a same-turn payload fires with the enabler active
+    // (-> damage, not healing). Matches the rollout's enabler-first order. No-op (and so
+    // byte-identical) for decks without lifegain_to_loss cards.
     for (const Action& a : plan.actions)
     {
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
+            && IsLifegainToLossCard(a.card_name))
         {
-            cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
+        }
+    }
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
+        {
+            cast_alt(a.card_name, a.alt_lifegain); resolve_now();
+        }
+        else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
+                 && !IsLifegainToLossCard(a.card_name))   // enablers already cast above
+        {
+            cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 // Commit-the-line: a committed plan replays the verbatim recorded
@@ -1279,13 +1308,37 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (staged_break) { break; }
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { cast_by_name(a.card_name); note_draw_engine(a.card_name); resolve_now(); }
+        { cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
         if (staged_break) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
         { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
+    }
+
+    // Auto-fire safe alt payloads (Invigorate / Skyshroud) deterministically once a Remedy is
+    // live -> free face damage. Mirrors the rollout's FireSafeAltPayloads pass (so the realised
+    // turn matches the searched line without any recording). Re-scan after each cast because it
+    // mutates the hand. No-op for decks without alt-cost cards.
+    if (!staged_break)
+    {
+        for (;;)
+        {
+            Player& rp2 = state.ActivePlayer();
+            int target = -1; int amt = 0;
+            for (int i = 0; i < static_cast<int>(rp2.hand.size()); ++i)
+            {
+                auto d = CardDatabase::Instance().LookupCached(rp2.hand[i]);
+                if (d && CanAutoFireAltPayload(state, state.active_player_index, *d))
+                { target = i; amt = d->params.alt_lifegain_cost; break; }
+            }
+            if (target < 0) { break; }
+            std::string nm = rp2.hand[target].m_name;
+            size_t before = rp2.hand.size();
+            cast_alt(nm, amt); resolve_now();
+            if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
+        }
     }
 
     // Commit-the-line: replay any recorded dig (Kind::DigDraw) the draw-engine breakpoint
@@ -1356,7 +1409,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
 // Play a specific named land from hand. Mirrors TryPlayLand's per-card logic;
 // used by the land search in TakeTurn to apply the chosen candidate.
-bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name)
+bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
+                                   const std::string& fetch_target)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
@@ -1367,6 +1421,17 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name)
         if (!def || !def->card.IsLand()) { continue; }
 
         if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
+        // Fetchland: sacrifice it to search out a real land (same heuristic as the rollout
+        // so the committed line replays identically).
+        if (!def->params.fetch_land_types.empty())
+        {
+            Card fetchland = *it;
+            ap.hand.erase(it);
+            ++ap.lands_played_this_turn;
+            ap.graveyard.push_back(fetchland);
+            PerformFetch(state, state.active_player_index, def->params, fetch_target);
+            return true;
+        }
         bool tapped = LandEntersTapped(state, *def);
         Permanent perm;
         perm.card              = def->card;
@@ -1400,6 +1465,16 @@ bool AIEngine::TryPlayLand(GameState& state)
     auto play_land_iter = [&](std::vector<Card>::iterator it, const CardDefinition& def) -> bool
     {
         if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
+        // Fetchland: sacrifice it to search out a real land (PerformFetch heuristic).
+        if (!def.params.fetch_land_types.empty())
+        {
+            Card fetchland = *it;
+            ap.hand.erase(it);
+            ++ap.lands_played_this_turn;
+            ap.graveyard.push_back(fetchland);
+            PerformFetch(state, state.active_player_index, def.params);
+            return true;
+        }
         // Resolve "as this land enters" choices (shock life payment, reveal-untap)
         // while the card is still in hand; this also tells us if it enters tapped.
         bool tapped = LandEntersTapped(state, def);
@@ -1433,7 +1508,7 @@ bool AIEngine::TryPlayLand(GameState& state)
     bool has_draw_until_nonland = false;
     for (const Card& c : ap.hand)
     {
-        auto cdef = CardDatabase::Instance().Lookup(c.m_name);
+        auto cdef = CardDatabase::Instance().LookupCached(c);
         if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland)
         {
             has_draw_until_nonland = true;
@@ -1508,7 +1583,7 @@ void AIEngine::UseSurplusLandAbilities(GameState& state)
 bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_sacrifice)
 {
     Player& ap = state.ActivePlayer();
-    std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(source);
+    const CardDefinition* sd = CardDatabase::Instance().Lookup(source);
     if (!sd) { return false; }
 
     if (is_sacrifice)
@@ -1549,7 +1624,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
 
     if (ap.library.empty()) { return false; }
     Card drawn = ap.library.DrawTop();
-    std::optional<CardDefinition> ddef = CardDatabase::Instance().Lookup(drawn.m_name);
+    const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
     bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
     if (m_logger) { m_logger->LogDraw(drawn.m_number, drawn.m_name); }
     ap.hand.push_back(std::move(drawn));
@@ -1564,7 +1639,7 @@ void AIEngine::AnimateLands(GameState& state, ManaPool& available)
     {
         if (p.controller_index != state.active_player_index
             || p.tapped || p.is_animated) { continue; }
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || !def->params.can_animate || !def->params.animate_cost.has_value()) { continue; }
         const ManaCost& cost = def->params.animate_cost.value();
         if (!available.CanPay(cost)) { continue; }
@@ -1582,8 +1657,8 @@ void AIEngine::ActivateTapTokens(GameState& state, ManaPool& available)
     {
         if (state.battlefield[i].controller_index != state.active_player_index
             || state.battlefield[i].tapped) { continue; }
-        std::optional<CardDefinition> def =
-            CardDatabase::Instance().Lookup(state.battlefield[i].card.m_name);
+        const CardDefinition* def =
+            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!def || !def->params.tap_token_cost.has_value()) { continue; }
 
         if (!def->params.tap_token_requires_subtypes.empty())
@@ -1628,7 +1703,7 @@ ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
 
-        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
 
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
@@ -1665,6 +1740,10 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
         p.tapped = true;
         DecrementDepletionOnTap(p);
         if (def.params.tap_self_damage > 0) { ap.life -= def.params.tap_self_damage; }
+        // Grove of the Burnwillows: each coloured tap makes the opponent gain 1 (-> 1 damage
+        // with Tainted Remedy out). Mirrors TurnSolver's tap_source.
+        if (def.params.tap_opponent_lifegain > 0)
+        { OpponentGainsLife(state, state.active_player_index, def.params.tap_opponent_lifegain); }
         int amt = ManaProducedPerTap(def);
         floating.Add(col, amt);
         available.Add(col, -amt);
@@ -1684,7 +1763,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
         for (Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
-            std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
             Color col;
             if (any)
@@ -1709,7 +1788,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
             for (Permanent& p : state.battlefield)
             {
                 if (p.controller_index != active || p.tapped) { continue; }
-                std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
                 if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
                 p.tapped = true;
                 floating.Add(Color::Colorless, 1);
@@ -1723,7 +1802,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
         for (Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
-            std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
             Color out;
             if (any)
@@ -1753,7 +1832,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
                     for (Permanent& s : state.battlefield)
                     {
                         if (s.controller_index != active || s.tapped) { continue; }
-                        std::optional<CardDefinition> sd = CardDatabase::Instance().Lookup(s.card.m_name);
+                        const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
                         bool m = false;
                         for (Color c : sd->params.produces) { if (c == ic) { m = true; break; } }
@@ -1780,7 +1859,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
             for (Permanent& p : state.battlefield)
             {
                 if (p.controller_index != active || p.tapped) { continue; }
-                std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(p.card.m_name);
+                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
                 if (!def || !def->params.ramp_filter || !usable(p, *def)) { continue; }
                 if (!any)
                 {
@@ -1885,10 +1964,11 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
     return -1;
 }
 
-void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available)
+void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
+                                 int alt_lifegain, const std::string& tutor_target)
 {
     Player& ap = state.ActivePlayer();
-    auto def = CardDatabase::Instance().Lookup(hand_card.m_name);
+    auto def = CardDatabase::Instance().LookupCached(hand_card);
     if (!def) { return; }
 
     StackEntry entry;
@@ -1896,6 +1976,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     entry.source           = def->card;
     entry.source.m_number  = hand_card.m_number;  // preserve per-copy ID for logging
     entry.controller_index = state.active_player_index;
+    entry.tutor_target     = tutor_target;        // searched fetch target (empty -> heuristic)
 
     int opp_index = 1 - state.active_player_index;
     switch (def->params.targeting)
@@ -1911,7 +1992,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         }
         case Targeting::Creature:
         {
-            int idx = FindOpponentCreature(state);
+            // Own-creature pump (Invigorate) targets the controller's best attacker; other
+            // creature-targeting spells (removal/burn) target an opponent creature.
+            int idx = def->params.target_own_creature
+                      ? FindBestOwnAttacker(state, state.active_player_index)
+                      : FindOpponentCreature(state);
             if (idx < 0) { return; }
             Target t;
             t.type            = Target::Type::Permanent;
@@ -1939,11 +2024,19 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     }
 
     ManaCost effective = EffectiveCost(*def, state);
-    if (!TapForCost(state, effective, available, def->card.IsCreature())) { return; }
+    if (alt_lifegain > 0)
+    {
+        // Alternative cost: pay no mana; instead make the opponent gain alt_lifegain life
+        // (-> that much damage with a Tainted Remedy / Plague Drone in play). Paid at cast.
+        OpponentGainsLife(state, state.active_player_index, alt_lifegain);
+    }
+    else if (!TapForCost(state, effective, available, def->card.IsCreature())) { return; }
 
     if (m_logger)
     {
-        m_logger->LogCastSpell(hand_card.m_number, hand_card.m_name, effective.ToString());
+        m_logger->LogCastSpell(hand_card.m_number, hand_card.m_name,
+                               alt_lifegain > 0 ? ("(alt: opp +" + std::to_string(alt_lifegain) + ")")
+                                                : effective.ToString());
     }
 
     if (def->params.sacrifice_land)
@@ -2037,7 +2130,7 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     bool has_land_outlet = false;
     for (const Card& c : ap.hand)
     {
-        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        auto def = CardDatabase::Instance().LookupCached(c);
         if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
     }
     if (!has_land_outlet)
@@ -2045,7 +2138,7 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index) { continue; }
-            auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+            auto def = CardDatabase::Instance().LookupCached(p.card);
             if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
         }
     }
@@ -2055,7 +2148,7 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         for (Card& c : ap.hand)
         {
             if (c.m_is_staged) { continue; }
-            auto def     = CardDatabase::Instance().Lookup(c.m_name);
+            auto def     = CardDatabase::Instance().LookupCached(c);
             bool is_land = def ? def->card.IsLand() : c.IsLand();
             if (is_land) { return &c; }
         }
@@ -2074,7 +2167,7 @@ Card* AIEngine::ChooseDiscard(GameState& state)
             if (c.m_name == piece) { is_req = true; break; }
         }
         if (is_req) { continue; }
-        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        auto def = CardDatabase::Instance().LookupCached(c);
         int  mv  = def ? def->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
         if (mv > best_mv) { best_mv = mv; best_non_req = &c; }
     }
@@ -2085,8 +2178,8 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         [](const Card& a, const Card& b)
         {
             if (a.m_is_staged != b.m_is_staged) { return a.m_is_staged; }
-            auto da = CardDatabase::Instance().Lookup(a.m_name);
-            auto db = CardDatabase::Instance().Lookup(b.m_name);
+            auto da = CardDatabase::Instance().LookupCached(a);
+            auto db = CardDatabase::Instance().LookupCached(b);
             int mv_a = da ? da->card.m_mana_cost.ManaValue() : a.m_mana_cost.ManaValue();
             int mv_b = db ? db->card.m_mana_cost.ManaValue() : b.m_mana_cost.ManaValue();
             return mv_a < mv_b;
@@ -2104,7 +2197,7 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
-        auto def = CardDatabase::Instance().Lookup(p.card.m_name);
+        auto def = CardDatabase::Instance().LookupCached(p.card);
         if (def && def->params.discard_land_damage > 0)
             rate = std::max(rate, def->params.discard_land_damage);
     }
@@ -2115,7 +2208,7 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     int lands_in_hand = 0;
     for (const Card& c : ap.hand)
     {
-        auto def = CardDatabase::Instance().Lookup(c.m_name);
+        auto def = CardDatabase::Instance().LookupCached(c);
         if ((def ? def->card.IsLand() : c.IsLand())) { ++lands_in_hand; }
     }
     if (lands_in_hand == 0) { return; }
@@ -2154,7 +2247,7 @@ void AIEngine::DoActivateLandsEdge(GameState& state, int count, int rate)
     int fired = 0;
     for (Card& c : ap.hand)
     {
-        auto def     = CardDatabase::Instance().Lookup(c.m_name);
+        auto def     = CardDatabase::Instance().LookupCached(c);
         bool is_land = def ? def->card.IsLand() : c.IsLand();
         if (is_land && fired < count)
         {

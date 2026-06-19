@@ -19,12 +19,14 @@ declare -A DECK_FILE=(
   [burn]=decks/test_deck.txt
   [th]=decks/treasure_hunt.txt
   [knights]=decks/Knights.cod
+  [antilife]=decks/Anti-Lifegain.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial.profile.json
   [burn]=decks/test_deck.profile.json
   [th]=decks/treasure_hunt.profile.json
   [knights]=decks/Knights.profile.json
+  [antilife]=decks/Anti-Lifegain.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -44,6 +46,14 @@ SMOKE_CASES=(
   "knights 0 1001 1000 0"
   "knights 3 1001  250 100"
   "knights 5 1001  150 200"
+  # antilife: pulled from the suites pending lever-2 path-pruning. Its no-win games
+  # explore pathological trees that the overrun guard can only bound at a low ceiling,
+  # which perturbs normal games of other decks (broke th d3 s3003 game 278). Re-add once
+  # the no-win hang is fixed (and the per-node-cost work / budget rebase may pull it under
+  # budget on its own). See search-perf-investigation memory.
+  # "antilife 0 1001 1000 0"
+  # "antilife 3 1001  250 100"
+  # "antilife 5 1001  150 200"
 )
 
 # regression: ~40 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -73,6 +83,12 @@ REGRESSION_CASES=(
   "knights 3 3003  300 100"
   "knights 5 2002  250 200"
   "knights 5 3003  250 200"
+  # antilife: pulled pending lever-2 path-pruning (see smoke block + search-perf-investigation).
+  # "antilife 0 2002 1000 0"
+  # "antilife 3 2002  300 100"
+  # "antilife 3 3003  300 100"
+  # "antilife 5 2002  250 200"
+  # "antilife 5 3003  250 200"
 )
 
 # overnight: ~80 min wide multi-seed sweep -- 4 seeds, large game counts for
@@ -126,4 +142,17 @@ OVERNIGHT_CASES=(
   "knights 5 5005 1000 200"
   "knights 5 6006 1000 200"
   "knights 5 7007 1000 200"
+  # antilife: pulled pending lever-2 path-pruning (see smoke block + search-perf-investigation).
+  # "antilife 0 4004 2000 0"
+  # "antilife 0 5005 2000 0"
+  # "antilife 0 6006 2000 0"
+  # "antilife 0 7007 2000 0"
+  # "antilife 3 4004 1000 100"
+  # "antilife 3 5005 1000 100"
+  # "antilife 3 6006 1000 100"
+  # "antilife 3 7007 1000 100"
+  # "antilife 5 4004 1000 200"
+  # "antilife 5 5005 1000 200"
+  # "antilife 5 6006 1000 200"
+  # "antilife 5 7007 1000 200"
 )

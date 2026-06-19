@@ -152,7 +152,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         for (const Permanent& p : s.battlefield)
         {
             if (p.controller_index != s.active_player_index) { continue; }
-            std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(p.card.m_name);
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (d && d->params.upkeep_adds_charge) { vials.push_back(p.charge_counters); }
         }
         os << ", \"vial_counters\": [";
@@ -165,7 +165,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     for (size_t i = 0; i < hand.size(); ++i)
     {
         if (i) { os << ", "; }
-        std::optional<CardDefinition> d = CardDatabase::Instance().Lookup(hand[i]);
+        const CardDefinition* d = CardDatabase::Instance().Lookup(hand[i]);
         os << "{ \"name\": "; JsonStr(os, hand[i]);
         os << ", \"cost\": "; JsonStr(os, d ? d->card.m_mana_cost.ToString() : std::string());
         os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0) << " }";

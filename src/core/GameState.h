@@ -35,6 +35,9 @@ struct StackEntry
     int                 controller_index = 0;
     std::vector<Target> targets;
     std::optional<int>  chosen_x;
+    std::string         tutor_target;   // for a tutor spell: the specific library card to fetch
+                                        // (searched choice). Empty -> PerformTutor uses the
+                                        // heuristic's top pick.
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
 };
 

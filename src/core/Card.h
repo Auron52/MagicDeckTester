@@ -4,12 +4,14 @@
 #include <optional>
 #include <cstdint>
 
+struct CardDefinition; // fwd decl: Card caches a pointer into the CardDatabase (see m_def)
+
 enum class CardType { Land, Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Battle };
 enum class Color { White, Blue, Black, Red, Green, Colorless };
 enum class Keyword
 {
     Haste, Flying, Trample, Deathtouch, Lifelink, FirstStrike, DoubleStrike,
-    Vigilance, Reach, Defender, Indestructible, Flash, Menace, Prowess
+    Vigilance, Reach, Defender, Indestructible, Flash, Menace, Prowess, Exalted
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 
@@ -71,6 +73,21 @@ struct Card
     uint32_t    m_keyword_mask   = 0;    // set of Keyword
     std::optional<int>     m_power;      // null for non-creatures
     std::optional<int>     m_toughness;
+
+    // Memoized pointer to this card's CardDatabase entry, resolved lazily by
+    // CardDatabase::LookupCached(const Card&). The DB is a lifetime singleton whose
+    // entries are never erased/relocated, so the pointer stays valid; it is copied
+    // along with the card (a cheap register move) so a card resolved once carries its
+    // definition through every GameState deep-copy in the search -- eliminating the
+    // repeated name-hash + hashtable find that dominated the profile after the
+    // by-value-Lookup fix. nullptr means "not yet resolved" (re-resolves on next use).
+    //
+    // DERIVED FROM m_name: it must be reset to nullptr anywhere m_name is reassigned
+    // (token P/T naming), and it must NEVER feed BuildSimKey / game-log output / any
+    // hashing -- a heap address is non-deterministic across runs and would break the
+    // deterministic-budget contract. (BuildSimKey folds only chosen fields, not the
+    // struct, so it is unaffected.)
+    mutable const CardDefinition* m_def = nullptr;
 
     // The enum value's ordinal is its bit index; every enum above has < 32 values.
     static constexpr uint32_t Bit(CardType t)  { return 1u << static_cast<int>(t); }

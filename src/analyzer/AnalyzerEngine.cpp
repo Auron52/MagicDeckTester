@@ -334,7 +334,7 @@ static std::map<Color, int> FindMaxPipsPerColor(const Decklist& deck)
     std::map<Color, int> max_pips;
     for (const Card& c : deck.mainboard)
     {
-        std::optional<CardDefinition> def = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const ManaCost& cost = def->card.m_mana_cost;
         if (cost.white > 0) { max_pips[Color::White] = std::max(max_pips[Color::White], cost.white); }
@@ -414,7 +414,7 @@ int AnalyzerEngine::ComputeVialTargetMv(const Decklist& deck)
     std::map<int, int> mv_count;
     for (const Card& c : deck.mainboard)
     {
-        std::optional<CardDefinition> cdef = CardDatabase::Instance().Lookup(c.m_name);
+        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
         if (!cdef || !cdef->card.IsCreature()) { continue; }
         int mv = cdef->card.m_mana_cost.ManaValue();
         if (mv > 0) { ++mv_count[mv]; }
@@ -486,7 +486,7 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
         const std::string& card = kv.first;
 
         // Skip lands — they're controlled by the grid search, not required_pieces.
-        std::optional<CardDefinition> opt = CardDatabase::Instance().Lookup(card);
+        const CardDefinition* opt = CardDatabase::Instance().Lookup(card);
         if (opt && opt->card.IsLand()) { continue; }
 
         std::cerr << "  Candidate: " << card

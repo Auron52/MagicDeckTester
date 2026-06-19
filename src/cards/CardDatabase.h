@@ -242,6 +242,82 @@ struct CardParams
     int                      etb_dig_count = 0;
     std::vector<std::string> etb_dig_subtypes;
     std::vector<std::string> etb_dig_requires_subtypes;
+
+    // --- Anti-Lifegain (Tainted Remedy / Aria of Flame) extensions ---
+
+    // Static replacement (Tainted Remedy; Plague Drone's "Rot Fly"): while the controller
+    // has a permanent with this flag, "an opponent would gain N life" becomes "that opponent
+    // loses N life instead" (CR 614.12). This is the deck's entire damage engine -- every
+    // "opponent gains life" rider below is routed through OpponentGainsLife (SpellEffects.h),
+    // which checks RemedyActive. Default false -> no effect for other decks.
+    bool lifegain_to_loss = false;
+
+    // Resolution rider "target opponent / each opponent gains N life" (Fiery Justice: 5).
+    // Applied at resolution via OpponentGainsLife, so Tainted Remedy reverses it into damage.
+    int opponent_lifegain = 0;
+
+    // ETB "each opponent gains N life" (Aria of Flame: 10). Applied via OpponentGainsLife
+    // when the permanent enters -- with Tainted Remedy out it is 10 immediate damage.
+    int etb_opponent_lifegain = 0;
+
+    // Verse engine (Aria of Flame): when the controller CASTS an instant or sorcery, put a
+    // verse counter on this permanent, then it deals (verse counters) damage to the opponent.
+    // Fired from FireOnCastTriggers (real game + rollout). Counter stored on Permanent.
+    bool verse_damage = false;
+
+    // Alternate cost (Invigorate: 3 / Skyshroud Cutter: 5 / Reverent Silence: 6): "If you
+    // control a <alt_cost_requires_subtype>, rather than pay this spell's mana cost, you may
+    // have an opponent gain alt_lifegain_cost life." The spell still resolves its normal
+    // effect; only the cost changes. The search offers it as a separate ZERO-mana Action
+    // when the controller controls a permanent with alt_cost_requires_subtype, applying the
+    // opponent lifegain (-> damage under Tainted Remedy) at cast time. 0 = no alt cost.
+    int         alt_lifegain_cost = 0;
+    std::string alt_cost_requires_subtype;
+
+    // Destroy all enchantments on resolution (Reverent Silence) -- includes the caster's own.
+    bool destroy_all_enchantments = false;
+
+    // Tutor: search the library for a card whose card type is in tutor_types and move it to
+    // the hand (tutor_to_hand) or the top of the library (tutor_to_top). Deterministic target
+    // choice via TutorPick (SpellEffects.h). Idyllic Tutor (enchantment -> hand), Enlightened
+    // Tutor (artifact/enchantment -> top).
+    bool                     tutor_to_hand = false;
+    bool                     tutor_to_top  = false;
+    std::vector<std::string> tutor_types;
+    // Tutor target selection. The intended DEFAULT (empty) is a SEARCHED choice -- the
+    // search branches over fetch targets and keeps the best (a Tier-2 search-choice like
+    // dig-as-search-choice; pending, see follow-up). A non-empty value names a HEURISTIC
+    // override used instead of searching. "enabler_then_wincon" = TutorPick: fetch a combo
+    // enabler (lifegain_to_loss) while none is active, else the wincon engine (verse_damage),
+    // else the first match. (Until searched-tutor lands, the default also uses TutorPick.)
+    std::string              tutor_heuristic;
+
+    // Removal rider (Swords to Plowshares): the exiled creature's controller gains life equal
+    // to its power. Routed through OpponentGainsLife when that controller is the opponent (so
+    // with Tainted Remedy it becomes damage equal to the exiled creature's power).
+    bool controller_lifegain_equals_power = false;
+
+    // Per-tap opponent lifegain (Grove of the Burnwillows: "{T}: Add {R} or {G}. Each opponent
+    // gains 1 life."). When > 0, tapping this source for mana makes the opponent gain this much
+    // (-> that much DAMAGE with a Tainted Remedy / Plague Drone). Applied via OpponentGainsLife
+    // at tap time, mirroring tap_self_damage. Gated > 0 so other decks are unaffected.
+    int tap_opponent_lifegain = 0;
+
+    // Fetchland (Windswept Heath etc.): "{T}, pay 1 life, sacrifice this land: search your
+    // library for a land whose subtype is in this list, put it onto the battlefield, then
+    // shuffle." When non-empty the land is resolved by PerformFetch (SpellEffects.h) instead
+    // of entering itself: it pulls the heuristically/searched-chosen library land, makes IT
+    // enter (resolving that land's own enters-tapped/shock choice), pays 1 life, and sends the
+    // fetchland to the graveyard. The fetchland keeps a `produces` list purely so a copy in
+    // HAND counts as a flexible colour source for color-fixing heuristics; it never taps for
+    // mana (it never reaches the battlefield). Empty -> ordinary land (other decks unaffected).
+    std::vector<std::string> fetch_land_types;
+
+    // Pump spell that targets YOUR OWN creature (Invigorate: "Target creature gets +4/+4").
+    // Default false keeps the existing pump/creature targeting (opponent creature). When true,
+    // the spell targets the controller's best attacker and the bonus is applied until end of
+    // turn. Gated so no existing deck is affected.
+    bool target_own_creature = false;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.
@@ -271,7 +347,22 @@ public:
     void Register(const std::string& name, CardFactory factory);
 
     // Look up a card by name (case-sensitive, matches Scryfall name).
-    std::optional<CardDefinition> Lookup(const std::string& name) const;
+    const CardDefinition* Lookup(const std::string& name) const;
+
+    // Look up a card's definition via its memoized pointer (Card::m_def), falling
+    // back to a by-name Lookup (and caching the result) the first time. Prefer this
+    // over Lookup(c.m_name) on the hot path: a card resolved once carries its def
+    // through every GameState deep-copy, so the repeated name-hash + hashtable find
+    // is paid at most once per distinct card object rather than per search node.
+    // (callgrind 2026-06-19: name hashing was ~39% of a search game after the
+    // by-value-Lookup fix.) Behaviour is identical to Lookup(c.m_name) -- same result,
+    // and m_def never escapes into any key/output (see Card::m_def).
+    const CardDefinition* LookupCached(const Card& c) const
+    {
+        if (c.m_def) { return c.m_def; }
+        c.m_def = Lookup(c.m_name);
+        return c.m_def;
+    }
 
     bool IsImplemented(const std::string& name) const;
 
