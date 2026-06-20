@@ -142,26 +142,12 @@ static int CountLands(const GameState& state)
 // (those mis-estimate amounts and would false-reject payable RR/filter-chain plans), so a
 // rarer "needs 2 of a color, only 1 source" phantom is left to the rollout's real payment,
 // which already no-ops it. Cheap and deterministic.
-static bool SubsetPayable(const GameState& state, const std::vector<Action>& cands,
-                          const std::vector<int>& sel)
+// Colors at least one untapped source can produce (W,U,B,R,G). State-only -- it does not depend
+// on which subset is being tested -- so callers compute it ONCE before the subset-enumeration
+// loop and pass the result to SubsetPayable, instead of re-scanning the battlefield per subset.
+static void ComputeAvailableColors(const GameState& state, bool have[5])
 {
-    // Colors required by the chosen casts (Vial deploys cost no mana).
-    bool need[5] = {false,false,false,false,false};  // W,U,B,R,G ({C}/generic via CanPay)
-    bool any = false;
-    for (int j : sel)
-    {
-        const Action& a = cands[j];
-        if (a.kind == Action::Kind::ActivateVial) { continue; }
-        if (a.cost.white > 0) { need[0] = true; any = true; }
-        if (a.cost.blue  > 0) { need[1] = true; any = true; }
-        if (a.cost.black > 0) { need[2] = true; any = true; }
-        if (a.cost.red   > 0) { need[3] = true; any = true; }
-        if (a.cost.green > 0) { need[4] = true; any = true; }
-    }
-    if (!any) { return true; }
-
-    // Colors at least one untapped source can produce.
-    bool have[5] = {false,false,false,false,false};
+    have[0] = have[1] = have[2] = have[3] = have[4] = false;
     int active = state.active_player_index;
     for (const Permanent& p : state.battlefield)
     {
@@ -184,6 +170,26 @@ static bool SubsetPayable(const GameState& state, const std::vector<Action>& can
             }
         }
     }
+}
+
+static bool SubsetPayable(const bool have[5], const std::vector<Action>& cands,
+                          const std::vector<int>& sel)
+{
+    // Colors required by the chosen casts (Vial deploys cost no mana).
+    bool need[5] = {false,false,false,false,false};  // W,U,B,R,G ({C}/generic via CanPay)
+    bool any = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }
+        if (a.cost.white > 0) { need[0] = true; any = true; }
+        if (a.cost.blue  > 0) { need[1] = true; any = true; }
+        if (a.cost.black > 0) { need[2] = true; any = true; }
+        if (a.cost.red   > 0) { need[3] = true; any = true; }
+        if (a.cost.green > 0) { need[4] = true; any = true; }
+    }
+    if (!any) { return true; }
+
     for (int i = 0; i < 5; ++i) { if (need[i] && !have[i]) { return false; } }
     return true;
 }
@@ -758,6 +764,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     Plan best;
 
     std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-mask alloc)
+    bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
+    ComputeAvailableColors(state, have_colors);
 
     // Enumerate all non-empty subsets (mask=0 is "do nothing" and is the default).
     for (int mask = 1; mask < (1 << m); ++mask)
@@ -874,7 +882,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             // lands produce the colors they need.
             sel.clear();
             for (int j = 0; j < m; ++j) { if (mask & (1 << j)) { sel.push_back(j); } }
-            if (!SubsetPayable(state, cands, sel)) { continue; }
+            if (!SubsetPayable(have_colors, cands, sel)) { continue; }
         }
 
         // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so
@@ -2302,6 +2310,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
 
+    bool have_colors[5];   // untapped-source colors -- state-only, computed once for all subsets
+    ComputeAvailableColors(state, have_colors);
+
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
@@ -2369,7 +2380,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
-        if (!SubsetPayable(state, cands, sel))               { return; }
+        if (!SubsetPayable(have_colors, cands, sel))         { return; }
 
         if (self_damage >= ap.life) { return; }
 
