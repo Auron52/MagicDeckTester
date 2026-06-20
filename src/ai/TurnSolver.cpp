@@ -1680,14 +1680,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // a dig source enter the loop, so burn/slivers stay byte-identical. ShouldConsiderDig
     // encodes when NOT to dig (a draw engine already in hand, a retrace engine in the
     // graveyard, fewer than two lands, or Land's Edge already lethal from the hand).
-    if (is_pre_combat && HasAnyDigSource(state))
+    if (is_pre_combat && ResolveProvider(state).HasAnyDigSource(state))
     {
         int dig_guard = 0;
-        while (dig_guard++ < 16 && ShouldConsiderDig(state) && !ap.library.empty())
+        while (dig_guard++ < 16 && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
         {
             ManaPool pool = BuildPool(state);
             bool is_sac = false;
-            std::string src = SelectDigSource(state, pool, is_sac);
+            std::string src = ResolveProvider(state).SelectDigSource(state, pool, is_sac);
             if (src.empty()) { break; }
             const CardDefinition* sd = CardDatabase::Instance().Lookup(src);
             if (!sd) { break; }

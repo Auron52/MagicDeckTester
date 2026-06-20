@@ -1557,7 +1557,7 @@ void AIEngine::UseSurplusLandAbilities(GameState& state)
 {
     Player& ap = state.ActivePlayer();
     if (!state.stack.empty()) { return; }   // let pending spells resolve first
-    if (!HasAnyDigSource(state)) { return; }
+    if (!ResolveProvider(state).HasAnyDigSource(state)) { return; }
 
     // Reactive "dig when stuck" used on the depth-0 / develop-when-stuck paths (full-depth
     // committed turns replay the search's recorded digs instead). Dig THROUGH lands toward
@@ -1568,11 +1568,11 @@ void AIEngine::UseSurplusLandAbilities(GameState& state)
     // Treasure Hunt to refill ammo -- and stops only when a draw engine is already in hand,
     // a retrace engine sits in the yard, or Land's Edge is already lethal from the hand.
     int guard = 0;
-    while (guard++ < 16 && ShouldConsiderDig(state) && !ap.library.empty())
+    while (guard++ < 16 && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
     {
         ManaPool avail = BuildAvailableMana(state);
         bool is_sac = false;
-        std::string src = SelectDigSource(state, avail, is_sac);
+        std::string src = ResolveProvider(state).SelectDigSource(state, avail, is_sac);
         if (src.empty()) { break; }
         // PerformDig returns whether the drawn card was a land; on a nonland (action found)
         // we stop digging. A false-ish "could not perform" also returns false -> stop.
