@@ -1217,14 +1217,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target)
     {
-        const CardDefinition* opt = CardDatabase::Instance().Lookup(name);
-        if (!opt) { return; }
-        const CardDefinition& def = *opt;
-
+        // Find the card in its zone first, then resolve its definition via the card's cached
+        // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
+        // ~200k/game). Byte-identical: it->m_name == name so LookupCached(*it) == Lookup(name),
+        // and the two early-returns (not in zone / unknown def) yield the same outcome in either
+        // order.
         std::vector<Card>& zone = from_graveyard ? ap.graveyard : ap.hand;
         std::vector<Card>::iterator it = std::find_if(zone.begin(), zone.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == zone.end()) { return; }
+        const CardDefinition* opt = CardDatabase::Instance().LookupCached(*it);
+        if (!opt) { return; }
+        const CardDefinition& def = *opt;
 
         bool is_creature = def.card.IsCreature();
         // Cascade casts its target for FREE (CR 702.84). Consume the one-shot flag here,

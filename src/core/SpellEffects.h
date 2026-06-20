@@ -1330,10 +1330,20 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
     // (White for Fiery Justice {W} + Swords {W} in a turn; Green for the {G} dorks + the free
     // {G}-gated spells + Fiery Justice {G}). It rarely changes the win, but collapses the
     // common early-game "which Forest dual" tie to ONE candidate, so the search needn't branch.
-    struct Cand { std::string name; int gives_crit, s_turn, s_deck, s_breadth, multi, dup_pref, shock, order; };
-    std::vector<Cand> cands;
-    std::unordered_set<std::string> seen;
-    int order = 0;
+    // Keep the single best candidate in ONE PASS over the library -- no candidate vector, dedup
+    // set, or sort (this is on the per-fetch-decision hot path). A candidate beats the incumbent
+    // on the first differing key (all "higher is better"); a full tie keeps the incumbent, which
+    // -- because we scan the library in order -- is the earliest, exactly reproducing the old
+    // sort-by-(keys desc, insertion order asc) + front(). Duplicate names tie their first
+    // occurrence on every key and so never displace it, so an explicit dedup set is unnecessary
+    // (it changes nothing about the winner). Keys, lowest-priority last:
+    //   gives_crit (carries the critical subtype we still need, e.g. Forest unlock)
+    //   s_turn (new colours wanted THIS turn) / s_deck (deck-wide) / s_breadth (new colours)
+    //   multi (fixes >1 colour) / dup_pref (White=2 then Green=1, the only doubled colours)
+    //   shock (prefer a shock dual over a basic -- life is irrelevant in a goldfish)
+    bool        have_best = false;
+    std::string best_name;
+    int b_gc = 0, b_st = 0, b_sd = 0, b_sb = 0, b_multi = 0, b_dup = 0, b_shock = 0;
     for (const Card& lc : ap.library)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
@@ -1346,15 +1356,12 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
             if (type_ok) { break; }
         }
         if (!type_ok) { continue; }
-        if (!seen.insert(lc.m_name).second) { continue; }
 
-        // Does this candidate carry the critical subtype we still need (Forest unlock)?
         int gives_crit = 0;
         if (want_crit)
         {
             for (const std::string& cs : card.m_subtypes) { if (cs == crit_subtype) { gives_crit = 1; break; } }
         }
-
         const std::vector<Color>& prod = d ? d->params.produces : std::vector<Color>{};
         int s_turn = 0, s_deck = 0, s_breadth = 0;
         for (Color c : prod)
@@ -1371,34 +1378,32 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
             if (c == Color::White) { pw = true; }
             if (c == Color::Green) { pg = true; }
         }
-        int dup_pref = (pw ? 2 : 0) + (pg ? 1 : 0);   // White preferred, then Green
-        // Final deterministic tiebreak: prefer a shock dual (etb_pay_life_to_untap > 0) over a
-        // basic -- "consistently pick one shock land; if none, a basic" (the life is irrelevant
-        // in a goldfish, and a dual fixes two colours). Combined with the keys above this leaves
-        // a single best, so the fetch is decided by the heuristic and never branches the search.
-        int shock = (d && d->params.etb_pay_life_to_untap > 0) ? 1 : 0;
-        cands.push_back({lc.m_name, gives_crit, s_turn, s_deck, s_breadth, multi, dup_pref, shock, order++});
+        int dup_pref = (pw ? 2 : 0) + (pg ? 1 : 0);
+        int shock    = (d && d->params.etb_pay_life_to_untap > 0) ? 1 : 0;
+
+        bool better;
+        if      (gives_crit != b_gc)    { better = gives_crit > b_gc; }
+        else if (s_turn     != b_st)    { better = s_turn     > b_st; }
+        else if (s_deck     != b_sd)    { better = s_deck     > b_sd; }
+        else if (s_breadth  != b_sb)    { better = s_breadth  > b_sb; }
+        else if (multi      != b_multi) { better = multi      > b_multi; }
+        else if (dup_pref   != b_dup)   { better = dup_pref   > b_dup; }
+        else if (shock      != b_shock) { better = shock      > b_shock; }
+        else                            { better = false; }  // full tie -> keep the earlier incumbent
+
+        if (!have_best || better)
+        {
+            have_best = true;
+            best_name = lc.m_name;
+            b_gc = gives_crit; b_st = s_turn; b_sd = s_deck; b_sb = s_breadth;
+            b_multi = multi;   b_dup = dup_pref; b_shock = shock;
+        }
     }
 
-    std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
-    {
-        if (a.gives_crit != b.gives_crit) { return a.gives_crit > b.gives_crit; }
-        if (a.s_turn     != b.s_turn)     { return a.s_turn     > b.s_turn; }
-        if (a.s_deck     != b.s_deck)     { return a.s_deck     > b.s_deck; }
-        if (a.s_breadth  != b.s_breadth)  { return a.s_breadth  > b.s_breadth; }
-        if (a.multi      != b.multi)      { return a.multi      > b.multi; }
-        if (a.dup_pref   != b.dup_pref)   { return a.dup_pref   > b.dup_pref; }
-        if (a.shock      != b.shock)      { return a.shock      > b.shock; }
-        return a.order < b.order;
-    });
-
-    // Per the deck owner: when flooding it does not matter which equivalent land we get -- just
-    // pick ONE deterministically. So return exactly the single best candidate (never a tied
-    // group), which means a fetch is always decided by the heuristic and the search never
-    // branches over fetch targets (no enumeration blow-up on flooded hands). Returns {} only on
-    // a true whiff (no legal target left).
+    // Return exactly the single best (never a tied group) so a fetch is always decided by the
+    // heuristic and the search never branches over fetch targets. Empty only on a true whiff.
     std::vector<std::string> out;
-    if (!cands.empty()) { out.push_back(cands.front().name); }
+    if (have_best) { out.push_back(best_name); }
     return out;
 }
 
