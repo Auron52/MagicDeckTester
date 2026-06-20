@@ -220,6 +220,7 @@ Card CardDatabase::BuildCardFromJson(const json& entry) const
 {
     Card card;
     card.m_name = entry.value("name", std::string{});
+    card.RehashName();
 
     std::string cost_str = entry.value("mana_cost", std::string{});
     card.m_mana_cost = ManaCostFromString(cost_str);

@@ -2034,6 +2034,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             Card token;
             token.m_name      = std::to_string(spawn.power) + "/"
                               + std::to_string(spawn.toughness) + " Creature";
+            token.RehashName();
             token.AddType(CardType::Creature);
             token.m_power     = spawn.power;
             token.m_toughness = spawn.toughness;
@@ -2771,13 +2772,13 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         Fold(k, static_cast<uint64_t>(p.lands_played_this_turn));
         Fold(k, static_cast<uint64_t>(p.bonus_land_drops_this_turn));
         Fold(k, static_cast<uint64_t>(p.library.size()));
-        if (!p.library.empty()) { FoldName(k, p.library.front().m_name); }
+        if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }
 
         Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered)
         Fold(k, static_cast<uint64_t>(p.hand.size()));
         for (const Card& c : p.hand)
         {
-            FoldName(k, c.m_name);
+            Fold(k, c.m_name_hash);
             // A staged card's expiry changes when it can still be played, so two hands
             // with identical names but different staged expiries are different rollout
             // states. Folded ONLY when staged, so non-staging decks keep their exact
@@ -2789,7 +2790,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         Fold(k, static_cast<uint64_t>(p.staged_cards.size()));
         for (const StagedCard& sc : p.staged_cards)
         {
-            FoldName(k, sc.card.m_name);
+            Fold(k, sc.card.m_name_hash);
             Fold(k, static_cast<uint64_t>(sc.expiry_turn));
         }
 
@@ -2803,7 +2804,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             bool     gy_retraceable = false;
             for (const Card& c : p.graveyard)
             {
-                gy_acc += static_cast<uint64_t>(std::hash<std::string>{}(c.m_name));
+                gy_acc += c.m_name_hash;  // cached std::hash(m_name)
                 const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
                 if (cdef && cdef->params.retrace) { gy_retraceable = true; }
             }
@@ -2820,7 +2821,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     Fold(k, static_cast<uint64_t>(state.battlefield.size()));
     for (const Permanent& perm : state.battlefield)
     {
-        FoldName(k, perm.card.m_name);
+        Fold(k, perm.card.m_name_hash);
         Fold(k, static_cast<uint64_t>(perm.controller_index));
         Fold(k, perm.tapped ? 1u : 0u);
         Fold(k, perm.entered_this_turn ? 1u : 0u);

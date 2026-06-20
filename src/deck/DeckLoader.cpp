@@ -160,6 +160,7 @@ Card DeckLoader::MakePlaceholder(const std::string& name)
 {
     Card c;
     c.m_name = name;
+    c.RehashName();
     return c;
 }
 

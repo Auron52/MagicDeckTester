@@ -3,6 +3,7 @@
 #include <vector>
 #include <optional>
 #include <cstdint>
+#include <functional>
 #include "SubtypeRegistry.h"
 
 struct CardDefinition; // fwd decl: Card caches a pointer into the CardDatabase (see m_def)
@@ -63,6 +64,12 @@ struct Card
     // Subtypes stay a vector<string>: they are string-matched (lord subtype checks)
     // and would need an intern table to pack, which the lord paths don't justify.
     std::string m_name;
+    // Cached std::hash of m_name. The search folds card NAMES into the transposition-table
+    // key (BuildSimKey) once per card per node via std::hash<std::string>{}(m_name); caching
+    // it here turns that hot per-node hash into a load. MUST be refreshed (RehashName) at the
+    // few sites that assign m_name -- a stale value would change the TT key (a bug, caught by
+    // the byte-identical smoke/regression gate). Copied with the card (stays consistent).
+    uint64_t    m_name_hash = 0;
     int         m_number    = 0;    // per-copy stable ID (1–60); assigned at deck setup
     bool        m_is_staged = false; // true while the card is a staged (exiled) card in hand
     int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
@@ -96,6 +103,10 @@ struct Card
     static constexpr uint32_t Bit(Supertype s) { return 1u << static_cast<int>(s); }
     static constexpr uint32_t Bit(Color c)     { return 1u << static_cast<int>(c); }
     static constexpr uint32_t Bit(Keyword k)   { return 1u << static_cast<int>(k); }
+
+    // Recompute m_name_hash; call after any assignment to m_name. The hash must match
+    // exactly what BuildSimKey/graveyard folding used before (std::hash<std::string>).
+    void RehashName() { m_name_hash = std::hash<std::string>{}(m_name); }
 
     void AddType(CardType t)       { m_type_mask      |= Bit(t); }
     void AddSupertype(Supertype s) { m_supertype_mask |= Bit(s); }
