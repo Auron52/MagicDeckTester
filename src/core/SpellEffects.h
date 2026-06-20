@@ -107,7 +107,7 @@ inline bool ControlsSubtype(const GameState& state, int controller_index,
     {
         if (p.controller_index != controller_index) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-        const std::vector<std::string>& subs = def ? def->card.m_subtypes : p.card.m_subtypes;
+        const SubtypeSet& subs = def ? def->card.m_subtypes : p.card.m_subtypes;
         for (const std::string& s : subs) { if (s == subtype) { return true; } }
     }
     return false;
@@ -736,7 +736,7 @@ inline bool PerformEtbDig(GameState& state, int controller_index,
     for (int i = 0; i < static_cast<int>(examined.size()) && take < 0; ++i)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(examined[i]);
-        const std::vector<std::string>& subs = d ? d->card.m_subtypes : examined[i].m_subtypes;
+        const SubtypeSet& subs = d ? d->card.m_subtypes : examined[i].m_subtypes;
         for (const std::string& want : pp.etb_dig_subtypes)
         {
             for (const std::string& cs : subs) { if (cs == want) { take = i; break; } }
@@ -981,7 +981,7 @@ inline bool LandEntersTapped(GameState& state, const CardDefinition& def)
         for (const Card& c : ap.hand)
         {
             const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-            const std::vector<std::string>& subs = cdef ? cdef->card.m_subtypes : c.m_subtypes;
+            const SubtypeSet& subs = cdef ? cdef->card.m_subtypes : c.m_subtypes;
             for (const std::string& cs : subs)
             {
                 for (const std::string& want : pp.etb_untap_reveal_subtypes)

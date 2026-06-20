@@ -3,6 +3,7 @@
 #include <vector>
 #include <optional>
 #include <cstdint>
+#include "SubtypeRegistry.h"
 
 struct CardDefinition; // fwd decl: Card caches a pointer into the CardDatabase (see m_def)
 
@@ -66,7 +67,8 @@ struct Card
     bool        m_is_staged = false; // true while the card is a staged (exiled) card in hand
     int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
     ManaCost m_mana_cost;
-    std::vector<std::string> m_subtypes; // creature/land subtypes (e.g. "Sliver", "Goblin", "Mountain")
+    SubtypeSet  m_subtypes;              // creature/land subtypes (e.g. "Sliver", "Goblin", "Mountain"):
+                                         // interned-id storage, iterates as std::string (see SubtypeSet)
     uint32_t    m_type_mask      = 0;    // set of CardType  (see Bit())
     uint32_t    m_supertype_mask = 0;    // set of Supertype
     uint32_t    m_color_mask     = 0;    // set of Color

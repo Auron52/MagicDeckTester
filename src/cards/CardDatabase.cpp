@@ -77,6 +77,15 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         {
             def.params = BuildParamsFromJson(entry["parameters"]);
         }
+        // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the
+        // worker threads only ever do read-only id lookups (SubtypeSet::operator=) and
+        // never insert into the shared SubtypeRegistry mid-search. (A card's own subtypes
+        // are already interned in BuildCardFromJson via SubtypeSet::push_back.)
+        SubtypeRegistry& reg = SubtypeRegistry::Instance();
+        for (const std::string& s : def.params.attack_token_subtypes) { reg.Intern(s); }
+        for (const std::string& s : def.params.upkeep_token_subtypes) { reg.Intern(s); }
+        for (const std::string& s : def.params.tap_token_subtypes)    { reg.Intern(s); }
+        for (const std::string& s : def.params.cast_token_subtypes)   { reg.Intern(s); }
         m_cards[def.card.m_name] = std::move(def);
     }
 }
