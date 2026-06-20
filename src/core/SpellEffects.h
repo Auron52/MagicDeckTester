@@ -2,6 +2,7 @@
 #include "GameState.h"
 #include "ManaPool.h"
 #include "../cards/CardDatabase.h"
+#include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -219,7 +220,7 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
     std::string want = target_name;
     if (want.empty())
     {
-        std::vector<std::string> cands = TutorCandidates(state, controller_index, pp);
+        std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
         if (cands.empty()) { return; }
         want = cands.front();
     }
@@ -1426,7 +1427,7 @@ inline void PerformFetch(GameState& state, int controller_index,
     std::string want = target_name;
     if (want.empty())
     {
-        std::vector<std::string> cands = FetchCandidates(state, controller_index, fetch_pp);
+        std::vector<std::string> cands = ResolveProvider(state).FetchCandidates(state, controller_index, fetch_pp);
         if (cands.empty()) { return; }   // whiff: no legal target (life already paid)
         want = cands.front();
     }

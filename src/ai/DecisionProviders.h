@@ -33,3 +33,11 @@ const DecisionProvider& DefaultProvider();
 
 // Pick the provider for a deck by archetype detection. Stage 0: always Generic.
 const DecisionProvider& SelectDecisionProvider(const Decklist& deck);
+
+// Resolve the provider for a state: its attached provider, or the default fallback for
+// any path that built a raw GameState. Cheap (a pointer test on the common path); the
+// DefaultProvider() call only happens when m_provider is null.
+inline const DecisionProvider& ResolveProvider(const GameState& s)
+{
+    return s.m_provider ? *s.m_provider : DefaultProvider();
+}

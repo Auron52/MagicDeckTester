@@ -574,7 +574,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         // the general "heuristic narrows, search decides the rest" pattern.
         if (def.params.tutor_to_hand || def.params.tutor_to_top)
         {
-            std::vector<std::string> cands = TutorCandidates(state, state.active_player_index, def.params);
+            std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
             if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
             for (const std::string& tgt : cands)
             {
@@ -2707,7 +2707,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         if (ld && !ld->params.fetch_land_types.empty())
         {
             std::vector<std::string> cands =
-                FetchCandidates(state, state.active_player_index, ld->params);
+                ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
             if (cands.size() > 1)
             {
                 int n = std::min(static_cast<int>(cands.size()), kMaxFetchSearchTargets);
