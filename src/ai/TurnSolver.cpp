@@ -1275,7 +1275,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (std::vector<Card>::iterator hit = ap.hand.begin();
                  hit != ap.hand.end() && discarded < discard_lands; )
             {
-                const CardDefinition* hdef = CardDatabase::Instance().Lookup(hit->m_name);
+                const CardDefinition* hdef = CardDatabase::Instance().LookupCached(*hit);
                 bool is_land = hdef ? hdef->card.IsLand() : hit->IsLand();
                 if (is_land) { ap.graveyard.push_back(*hit); hit = ap.hand.erase(hit); ++discarded; }
                 else         { ++hit; }
@@ -1483,7 +1483,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (cascade_idx >= 0)
             {
                 const std::string& cname = exiled[cascade_idx].m_name;
-                auto cdef2 = CardDatabase::Instance().Lookup(cname);
+                auto cdef2 = CardDatabase::Instance().LookupCached(exiled[cascade_idx]);
                 if (cdef2)
                 {
                     ap.hand.push_back(cdef2->card);
@@ -1968,7 +1968,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         {
             for (std::vector<Card>::iterator it = ap.hand.begin(); it != ap.hand.end(); ++it)
             {
-                auto def     = CardDatabase::Instance().Lookup(it->m_name);
+                auto def     = CardDatabase::Instance().LookupCached(*it);
                 bool is_land = def ? def->card.IsLand() : it->IsLand();
                 if (is_land) { victim = it; break; }
             }
@@ -2100,7 +2100,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
     {
         if (it->m_name != name) { continue; }
-        auto def = CardDatabase::Instance().Lookup(it->m_name);
+        auto def = CardDatabase::Instance().LookupCached(*it);
         if (!def || !def->card.IsLand()) { continue; }
 
         // Fetchland: the land drop sacrifices the fetchland to search out a real land.
