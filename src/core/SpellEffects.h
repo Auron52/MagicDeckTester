@@ -3,6 +3,7 @@
 #include "ManaPool.h"
 #include "../cards/CardDatabase.h"
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <unordered_set>
 
@@ -1249,14 +1250,15 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
 {
     const Player& ap = state.players[controller_index];
 
-    auto add_colors = [](std::vector<bool>& set, const std::vector<Color>& cs)
+    constexpr int NC = 6;   // Color enum cardinality (W,U,B,R,G,C)
+    using ColorSet = std::array<bool, NC>;   // stack-resident; avoids per-call vector<bool> allocs + bit-proxy cost
+    auto add_colors = [](ColorSet& set, const std::vector<Color>& cs)
     {
         for (Color c : cs) { set[static_cast<int>(c)] = true; }
     };
-    constexpr int NC = 6;   // Color enum cardinality (W,U,B,R,G,C)
 
     // Colours we already have on the battlefield (lands + mana dorks we control).
-    std::vector<bool> have(NC, false);
+    ColorSet have{};
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller_index) { continue; }
@@ -1265,7 +1267,7 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
         if (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork) { add_colors(have, d->params.produces); }
     }
     // Plus colours from OTHER (non-fetch) lands in hand -- part of the deck-fixing equation.
-    std::vector<bool> have_or_hand = have;
+    ColorSet have_or_hand = have;
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -1298,8 +1300,8 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
     bool want_crit = !crit_subtype.empty() && !have_crit;
 
     // Colours wanted this turn (coloured pips of nonland cards in hand) and deck-wide.
-    std::vector<bool> want_turn(NC, false), want_deck(NC, false);
-    auto note_cost = [&](const Card& card, std::vector<bool>& set)
+    ColorSet want_turn{}, want_deck{};
+    auto note_cost = [&](const Card& card, ColorSet& set)
     {
         const ManaCost& mc = card.m_mana_cost;
         if (mc.white > 0)  { set[static_cast<int>(Color::White)] = true; }
