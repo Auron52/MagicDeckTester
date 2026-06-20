@@ -102,6 +102,23 @@ bool GenericProvider::DiscardLandsFirst(const GameState& s) const
     return false;
 }
 
+bool GenericProvider::ShouldEmitRiskyAltPayload(const GameState& s, int controller,
+                                                const CardDefinition& def) const
+{
+    // Reproduces the inline gate: emit the risky alt only for a destroy-all-enchantments
+    // payload while a Remedy is active (so the 6 face damage is real). The cheap
+    // preconditions (alt_lifegain_cost>0 + Forest control) stay at the call site.
+    return def.params.destroy_all_enchantments && ::RemedyActive(s, controller);
+}
+
+bool GenericProvider::ShouldStageSpectacleDraw(const GameState& /*s*/, int /*controller*/,
+                                               const CardDefinition& draw_def) const
+{
+    // Reproduces the inline gate: a draw spell with a Spectacle cost can be staged behind
+    // a cheap damage spell to unlock the cheaper cost.
+    return draw_def.params.spectacle_cost.has_value();
+}
+
 namespace
 {
     // Stateless, read-only -> a single shared const instance is thread-safe (same model

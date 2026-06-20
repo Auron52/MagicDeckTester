@@ -546,8 +546,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         if (def.params.alt_lifegain_cost > 0
             && ControlsSubtype(state, state.active_player_index, def.params.alt_cost_requires_subtype))
         {
-            if (def.params.destroy_all_enchantments
-                && RemedyActive(state, state.active_player_index))
+            if (ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def))
             {
                 constexpr int DMG = 100;
                 Action a;
@@ -1657,7 +1656,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (int i = 0; i < static_cast<int>(ap2.hand.size()); ++i)
             {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(ap2.hand[i]);
-                if (d && CanAutoFireAltPayload(state, state.active_player_index, *d))
+                if (d && ResolveProvider(state).CanAutoFireAltPayload(state, state.active_player_index, *d))
                 { target = i; amt = d->params.alt_lifegain_cost; break; }
             }
             if (target < 0) { break; }
@@ -2445,7 +2444,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // If Spectacle not yet active, we need a trigger first; use the Spectacle cost directly.
         const CardDefinition* draw_def =
             CardDatabase::Instance().LookupCached(ap.hand[draw.hand_index]);
-        if (!draw_def || !draw_def->params.spectacle_cost.has_value()) { continue; }
+        if (!draw_def || !ResolveProvider(state).ShouldStageSpectacleDraw(state, state.active_player_index, *draw_def)) { continue; }
         ManaCost spectacle_only = draw_def->params.spectacle_cost.value();
 
         bool spectacle_active = state.opponent_lost_life_this_turn;

@@ -74,4 +74,19 @@ public:
     // first (true) over the highest-MV card (false). Used when a Land's Edge land outlet
     // makes lands ammunition. Required-piece protection stays engine-side.
     virtual bool DiscardLandsFirst(const GameState& s) const = 0;
+
+    // Hook 3 -- whether to EMIT a risky alt-cost payload (Reverent Silence: free, but its
+    // destroy-all-enchantments wipes the caster's own Aria/Remedy) as a searched action.
+    // The engine keeps the alt-cost preconditions (alt_lifegain_cost>0 + Forest control)
+    // and builds the Action; this is the wipe-vs-value gate. (The forthcoming antilife
+    // refinement -- only when lethal or a Plague Drone / 2nd Remedy survives the wipe --
+    // lands here.)
+    virtual bool ShouldEmitRiskyAltPayload(const GameState& s, int controller,
+                                           const CardDefinition& def) const = 0;
+
+    // Hook 11 -- whether to enumerate spectacle-staging plan variants for a draw spell
+    // (cast a cheap damage spell first to unlock its cheaper Spectacle cost). The engine
+    // keeps the variant-building mechanism; this is the archetype gate.
+    virtual bool ShouldStageSpectacleDraw(const GameState& s, int controller,
+                                          const CardDefinition& draw_def) const = 0;
 };

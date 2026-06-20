@@ -1330,7 +1330,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             for (int i = 0; i < static_cast<int>(rp2.hand.size()); ++i)
             {
                 auto d = CardDatabase::Instance().LookupCached(rp2.hand[i]);
-                if (d && CanAutoFireAltPayload(state, state.active_player_index, *d))
+                if (d && ResolveProvider(state).CanAutoFireAltPayload(state, state.active_player_index, *d))
                 { target = i; amt = d->params.alt_lifegain_cost; break; }
             }
             if (target < 0) { break; }
