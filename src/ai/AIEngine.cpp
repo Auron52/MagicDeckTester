@@ -1274,7 +1274,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
-            && IsLifegainToLossCard(a.card_name))
+            && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
             cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
         }
@@ -1286,7 +1286,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             cast_alt(a.card_name, a.alt_lifegain); resolve_now();
         }
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
-                 && !IsLifegainToLossCard(a.card_name))   // enablers already cast above
+                 && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))   // enablers already cast above
         {
             cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
@@ -2125,23 +2125,9 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         throw std::runtime_error("ChooseDiscard called with empty hand");
     }
 
-    // Check whether a land-discard outlet (Land's Edge) exists in hand or on battlefield.
-    // When it does, lands are the ammunition and should be discarded in preference to spells.
-    bool has_land_outlet = false;
-    for (const Card& c : ap.hand)
-    {
-        auto def = CardDatabase::Instance().LookupCached(c);
-        if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
-    }
-    if (!has_land_outlet)
-    {
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            auto def = CardDatabase::Instance().LookupCached(p.card);
-            if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
-        }
-    }
+    // When a Land's Edge land outlet exists, lands are the ammunition and should be
+    // discarded in preference to spells (decision owned by the provider).
+    bool has_land_outlet = ResolveProvider(state).DiscardLandsFirst(state);
 
     if (has_land_outlet)
     {

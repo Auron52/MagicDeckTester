@@ -26,6 +26,8 @@ public:
     int         LandsEdgeFireCount(const GameState&, int) const override;
     bool        WantVialCharge(const GameState&, const Permanent&) const override;
     bool        ScryKeepOnTop(const GameState&, const Card&) const override;
+    bool        CastEnablerFirst(const GameState&, const std::string&) const override;
+    bool        DiscardLandsFirst(const GameState&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

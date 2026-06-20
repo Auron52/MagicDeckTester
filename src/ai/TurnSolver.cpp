@@ -1604,10 +1604,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Justice rider) resolves with the enabler already active -> damage instead of healing.
     // No-op for decks without lifegain_to_loss cards: pass 1 is empty and pass 2 == the old
     // single loop, so their execution stays byte-identical.
-    auto is_enabler_cast = [](const Action& a)
+    auto is_enabler_cast = [&state](const Action& a)
     {
         return a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
-            && IsLifegainToLossCard(a.card_name);
+            && ResolveProvider(state).CastEnablerFirst(state, a.card_name);
     };
     apply_plan_actions = [&](const std::vector<Action>& acts)
     {
@@ -1953,22 +1953,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // truth). Without this the search kept every drawn land as Land's Edge ammo while
     // the real game discards lands here, over-counting Land's Edge damage (gi=947).
     static const bool s_fd_discard = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
-    bool has_land_outlet = false;
-    if (s_fd_discard)
-    {
-        for (const Card& c : ap.hand)
-        {
-            auto def = CardDatabase::Instance().LookupCached(c);
-            if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; break; }
-        }
-        for (const Permanent& p : state.battlefield)
-        {
-            if (has_land_outlet) { break; }
-            if (p.controller_index != state.active_player_index) { continue; }
-            auto def = CardDatabase::Instance().LookupCached(p.card);
-            if (def && def->params.discard_land_damage > 0) { has_land_outlet = true; }
-        }
-    }
+    bool has_land_outlet = s_fd_discard && ResolveProvider(state).DiscardLandsFirst(state);
     while (!unlimited_hand && ap.hand.size() > 7)
     {
         std::vector<Card>::iterator victim = ap.hand.end();

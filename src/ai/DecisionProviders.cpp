@@ -75,6 +75,33 @@ bool GenericProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) co
     return lands_in_play < 2;
 }
 
+bool GenericProvider::CastEnablerFirst(const GameState& /*s*/, const std::string& card_name) const
+{
+    // Reproduces the enabler-first partition: lifegain_to_loss cards (Tainted Remedy /
+    // Plague Drone) cast + resolve before other spells so a same-turn payload sees the
+    // enabler active. No-op for decks without such cards.
+    return ::IsLifegainToLossCard(card_name);
+}
+
+bool GenericProvider::DiscardLandsFirst(const GameState& s) const
+{
+    // Reproduces the has_land_outlet scan: a Land's Edge land outlet (discard_land_damage)
+    // in hand or in play makes lands ammunition -> shed a land before the highest-MV card.
+    const Player& ap = s.players[s.active_player_index];
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (def && def->params.discard_land_damage > 0) { return true; }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        if (def && def->params.discard_land_damage > 0) { return true; }
+    }
+    return false;
+}
+
 namespace
 {
     // Stateless, read-only -> a single shared const instance is thread-safe (same model

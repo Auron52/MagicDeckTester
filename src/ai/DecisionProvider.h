@@ -64,4 +64,14 @@ public:
     // bottom/bin it (false). The engine keeps the reorder/bin MECHANISM (ScryTop/
     // SurveilTop); only the keep DECISION is provider-owned.
     virtual bool ScryKeepOnTop(const GameState& s, const Card& top_card) const = 0;
+
+    // Hook 5 -- cast-sequencing: should this hand cast go in the ENABLER-FIRST pass (cast
+    // + resolve before other spells, so a same-turn payload sees the enabler active)?
+    // The engine keeps the multi-pass apply MECHANISM; only the partition is provider-owned.
+    virtual bool CastEnablerFirst(const GameState& s, const std::string& card_name) const = 0;
+
+    // Hook 10 -- discard-to-7 policy: when shedding to hand size, prefer discarding a LAND
+    // first (true) over the highest-MV card (false). Used when a Land's Edge land outlet
+    // makes lands ammunition. Required-piece protection stays engine-side.
+    virtual bool DiscardLandsFirst(const GameState& s) const = 0;
 };
