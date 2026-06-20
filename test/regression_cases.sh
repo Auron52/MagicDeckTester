@@ -33,126 +33,131 @@ declare -A DECK_PROF=(
 # (counts sized from measured timings -- see test/TIMINGS.md)
 
 # smoke: ~3 min single-seed gate -- d0 full + small d3/d5 (deep-search crash check).
+# At NODES_PER_VIRTUAL_MS=900 (rebased 90->900, 2026-06-20) the GATE modes run every deck at
+# d3=10/d5=20 = 9000/18000 units = the old NPV=90 budget-100/200 level => BYTE-IDENTICAL to the
+# pre-rebase GT (only antilife is new). The search is converged here, so a bigger gate budget
+# buys ~nothing and is non-monotonic (th budget 40 turned game s3003/gi104 from a turn-5 win
+# into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
+# deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
   "slivers 0 1001 1000 0"
-  "slivers 3 1001  250 100"
-  "slivers 5 1001  150 200"
+  "slivers 3 1001  250 10"
+  "slivers 5 1001  150 20"
   "burn    0 1001 1000 0"
-  "burn    3 1001  300 100"
-  "burn    5 1001  250 200"
+  "burn    3 1001  300 10"
+  "burn    5 1001  250 20"
   "th      0 1001 1000 0"
-  "th      3 1001  150 100"
-  "th      5 1001   75 200"
+  "th      3 1001  150 10"
+  "th      5 1001   75 20"
   "knights 0 1001 1000 0"
-  "knights 3 1001  250 100"
-  "knights 5 1001  150 200"
-  # antilife: pulled from the suites pending lever-2 path-pruning. Its no-win games
-  # explore pathological trees that the overrun guard can only bound at a low ceiling,
-  # which perturbs normal games of other decks (broke th d3 s3003 game 278). Re-add once
-  # the no-win hang is fixed (and the per-node-cost work / budget rebase may pull it under
-  # budget on its own). See search-perf-investigation memory.
-  # "antilife 0 1001 1000 0"
-  # "antilife 3 1001  250 100"
-  # "antilife 5 1001  150 200"
+  "knights 3 1001  250 10"
+  "knights 5 1001  150 20"
+  "antilife 0 1001 1000 0"
+  "antilife 3 1001  250 10"
+  "antilife 5 1001  150 20"
 )
 
-# regression: ~40 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
-# slivers d3/d5 counts are kept modest because slivers has a severe seed-specific
-# heavy tail (one pathological deep game can pin a core for minutes -- s2002 d5
-# 500g hit 23 min); see TIMINGS.md. Trim slivers first if this mode overruns.
+# regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
+# GATE budgets: every deck at d3=10/d5=20 (NPV=900) = old units => BYTE-IDENTICAL to the
+# pre-rebase GT, FULL game counts kept. Converged + stable; the deeper budgets are in OVERNIGHT
+# (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
+# was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
   "slivers 0 2002 1000 0"
-  "slivers 3 2002  400 100"
-  "slivers 3 3003  400 100"
-  "slivers 5 2002  300 200"
-  "slivers 5 3003  300 200"
+  "slivers 3 2002  400 10"
+  "slivers 3 3003  400 10"
+  "slivers 5 2002  300 20"
+  "slivers 5 3003  300 20"
   "burn    0 2002 1000 0"
-  "burn    3 2002  500 100"
-  "burn    3 3003  500 100"
-  "burn    5 2002  500 200"
-  "burn    5 3003  500 200"
+  "burn    3 2002  500 10"
+  "burn    3 3003  500 10"
+  "burn    5 2002  500 20"
+  "burn    5 3003  500 20"
   "th      0 2002 1000 0"
-  "th      3 2002  500 100"
-  "th      3 3003  500 100"
-  "th      5 2002  300 200"
-  "th      5 3003  300 200"
-  # knights: big creature/lord boards make EnumeratePlans subsets large, so d3/d5 are
-  # relatively heavy (~0.15-0.18s/game); kept to modest counts to stay within the mode budget.
+  "th      3 2002  500 10"
+  "th      3 3003  500 10"
+  "th      5 2002  300 20"
+  "th      5 3003  300 20"
   "knights 0 2002 1000 0"
-  "knights 3 2002  300 100"
-  "knights 3 3003  300 100"
-  "knights 5 2002  250 200"
-  "knights 5 3003  250 200"
-  # antilife: pulled pending lever-2 path-pruning (see smoke block + search-perf-investigation).
-  # "antilife 0 2002 1000 0"
-  # "antilife 3 2002  300 100"
-  # "antilife 3 3003  300 100"
-  # "antilife 5 2002  250 200"
-  # "antilife 5 3003  250 200"
+  "knights 3 2002  300 10"
+  "knights 3 3003  300 10"
+  "knights 5 2002  250 20"
+  "knights 5 3003  250 20"
+  # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
+  "antilife 0 2002 1000 0"
+  "antilife 3 2002  300 10"
+  "antilife 3 3003  300 10"
+  "antilife 5 2002  250 20"
+  "antilife 5 3003  250 20"
 )
 
-# overnight: ~80 min wide multi-seed sweep -- 4 seeds, large game counts for
-# tight statistics (subsumes the old standalone multi-seed A/B helper).
+# overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
+# Budgets are MORE GENEROUS than the gate modes (8 h budget allows it): deeper search
+# explores rarer states and catches edge-case bugs the converged gate budgets miss --
+# even where it doesn't change avg win turn. Generosity is spent on the CHEAP decks
+# (th/burn at 80/80); slivers stays low (10/20 -- it spins on its heavy tail and its
+# 1000g x4-seed counts make a big budget a multi-hour sink for zero benefit); knights
+# gets a modest bump (20/40). See search-perf-investigation memory.
 OVERNIGHT_CASES=(
   "slivers 0 4004 2000 0"
   "slivers 0 5005 2000 0"
   "slivers 0 6006 2000 0"
   "slivers 0 7007 2000 0"
-  "slivers 3 4004 1000 100"
-  "slivers 3 5005 1000 100"
-  "slivers 3 6006 1000 100"
-  "slivers 3 7007 1000 100"
-  "slivers 5 4004 1000 200"
-  "slivers 5 5005 1000 200"
-  "slivers 5 6006 1000 200"
-  "slivers 5 7007 1000 200"
+  "slivers 3 4004 1000 10"
+  "slivers 3 5005 1000 10"
+  "slivers 3 6006 1000 10"
+  "slivers 3 7007 1000 10"
+  "slivers 5 4004 1000 20"
+  "slivers 5 5005 1000 20"
+  "slivers 5 6006 1000 20"
+  "slivers 5 7007 1000 20"
   "burn    0 4004 2000 0"
   "burn    0 5005 2000 0"
   "burn    0 6006 2000 0"
   "burn    0 7007 2000 0"
-  "burn    3 4004 1000 100"
-  "burn    3 5005 1000 100"
-  "burn    3 6006 1000 100"
-  "burn    3 7007 1000 100"
-  "burn    5 4004 1000 200"
-  "burn    5 5005 1000 200"
-  "burn    5 6006 1000 200"
-  "burn    5 7007 1000 200"
+  "burn    3 4004 1000 80"
+  "burn    3 5005 1000 80"
+  "burn    3 6006 1000 80"
+  "burn    3 7007 1000 80"
+  "burn    5 4004 1000 80"
+  "burn    5 5005 1000 80"
+  "burn    5 6006 1000 80"
+  "burn    5 7007 1000 80"
   "th      0 4004 2000 0"
   "th      0 5005 2000 0"
   "th      0 6006 2000 0"
   "th      0 7007 2000 0"
-  "th      3 4004 1000 100"
-  "th      3 5005 1000 100"
-  "th      3 6006 1000 100"
-  "th      3 7007 1000 100"
-  "th      5 4004 1000 200"
-  "th      5 5005 1000 200"
-  "th      5 6006 1000 200"
-  "th      5 7007 1000 200"
+  "th      3 4004 1000 80"
+  "th      3 5005 1000 80"
+  "th      3 6006 1000 80"
+  "th      3 7007 1000 80"
+  "th      5 4004 1000 80"
+  "th      5 5005 1000 80"
+  "th      5 6006 1000 80"
+  "th      5 7007 1000 80"
   "knights 0 4004 2000 0"
   "knights 0 5005 2000 0"
   "knights 0 6006 2000 0"
   "knights 0 7007 2000 0"
-  "knights 3 4004 1000 100"
-  "knights 3 5005 1000 100"
-  "knights 3 6006 1000 100"
-  "knights 3 7007 1000 100"
-  "knights 5 4004 1000 200"
-  "knights 5 5005 1000 200"
-  "knights 5 6006 1000 200"
-  "knights 5 7007 1000 200"
-  # antilife: pulled pending lever-2 path-pruning (see smoke block + search-perf-investigation).
-  # "antilife 0 4004 2000 0"
-  # "antilife 0 5005 2000 0"
-  # "antilife 0 6006 2000 0"
-  # "antilife 0 7007 2000 0"
-  # "antilife 3 4004 1000 100"
-  # "antilife 3 5005 1000 100"
-  # "antilife 3 6006 1000 100"
-  # "antilife 3 7007 1000 100"
-  # "antilife 5 4004 1000 200"
-  # "antilife 5 5005 1000 200"
-  # "antilife 5 6006 1000 200"
-  # "antilife 5 7007 1000 200"
+  "knights 3 4004 1000 20"
+  "knights 3 5005 1000 20"
+  "knights 3 6006 1000 20"
+  "knights 3 7007 1000 20"
+  "knights 5 4004 1000 40"
+  "knights 5 5005 1000 40"
+  "knights 5 6006 1000 40"
+  "knights 5 7007 1000 40"
+  # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
+  "antilife 0 4004 2000 0"
+  "antilife 0 5005 2000 0"
+  "antilife 0 6006 2000 0"
+  "antilife 0 7007 2000 0"
+  "antilife 3 4004 1000 10"
+  "antilife 3 5005 1000 10"
+  "antilife 3 6006 1000 10"
+  "antilife 3 7007 1000 10"
+  "antilife 5 4004 1000 20"
+  "antilife 5 5005 1000 20"
+  "antilife 5 6006 1000 20"
+  "antilife 5 7007 1000 20"
 )

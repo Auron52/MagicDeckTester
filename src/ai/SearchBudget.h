@@ -27,7 +27,7 @@ public:
     // Calibrated work-units per virtual millisecond. One unit == one simulated
     // turn-step in a rollout. See project-deterministic-budget memory for the
     // calibration procedure.
-    static constexpr long long NODES_PER_VIRTUAL_MS = 90;
+    static constexpr long long NODES_PER_VIRTUAL_MS = 900;
 
     SearchBudget() = default;
     explicit SearchBudget(long long limit_units) : m_limit(limit_units) {}
