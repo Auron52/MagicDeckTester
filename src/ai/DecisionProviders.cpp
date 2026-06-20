@@ -112,10 +112,38 @@ bool AntiLifegainProvider::CastEnablerFirst(const GameState&, const std::string&
 bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int controller,
                                                      const CardDefinition& def) const
 {
-    // Emit Reverent Silence (destroy-all-enchantments alt payload) while a Remedy is active.
-    // (The lethal-or-surviving-enabler refinement -- so it isn't cast non-lethally into a
-    // single enchantment Remedy -- is the next change here.)
-    return def.params.destroy_all_enchantments && ::RemedyActive(s, controller);
+    // Reverent Silence's destroy-all-enchantments wipes our OWN Aria/Remedy. Casting it
+    // non-lethally with no surviving enabler bricks the combo (the greedy second-main rollout
+    // overvalues the immediate 6 -- regression gi=36: opp 23, single Tainted Remedy, no Drone
+    // -> Reverent destroys the only enabler and the deck stalls). Emit it only when:
+    //   (a) a Plague Drone (lifegain_to_loss CREATURE) is IN PLAY -- it survives the wipe, so
+    //       the enabler stays online. An enchantment Remedy does NOT survive, even a 2nd one
+    //       cast the same turn (enabler-first casts it before Reverent, so it is wiped too --
+    //       the "Reverent + 2nd Remedy + Reverent" rebuild needs cross-turn sequencing the
+    //       engine does not model; allowing it just re-bricks, regression gi=84); or
+    //   (b) it is lethal in combination -- the free 6 plus an unblocked attack finishes the
+    //       opponent this turn (wiping our own combo is fine once the game is won).
+    if (!def.params.destroy_all_enchantments || !::RemedyActive(s, controller)) { return false; }
+
+    // (a) a Plague Drone in play survives the enchantment wipe
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.lifegain_to_loss && p.card.IsCreature()) { return true; }
+    }
+
+    // (b) lethal in combination with this turn's attackers
+    int atk = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsCreature() && p.CanAttack())
+        {
+            int pw = p.EffectivePower();
+            if (pw > 0) { atk += pw; }
+        }
+    }
+    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + atk;
 }
 
 // ---- TreasureHuntProvider ---------------------------------------------------
