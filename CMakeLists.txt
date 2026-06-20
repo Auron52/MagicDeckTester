@@ -43,21 +43,43 @@ if(MTG_PROFILE)
     target_compile_definitions(mtg-core PUBLIC MTG_PROFILE)
 endif()
 
-# Optional: jemalloc. The simulator is malloc/free-bound on the search hot path (the
-# per-node GameState deep-copy is millions of small short-lived allocations). jemalloc's
-# small-object pools cut that substantially. Linked CONDITIONALLY so the build works with
-# OR without it: the dev container installs libjemalloc-dev (see .devcontainer/Dockerfile),
-# and a rebuild that includes that layer turns this on automatically. It only changes where
-# memory lives, never the data/logic, so simulation results stay byte-identical.
-# Override with -DMTG_USE_JEMALLOC=OFF to force the system allocator.
-option(MTG_USE_JEMALLOC "Link jemalloc if available" ON)
-if(MTG_USE_JEMALLOC)
+# Optional: a fast general allocator. The simulator is malloc/free-bound on the search
+# hot path (the per-node GameState deep-copy is millions of small short-lived
+# allocations), so a small-object-pool allocator cuts a large slice of wall time. Linked
+# CONDITIONALLY and allocator-agnostically so the build works on any platform with or
+# without one -- it only changes WHERE memory lives, never the data/logic, so results stay
+# byte-identical regardless of which (or no) allocator each platform uses.
+#
+# Preference order: jemalloc (first-class on Linux/Unix; the dev container installs
+# libjemalloc-dev, so a rebuild turns it on) -> mimalloc (first-class on Windows AND
+# cross-platform, so a future MSVC build can opt in) -> the system allocator. Override
+# with -DMTG_USE_FAST_ALLOC=OFF.
+#
+# NOTE (Windows): linking mimalloc overrides new/malloc automatically on Linux via symbol
+# interposition; an MSVC build additionally needs mimalloc's redirect/override mechanism
+# (mimalloc-redirect.dll, or the mimalloc-new-delete header for static linking) -- wire
+# that up when the Windows build is actually set up.
+option(MTG_USE_FAST_ALLOC "Link a fast allocator (jemalloc, else mimalloc) if available" ON)
+if(MTG_USE_FAST_ALLOC)
     find_library(JEMALLOC_LIB jemalloc)
     if(JEMALLOC_LIB)
         message(STATUS "mtg: linking jemalloc (${JEMALLOC_LIB})")
         target_link_libraries(mtg-core PUBLIC ${JEMALLOC_LIB})
     else()
-        message(STATUS "mtg: jemalloc not found -- using the system allocator")
+        # Prefer mimalloc's own CMake package (exports the `mimalloc` target), else a bare lib.
+        find_package(mimalloc CONFIG QUIET)
+        if(TARGET mimalloc)
+            message(STATUS "mtg: linking mimalloc (CMake package)")
+            target_link_libraries(mtg-core PUBLIC mimalloc)
+        else()
+            find_library(MIMALLOC_LIB mimalloc)
+            if(MIMALLOC_LIB)
+                message(STATUS "mtg: linking mimalloc (${MIMALLOC_LIB})")
+                target_link_libraries(mtg-core PUBLIC ${MIMALLOC_LIB})
+            else()
+                message(STATUS "mtg: no fast allocator found -- using the system allocator")
+            endif()
+        endif()
     endif()
 endif()
 
