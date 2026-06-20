@@ -679,7 +679,7 @@ bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial) c
     // current MV is in hand to deploy, otherwise climb toward a bigger creature in hand
     // (up to Haytham's MV 4), else pre-charge toward the deck's dominant MV. See
     // WantVialCharge.
-    bool heuristic = WantVialCharge(state, vial);
+    bool heuristic = ResolveProvider(state).WantVialCharge(state, vial);
     // An external controller (claude-play / human-play) may decide differently.
     if (m_external_vial_chooser) { return m_external_vial_chooser(state, vial, heuristic); }
     return heuristic;
@@ -2216,7 +2216,7 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     // Base firing count (shared with the search's ApplyPlanDirect so both model the
     // same Land's Edge damage): fire all for lethal; else only the excess over the max
     // hand size; else hold. See LandsEdgeHeuristicFireCount.
-    int fire_count = LandsEdgeHeuristicFireCount(state, rate);
+    int fire_count = ResolveProvider(state).LandsEdgeFireCount(state, rate);
 
     // For depth > 0 outside a rollout: compare heuristic amount vs. firing all lands.
     // The heuristic handles "fire for lethal" and "fire excess to prevent waste";

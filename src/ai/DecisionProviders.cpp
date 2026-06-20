@@ -51,6 +51,30 @@ bool GenericProvider::WantVialCharge(const GameState& s, const Permanent& vial) 
     return ::WantVialCharge(s, vial);
 }
 
+bool GenericProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+{
+    // Reproduces the inline keep heuristic shared by ScryTop/SurveilTop: keep nonland
+    // spells always (combo pieces); keep a land only while it still helps -- a
+    // DrawUntilNonland (Treasure Hunt) in hand wants land fuel, or fewer than two lands
+    // are in play -- otherwise bottom/bin it to dig toward action.
+    const CardDefinition* tdef = CardDatabase::Instance().LookupCached(top_card);
+    bool is_land = tdef ? tdef->card.IsLand() : top_card.IsLand();
+    if (!is_land) { return true; }
+
+    const Player& ap = s.players[s.active_player_index];
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { return true; }
+    }
+    int lands_in_play = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index && p.card.IsLand()) { ++lands_in_play; }
+    }
+    return lands_in_play < 2;
+}
+
 namespace
 {
     // Stateless, read-only -> a single shared const instance is thread-safe (same model

@@ -1124,31 +1124,13 @@ inline void ScryTop(GameState& state, int n)
 {
     Player& ap = state.ActivePlayer();
 
-    bool has_draw_until_nonland = false;
-    for (const Card& c : ap.hand)
-    {
-        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland)
-        {
-            has_draw_until_nonland = true;
-            break;
-        }
-    }
-    int lands_in_play = 0;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++lands_in_play; }
-    }
-
     std::vector<Card> keep_top;
     std::vector<Card> bottomed;
     for (int i = 0; i < n && !ap.library.empty(); ++i)
     {
         Card c = ap.library.front();
         ap.library.erase(ap.library.begin());
-        const CardDefinition* tdef = CardDatabase::Instance().LookupCached(c);
-        bool is_land = tdef ? tdef->card.IsLand() : c.IsLand();
-        bool keep    = !is_land || has_draw_until_nonland || lands_in_play < 2;
+        bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
         if (keep) { keep_top.push_back(std::move(c)); }
         else      { bottomed.push_back(std::move(c)); }
     }
@@ -1168,26 +1150,12 @@ inline void SurveilTop(GameState& state, int n)
 {
     Player& ap = state.ActivePlayer();
 
-    bool has_draw_until_nonland = false;
-    for (const Card& c : ap.hand)
-    {
-        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { has_draw_until_nonland = true; break; }
-    }
-    int lands_in_play = 0;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++lands_in_play; }
-    }
-
     std::vector<Card> keep_top;
     for (int i = 0; i < n && !ap.library.empty(); ++i)
     {
         Card c = ap.library.front();
         ap.library.erase(ap.library.begin());
-        const CardDefinition* tdef = CardDatabase::Instance().LookupCached(c);
-        bool is_land = tdef ? tdef->card.IsLand() : c.IsLand();
-        bool keep    = !is_land || has_draw_until_nonland || lands_in_play < 2;
+        bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
         if (keep) { keep_top.push_back(std::move(c)); }
         else      { ap.graveyard.push_back(std::move(c)); }  // surveil bins to graveyard
     }

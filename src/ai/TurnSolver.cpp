@@ -1778,7 +1778,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // baseline (MTG_LEGACY_SEARCH) fires ALL lands -- its rollouts are frozen as
             // the held-out ground truth.
             static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
-            int fire_count = s_fd ? LandsEdgeHeuristicFireCount(state, rate)
+            int fire_count = s_fd ? ResolveProvider(state).LandsEdgeFireCount(state, rate)
                                   : std::numeric_limits<int>::max();
 
             std::vector<Card> keep;
@@ -2068,7 +2068,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (!def || !def->params.upkeep_adds_charge) { continue; }
         // Hand-aware charge policy, shared with the real engine (AIEngine::DecideVialCharge)
         // so the rollout models the same charge the executor will make.
-        if (WantVialCharge(state, p)) { ++p.charge_counters; }
+        if (ResolveProvider(state).WantVialCharge(state, p)) { ++p.charge_counters; }
     }
 
     // Upkeep token creation (e.g. Thrumming Hivepool). Iterate over initial size only.

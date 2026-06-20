@@ -59,4 +59,9 @@ public:
 
     // Hook 8 -- whether to add an Aether Vial charge counter this upkeep.
     virtual bool WantVialCharge(const GameState& s, const Permanent& vial) const = 0;
+
+    // Hook 9 -- scry/surveil per-card keep decision: keep `top_card` on top (true) or
+    // bottom/bin it (false). The engine keeps the reorder/bin MECHANISM (ScryTop/
+    // SurveilTop); only the keep DECISION is provider-owned.
+    virtual bool ScryKeepOnTop(const GameState& s, const Card& top_card) const = 0;
 };
