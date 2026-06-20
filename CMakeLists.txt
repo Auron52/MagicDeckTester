@@ -36,6 +36,7 @@ add_library(mtg-core STATIC
     src/runner/GoldFishRunner.cpp
     src/runner/BatchRunner.cpp
     src/cards/CardDatabase.cpp
+    src/core/NameRegistry.cpp
 )
 target_include_directories(mtg-core PUBLIC src)
 target_link_libraries(mtg-core PUBLIC pugixml::pugixml nlohmann_json::nlohmann_json)

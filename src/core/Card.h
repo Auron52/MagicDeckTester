@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include "SubtypeRegistry.h"
+#include "NameRegistry.h"
 
 struct CardDefinition; // fwd decl: Card caches a pointer into the CardDatabase (see m_def)
 
@@ -63,7 +64,10 @@ struct Card
     // a heap alloc/free for its (always non-empty) type set on each GameState copy.
     // Subtypes stay a vector<string>: they are string-matched (lord subtype checks)
     // and would need an intern table to pack, which the lord paths don't justify.
-    std::string m_name;
+    InternedName m_name;   // interned: an 8-byte pointer into a process-wide name registry (see
+                           // NameRegistry.h). Reads convert implicitly to const std::string&; this
+                           // keeps Card trivially copyable so vector<Card> copy/erase are memcpy/
+                           // memmove. m_name_hash (below) is still the std::hash of the name string.
     // Cached std::hash of m_name. The search folds card NAMES into the transposition-table
     // key (BuildSimKey) once per card per node via std::hash<std::string>{}(m_name); caching
     // it here turns that hot per-node hash into a load. MUST be refreshed (RehashName) at the

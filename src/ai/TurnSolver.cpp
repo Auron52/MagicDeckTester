@@ -2909,7 +2909,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             { std::cerr << c.m_name << (c.m_is_staged ? "*" : "") << "; "; }
             std::cerr << "] lib_top=";
             const Player& tp = state.ActivePlayer();
-            std::cerr << (tp.library.empty() ? "(none)" : tp.library.front().m_name) << "\n";
+            std::cerr << (tp.library.empty() ? std::string("(none)") : tp.library.front().m_name.str()) << "\n";
         }
 
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens

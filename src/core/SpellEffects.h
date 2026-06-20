@@ -583,9 +583,10 @@ inline void CreateToken(
     const std::vector<std::string>&  subtypes)
 {
     Permanent token;
-    token.card.m_name      = std::to_string(power) + "/" + std::to_string(toughness);
-    if (!subtypes.empty()) { token.card.m_name += " " + subtypes[0]; }
-    token.card.m_name     += " Token";
+    std::string token_name = std::to_string(power) + "/" + std::to_string(toughness);
+    if (!subtypes.empty()) { token_name += " " + subtypes[0]; }
+    token_name            += " Token";
+    token.card.m_name      = token_name;   // single intern of the full token name
     token.card.RehashName();
     token.card.AddType(CardType::Creature);
     token.card.m_subtypes  = subtypes;
