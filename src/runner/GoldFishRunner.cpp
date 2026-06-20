@@ -21,17 +21,34 @@
 // ---- Second-main relevance -------------------------------------------------
 
 // True if the deck contains any card whose value depends on the second
-// (post-combat) main phase. Currently that means spectacle cards: their alternate
-// cost unlocks once the opponent has lost life this turn, so the finisher is
-// cast cheaply AFTER combat. Such decks enable a played/searched second main
-// (see AIEngine::SetSearchPostCombat); for everything else the second main is
-// skipped because combat creates no new resources in a goldfish.
+// (post-combat) main phase, so the engine should run a searched second main
+// (see AIEngine::SetSearchPostCombat). For everything else the second main is
+// skipped: combat creates no new resources in a goldfish, and a searched second
+// main roughly doubles the per-turn search cost, so we only pay for it where it
+// buys a better line. Two triggers:
+//
+//   * SPECTACLE: the alternate cost unlocks once the opponent has lost life this
+//     turn, so the finisher is cast cheaply AFTER combat.
+//
+//   * ENABLER-GATED LIFEGAIN REACH (Anti-Lifegain: Tainted Remedy / Plague Drone
+//     + alt-cost payloads like Reverent Silence): the deck's face damage flows
+//     through "opponent gains life" effects flipped to loss by a lifegain_to_loss
+//     enabler. The optimal line is "attack to drop the opponent into range, THEN
+//     fire the payload post-combat" -- and some payloads (Reverent Silence wipes
+//     the caster's own Remedy/Aria) are ONLY safe post-combat. Without a searched
+//     second main the engine misses these post-combat lethals and slips the win a
+//     full turn (measured: antilife d5 avg 4.92 -> 4.77, more T3/T4 kills). Plain
+//     direct-damage reach (burn) does NOT need this: it is castable pre-combat and
+//     the rollout already simulates the attack, so pre/post-combat are equivalent
+//     and those decks stay byte-identical (verified: burn/slivers unchanged).
 bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
 {
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-        if (def && def->params.spectacle_cost.has_value()) { return true; }
+        if (!def) { continue; }
+        if (def->params.spectacle_cost.has_value()) { return true; }
+        if (def->params.lifegain_to_loss)           { return true; }
     }
     return false;
 }
