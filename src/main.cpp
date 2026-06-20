@@ -673,7 +673,10 @@ int main(int argc, char* argv[])
     std::filesystem::path profile_path;
     std::filesystem::path log_dir;
     int      num_games      = 10000;
-    int      max_turns      = 20;
+    int      max_turns      = 8;   // goldfish horizon: wins on turn >8 are not useful data (a
+                                   // real game is lost by then; goldfishing can't model control).
+                                   // Bounding it also stops the search exploring deep no-early-win
+                                   // lines -- override with --max-turns for a genuinely slow deck.
     int      base_game_index = 0;
     int      lookahead_depth = 0;
     int      timeout_ms     = 0;

@@ -29,7 +29,7 @@ struct Job
     uint64_t        seed                = 0;
     int             depth               = 0;
     int             budget_ms           = 0;
-    int             max_turns           = 20;
+    int             max_turns           = 8;   // goldfish horizon (see main.cpp); per-job overridable
     bool            lookahead_bottoming = false;
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
 };
@@ -57,7 +57,7 @@ Job ParseJob(const json& jspec)
     j.seed                = jspec["seed"].get<uint64_t>();
     j.depth               = jspec.value("depth", 0);
     j.budget_ms           = jspec.value("budget_ms", 0);
-    j.max_turns           = jspec.value("max_turns", 20);
+    j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
     j.lookahead_bottoming = jspec.value("lookahead_bottoming", true);   // ON by default
 
     // Profile: explicit "profile" path, else auto-detect deckname.profile.json
