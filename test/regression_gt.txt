@@ -1,4 +1,4 @@
-# Regression ground truth -- commit ff012a6  date 2026-06-20
+# Regression ground truth -- commit b77f540  date 2026-06-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -16,7 +16,7 @@ th_smoke_d5_s1001=75/4.26667
 knights_smoke_d0_s1001=1000/4.654
 knights_smoke_d3_s1001=250/4.392
 knights_smoke_d5_s1001=150/4.36
-antilife_smoke_d0_s1001=745/5.85906
+antilife_smoke_d0_s1001=754/5.84483
 antilife_smoke_d3_s1001=243/4.73251
 antilife_smoke_d5_s1001=145/4.68276
 
@@ -41,10 +41,10 @@ knights_regression_d3_s2002=300/4.33
 knights_regression_d3_s3003=300/4.32333
 knights_regression_d5_s2002=250/4.308
 knights_regression_d5_s3003=250/4.336
-antilife_regression_d0_s2002=748/5.92914
-antilife_regression_d3_s2002=292/4.66781
+antilife_regression_d0_s2002=755/5.93642
+antilife_regression_d3_s2002=292/4.66438
 antilife_regression_d3_s3003=292/4.67466
-antilife_regression_d5_s2002=243/4.69136
+antilife_regression_d5_s2002=244/4.70082
 antilife_regression_d5_s3003=243/4.65432
 
 # --- overnight ---

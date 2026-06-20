@@ -1239,6 +1239,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!opt) { return; }
         const CardDefinition& def = *opt;
 
+        // Cast-time guard for a risky alt payload (Reverent Silence): the search may commit it
+        // from a node whose enabler diverges away in the realized line (commit-the-line
+        // non-convergence, gi=212). Re-check the gate on the CURRENT board: if no enabler
+        // survives the wipe and it isn't lethal, SKIP it -- keep the card and our own
+        // enchantments rather than self-brick. Inert for decks without a destroy-all alt.
+        if (alt_cost && def.params.destroy_all_enchantments
+            && !ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def))
+        {
+            return;
+        }
+
         bool is_creature = def.card.IsCreature();
         // Cascade casts its target for FREE (CR 702.84). Consume the one-shot flag here,
         // before any nested casts, so exactly THIS cast skips its mana cost.

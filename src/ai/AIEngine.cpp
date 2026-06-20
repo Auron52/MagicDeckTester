@@ -1066,6 +1066,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
+        // Cast-time guard (mirror of the rollout's): a risky alt payload (Reverent Silence)
+        // committed by the search may realize on a board where its enabler diverged away
+        // (commit-the-line non-convergence, gi=212). Re-check the gate on the realized board;
+        // if no enabler survives the wipe and it isn't lethal, SKIP it rather than self-brick.
+        const CardDefinition* adef = CardDatabase::Instance().LookupCached(*it);
+        if (adef && adef->params.destroy_all_enchantments
+            && !ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, *adef))
+        {
+            return;
+        }
         ManaPool available = BuildAvailableMana(state);
         CastSpellFromHand(state, *it, available, alt_lifegain);
     };
