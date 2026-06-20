@@ -14,6 +14,11 @@ struct OpponentSpawn
     int toughness;
 };
 
+// Per-deck heuristic provider (decision logic lives in ai/DecisionProvider.h); GameState
+// carries a non-owning pointer so the search's deep copies all see it. Forward-declared
+// here to avoid pulling the AI layer into this core header.
+class DecisionProvider;
+
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
 enum class Step  { Untap, Upkeep, Draw, MainPhase,
                    BeginCombat, DeclareAttackers, DeclareBlockers, CombatDamage, EndCombat,
@@ -59,6 +64,10 @@ struct GameState
     std::vector<OpponentSpawn> opponent_spawns;           // passive creatures to place on opp side each turn
     int                      vial_target_mv        = 0;   // most common creature MV in the deck; Aether Vial stops here
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)
+    // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
+    // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
+    // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.
+    const DecisionProvider*  m_provider            = nullptr;
 
     Player&       ActivePlayer()       { return players[active_player_index]; }
     const Player& ActivePlayer() const { return players[active_player_index]; }

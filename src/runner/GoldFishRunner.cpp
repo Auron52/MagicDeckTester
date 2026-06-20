@@ -3,6 +3,7 @@
 #include "../core/GameLogger.h"
 #include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
+#include "../ai/DecisionProviders.h"
 #include "../ai/Profiler.h"
 #include <algorithm>
 #include <atomic>
@@ -332,6 +333,11 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // base_seed + i, so consecutive games flip on_the_play, giving a balanced
     // 50/50 split within any run without a separate play/draw parameter.
     state.on_the_play = (seed % 2 == 0);
+
+    // Attach the deck's decision heuristics. This is the single choke point all callers
+    // (GoldFishRunner / BatchRunner / AnalyzerEngine / main) funnel through, and every
+    // search/rollout state is a copy of this one, so the pointer reaches every node.
+    state.m_provider = &SelectDecisionProvider(deck);
 
     return state;
 }
