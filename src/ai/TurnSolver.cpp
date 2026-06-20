@@ -757,6 +757,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     int m = static_cast<int>(cands.size());
     Plan best;
 
+    std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-mask alloc)
+
     // Enumerate all non-empty subsets (mask=0 is "do nothing" and is the default).
     for (int mask = 1; mask < (1 << m); ++mask)
     {
@@ -870,7 +872,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U}
             // hard-cast off a W/R/B-only land). Strict tightening; inert for decks whose
             // lands produce the colors they need.
-            std::vector<int> sel;
+            sel.clear();
             for (int j = 0; j < m; ++j) { if (mask & (1 << j)) { sel.push_back(j); } }
             if (!SubsetPayable(state, cands, sel)) { continue; }
         }
@@ -2384,12 +2386,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // groups[g][v-1]), crossed with the 2^num_ind powerset of independent actions.
     // The empty combination (skip everything) is not a plan and is dropped.
     std::vector<int> choice(num_groups, 0);
+    std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-combo alloc)
     bool done = false;
     while (!done)
     {
         for (int imask = 0; imask < (1 << num_ind); ++imask)
         {
-            std::vector<int> sel;
+            sel.clear();
             for (int g = 0; g < num_groups; ++g)
             {
                 if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); }
