@@ -515,6 +515,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                       || state.stack.empty();
         if (!timing_ok) { continue; }
 
+        // Flood-engine gate: a Treasure Hunt (DrawUntilNonland) or a cascade/retrace card
+        // that can cascade INTO Treasure Hunt (Throes of Chaos) is only offered when its
+        // draw has a payoff this turn (Land's Edge online / castable, or a no-max-hand-size
+        // land to keep it) -- otherwise the drawn lands are wasted to cleanup. Asked at this
+        // single enumeration choke point so the search AND the bottoming rollouts both honor
+        // it. Generic returns true (no gate), so non-Treasure-Hunt decks are byte-identical.
+        if ((def.tmpl == CardTemplate::DrawUntilNonland
+             || def.params.cascade_max_mv > 0 || def.params.retrace)
+            && !ResolveProvider(state).ShouldCastDrawEngine(state, state.active_player_index, def))
+        {
+            continue;
+        }
+
         // Skip spells that need a creature target when none exists. An own-creature pump
         // (Invigorate) needs one of OUR attackers; other creature-targeting spells need an
         // opponent creature.
@@ -693,6 +706,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 if (!timing_ok) { continue; }
                 if (gdef->card.m_mana_cost.has_x) { continue; }
                 if (!seen_gy.insert(gc.m_name).second) { continue; }
+                // Flood-engine gate (same as hand casts): a retrace card here is Throes of
+                // Chaos, which cascades into Treasure Hunt -- only recast it from the
+                // graveyard when the resulting draw has a payoff this turn.
+                if (!ResolveProvider(state).ShouldCastDrawEngine(state, state.active_player_index, *gdef))
+                {
+                    continue;
+                }
 
                 Action a;
                 a.kind                  = Action::Kind::CastFromGraveyard;
@@ -1219,6 +1239,56 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     };
 
+    // Part B (defer-the-land-until-you-see-the-draw): after a Treasure Hunt (DrawUntilNonland)
+    // resolves, play the DEFERRED land drop now that the draw is known. If the hand is flooding
+    // and no no-max-hand-size land is already in play, play a DRAWN Reliquary Tower so the whole
+    // draw is KEPT as Land's Edge ammo (gi=65). Otherwise play the best normal land (chosen
+    // against the post-draw hand) so the drop is developed and the land not discarded (gi=881: a
+    // drawn Temple of Epiphany was discarded only because the deferred drop was never played).
+    // Only when the land drop is still open (the plan deferred); records the play for
+    // commit-the-line replay. Legacy keeps the frozen behavior (no land here).
+    auto play_drawn_flood_keep_land = [&](std::vector<Action>* sink)
+    {
+        static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+        if (!s_fd || !is_pre_combat) { return; }
+        Player& lp = state.ActivePlayer();
+        if (lp.lands_played_this_turn >= lp.LandDropsAvailable()) { return; }   // drop already used
+
+        std::string reliquary;
+        if (static_cast<int>(lp.hand.size()) > 7)   // flooding -> keep the draw with a no-max land
+        {
+            bool nomax_in_play = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d && d->params.no_max_hand_size && d->card.IsLand()) { nomax_in_play = true; break; }
+            }
+            if (!nomax_in_play)
+            {
+                for (const Card& c : lp.hand)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d && d->params.no_max_hand_size && d->card.IsLand()) { reliquary = c.m_name; break; }
+                }
+            }
+        }
+        if (!reliquary.empty())
+        {
+            if (PlayLandByName(state, reliquary, std::string{}) && out_breakpoint != nullptr && sink != nullptr)
+            {
+                Action la;
+                la.kind      = Action::Kind::PlayLand;
+                la.card_name = reliquary;
+                sink->push_back(la);
+            }
+            return;
+        }
+        // No flood-keep land to play -> play the best normal land (the deferred drop), recorded.
+        play_breakpoint_land(sink);
+    };
+
+
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
@@ -1462,12 +1532,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ap.hand.push_back(std::move(c));
                 if (!is_land) { break; }
             }
-            // Draw breakpoint: re-solve so any new castables are played with remaining
-            // mana. NOTE: no breakpoint land play here (unlike the DrawSpell branch) --
-            // for Treasure Hunt the revealed lands are Land's Edge ammo, not a land
-            // drop; that interaction is handled with Land's Edge (see Step 2).
-            TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+            // Draw breakpoint: play a DEFERRED land now that the draw is seen, then re-solve
+            // so new castables are played with remaining mana. The flood-keep land play (part
+            // B) plays a drawn Reliquary Tower as the open land drop so a flooded draw is KEPT
+            // for Land's Edge rather than discarded at cleanup; other revealed lands remain
+            // Land's Edge ammo (no land played). See play_drawn_flood_keep_land.
             if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+            play_drawn_flood_keep_land(my_bp_sink);
+            TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
             apply_plan_actions(extra.actions);
             if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
         }

@@ -89,4 +89,15 @@ public:
     // keeps the variant-building mechanism; this is the archetype gate.
     virtual bool ShouldStageSpectacleDraw(const GameState& s, int controller,
                                           const CardDefinition& draw_def) const = 0;
+
+    // Hook 12 -- whether to CAST a "flood engine" card (Treasure Hunt's DrawUntilNonland,
+    // and cascade/retrace cards like Throes of Chaos that can cascade into Treasure Hunt).
+    // Firing the engine when the drawn lands cannot be used wastes them: they hit cleanup
+    // discard with no Land's Edge to throw them. The engine asks this BEFORE emitting the
+    // cast candidate (so the search and the bottoming rollouts both inherit the gate).
+    // Generic = always cast (byte-identical); the Treasure-Hunt provider gates on having a
+    // payoff this turn (Land's Edge in play, mana to cast Land's Edge after the engine, or
+    // a no-max-hand-size land to keep the draw). `def` is the engine card being considered.
+    virtual bool ShouldCastDrawEngine(const GameState& s, int controller,
+                                      const CardDefinition& def) const = 0;
 };

@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
@@ -71,6 +72,12 @@ bool GenericProvider::DiscardLandsFirst(const GameState&) const
 bool GenericProvider::ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const
 {
     return false;   // no risky alt-cost payloads in a generic deck.
+}
+
+bool GenericProvider::ShouldCastDrawEngine(const GameState&, int,
+                                          const CardDefinition&) const
+{
+    return true;   // no generic flood-engine gate; the Treasure-Hunt archetype overrides.
 }
 
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
@@ -199,6 +206,81 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
         if (p.controller_index == s.active_player_index && p.card.IsLand()) { ++lands_in_play; }
     }
     return lands_in_play < 2;
+}
+
+bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,
+                                                const CardDefinition& def) const
+{
+    // Cast a flood engine -- Treasure Hunt (DrawUntilNonland) or a cascade/retrace card that
+    // can cascade INTO it (Throes of Chaos) -- only when the cards it draws will not be wasted.
+    // Without a payoff the drawn lands just hit cleanup discard (gi=67: Treasure Hunt drew 31
+    // lands with no Land's Edge online -> all discarded). Three real payoffs:
+    //   (1) Land's Edge already in play         -> the drawn lands become damage now;
+    //   (2) enough untapped mana THIS turn to cast the engine AND Land's Edge afterward
+    //       -> the same-turn combo (the engine draws Land's Edge, cast it, throw the lands).
+    //       Checked with COLORED affordability, so the {R}{R} requirement separates a real
+    //       combo hand (a Sandstone Needle for {R}{R}) from a flood hand that cannot make it;
+    //   (3) a no-max-hand-size land (Reliquary Tower) in play or in hand -> the draw is KEPT.
+    // Gambling on DRAWING Reliquary Tower (or Land's Edge) and bricking is an acceptable real
+    // game -- not credited here.
+    const Player& ap = s.players[controller];
+
+    const CardDefinition* le_def = nullptr;   // a Land's Edge def (for its cost in (2))
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.discard_land_damage > 0) { return true; }                 // (1) LE in play
+        if (d->params.no_max_hand_size && d->card.IsLand()) { return true; }    // never floods
+    }
+    // (3) a land drop THIS TURN -> either still open (defer it to play a drawn Reliquary Tower
+    //     / Land's-Edge enabler), OR already spent developing a real land this turn (in which
+    //     case digging alongside is still fine -- the drop was used productively).
+    //     IMPORTANT: the land-fold enumeration (add_for_land) plays the candidate land into the
+    //     trial state BEFORE this gate runs, so a "play a land AND cast Treasure Hunt" plan
+    //     shows lands_played_this_turn==1 here. Crediting a just-played land keeps that line
+    //     legal -- otherwise the gate deletes Treasure Hunt from every play-a-land branch and
+    //     forces deferring the land, which then gets discarded in the flood (gi=881). Whiffing
+    //     the drawn payoff and bricking is an acceptable real game.
+    if (ap.lands_played_this_turn > 0
+        || ap.lands_played_this_turn < ap.LandDropsAvailable()) { return true; }   // (3)
+
+    // (2) -- find a Land's Edge cost from any zone (it is usually still in the library, since
+    // the engine is what draws it), then check the same-turn combo affordability.
+    auto find_le = [](auto begin, auto end) -> const CardDefinition*
+    {
+        for (auto it = begin; it != end; ++it)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
+            if (d && d->params.discard_land_damage > 0) { return d; }
+        }
+        return nullptr;
+    };
+    le_def = find_le(ap.hand.begin(), ap.hand.end());
+    if (!le_def) { le_def = find_le(ap.library.begin(), ap.library.end()); }
+    if (!le_def) { le_def = find_le(ap.graveyard.begin(), ap.graveyard.end()); }
+    if (le_def)
+    {
+        ManaPool pool;   // untapped lands/dorks (mirrors TurnSolver::BuildPool)
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            bool is_land = (d->tmpl == CardTemplate::BasicLand);
+            bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap());
+            if (!is_land && !is_dork) { continue; }
+            AddSourceToPool(pool, s, *d);
+        }
+        ManaCost combined  = def.card.m_mana_cost;
+        const ManaCost& lc = le_def->card.m_mana_cost;
+        combined.white += lc.white; combined.blue += lc.blue; combined.black += lc.black;
+        combined.red   += lc.red;   combined.green += lc.green;
+        combined.colorless += lc.colorless; combined.generic += lc.generic;
+        if (pool.CanPay(combined)) { return true; }                            // (2)
+    }
+    return false;
 }
 
 // ---- VialProvider -----------------------------------------------------------

@@ -1261,6 +1261,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
         }
+        // Flood-keep (fallback path): if the draw overfilled the hand and the land drop is
+        // still open (deferred before Treasure Hunt), play it now -- TryPlayLand prioritizes a
+        // drawn Reliquary Tower when flooding (see its pre-pass), keeping the whole draw as
+        // Land's Edge ammo instead of discarding it at cleanup (gi=65). Only when flooding, so
+        // non-flood draw turns keep their normal land timing.
+        if (is_pre_combat_main
+            && static_cast<int>(state.ActivePlayer().hand.size()) > 7) { TryPlayLand(state); }
     };
 
     // Canonical execution order: Vial deployments first (lords live before spell casts),
@@ -1512,9 +1519,12 @@ bool AIEngine::TryPlayLand(GameState& state)
         return true;
     };
 
-    // Pre-pass: when a DrawUntilNonland spell (Treasure Hunt) is in hand, prioritize
-    // no_max_hand_size lands (Reliquary Tower) so they're on the battlefield before
-    // TH resolves — this prevents the drawn cards from being discarded at end of turn.
+    // Pre-pass: prioritize a no_max_hand_size land (Reliquary Tower) when either a
+    // DrawUntilNonland spell (Treasure Hunt) is in hand (play it BEFORE the draw) OR the hand
+    // is already flooding past max size (play it AFTER a draw to KEEP the cards). The latter
+    // is the gi=65/gi=881 case: Treasure Hunt resolved and drew a Reliquary, but with TH no
+    // longer in hand the old TH-in-hand-only check missed it, so the drawn Reliquary (and the
+    // whole flood) was discarded at cleanup instead of kept as Land's Edge ammo.
     bool has_draw_until_nonland = false;
     for (const Card& c : ap.hand)
     {
@@ -1525,7 +1535,8 @@ bool AIEngine::TryPlayLand(GameState& state)
             break;
         }
     }
-    if (has_draw_until_nonland)
+    bool hand_flooding = static_cast<int>(ap.hand.size()) > 7;
+    if (has_draw_until_nonland || hand_flooding)
     {
         for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
         {
