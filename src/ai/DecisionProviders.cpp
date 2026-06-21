@@ -4,6 +4,23 @@
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
 #include "../deck/DeckLoader.h"     // Decklist
 
+// Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
+// the search-narrowing heuristics return their MAXIMALLY-PERMISSIVE value so the general
+// search explores the full branch space instead of the heuristic-narrowed one. Run the
+// suite with and without it and diff per-game: if the unpruned arm wins MORE or FASTER, a
+// pruning heuristic is costing the search a line (a bad heuristic); if it is the same (or
+// only slower), the heuristic is a sound perf-only pruner. Default off => byte-identical.
+// Currently widens the GATE hooks (ShouldCastDrawEngine / ShouldEmitRiskyAltPayload) --
+// the two heuristics that actually delete a cast from the search's branch space. The
+// candidate-narrowers (Tutor/Fetch, in shared SpellEffects.h) are a follow-up; for the
+// current decks they rarely narrow to a costly choice. Decision/policy hooks that don't
+// prune the search space (scry-keep, vial-charge, discard-order, ...) are unaffected.
+bool DecisionUnpruned()
+{
+    static const bool v = std::getenv("MTG_UNPRUNED") != nullptr;
+    return v;
+}
+
 // Stage 6: the search tree calls the provider for every deck decision; here the GENERIC
 // defaults are minimal (a deck-agnostic baseline) and each archetype subclass holds its
 // own heuristics. Archetype detection (SelectDecisionProvider) routes each deck to its
@@ -119,6 +136,7 @@ bool AntiLifegainProvider::CastEnablerFirst(const GameState&, const std::string&
 bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int controller,
                                                      const CardDefinition& def) const
 {
+    if (DecisionUnpruned()) { return true; }   // unpruned A/B: let the search judge the wipe.
     // Reverent Silence's destroy-all-enchantments wipes our OWN Aria/Remedy. Casting it
     // non-lethally with no surviving enabler bricks the combo (the greedy second-main rollout
     // overvalues the immediate 6 -- regression gi=36: opp 23, single Tainted Remedy, no Drone
@@ -211,6 +229,7 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
 bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,
                                                 const CardDefinition& def) const
 {
+    if (DecisionUnpruned()) { return true; }   // unpruned A/B: never gate the flood engine.
     // Cast a flood engine -- Treasure Hunt (DrawUntilNonland) or a cascade/retrace card that
     // can cascade INTO it (Throes of Chaos) -- only when the cards it draws will not be wasted.
     // Without a payoff the drawn lands just hit cleanup discard (gi=67: Treasure Hunt drew 31

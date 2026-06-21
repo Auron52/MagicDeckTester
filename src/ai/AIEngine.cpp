@@ -876,8 +876,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // the searched horizon, commit just THIS turn and re-search next turn,
                     // like baseline's per-turn re-deciding. (We still RANK this turn's play
                     // with the search; we just don't commit future turns on an estimate.)
+                    // EXPERIMENT (env-gated, default off => byte-identical): always
+                    // re-search every turn -- commit only THIS turn's phases and recompute
+                    // from the realised state next turn, even when a win is verified in
+                    // horizon. This is per-turn re-deciding driven by the full-depth search
+                    // (search-primary): it lets the line adapt to each draw, recovering the
+                    // gi252-class lines commit-the-line locks a turn slower. Perf cost = a
+                    // FullSearchLine every turn instead of once per committed line.
+                    static const bool s_fd_always_research =
+                        std::getenv("MTG_FD_ALWAYS_RESEARCH") != nullptr;
                     const bool verified_win =
-                        line.win_turn <= state.turn_number + searched_depth - 1;
+                        !s_fd_always_research
+                        && line.win_turn <= state.turn_number + searched_depth - 1;
                     if (!verified_win && !line.phases.empty())
                     {
                         // Keep the current turn only: its pre-combat phase plus any
