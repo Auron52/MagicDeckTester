@@ -68,6 +68,13 @@ struct GameState
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
     // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.
     const DecisionProvider*  m_provider            = nullptr;
+    // Non-owning pointer to the deck's required combo pieces (MulliganProfile::required_pieces),
+    // set in AIEngine::HandleMulligan and propagated through every deep copy. Used by the shared
+    // cleanup-discard selector (SelectCleanupDiscardIndex) so the search rollout protects the same
+    // pieces the real engine's ChooseDiscard does -- without it the rollout shed high-MV spells and
+    // hoarded lands, over-counting a Land's Edge flood the real game never accumulates (gi=220).
+    // nullptr -> no protection (matches a raw GameState with no profile attached).
+    const std::vector<std::string>* m_required_pieces = nullptr;
 
     Player&       ActivePlayer()       { return players[active_player_index]; }
     const Player& ActivePlayer() const { return players[active_player_index]; }

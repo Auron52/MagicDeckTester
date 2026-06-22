@@ -2020,20 +2020,20 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // truth). Without this the search kept every drawn land as Land's Edge ammo while
     // the real game discards lands here, over-counting Land's Edge damage (gi=947).
     static const bool s_fd_discard = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
-    bool has_land_outlet = s_fd_discard && ResolveProvider(state).DiscardLandsFirst(state);
     while (!unlimited_hand && ap.hand.size() > 7)
     {
-        std::vector<Card>::iterator victim = ap.hand.end();
-        if (has_land_outlet)
+        // Default (commit-the-line): use the SHARED selector so the rollout sheds exactly the
+        // card the real engine's ChooseDiscard would -- required-piece protection + land-outlet
+        // ammo, reading the deck's pieces from state.m_required_pieces. Without this the rollout
+        // shed high-MV spells and hoarded lands, predicting a phantom Land's Edge flood (gi=220).
+        // Legacy (MTG_LEGACY_SEARCH): the frozen highest-MV-only rule (held-out ground truth).
+        std::vector<Card>::iterator victim;
+        if (s_fd_discard)
         {
-            for (std::vector<Card>::iterator it = ap.hand.begin(); it != ap.hand.end(); ++it)
-            {
-                auto def     = CardDatabase::Instance().LookupCached(*it);
-                bool is_land = def ? def->card.IsLand() : it->IsLand();
-                if (is_land) { victim = it; break; }
-            }
+            int idx = SelectCleanupDiscardIndex(state, state.m_required_pieces);
+            victim = ap.hand.begin() + idx;
         }
-        if (victim == ap.hand.end())
+        else
         {
             victim = std::max_element(ap.hand.begin(), ap.hand.end(),
                 [](const Card& a, const Card& b)
@@ -3417,6 +3417,26 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             }
             if (pp.is_pre_combat)
             {
+                // Diagnostic: dump the library top BEFORE the plan resolves so the
+                // rollout's draw source can be diffed against the executor's [traj] libtop.
+                {
+                    const auto& lib = copy.ActivePlayer().library;
+                    int pre_hand_lands = 0, pre_nomax = 0;
+                    for (const Card& hc : copy.ActivePlayer().hand)
+                    { auto hd = CardDatabase::Instance().LookupCached(hc);
+                      if (hd ? hd->card.IsLand() : hc.IsLand()) ++pre_hand_lands; }
+                    for (const Permanent& perm : copy.battlefield)
+                    { if (perm.controller_index != copy.active_player_index) continue;
+                      auto pd = CardDatabase::Instance().LookupCached(perm.card);
+                      if (pd && pd->params.no_max_hand_size && pd->card.IsLand()) ++pre_nomax; }
+                    std::cerr << "[fd-pred]   turn=" << copy.turn_number
+                              << " POST-CLEANUP hand_lands=" << pre_hand_lands
+                              << " handsize=" << copy.ActivePlayer().hand.size()
+                              << " nomax=" << pre_nomax << " libtop=";
+                    for (std::size_t li = 0; li < lib.size() && li < 6; ++li)
+                    { std::cerr << lib[li].m_name << "; "; }
+                    std::cerr << " (libsize=" << lib.size() << ")\n";
+                }
                 ApplyPlanDirect(copy, pp.plan, true);
                 SimulateAnimateLands(copy);
                 SimulateTapTokens(copy);

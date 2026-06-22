@@ -87,6 +87,13 @@ void AIEngine::OnGameEnd(const GameState& state, int win_turn)
 void AIEngine::HandleMulligan(GameState& state, int max_turns)
 {
     Player& ap = state.ActivePlayer();
+
+    // Stamp this engine's required combo pieces onto the state so the search rollout's
+    // shared cleanup-discard selector protects the same pieces ChooseDiscard does. The
+    // pointer is non-owning (m_profile outlives the game) and propagates through every
+    // deep copy / rollout trial (each a copy of this live state). See GameState::m_required_pieces.
+    state.m_required_pieces = &m_profile.required_pieces;
+
     ap.library.DrawN(7, ap.hand);
 
     // New game: reset the per-game non-convergence baseline.
@@ -2156,51 +2163,12 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         throw std::runtime_error("ChooseDiscard called with empty hand");
     }
 
-    // When a Land's Edge land outlet exists, lands are the ammunition and should be
-    // discarded in preference to spells (decision owned by the provider).
-    bool has_land_outlet = ResolveProvider(state).DiscardLandsFirst(state);
-
-    if (has_land_outlet)
-    {
-        for (Card& c : ap.hand)
-        {
-            if (c.m_is_staged) { continue; }
-            auto def     = CardDatabase::Instance().LookupCached(c);
-            bool is_land = def ? def->card.IsLand() : c.IsLand();
-            if (is_land) { return &c; }
-        }
-    }
-
-    // No land-discard outlet, or no land in hand: discard highest-MV spell that is not
-    // a required combo piece.  Required pieces are the engine; discard them last.
-    Card* best_non_req = nullptr;
-    int   best_mv      = -1;
-    for (Card& c : ap.hand)
-    {
-        if (c.m_is_staged) { continue; }
-        bool is_req = false;
-        for (const std::string& piece : m_profile.required_pieces)
-        {
-            if (c.m_name == piece) { is_req = true; break; }
-        }
-        if (is_req) { continue; }
-        auto def = CardDatabase::Instance().LookupCached(c);
-        int  mv  = def ? def->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
-        if (mv > best_mv) { best_mv = mv; best_non_req = &c; }
-    }
-    if (best_non_req) { return best_non_req; }
-
-    // Last resort: max-MV pick including staged cards and required pieces.
-    return &(*std::max_element(ap.hand.begin(), ap.hand.end(),
-        [](const Card& a, const Card& b)
-        {
-            if (a.m_is_staged != b.m_is_staged) { return a.m_is_staged; }
-            auto da = CardDatabase::Instance().LookupCached(a);
-            auto db = CardDatabase::Instance().LookupCached(b);
-            int mv_a = da ? da->card.m_mana_cost.ManaValue() : a.m_mana_cost.ManaValue();
-            int mv_b = db ? db->card.m_mana_cost.ManaValue() : b.m_mana_cost.ManaValue();
-            return mv_a < mv_b;
-        }));
+    // The victim-selection policy (land-outlet ammo, required-piece protection, staged-last)
+    // is the SHARED SelectCleanupDiscardIndex so the search rollout's cleanup sheds the same
+    // card. required_pieces comes from this engine's profile (the rollout reads the identical
+    // set via GameState::m_required_pieces, stamped in HandleMulligan).
+    int idx = SelectCleanupDiscardIndex(state, &m_profile.required_pieces);
+    return &ap.hand[idx];
 }
 
 // ============================================================

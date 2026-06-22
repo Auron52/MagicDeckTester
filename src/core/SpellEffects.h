@@ -45,6 +45,72 @@ inline int LandsEdgeHeuristicFireCount(const GameState& state, int rate)
     return std::min(excess, lands_in_hand);
 }
 
+// Cleanup discard-victim selection. SHARED by the real engine (AIEngine::ChooseDiscard) and
+// the search rollout (TurnSolver::SimulateEndAndStartNextTurn) so both shed the SAME card when
+// discarding to hand size -- previously they diverged (the rollout had no required-piece
+// protection, so it shed high-MV spells and hoarded lands, over-counting a Land's Edge flood
+// the real game never accumulates: gi=220 predicted a phantom T4 lethal vs the realised T7).
+//
+// Policy (mirrors the old ChooseDiscard exactly): when a Land's Edge land outlet exists
+// (provider DiscardLandsFirst) the lands are ammunition -> discard the first non-staged land.
+// Otherwise discard the highest-MV non-staged card that is NOT a required combo piece; required
+// pieces and staged cards are shed only as a last resort. Returns an index into the active
+// player's hand, or -1 if the hand is empty. `required_pieces` may be null (no protection).
+inline int SelectCleanupDiscardIndex(const GameState& state,
+                                     const std::vector<std::string>* required_pieces)
+{
+    const Player& ap = state.players[state.active_player_index];
+    if (ap.hand.empty()) { return -1; }
+
+    const bool has_land_outlet = ResolveProvider(state).DiscardLandsFirst(state);
+    if (has_land_outlet)
+    {
+        for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+        {
+            if (ap.hand[i].m_is_staged) { continue; }
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            bool is_land = def ? def->card.IsLand() : ap.hand[i].IsLand();
+            if (is_land) { return i; }
+        }
+    }
+
+    // Highest-MV non-staged card that is not a required combo piece.
+    int best_idx = -1, best_mv = -1;
+    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        bool is_req = false;
+        if (required_pieces)
+        {
+            for (const std::string& piece : *required_pieces)
+            {
+                if (ap.hand[i].m_name == piece) { is_req = true; break; }
+            }
+        }
+        if (is_req) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        int mv = def ? def->card.m_mana_cost.ManaValue() : ap.hand[i].m_mana_cost.ManaValue();
+        if (mv > best_mv) { best_mv = mv; best_idx = i; }
+    }
+    if (best_idx >= 0) { return best_idx; }
+
+    // Last resort: max-MV including staged + required, staged preferred for discard
+    // (mirrors ChooseDiscard's staged-aware comparator).
+    best_idx = 0;
+    for (int i = 1; i < static_cast<int>(ap.hand.size()); ++i)
+    {
+        const Card& a = ap.hand[best_idx];
+        const Card& b = ap.hand[i];
+        if (a.m_is_staged != b.m_is_staged) { if (a.m_is_staged) { best_idx = i; } continue; }
+        const CardDefinition* da = CardDatabase::Instance().LookupCached(a);
+        const CardDefinition* db = CardDatabase::Instance().LookupCached(b);
+        int mv_a = da ? da->card.m_mana_cost.ManaValue() : a.m_mana_cost.ManaValue();
+        int mv_b = db ? db->card.m_mana_cost.ManaValue() : b.m_mana_cost.ManaValue();
+        if (mv_a < mv_b) { best_idx = i; }
+    }
+    return best_idx;
+}
+
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&);
 
