@@ -3432,9 +3432,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 if (perm.controller_index == copy.active_player_index && perm.card.IsCreature())
                 { ++my_creatures; }
             }
+            int hand_lands = 0, bf_le = 0, bf_nomax = 0;
+            for (const Card& hc : copy.ActivePlayer().hand)
+            { auto hd = CardDatabase::Instance().LookupCached(hc); if (hd ? hd->card.IsLand() : hc.IsLand()) ++hand_lands; }
+            for (const Permanent& perm : copy.battlefield)
+            { if (perm.controller_index != copy.active_player_index) continue;
+              auto pd = CardDatabase::Instance().LookupCached(perm.card);
+              if (pd && pd->params.discard_land_damage>0) ++bf_le;
+              if (pd && pd->params.no_max_hand_size && pd->card.IsLand()) ++bf_nomax; }
             std::cerr << "[fd-pred]   turn=" << copy.turn_number
                       << (pp.is_pre_combat ? " pre " : " 2nd ")
                       << "opp_life=" << copy.Opponent().life
+                      << " hand_lands=" << hand_lands << " LE=" << bf_le << " nomax=" << bf_nomax
                       << " my_creatures=" << my_creatures
                       << "  " << PlanDesc(pp.plan) << "\n";
             first = false;
