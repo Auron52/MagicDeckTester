@@ -101,6 +101,20 @@ public:
     virtual bool ShouldCastDrawEngine(const GameState& s, int controller,
                                       const CardDefinition& def) const = 0;
 
+    // Hook 14 -- deck-specific extra damage toward THIS turn's lethal, BEYOND the generic
+    // combat + direct-damage total the engine already sums. This is the Treasure Hunt /
+    // Land's Edge model: lands in hand are Land's Edge ammunition, and a clairvoyant Treasure
+    // Hunt cast this turn adds the run of lands on top of the library as further ammo. `casting`
+    // lists the CardDefinitions this plan casts this turn, so the provider counts a Land's Edge
+    // or Treasure Hunt being cast NOW (not only one already on the battlefield). The engine keeps
+    // the generic win-check (projected attackers + direct damage + THIS addend >= opp life); only
+    // the deck-specific addend is provider-owned. HasExtraLethalModel() is the cheap gate: when
+    // false the engine skips building `casting` entirely (byte-identical fast path), so a deck
+    // with no such model pays nothing. Generic = false / 0.
+    virtual bool HasExtraLethalModel() const = 0;
+    virtual int  ExtraLethalDamage(const GameState& s,
+                                   const std::vector<const CardDefinition*>& casting) const = 0;
+
     // Hook 13 -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
     // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
     // the Treasure-Hunt provider returns a drawn no-max-hand-size land (Reliquary Tower) when the

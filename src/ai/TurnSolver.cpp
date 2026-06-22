@@ -748,36 +748,22 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     int n = static_cast<int>(ap.hand.size());
 
-    // Compute damage available from Land's Edge permanents already on the battlefield.
-    // (discard_land_damage > 0 signals the card; rate = damage per land discarded)
-    int lands_edge_rate = 0;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index) { continue; }
-        auto def = CardDatabase::Instance().LookupCached(p.card);
-        if (def && def->params.discard_land_damage > 0)
-        {
-            lands_edge_rate = std::max(lands_edge_rate, def->params.discard_land_damage);
-        }
-    }
+    // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
+    // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
     int lands_in_hand = 0;
     for (int i = 0; i < n; ++i)
     {
         auto def = CardDatabase::Instance().LookupCached(ap.hand[i]);
         if (def && def->card.IsLand()) { ++lands_in_hand; }
     }
-    int base_lands_edge_dmg = lands_in_hand * lands_edge_rate;
 
-    // Clairvoyant estimate of how many consecutive lands sit on top of the library
-    // (what a Treasure Hunt cast this turn would draw into hand, minus the nonland).
-    int th_lands_estimate = 0;
-    for (const Card& c : ap.library)
-    {
-        auto def = CardDatabase::Instance().LookupCached(c);
-        bool is_land = def ? def->card.IsLand() : c.IsLand();
-        if (!is_land) { break; }
-        ++th_lands_estimate;
-    }
+    // Deck-specific reach toward THIS turn's lethal beyond combat + direct damage (the Treasure
+    // Hunt / Land's Edge ammunition model) is provider-owned (Hook 14). HasExtraLethalModel()
+    // gates the whole thing: a deck without such a model skips building the per-plan cast list
+    // entirely, staying byte-identical to the old "all addends 0" path.
+    const DecisionProvider& provider = ResolveProvider(state);
+    const bool has_extra_lethal = provider.HasExtraLethalModel();
+    std::vector<const CardDefinition*> casting;   // reused per subset (only when has_extra_lethal)
 
     int m = static_cast<int>(cands.size());
     Plan best;
@@ -817,8 +803,6 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         int self_damage       = 0;
         int vial_haste_atk    = 0;
         int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
-        // Land's Edge damage added by casting Land's Edge or Treasure Hunt this plan.
-        int plan_le_dmg       = 0;
 
         for (int j = 0; j < m; ++j)
         {
@@ -855,40 +839,6 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             {
                 if (c.card_mv <= src.max_mv) { self_damage += src.damage; }
             }
-
-            // Land's Edge being cast: if no LE is on board yet, this plan enables it.
-            // Add the damage potential from discarding the current hand's lands.
-            if (lands_edge_rate == 0 && c.discard_land_damage > 0)
-            {
-                plan_le_dmg += lands_in_hand * c.discard_land_damage;
-            }
-            // Treasure Hunt in a plan where Land's Edge is active (board or this plan):
-            // th_lands_estimate new lands become available for LE discards.
-            if (c.is_draw_until_nonland)
-            {
-                int active_rate = (lands_edge_rate > 0)
-                    ? lands_edge_rate
-                    : 0;  // LE may also be in this plan; picked up below second pass
-                if (active_rate > 0)
-                {
-                    plan_le_dmg += th_lands_estimate * active_rate;
-                }
-            }
-        }
-
-        // Second pass: if TH is in the plan and LE is being cast this plan (not already on board),
-        // add the TH bonus lands to plan_le_dmg now that we know LE is present.
-        if (lands_edge_rate == 0)
-        {
-            bool has_le  = false;
-            bool has_th  = false;
-            for (int j = 0; j < m; ++j)
-            {
-                if (!(mask & (1 << j))) { continue; }
-                if (cands[j].discard_land_damage > 0) { has_le = true; }
-                if (cands[j].is_draw_until_nonland) { has_th = true; }
-            }
-            if (has_le && has_th) { plan_le_dmg += th_lands_estimate * 2; }
         }
 
         if (!pool.CanPay(combined))                          { continue; }
@@ -910,8 +860,20 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (self_damage >= ap.life) { continue; }
 
         int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
-        bool wins = (projected_atk + direct_dmg + base_lands_edge_dmg + plan_le_dmg)
-                    >= state.Opponent().life;
+        // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
+        // provider-owned. Built only when the deck has such a model (byte-identical otherwise).
+        int extra_lethal = 0;
+        if (has_extra_lethal)
+        {
+            casting.clear();
+            for (int j = 0; j < m; ++j)
+            {
+                if (!(mask & (1 << j))) { continue; }
+                casting.push_back(CardDatabase::Instance().Lookup(cands[j].card_name));
+            }
+            extra_lethal = provider.ExtraLethalDamage(state, casting);
+        }
+        bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
 
         // A winning plan always beats a non-winning plan.
         // Among plans with the same win status, prefer higher total eval.

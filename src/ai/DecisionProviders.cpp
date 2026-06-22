@@ -103,6 +103,17 @@ std::string GenericProvider::PostDrawKeepLandName(const GameState&, int) const
                  // best-normal-land fallback applies). The Treasure-Hunt archetype overrides.
 }
 
+bool GenericProvider::HasExtraLethalModel() const
+{
+    return false;   // no deck-specific lethal addend; the Treasure-Hunt archetype overrides.
+}
+
+int GenericProvider::ExtraLethalDamage(const GameState&,
+                                       const std::vector<const CardDefinition*>&) const
+{
+    return 0;
+}
+
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
                                                const CardDefinition& draw_def) const
 {
@@ -329,6 +340,81 @@ std::string TreasureHuntProvider::PostDrawKeepLandName(const GameState& s, int c
         if (d && d->params.no_max_hand_size && d->card.IsLand()) { return c.m_name; }
     }
     return {};
+}
+
+bool TreasureHuntProvider::HasExtraLethalModel() const
+{
+    return true;   // the Land's Edge / Treasure Hunt lethal model below.
+}
+
+int TreasureHuntProvider::ExtraLethalDamage(const GameState& s,
+        const std::vector<const CardDefinition*>& casting) const
+{
+    // The deck's reach toward THIS turn's lethal beyond combat + direct damage: lands in hand
+    // are Land's Edge ammunition, and a Treasure Hunt cast this turn adds the run of lands on
+    // top of the library (clairvoyant). Relocated verbatim from TurnSolver::Solve so the search
+    // stays byte-identical; only the model is now archetype-owned (the engine keeps the win-check).
+    const int active = s.active_player_index;
+
+    // Land's Edge rate already on the battlefield (damage per land discarded).
+    int lands_edge_rate = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        if (def && def->params.discard_land_damage > 0)
+        {
+            lands_edge_rate = std::max(lands_edge_rate, def->params.discard_land_damage);
+        }
+    }
+    int lands_in_hand = 0;
+    for (const Card& c : s.players[active].hand)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (def ? def->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
+    }
+    // Clairvoyant count of consecutive lands on top of the library (what a Treasure Hunt cast
+    // this turn would draw into hand, minus the triggering nonland).
+    int th_lands_estimate = 0;
+    for (const Card& c : s.players[active].library)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        bool is_land = def ? def->card.IsLand() : c.IsLand();
+        if (!is_land) { break; }
+        ++th_lands_estimate;
+    }
+
+    int base_lands_edge_dmg = lands_in_hand * lands_edge_rate;
+    int plan_le_dmg         = 0;
+    for (const CardDefinition* c : casting)
+    {
+        if (!c) { continue; }
+        // Land's Edge being cast with none on board yet: this plan enables it.
+        if (lands_edge_rate == 0 && c->params.discard_land_damage > 0)
+        {
+            plan_le_dmg += lands_in_hand * c->params.discard_land_damage;
+        }
+        // Treasure Hunt with Land's Edge already on board: th_lands_estimate new ammo lands.
+        if (c->tmpl == CardTemplate::DrawUntilNonland)
+        {
+            int active_rate = (lands_edge_rate > 0) ? lands_edge_rate : 0;
+            if (active_rate > 0) { plan_le_dmg += th_lands_estimate * active_rate; }
+        }
+    }
+    // Second pass: TH + Land's Edge both cast this plan (none on board) -> add the TH bonus
+    // lands at Land's Edge's rate (2). Mirrors the original Solve second pass exactly.
+    if (lands_edge_rate == 0)
+    {
+        bool has_le = false, has_th = false;
+        for (const CardDefinition* c : casting)
+        {
+            if (!c) { continue; }
+            if (c->params.discard_land_damage > 0)        { has_le = true; }
+            if (c->tmpl == CardTemplate::DrawUntilNonland) { has_th = true; }
+        }
+        if (has_le && has_th) { plan_le_dmg += th_lands_estimate * 2; }
+    }
+    return base_lands_edge_dmg + plan_le_dmg;
 }
 
 // ---- VialProvider -----------------------------------------------------------
