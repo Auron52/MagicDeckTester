@@ -97,6 +97,12 @@ bool GenericProvider::ShouldCastDrawEngine(const GameState&, int,
     return true;   // no generic flood-engine gate; the Treasure-Hunt archetype overrides.
 }
 
+std::string GenericProvider::PostDrawKeepLandName(const GameState&, int) const
+{
+    return {};   // no deferred draw-engine keep-land in a generic deck (only the engine's
+                 // best-normal-land fallback applies). The Treasure-Hunt archetype overrides.
+}
+
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
                                                const CardDefinition& draw_def) const
 {
@@ -300,6 +306,29 @@ bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controll
         if (pool.CanPay(combined)) { return true; }                            // (2)
     }
     return false;
+}
+
+std::string TreasureHuntProvider::PostDrawKeepLandName(const GameState& s, int controller) const
+{
+    // After a deferred Treasure Hunt resolves: if the hand is flooding past max size and no
+    // no-max-hand-size land (Reliquary Tower) is already in play, play a DRAWN Reliquary so the
+    // whole flood is KEPT as Land's Edge ammo instead of being discarded at cleanup (gi=65).
+    // Otherwise return "" -> the engine plays the best normal land (the deferred drop). The
+    // engine owns the open-land-drop precondition + the land-play mechanism; this is the choice.
+    const Player& lp = s.players[controller];
+    if (static_cast<int>(lp.hand.size()) <= 7) { return {}; }                  // not flooding
+    for (const Permanent& p : s.battlefield)                                   // already safe?
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.no_max_hand_size && d->card.IsLand()) { return {}; }
+    }
+    for (const Card& c : lp.hand)                                              // keep with a drawn Reliquary
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.no_max_hand_size && d->card.IsLand()) { return c.m_name; }
+    }
+    return {};
 }
 
 // ---- VialProvider -----------------------------------------------------------

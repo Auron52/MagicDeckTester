@@ -31,6 +31,7 @@ public:
     bool        ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
     bool        ShouldStageSpectacleDraw(const GameState&, int, const CardDefinition&) const override;
     bool        ShouldCastDrawEngine(const GameState&, int, const CardDefinition&) const override;
+    std::string PostDrawKeepLandName(const GameState&, int) const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the
@@ -58,6 +59,7 @@ public:
     bool        DiscardLandsFirst(const GameState&) const override;
     bool        ScryKeepOnTop(const GameState&, const Card&) const override;
     bool        ShouldCastDrawEngine(const GameState&, int, const CardDefinition&) const override;
+    std::string PostDrawKeepLandName(const GameState&, int) const override;
 };
 
 // Aether Vial decks (Slivers, Knights): the hand-aware vial charge policy.

@@ -1254,25 +1254,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         Player& lp = state.ActivePlayer();
         if (lp.lands_played_this_turn >= lp.LandDropsAvailable()) { return; }   // drop already used
 
-        std::string reliquary;
-        if (static_cast<int>(lp.hand.size()) > 7)   // flooding -> keep the draw with a no-max land
-        {
-            bool nomax_in_play = false;
-            for (const Permanent& p : state.battlefield)
-            {
-                if (p.controller_index != state.active_player_index) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (d && d->params.no_max_hand_size && d->card.IsLand()) { nomax_in_play = true; break; }
-            }
-            if (!nomax_in_play)
-            {
-                for (const Card& c : lp.hand)
-                {
-                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                    if (d && d->params.no_max_hand_size && d->card.IsLand()) { reliquary = c.m_name; break; }
-                }
-            }
-        }
+        // The keep-ammo land CHOICE is deck logic -> ask the provider (Hook 13); the engine
+        // keeps the open-drop precondition above and the land-play mechanism below.
+        std::string reliquary =
+            ResolveProvider(state).PostDrawKeepLandName(state, state.active_player_index);
         if (!reliquary.empty())
         {
             if (PlayLandByName(state, reliquary, std::string{}) && out_breakpoint != nullptr && sink != nullptr)

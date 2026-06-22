@@ -100,4 +100,13 @@ public:
     // a no-max-hand-size land to keep the draw). `def` is the engine card being considered.
     virtual bool ShouldCastDrawEngine(const GameState& s, int controller,
                                       const CardDefinition& def) const = 0;
+
+    // Hook 13 -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
+    // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
+    // the Treasure-Hunt provider returns a drawn no-max-hand-size land (Reliquary Tower) when the
+    // hand is flooding and no such land is already in play, so the whole draw is KEPT as Land's
+    // Edge ammo (gi=65); "" means "play the best normal land via the engine's generic land-play".
+    // The engine keeps the land-play MECHANISM (PlayLandByName / breakpoint land + recording) and
+    // the open-land-drop precondition; only this card-choice is provider-owned. Generic = "".
+    virtual std::string PostDrawKeepLandName(const GameState& s, int controller) const = 0;
 };
