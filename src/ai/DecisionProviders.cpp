@@ -114,6 +114,11 @@ int GenericProvider::ExtraLethalDamage(const GameState&,
     return 0;
 }
 
+bool GenericProvider::ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const
+{
+    return false;   // no archetype card-value override; EvalCard's generic estimate applies.
+}
+
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
                                                const CardDefinition& draw_def) const
 {
@@ -415,6 +420,63 @@ int TreasureHuntProvider::ExtraLethalDamage(const GameState& s,
         if (has_le && has_th) { plan_le_dmg += th_lands_estimate * 2; }
     }
     return base_lands_edge_dmg + plan_le_dmg;
+}
+
+bool TreasureHuntProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,
+                                              int DMG, int& out) const
+{
+    // Per-card value for the Treasure Hunt / Land's Edge combo, relocated verbatim from
+    // TurnSolver::EvalCard so candidate ordering stays byte-identical; only the archetype
+    // value is now provider-owned. The engine keeps the generic value for every other card.
+    if (def.tmpl == CardTemplate::DrawUntilNonland)
+    {
+        // Estimate how many lands TH will draw (clairvoyant scan of the library top).
+        int estimated_lands = 0;
+        for (const Card& c : state.ActivePlayer().library)
+        {
+            const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+            bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+            if (!is_land) { break; }
+            ++estimated_lands;
+        }
+        // Check for enabling permanents on the battlefield.
+        bool has_no_max_hand = false;
+        bool has_lands_edge  = false;
+        int  lands_edge_rate = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pdef = CardDatabase::Instance().LookupCached(p.card);
+            if (!pdef) { continue; }
+            if (pdef->params.no_max_hand_size) { has_no_max_hand = true; }
+            if (pdef->params.discard_land_damage > 0)
+            {
+                has_lands_edge  = true;
+                lands_edge_rate = pdef->params.discard_land_damage;
+            }
+        }
+        // With Land's Edge active, each drawn land converts to direct damage.
+        if (has_lands_edge) { out = (estimated_lands + 1) * lands_edge_rate * DMG; return true; }
+        // With Reliquary Tower (no max hand size) but no Land's Edge, the drawn lands
+        // accumulate for a future LE activation. Card-draw value only.
+        if (has_no_max_hand) { out = (estimated_lands + 1) * DMG; return true; }
+        // No enabler in play: value the draw normally (the lands accumulate in hand).
+        out = (estimated_lands + 1) * DMG; return true;
+    }
+
+    // Land's Edge: each land already in hand is worth discard_land_damage damage.
+    if (def.params.discard_land_damage > 0)
+    {
+        int lands_in_hand = 0;
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+            if (cdef && cdef->card.IsLand()) { ++lands_in_hand; }
+        }
+        out = lands_in_hand * def.params.discard_land_damage * DMG;
+        return true;
+    }
+    return false;   // not an archetype card -> EvalCard's generic estimate applies.
 }
 
 // ---- VialProvider -----------------------------------------------------------

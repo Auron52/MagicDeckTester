@@ -34,6 +34,7 @@ public:
     std::string PostDrawKeepLandName(const GameState&, int) const override;
     bool        HasExtraLethalModel() const override;
     int         ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
+    bool        ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the
@@ -64,6 +65,7 @@ public:
     std::string PostDrawKeepLandName(const GameState&, int) const override;
     bool        HasExtraLethalModel() const override;
     int         ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
+    bool        ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
 };
 
 // Aether Vial decks (Slivers, Knights): the hand-aware vial charge policy.

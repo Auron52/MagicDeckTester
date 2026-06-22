@@ -115,6 +115,16 @@ public:
     virtual int  ExtraLethalDamage(const GameState& s,
                                    const std::vector<const CardDefinition*>& casting) const = 0;
 
+    // Hook 15 -- archetype-specific per-card VALUE for the candidate-ordering heuristic
+    // (TurnSolver's EvalCard), for cards whose worth is a combo / clairvoyant assumption rather
+    // than a generic single-card estimate. The Treasure Hunt provider values a Treasure Hunt
+    // (clairvoyant count of lands on top of the library x Land's Edge rate) and a Land's Edge
+    // (lands-in-hand x rate). `dmg_unit` is EvalCard's damage-equivalent unit. Returns true and
+    // sets `out` when the provider owns this card's value; false -> EvalCard uses its generic
+    // estimate (so the engine keeps every generic card type). Generic = false.
+    virtual bool ArchetypeCardValue(const GameState& s, const CardDefinition& def,
+                                    int dmg_unit, int& out) const = 0;
+
     // Hook 13 -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
     // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
     // the Treasure-Hunt provider returns a drawn no-max-hand-size land (Reliquary Tower) when the

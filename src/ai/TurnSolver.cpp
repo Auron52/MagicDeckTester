@@ -388,62 +388,15 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         return DMG;  // minimal X=1 estimate
     }
 
-    if (def.tmpl == CardTemplate::DrawUntilNonland)
+    // Archetype-specific card value (Treasure Hunt / Land's Edge combo): provider-owned
+    // (Hook 15), so the clairvoyant + combo assumptions live in the per-deck file. A deck
+    // without such a model returns false here and falls through to the generic estimates.
     {
-        // Estimate how many lands TH will draw (clairvoyant scan of the library top).
-        int estimated_lands = 0;
-        for (const Card& c : state.ActivePlayer().library)
+        int archetype_value = 0;
+        if (ResolveProvider(state).ArchetypeCardValue(state, def, DMG, archetype_value))
         {
-            auto cdef = CardDatabase::Instance().LookupCached(c);
-            bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
-            if (!is_land) { break; }
-            ++estimated_lands;
+            return archetype_value;
         }
-        // Check for enabling permanents on the battlefield.
-        bool has_no_max_hand = false;
-        bool has_lands_edge  = false;
-        int  lands_edge_rate = 0;
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            auto pdef = CardDatabase::Instance().LookupCached(p.card);
-            if (!pdef) { continue; }
-            if (pdef->params.no_max_hand_size) { has_no_max_hand = true; }
-            if (pdef->params.discard_land_damage > 0)
-            {
-                has_lands_edge  = true;
-                lands_edge_rate = pdef->params.discard_land_damage;
-            }
-        }
-        // With Land's Edge active, each drawn land converts to direct damage.
-        if (has_lands_edge)
-        {
-            return (estimated_lands + 1) * lands_edge_rate * DMG;
-        }
-        // With Reliquary Tower (no max hand size) but no Land's Edge, the drawn lands
-        // accumulate for a future LE activation.  Card-draw value only; LE combo scored
-        // by the plan evaluator's two-pass logic when LE is also in the plan.
-        if (has_no_max_hand)
-        {
-            return (estimated_lands + 1) * DMG;
-        }
-        // No enabler in play: drawn lands accumulate in hand until a future LE/RT turn.
-        // Value the draw normally; the plan evaluator's two-pass logic handles TH+LE
-        // combos in the same plan, and Fix1 (SimulateEndAndStartNextTurn) ensures the
-        // lookahead correctly models the no-discard case when RT is later in play.
-        return (estimated_lands + 1) * DMG;
-    }
-
-    // Land's Edge: each land already in hand plus any held is worth discard_land_damage damage.
-    if (def.params.discard_land_damage > 0)
-    {
-        int lands_in_hand = 0;
-        for (const Card& c : state.ActivePlayer().hand)
-        {
-            auto cdef = CardDatabase::Instance().LookupCached(c);
-            if (cdef && cdef->card.IsLand()) { ++lands_in_hand; }
-        }
-        return lands_in_hand * def.params.discard_land_damage * DMG;
     }
 
     // Cascade spells: value = free spell drawn (assume ~3 damage-equivalents on average).
