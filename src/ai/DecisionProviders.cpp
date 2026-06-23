@@ -125,6 +125,11 @@ bool GenericProvider::ArchetypeCardValue(const GameState&, const CardDefinition&
     return false;   // no archetype card-value override; EvalCard's generic estimate applies.
 }
 
+bool GenericProvider::ShouldAttackWith(const GameState&, const Permanent&) const
+{
+    return true;    // goldfish default: attack with everything that can attack (no blockers).
+}
+
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
                                                const CardDefinition& draw_def) const
 {

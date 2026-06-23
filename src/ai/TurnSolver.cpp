@@ -203,6 +203,7 @@ static int PendingAttackDamage(const GameState& state)
     {
         if (p.controller_index != active) { continue; }
         if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        if (!ResolveProvider(state).ShouldAttackWith(state, p)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
             p.card, state.battlefield, active, animated, &p);
@@ -278,6 +279,7 @@ static int CountProwessAttackers(const GameState& state)
     {
         if (p.controller_index == state.active_player_index
             && CanAttackFull(p, state.battlefield, state.active_player_index)
+            && ResolveProvider(state).ShouldAttackWith(state, p)
             && p.card.HasKeyword(Keyword::Prowess))
         {
             ++count;
@@ -1819,6 +1821,7 @@ static void SimulateCombat(GameState& state)
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != active) { continue; }
         if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        if (!ResolveProvider(state).ShouldAttackWith(state, p)) { continue; }
         atk_idx.push_back(i);
     }
 

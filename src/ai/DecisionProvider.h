@@ -125,6 +125,17 @@ public:
     virtual bool ArchetypeCardValue(const GameState& s, const CardDefinition& def,
                                     int dmg_unit, int& out) const = 0;
 
+    // Hook 16 -- combat: should this eligible creature be DECLARED as an attacker this turn?
+    // The engine keeps combat eligibility (CanAttackFull: summoning sickness, tap state,
+    // haste) and the damage MECHANISM; this is only the attack/hold DECISION over an
+    // already-eligible attacker. Generic = true (attack with everything that can attack --
+    // correct for a goldfish with no blockers). An archetype overrides to HOLD a creature
+    // back (e.g. a creature whose {T} activated ability beats attacking). Honoured in
+    // lockstep by the real declaration (AIEngine::DeclareAttackers) and every search-side
+    // attack projection (PendingAttackDamage / prowess count / rollout combat), so an
+    // override never makes the search predict an attack the executor won't make.
+    virtual bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const = 0;
+
     // Hook 13 -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
     // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
     // the Treasure-Hunt provider returns a drawn no-max-hand-size land (Reliquary Tower) when the

@@ -43,6 +43,7 @@ public:
     bool        HasExtraLethalModel() const override;
     int         ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
     bool        ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
+    bool        ShouldAttackWith(const GameState&, const Permanent&) const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the

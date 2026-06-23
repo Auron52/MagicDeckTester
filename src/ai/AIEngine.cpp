@@ -2184,10 +2184,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
 std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
 {
     std::vector<Permanent*> attackers;
+    const DecisionProvider& provider = ResolveProvider(state);
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index == state.active_player_index
-            && CanAttackFull(p, state.battlefield, state.active_player_index))
+            && CanAttackFull(p, state.battlefield, state.active_player_index)
+            && provider.ShouldAttackWith(state, p))
         {
             attackers.push_back(&p);
         }
