@@ -820,9 +820,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             else
             {
-                // Second main: play a land if a drop still remains (matches the
-                // pre-fold unconditional land play).
-                TryPlayLand(state);
+                // Second main: play a land if a drop still remains.
+                //
+                // ONLY at depth 0. At depth>0 the SEARCH owns every land decision: the
+                // pre-combat main folds the land into the search (incl. a deliberate
+                // DEFER), and any land revealed mid-turn (Light Up the Stage / Treasure
+                // Hunt) is replayed from the committed line's recorded breakpoint actions
+                // (replay_recorded). The search's second main never plays a land
+                // (FSLineTail enumerates via EnumeratePlans, no land fold), so an
+                // autonomous greedy land here OVERRIDES the search's deliberate deferral
+                // and diverges from the committed line: gi=141 (d5 s2002, seed 2143) the
+                // executor played a deferred fetchland a turn early, fetching Overgrown
+                // Tomb OUT of the library while the committed line kept it to draw -- the
+                // in-window rollout/executor divergence that made the search "verify" an
+                // uncastable Plague Drone line (predicted T5, realised T7). Suppressing it
+                // keeps the executor in lockstep with the committed line. Opt-out restores
+                // the old greedy behaviour for A/B (MTG_LEGACY_2ND_MAIN_LAND).
+                static const bool s_legacy_2nd_main_land =
+                    std::getenv("MTG_LEGACY_2ND_MAIN_LAND") != nullptr;
+                if (m_lookahead_depth == 0 || s_legacy_2nd_main_land) { TryPlayLand(state); }
             }
         }
 

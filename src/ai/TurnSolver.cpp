@@ -3314,6 +3314,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         for (const PhasePlan& pp : line.phases)
         {
             std::cerr << " | " << (pp.is_pre_combat ? "pre:" : "2nd:") << PlanDesc(pp.plan);
+            if (pp.plan.land_decided)
+            {
+                std::cerr << "{land=" << (pp.plan.land_to_play.empty() ? "<none>" : pp.plan.land_to_play);
+                if (!pp.plan.fetch_target.empty()) { std::cerr << " fetch=" << pp.plan.fetch_target; }
+                std::cerr << "}";
+            }
+            else { std::cerr << "{land=undecided}"; }
         }
         std::cerr << "\n";
 
