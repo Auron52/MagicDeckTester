@@ -37,15 +37,56 @@ bool DecisionUnpruned()
 // ---- GenericProvider: deck-agnostic baseline --------------------------------
 
 std::vector<std::string>
-GenericProvider::TutorCandidates(const GameState&, int, const CardParams&) const
+GenericProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
-    return {};   // no generic tutor heuristic; archetypes with tutors override.
+    // Search-primary default: return EVERY legal tutor target (distinct library card names
+    // matching the tutor's type filter) and let the search pick the best. There is no
+    // deck-agnostic tutor heuristic worth encoding (the only narrowing logic -- enabler vs.
+    // wincon -- is antilife-specific, so it lives in AntiLifegainProvider). A deck that needs
+    // its tutor narrowed for perf adds a provider override via the analyze-deck workflow;
+    // until then the general search decides, never whiffs. (Previously returned {} -> a
+    // generic tutor silently fetched nothing.)
+    const Player& ap = s.players[controller];
+    std::vector<std::string>        all;
+    std::unordered_set<std::string> seen;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
+        const Card&           card = def ? def->card : lc;
+        bool type_ok = false;
+        for (const std::string& t : pp.tutor_types)
+        { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+        if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
+    }
+    return all;
 }
 
 std::vector<std::string>
-GenericProvider::FetchCandidates(const GameState&, int, const CardParams&) const
+GenericProvider::FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const
 {
-    return {};   // no generic fetch heuristic; archetypes with fetchlands override.
+    // Search-primary default: return EVERY legal fetch target (distinct library land names
+    // whose subtypes match the fetchland) and let the search pick. The color-fixing heuristic
+    // in ::FetchCandidates is tuned to a specific 4-colour shell (its tiebreaks favour that
+    // deck's doubled colours), so it is NOT a safe deck-agnostic default; it stays an archetype
+    // override. A generic fetchland deck thus searches its fetch targets rather than whiffing.
+    // (Previously returned {} -> a generic fetch paid 1 life and fetched nothing.)
+    const Player& ap = s.players[controller];
+    std::vector<std::string>        all;
+    std::unordered_set<std::string> seen;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* d    = CardDatabase::Instance().LookupCached(lc);
+        const Card&           card = d ? d->card : lc;
+        if (!card.IsLand()) { continue; }
+        bool match = false;
+        for (const std::string& want : fetch_pp.fetch_land_types)
+        {
+            for (const std::string& cs : card.m_subtypes) { if (cs == want) { match = true; break; } }
+            if (match) { break; }
+        }
+        if (match && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
+    }
+    return all;
 }
 
 bool GenericProvider::CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const
