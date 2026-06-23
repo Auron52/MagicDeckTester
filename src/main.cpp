@@ -363,7 +363,7 @@ static void PlayOutLogged(GameState state, const MulliganProfile& profile,
     logger.WriteToFile(log_path);
 }
 
-// Diagnostic: attribute the depth-4-worse-than-depth-3 (with --lookahead-bottoming)
+// Diagnostic: attribute the depth-4-worse-than-depth-3 (bottoming auto-on at depth>0)
 // regression to its locus. For each game, run bottoming at depth 3 and depth 4
 // (the keep decision is depth-independent, so both reach the same pre-bottom hand
 // and identical library order — they differ only in which card bottoming chose).
@@ -432,7 +432,6 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 s3.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s3, i);
                 AIEngine bot3(profile, 3, timeout_ms);
-                bot3.SetLookaheadBottoming(true);
                 bot3.HandleMulligan(s3, max_turns);
                 gr.hand3 = SortedHandNames(s3);
 
@@ -440,7 +439,6 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 s4.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s4, i);
                 AIEngine bot4(profile, 4, timeout_ms);
-                bot4.SetLookaheadBottoming(true);
                 bot4.HandleMulligan(s4, max_turns);
                 gr.hand4 = SortedHandNames(s4);
 
@@ -494,7 +492,6 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 s3.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s3, i);
                 AIEngine bot3(profile, 3, timeout_ms);
-                bot3.SetLookaheadBottoming(true);
                 bot3.HandleMulligan(s3, max_turns);
 
                 if (logging)
@@ -534,7 +531,6 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 s3b.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s3b, i);
                 AIEngine bot3b(profile, 3, timeout_ms);
-                bot3b.SetLookaheadBottoming(true);
                 if (trace_divergence)
                 {
                     std::cerr << "\n=== BOTTOMING TRACE depth=3 (seed " << seed << ") ===\n";
@@ -547,7 +543,6 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 s4b.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s4b, i);
                 AIEngine bot4b(profile, 4, timeout_ms);
-                bot4b.SetLookaheadBottoming(true);
                 if (trace_divergence)
                 {
                     std::cerr << "\n=== BOTTOMING TRACE depth=4 (seed " << seed << ") ===\n";
@@ -572,7 +567,7 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
 
     double n = static_cast<double>(num_games);
     std::cout << "\n=== DEPTH DIVERGENCE (" << num_games << " games, " << num_threads
-              << " threads, budget " << timeout_ms << "ms, --lookahead-bottoming) ===\n";
+              << " threads, budget " << timeout_ms << "ms, bottoming on at depth>0) ===\n";
     std::cout << "bottoming differs (d3 vs d4 kept hand): " << bottom_diff
               << " (" << (100.0 * bottom_diff / n) << "%)\n";
     std::cout << "main-phase differs (W34 != W33):        " << mainphase_diff
@@ -683,7 +678,6 @@ int main(int argc, char* argv[])
     int      num_threads    = 0;
     uint64_t seed           = 0;
     bool     seed_provided  = false;
-    bool     lookahead_bottoming = true;   // ON by default; opt out with --no-lookahead-bottoming
     bool     diag_depth     = false;
     bool     trace_t1       = false;
     bool        claude_play = false;
@@ -693,8 +687,6 @@ int main(int argc, char* argv[])
     for (int i = 2; i < argc; ++i)
     {
         std::string flag = argv[i];
-        if (flag == "--lookahead-bottoming")    { lookahead_bottoming = true;  continue; }  // now the default; kept for back-compat
-        if (flag == "--no-lookahead-bottoming") { lookahead_bottoming = false; continue; }  // opt out (A/B isolation)
         if (flag == "--diag-depth")          { diag_depth = true; continue; }
         if (flag == "--trace")               { trace_t1 = true; continue; }
         if (flag == "--claude-play")         { claude_play = true; continue; }
@@ -819,8 +811,7 @@ int main(int argc, char* argv[])
 
         GoldFishRunner runner;
         RunResult result = runner.Run(deck, num_games, seed, max_turns, profile, log_dir,
-                                       base_game_index, lookahead_depth, timeout_ms, num_threads,
-                                       lookahead_bottoming);
+                                       base_game_index, lookahead_depth, timeout_ms, num_threads);
 
         std::cout << "Seed         : " << result.seed << "\n";
         std::cout << "Games played : " << result.games_played << "\n";

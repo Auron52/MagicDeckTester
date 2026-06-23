@@ -619,14 +619,14 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     // enclosing rollout are unaffected and byte-identical. See m_shared_tt.
     TranspositionTable  shared_tt;
     TranspositionTable* saved_tt = m_shared_tt;
-    m_shared_tt = m_lookahead_bottoming ? &shared_tt : saved_tt;
+    m_shared_tt = LookaheadBottoming() ? &shared_tt : saved_tt;
 
     for (int i = 0; i < count && !ap.hand.empty(); ++i)
     {
         int hand_size = static_cast<int>(ap.hand.size());
         std::vector<char> allowed(hand_size, 1);
 
-        if (m_lookahead_bottoming)
+        if (LookaheadBottoming())
         {
             // Clairvoyant greedy: roll out a full game for removing each candidate
             // card (it goes to the bottom of the library, so the draws the rollout

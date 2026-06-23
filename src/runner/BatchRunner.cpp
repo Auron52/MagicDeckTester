@@ -30,7 +30,6 @@ struct Job
     int             depth               = 0;
     int             budget_ms           = 0;
     int             max_turns           = 8;   // goldfish horizon (see main.cpp); per-job overridable
-    bool            lookahead_bottoming = false;
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
 };
 
@@ -58,7 +57,8 @@ Job ParseJob(const json& jspec)
     j.depth               = jspec.value("depth", 0);
     j.budget_ms           = jspec.value("budget_ms", 0);
     j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
-    j.lookahead_bottoming = jspec.value("lookahead_bottoming", true);   // ON by default
+    // Note: lookahead bottoming is no longer a manifest field -- the engine derives it
+    // from depth (on iff depth>0). A stale "lookahead_bottoming" key is simply ignored.
 
     // Profile: explicit "profile" path, else auto-detect deckname.profile.json
     // (mirrors the single-run mtg.exe behaviour exactly).
@@ -165,7 +165,6 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 if (wi.job != cached_job)
                 {
                     ai.emplace(job.profile, job.depth, job.budget_ms);
-                    ai->SetLookaheadBottoming(job.lookahead_bottoming);
                     ai->SetSearchPostCombat(job.second_main);
                     engine.emplace(*ai);
                     cached_job = wi.job;

@@ -8,7 +8,7 @@
 #   seed    base RNG seed (disjoint across modes on purpose)
 #   games   number of games
 #   budget  per-decision virtual-ms search budget (ignored at depth 0)
-# --lookahead-bottoming is always added at depth>0 (every deck, every mode).
+# Lookahead bottoming is derived from depth by the engine (ON iff depth>0); no flag.
 #
 # Time budgets (shared across ALL decks; trim cheaper decks when adding new ones):
 #   smoke      < 15 min   regression < 45 min   overnight < 8 h

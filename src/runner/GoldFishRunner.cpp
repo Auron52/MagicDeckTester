@@ -187,8 +187,7 @@ static void CleanupLogs(const std::filesystem::path& log_dir,
 RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base_seed,
                                int max_turns, const MulliganProfile& profile,
                                const std::filesystem::path& log_dir, int base_game_index,
-                               int lookahead_depth, int timeout_ms, int num_threads,
-                               bool lookahead_bottoming)
+                               int lookahead_depth, int timeout_ms, int num_threads)
 {
     int requested = num_threads;
     num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
@@ -240,7 +239,6 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
         threads.emplace_back([&]()
         {
             AIEngine   ai(profile, lookahead_depth, per_thread_timeout);
-            ai.SetLookaheadBottoming(lookahead_bottoming);
             ai.SetSearchPostCombat(needs_second_main);
             GameEngine engine(ai);
 

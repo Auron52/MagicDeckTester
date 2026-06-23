@@ -63,11 +63,15 @@ public:
     // after ResolveStack so Treasure Hunt has already resolved and filled the hand.
     void ActivateLandsEdge(GameState& state);
 
-    // When enabled, bottoming evaluates each candidate removal with a full
-    // clairvoyant game rollout and bottoms the card whose removal preserves the
-    // earliest win (heuristic breaks win-turn ties). More accurate, ~2x slower;
-    // off by default so the analyzer's scoring passes keep their speed.
-    void SetLookaheadBottoming(bool enabled) { m_lookahead_bottoming = enabled; }
+    // Lookahead bottoming evaluates each candidate removal with a full clairvoyant
+    // game rollout and bottoms the card whose removal preserves the earliest win
+    // (heuristic breaks win-turn ties). More accurate, ~2x slower. It is DERIVED
+    // FROM DEPTH -- ON exactly when the engine searches (depth > 0), OFF for the
+    // depth-0 greedy baseline (whose greedy rollout cannot discriminate on a deep
+    // mulligan and would bottom the payoff). There is intentionally no flag: tying
+    // it to depth removes the search/executor and single-deck/batch config-mismatch
+    // footguns that an independent toggle caused.
+    bool LookaheadBottoming() const { return m_lookahead_depth > 0; }
 
     // Sets the max-turns horizon used by ActivateLandsEdge rollouts (depth > 0).
     // Called by GameEngine::PlayOut so the value tracks each game's actual limit.
@@ -122,7 +126,6 @@ private:
     int                      m_lookahead_depth   = 0;
     int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
     int                      m_max_turns         = 20;  // rollout horizon; kept in sync by SetMaxTurns
-    bool                     m_lookahead_bottoming = true;   // ON by default (opt out via runners)
     bool                     m_search_post_combat  = false;
     bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts
     std::vector<std::string> m_kept_opening_hand;
