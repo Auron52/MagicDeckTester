@@ -10,6 +10,7 @@
 #include <atomic>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <thread>
@@ -83,7 +84,8 @@ Job ParseJob(const json& jspec)
 } // namespace
 
 std::vector<BatchJobResult> BatchRunner::RunManifest(
-    const std::filesystem::path& manifest_path, int num_threads)
+    const std::filesystem::path& manifest_path, int num_threads,
+    const JobDoneCallback& on_job_done)
 {
     std::ifstream in(manifest_path);
     if (!in) { throw std::runtime_error("cannot open manifest: " + manifest_path.string()); }
@@ -138,6 +140,33 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     num_threads = std::min<int>(num_threads, std::max<std::size_t>(1, items.size()));
     concurrency_util::LogWorkerThreads(std::cerr, "batch", requested, num_threads);
 
+    // Reduce one job's per-game win turns to its aggregate (average over WINS only --
+    // matches GoldFishRunner). Used both for the streamed per-job callback and the
+    // final returned vector.
+    auto reduce_job = [&](std::size_t j) -> BatchJobResult
+    {
+        BatchJobResult r;
+        r.name         = jobs[j].name;
+        r.games_played = jobs[j].games;
+        r.win_turns    = win_turns[j];
+        long long sum = 0;
+        for (int wt : win_turns[j]) { if (wt > 0) { ++r.games_won; sum += wt; } }
+        if (r.games_won > 0) { r.average_win_turn = static_cast<double>(sum) / r.games_won; }
+        return r;
+    };
+
+    // Per-job remaining-game counters drive the streaming callback: the worker that
+    // finishes a job's LAST game reduces it and fires on_job_done. acq_rel on the
+    // decrement makes that worker observe every other thread's win_turns writes for
+    // the job (disjoint slots + this release/acquire chain). A mutex serialises the
+    // callback so streamed output never interleaves. Only armed when streaming.
+    std::vector<std::atomic<int>> remaining(jobs.size());
+    for (std::size_t j = 0; j < jobs.size(); ++j)
+    {
+        remaining[j].store(jobs[j].games, std::memory_order_relaxed);
+    }
+    std::mutex cb_mtx;
+
     std::atomic<std::size_t> cursor{0};
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
@@ -176,29 +205,22 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 GoldFishRunner::PopulateOpponentSpawns(state, wi.game);
 
                 win_turns[wi.job][wi.game] = engine->RunGame(state, job.max_turns);
+
+                // Stream this job the instant its last game lands.
+                if (on_job_done
+                    && remaining[wi.job].fetch_sub(1, std::memory_order_acq_rel) == 1)
+                {
+                    BatchJobResult r = reduce_job(wi.job);
+                    std::lock_guard<std::mutex> lk(cb_mtx);
+                    on_job_done(r);
+                }
             }
         });
     }
     for (std::thread& th : threads) { th.join(); }
 
-    // Reduce per job (matches GoldFishRunner: average over winning games only).
+    // Final per-job aggregate, in manifest order (regardless of streaming).
     std::vector<BatchJobResult> results(jobs.size());
-    for (std::size_t j = 0; j < jobs.size(); ++j)
-    {
-        BatchJobResult& r = results[j];
-        r.name         = jobs[j].name;
-        r.games_played = jobs[j].games;
-        r.win_turns    = win_turns[j];
-
-        long long sum = 0;
-        for (int wt : win_turns[j])
-        {
-            if (wt > 0) { ++r.games_won; sum += wt; }
-        }
-        if (r.games_won > 0)
-        {
-            r.average_win_turn = static_cast<double>(sum) / r.games_won;
-        }
-    }
+    for (std::size_t j = 0; j < jobs.size(); ++j) { results[j] = reduce_job(j); }
     return results;
 }

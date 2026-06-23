@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -31,8 +32,18 @@ struct BatchJobResult
 class BatchRunner
 {
 public:
+    // Invoked once per job AS SOON AS that job's last game finishes (not at the very
+    // end), so a caller can stream per-job results while the rest of the batch is
+    // still running. Called from a worker thread under an internal mutex, so the
+    // callback itself need not lock; jobs arrive in completion order, not manifest
+    // order. Optional (default no-op).
+    using JobDoneCallback = std::function<void(const BatchJobResult&)>;
+
     // Parses the manifest JSON and runs it. num_threads: 0 = hardware_concurrency.
+    // on_job_done (optional) streams each job's result the moment it completes; the
+    // returned vector still holds every job's result in manifest order at the end.
     // Throws std::runtime_error on a malformed manifest or unreadable deck/profile.
     static std::vector<BatchJobResult> RunManifest(
-        const std::filesystem::path& manifest_path, int num_threads = 0);
+        const std::filesystem::path& manifest_path, int num_threads = 0,
+        const JobDoneCallback& on_job_done = {});
 };

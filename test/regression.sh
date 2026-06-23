@@ -196,9 +196,13 @@ MANIFEST="$LOGDIR/manifest.json"
 } > "$MANIFEST"
 
 TOTAL_START=$(date +%s)
-BATCH_OUT=$("$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$LOGDIR/wins" 2>"$LOGDIR/batch.err")
+# `tee` to batch.log so per-job results STREAM to the terminal live as each case
+# finishes (the binary flushes one line per completed job), instead of being buffered
+# inside $() until the whole batch ends. We then read the captured file for parsing.
+"$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$LOGDIR/wins" \
+    2>"$LOGDIR/batch.err" | tee "$LOGDIR/batch.log"
 TOTAL=$(( $(date +%s) - TOTAL_START ))
-printf '%s\n' "$BATCH_OUT" > "$LOGDIR/batch.log"
+BATCH_OUT=$(cat "$LOGDIR/batch.log")
 
 # Per-game ground-truth logs live in test/gt_logs/<key>.wins (committed). The batch
 # run just wrote this run's per-game win turns to $LOGDIR/wins/<key>.wins. We diff

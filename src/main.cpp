@@ -637,23 +637,29 @@ int main(int argc, char* argv[])
             {
                 CardDatabase::Instance().LoadFromJson(cards_json);
             }
-            std::vector<BatchJobResult> results = BatchRunner::RunManifest(manifest, num_threads);
-            int total_games = 0;
-            for (const BatchJobResult& r : results) { total_games += r.games_played; }
-            std::cout << "=== BATCH (" << results.size() << " jobs, "
-                      << total_games << " games) ===\n";
-            for (const BatchJobResult& r : results)
+            std::cout << "=== BATCH (streaming per-job results as each job finishes) ===\n"
+                      << std::flush;
+            // Stream each job's line the moment it completes (jobs arrive in completion
+            // order, not manifest order). Flush so progress is visible live rather than
+            // buffered until the whole batch ends.
+            auto on_job_done = [&](const BatchJobResult& r)
             {
                 double pct = r.games_played > 0
                              ? 100.0 * r.games_won / r.games_played : 0.0;
                 std::cout << r.name << ": played=" << r.games_played
                           << " won=" << r.games_won << " (" << pct << "%)"
-                          << " avg=" << r.average_win_turn << "\n";
+                          << " avg=" << r.average_win_turn << "\n" << std::flush;
                 if (!game_log_dir.empty())
                 {
                     WriteGameLog(game_log_dir, r.name, r.win_turns);
                 }
-            }
+            };
+            std::vector<BatchJobResult> results =
+                BatchRunner::RunManifest(manifest, num_threads, on_job_done);
+            int total_games = 0;
+            for (const BatchJobResult& r : results) { total_games += r.games_played; }
+            std::cout << "=== BATCH done (" << results.size() << " jobs, "
+                      << total_games << " games) ===\n" << std::flush;
         }
         catch (const std::exception& e)
         {
