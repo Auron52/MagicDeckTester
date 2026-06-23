@@ -21,6 +21,19 @@ using json = nlohmann::json;
 
 namespace
 {
+// Search depth/budget the analyzer evaluates at -- BOTH the mulligan-profile
+// optimisation (scan / confirm / land grid) and the card scoring. It must match the
+// depth the deck is actually PLAYED at, or the mulligan profile and card values are
+// calibrated for a different game (a combo hand weak under greedy d0 but strong under
+// d5 search would be wrongly mulliganed). Optimisation historically ran at d0 for
+// speed; now unified at d5 for accuracy (perf cost accepted -- the land grid is the
+// dominant ~288k games/deck). Change both together.
+constexpr int ANALYSIS_DEPTH  = 5;
+constexpr int ANALYSIS_BUDGET = 20;    // deterministic virtual-ms node budget; matches the
+                                       // regression suite's proven-sufficient d5 budget (the
+                                       // node budget is iterative-deepening refinement WITHIN
+                                       // d5, not depth). ~10x faster than the old scoring's 200.
+
 int HardwareThreads()
 {
     // Affinity-aware (see HardwareConcurrency.h) -- avoids a transiently-low
@@ -304,7 +317,8 @@ MulliganProfile AnalyzerEngine::GridSearchLands(
     {
         std::vector<GameRecord> records = RunForRecordsSerial(
             deck, configs[ci], games_per_config,
-            seed + static_cast<uint64_t>(ci) * seed_step, max_turns);
+            seed + static_cast<uint64_t>(ci) * seed_step, max_turns,
+            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
         avgs[ci] = AverageWinTurn(records, max_turns);
     });
 
@@ -367,7 +381,8 @@ static int ConfirmColorSourceMin(
                   << min_count << " — confirming...\n";
 
         std::vector<AnalyzerEngine::GameRecord> c1 = AnalyzerEngine::RunForRecords(
-            deck, test_profile, CONFIRM1_GAMES, confirm_seed, max_turns);
+            deck, test_profile, CONFIRM1_GAMES, confirm_seed, max_turns,
+            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
         double avg1     = AnalyzerEngine::AverageWinTurn(c1, max_turns);
         double improve1 = baseline_avg - avg1;
         confirm_seed   += CONFIRM1_GAMES;
@@ -380,7 +395,8 @@ static int ConfirmColorSourceMin(
         }
 
         std::vector<AnalyzerEngine::GameRecord> c2 = AnalyzerEngine::RunForRecords(
-            deck, test_profile, CONFIRM2_GAMES, confirm_seed, max_turns);
+            deck, test_profile, CONFIRM2_GAMES, confirm_seed, max_turns,
+            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
         double avg2     = AnalyzerEngine::AverageWinTurn(c2, max_turns);
         double improve2 = baseline_avg - avg2;
         confirm_seed   += CONFIRM2_GAMES;
@@ -438,9 +454,11 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     uint64_t opt_seed = seed + OPT_SEED_OFFSET;
 
     // Phase parameters.
-    // All optimisation phases run at depth=0 (greedy), so even large game counts
-    // are fast (~0.1ms/game).  Counts are sized so that the standard error
-    // (~1.5/sqrt(N)) is well below each acceptance threshold.
+    // All optimisation phases run at ANALYSIS_DEPTH (d5) -- the depth the deck is
+    // actually played at -- so the mulligan profile is calibrated for real play, not
+    // greedy. This is far slower than the old d0 (the land grid alone is ~288k games),
+    // accepted for accuracy. Counts are sized so the standard error (~1.5/sqrt(N)) is
+    // well below each acceptance threshold.
     constexpr int    SCAN_GAMES        = 2000;  // std_err ≈ 0.034 turns
     constexpr int    CONFIRM1_GAMES    = 3000;  // std_err ≈ 0.027 turns; threshold 0.10
     constexpr int    CONFIRM2_GAMES    = 5000;  // std_err ≈ 0.021 turns; threshold 0.05
@@ -456,7 +474,8 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     MulliganProfile             baseline_profile;
     baseline_profile.vial_target_mv = vial_target_mv;
     std::vector<GameRecord>     scan_records = RunForRecords(
-        deck, baseline_profile, SCAN_GAMES, opt_seed, max_turns);
+        deck, baseline_profile, SCAN_GAMES, opt_seed, max_turns,
+        ANALYSIS_DEPTH, ANALYSIS_BUDGET);
     double baseline_avg = AverageWinTurn(scan_records, max_turns);
 
     std::map<std::string, double> impacts = ScanCardImpacts(scan_records, max_turns);
@@ -498,7 +517,8 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
 
         // Round 1
         std::vector<GameRecord> c1 = RunForRecords(
-            deck, test_profile, CONFIRM1_GAMES, confirm_seed, max_turns);
+            deck, test_profile, CONFIRM1_GAMES, confirm_seed, max_turns,
+            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
         double avg1       = AverageWinTurn(c1, max_turns);
         double improve1   = baseline_avg - avg1;
         confirm_seed     += CONFIRM1_GAMES;
@@ -512,7 +532,8 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
 
         // Round 2: deeper confirmation with a fresh seed
         std::vector<GameRecord> c2 = RunForRecords(
-            deck, test_profile, CONFIRM2_GAMES, confirm_seed, max_turns);
+            deck, test_profile, CONFIRM2_GAMES, confirm_seed, max_turns,
+            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
         double avg2      = AverageWinTurn(c2, max_turns);
         double improve2  = baseline_avg - avg2;
         confirm_seed    += CONFIRM2_GAMES;
@@ -588,17 +609,16 @@ AnalysisResult AnalyzerEngine::Run(const Decklist& deck, uint64_t base_seed, int
     result.mulligan_profile = opt.profile;
     result.mulligan_flags   = opt.flags;
 
-    // Per-card marginal scores from a dedicated scoring pass. Depth 5 lets the
-    // lookahead value delayed-payoff cards (e.g. Aether Vial looks bad at depth 0
-    // because the greedy AI can't plan its future ticks). Fixed methodology.
+    // Per-card marginal scores from a dedicated scoring pass. Runs at ANALYSIS_DEPTH
+    // (d5) -- the same depth as optimisation and as real play -- so the lookahead
+    // values delayed-payoff cards (e.g. Aether Vial looks bad at depth 0 because the
+    // greedy AI can't plan its future ticks). Fixed methodology.
     const int      SCORING_GAMES  = 2000;
-    const int      SCORING_DEPTH  = 5;
-    const int      SCORING_BUDGET = 200;   // deterministic virtual-ms node budget
     const uint64_t SCORING_OFFSET = 3'000'000ULL;
-    std::cerr << "  Computing card scores (" << SCORING_GAMES << " games, depth=" << SCORING_DEPTH << ")...\n";
+    std::cerr << "  Computing card scores (" << SCORING_GAMES << " games, depth=" << ANALYSIS_DEPTH << ")...\n";
     std::vector<GameRecord> scoring_records = RunForRecords(
         deck, opt.profile, SCORING_GAMES, base_seed + SCORING_OFFSET, max_turns,
-        SCORING_DEPTH, SCORING_BUDGET);
+        ANALYSIS_DEPTH, ANALYSIS_BUDGET);
     double threshold = 0.0;
     result.card_scores          = ComputeCardScores(scoring_records, max_turns, &threshold);
     result.hand_score_threshold = threshold;
