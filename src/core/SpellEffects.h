@@ -5,6 +5,7 @@
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <limits>
 #include <unordered_set>
 
@@ -274,6 +275,47 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
     return out;
 }
 
+// Whether mid-game library SEARCHES (fetchland / tutor) shuffle the remaining library.
+// Real MTG always shuffles on a search (CR 701.19); the model historically skipped it
+// (a clairvoyance simplification -- the search reads the fixed game-start order to
+// predict draws). OFF by default => byte-identical to the old no-shuffle behaviour.
+// When ON the shuffle is DETERMINISTIC (SearchShuffleSeed) so the search rollout and the
+// real executor reproduce the IDENTICAL post-search order -> they stay in lockstep, and
+// the same seed reproduces the same game across runs / similar decklists. See
+// search-quality-first-roadmap.
+inline bool SearchShuffleEnabled()
+{
+    static const bool on = std::getenv("MTG_SEARCH_SHUFFLE") != nullptr;
+    return on;
+}
+
+// Deterministic seed for the shuffle a library SEARCH triggers. Keyed on (game_seed,
+// search-event index) -- NOT on library contents or RNG-call-count -- so it is stable
+// across runs and across similar decklists (an A/B of two near-identical lists shuffles
+// the same way at the same search index). splitmix64 finaliser over a well-separated mix
+// keeps it clear of the mulligan reshuffle seeds (game_seed + mulligan_count).
+inline uint64_t SearchShuffleSeed(uint64_t game_seed, uint64_t search_index)
+{
+    uint64_t x = game_seed * 0x9E3779B97F4A7C15ull
+               + (search_index + 1) * 0xD1B54A32D192ED03ull;
+    x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ull;
+    x ^= x >> 27; x *= 0x94D049BB133111EBull;
+    x ^= x >> 31;
+    return x;
+}
+
+// Shuffle the controller's remaining library after a search, then bump the per-game
+// search counter (so the NEXT search uses a fresh deterministic seed). No-op when the
+// feature is off. Call AFTER the searched card has been removed from the library and
+// BEFORE any "put on top" placement (rules order: shuffle, then put on top).
+inline void ShuffleAfterSearch(GameState& state, int controller_index)
+{
+    if (!SearchShuffleEnabled()) { return; }
+    state.players[controller_index].library.Shuffle(
+        SearchShuffleSeed(state.game_seed, state.search_count));
+    ++state.search_count;
+}
+
 // Execute a tutor (Idyllic / Enlightened): fetch `target_name` from the library and move it to
 // hand (to_hand) or the top of the library (to_top). When target_name is empty, fall back to
 // the heuristic's top candidate (TutorCandidates) -- so any path that doesn't carry a searched
@@ -299,6 +341,10 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
     if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
     Card c = ap.library[idx];
     ap.library.erase(ap.library.begin() + idx);
+    // Searching the library shuffles it (CR 701.19) -- BEFORE a "put on top" placement
+    // (you shuffle, then put the card on top). Deterministic + lockstep; no-op unless
+    // MTG_SEARCH_SHUFFLE is set.
+    ShuffleAfterSearch(state, controller_index);
     if (pp.tutor_to_hand)     { ap.hand.push_back(std::move(c)); }
     else if (pp.tutor_to_top) { ap.library.insert(ap.library.begin(), std::move(c)); }
 }
@@ -1485,6 +1531,9 @@ inline void PerformFetch(GameState& state, int controller_index,
         perm.entered_this_turn = true;
         state.battlefield.push_back(perm);
     }
+    // Searching the library shuffles it (CR 701.19). Deterministic + lockstep; no-op
+    // unless MTG_SEARCH_SHUFFLE is set.
+    ShuffleAfterSearch(state, controller_index);
 }
 
 // Removes one depletion counter from a land tapped for mana (e.g. Saprazzan Skerry,

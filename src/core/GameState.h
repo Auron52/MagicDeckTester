@@ -61,6 +61,11 @@ struct GameState
     bool                     player_lost_on_draw          = false;
     bool                     opponent_lost_life_this_turn = false;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
+    uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
+                                                          // deterministic mid-game shuffle (ShuffleAfterSearch).
+                                                          // Copied with state so the search rollout reproduces the
+                                                          // same shuffle the executor will -> lockstep. Inert (always
+                                                          // 0) unless MTG_SEARCH_SHUFFLE is set.
     std::vector<OpponentSpawn> opponent_spawns;           // passive creatures to place on opp side each turn
     int                      vial_target_mv        = 0;   // most common creature MV in the deck; Aether Vial stops here
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)

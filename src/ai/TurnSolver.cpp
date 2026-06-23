@@ -2749,6 +2749,17 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     Fold(k, static_cast<uint64_t>(state.vial_target_mv));
     Fold(k, static_cast<uint64_t>(state.stack.size()));
 
+    // With search-shuffle ON the library order is NO LONGER a deterministic function of
+    // its size (a fetch/tutor reshuffles it), so the cheap (size + front) library digest
+    // below would let two differently-ordered libraries share a memo entry -- a stale TT/
+    // FSLineCache hit yielding a wrong rollout. Fold search_count (it seeds the NEXT
+    // shuffle, so it distinguishes states with identical current order but different
+    // futures) and the FULL ordered library (below) to make the key exact. OFF (default):
+    // not folded => byte-identical keys, and the clairvoyant "size => content" assumption
+    // still holds because nothing shuffles mid-search.
+    const bool shuffle_keys = SearchShuffleEnabled();
+    if (shuffle_keys) { Fold(k, 0x5ADF); Fold(k, state.search_count); }
+
     for (int pi = 0; pi < 2; ++pi)
     {
         const Player& p = state.players[pi];
@@ -2758,6 +2769,8 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         Fold(k, static_cast<uint64_t>(p.bonus_land_drops_this_turn));
         Fold(k, static_cast<uint64_t>(p.library.size()));
         if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }
+        // Full ordered library when shuffle can reorder it (see above). Skipped when OFF.
+        if (shuffle_keys) { for (const Card& c : p.library) { Fold(k, c.m_name_hash); } }
 
         Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered)
         Fold(k, static_cast<uint64_t>(p.hand.size()));
