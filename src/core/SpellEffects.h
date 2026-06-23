@@ -277,15 +277,16 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
 
 // Whether mid-game library SEARCHES (fetchland / tutor) shuffle the remaining library.
 // Real MTG always shuffles on a search (CR 701.19); the model historically skipped it
-// (a clairvoyance simplification -- the search reads the fixed game-start order to
-// predict draws). OFF by default => byte-identical to the old no-shuffle behaviour.
-// When ON the shuffle is DETERMINISTIC (SearchShuffleSeed) so the search rollout and the
-// real executor reproduce the IDENTICAL post-search order -> they stay in lockstep, and
-// the same seed reproduces the same game across runs / similar decklists. See
+// (a clairvoyance simplification -- the search read the fixed game-start order to predict
+// draws). Now ON by default (rules-correct, and removes post-search draw clairvoyance
+// from the search). The shuffle is DETERMINISTIC (SearchShuffleSeed) so the search
+// rollout and the real executor reproduce the IDENTICAL post-search order -> they stay in
+// lockstep, and the same seed reproduces the same game across runs / similar decklists.
+// Opt-out MTG_NO_SEARCH_SHUFFLE restores the old no-shuffle behaviour for A/B. See
 // search-quality-first-roadmap.
 inline bool SearchShuffleEnabled()
 {
-    static const bool on = std::getenv("MTG_SEARCH_SHUFFLE") != nullptr;
+    static const bool on = std::getenv("MTG_NO_SEARCH_SHUFFLE") == nullptr;
     return on;
 }
 
