@@ -14,6 +14,14 @@
 
 struct Decklist;
 
+// Standing unpruned-vs-pruned A/B switch (MTG_UNPRUNED). When set, every
+// search-narrowing heuristic returns its MAXIMALLY-PERMISSIVE value so the general
+// search explores the full branch space the heuristics would otherwise prune --
+// the audit tool for "are our heuristics costing us lines?". Declared here so the
+// shared tutor/fetch candidate functions in SpellEffects.h can honour it too.
+// Default off => byte-identical. Defined in DecisionProviders.cpp.
+bool DecisionUnpruned();
+
 class GenericProvider : public DecisionProvider
 {
 public:

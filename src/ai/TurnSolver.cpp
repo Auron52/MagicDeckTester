@@ -2677,7 +2677,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
             if (cands.size() > 1)
             {
-                int n = std::min(static_cast<int>(cands.size()), kMaxFetchSearchTargets);
+                // Unpruned audit: search EVERY fetch candidate (no cap), so a costly
+                // fetch-target heuristic can be detected. See DecisionUnpruned.
+                int cap = DecisionUnpruned() ? static_cast<int>(cands.size())
+                                             : kMaxFetchSearchTargets;
+                int n = std::min(static_cast<int>(cands.size()), cap);
                 for (int i = 0; i < n; ++i) { add_for_land(ln, cands[i]); }
                 continue;
             }

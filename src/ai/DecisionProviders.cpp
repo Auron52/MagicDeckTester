@@ -10,11 +10,17 @@
 // suite with and without it and diff per-game: if the unpruned arm wins MORE or FASTER, a
 // pruning heuristic is costing the search a line (a bad heuristic); if it is the same (or
 // only slower), the heuristic is a sound perf-only pruner. Default off => byte-identical.
-// Currently widens the GATE hooks (ShouldCastDrawEngine / ShouldEmitRiskyAltPayload) --
-// the two heuristics that actually delete a cast from the search's branch space. The
-// candidate-narrowers (Tutor/Fetch, in shared SpellEffects.h) are a follow-up; for the
-// current decks they rarely narrow to a costly choice. Decision/policy hooks that don't
-// prune the search space (scry-keep, vial-charge, discard-order, ...) are unaffected.
+//
+// Now opens ALL the BRANCH-NARROWING gates (the audit tool for evaluating heuristic state):
+//   - ShouldCastDrawEngine / ShouldEmitRiskyAltPayload : un-gate the cast (here).
+//   - ShouldConsiderDig                                : always consider a dig (here).
+//   - Tutor / Fetch candidate sets (shared SpellEffects.h ::TutorCandidates/::FetchCandidates):
+//     return EVERY legal target instead of the heuristic-narrowed pick, and TurnSolver lifts
+//     its fetch-target search cap. So the search branches over every tutor/fetch target.
+// Expect a large branching blow-up -- run with a high budget. Pure DECISION/POLICY hooks that
+// pick ONE option the search never alternatives over (cast-ORDER, vial-charge, scry-keep,
+// discard-order, combat) are NOT yet opened here: making the search branch on them needs new
+// enumeration (the ordering/combat work items), not just a wider gate.
 bool DecisionUnpruned()
 {
     static const bool v = std::getenv("MTG_UNPRUNED") != nullptr;
@@ -196,7 +202,13 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
 // ---- TreasureHuntProvider ---------------------------------------------------
 
 bool TreasureHuntProvider::HasAnyDigSource (const GameState& s) const { return ::HasAnyDigSource(s); }
-bool TreasureHuntProvider::ShouldConsiderDig(const GameState& s) const { return ::ShouldConsiderDig(s); }
+bool TreasureHuntProvider::ShouldConsiderDig(const GameState& s) const
+{
+    // Unpruned audit: consider a dig whenever a dig source exists, instead of the
+    // affordability/flood heuristic gating it. See DecisionUnpruned.
+    if (DecisionUnpruned()) { return ::HasAnyDigSource(s); }
+    return ::ShouldConsiderDig(s);
+}
 std::string TreasureHuntProvider::SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const
 {
     return ::SelectDigSource(s, pool, out_is_sac);

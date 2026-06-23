@@ -215,6 +215,24 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
 {
     const Player& ap = state.players[controller_index];
 
+    // Unpruned audit (MTG_UNPRUNED): return EVERY legal tutor target (distinct names)
+    // so the search branches over all of them, instead of the heuristic-narrowed pick.
+    if (DecisionUnpruned())
+    {
+        std::vector<std::string>        all;
+        std::unordered_set<std::string> seen;
+        for (const Card& lc : ap.library)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
+            const Card&           card = def ? def->card : lc;
+            bool type_ok = false;
+            for (const std::string& t : pp.tutor_types)
+            { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+            if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
+        }
+        return all;
+    }
+
     // Best enabler / wincon / any matching card available in the library.
     std::string enabler_name, wincon_name, any_name;
     for (const Card& lc : ap.library)
@@ -1332,6 +1350,30 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
                                                 const CardParams& fetch_pp)
 {
     const Player& ap = state.players[controller_index];
+
+    // Unpruned audit (MTG_UNPRUNED): return EVERY legal fetch target (distinct names of
+    // library lands whose subtypes match the fetchland's target types) so the search
+    // branches over all of them, instead of the heuristic-ranked pick. TurnSolver lifts
+    // its fetch-target search cap in the same mode.
+    if (DecisionUnpruned())
+    {
+        std::vector<std::string>        all;
+        std::unordered_set<std::string> seen;
+        for (const Card& lc : ap.library)
+        {
+            const CardDefinition* d    = CardDatabase::Instance().LookupCached(lc);
+            const Card&           card = d ? d->card : lc;
+            if (!card.IsLand()) { continue; }
+            bool match = false;
+            for (const std::string& want : fetch_pp.fetch_land_types)
+            {
+                for (const std::string& s : card.m_subtypes) { if (s == want) { match = true; break; } }
+                if (match) { break; }
+            }
+            if (match && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
+        }
+        return all;
+    }
 
     constexpr int NC = 6;   // Color enum cardinality (W,U,B,R,G,C)
     using ColorSet = std::array<bool, NC>;   // stack-resident; avoids per-call vector<bool> allocs + bit-proxy cost
