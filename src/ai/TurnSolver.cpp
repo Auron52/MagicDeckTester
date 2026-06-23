@@ -1126,7 +1126,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     };
     // Forward-declared so apply_one's draw breakpoints can re-apply a freshly solved
     // sub-plan (newly drawn castables) through the same canonical-order dispatch.
-    std::function<void(const std::vector<Action>&)> apply_plan_actions;
+    std::function<void(const std::vector<Action>&, bool)> apply_plan_actions;
 
     // Play a revealed land as the turn's land drop inside a staged-draw breakpoint
     // (pre-combat only), mirroring the real engine's draw-engine second pass
@@ -1418,7 +1418,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
             play_breakpoint_land(my_bp_sink);
             TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-            apply_plan_actions(extra.actions);
+            apply_plan_actions(extra.actions, false);
             if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
         }
         else if (def.tmpl == CardTemplate::DrawUntilNonland)
@@ -1440,7 +1440,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
             play_drawn_flood_keep_land(my_bp_sink);
             TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-            apply_plan_actions(extra.actions);
+            apply_plan_actions(extra.actions, false);
             if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
         }
         else if (def.params.cascade_max_mv > 0)
@@ -1591,24 +1591,40 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         return a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
             && ResolveProvider(state).CastEnablerFirst(state, a.card_name);
     };
-    apply_plan_actions = [&](const std::vector<Action>& acts)
+    apply_plan_actions = [&](const std::vector<Action>& acts, bool explicit_order)
     {
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::ActivateVial) { apply_vial(a.card_name); }
         }
-        for (const Action& a : acts)
+        if (explicit_order)
         {
-            if (is_enabler_cast(a))
+            // Cast-ordering search: play the non-sacrifice hand casts in the EXACT vector
+            // order the search chose (no enabler-first bucketing), so interleavings the
+            // canonical order batches wrong are reachable. See Plan::searched_order.
+            for (const Action& a : acts)
             {
-                apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+                {
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                }
             }
         }
-        for (const Action& a : acts)
+        else
         {
-            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler_cast(a))
+            for (const Action& a : acts)
             {
-                apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                if (is_enabler_cast(a))
+                {
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                }
+            }
+            for (const Action& a : acts)
+            {
+                if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler_cast(a))
+                {
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                }
             }
         }
         for (const Action& a : acts)
@@ -1650,7 +1666,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     };
 
-    apply_plan_actions(plan.actions);
+    apply_plan_actions(plan.actions, plan.searched_order);
 
     // Dig when stuck (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar, Forgotten
     // Cave, Fiery Islet): spend a surplus land to draw toward action -- chiefly Treasure
@@ -1731,7 +1747,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (out_breakpoint) { sink_stack.push_back(my_bp_sink); }
                 TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-                apply_plan_actions(extra.actions);
+                apply_plan_actions(extra.actions, false);
                 if (out_breakpoint) { sink_stack.pop_back(); }
                 break;
             }
@@ -2144,6 +2160,25 @@ static std::string SimulateLandPlay(GameState& state)
     return std::string();
 }
 
+// Cast-ordering search gate (C): when on, EnumeratePlans expands each action SET into the
+// DISTINCT orderings of its non-sacrifice hand casts (deduped by end-of-phase state),
+// instead of only the canonical enabler-first order -- so interleavings the canonical
+// heuristic batches wrong (enabler / destroy-all-payload rebuilds) are reachable. Off by
+// default => byte-identical (canonical order). On via MTG_SEARCH_ORDER or the global
+// MTG_UNPRUNED. Expensive (applies each tried ordering on a copy); run with a high budget.
+static bool OrderingSearchEnabled()
+{
+    static const bool v = (std::getenv("MTG_SEARCH_ORDER") != nullptr) || DecisionUnpruned();
+    return v;
+}
+
+// Defined after EnumeratePlans; used here only as an end-of-phase STATE signature for
+// ordering dedup (two orderings with the same key drive an identical rollout, so keeping
+// one is lossless -- the same omissions that make it a valid rollout memo key make it a
+// valid ordering-equivalence key).
+static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
+                                           bool second_main);
+
 // Returns candidate plans for the current turn for use by SolveWithLookahead.
 //
 // Base set (unchanged from original): all 2^m feasible hand subsets, so the
@@ -2529,7 +2564,64 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (seen.insert(plan_signature(p)).second) { deduped.push_back(std::move(p)); }
     }
 
-    return deduped;
+    // Cast-ordering search (C): expand each action set into the DISTINCT orderings of its
+    // non-sacrifice hand casts, deduped by end-of-phase state. Off by default => return
+    // the canonical-order sets unchanged (byte-identical). See OrderingSearchEnabled.
+    if (!OrderingSearchEnabled()) { return deduped; }
+
+    std::vector<TurnSolver::Plan> ordered;
+    ordered.reserve(deduped.size());
+    for (TurnSolver::Plan& p : deduped)
+    {
+        // Reorderable = non-sacrifice hand casts (where enabler/payload interactions live);
+        // everything else (Vial / sacrifice-land / retrace) keeps its canonical bucket.
+        std::vector<Action> reorder, fixed;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { reorder.push_back(a); }
+            else { fixed.push_back(a); }
+        }
+        if (reorder.size() < 2) { ordered.push_back(std::move(p)); continue; }
+
+        // Bound the work: permutations grow as k! (distinct end-states are far fewer, but we
+        // still APPLY each tried ordering). Beyond the cap keep the canonical order only.
+        long long perms = 1; bool too_many = false;
+        for (size_t i = 2; i <= reorder.size(); ++i)
+        { perms *= static_cast<long long>(i); if (perms > 120) { too_many = true; break; } }
+        if (too_many) { ordered.push_back(std::move(p)); continue; }
+
+        // Permute reorderable casts by NAME (next_permutation over a name-sorted index list
+        // yields each distinct multiset ordering once -- identical copies don't multiply).
+        std::vector<int> idx(reorder.size());
+        for (size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
+        auto by_name = [&](int x, int y) { return reorder[x].card_name < reorder[y].card_name; };
+        std::sort(idx.begin(), idx.end(), by_name);
+
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> seen_states;
+        do
+        {
+            TurnSolver::Plan cand = p;
+            cand.actions.clear();
+            for (int j : idx)            { cand.actions.push_back(reorder[j]); }
+            for (const Action& a : fixed){ cand.actions.push_back(a); }
+            cand.searched_order = true;
+
+            // Apply this ordering on a copy; dedup by the resulting end-of-phase state.
+            GameState copy = state;
+            ApplyPlanDirect(copy, cand, is_pre_combat);
+            if (seen_states.insert(BuildSimKey(copy, 0, 0, false)).second)
+            {
+                // Combat is order-independent, so inherit the base plan's combat-based
+                // win; a reordering can only ADD direct damage (e.g. the rebuild), so also
+                // mark a win if this ordering kills outright. Keeps winning orderings
+                // sorted first (not cut under budget).
+                cand.wins_this_turn = p.wins_this_turn || (copy.Opponent().life <= 0);
+                ordered.push_back(std::move(cand));
+            }
+        } while (std::next_permutation(idx.begin(), idx.end(), by_name));
+    }
+
+    return ordered;
 }
 
 // Land-folded candidate enumeration: the land drop is searched alongside the spells.

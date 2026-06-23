@@ -1317,6 +1317,29 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
     }
+    // Cast-ordering search (C): a committed plan with searched_order set carries an
+    // EXPLICIT interleaving the search scored (e.g. enabler/destroy-all-payload rebuild);
+    // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
+    // realises the same line ApplyPlanDirect's explicit-order path produced. Without this
+    // the executor would re-bucket enabler-first and diverge from the committed ordering.
+    if (plan.searched_order)
+    {
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+            if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
+            cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
+            if (s_full_depth && is_draw_engine(a.card_name))
+            {
+                if (fd_plan_committed)
+                { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
+                else { resolve_draw_breakpoint(); }
+            }
+            else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+        }
+    }
+    else
+    {
     // Enabler-first: cast lifegain_to_loss spells (Tainted Remedy / Plague Drone) before any
     // other hand cast and resolve each, so a same-turn payload fires with the enabler active
     // (-> damage, not healing). Matches the rollout's enabler-first order. No-op (and so
@@ -1353,6 +1376,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
         }
+    }
     }
     for (const Action& a : plan.actions)
     {

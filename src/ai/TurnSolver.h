@@ -103,6 +103,16 @@ public:
         int  value          = -1;   // -1 = nothing castable
         bool wins_this_turn = false;
 
+        // Cast-ordering search (C): when true, ApplyPlanDirect executes the non-sacrifice
+        // hand casts in `actions` VECTOR ORDER instead of the canonical enabler-first
+        // bucketing -- so the search can explore orderings the canonical heuristic batches
+        // wrong (e.g. enabler/destroy-all-payload interleaving: Tainted Remedy -> Reverent
+        // Silence -> Tainted Remedy -> Reverent Silence, where casting both Remedies first
+        // lets the first Reverent wipe both). Default false => canonical order (byte-
+        // identical). Set only by the gated ordering enumeration (MTG_SEARCH_ORDER /
+        // MTG_UNPRUNED), which dedups orderings by end-of-phase state.
+        bool searched_order = false;
+
         // Land drop folded into the plan (searched alongside spells). When
         // land_decided is true the executor plays exactly land_to_play this turn
         // ("" == a deliberate defer / no land available); when false the land was
