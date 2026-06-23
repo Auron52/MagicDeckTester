@@ -1056,6 +1056,33 @@ static bool PlayLandByName(GameState& state, const std::string& name,
                            const std::string& fetch_target = "");
 static std::string SimulateLandPlay(GameState& state);
 
+// Provider cast-order rank for a hand cast by name (lower = cast earlier). Thin lookup
+// wrapper around DecisionProvider::CastOrderRank; mirrored byte-for-byte in AIEngine so the
+// rollout's canonical cast order and the real executor's stay in lockstep. Unknown card
+// (should not happen for a planned cast) falls to the noncreature rank.
+static int CastRankOf(const GameState& state, const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    return d ? ResolveProvider(state).CastOrderRank(state, *d) : 20;
+}
+
+// A cast whose resolution triggers a mid-turn re-solve breakpoint (draw / staging / cascade
+// / retrace): the rest of the turn re-solves from the post-draw state, so the optimal cast
+// ORDER around it is situation-dependent (mana left, what is revealed) -- a static rank
+// can't capture it. The CastOrderRank reordering is therefore SKIPPED for any set that
+// contains such a card; that set keeps its canonical plan/breakpoint order (the search owns
+// the ambiguous ordering). Mirrored in AIEngine.
+static bool OrderingOpaque(const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    if (!d) { return false; }
+    return d->tmpl == CardTemplate::DrawUntilNonland
+        || d->params.stages_cards
+        || d->params.cascade_max_mv > 0
+        || d->params.retrace
+        || d->params.draw > 0;
+}
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr)
 {
@@ -1580,19 +1607,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     };
 
-    // Canonical execution order, applied within each kind in plan order:
-    //   ActivateVial -> hand casts (non-sacrifice) -> hand casts (sacrifice-land)
-    //   -> graveyard casts (Retrace).  (DiscardToLandsEdge is added in a later phase.)
-    // Within non-sacrifice hand casts, ENABLERS (lifegain_to_loss: Tainted Remedy / Plague
-    // Drone) go first so a same-turn payload (a free alt-cost spell, Aria's ETB, a Fiery
-    // Justice rider) resolves with the enabler already active -> damage instead of healing.
-    // No-op for decks without lifegain_to_loss cards: pass 1 is empty and pass 2 == the old
-    // single loop, so their execution stays byte-identical.
-    auto is_enabler_cast = [&state](const Action& a)
-    {
-        return a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
-            && ResolveProvider(state).CastEnablerFirst(state, a.card_name);
-    };
+    // Canonical execution order, applied within each kind:
+    //   ActivateVial -> hand casts (non-sacrifice, in provider CastOrderRank order)
+    //   -> hand casts (sacrifice-land) -> graveyard casts (Retrace).
+    // The non-sacrifice hand casts are stable-sorted by DecisionProvider::CastOrderRank
+    // (enabler-first, prowess creatures before noncreature spells, on-cast self-damage
+    // sources last); see the canonical branch below. Byte-identical for a deck whose ranks
+    // don't reorder its casts.
     apply_plan_actions = [&](const std::vector<Action>& acts, bool explicit_order)
     {
         for (const Action& a : acts)
@@ -1614,17 +1635,51 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else
         {
+            // Reorder the non-sacrifice hand casts by CastOrderRank, EXCEPT when the set has
+            // a re-solve breakpoint card (draw/staging/cascade): its ordering is search-owned
+            // (Light Up the Stage can't be ordered optimally without search), so keep the
+            // canonical enabler-first + plan order there. The rank encodes the full-search-
+            // grounded ordering rules (prowess creatures early, on-cast self-damage sources
+            // last, ...) and grows as analysis surfaces more; d0 imperfection is acceptable.
+            // Definitive validation is the with/without-heuristic per-game A/B.
+            bool opaque = false;
             for (const Action& a : acts)
             {
-                if (is_enabler_cast(a))
+                if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
+                    && OrderingOpaque(a.card_name)) { opaque = true; break; }
+            }
+            auto is_enabler = [&](const Action& a)
+            {
+                return a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
+                    && ResolveProvider(state).CastEnablerFirst(state, a.card_name);
+            };
+            if (opaque)
+            {
+                for (const Action& a : acts)
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target); } }
+                for (const Action& a : acts)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                    if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target); }
                 }
             }
-            for (const Action& a : acts)
+            else
             {
-                if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler_cast(a))
+                // Clean set: stable-sort the non-sacrifice hand casts by CastOrderRank
+                // (enabler-first, prowess creatures before noncreature spells, on-cast
+                // self-damage sources last). Stable => plan order breaks ties. Mirrored in
+                // AIEngine::TakeTurn so rollout and executor stay in lockstep.
+                std::vector<int> order;
+                for (int i = 0; i < static_cast<int>(acts.size()); ++i)
                 {
+                    if (acts[i].kind == Action::Kind::CastFromHand && !acts[i].sacrifice_land)
+                    { order.push_back(i); }
+                }
+                std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+                { return CastRankOf(state, acts[x].card_name) < CastRankOf(state, acts[y].card_name); });
+                for (int i : order)
+                {
+                    const Action& a = acts[i];
                     apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
                 }
             }

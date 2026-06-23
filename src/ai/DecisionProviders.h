@@ -44,6 +44,7 @@ public:
     int         ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
     bool        ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     bool        ShouldAttackWith(const GameState&, const Permanent&) const override;
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the
@@ -57,6 +58,7 @@ public:
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
     bool CastEnablerFirst(const GameState&, const std::string&) const override;
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
 };
 
 // Treasure Hunt + Land's Edge: dig-when-stuck, Land's Edge fire count, deck-aware

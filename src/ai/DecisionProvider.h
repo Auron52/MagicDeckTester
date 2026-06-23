@@ -125,6 +125,20 @@ public:
     virtual bool ArchetypeCardValue(const GameState& s, const CardDefinition& def,
                                     int dmg_unit, int& out) const = 0;
 
+    // Hook 17 -- cast-order rank for a non-sacrifice hand cast (LOWER = cast earlier). The
+    // engine stable-sorts the turn's hand casts by this rank, so the RELIABLE ordering rules
+    // live here as a heuristic instead of in an expensive (and budget-diluting) permutation
+    // search. The point is to make the canonical line REALISE what EnumeratePlans already
+    // projects -- e.g. prowess. Generic ranks (all provably non-negative in a goldfish):
+    //   * creatures (10) before noncreature spells (20): a haste prowess creature cast BEFORE
+    //     a noncreature spell catches that spell's prowess trigger and attacks bigger; casting
+    //     it after wastes the pump (the executed order, not the SET, decides this).
+    //   * on-cast SELF-damage sources (30, LAST): an Eidolon of the Great Revel cast after this
+    //     turn's other MV<=3 spells avoids them triggering its self-ping (the spells already
+    //     resolved before it entered). Same casts either way, so only the ORDER changes life.
+    // Archetypes override (antilife: enablers rank 0 so a same-turn payload sees the flip).
+    virtual int CastOrderRank(const GameState& s, const CardDefinition& def) const = 0;
+
     // Hook 16 -- combat: should this eligible creature be DECLARED as an attacker this turn?
     // The engine keeps combat eligibility (CanAttackFull: summoning sickness, tap state,
     // haste) and the damage MECHANISM; this is only the attack/hold DECISION over an

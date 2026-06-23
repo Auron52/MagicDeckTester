@@ -35,6 +35,30 @@ static const bool s_full_depth = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
 // can be traced. Only meaningful with s_full_depth.
 static const bool s_fd_oracle = std::getenv("MTG_FD_ORACLE") != nullptr;
 
+// Provider cast-order rank for a hand cast by name (lower = cast earlier). MUST stay
+// byte-for-byte identical to TurnSolver::CastRankOf so the executor's canonical cast
+// order matches the rollout's (lockstep). Unknown card falls to the noncreature rank.
+static int CastRankAI(const GameState& state, const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    return d ? ResolveProvider(state).CastOrderRank(state, *d) : 20;
+}
+
+// Mirror of TurnSolver::OrderingOpaque: a cast with a mid-turn re-solve breakpoint
+// (draw / staging / cascade / retrace). The CastOrderRank reordering is skipped for any
+// set containing one (its ordering is search-owned); such a set keeps its canonical
+// plan/breakpoint order. MUST match TurnSolver::OrderingOpaque (lockstep).
+static bool OrderingOpaqueAI(const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    if (!d) { return false; }
+    return d->tmpl == CardTemplate::DrawUntilNonland
+        || d->params.stages_cards
+        || d->params.cascade_max_mv > 0
+        || d->params.retrace
+        || d->params.draw > 0;
+}
+
 // Trajectory probe: when MTG_NONCONV_TRACE_SEED matches a game's seed, dump every
 // real pre-combat decision (turn, committed_win, opp life/creatures, hand, plan).
 static const char*     s_trace_seed_env = std::getenv("MTG_NONCONV_TRACE_SEED");
@@ -1313,6 +1337,43 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // real game executes the same draw-breakpoint line the rollout searches.
     bool staged_break = false;
     bool bp_replayed  = false;  // commit-the-line: recorded breakpoint replayed once
+
+    // Order trace (MTG_ORDER_TRACE, inert by default): print the committed hand-cast
+    // sequence per pre-combat main, tagged with searched_order, so a heuristic-vs-search
+    // (MTG_SEARCH_ORDER) A/B can see WHICH reorder the search chose. The skill's
+    // heuristic-accuracy process uses this to author a provider ordering heuristic that
+    // reproduces the search's pick. Single-thread + --game-index N for a clean per-game read.
+    static const bool s_order_trace = std::getenv("MTG_ORDER_TRACE") != nullptr;
+    if (s_order_trace && is_pre_combat_main && !m_in_rollout)
+    {
+        // Print the ACTUAL executed order of non-sacrifice hand casts: rank-sorted for a
+        // clean set, plan order for an opaque (draw/staging) set or a searched_order plan.
+        std::vector<int> ns;
+        bool opaque = false;
+        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+        {
+            const Action& a = plan.actions[i];
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+            ns.push_back(i);
+            if (OrderingOpaqueAI(a.card_name)) { opaque = true; }
+        }
+        if (!opaque && !plan.searched_order)
+        {
+            std::stable_sort(ns.begin(), ns.end(), [&](int x, int y)
+            { return CastRankAI(state, plan.actions[x].card_name) < CastRankAI(state, plan.actions[y].card_name); });
+        }
+        std::string seq;
+        for (int i : ns)
+        {
+            if (!seq.empty()) { seq += ", "; }
+            seq += plan.actions[i].card_name;
+            if (plan.actions[i].alt_cost) { seq += "(alt)"; }
+        }
+        std::fprintf(stderr, "[ord] turn=%d searched=%d opaque=%d casts: %s\n",
+                     state.turn_number, plan.searched_order ? 1 : 0, opaque ? 1 : 0,
+                     seq.empty() ? "(none)" : seq.c_str());
+    }
+
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
@@ -1340,10 +1401,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     else
     {
+    // Reorder by CastOrderRank, EXCEPT when the set has a re-solve breakpoint card
+    // (draw/staging/cascade): its ordering is search-owned, so keep the canonical
+    // enabler-first + plan order (with the breakpoint/staging handling). Mirrors
+    // ApplyPlanDirect's gate (lockstep).
+    bool opaque = false;
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
+            && OrderingOpaqueAI(a.card_name)) { opaque = true; break; }
+    }
+    if (opaque)
+    {
     // Enabler-first: cast lifegain_to_loss spells (Tainted Remedy / Plague Drone) before any
-    // other hand cast and resolve each, so a same-turn payload fires with the enabler active
-    // (-> damage, not healing). Matches the rollout's enabler-first order. No-op (and so
-    // byte-identical) for decks without lifegain_to_loss cards.
+    // other hand cast so a same-turn payload fires with the enabler active. Then the rest in
+    // plan order, with the draw-engine breakpoint / staging handling.
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
@@ -1359,23 +1431,40 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             cast_alt(a.card_name, a.alt_lifegain); resolve_now();
         }
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
-                 && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))   // enablers already cast above
+                 && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
             cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
-                // Commit-the-line: a committed plan replays the verbatim recorded
-                // breakpoint script (no re-solve) right after the draw engine revealed
-                // its cards; the develop-when-stuck fallback plan has no script, so it
-                // re-solves (the rare no-win path).
                 if (fd_plan_committed)
-                {
-                    if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; }
-                }
+                { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
                 else { resolve_draw_breakpoint(); }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
         }
+    }
+    }
+    else
+    {
+    // Clean set: stable-sort the non-sacrifice hand casts by DecisionProvider::CastOrderRank
+    // (enabler-first, prowess creatures before noncreature spells, on-cast self-damage
+    // sources last). Stable => plan order breaks ties. Mirrors ApplyPlanDirect's canonical
+    // branch (CastRankAI == TurnSolver::CastRankOf) so the executor realises the same line
+    // the rollout scored. No draw engine here, so no breakpoint handling is needed.
+    std::vector<int> order;
+    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+    {
+        const Action& a = plan.actions[i];
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { order.push_back(i); }
+    }
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    { return CastRankAI(state, plan.actions[x].card_name) < CastRankAI(state, plan.actions[y].card_name); });
+    for (int oi : order)
+    {
+        const Action& a = plan.actions[oi];
+        if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
+        cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
+    }
     }
     }
     for (const Action& a : plan.actions)

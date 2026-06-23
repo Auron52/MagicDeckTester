@@ -171,6 +171,26 @@ bool GenericProvider::ShouldAttackWith(const GameState&, const Permanent&) const
     return true;    // goldfish default: attack with everything that can attack (no blockers).
 }
 
+int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) const
+{
+    // See DecisionProvider.h Hook 17. Reliable deck-agnostic order so the canonical line
+    // realises what EnumeratePlans projects (prowess), at no search cost. Tiers (lower =
+    // earlier):
+    //   10 creatures: before noncreature spells, so a haste prowess creature catches the
+    //      later noncreature casts' prowess triggers and attacks bigger.
+    //   20 other noncreature spells.
+    //   30 on-cast SELF-damage sources (Eidolon of the Great Revel): LAST, so this turn's
+    //      other MV<=3 casts (already resolved) don't trigger its self-ping.
+    // NOTE: this rank is only applied to cast sets with NO re-solve breakpoint (draw/staging/
+    // cascade) card -- see OrderingOpaque / the canonical branches. Draw-engine turns keep
+    // their plan/breakpoint order, whose post-draw re-solve is order-sensitive in ways a
+    // static rank can't capture (verified: a "draw first" rank fixes some games and breaks
+    // others); that ambiguous ordering is left to the search.
+    if (def.params.on_cast_trigger_damage > 0) { return 30; }
+    if (def.card.IsCreature())                 { return 10; }
+    return 20;
+}
+
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
                                                const CardDefinition& draw_def) const
 {
@@ -205,6 +225,14 @@ bool AntiLifegainProvider::CastEnablerFirst(const GameState&, const std::string&
     // Enabler-first: lifegain_to_loss cards (Tainted Remedy / Plague Drone) cast + resolve
     // before payloads so a same-turn payload sees the enabler active.
     return ::IsLifegainToLossCard(card_name);
+}
+
+int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    // Enabler-first (Tainted Remedy / Plague Drone) so a same-turn payload resolves with the
+    // lifegain->loss flip already active; otherwise the generic ranks.
+    if (CastEnablerFirst(s, def.card.m_name)) { return 0; }
+    return GenericProvider::CastOrderRank(s, def);
 }
 
 bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int controller,
