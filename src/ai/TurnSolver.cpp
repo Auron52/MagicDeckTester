@@ -496,8 +496,39 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             continue;
         }
 
-        // Skip X spells (X=0 is useless; proper X selection is future work).
-        if (def.card.m_mana_cost.has_x) { continue; }
+        // {X} spells: enumerate candidate X values (provider XCandidates narrows the range,
+        // the search picks among the variants -- they share hand_index, so they are mutually
+        // exclusive in the plan). Only X-damage (DirectDamage) is modeled today; other X
+        // templates (DrawX) stay skipped until their effect is scaled in BOTH cast paths.
+        if (def.card.m_mana_cost.has_x)
+        {
+            if (def.tmpl != CardTemplate::DirectDamage) { continue; }
+            ManaCost base  = EffectiveCost(def, state);   // fixed part; ManaValue() ignores X
+            ManaPool xpool = BuildPool(state);
+            int max_x = xpool.Total() - base.ManaValue();
+            if (max_x < 0) { max_x = 0; }
+            for (int x : ResolveProvider(state).XCandidates(state, def, max_x))
+            {
+                if (x <= 0) { continue; }
+                ManaCost xcost = base;
+                xcost.generic += x;                       // X is paid as generic mana
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = xcost;
+                a.chosen_x       = x;
+                a.sacrifice_land = def.params.sacrifice_land;
+                a.eval           = x * 100;               // EvalCard's DMG unit (X dmg-equivalents)
+                // X burn reaches the face only when not creature-only targeted (the creature-
+                // target guard above already dropped Creature/Multi with no opponent creature).
+                a.direct_damage  = (def.params.targeting != Targeting::Creature) ? x : 0;
+                a.is_noncreature = !def.card.IsCreature();
+                a.card_mv        = def.card.m_mana_cost.ManaValue();  // X = 0 outside the stack
+                actions.push_back(std::move(a));
+            }
+            continue;
+        }
 
         // Alternative cost (Invigorate / Skyshroud Cutter / Reverent Silence): "If you control
         // a Forest, rather than pay this spell's mana cost, you may have an opponent gain N
@@ -1221,9 +1252,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
-                    bool alt_cost, int alt_lifegain, const std::string& tutor_target)
+                    bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x)
     {
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
@@ -1280,6 +1311,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.alt_cost       = alt_cost;
             rec.alt_lifegain   = alt_lifegain;
             rec.tutor_target   = tutor_target;
+            rec.chosen_x       = chosen_x;
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -1319,8 +1351,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // here while the win-check and the real engine both counted their damage —
             // a phantom-early-win source.
             Targeting t = def.params.targeting;
-            int dmg = def.params.damage;
-            if (def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
+            // An {X} burn deals its chosen X (mirrors EffectHandler::ResolveDirectDamage);
+            // a fixed-damage burn uses params.damage with the landfall boost.
+            int dmg = def.card.m_mana_cost.has_x ? chosen_x : def.params.damage;
+            if (!def.card.m_mana_cost.has_x
+                && def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
             {
                 dmg = def.params.landfall_damage;
             }
@@ -1507,7 +1542,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{});
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0);
                 }
             }
         }
@@ -1629,7 +1664,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x);
                 }
             }
         }
@@ -1656,11 +1691,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target); } }
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x); } }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target); }
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x); }
                 }
             }
             else
@@ -1680,7 +1715,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x);
                 }
             }
         }
@@ -1688,14 +1723,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{});
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x);
             }
         }
 
@@ -1718,7 +1753,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{});
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };

@@ -56,6 +56,13 @@ struct Action
                                        // exclusive) so the search picks; one variant when it is
                                        // sure. Empty for non-tutors (PerformTutor falls back to
                                        // the heuristic's top pick).
+    int         chosen_x       = 0;    // CastFromHand of an {X} spell: the X value chosen at
+                                       // enumeration. The provider (XCandidates) narrows the X
+                                       // range; CollectActions emits one variant per candidate
+                                       // (sharing hand_index -> mutually exclusive) so the search
+                                       // picks. cost already includes the X generic; chosen_x is
+                                       // carried so the cast (rollout AND executor) scales the
+                                       // effect (X damage) identically. 0 = not an X spell.
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;

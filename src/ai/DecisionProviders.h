@@ -45,6 +45,7 @@ public:
     bool        ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     bool        ShouldAttackWith(const GameState&, const Permanent&) const override;
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the

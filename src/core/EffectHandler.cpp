@@ -171,12 +171,21 @@ void EffectHandler::ResolveManaDork(GameState& state, const StackEntry& entry,
 void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entry,
                                          const CardDefinition& def)
 {
-    // Landfall: use the boosted damage value if a land entered this turn.
-    int damage = def.params.damage;
-    if (def.params.landfall_damage > 0
-        && state.players[entry.controller_index].lands_played_this_turn > 0)
+    // An {X} burn deals its chosen X (carried on the stack entry; CR 202.3). A fixed-damage
+    // burn uses params.damage, with the landfall boost if a land entered this turn.
+    int damage;
+    if (def.card.m_mana_cost.has_x)
     {
-        damage = def.params.landfall_damage;
+        damage = entry.chosen_x.value_or(0);
+    }
+    else
+    {
+        damage = def.params.damage;
+        if (def.params.landfall_damage > 0
+            && state.players[entry.controller_index].lands_played_this_turn > 0)
+        {
+            damage = def.params.landfall_damage;
+        }
     }
 
     for (const Target& t : entry.targets)

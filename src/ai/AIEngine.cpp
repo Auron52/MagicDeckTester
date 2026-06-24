@@ -1105,14 +1105,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     };
 
     // Cast a spell from hand by name.
-    auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "")
+    auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
+                            int chosen_x = 0)
     {
         Player& ap = state.ActivePlayer();
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);
-        CastSpellFromHand(state, *it, available, 0, tutor_target);
+        CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x);
     };
 
     // Cast a spell from hand via its alternative cost (Invigorate / Skyshroud Cutter /
@@ -1271,7 +1272,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
-            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target); } resolve_now(); }
+            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::DigDraw)
@@ -1304,14 +1305,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
             {
-                cast_by_name(a.card_name, a.tutor_target); resolve_now();
+                cast_by_name(a.card_name, a.tutor_target, a.chosen_x); resolve_now();
                 if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(); }
             }
         }
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { cast_by_name(a.card_name, a.tutor_target); resolve_now(); }
+            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x); resolve_now(); }
         }
         for (const Action& a : extra.actions)
         {
@@ -1389,7 +1390,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -1421,7 +1422,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
             && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now();
         }
     }
     for (const Action& a : plan.actions)
@@ -1433,7 +1434,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -1463,7 +1464,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[oi];
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now();
+        cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now();
     }
     }
     }
@@ -1471,7 +1472,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (staged_break) { break; }
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { cast_by_name(a.card_name, a.tutor_target); note_draw_engine(a.card_name); resolve_now(); }
+        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
@@ -2132,7 +2133,8 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
 }
 
 void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
-                                 int alt_lifegain, const std::string& tutor_target)
+                                 int alt_lifegain, const std::string& tutor_target,
+                                 int chosen_x)
 {
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
@@ -2144,6 +2146,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     entry.source.m_number  = hand_card.m_number;  // preserve per-copy ID for logging
     entry.controller_index = state.active_player_index;
     entry.tutor_target     = tutor_target;        // searched fetch target (empty -> heuristic)
+    // {X} spell: carry the chosen X so the effect (ResolveDirectDamage) scales by it. CR 202.3:
+    // X is 0 except on the stack, where it is the chosen value -- so it is NOT in the card's
+    // mana value, only here on the stack entry.
+    if (chosen_x > 0) { entry.chosen_x = chosen_x; }
 
     int opp_index = 1 - state.active_player_index;
     switch (def->params.targeting)
@@ -2191,6 +2197,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     }
 
     ManaCost effective = EffectiveCost(*def, state);
+    if (chosen_x > 0) { effective.generic += chosen_x; }   // {X} is paid as generic mana
     if (alt_lifegain > 0)
     {
         // Alternative cost: pay no mana; instead make the opponent gain alt_lifegain life

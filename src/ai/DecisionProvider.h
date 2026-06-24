@@ -139,6 +139,16 @@ public:
     // Archetypes override (antilife: enablers rank 0 so a same-turn payload sees the flip).
     virtual int CastOrderRank(const GameState& s, const CardDefinition& def) const = 0;
 
+    // Hook 18 -- candidate X values for an {X} spell (a branching-PRUNE heuristic). The engine
+    // asks BEFORE emitting cast variants and emits one cast per returned value (the variants
+    // share hand_index, so they are mutually exclusive in the plan), letting the search pick
+    // among the narrowed set. `max_affordable` is the largest X the current mana can pay (spare
+    // mana after the base cost). Generic proposes {max_affordable} (goldfish-optimal: an X burn
+    // / X effect wants all available mana); MTG_UNPRUNED opens the full 1..max_affordable range
+    // for the search to confirm. Empty -> the spell is not cast this turn. See analyze-deck 5f.
+    virtual std::vector<int> XCandidates(const GameState& s, const CardDefinition& def,
+                                         int max_affordable) const = 0;
+
     // Hook 16 -- combat: should this eligible creature be DECLARED as an attacker this turn?
     // The engine keeps combat eligibility (CanAttackFull: summoning sickness, tap state,
     // haste) and the damage MECHANISM; this is only the attack/hold DECISION over an

@@ -191,6 +191,25 @@ int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) 
     return 20;
 }
 
+std::vector<int> GenericProvider::XCandidates(const GameState&, const CardDefinition&,
+                                              int max_affordable) const
+{
+    // See DecisionProvider.h Hook 18. In a goldfish, an {X} spell (X burn, X draw, X pump)
+    // wants all available mana: a larger X is never worse for closing the game. So the prune
+    // proposes the single max-affordable value -- no branching. MTG_UNPRUNED opens the full
+    // 1..max range so the unpruned-vs-pruned A/B can confirm the prune leaves nothing behind
+    // (e.g. a turn where holding mana for a second spell beats max-X). Empty when X must be 0.
+    if (max_affordable <= 0) { return {}; }
+    if (DecisionUnpruned())
+    {
+        std::vector<int> all;
+        all.reserve(max_affordable);
+        for (int x = 1; x <= max_affordable; ++x) { all.push_back(x); }
+        return all;
+    }
+    return { max_affordable };
+}
+
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
                                                const CardDefinition& draw_def) const
 {
