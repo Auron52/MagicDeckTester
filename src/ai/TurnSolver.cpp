@@ -562,6 +562,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 a.direct_damage  = 0;
                 a.is_noncreature = !def.card.IsCreature();
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.ritual_float   = RitualFloatAmount(state, def, x);   // refloat mana, stamped once
                 actions.push_back(std::move(a));
                 continue;
             }
@@ -715,6 +716,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         a.has_spectacle         = def.params.spectacle_cost.has_value();
         a.is_draw_until_nonland = (def.tmpl == CardTemplate::DrawUntilNonland);
         a.discard_land_damage   = def.params.discard_land_damage;
+        if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
         actions.push_back(std::move(a));
     }
 
@@ -830,21 +832,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     int n = static_cast<int>(ap.hand.size());
 
-    // Hinata combo: per-candidate GROSS floating-mana credit (Reality Spasm refloat / Irencrag
-    // burst). `consider` sums ritual_float[j] over the chosen subset and adds it to the pool's
-    // CanPay, so a subset that actually casts the ritual can fund a bigger same-turn payoff
-    // (Crackle). All zero for every non-ritual deck (any_ritual stays false) -> byte-identical.
-    std::vector<int> ritual_float(cands.size(), 0);
+    // Hinata combo: does any candidate float ritual mana (Reality Spasm / Irencrag)? Each Action's
+    // gross float was stamped at enumeration (a.ritual_float), so this is a cheap scan -- no
+    // per-node card lookup. `consider` sums cands[j].ritual_float over the chosen subset and credits
+    // the pool's CanPay. False for every non-ritual deck -> byte-identical.
     bool any_ritual = false;
-    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
-    {
-        const CardDefinition* cd = CardDatabase::Instance().Lookup(cands[j].card_name);
-        if (cd && IsManaRitual(*cd))
-        {
-            ritual_float[j] = RitualFloatAmount(state, *cd, cands[j].chosen_x);
-            any_ritual = true;
-        }
-    }
+    for (const Action& ra : cands) { if (ra.ritual_float > 0) { any_ritual = true; break; } }
 
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
@@ -933,7 +926,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // `combined`, so pool+gross-cost == pool+net -> exact, conservative). Zero unless a
         // ritual is selected -> byte-identical for every non-ritual deck.
         int ritual_credit = 0;
-        if (any_ritual) { for (int j : sel) { ritual_credit += ritual_float[j]; } }
+        if (any_ritual) { for (int j : sel) { ritual_credit += cands[j].ritual_float; } }
         if (ritual_credit > 0)
         {
             ManaPool eff    = pool;             eff.wild    += ritual_credit;
@@ -2609,20 +2602,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (cdef ? cdef->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
     }
 
-    // Hinata combo: per-candidate gross ritual float (mirrors Solve), so the deep search also
-    // enumerates the ritual->payoff combo as a branch. All zero for non-ritual decks (any_ritual
-    // false) -> byte-identical.
-    std::vector<int> ritual_float(cands.size(), 0);
+    // Hinata combo: cheap scan of the stamped per-Action ritual float (mirrors Solve), so the deep
+    // search also enumerates the ritual->payoff combo. False for non-ritual decks -> byte-identical.
     bool any_ritual = false;
-    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
-    {
-        const CardDefinition* cd = CardDatabase::Instance().Lookup(cands[j].card_name);
-        if (cd && IsManaRitual(*cd))
-        {
-            ritual_float[j] = RitualFloatAmount(state, *cd, cands[j].chosen_x);
-            any_ritual = true;
-        }
-    }
+    for (const Action& ra : cands) { if (ra.ritual_float > 0) { any_ritual = true; break; } }
 
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
@@ -2786,7 +2769,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
 
         int ritual_credit = 0;
-        if (any_ritual) { for (int j : sel) { ritual_credit += ritual_float[j]; } }
+        if (any_ritual) { for (int j : sel) { ritual_credit += cands[j].ritual_float; } }
         if (ritual_credit > 0)
         {
             ManaPool eff    = pool;             eff.wild    += ritual_credit;

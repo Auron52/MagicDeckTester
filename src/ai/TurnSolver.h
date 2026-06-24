@@ -56,6 +56,11 @@ struct Action
                                        // exclusive) so the search picks; one variant when it is
                                        // sure. Empty for non-tutors (PerformTutor falls back to
                                        // the heuristic's top pick).
+    int         ritual_float   = 0;    // Hinata combo: gross floating mana this cast adds when it
+                                       // resolves (Reality Spasm refloat / Irencrag burst), stamped
+                                       // at enumeration (CollectActions, where the def is in hand)
+                                       // so Solve/EnumeratePlans credit it WITHOUT a per-node card
+                                       // lookup. 0 for every non-ritual action (all other decks).
     int         chosen_x       = 0;    // CastFromHand of an {X} spell: the X value chosen at
                                        // enumeration. The provider (XCandidates) narrows the X
                                        // range; CollectActions emits one variant per candidate
