@@ -781,25 +781,36 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
 
+    // Mutual-exclusion conflicts, precomputed ONCE: two actions conflict if they use the same
+    // hand card (cast vs. its Vial deploy) or tap the same Vial. conflict[j] is the bitmask of
+    // actions that cannot co-occur with j. Per mask the validity test then collapses from the
+    // old O(m^2) nested scan to one O(popcount) pass -- this powerset/validity loop is the
+    // dominant self-time in Solve on wide boards (slivers/knights). Result-identical: the same
+    // subsets are accepted, just rejected far more cheaply.
+    std::vector<int> conflict(m, 0);
+    for (int j = 0; j < m; ++j)
+    {
+        for (int k = j + 1; k < m; ++k)
+        {
+            bool conf =
+                (cands[j].hand_index >= 0 && cands[j].hand_index == cands[k].hand_index)
+                || (cands[j].kind == Action::Kind::ActivateVial
+                    && cands[k].kind == Action::Kind::ActivateVial
+                    && cands[j].vial_bf_index == cands[k].vial_bf_index);
+            if (conf) { conflict[j] |= (1 << k); conflict[k] |= (1 << j); }
+        }
+    }
+
     // Enumerate all non-empty subsets (mask=0 is "do nothing" and is the default).
     for (int mask = 1; mask < (1 << m); ++mask)
     {
         // Reject subsets that use the same hand card twice (e.g. cast + Vial same creature)
-        // or that tap the same Vial twice.
+        // or that tap the same Vial twice -- via the precomputed conflict masks.
         bool valid = true;
-        for (int j = 0; j < m && valid; ++j)
+        for (int j = 0; j < m; ++j)
         {
             if (!(mask & (1 << j))) { continue; }
-            for (int k = j + 1; k < m; ++k)
-            {
-                if (!(mask & (1 << k))) { continue; }
-                if (cands[j].hand_index >= 0
-                    && cands[j].hand_index == cands[k].hand_index) { valid = false; break; }
-                if (cands[j].kind == Action::Kind::ActivateVial
-                    && cands[k].kind == Action::Kind::ActivateVial
-                    && cands[j].vial_bf_index == cands[k].vial_bf_index)
-                { valid = false; break; }
-            }
+            if (mask & conflict[j]) { valid = false; break; }
         }
         if (!valid) { continue; }
 
