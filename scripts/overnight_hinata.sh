@@ -15,9 +15,13 @@ log(){ echo "[$(date '+%H:%M:%S')] $*" | tee -a "$OUT/runner.log"; }
 
 log "=== overnight_hinata START ==="
 
-# --- Phase 1: Hinata2 profile (Stage 4) ---
-log "Phase 1: Hinata2 profile (analyze_deck, no-rebuild) -> $OUT/01_profile.log"
-python3 scripts/analyze_deck.py decks/Hinata2.cod --no-rebuild > "$OUT/01_profile.log" 2>&1
+# --- Phase 1: Hinata2 profile (Stage 4) at d3 ---
+# d5 full-grid profiling of this wide-hand combo deck is impractically slow (the dig/draw inflate
+# hand size -> the per-node subset enumeration explodes). Profile at MTG_ANALYZE_DEPTH=3: the
+# one-turn combo is found by Solve even at d0 and land/mulligan choices are largely depth-insensitive,
+# so a d3 profile is a valid (coarser) result that completes in a reasonable time. Disclosed as d3.
+log "Phase 1: Hinata2 profile at MTG_ANALYZE_DEPTH=3 (analyze_deck, no-rebuild) -> $OUT/01_profile.log"
+MTG_ANALYZE_DEPTH=3 python3 scripts/analyze_deck.py decks/Hinata2.cod --no-rebuild > "$OUT/01_profile.log" 2>&1
 log "Phase 1 done rc=$? ; profile json: $(ls -la decks/Hinata2.profile.json 2>/dev/null || echo MISSING)"
 
 # --- Phase 2: Mulligan-profile QA on existing decks ---

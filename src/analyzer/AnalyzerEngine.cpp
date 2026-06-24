@@ -28,7 +28,15 @@ namespace
 // d5 search would be wrongly mulliganed). Optimisation historically ran at d0 for
 // speed; now unified at d5 for accuracy (perf cost accepted -- the land grid is the
 // dominant ~288k games/deck). Change both together.
-constexpr int ANALYSIS_DEPTH  = 5;
+// Default d5; overridable via MTG_ANALYZE_DEPTH for decks too expensive to profile at d5 in a
+// reasonable time (e.g. wide-hand combo decks whose per-node subset enumeration explodes). A lower
+// depth gives a COARSER profile (calibrated for that depth's play) but is far faster; land/mulligan
+// choices are largely depth-insensitive, and a one-turn combo is already found by Solve at d0.
+// UNSET -> 5 -> byte-identical to every existing committed profile. Read once at startup.
+const int ANALYSIS_DEPTH = []{
+    const char* e = std::getenv("MTG_ANALYZE_DEPTH");
+    return (e && *e) ? std::max(0, std::atoi(e)) : 5;
+}();
 constexpr int ANALYSIS_BUDGET = 20;    // deterministic virtual-ms node budget; matches the
                                        // regression suite's proven-sufficient d5 budget (the
                                        // node budget is iterative-deepening refinement WITHIN
