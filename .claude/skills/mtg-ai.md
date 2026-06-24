@@ -395,6 +395,49 @@ When making implementation trade-offs, use this priority order:
 3. **Simplicity** — prefer simpler implementations when accuracy is equal. Complexity is justified when it improves accuracy, not as an end in itself.
 4. **Determinism** — prefer deterministic algorithms. Where nondeterminism is unavoidable (e.g. MCTS rollouts), it must be driven by the game's seeded RNG so that the same seed always produces the same final result (win turn, board state, etc.). Nondeterminism that affects only internal search paths is acceptable; nondeterminism that changes game outcomes is not.
 
+### Search is the primary decision route (heuristics only curb branching)
+
+**Search dominates; heuristics serve search — never the reverse.** The default for any
+non-trivial decision is to let the search explore the space and pick the line. A heuristic's
+*only* legitimate job is to **reduce unnecessary branching** so the search stays within the
+performance budget — it narrows the candidate set the search then chooses among; it must not
+make the choice the search should be making.
+
+- **Follow the [heuristic-then-search] pattern.** A heuristic returns a *candidate set*: 1
+  candidate ⇒ decided (no search needed, branching collapsed); >1 ⇒ the search picks among the
+  narrowed set. A heuristic that returns a single answer where the search could and should have
+  discriminated is a bug, not an optimization.
+- **A heuristic must never pre-decide a line the search would otherwise get right.** If removing
+  a heuristic makes the search find a *better* line (earlier win, or a win it now misses), that
+  heuristic was dominating the search — it is wrong, regardless of any average-case win it buys.
+  Suspect this first when a change makes individual games slower or lost while the aggregate
+  improves. (Concrete failure seen in practice: a Treasure-Hunt land-play heuristic narrowed the
+  T2 candidate set so the search never got to choose "cast Land's Edge before Treasure Hunt,"
+  turning a clean T3 win into T4.)
+- **Justify every heuristic by branching/perf, never by "it plays better."** If a heuristic
+  exists only because it encodes good play, that good play belongs in the search's evaluation or
+  candidate generation, not in a shortcut. The exception is a genuine combinatorial blow-up the
+  budget cannot absorb — and that must be called out explicitly (see the heuristic-disclosure
+  requirement in `analyze-deck.md` Stage 6a).
+
+### Heuristics live in deck/archetype files, never in the main paths
+
+**The generic search/decision tree (`TurnSolver` / `AIEngine`) must contain NO
+deck/archetype/card-specific decision logic.** Every such heuristic — which card to fetch,
+whether to dig, how many lands to discard, whether a payload is worth casting, which spell to
+sequence first — is asked of the deck's **`DecisionProvider`** (`src/ai/DecisionProvider.h` +
+`DecisionProviders.{h,cpp}`), behind the interface. The engine keeps only rules-mechanic
+*execution* (how an effect resolves); the provider owns every *decision*.
+
+- New decisions are added as a provider hook, not an `if (card_name == ...)` or archetype param
+  branch in the engine. A grep of `TurnSolver.cpp`/`AIEngine.cpp` decision paths should find no
+  card-name compares.
+- Providers are **stateless, all-`const`, read-only** singletons (one per archetype), reached via
+  `state.m_provider` (`ResolveProvider(state)`; null ⇒ `GenericProvider`). `GenericProvider` is
+  the param-driven baseline; archetype subclasses override only their hooks and delegate the rest,
+  so any non-customized decision is byte-identical to Generic.
+- See `analyze-deck.md` Stage 6a for the mandatory disclosure of every encoded heuristic/assumption.
+
 ### Hard Constraint
 
 **No inference calls during game execution.** The AI must be a self-contained program that makes all decisions locally at runtime without calling external services (LLMs, APIs, remote models). Offline training that produces a local model or policy table is fine; calling out to a model at decision time is not.

@@ -98,6 +98,13 @@ This is the step that most often gets skipped — do not skip it. **You may not
 games that changed and explained each one.** A plausible-sounding *narrative* for
 an aggregate shift is NOT a substitute for measuring it per game.
 
+When a run moves **hundreds or thousands** of games (a deliberate engine/horizon/
+baseline shift this mode never exercised — e.g. the overnight first seeing
+commit-the-line), per-game reading of all of them is infeasible: use the
+**"Auditing a LARGE changed-game set"** workflow below (classify → legality sweep →
+out-of-horizon reproduction → in-horizon deep-dive), which satisfies this gate at
+scale. The rules below still bind every game it surfaces.
+
 The rules — all of them, every time:
 
 1. **Analyze BEFORE accepting, never after.** The order is
@@ -168,6 +175,98 @@ starved the search). Decks with no relevant cards must stay **byte-identical
 PASS** — a FAIL there is collateral damage, not an accept-able delta. If any moved
 game fails this, fix the root cause before accepting. Acceptance certifies you
 have explained the deltas — not that the top-line number looks unchanged.
+
+---
+
+### Auditing a LARGE changed-game set (a baseline/engine/horizon shift)
+
+When a deliberate engine change that this mode never exercised lands between
+baselines — a commit-the-line/full-depth default switch, a horizon change
+(`max_turns`), a NODES rebase, dig modeling — a single run can move **hundreds or
+thousands** of games. Reading every log is infeasible, but the gate's *intent*
+(understand every change, no hidden regression) still holds. Do it in two passes:
+mechanical classification, then a legality sweep over ALL games plus a targeted
+deep-dive of the concerning buckets. **All of this happens before `--accept`.**
+
+> `max_turns` does double duty: it is both the rollout/search **horizon** and the
+> win-acceptance **cutoff** (`won = 0 < win_turn ≤ max_turns`). A stale GT taken at
+> a *larger* horizon records wins past the new cutoff; those become `→ -1` and are
+> EXPECTED. `MTG_DUMP_WINS=1` emits `[win] gi=… wt=…` to **stderr** (use `2>&1`).
+
+**Pass 1 — classify every changed game** from the `.wins` logs (this run's
+`test/logs/<mode>/wins/<key>.wins` vs `test/gt_logs/<key>.wins`), given horizon H:
+
+```python
+# buckets: horizon-cut (gt>H -> -1, expected if H was lowered), improvement
+# (new<gt, or gt=-1 & new<=H), slowdown (gt,new<=H, new>gt; still a win),
+# IN-HORIZON WIN-LOSS (gt in 1..H & new=-1; the loudest), new-win.
+for gi in gt:
+    g,n = gt[gi], new.get(gi,-1)
+    if g==n: continue
+    if g>H and n==-1: bucket='horizon_cut'
+    elif 1<=g<=H and n==-1: bucket='IN_HORIZON_WIN_LOSS'   # root-cause each
+    elif g==-1 and 1<=n<=H: bucket='new_win'
+    elif 1<=g<=H and 1<=n<=H and n<g: bucket='faster'
+    elif 1<=g<=H and 1<=n<=H and n>g: bucket='slowdown'
+    elif g>H and 1<=n<=H: bucket='pulled_into_horizon'
+```
+Report the bucket counts; they must sum to the total changed and each class must
+have a single explained cause. Horizon-cut + faster/pulled-in are expected for a
+horizon-lowering + search-improvement change; **the in-horizon win-loss bucket is
+the one that blocks acceptance until each is root-caused.**
+
+**Pass 2a — legality sweep over ALL games (mandatory).** This is how "improvements
+and out-of-horizon results" get checked for an illegal/phantom line without reading
+every log — a play line that is illegal or that the executor can't realize shows up
+as a harness flag. Re-run the SAME manifest with the oracles on:
+```bash
+MTG_FLAG_NONCONV=1 MTG_FD_ORACLE=1 ./build/Release/mtg --batch <manifest> \
+  --threads N 2>flags.err          # full-depth/commit-the-line is the default
+```
+- `[nonconv]` MUST be **0**. Any non-convergence is a search inconsistency — root-cause; never accept with `nonconv>0`.
+- `[fd-diverge]` = commit-the-line predicted a win earlier than the real game realized it. Categorize by `realized-predicted`: **off-by-one** (realized=predicted+1) is the known minor rollout-optimism — note the count (it must not grow run-over-run); **delta≥2, or predicted-but-never-realized** (realized beyond horizon) is SEVERE → root-cause each. Caveat: the oracle only catches *predicted-but-missed*; a game commit-the-line should have won but **never predicted** is NOT flagged here — Pass 1's in-horizon win-loss bucket + Pass 2c catch those.
+
+**Pass 2b — out-of-horizon "worse": reproduce at a lifted horizon.** A
+`gt>H → -1` game is benign only if its old win still EXISTS. Re-run those cases at
+the GT's original (higher) horizon via a per-job `max_turns` override and diff vs
+GT:
+```python
+m=json.load(open('<mode>/manifest.json'));     # per-job override is honored
+for j in m['jobs']: j['max_turns']=20          # the GT's old horizon
+json.dump(m, open('<mode>_hi/manifest.json','w'))
+```
+Games that reproduce their GT win (same turn or earlier) at the lifted horizon are
+pure horizon-cut (benign). Games that **do not win even at the lifted horizon** are
+real regressions the cut was hiding → root-cause.
+
+**Pass 2c — in-horizon win-losses & severe divergences: per-game + engine A/B.**
+For each in-horizon win-loss (and each severe fd-diverge): reproduce single-game,
+read the log (the per-game recipe above), and decide whether it is a
+**commit-the-line (full-depth) regression** by comparing the default engine to
+legacy per-turn search on that exact game:
+```bash
+# default (commit-the-line):
+MTG_DUMP_WINS=1                ./build/Release/mtg <deck> --seed $((base+gi)) --games 1 \
+  --depth D --budget-ms B --max-turns H 2>&1 | grep '^\[win\]'
+# legacy per-turn re-deciding:
+MTG_LEGACY_SEARCH=1 MTG_DUMP_WINS=1 ./build/Release/mtg <deck> --seed $((base+gi)) --games 1 \
+  --depth D --budget-ms B --max-turns H 2>&1 | grep '^\[win\]'
+```
+- **legacy wins, default loses ⇒ commit-the-line regression.** The committed line
+  misfires on the realized board, OR — because lookahead-bottoming rolls out with
+  the same engine — the bottoming kept a worse hand: **compare the two opening
+  hands, they can differ** (a real case: default bottomed a flood-prone double-
+  Treasure-Hunt hand and lost; legacy kept a leaner hand and won T4).
+- **both lose ⇒ not commit-the-line** (horizon-edge or genuinely unwinnable; the
+  horizon-edge cost is ~0.1% at suite budget and shrinks with budget).
+- Rule out **budget starvation** either way by re-running at a much larger `--budget-ms`.
+
+**Gate (no `--accept` until all hold):** Pass-1 buckets sum and each has one
+explained cause; `nonconv=0`; every severe fd-diverge root-caused (off-by-one
+count noted); every out-of-horizon "worse" reproduces at the lifted horizon or is
+root-caused; every in-horizon win-loss categorized (commit-the-line regression /
+horizon-edge / budget / genuinely unwinnable). A net-positive aggregate NEVER
+waives a single unexplained in-horizon win-loss or a `nonconv`.
 
 ---
 

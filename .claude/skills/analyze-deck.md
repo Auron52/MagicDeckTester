@@ -235,6 +235,120 @@ other behavioral params). A flag verified as a false positive (a card-data misre
 agent — the most common kind, per the prototype sweeps) is not a defect; record it as
 dismissed with the reason.
 
+### 5e. Heuristic accuracy vs the full-search oracle (cast ordering, dig, targeting, …)
+
+Several decisions are made by a cheap **heuristic that narrows the search** rather than by
+the search branching over every option: cast ORDER within a turn (`DecisionProvider::
+CastOrderRank`), dig-source choice, removal/pump targeting, tutor/fetch targets. A
+narrowing heuristic is only safe if it picks **what the full search would have picked** —
+otherwise it silently leaves quality on the table or causes a play error. This sub-stage
+verifies that against the search itself as an **oracle**, then locks the heuristic in with
+a definitive **with/without** A/B. (User direction 2026-06-23: heuristic proposes, search
+picks; proposals must be GROUNDED in full-permutation-search knowledge; the definitive test
+is comparing with vs without the heuristic.)
+
+**The oracle levers** (env-gated, open the narrowed space to the full search):
+`MTG_SEARCH_ORDER` enumerates cast orderings (deduped by end-of-phase state);
+`MTG_UNPRUNED` opens every branch-narrowing gate (tutor/fetch search-all, dig, caps).
+Neither is shipped on by default — they are the reference the heuristic is measured against.
+
+**The differential workflow** (reusable for any narrowing heuristic):
+1. **Find divergences.** Run the deck twice with `MTG_DUMP_WINS=1` (prints `[win] gi=N wt=M`
+   per game to stderr) — once plain (heuristic), once with the oracle lever — and diff the
+   per-game win turns. `--threads 1` for ordered output. The games whose win turn differs
+   are where the heuristic and the full search disagree.
+2. **Reproduce one game.** A 300-game run's `gi=N` is NOT `--game-index N --games 1` (that
+   uses seed = base, not base+N). Reproduce 300-run `gi=N` at base seed `S` as a single game
+   with: `--seed $((S+N)) --game-index $((N%10)) --games 1` (seed = base+N, opponent-spawn
+   pattern = N%10; see `GoldFishRunner.cpp`). The batch-vs-single indexing footgun has bitten
+   analysis before — always use this recipe.
+3. **Classify each divergence** with `MTG_FD_ORACLE=1` (flags `[fd-diverge] realized>predicted`):
+   - **No `[fd-diverge]` → coverage gap.** The search both predicts AND realizes the slower
+     turn (rollout and executor agree); it simply never explores the faster line. The
+     heuristic should ADD that line. *(Burn: 5/300 prowess-ordering games — Swiftspear before
+     Lightning Bolt is +1 prowess damage = a turn earlier.)*
+   - **`[fd-diverge]` → true mismatch.** The search predicts a win it can't realize — a
+     rollout/executor or win-PROJECTION bug, fix it directly (this is the real search-quality
+     defect, not an ordering gap). *(Burn gi=215, CONFIRMED cross-cast mana over-acceptance: the
+     search scores a T4 lethal [Skullcrack {1}{R}, Searing Blaze {R}{R}] = 4 mana, execution
+     realizes T5. T4 has only **3 lands** — Shard Volley sacrificed one on T3 — so execution pays
+     Skullcrack (2), leaving 1, and Searing Blaze ({R}{R}) can't be paid → slips to T5. The
+     single-turn Solve check `pool.CanPay(combined)` correctly rejects 4-mana-on-3-lands, so the
+     over-acceptance is in the LEAF forward rollout (`SimulateToEndImpl`) scoring this line a T4
+     win; its projected T4 pool exceeds execution's 3 lands. Fix = the leaf mana/land projection.)*
+     **Counting lesson (this case cost three wrong diagnoses): instrument the actual numbers, do
+     not eyeball.** Count LANDS, not the log's `battlefield` array (it includes CREATURES — map
+     IDs through `cardNumbering`); and confirm a mana failure with the real available total
+     (a temporary `available.Total()` print at the `TapForCost` site) rather than inferring from
+     lands-in-play. Player-life drops can be self-inflicted (Eidolon pinging you on your own
+     cheap spells), so they do NOT prove an opponent creature is attacking.
+   Trace the actual play with `MTG_ORDER_TRACE=1` (prints the executed cast order per main
+   phase) and `--log-dir` (per-game JSON: per-turn life/damage timeline) to see WHY.
+4. **Derive the rule** from the divergences, grounded in what the oracle actually does — not
+   from card-text intuition. To mine rules across many cases, enumerate the earliest-turn-win
+   orderings (the oracle's optimal set) and read off what they share. Beware: the full
+   permutation search is NOT a clean oracle at a fixed budget — it dilutes the node budget
+   across orderings and can commit a *slower* line (burn gi=290: `MTG_SEARCH_ORDER` lost a
+   turn). That is itself the argument for a cheap deterministic heuristic over shipping the
+   permutation search.
+5. **Encode as a provider proposal.** Put the rule in the provider (e.g. `CastOrderRank`:
+   prowess creatures before noncreature spells; on-cast self-damage sources like Eidolon
+   last). For **situation-dependent** orderings the heuristic cannot resolve statically —
+   a card whose resolution triggers a mid-turn re-solve breakpoint (draw / staging / cascade,
+   e.g. Light Up the Stage) — do NOT reorder; leave that set's order to the search. The
+   heuristic proposes; the search picks the ambiguous cases.
+6. **Validate definitively (with/without A/B).** Re-run step 1 comparing the heuristic ON vs
+   OFF per game. Accept only if net-positive with **every** regression explained: d0 (no
+   search) greedy churn is acceptable (per user); a search-budget line-shift or a
+   left-to-search staging game is expected; an unexplained win→loss or a true `[fd-diverge]`
+   is not. The aggregate fingerprint can hide per-game churn (faster+slower cancel in the
+   avg) — always diff per game against `test/gt_logs/*.wins`, never trust the win/avg pair.
+
+This generalizes beyond ordering: the same oracle-diff → classify → derive → encode →
+with/without-validate loop applies to dig-source selection, targeting, and tutor/fetch
+narrowing. Each heuristic added this way is disclosed in Stage 6a.
+
+### 5f. Runtime-reducing heuristics (branching pruning that funds better mulligan opt)
+
+5e keeps heuristics *accurate*; this sub-stage uses the same machinery to make the analyzer
+**cheaper to run** so it fits an overnight window and the freed budget buys a better mulligan
+profile (more `GRID_GAMES`, more threshold candidates, deeper optimisation). The analyzer's
+cost is dominated by the per-node search rollout (the land×gate grid alone is hundreds of
+thousands of d5 games), and that cost scales with the **branching factor** — how many actions
+`CollectActions` emits per node and how wide each candidate set is (subset enumeration is
+`O(2^candidates)`). A heuristic that narrows a candidate set to what the full search would
+have chosen cuts node count super-linearly at no quality cost. (User direction 2026-06-23:
+heuristics may prune to curb branching/perf, **never** as a quality shortcut; ALWAYS keep the
+unpruned A/B; the analyzer process should propose and test these so overnight runs can spend
+the savings on mulligans.)
+
+**Find the expensive decision points.** Profile where branching explodes: the trace toolkit
+(`MTG_TRACE`, see `src/core/Trace.h` / the search-perf memory) and per-node action counts.
+The usual offenders are wide candidate sets — X-cost values (full `0..maxX` range), tutor/fetch
+targets, dig sources, removal/pump targeting — and flooded hands that emit many redundant
+casts. Each is a place where a provider heuristic can narrow `{all legal options}` down to the
+few the search actually picks.
+
+**Propose a pruning heuristic, grounded in the full search.** Put it behind the provider
+interface and the `MTG_UNPRUNED` gate so the wide set is always recoverable. The proposal must
+come from what the unpruned search chooses (5e's oracle), not intuition — e.g. X-cost: the
+goldfish-optimal X is almost always "all affordable mana," so `XCandidates` proposes
+`{max_affordable}` and the search confirms; tutor: the provider returns the 1–few cards that
+matter. One candidate = a decided heuristic (no branch); several = narrowed-but-searched.
+
+**Validate with the unpruned-vs-pruned A/B (the definitive test).** Run pruned (default) vs
+`MTG_UNPRUNED` and require: (a) **quality parity** — per-game win turns identical, or every
+difference explained and net-neutral/positive (diff per game vs `test/gt_logs/*.wins`, never
+the aggregate fingerprint; same discipline as 5e step 6); and (b) **a real cost win** —
+measure node count / per-deck analyzer wall-time before vs after (the regen script logs
+per-deck timing). Accept only if quality holds AND cost drops. A pruner that changes results
+is a quality bug, not a perf win — fall back to `MTG_UNPRUNED` behaviour and re-derive.
+
+**Reinvest the savings.** Once a pruner is locked in, the analyzer's freed budget goes back
+into the mulligan optimisation (raise `GRID_GAMES`, add threshold candidates, widen the land
+grid) — the whole point is a *better* profile at the same wall-clock. Disclose every pruning
+heuristic in Stage 6a alongside the accuracy heuristics, and note its measured cost saving.
+
 ### Convergence criteria
 
 Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
@@ -242,6 +356,7 @@ Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
 2. **Zero `[nonconv]` and zero `[fd-diverge]` lines** across the tested seeds.
 3. Multi-depth results are monotonic and plausible, with **every outlier game explained** (legitimate line, budget starvation, or a fixed bug — not an unexplained slowdown).
 4. The 100-game claude-play sweep (5d) ran, and **every legality/invariant flag is resolved** — fixed (engine/card/data bug) or dismissed with a reason (verified false positive). Win-turn deltas are noted but do not block.
+5. Any narrowing heuristic introduced/relied on for this deck (cast ordering, dig, targeting, tutor/fetch) passed the **5e oracle diff + with/without A/B** — its proposals match the full search where it matters, with every per-game regression explained.
 
 Only a deck that satisfies all three is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
 
@@ -254,10 +369,52 @@ Present a concise summary:
 2. **Mulligan profile**: the optimised settings (and notable card scores / required-piece flags)
 3. **Win rate / average win turn**: from a regression-suite run on the new profile (the analyzer no longer reports these)
 4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, any budget-starvation threshold noted, and the 100-game claude-play sweep result (games played, flags raised and their resolution, win-turn comparison vs the search)
-5. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
-6. **Suggested next steps**: any Tier 4 deferrals worth revisiting, or interesting profile observations
+5. **Encoded heuristics & assumptions disclosure** (mandatory — see Stage 6a): the full reviewable list of every assumption and heuristic that shapes this deck's results, so the user can catch anything unexpected and decide whether it should be full-searched instead.
+6. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
+7. **Suggested next steps**: any Tier 4 deferrals worth revisiting, or interesting profile observations
 
 Ask the user if they want to explore any aspect further (e.g. comparing card choices, investigating a specific mechanic, or revisiting a deferred implementation).
+
+### Stage 6a — Encoded heuristics & assumptions disclosure (mandatory)
+
+**Default stance: full search.** The simulator's value is that it explores the play space; a
+heuristic that *decides* something the search could otherwise discover is a deviation from that
+ideal. Heuristics are justified **only** when they exist to curb exponential branching (or a
+proven perf hot path), never as a shortcut for "what the deck probably wants to do." The user
+has explicitly asked to lean toward fully searching the space, so **every heuristic that narrows
+or pre-decides a choice must be surfaced for review** — some past assumptions were unexpected, and
+the user must be able to veto any that isn't earning its keep.
+
+Compile the disclosure from three sources (do NOT write it from memory — read the code):
+
+1. **Global engine assumptions in force** (restate the ones that materially shape this deck's
+   numbers): single passive opponent that never blocks / casts / gains or prevents life;
+   clairvoyant search over a known library (deterministic shuffle); no post-combat second main
+   unless `DeckUsesSecondMain` fired for this deck (say which flag, or "first-main only"); search
+   depth / budget the result was produced at; deterministic dig / lookahead-bottoming if active.
+
+2. **Card-modeling simplifications** — every bracket note in this deck's `cards.json` entries, plus
+   any "provably inert for goldfishing" collapse you relied on (flying/first-strike/"target
+   opponent" vs "each opponent"). Show the bracket text verbatim and why it's inert (or that it
+   isn't, and is a deferral).
+
+3. **Deck / archetype DecisionProvider heuristics** — the authoritative list. Read the deck's
+   provider in [src/ai/DecisionProviders.cpp](src/ai/DecisionProviders.cpp) (and which one
+   `SelectDecisionProvider` routes this deck to), and list **every hook it overrides** away from
+   the generic baseline. For each, give: the hook name, a plain-language description of what it
+   decides, and a classification —
+   - **Pruning** (narrows the search to curb branching/perf): state *what lines it could miss*.
+     These are the candidates for "full-search instead" the user most wants to see.
+   - **Correctness shortcut** (bakes a specific decision the search could otherwise make, e.g. a
+     combo-safety gate): state the decision and the rule/observation that justifies it.
+
+   A deck routed to `GenericProvider` overrides nothing — say so explicitly (no deck-specific
+   heuristics; pure search within the global assumptions above).
+
+Present this as a short table (assumption/heuristic | source | classification | what it costs us /
+why it's safe). Flag anything you'd expect the user to find surprising. If the user decides a
+pruning heuristic should be full-searched, that becomes a follow-up engine task — do not silently
+keep it.
 
 ---
 
