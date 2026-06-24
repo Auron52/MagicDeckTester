@@ -363,8 +363,17 @@ struct CardParams
     // applied at every cast-cost finalization site (both EffectiveCost copies for fixed costs +
     // the three X-cost payers), via HinataGenericDiscount, so planner/rollout/executor agree.
     bool hinata_cost_reducer       = false;
-    int  discount_targets          = 0;
-    bool discount_targets_scale_x  = false;
+    // Board-aware multi-target discount inputs (Layer 2b). The discount = min(cap, available
+    // beneficial targets on the board), where cap = discount_max_targets (or the chosen X when
+    // discount_targets_scale_x). available = the opponent + your creatures + yourself (if
+    // discount_self_safe -- the spell's per-target effect isn't self-lethal: Magma 1dmg / Soulfire
+    // small MV = safe; Crackle 5X = NOT) + (every permanent, incl. the opponent's lands, if
+    // discount_targets_permanents -- the spell taps/untaps/targets permanents: Magma's "tap two",
+    // Reality Spasm's "untap X"). Computed in HinataAvailableTargets / HinataGenericDiscount.
+    int  discount_max_targets      = 0;    // fixed cap (Magma 6 = 4 damage + 2 tap; Soulfire large)
+    bool discount_targets_scale_x  = false; // cap = chosen X (Crackle up to X, Reality Spasm X)
+    bool discount_self_safe        = false; // count yourself as a target (per-target effect non-lethal)
+    bool discount_targets_permanents = false; // spell can target permanents (count all, incl. opp lands)
 
     // Karoo "bounce land" (Izzet Boilerworks: "This land enters tapped. When this land enters,
     // return a land you control to its owner's hand. {T}: Add {U}{R}"). On ETB, return one of

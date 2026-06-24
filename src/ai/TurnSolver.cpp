@@ -545,11 +545,24 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // affordable X divides the leftover mana by x_pips.
             int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
             int mult = def.params.x_damage_multiplier; if (mult < 1) { mult = 1; }
-            // Hinata's discount frees up mana for a larger X. For a DirectDamage X spell the
-            // discount does not scale with X (discount_targets_scale_x is for untap rituals),
-            // so it adds a constant to the affordable budget.
-            int disc = HinataGenericDiscount(def, state, 0);
-            int max_x = (xpool.Total() - base.ManaValue() + disc) / pips;
+            // Hinata's discount frees up mana for a larger X. Two cases:
+            int max_x;
+            int P = xpool.Total(), bmv = base.ManaValue();
+            if (def.params.discount_targets_scale_x && HinataInPlay(state))
+            {
+                // Crackle: discount = min(X, avail) -> cost(X) = pips*X + bmv - min(X, avail),
+                // monotonic increasing. Solve for the largest affordable X (piecewise at X=avail).
+                int avail = HinataAvailableTargets(def, state);
+                int cost_at_avail = (pips - 1) * avail + bmv;
+                if (P >= cost_at_avail) { max_x = (P - bmv + avail) / pips; }
+                else                    { max_x = (P - bmv) / (pips > 1 ? pips - 1 : 1); }
+            }
+            else
+            {
+                // Fixed (non-scaling) discount: a constant addend to the affordable budget.
+                int disc = HinataGenericDiscount(def, state, 0);
+                max_x = (P - bmv + disc) / pips;
+            }
             if (max_x < 0) { max_x = 0; }
             for (int x : ResolveProvider(state).XCandidates(state, def, max_x))
             {

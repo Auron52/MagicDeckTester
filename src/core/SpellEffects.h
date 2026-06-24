@@ -1024,25 +1024,51 @@ inline void UntapManaSources(GameState& state, int count)
     }
 }
 
-// Hinata, Dawn-Crowned: "Spells you cast cost {1} less to cast for each target." Returns the
-// GENERIC reduction for `def` being cast by the active player with the chosen X, or 0 when no
-// Hinata is in play. discount_targets is the spell's target count; discount_targets_scale_x adds
-// the chosen X (Reality Spasm "untap X target permanents" -> X targets -> its whole {X} cancels).
-// Applied identically at every cast-cost finalization site so planner/rollout/executor agree.
-inline int HinataGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x)
+// Does the active player control a Hinata (cost-reduction static)?
+inline bool HinataInPlay(const GameState& state)
 {
-    int targets = def.params.discount_targets;
-    if (def.params.discount_targets_scale_x) { targets += chosen_x; }
-    if (targets <= 0) { return 0; }
     const int active = state.active_player_index;
-    bool has_hinata = false;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && d->params.hinata_cost_reducer) { has_hinata = true; break; }
+        if (d && d->params.hinata_cost_reducer) { return true; }
     }
-    return has_hinata ? targets : 0;
+    return false;
+}
+
+// Count the beneficial targets `def` would choose on the current board to maximise Hinata's
+// per-target discount: the opponent (every discounting spell here can point at them) + your
+// creatures (extra spread-damage/tap targets) + yourself (if discount_self_safe -- a non-lethal
+// per-target effect) + every permanent (incl. the opponent's lands) when the spell targets
+// permanents (Magma's "tap two", Reality Spasm's "untap X"). NOT capped here (the cap is the
+// spell's max targets / chosen X -- applied by the caller).
+inline int HinataAvailableTargets(const CardDefinition& def, const GameState& state)
+{
+    const int active = state.active_player_index;
+    int avail = 1;                                   // the opponent (a player target)
+    if (def.params.discount_self_safe) { avail += 1; }   // yourself
+    for (const Permanent& p : state.battlefield)
+    {
+        if (def.params.discount_targets_permanents) { avail += 1; }   // any permanent (both sides)
+        else if (p.card.IsCreature())               { avail += 1; }   // creatures only (both sides)
+    }
+    (void)active;
+    return avail;
+}
+
+// Hinata, Dawn-Crowned: "Spells you cast cost {1} less to cast for each target." Returns the
+// GENERIC reduction for `def` cast by the active player at the chosen X, or 0 with no Hinata in
+// play. discount = min(cap, available targets): cap = discount_max_targets, or the chosen X when
+// discount_targets_scale_x (Crackle up to X, Reality Spasm X -> its whole {X} cancels). Applied
+// identically at every cast-cost finalization site so planner/rollout/executor agree.
+inline int HinataGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x)
+{
+    int cap = def.params.discount_targets_scale_x ? chosen_x : def.params.discount_max_targets;
+    if (cap <= 0) { return 0; }
+    if (!HinataInPlay(state)) { return 0; }
+    int avail = HinataAvailableTargets(def, state);
+    return cap < avail ? cap : avail;
 }
 
 // True if `state.active_player` controls an untapped NON-filter mana source producing

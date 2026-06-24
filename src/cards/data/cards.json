@@ -1291,7 +1291,7 @@
                 "damage": 0,
                 "targeting": "any",
                 "x_damage_multiplier": 5,
-                "discount_targets": 1
+                "discount_targets_scale_x": true
             }
         },
         {
@@ -1409,7 +1409,8 @@
                 "damage": 0,
                 "targeting": "any",
                 "damage_equals_top_mv": true,
-                "discount_targets": 1
+                "discount_max_targets": 8,
+                "discount_self_safe": true
             }
         },
         {
@@ -1425,7 +1426,9 @@
             "parameters": {
                 "damage": 4,
                 "targeting": "any",
-                "discount_targets": 1
+                "discount_max_targets": 6,
+                "discount_self_safe": true,
+                "discount_targets_permanents": true
             }
         },
         {
@@ -1440,7 +1443,8 @@
             "template": "custom",
             "parameters": {
                 "untap_x_mana_sources": true,
-                "discount_targets_scale_x": true
+                "discount_targets_scale_x": true,
+                "discount_targets_permanents": true
             }
         }
     ]
