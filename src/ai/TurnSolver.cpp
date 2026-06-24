@@ -776,57 +776,35 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
     int m = static_cast<int>(cands.size());
     Plan best;
+    int  best_mask = 0;     // action mask of `best` (0 = the do-nothing default); ties keep min mask
 
-    std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-mask alloc)
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
 
-    // Mutual-exclusion conflicts, precomputed ONCE: two actions conflict if they use the same
-    // hand card (cast vs. its Vial deploy) or tap the same Vial. conflict[j] is the bitmask of
-    // actions that cannot co-occur with j. Per mask the validity test then collapses from the
-    // old O(m^2) nested scan to one O(popcount) pass -- this powerset/validity loop is the
-    // dominant self-time in Solve on wide boards (slivers/knights). Result-identical: the same
-    // subsets are accepted, just rejected far more cheaply.
-    std::vector<int> conflict(m, 0);
-    for (int j = 0; j < m; ++j)
+    // Evaluate one selected combination of candidate indices and, if it is the new optimum,
+    // record it. The optimum is ordered by (wins, value, SMALLEST action mask): a winning plan
+    // beats a non-winner; higher eval beats lower; among equals the numerically smallest mask
+    // wins. That last tie-break is exactly the plan the ascending-mask powerset below settles on
+    // (first-found under a strict '>' test) -- making it explicit lets the odometer enumeration
+    // return the byte-identical plan despite visiting subsets in a different order.
+    auto consider = [&](std::vector<int> sel)
     {
-        for (int k = j + 1; k < m; ++k)
-        {
-            bool conf =
-                (cands[j].hand_index >= 0 && cands[j].hand_index == cands[k].hand_index)
-                || (cands[j].kind == Action::Kind::ActivateVial
-                    && cands[k].kind == Action::Kind::ActivateVial
-                    && cands[j].vial_bf_index == cands[k].vial_bf_index);
-            if (conf) { conflict[j] |= (1 << k); conflict[k] |= (1 << j); }
-        }
-    }
-
-    // Enumerate all non-empty subsets (mask=0 is "do nothing" and is the default).
-    for (int mask = 1; mask < (1 << m); ++mask)
-    {
-        // Reject subsets that use the same hand card twice (e.g. cast + Vial same creature)
-        // or that tap the same Vial twice -- via the precomputed conflict masks.
-        bool valid = true;
-        for (int j = 0; j < m; ++j)
-        {
-            if (!(mask & (1 << j))) { continue; }
-            if (mask & conflict[j]) { valid = false; break; }
-        }
-        if (!valid) { continue; }
+        std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
+        int mask = 0;
+        for (int j : sel) { mask |= (1 << j); }
 
         ManaCost combined;
         ManaCost noncreature_combined;
-        int sacrifice_count   = 0;
-        int noncreature_count = 0;
-        int direct_dmg        = 0;
-        int total_eval        = 0;
-        int self_damage       = 0;
-        int vial_haste_atk    = 0;
+        int sacrifice_count    = 0;
+        int noncreature_count  = 0;
+        int direct_dmg         = 0;
+        int total_eval         = 0;
+        int self_damage        = 0;
+        int vial_haste_atk     = 0;
         int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
 
-        for (int j = 0; j < m; ++j)
+        for (int j : sel)
         {
-            if (!(mask & (1 << j))) { continue; }
             const Action& c = cands[j];
             discard_lands_used += c.discard_lands;
 
@@ -847,10 +825,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 noncreature_combined.green     += c.cost.green;
                 noncreature_combined.colorless += c.cost.colorless;
                 noncreature_combined.generic   += c.cost.generic;
+                ++noncreature_count;
             }
 
             if (c.sacrifice_land)    { ++sacrifice_count; }
-            if (c.is_noncreature)    { ++noncreature_count; }
             direct_dmg        += c.direct_damage;
             total_eval        += c.eval;
             vial_haste_atk    += c.vial_attack_power;
@@ -861,23 +839,17 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             }
         }
 
-        if (!pool.CanPay(combined))                          { continue; }
-        if (!pool_noncreature.CanPay(noncreature_combined))  { continue; }
-        if (sacrifice_count > total_lands)                   { continue; }
-        if (discard_lands_used > lands_in_hand)              { continue; }
-        {
-            // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U}
-            // hard-cast off a W/R/B-only land). Strict tightening; inert for decks whose
-            // lands produce the colors they need.
-            sel.clear();
-            for (int j = 0; j < m; ++j) { if (mask & (1 << j)) { sel.push_back(j); } }
-            if (!SubsetPayable(have_colors, cands, sel)) { continue; }
-        }
+        if (!pool.CanPay(combined))                          { return; }
+        if (!pool_noncreature.CanPay(noncreature_combined))  { return; }
+        if (sacrifice_count > total_lands)                   { return; }
+        if (discard_lands_used > lands_in_hand)              { return; }
+        // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
+        // W/R/B-only land). Strict tightening; inert for decks whose lands produce their colors.
+        if (!SubsetPayable(have_colors, cands, sel))         { return; }
 
-        // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so
-        // they resolve BEFORE the spell. A plan that kills us via self-damage cannot win —
-        // we die to the trigger before the spell deals its damage.
-        if (self_damage >= ap.life) { continue; }
+        // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so they
+        // resolve BEFORE the spell. A plan that kills us via self-damage cannot win.
+        if (self_damage >= ap.life)                          { return; }
 
         int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
         // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
@@ -886,31 +858,180 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (has_extra_lethal)
         {
             casting.clear();
-            for (int j = 0; j < m; ++j)
-            {
-                if (!(mask & (1 << j))) { continue; }
-                casting.push_back(CardDatabase::Instance().Lookup(cands[j].card_name));
-            }
+            for (int j : sel) { casting.push_back(CardDatabase::Instance().Lookup(cands[j].card_name)); }
             extra_lethal = provider.ExtraLethalDamage(state, casting);
         }
         bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
 
-        // A winning plan always beats a non-winning plan.
-        // Among plans with the same win status, prefer higher total eval.
-        bool better = (!best.wins_this_turn && wins)
-                   || (wins == best.wins_this_turn && total_eval > best.value);
+        bool better;
+        if (best.wins_this_turn != wins)   { better = wins; }                  // winning dominates
+        else if (total_eval != best.value) { better = total_eval > best.value; } // then higher eval
+        else                               { better = mask < best_mask; }        // tie -> smallest mask
+        if (!better) { return; }
 
-        if (better)
+        best.actions.clear();
+        for (int j : sel) { best.actions.push_back(cands[j]); }
+        best.value          = total_eval;
+        best.wins_this_turn = wins;
+        best_mask           = mask;
+    };
+
+    std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-call alloc)
+
+    // The default enumeration replaces the 2^m action powerset with the PRODUCT of per-hand-card
+    // choices {skip, cast, deploy-via-Vial} (same-charge Vial deploys collapse to one
+    // representative, bounded by an aggregate per-charge capacity) crossed with the 2^independent
+    // powerset of non-hand actions (graveyard retrace). This visits exactly the powerset's feasible
+    // subsets -- the same invariant EnumeratePlans relies on -- in O(prod(1+choices)*2^independent)
+    // instead of O(2^m), which is the wide-board (slivers/knights) hot path. MTG_LEGACY_SOLVE keeps
+    // the reference powerset for A/B (the two must produce byte-identical game results).
+    static const bool s_legacy_solve = std::getenv("MTG_LEGACY_SOLVE") != nullptr;
+    if (s_legacy_solve)
+    {
+        // Reference path: full 2^m powerset with precomputed mutual-exclusion conflict masks. Two
+        // actions conflict if they use the same hand card (cast vs. its Vial deploy) or tap the
+        // same Vial. conflict[j] is the bitmask of actions that cannot co-occur with j.
+        std::vector<int> conflict(m, 0);
+        for (int j = 0; j < m; ++j)
         {
-            best.actions.clear();
+            for (int k = j + 1; k < m; ++k)
+            {
+                bool conf =
+                    (cands[j].hand_index >= 0 && cands[j].hand_index == cands[k].hand_index)
+                    || (cands[j].kind == Action::Kind::ActivateVial
+                        && cands[k].kind == Action::Kind::ActivateVial
+                        && cands[j].vial_bf_index == cands[k].vial_bf_index);
+                if (conf) { conflict[j] |= (1 << k); conflict[k] |= (1 << j); }
+            }
+        }
+        for (int mask = 1; mask < (1 << m); ++mask)
+        {
+            bool valid = true;
             for (int j = 0; j < m; ++j)
             {
                 if (!(mask & (1 << j))) { continue; }
-                best.actions.push_back(cands[j]);
+                if (mask & conflict[j]) { valid = false; break; }
             }
-            best.value          = total_eval;
-            best.wins_this_turn = wins;
+            if (!valid) { continue; }
+            sel.clear();
+            for (int j = 0; j < m; ++j) { if (mask & (1 << j)) { sel.push_back(j); } }
+            consider(sel);
         }
+        return best;
+    }
+
+    // --- Default: odometer over per-hand-card choices x powerset of independent actions ---
+
+    // Per-charge Vial capacity = number of distinct untapped Vials at each charge (derived from
+    // the Vial actions' vial_bf_index, matching apply_vial which taps a fresh matching Vial per
+    // deploy). Mirrors EnumeratePlans.
+    std::vector<std::pair<int, int>> vial_capacity;   // (charge, count)
+    auto capacity_for = [&](int charge) -> int
+    {
+        for (const std::pair<int, int>& vc : vial_capacity)
+        {
+            if (vc.first == charge) { return vc.second; }
+        }
+        return 0;
+    };
+    {
+        std::vector<std::pair<int, int>> seen;   // (charge, vial_bf_index) already counted
+        for (const Action& a : cands)
+        {
+            if (a.kind != Action::Kind::ActivateVial) { continue; }
+            std::pair<int, int> key{ a.card_mv, a.vial_bf_index };
+            bool already = false;
+            for (const std::pair<int, int>& s : seen) { if (s == key) { already = true; break; } }
+            if (already) { continue; }
+            seen.push_back(key);
+            bool found = false;
+            for (std::pair<int, int>& vc : vial_capacity)
+            {
+                if (vc.first == a.card_mv) { ++vc.second; found = true; break; }
+            }
+            if (!found) { vial_capacity.push_back({ a.card_mv, 1 }); }
+        }
+    }
+
+    // Group action indices: one mutually-exclusive option list per hand card (its cast + a single
+    // representative Vial deploy), plus a flat list of independent non-hand actions (retrace).
+    std::vector<std::vector<int>> groups;            // per hand card: option cand indices
+    std::vector<int>              group_hand_index;  // parallel: the card's hand_index
+    std::vector<int>              independent;
+    for (int j = 0; j < m; ++j)
+    {
+        if (cands[j].hand_index < 0) { independent.push_back(j); continue; }
+
+        int gi = -1;
+        for (int g = 0; g < static_cast<int>(groups.size()); ++g)
+        {
+            if (group_hand_index[g] == cands[j].hand_index) { gi = g; break; }
+        }
+        if (gi < 0)
+        {
+            groups.push_back({});
+            group_hand_index.push_back(cands[j].hand_index);
+            gi = static_cast<int>(groups.size()) - 1;
+        }
+        // Collapse all same-charge Vial deploys of one card to a single representative.
+        if (cands[j].kind == Action::Kind::ActivateVial)
+        {
+            bool has_vial = false;
+            for (int existing : groups[gi])
+            {
+                if (cands[existing].kind == Action::Kind::ActivateVial) { has_vial = true; break; }
+            }
+            if (has_vial) { continue; }
+        }
+        groups[gi].push_back(j);
+    }
+
+    int num_groups = static_cast<int>(groups.size());
+    int num_ind    = static_cast<int>(independent.size());
+
+    // Reject combinations whose Vial deploys exceed the per-charge capacity.
+    auto vial_ok = [&](const std::vector<int>& s) -> bool
+    {
+        for (int j : s)
+        {
+            if (cands[j].kind != Action::Kind::ActivateVial) { continue; }
+            int charge = cands[j].card_mv;
+            int used   = 0;
+            for (int k : s)
+            {
+                if (cands[k].kind == Action::Kind::ActivateVial && cands[k].card_mv == charge) { ++used; }
+            }
+            if (used > capacity_for(charge)) { return false; }
+        }
+        return true;
+    };
+
+    std::vector<int> choice(num_groups, 0);
+    bool done = false;
+    while (!done)
+    {
+        for (int imask = 0; imask < (1 << num_ind); ++imask)
+        {
+            sel.clear();
+            for (int g = 0; g < num_groups; ++g)
+            {
+                if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); }
+            }
+            for (int b = 0; b < num_ind; ++b)
+            {
+                if (imask & (1 << b)) { sel.push_back(independent[b]); }
+            }
+            if (!sel.empty() && vial_ok(sel)) { consider(sel); }
+        }
+
+        int g = 0;
+        for (; g < num_groups; ++g)
+        {
+            ++choice[g];
+            if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
+            choice[g] = 0;
+        }
+        if (g == num_groups) { done = true; }
     }
 
     return best;
