@@ -168,4 +168,14 @@ public:
     // The engine keeps the land-play MECHANISM (PlayLandByName / breakpoint land + recording) and
     // the open-land-drop precondition; only this card-choice is provider-owned. Generic = "".
     virtual std::string PostDrawKeepLandName(const GameState& s, int controller) const = 0;
+
+    // Hook 16 -- does this deck's goldfish opponent play lands? Decks whose spells target the
+    // OPPONENT'S permanents for value (Hinata: Magma Opus taps them, the spread-damage / cost-
+    // reduction targeting points at them) need a realistic opponent board. When true the engine
+    // gives the passive opponent one land on each of the first three turns (a realistic floor:
+    // most opponents have >=3 lands, and aggressive decks with fewer bring creatures = better
+    // targets anyway). DEFAULT false -> every existing deck's opponent stays boardless-of-lands
+    // (byte-identical); only HinataProvider opts in. NOT pure (defaulted) so no other provider
+    // needs to implement it.
+    virtual bool OpponentPlaysLands() const { return false; }
 };

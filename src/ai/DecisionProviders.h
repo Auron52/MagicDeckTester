@@ -87,6 +87,16 @@ public:
     bool WantVialCharge(const GameState&, const Permanent&) const override;
 };
 
+// Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by
+// Hinata's "{1} less per target", which the deck maximises by targeting extra/own/opponent
+// permanents -- so its goldfish opponent must present real targets. Layer 2 grows this provider
+// with the board-aware multi-target discount and the Reality-Spasm -> Crackle mana ritual.
+class HinataProvider : public GenericProvider
+{
+public:
+    bool OpponentPlaysLands() const override { return true; }
+};
+
 // Process-lifetime default provider (stateless, shared across threads). Used as the
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();

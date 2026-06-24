@@ -336,5 +336,27 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // search/rollout state is a copy of this one, so the pointer reaches every node.
     state.m_provider = &SelectDecisionProvider(deck);
 
+    // Decks whose spells target the OPPONENT'S permanents for value (Hinata: Magma Opus taps
+    // them, the spread-damage / cost-reduction targeting points at them) get a realistic
+    // opponent board -- three lands (a realistic floor: most opponents have >=3 lands, and
+    // aggressive decks with fewer bring creatures = better targets anyway; see HinataProvider::
+    // OpponentPlaysLands). Pre-populated here (the single setup choke point) so every search
+    // deep copy and the real game agree, and present by the time the deck targets them (T4+).
+    if (state.m_provider->OpponentPlaysLands())
+    {
+        for (int i = 0; i < 3; ++i)
+        {
+            Card land;
+            land.m_name = "Opponent Land";
+            land.RehashName();
+            land.AddType(CardType::Land);
+            Permanent perm;
+            perm.card             = land;
+            perm.controller_index = 1;
+            perm.owner_index      = 1;
+            state.battlefield.push_back(perm);
+        }
+    }
+
     return state;
 }

@@ -621,6 +621,7 @@ namespace
     const AntiLifegainProvider g_antilife;
     const TreasureHuntProvider g_treasure;
     const VialProvider         g_vial;
+    const HinataProvider       g_hinata;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -632,12 +633,15 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 {
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
-    bool anti = false, th = false, vial = false;
+    bool anti = false, th = false, vial = false, hinata = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+
+        // Hinata, Dawn-Crowned's cost-reduction static is the deck's defining signature.
+        if (p.hinata_cost_reducer) { hinata = true; }
 
         if (p.lifegain_to_loss || p.verse_damage || p.alt_lifegain_cost > 0
             || p.tutor_to_hand || p.tutor_to_top || !p.fetch_land_types.empty())
@@ -653,6 +657,7 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
         if (p.upkeep_adds_charge) { vial = true; }
     }
 
+    if (hinata) { return g_hinata; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }
