@@ -27,7 +27,7 @@ public:
     // base_game_index: first game's index for spawn-pattern selection (game i uses
     //   pattern (base_game_index + i) % 10). Pass a non-zero value to replay a
     //   specific game from a larger run with the correct opponent board.
-    RunResult Run(const Decklist& deck, int num_games, uint64_t base_seed, int max_turns = 20,
+    RunResult Run(const Decklist& deck, int num_games, uint64_t base_seed, int max_turns = 8,
                   const MulliganProfile& profile = MulliganProfile::DefaultProfile(),
                   const std::filesystem::path& log_dir = {},
                   int base_game_index = 0,

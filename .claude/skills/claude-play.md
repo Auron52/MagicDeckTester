@@ -104,7 +104,7 @@ decision and exits:
 
 ```bash
 ./build/Release/mtg <deck>.txt --profile <deck>.profile.json \
-  --claude-play --seed <S> --game-index <GI> --max-turns 20 --reveal 6 --choices "<CSV>"
+  --claude-play --seed <S> --game-index <GI> --max-turns 8 --reveal 6 --choices "<CSV>"
 ```
 
 - Start with **no** `--choices` (or empty). The command prints ONE decision between
