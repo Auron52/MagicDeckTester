@@ -353,6 +353,26 @@ struct CardParams
     // changes nothing for goldfishing" simplification (a counter/tap/bounce vs a do-nothing
     // opponent collapses to a do-nothing card). Default false; gated so other decks unaffected.
     bool goldfish_inert = false;
+
+    // Hinata, Dawn-Crowned's static: "Spells you cast cost {1} less to cast for each target."
+    // hinata_cost_reducer marks the permanent that grants the reduction (on Hinata herself).
+    // discount_targets is the per-spell target count used for the reduction (Hinata's spells
+    // each subtract this many from their GENERIC cost, floored at 0); discount_targets_scale_x
+    // makes the target count grow with the chosen X (Reality Spasm "untap X target permanents" ->
+    // X targets, so a Hinata in play cancels its entire {X}, the ritual). The reduction is
+    // applied at every cast-cost finalization site (both EffectiveCost copies for fixed costs +
+    // the three X-cost payers), via HinataGenericDiscount, so planner/rollout/executor agree.
+    bool hinata_cost_reducer       = false;
+    int  discount_targets          = 0;
+    bool discount_targets_scale_x  = false;
+
+    // Karoo "bounce land" (Izzet Boilerworks: "This land enters tapped. When this land enters,
+    // return a land you control to its owner's hand. {T}: Add {U}{R}"). On ETB, return one of
+    // the controller's OTHER lands to hand (preferring a tapped one -> no mana lost this turn),
+    // modelled by BounceKarooLand at every land-play ETB site. Combined with enters_tapped +
+    // produces[U,R] + produces_amount 2. The bounce is the real tempo cost (a future land drop
+    // re-plays the returned land) and is modelled so the deck's mana is not over-rated. Gated.
+    bool etb_bounce_land = false;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

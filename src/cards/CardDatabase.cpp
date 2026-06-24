@@ -391,6 +391,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_scry                 = params.value("cast_scry", 0);
     p.x_damage_multiplier       = params.value("x_damage_multiplier", 1);
     p.goldfish_inert            = params.value("goldfish_inert", false);
+    p.hinata_cost_reducer       = params.value("hinata_cost_reducer", false);
+    p.discount_targets          = params.value("discount_targets", 0);
+    p.discount_targets_scale_x  = params.value("discount_targets_scale_x", false);
+    p.etb_bounce_land           = params.value("etb_bounce_land", false);
 
     return p;
 }

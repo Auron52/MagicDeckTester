@@ -1290,7 +1290,8 @@
             "parameters": {
                 "damage": 0,
                 "targeting": "any",
-                "x_damage_multiplier": 5
+                "x_damage_multiplier": 5,
+                "discount_targets": 1
             }
         },
         {
@@ -1342,13 +1343,56 @@
                 "Instant"
             ],
             "subtypes": [],
-            "keywords": [
-                "Ferocious"
-            ],
+            "keywords": [],
             "oracle_text": "Tap X target creatures.\nFerocious - If you control a creature with power 4 or greater, those creatures don't untap during their controllers' next untap steps. [Goldfish-inert: tapping the passive opponent's creatures is irrelevant (they never attack or block), and there is no reason to tap your own. Never cast. A faithful dead draw.]",
             "template": "custom",
             "parameters": {
                 "goldfish_inert": true
+            }
+        },
+        {
+            "name": "Hinata, Dawn-Crowned",
+            "mana_cost": "{1}{U}{R}{W}",
+            "types": [
+                "Creature"
+            ],
+            "supertypes": [
+                "Legendary"
+            ],
+            "subtypes": [
+                "Kirin",
+                "Spirit"
+            ],
+            "keywords": [
+                "Flying",
+                "Trample"
+            ],
+            "power": 4,
+            "toughness": 4,
+            "oracle_text": "Flying, trample\nSpells you cast cost {1} less to cast for each target.\nSpells your opponents cast cost {1} more to cast for each target. [Flying/trample are inert vs a passive non-blocking opponent (she just attacks for 4). The opponent-tax line is inert (the goldfish opponent casts nothing). The 'your spells cost {1} less per target' static is the deck's engine, modelled via hinata_cost_reducer + each spell's discount_targets (see Crackle / Reality Spasm). Per-target target COUNT is modelled conservatively (one target = the opponent) for damage spells; Reality Spasm scales with X. Maximising targets for a bigger discount, and the Reality-Spasm-untap-ritual same-turn combo, are the Layer-2 HinataProvider items disclosed in Stage 6a.]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "hinata_cost_reducer": true
+            }
+        },
+        {
+            "name": "Izzet Boilerworks",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {U}{R}. [Karoo bounce land: enters tapped, makes 2 mana ({U}{R}, modelled as wild like other duals), and on ETB returns one of your lands to hand (BounceKarooLand prefers a tapped land so no mana is lost this turn; the returned land must be replayed, the real tempo cost).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "U",
+                    "R"
+                ],
+                "produces_amount": 2,
+                "enters_tapped": true,
+                "etb_bounce_land": true
             }
         }
     ]

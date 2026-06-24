@@ -350,6 +350,12 @@ static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state)
         }
         cost.generic = std::max(0, cost.generic - reduction);
     }
+    // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
+    // sites where the whole generic, incl. X, is known -- see the X-enumeration / apply_one).
+    if (!def.card.m_mana_cost.has_x)
+    {
+        cost.generic = std::max(0, cost.generic - HinataGenericDiscount(def, state, 0));
+    }
     return cost;
 }
 
@@ -539,13 +545,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // affordable X divides the leftover mana by x_pips.
             int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
             int mult = def.params.x_damage_multiplier; if (mult < 1) { mult = 1; }
-            int max_x = (xpool.Total() - base.ManaValue()) / pips;
+            // Hinata's discount frees up mana for a larger X. For a DirectDamage X spell the
+            // discount does not scale with X (discount_targets_scale_x is for untap rituals),
+            // so it adds a constant to the affordable budget.
+            int disc = HinataGenericDiscount(def, state, 0);
+            int max_x = (xpool.Total() - base.ManaValue() + disc) / pips;
             if (max_x < 0) { max_x = 0; }
             for (int x : ResolveProvider(state).XCandidates(state, def, max_x))
             {
                 if (x <= 0) { continue; }
                 ManaCost xcost = base;
                 xcost.generic += x * pips;                // X is paid (x_pips times) as generic mana
+                // Hinata reduces the whole generic (incl. X) by the spell's target count;
+                // for an X-target spell (Reality Spasm) that scales with the chosen X.
+                xcost.generic = std::max(0, xcost.generic - HinataGenericDiscount(def, state, x));
                 Action a;
                 a.kind           = Action::Kind::CastFromHand;
                 a.card_name      = ap.hand[i].m_name;
@@ -1459,6 +1472,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
             ec.generic += chosen_x * pips;
+            ec.generic = std::max(0, ec.generic - HinataGenericDiscount(def, state, chosen_x));
         }
         if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
         zone.erase(it);
@@ -2399,6 +2413,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
         ++ap.lands_played_this_turn;
         if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry); }
         if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil); }
+        if (def->params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
         return true;
     }
     return false;

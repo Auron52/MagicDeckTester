@@ -988,6 +988,27 @@ inline int ManaProducedPerTap(const CardDefinition& def)
     return std::max(1, def.params.produces_amount);
 }
 
+// Hinata, Dawn-Crowned: "Spells you cast cost {1} less to cast for each target." Returns the
+// GENERIC reduction for `def` being cast by the active player with the chosen X, or 0 when no
+// Hinata is in play. discount_targets is the spell's target count; discount_targets_scale_x adds
+// the chosen X (Reality Spasm "untap X target permanents" -> X targets -> its whole {X} cancels).
+// Applied identically at every cast-cost finalization site so planner/rollout/executor agree.
+inline int HinataGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x)
+{
+    int targets = def.params.discount_targets;
+    if (def.params.discount_targets_scale_x) { targets += chosen_x; }
+    if (targets <= 0) { return 0; }
+    const int active = state.active_player_index;
+    bool has_hinata = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.hinata_cost_reducer) { has_hinata = true; break; }
+    }
+    return has_hinata ? targets : 0;
+}
+
 // True if `state.active_player` controls an untapped NON-filter mana source producing
 // one of `colors`. A filter land (e.g. Cascade Bluffs) can only make its colours when
 // such a feeder exists, since its filter ability requires a coloured mana input.
@@ -1272,6 +1293,36 @@ inline void ScryTop(GameState& state, int n)
         ap.library.insert(ap.library.begin(), std::move(*it));
     }
     for (Card& c : bottomed) { ap.library.push_back(std::move(c)); }
+}
+
+// Karoo bounce land ETB (Izzet Boilerworks): return one of `controller`'s OTHER lands to hand.
+// Deterministic so the rollout and executor agree: prefer a TAPPED land (already spent this turn
+// -> no mana lost), else the lowest-index other land; never the just-entered karoo (self_index,
+// which is always the last-pushed battlefield element when this is called). If the karoo is the
+// only land, nothing is returned (a pathological play the search avoids; a tiny, conservative
+// deviation from the rules' forced self-bounce).
+inline void BounceKarooLand(GameState& state, int controller, int self_index)
+{
+    auto find = [&](bool want_tapped) -> int
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (i == self_index) { continue; }
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            if (want_tapped && !p.tapped) { continue; }
+            return i;
+        }
+        return -1;
+    };
+    int pick = find(true);
+    if (pick < 0) { pick = find(false); }
+    if (pick < 0) { return; }
+    Card c = state.battlefield[pick].card;
+    c.m_is_staged = false;
+    c.m_def = nullptr;
+    state.players[controller].hand.push_back(c);
+    state.battlefield.erase(state.battlefield.begin() + pick);
 }
 
 // Surveil N (e.g. Thundering Falls): like ScryTop, but unwanted cards go to the GRAVEYARD

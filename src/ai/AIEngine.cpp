@@ -1666,6 +1666,7 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
         ++ap.lands_played_this_turn;
         if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry); }
         if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil); }
+        if (def->params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
         return true;
     }
     return false;
@@ -1713,6 +1714,7 @@ bool AIEngine::TryPlayLand(GameState& state)
         // after the land is on the battlefield.
         if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }
         if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil); }
+        if (def.params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
         return true;
     };
 
@@ -2166,6 +2168,12 @@ ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& sta
         }
         cost.generic = std::max(0, cost.generic - reduction);
     }
+    // Hinata per-target reduction for fixed-cost spells (mirrors TurnSolver::EffectiveCost;
+    // {X} spells apply it where the chosen X is added to generic, in CastSpellFromHand).
+    if (!def.card.m_mana_cost.has_x)
+    {
+        cost.generic = std::max(0, cost.generic - HinataGenericDiscount(def, state, 0));
+    }
     return cost;
 }
 
@@ -2253,6 +2261,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     {
         int pips = def->card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
         effective.generic += chosen_x * pips;
+        effective.generic = std::max(0, effective.generic - HinataGenericDiscount(*def, state, chosen_x));
     }
     if (alt_lifegain > 0)
     {
