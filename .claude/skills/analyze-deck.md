@@ -373,9 +373,12 @@ It prints three grounded reports with **support / conflict** counts:
 - **ORDER rules** — ordered card pairs whose faster lines agree on direction. *(burn: cast
   Lightning Bolt before Light Up / Searing Blaze, Goblin Guide before Lightning Bolt; th:
   Land's Edge before Treasure Hunt — the real combo line.)*
-- **INCLUSION rules** — per-card avg win-turn delta from casting it THIS turn (− helps, + hurts).
-  *(burn: Shard Volley +0.33 → avoid early; knights: lords/anthem creatures all negative → deploy
-  them; th: Land's Edge −0.44 / Treasure Hunt −0.24 → cast the combo pieces.)*
+- **INCLUSION rules** — per-card avg win-turn delta from casting it THIS turn (− helps, + slower),
+  shown with a help/hurt/neutral SPLIT. *(burn: Shard Volley +0.33; knights: lords/anthem all
+  negative → deploy them; th: Land's Edge −0.44 / Treasure Hunt −0.24 → cast the combo pieces.)*
+  Read the split, not the mean: a + card may be a **setup/combo-timing** card (good with a follow-up)
+  or an **inert-in-goldfish ability** — the script can't distinguish them and the safe default for
+  BOTH is "leave to the search" (see the encoding table). Gate a + card only on a confirmed misplay.
 - **LAND / FETCH** — which land / fetch target the earliest-win lines pick. *(antilife: Forest
   first.)*
 
@@ -384,7 +387,7 @@ It prints three grounded reports with **support / conflict** counts:
 |---|---|
 | 0-conflict ORDER "A before B" | `CastOrderRank`: give A a lower rank than B (archetype override). High-conflict pair → leave to the search (don't encode). |
 | INCLUSION strongly − ("cast it") | it already gets cast; only act if it's being *deferred* wrongly — usually no change. |
-| INCLUSION strongly + ("avoid early") | a cast-gate/late rank in the provider IF a real per-game misplay is confirmed (else leave to search). |
+| INCLUSION + ("slower early") | almost always **leave to the search** — a cast-gate is the rare exception, only for a CONFIRMED greedy misplay (e.g. antilife Reverent self-brick). The miner CANNOT tell *why* a card is slow early; classify it yourself from the oracle text: a **setup/combo-timing** card (helps only with a follow-up, e.g. Hatchery Sliver: T2 → replicate one-drops T3 → duplicate a lord = a real win the **lookahead already finds**) must NOT be gated; an **inert-in-goldfish ability** (e.g. Crystalline Sliver's shroud — no opponent removal to dodge, so it's just a vanilla 2/2) needs no rule either, the search casts it when nothing better exists. Hard-gating either would lose games. |
 | LAND / FETCH skew | `FetchCandidates` / land-pick priority (the Forest-first pattern). |
 
 **These are PROPOSALS, never auto-shipped.** Each encoded rule still goes through the 5e step-6

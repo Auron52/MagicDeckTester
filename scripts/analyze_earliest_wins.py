@@ -121,11 +121,27 @@ def inclusion_rules(decisions, min_support):
     rows = [(card, v) for card, v in agg.items() if v["n"] >= min_support]
     rows.sort(key=lambda kv: (kv[1]["with"] - kv[1]["wo"]) / kv[1]["n"])
     print("\n== INCLUSION rules (casting this card THIS turn: avg win-turn delta) ==")
-    print(f"   {'avgdelta':>8} {'help':>5} {'hurt':>5} {'neut':>5} {'n':>5}  card")
+    print("   delta = best-win(cast it) - best-win(don't), averaged over decisions. "
+          "READ THE SPLIT, not just the mean:")
+    print("     -delta, help>>hurt  -> payoff/enabler: cast it (usually already cast; no code needed).")
+    print("     +delta, help == 0   -> consistently slower here: an inert-in-goldfish ability "
+          "(e.g. shroud) or just outclassed; the search already deprioritises it -> gate ONLY if a")
+    print("                            per-game misplay is confirmed. (Small samples can hide a rare combo.)")
+    print("     +delta BUT help > 0 -> SITUATIONAL / setup-timing (good only WITH a follow-up, e.g. a")
+    print("                            token-maker before more creatures) -> do NOT gate; LEAVE TO THE SEARCH.")
+    print(f"   {'avgdelta':>8} {'help':>5} {'hurt':>5} {'neut':>5} {'n':>5}  card  | reading")
     for card, v in rows:
         delta = (v["with"] - v["wo"]) / v["n"]
-        tag = "  cast it" if delta <= -0.25 else ("  AVOID early" if delta >= 0.25 else "")
-        print(f"   {delta:+8.2f} {v['help']:5} {v['hurt']:5} {v['neutral']:5} {v['n']:5}  {card}{tag}")
+        if delta <= -0.25:
+            tag = "cast it (payoff/enabler)"
+        elif delta >= 0.25 and v["help"] == 0:
+            tag = "slower early (inert ability? / outclassed -- leave to search unless misplay confirmed)"
+        elif delta >= 0.25:
+            tag = "SITUATIONAL/setup -- leave to search (helps in %d/%d)" % (v["help"], v["n"])
+        else:
+            tag = ""
+        sep = "  | " if tag else ""
+        print(f"   {delta:+8.2f} {v['help']:5} {v['hurt']:5} {v['neutral']:5} {v['n']:5}  {card}{sep}{tag}")
 
 
 def land_rules(decisions, min_support):
