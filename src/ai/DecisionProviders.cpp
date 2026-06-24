@@ -435,7 +435,7 @@ bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controll
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d) { continue; }
             bool is_land = (d->tmpl == CardTemplate::BasicLand);
-            bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap());
+            bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
             if (!is_land && !is_dork) { continue; }
             AddSourceToPool(pool, s, *d);
         }

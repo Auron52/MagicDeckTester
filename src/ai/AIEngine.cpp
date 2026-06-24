@@ -220,7 +220,8 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
                 auto def = CardDatabase::Instance().LookupCached(c);
                 if (!def) { continue; }
                 bool is_mana_source = (def->tmpl == CardTemplate::BasicLand)
-                                   || (def->tmpl == CardTemplate::ManaDork);
+                                   || (def->tmpl == CardTemplate::ManaDork)
+                                   || (def->params.mana_rock);
                 if (!is_mana_source) { continue; }
                 for (Color produced : def->params.produces)
                 {
@@ -1924,7 +1925,7 @@ ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
         if (!def) { continue; }
 
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
 
         // Depletion lands contribute 2; multi-color lands contribute 1 wild; filter
@@ -1944,7 +1945,8 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
         bool is_src = (def.tmpl == CardTemplate::BasicLand)
-                   || (def.tmpl == CardTemplate::ManaDork && p.CanTap());
+                   || (def.tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || def.params.mana_rock;
         if (!is_src) { return false; }
         if (def.params.creature_mana_only && !for_creature) { return false; }
         return true;
@@ -2246,7 +2248,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     }
 
     ManaCost effective = EffectiveCost(*def, state);
-    if (chosen_x > 0) { effective.generic += chosen_x; }   // {X} is paid as generic mana
+    // {X} is paid as generic mana, once per {X} pip (Crackle {X}{X}{X} -> 3X).
+    if (chosen_x > 0)
+    {
+        int pips = def->card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
+        effective.generic += chosen_x * pips;
+    }
     if (alt_lifegain > 0)
     {
         // Alternative cost: pay no mana; instead make the opponent gain alt_lifegain life

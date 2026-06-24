@@ -115,7 +115,7 @@ static ManaPool BuildPool(const GameState& state)
         auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
         AddSourceToPool(pool, state, *def);
     }
@@ -133,7 +133,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.creature_mana_only) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
         AddSourceToPool(pool, state, *def);
     }
@@ -178,7 +178,8 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || def->params.mana_rock;
         if (!is_src) { continue; }
         for (Color c : def->params.produces)
         {
@@ -487,6 +488,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         auto opt = CardDatabase::Instance().LookupCached(ap.hand[i]);
         if (!opt || opt->card.IsLand()) { continue; }
         const CardDefinition& def = *opt;
+        // Goldfish-inert cards (counterspells / "tap target creature" / "bounce target
+        // permanent" against a passive opponent that never casts, attacks or blocks): they
+        // have no useful target, so the deck genuinely cannot productively cast them. Never
+        // offered as an action -> they sit in hand as faithful dead draws. Gated off for
+        // every existing deck.
+        if (def.params.goldfish_inert) { continue; }
         // Sorceries/non-flash spells require an empty stack and a main phase.
         bool timing_ok = def.card.IsInstant()
                       || def.card.HasKeyword(Keyword::Flash)
@@ -528,13 +535,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             if (def.tmpl != CardTemplate::DirectDamage) { continue; }
             ManaCost base  = EffectiveCost(def, state);   // fixed part; ManaValue() ignores X
             ManaPool xpool = BuildPool(state);
-            int max_x = xpool.Total() - base.ManaValue();
+            // Each point of X is paid x_pips times (Crackle {X}{X}{X} = 3), so the max
+            // affordable X divides the leftover mana by x_pips.
+            int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
+            int mult = def.params.x_damage_multiplier; if (mult < 1) { mult = 1; }
+            int max_x = (xpool.Total() - base.ManaValue()) / pips;
             if (max_x < 0) { max_x = 0; }
             for (int x : ResolveProvider(state).XCandidates(state, def, max_x))
             {
                 if (x <= 0) { continue; }
                 ManaCost xcost = base;
-                xcost.generic += x;                       // X is paid as generic mana
+                xcost.generic += x * pips;                // X is paid (x_pips times) as generic mana
                 Action a;
                 a.kind           = Action::Kind::CastFromHand;
                 a.card_name      = ap.hand[i].m_name;
@@ -542,10 +553,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 a.cost           = xcost;
                 a.chosen_x       = x;
                 a.sacrifice_land = def.params.sacrifice_land;
-                a.eval           = x * 100;               // EvalCard's DMG unit (X dmg-equivalents)
+                a.eval           = x * mult * 100;         // EvalCard's DMG unit (dmg-equivalents)
                 // X burn reaches the face only when not creature-only targeted (the creature-
                 // target guard above already dropped Creature/Multi with no opponent creature).
-                a.direct_damage  = (def.params.targeting != Targeting::Creature) ? x : 0;
+                // Damage per target = chosen X * x_damage_multiplier (Crackle = 5X).
+                a.direct_damage  = (def.params.targeting != Targeting::Creature) ? x * mult : 0;
                 a.is_noncreature = !def.card.IsCreature();
                 a.card_mv        = def.card.m_mana_cost.ManaValue();  // X = 0 outside the stack
                 actions.push_back(std::move(a));
@@ -1052,7 +1064,8 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
         bool is_src = (def.tmpl == CardTemplate::BasicLand)
-                   || (def.tmpl == CardTemplate::ManaDork && p.CanTap());
+                   || (def.tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || def.params.mana_rock;
         if (!is_src) { return false; }
         if (def.params.creature_mana_only && !for_creature) { return false; }
         return true;
@@ -1441,6 +1454,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         bool free_cast = cascade_free;
         cascade_free = false;
         ManaCost ec = EffectiveCost(def, state);
+        // {X} spells: pay the chosen X, once per {X} pip (Crackle {X}{X}{X} -> 3X generic).
+        if (def.card.m_mana_cost.has_x && chosen_x > 0)
+        {
+            int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
+            ec.generic += chosen_x * pips;
+        }
         if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
         zone.erase(it);
 
@@ -1506,9 +1525,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // here while the win-check and the real engine both counted their damage —
             // a phantom-early-win source.
             Targeting t = def.params.targeting;
-            // An {X} burn deals its chosen X (mirrors EffectHandler::ResolveDirectDamage);
-            // a fixed-damage burn uses params.damage with the landfall boost.
-            int dmg = def.card.m_mana_cost.has_x ? chosen_x : def.params.damage;
+            // An {X} burn deals chosen X * x_damage_multiplier (Crackle = 5X; mirrors
+            // EffectHandler::ResolveDirectDamage); a fixed-damage burn uses params.damage.
+            int x_mult = def.params.x_damage_multiplier; if (x_mult < 1) { x_mult = 1; }
+            int dmg = def.card.m_mana_cost.has_x ? (chosen_x * x_mult) : def.params.damage;
             if (!def.card.m_mana_cost.has_x
                 && def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
             {
@@ -1609,6 +1629,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (def.tmpl == CardTemplate::DrawSpell)
         {
+            // Scry-then-draw (Preordain/Ponder): reorder the top before drawing, mirroring
+            // ResolveDrawSpell so the rollout's realised draw matches the executor.
+            if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry); }
             int n = std::min(def.params.draw, static_cast<int>(ap.library.size()));
             if (def.params.stages_cards)
             {

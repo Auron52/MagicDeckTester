@@ -203,7 +203,7 @@ static ManaCost ManaCostFromString(const std::string& cost_str)
         else if (sym == "R") { ++cost.red; }
         else if (sym == "G") { ++cost.green; }
         else if (sym == "C") { ++cost.colorless; }
-        else if (sym == "X") { cost.has_x = true; }
+        else if (sym == "X") { cost.has_x = true; ++cost.x_pips; }
         else
         {
             try { cost.generic += std::stoi(sym); }
@@ -387,6 +387,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("fetch_land_types", json::array()))
         p.fetch_land_types.push_back(s);
     p.target_own_creature       = params.value("target_own_creature", false);
+    p.mana_rock                 = params.value("mana_rock", false);
+    p.cast_scry                 = params.value("cast_scry", 0);
+    p.x_damage_multiplier       = params.value("x_damage_multiplier", 1);
+    p.goldfish_inert            = params.value("goldfish_inert", false);
 
     return p;
 }

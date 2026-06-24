@@ -1137,6 +1137,219 @@
                 ],
                 "tutor_heuristic": "enabler_then_wincon"
             }
+        },
+        {
+            "name": "Forbidden Orchard",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add one mana of any color.\nWhenever you tap this land for mana, target opponent creates a 1/1 colorless Spirit creature token. [Modelled as a 5-colour land. The 'opponent creates a 1/1 Spirit' drawback is inert for goldfishing: the passive opponent never attacks or blocks, so a 1/1 it controls changes no outcome. (The spirits could in principle be extra Crackle/Soulfire targets for Hinata's cost reduction; that synergy is intentionally NOT modelled here -- a conservative under-approximation of the deck, never an over-count.)]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "U",
+                    "B",
+                    "R",
+                    "G"
+                ]
+            }
+        },
+        {
+            "name": "Mystic Monastery",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Mystic Monastery enters tapped.\n{T}: Add {U}, {R}, or {W}.",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "U",
+                    "R",
+                    "W"
+                ],
+                "enters_tapped": true
+            }
+        },
+        {
+            "name": "Reflecting Pool",
+            "mana_cost": "",
+            "types": [
+                "Land"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add one mana of any type that a land you control could produce. [Modelled as producing any of this deck's three colours (W/U/R). Faithful approximation: the deck's lands collectively make all of W, U and R, so a Reflecting Pool with almost any other land out can make any of them; the rare one-land opening is a minor over-approximation that the per-colour payability check (SubsetPayable) does not tighten for multi-colour (wild) sources. The deck needs no B/G, so 'any colour a land could produce' never reaches outside W/U/R.]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "U",
+                    "R"
+                ]
+            }
+        },
+        {
+            "name": "Sol Ring",
+            "mana_cost": "{1}",
+            "types": [
+                "Artifact"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {C}{C}.",
+            "template": "custom",
+            "parameters": {
+                "mana_rock": true,
+                "produces": [
+                    "C"
+                ],
+                "produces_amount": 2
+            }
+        },
+        {
+            "name": "Izzet Signet",
+            "mana_cost": "{2}",
+            "types": [
+                "Artifact"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{1}, {T}: Add {U}{R}. [Modelled exactly like Ferrous Lake's ramp_filter: needs a {1} feeder, nets +1 mana, contributes 1 wild. The {U}{R} is treated as wild (any colour) like every multi-colour source here; the deck's dedicated W sources cover Hinata's {W}, and SubsetPayable does not tighten wild, so this is the same minor over-approximation duals already carry.]",
+            "template": "custom",
+            "parameters": {
+                "mana_rock": true,
+                "ramp_filter": true,
+                "produces": [
+                    "U",
+                    "R"
+                ]
+            }
+        },
+        {
+            "name": "Ponder",
+            "mana_cost": "{U}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card. [Modelled as Scry 3 then draw 1: with a known library, the optimal 'reorder the top three in any order' is exactly what ScryTop (keep wanted on top, bottom the rest) achieves for the immediately-following draw. The 'you may shuffle' line is never beneficial for a clairvoyant player and is not modelled.]",
+            "template": "draw_spell",
+            "parameters": {
+                "draw": 1,
+                "cast_scry": 3
+            }
+        },
+        {
+            "name": "Preordain",
+            "mana_cost": "{U}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Scry 2, then draw a card.",
+            "template": "draw_spell",
+            "parameters": {
+                "draw": 1,
+                "cast_scry": 2
+            }
+        },
+        {
+            "name": "Expressive Iteration",
+            "mana_cost": "{U}{R}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Look at the top three cards of your library. Put one of them into your hand, put one of them on the bottom of your library, and exile one of them. You may play the exiled card this turn. [Modelled as Scry 3 then draw 2 (best two of the top three to hand, worst to the bottom). The exiled card is 'play this turn only'; modelling it as a second hand draw is a minor OVER-approximation -- it lets the search hold that card for a later turn, whereas the real card forces use-or-lose -- but the card count (2 gained, 1 bottomed) matches and a ramp/dig deck almost always plays it the same turn. Flagged for review in the heuristics/assumptions disclosure.]",
+            "template": "draw_spell",
+            "parameters": {
+                "draw": 2,
+                "cast_scry": 3
+            }
+        },
+        {
+            "name": "Crackle with Power",
+            "mana_cost": "{X}{X}{X}{R}{R}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Crackle with Power deals five times X damage to each of up to X targets. [Modelled as an {X} DirectDamage with x_damage_multiplier 5 and three {X} pips (cost = 3X + {R}{R}). The win-relevant case is targeting the opponent's face for 5X; 'up to X targets' only matters for Hinata's per-target cost reduction (Layer-2 HinataProvider) -- extra targets never add face damage (the player is still one target taking 5X), so the single-target face model is exact for lethality and conservative for the discount.]",
+            "template": "direct_damage",
+            "parameters": {
+                "damage": 0,
+                "targeting": "any",
+                "x_damage_multiplier": 5
+            }
+        },
+        {
+            "name": "Remand",
+            "mana_cost": "{1}{U}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Counter target spell. If that spell is countered this way, put it into its owner's hand instead of into that player's graveyard.\nDraw a card. [Goldfish-inert: the passive opponent casts no spells, so Remand has no legal target and is never cast; its 'draw a card' rider only happens on resolution. A faithful dead draw against a do-nothing opponent.]",
+            "template": "custom",
+            "parameters": {
+                "goldfish_inert": true
+            }
+        },
+        {
+            "name": "Memory Lapse",
+            "mana_cost": "{1}{U}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Counter target spell. If that spell is countered this way, put it on top of its owner's library instead of into that player's graveyard. [Goldfish-inert: the passive opponent casts no spells, so Memory Lapse has no legal target and is never cast. A faithful dead draw.]",
+            "template": "custom",
+            "parameters": {
+                "goldfish_inert": true
+            }
+        },
+        {
+            "name": "Distorting Wake",
+            "mana_cost": "{X}{U}{U}{U}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Return X target nonland permanents to their owners' hands. [Goldfish-inert: the passive opponent has no permanents worth bouncing (a Forbidden-Orchard spirit token, at most, which does nothing), and bouncing your own permanents never advances the win. Never cast. A faithful dead draw.]",
+            "template": "custom",
+            "parameters": {
+                "goldfish_inert": true
+            }
+        },
+        {
+            "name": "Icy Blast",
+            "mana_cost": "{X}{U}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [
+                "Ferocious"
+            ],
+            "oracle_text": "Tap X target creatures.\nFerocious - If you control a creature with power 4 or greater, those creatures don't untap during their controllers' next untap steps. [Goldfish-inert: tapping the passive opponent's creatures is irrelevant (they never attack or block), and there is no reason to tap your own. Never cast. A faithful dead draw.]",
+            "template": "custom",
+            "parameters": {
+                "goldfish_inert": true
+            }
         }
     ]
 }

@@ -318,6 +318,41 @@ struct CardParams
     // the spell targets the controller's best attacker and the bonus is applied until end of
     // turn. Gated so no existing deck is affected.
     bool target_own_creature = false;
+
+    // Artifact mana source / mana rock (Sol Ring "{T}: Add {C}{C}", Izzet Signet "{1},{T}: Add
+    // {U}{R}"). A noncreature permanent that taps for mana like a land but is CAST as a spell
+    // (not a land drop) and, being a noncreature, has no summoning sickness -- it taps the turn
+    // it enters (Permanent::CanTap() is always true for non-creatures). Recognised as a tappable
+    // mana source everywhere a BasicLand/ManaDork is (BuildPool / TapForCost / ComputeAvailable-
+    // Colors / ...), using the same `produces` / `produces_amount` / `ramp_filter` fields. Kept a
+    // noncreature ON PURPOSE: unlike a creature mana dork it is NOT a legal target for Crackle /
+    // Soulfire (which target creatures/players, not artifacts), so it never inflates Hinata's
+    // per-target cost reduction. Gated > 0/false so other decks are unaffected.
+    bool mana_rock = false;
+
+    // Scry-on-resolution for a draw spell (Preordain "Scry 2, then draw a card"; Ponder
+    // "look at the top three cards, then put them back in any order. Draw a card." -- modelled
+    // as Scry N then draw, the standard clairvoyant deck-ordering approximation: ScryTop keeps
+    // the wanted cards on top via DecisionProvider::ScryKeepOnTop, which is what an optimal
+    // reorder of a known library does for the immediately-following draw). Applied BEFORE the
+    // draw in BOTH the executor (ResolveDrawSpell) and the rollout (ApplyPlanDirect DrawSpell
+    // branch), so the realised draw matches the searched line. Gated > 0.
+    int cast_scry = 0;
+
+    // X-damage scaling for an {X} DirectDamage spell (Crackle with Power "deals five times X
+    // damage" -> 5). The damage dealt per target is chosen_x * x_damage_multiplier; combined with
+    // x_pips on the cost, Crackle = {X}{X}{X}{R}{R}, 5X to each target. Default 1 (plain {X} burn
+    // like a hypothetical X-bolt). Applied in BOTH the search's X-enumeration (direct_damage/eval)
+    // and ResolveDirectDamage. Gated (defaults to 1) so a plain X burn is unchanged.
+    int x_damage_multiplier = 1;
+
+    // Goldfish-inert: the card has no productive use against a single passive opponent that
+    // never casts spells, attacks, or blocks (counterspells with no spell to counter; "tap X
+    // target creatures" / "return X target permanents" with no useful target). CollectActions
+    // never offers it, so it is a faithful dead draw in hand. This is the allowed "provably
+    // changes nothing for goldfishing" simplification (a counter/tap/bounce vs a do-nothing
+    // opponent collapses to a do-nothing card). Default false; gated so other decks unaffected.
+    bool goldfish_inert = false;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

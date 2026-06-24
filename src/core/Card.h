@@ -28,6 +28,8 @@ struct ManaCost
     int green     = 0;
     int colorless = 0;  // {C} symbols
     bool has_x    = false;
+    int  x_pips   = 0;  // number of {X} symbols (Crackle with Power = {X}{X}{X} -> 3). The chosen
+                        // X is paid x_pips times as generic; max affordable X divides by x_pips.
 
     // X counts as 0 outside the stack (CR 202.3)
     int ManaValue() const { return generic + white + blue + black + red + green + colorless; }

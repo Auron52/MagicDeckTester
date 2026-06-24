@@ -257,7 +257,7 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
         {
             if (p.controller_index != controller_index) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork)) { ++sources; }
+            if (d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { ++sources; }
         }
         for (const Card& c : ap.hand)
         {
@@ -1001,7 +1001,8 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.is_filter || def->params.ramp_filter) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || def->params.mana_rock;
         if (!is_src) { continue; }
         for (Color pc : def->params.produces)
         {
@@ -1033,7 +1034,8 @@ inline bool HasUntappedRampFeeder(const GameState& state)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.ramp_filter) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap());
+                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || def->params.mana_rock;
         if (is_src) { return true; }
     }
     return false;
@@ -1389,7 +1391,7 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
         if (p.controller_index != controller_index) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
-        if (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork) { add_colors(have, d->params.produces); }
+        if (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock) { add_colors(have, d->params.produces); }
     }
     // Plus colours from OTHER (non-fetch) lands in hand -- part of the deck-fixing equation.
     ColorSet have_or_hand = have;
@@ -1615,7 +1617,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!def) { continue; }
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                         || (def->tmpl == CardTemplate::ManaDork && state.battlefield[i].CanTap());
+                         || (def->tmpl == CardTemplate::ManaDork && state.battlefield[i].CanTap())
+                         || def->params.mana_rock;
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }
 

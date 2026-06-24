@@ -176,7 +176,9 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
     int damage;
     if (def.card.m_mana_cost.has_x)
     {
-        damage = entry.chosen_x.value_or(0);
+        // Crackle with Power: "deals five times X damage" -> chosen_x * x_damage_multiplier.
+        int mult = def.params.x_damage_multiplier; if (mult < 1) { mult = 1; }
+        damage = entry.chosen_x.value_or(0) * mult;
     }
     else
     {
@@ -284,6 +286,9 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
 {
     Player& controller = state.players[entry.controller_index];
     int n = def.params.draw;
+
+    // Scry-then-draw (Preordain/Ponder): reorder the top of the library before drawing.
+    if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry); }
 
     if (def.params.stages_cards)
     {
