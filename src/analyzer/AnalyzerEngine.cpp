@@ -37,6 +37,19 @@ const int ANALYSIS_DEPTH = []{
     const char* e = std::getenv("MTG_ANALYZE_DEPTH");
     return (e && *e) ? std::max(0, std::atoi(e)) : 5;
 }();
+// MTG_ANALYZE_SCALE divides every phase's game count (default 1 -> UNSET is byte-identical to the
+// committed profiles). A scale >1 trades profile precision (higher per-cell variance) for speed --
+// for decks whose ~288k-game grid is too slow to profile at full resolution. Floored so a phase
+// never drops below a usable sample. Read once at startup.
+const int ANALYZE_SCALE = []{
+    const char* e = std::getenv("MTG_ANALYZE_SCALE");
+    int s = (e && *e) ? std::atoi(e) : 1;
+    return s < 1 ? 1 : s;
+}();
+inline int Scaled(int games, int floor_games = 200)
+{
+    return std::max(floor_games, games / ANALYZE_SCALE);
+}
 constexpr int ANALYSIS_BUDGET = 20;    // deterministic virtual-ms node budget; matches the
                                        // regression suite's proven-sufficient d5 budget (the
                                        // node budget is iterative-deepening refinement WITHIN
@@ -393,8 +406,8 @@ static int ConfirmColorSourceMin(
     Color color, int max_count,
     double baseline_avg, uint64_t& confirm_seed, int max_turns)
 {
-    constexpr int    CONFIRM1_GAMES      = 3000;
-    constexpr int    CONFIRM2_GAMES      = 5000;
+    const int        CONFIRM1_GAMES      = Scaled(3000);
+    const int        CONFIRM2_GAMES      = Scaled(5000);
     constexpr double CONFIRM1_THRESHOLD  = 0.10;
     constexpr double CONFIRM2_THRESHOLD  = 0.05;
 
@@ -485,10 +498,10 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     // greedy. This is far slower than the old d0 (the land grid alone is ~288k games),
     // accepted for accuracy. Counts are sized so the standard error (~1.5/sqrt(N)) is
     // well below each acceptance threshold.
-    constexpr int    SCAN_GAMES        = 2000;  // std_err ≈ 0.034 turns
-    constexpr int    CONFIRM1_GAMES    = 3000;  // std_err ≈ 0.027 turns; threshold 0.10
-    constexpr int    CONFIRM2_GAMES    = 5000;  // std_err ≈ 0.021 turns; threshold 0.05
-    constexpr int    GRID_GAMES        = 1000;  // std_err ≈ 0.047 turns per config
+    const int        SCAN_GAMES        = Scaled(2000);  // std_err ≈ 0.034 turns (at scale 1)
+    const int        CONFIRM1_GAMES    = Scaled(3000);  // std_err ≈ 0.027 turns; threshold 0.10
+    const int        CONFIRM2_GAMES    = Scaled(5000);  // std_err ≈ 0.021 turns; threshold 0.05
+    const int        GRID_GAMES        = Scaled(1000);  // std_err ≈ 0.047 turns per config
     constexpr int    MAX_CANDIDATES    = 5;
     constexpr double SCAN_THRESHOLD    = 0.30;  // min correlation (turns) to enter pipeline
     constexpr double CONFIRM1_THRESHOLD = 0.10; // min improvement to pass round 1
@@ -606,7 +619,7 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     // Computing them earlier -- on working_profile rather than the final land config --
     // also avoids coupling the scores to the very land params we are about to tune.
     constexpr uint64_t SCORING_OFFSET = 3'000'000ULL;
-    constexpr int      SCORING_GAMES  = 2000;
+    const int          SCORING_GAMES  = Scaled(2000);
     std::cerr << "  Computing card scores (" << SCORING_GAMES << " games, depth="
               << ANALYSIS_DEPTH << ")...\n";
     std::vector<GameRecord> scoring_records = RunForRecords(
