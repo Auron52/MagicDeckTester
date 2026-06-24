@@ -349,40 +349,56 @@ into the mulligan optimisation (raise `GRID_GAMES`, add threshold candidates, wi
 grid) — the whole point is a *better* profile at the same wall-clock. Disclose every pruning
 heuristic in Stage 6a alongside the accuracy heuristics, and note its measured cost saving.
 
-### 5g. Earliest-win rule-miner (grounds the 5e heuristics; `MTG_DUMP_EWINS`)
+### 5g. Heuristic GENERATION — earliest-win rule-miner (`MTG_DUMP_EWINS`)
 
-Step 4 of the 5e workflow ("derive the rule from what the oracle's optimal lines share")
-is automated by an offline rule-miner. For each **real pre-combat decision**, the runner
-scores EVERY candidate top-level play (the same `EnumeratePlansWithLand` candidates the
-search ranks — including cast ORDERINGS when `MTG_SEARCH_ORDER=1`) by the EARLIEST full-game
-win turn it leads to, by applying the play, running its combat, then full-search the rest of
-the game (no cross-candidate B&B, so each gets its TRUE earliest win — `TurnSolver::Enumerate-
-EarliestWins`). It writes one `{"ewins":...}` JSON line per decision to **stderr**. Inert
-(zero overhead) unless `MTG_DUMP_EWINS` is set.
+This is how you DERIVE a new deck's DecisionProvider heuristics (and audit an existing deck's)
+from the full search itself instead of card-text intuition — automating step 4 of the 5e
+workflow. For each **real pre-combat decision** the runner scores EVERY candidate top-level
+play (the same `EnumeratePlansWithLand` candidates the search ranks — cast ORDERINGS included
+when `MTG_SEARCH_ORDER=1`) by the EARLIEST full-game win it leads to: apply the play, run its
+combat, then full-search the rest of the game with no cross-candidate pruning, so each gets its
+TRUE earliest win (`TurnSolver::EnumerateEarliestWins`). One `{"ewins":...}` JSON line per
+decision → **stderr**. Inert (zero overhead) unless `MTG_DUMP_EWINS` is set. EXPENSIVE (a full
+rollout per candidate) — bound with games/budget; overnight-safe.
 
+**One command** (drives the dump over all decision turns + mines the rules):
 ```
-# generate the dump (orderings on; one decision turn keeps cost bounded — it is EXPENSIVE,
-# a full rollout per candidate, so use few games and single-deck). TURN default 1 (opening);
-# 0 = every turn. Redirect STDERR to the file.
-MTG_DUMP_EWINS=1 MTG_SEARCH_ORDER=1 MTG_DUMP_EWINS_TURN=3 \
-    ./build/Release/mtg <deck> --profile <prof> --seed 2002 --games 50 \
-    --depth 5 --budget-ms 1500 2>dump.jsonl >/dev/null
-python3 scripts/analyze_earliest_wins.py dump.jsonl      # --min-support N (default 3)
+GAMES=60 scripts/mine_heuristics.sh <deckfile> [profile]
+# wraps: MTG_DUMP_EWINS=1 MTG_SEARCH_ORDER=1 MTG_DUMP_EWINS_TURN=0 runner 2>logs/heuristics/<name>.ewins.jsonl
+#        + python3 scripts/analyze_earliest_wins.py <that file>
+# knobs (env or positional): GAMES SEED DEPTH BUDGET TURN (TURN=0 = every turn; a number = just that turn)
 ```
 
-The analyzer emits three grounded reports with support/conflict counts:
-- **ORDER rules** — ordered card pairs whose faster lines agree on direction (e.g. burn:
-  *cast Lightning Bolt before Light Up the Stage / Searing Blaze*, 0 conflict). A 0-conflict
-  rule is a `CastOrderRank` candidate; a high-conflict pair is situation-dependent → leave to
-  the search.
-- **INCLUSION rules** — casting card C this turn's avg win-turn delta (e.g. burn: *Shard Volley
-  +0.25 → AVOID early*; the land-sacrifice slows the clock).
-- **LAND / FETCH** — which land/fetch target the earliest-win lines pick (e.g. antilife: Forest
-  most-picked, matching the Forest-first fetch rule).
+It prints three grounded reports with **support / conflict** counts:
+- **ORDER rules** — ordered card pairs whose faster lines agree on direction. *(burn: cast
+  Lightning Bolt before Light Up / Searing Blaze, Goblin Guide before Lightning Bolt; th:
+  Land's Edge before Treasure Hunt — the real combo line.)*
+- **INCLUSION rules** — per-card avg win-turn delta from casting it THIS turn (− helps, + hurts).
+  *(burn: Shard Volley +0.33 → avoid early; knights: lords/anthem creatures all negative → deploy
+  them; th: Land's Edge −0.44 / Treasure Hunt −0.24 → cast the combo pieces.)*
+- **LAND / FETCH** — which land / fetch target the earliest-win lines pick. *(antilife: Forest
+  first.)*
 
-These are PROPOSALS, not law: still run the 5e step-6 with/without A/B before shipping any rule
-(the dump can over-fit a few seeds; the permutation oracle can itself commit a slower line at
-fixed budget — see step 4's caveat). Use it to *find* candidate rules fast, not to bless them.
+**Translate candidates → provider** (then validate each, below):
+| mined rule | provider encoding |
+|---|---|
+| 0-conflict ORDER "A before B" | `CastOrderRank`: give A a lower rank than B (archetype override). High-conflict pair → leave to the search (don't encode). |
+| INCLUSION strongly − ("cast it") | it already gets cast; only act if it's being *deferred* wrongly — usually no change. |
+| INCLUSION strongly + ("avoid early") | a cast-gate/late rank in the provider IF a real per-game misplay is confirmed (else leave to search). |
+| LAND / FETCH skew | `FetchCandidates` / land-pick priority (the Forest-first pattern). |
+
+**These are PROPOSALS, never auto-shipped.** Each encoded rule still goes through the 5e step-6
+**with/without per-game A/B** (diff vs `test/gt_logs/*.wins`): accept only if net-positive with
+every regression explained. The dump can over-fit a few seeds, and the permutation oracle can
+itself commit a slower line at fixed budget (step-4 caveat) — so a rule that doesn't survive the
+A/B is dropped. Mine across ≥2 seeds before trusting a marginal rule.
+
+**New-deck flow (incl. overnight):** once the deck is playable + profiled (Stages 1–4), run
+`mine_heuristics.sh` (a high `GAMES` count is the overnight-friendly knob) → read the candidate
+report → encode only the clear, generalizable rules an *archetype* provider needs (most decks
+ride `GenericProvider`; add a subclass only when the mined rules diverge from generic) → A/B
+each. The mining is unattended-safe; the encode+A/B is the next attended step. Disclose every
+encoded heuristic in Stage 6a.
 
 ### Convergence criteria
 
