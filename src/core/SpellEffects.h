@@ -1190,6 +1190,40 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
     return false;
 }
 
+// Spend pre-produced RESERVE ("floating") mana toward a cost, BEFORE any permanent is tapped.
+// Mutates both `reserve` (drained) and `cost` (reduced by what the reserve paid). Colour pips
+// are paid by matching colour first, then a wild (any-colour) reserve mana; {C} pips only by
+// colourless reserve; generic pips by colourless, then any colour, then wild. A no-op when the
+// reserve is empty -> byte-identical for every non-ritual deck. Shared by the executor
+// (AIEngine::TapForCost) and the rollout (TurnSolver::TapForCostDirect) so a ritual's floating
+// mana is realised identically in both (lockstep). See GameState::floating_mana.
+inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost)
+{
+    if (reserve.Total() == 0) { return; }
+    auto drain = [](int& pip, int& pool) { while (pip > 0 && pool > 0) { --pip; --pool; } };
+    // 1) Exact colour matches.
+    drain(cost.white,     reserve.white);
+    drain(cost.blue,      reserve.blue);
+    drain(cost.black,     reserve.black);
+    drain(cost.red,       reserve.red);
+    drain(cost.green,     reserve.green);
+    drain(cost.colorless, reserve.colorless);
+    // 2) Wild reserve mana covers any remaining COLOUR pip (not {C}).
+    drain(cost.white, reserve.wild);
+    drain(cost.blue,  reserve.wild);
+    drain(cost.black, reserve.wild);
+    drain(cost.red,   reserve.wild);
+    drain(cost.green, reserve.wild);
+    // 3) Generic pips: colourless, then each colour, then wild.
+    drain(cost.generic, reserve.colorless);
+    drain(cost.generic, reserve.white);
+    drain(cost.generic, reserve.blue);
+    drain(cost.generic, reserve.black);
+    drain(cost.generic, reserve.red);
+    drain(cost.generic, reserve.green);
+    drain(cost.generic, reserve.wild);
+}
+
 // Decides whether a land enters tapped and applies any "as this land enters"
 // payments/choices made on entry. Call while the land card is still in the player's
 // hand (the reveal check scans the hand). Returns true if the land enters tapped.

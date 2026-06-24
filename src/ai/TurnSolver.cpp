@@ -1084,10 +1084,17 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 // Tap mana sources in-place to pay a cost. Returns false if mana is unavailable.
 // for_creature: if false, skip creature-only mana sources (e.g. Ancient Ziggurat)
 //               since non-creature spells cannot be paid with that mana.
-static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_creature = true)
+static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature = true)
 {
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed
+
+    // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
+    // empty -> byte-identical for non-ritual decks. Mirrors AIEngine::TapForCost so the rollout
+    // and the real executor realise a ritual's floating mana identically (lockstep).
+    const ManaPool reserve_pre = state.floating_mana;
+    ManaCost cost = cost_in;
+    SpendFloatingTowardCost(state.floating_mana, cost);
 
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
@@ -1268,6 +1275,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost, bool for_cr
     // Total failure: restore the greedy's exact end-state to match prior behaviour.
     state.battlefield        = bf_greedy_fail;
     state.players[active].life = life_greedy_fail;
+    state.floating_mana      = reserve_pre;   // payment failed -> return the reserve untouched
     return false;
 }
 

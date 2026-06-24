@@ -1,6 +1,7 @@
 #pragma once
 #include "Player.h"
 #include "Permanent.h"
+#include "ManaPool.h"
 #include <array>
 #include <vector>
 #include <optional>
@@ -60,6 +61,13 @@ struct GameState
     int                      turn_number                  = 0;
     bool                     player_lost_on_draw          = false;
     bool                     opponent_lost_life_this_turn = false;
+    // Turn-scoped RESERVE mana: mana produced by a ritual (Reality Spasm untap-retap, Irencrag
+    // Feat) that has not yet been spent. Payment (TapForCost / TapForCostDirect) drains this
+    // BEFORE tapping any permanent, so a ritual cast earlier in a turn funds a bigger X-spell
+    // later the same turn (the Hinata combo). Empty for every non-ritual deck and reset at the
+    // start of each turn's planning/execution -> byte-identical when nothing fills it. NEVER
+    // folded into BuildSimKey (it is empty at every cross-turn decision point).
+    ManaPool                 floating_mana;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
     uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
                                                           // deterministic mid-game shuffle (ShuffleAfterSearch).

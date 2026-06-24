@@ -1937,12 +1937,18 @@ ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
     return pool;
 }
 
-bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& available,
+bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& available,
                           bool for_creature)
 {
     Player&  ap     = state.ActivePlayer();
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed (held locally)
+
+    // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
+    // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
+    const ManaPool reserve_pre = state.floating_mana;
+    ManaCost cost = cost_in;
+    SpendFloatingTowardCost(state.floating_mana, cost);
 
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
@@ -2135,6 +2141,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost, ManaPool& avai
     if (TapForCostBacktrack(state, cost, for_creature, ManaPool{})) { return true; }
     state.battlefield        = bf_greedy_fail;
     state.players[active].life = life_greedy_fail;
+    state.floating_mana      = reserve_pre;   // payment failed -> return the reserve untouched
     return false;
 }
 
