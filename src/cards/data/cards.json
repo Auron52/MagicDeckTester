@@ -1421,11 +1421,12 @@
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Magma Opus deals 4 damage divided as you choose among any number of targets. Tap two target permanents. Create a 4/4 blue and red Elemental creature token. Draw two cards.\n{U/R}{U/R}, Discard this card: Create a Treasure token. [PARTIAL: modelled as 4 damage to the opponent's face (the win-relevant part). The 4/4 Elemental token, draw two, tap-two (inert vs a passive opponent), and the {U/R}{U/R}-discard-for-Treasure ramp mode are NOT modelled -- a conservative UNDER-approximation (Magma contributes only its 4 face damage here; its token/card-advantage/early-Treasure value is omitted). Deferred to Layer 2. Hinata discount: 1 target.]",
+            "oracle_text": "Magma Opus deals 4 damage divided as you choose among any number of targets. Tap two target permanents. Create a 4/4 blue and red Elemental creature token. Draw two cards.\n{U/R}{U/R}, Discard this card: Create a Treasure token. [Modelled as 4 damage to the opponent's face (point all 4 there -- the win-relevant split) + DRAW TWO (cast_draw:2, its real card-advantage value). Hinata discount via discount_max_targets:6 (+self_safe +permanents). STILL omitted (conservative UNDER-approximation, never over-rated): the 4/4 Elemental token (a body), tap-two (inert vs a passive opponent), and the {U/R}{U/R}-discard-for-Treasure ramp mode. The token omission slightly under-rates this 1-of; flagged in the Stage 6a disclosure.]",
             "template": "direct_damage",
             "parameters": {
                 "damage": 4,
                 "targeting": "any",
+                "cast_draw": 2,
                 "discount_max_targets": 6,
                 "discount_self_safe": true,
                 "discount_targets_permanents": true

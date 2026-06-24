@@ -1025,6 +1025,24 @@ inline void ExileTopLibrary(GameState& state)
     if (!ap.library.empty()) { ap.library.erase(ap.library.begin()); }
 }
 
+// Soulfire Eruption's DIG: "you may play the exiled cards until the end of your next turn." Instead
+// of losing the card (ExileTopLibrary), move the top library card to hand as a STAGED card playable
+// through next turn (expiry = turn+1, the same primitive Light Up the Stage uses; SimulateToEndImpl
+// expires it). This is the card-advantage the deck digs for (find Hinata / combo pieces). Shared by
+// EffectHandler (executor) and apply_one (rollout) so the realised dig matches exactly (lockstep).
+// CONSERVATIVE: only the single (opponent-targeted) card is dug; the fuller multi-target exile-N
+// dig (with its self/own-creature damage downside) is left unmodelled -> never over-rates Soulfire.
+inline void StageTopLibraryCard(GameState& state)
+{
+    Player& ap = state.ActivePlayer();
+    if (ap.library.empty()) { return; }
+    Card c = ap.library.front();
+    ap.library.erase(ap.library.begin());
+    c.m_is_staged     = true;
+    c.m_staged_expiry = state.turn_number + 1;
+    ap.hand.push_back(std::move(c));
+}
+
 // Untap X of the active player's tapped mana sources (Reality Spasm). Deterministic order
 // (lowest battlefield index first) so the rollout and executor agree.
 inline void UntapManaSources(GameState& state, int count)

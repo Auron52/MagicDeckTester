@@ -404,6 +404,9 @@ struct CardParams
     // Irencrag Feat: a fixed mana-burst RITUAL -- on resolution, add this much mana to the
     // turn-scoped reserve (state.floating_mana) for a same-turn payoff. 0 for non-ritual cards.
     int  ritual_floating_mana = 0;
+    // Magma Opus: a non-draw spell that ALSO draws on resolution ("draw two cards"). Drawn to
+    // hand in both cast paths (executor + rollout) -- deterministic, lockstep. 0 = no draw rider.
+    int  cast_draw = 0;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

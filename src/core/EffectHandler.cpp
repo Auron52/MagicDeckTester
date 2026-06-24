@@ -196,11 +196,13 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         {
             damage = def.params.landfall_damage;
         }
-        // Soulfire Eruption: exile the top library card and deal its mana value.
+        // Soulfire Eruption: deal the top library card's mana value, and DIG -- "you may play
+        // the exiled card" -> stage it playable (card advantage toward the combo) rather than
+        // losing it. Mirrors apply_one (lockstep).
         if (def.params.damage_equals_top_mv)
         {
             damage = TopLibraryMV(state);
-            ExileTopLibrary(state);
+            StageTopLibraryCard(state);
         }
     }
 
@@ -242,6 +244,13 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
     if (def.params.opponent_lifegain > 0)
     {
         OpponentGainsLife(state, entry.controller_index, def.params.opponent_lifegain);
+    }
+
+    // Magma Opus rider: "draw two cards." Drawn to hand on resolution; mirrors apply_one (lockstep).
+    if (def.params.cast_draw > 0)
+    {
+        Player& cp = state.players[entry.controller_index];
+        cp.library.DrawN(def.params.cast_draw, cp.hand);
     }
 
     MoveToGraveyard(state, entry);

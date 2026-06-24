@@ -1636,12 +1636,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 dmg = def.params.landfall_damage;
             }
-            // Soulfire Eruption: exile the top library card and deal its mana value (mirrors
-            // EffectHandler::ResolveDirectDamage so the rollout matches the executor).
+            // Soulfire Eruption: deal the top library card's mana value, and DIG -- stage the
+            // card playable (card advantage) rather than losing it. Mirrors EffectHandler so the
+            // rollout matches the executor (lockstep).
             if (def.params.damage_equals_top_mv)
             {
                 dmg = TopLibraryMV(state);
-                ExileTopLibrary(state);
+                StageTopLibraryCard(state);
             }
 
             if (t == Targeting::Any || t == Targeting::Player)
@@ -1690,6 +1691,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 OpponentGainsLife(state, state.active_player_index, def.params.opponent_lifegain);
             }
+            // Magma Opus rider: "draw two cards." Mirrors EffectHandler (lockstep).
+            if (def.params.cast_draw > 0) { ap.library.DrawN(def.params.cast_draw, ap.hand); }
         }
         else if (is_creature)
         {
