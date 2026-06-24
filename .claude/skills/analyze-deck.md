@@ -363,11 +363,20 @@ rollout per candidate) — bound with games/budget; overnight-safe.
 
 **One command** (drives the dump over all decision turns + mines the rules):
 ```
-GAMES=60 scripts/mine_heuristics.sh <deckfile> [profile]
+GAMES=500 SEEDS="2002 3003 4004" scripts/mine_heuristics.sh <deckfile> [profile]
 # wraps: MTG_DUMP_EWINS=1 MTG_SEARCH_ORDER=1 MTG_DUMP_EWINS_TURN=0 runner 2>logs/heuristics/<name>.ewins.jsonl
-#        + python3 scripts/analyze_earliest_wins.py <that file>
-# knobs (env or positional): GAMES SEED DEPTH BUDGET TURN (TURN=0 = every turn; a number = just that turn)
+#        + python3 scripts/analyze_earliest_wins.py <that file>   (appends each seed, analyses together)
+# knobs (env or positional): GAMES(/seed) SEEDS DEPTH BUDGET TURN  (TURN=0 = every turn; a number = just that turn)
 ```
+
+**Sizing (overnight):** default **GAMES≈500 per seed × 2–3 disjoint SEEDS** (the ≥2-seed
+overfit guard). INCLUSION/LAND signals stabilise in the low hundreds; ORDER rules are the sparse
+one and want ~500/seed (and on order-irrelevant lord/anthem decks they stay sparse no matter the
+count — that's real, not under-sampling). Measured cost (depth 5, budget 3000, all turns, 24-core
+box): ~0.6 s/game narrow (burn), ~1.3 wide-board (slivers), ~2.1 combo (antilife) → 1,500 games
+mines in ~15 min / ~30 min / ~55 min respectively. So even a worst-case combo deck is well under
+an hour; bump to GAMES=1000 for an order-heavy deck. New deck of unknown cost: start GAMES=300 to
+gauge the rate, then scale. Diminishing returns past ~1,000–1,500/seed.
 
 It prints three grounded reports with **support / conflict** counts:
 - **ORDER rules** — ordered card pairs whose faster lines agree on direction. *(burn: cast
