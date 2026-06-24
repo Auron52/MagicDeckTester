@@ -51,6 +51,29 @@ static thread_local bool g_trace_arm = false;
 static const char* s_fd_leaf_depth_env = std::getenv("MTG_FD_LEAF_DEPTH");
 static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_leaf_depth_env) : 1;
 
+// Move-ordering for the full-depth branch-and-bound (FSLineWin / FSLineTail). Each B&B loop
+// returns at the FIRST verified in-horizon win; trying the plans that statically look lethal
+// (then higher-value) first makes that win surface after fewer simulated plans, so WINNING
+// nodes search less. Result-preserving by construction: in an iterative-deepening pass every
+// in-horizon win sits at the same horizon-edge turn, so reordering changes only WHICH tied
+// line commits, not the win turn -- and the rollout and executor share FSLineWin, so they
+// stay in lockstep. A stable sort keeps the original order within ties to minimise
+// committed-line churn (a different tied line could realise differently only under
+// commit-the-line non-convergence; verified against GT). Default ON; MTG_NO_MOVE_ORDER opts
+// out for the with/without A/B. Cheap: one O(n log n) sort per interior node.
+static const bool s_move_order = std::getenv("MTG_NO_MOVE_ORDER") == nullptr;
+
+static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
+{
+    if (!s_move_order || plans.size() < 2) { return; }
+    std::stable_sort(plans.begin(), plans.end(),
+        [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
+        {
+            if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn; }
+            return a.value > b.value;
+        });
+}
+
 void TurnSolver::SetTraceSolve(bool enable) { s_trace_solve = enable; }
 bool TurnSolver::GetTraceSolve() { return s_trace_solve; }
 
@@ -3217,6 +3240,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // no-win — making any tap-out play look strictly worse than idling. The
         // baseline rollout always advances past an empty second main; mirror that.
         post.push_back(TurnSolver::Plan{});
+        MoveOrderPlans(post);   // lethal-looking / higher-value second mains first -> earlier cutoff
         // NOTE: we do NOT shortcut on the projected `wins_this_turn` flag here. That
         // projection (pending_atk + direct_dmg >= opp life) can over-count what the
         // actual ApplyPlanDirect + SimulateCombat deals, and trusting it would commit
@@ -3312,6 +3336,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // simulating each plan below, so the committed line's win turn always matches
     // replaying it (the projection can over-count vs ApplyPlanDirect+SimulateCombat).
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
+    MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
 
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
