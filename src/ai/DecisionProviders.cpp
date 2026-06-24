@@ -233,10 +233,39 @@ AntiLifegainProvider::FetchCandidates(const GameState& s, int controller, const 
     return ::FetchCandidates(s, controller, fetch_pp);
 }
 
+// Total power of the controller's creatures that can still attack this turn (untapped, not
+// summoning-sick). Used by the Reverent-Silence lethal checks below so the "free payload + this
+// turn's swing finishes the opponent" formula is identical at emission and at auto-fire time.
+static int ReadyAttackPower(const GameState& s, int controller)
+{
+    int atk = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsCreature() && p.CanAttack())
+        {
+            int pw = p.EffectivePower();
+            if (pw > 0) { atk += pw; }
+        }
+    }
+    return atk;
+}
+
 bool AntiLifegainProvider::CanAutoFireAltPayload(const GameState& s, int controller,
                                                  const CardDefinition& def) const
 {
-    return ::CanAutoFireAltPayload(s, controller, def);
+    if (::CanAutoFireAltPayload(s, controller, def)) { return true; }  // safe payloads (Invigorate/Skyshroud)
+
+    // Same-turn enabler -> Reverent Silence LETHAL combo. ::CanAutoFireAltPayload refuses ANY
+    // destroy_all_enchantments payload (it wipes our own Aria/Remedy, so it is normally a SEARCH
+    // choice via ShouldEmitRiskyAltPayload). But when it is LETHAL this turn the wipe is moot (the
+    // game ends), so it becomes a safe auto-fire here. This loop runs AFTER the plan's casts
+    // resolve, so a Tainted Remedy / Plague Drone cast THIS turn (enabler-first) is already live --
+    // closing the "cast the enabler + free-cast Reverent Silence the same turn for the kill" gap
+    // that collection-time emission (gated on a Remedy already active) cannot express.
+    if (def.params.alt_lifegain_cost <= 0 || !def.params.destroy_all_enchantments) { return false; }
+    if (!::RemedyActive(s, controller)) { return false; }
+    if (!::ControlsSubtype(s, controller, def.params.alt_cost_requires_subtype)) { return false; }
+    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
 }
 
 bool AntiLifegainProvider::CastEnablerFirst(const GameState&, const std::string& card_name) const
@@ -280,16 +309,7 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
     }
 
     // (b) lethal in combination with this turn's attackers
-    int atk = 0;
-    for (const Permanent& p : s.battlefield)
-    {
-        if (p.controller_index == controller && p.card.IsCreature() && p.CanAttack())
-        {
-            int pw = p.EffectivePower();
-            if (pw > 0) { atk += pw; }
-        }
-    }
-    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + atk;
+    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
 }
 
 // ---- TreasureHuntProvider ---------------------------------------------------
