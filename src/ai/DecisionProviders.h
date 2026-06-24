@@ -95,6 +95,10 @@ class HinataProvider : public GenericProvider
 {
 public:
     bool OpponentPlaysLands() const override { return true; }
+    // Gamble (and any unrestricted tutor) is narrowed combo-aware: while no Hinata is in play
+    // or hand, fetch Hinata (a no-Hinata hand is a dead hand); once she is online, let the
+    // search pick among the missing payoffs/rituals (the generic full set). Honours MTG_UNPRUNED.
+    std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     // Combo-aware scry/dig: a no-Hinata hand is a dead hand (the payoffs are uncastable at full
     // price), so while no Hinata is in play or hand the dig HUNTS her -- keep Hinata, keep only
     // the lands/ramp/cantrips that cast or continue finding her, and bottom the dead payoffs.

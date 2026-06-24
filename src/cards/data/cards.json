@@ -1446,6 +1446,62 @@
                 "discount_targets_scale_x": true,
                 "discount_targets_permanents": true
             }
+        },
+        {
+            "name": "Ornithopter of Paradise",
+            "mana_cost": "{2}",
+            "types": [
+                "Artifact",
+                "Creature"
+            ],
+            "subtypes": [
+                "Thopter"
+            ],
+            "keywords": [
+                "Flying"
+            ],
+            "power": 0,
+            "toughness": 2,
+            "oracle_text": "Flying\n{T}: Add one mana of any color. [Modelled exactly like Birds of Paradise -- a creature mana dork that taps for any one colour (W/U/R cover this deck). Summoning sickness applies to its {T} mana ability, which the mana_dork template already enforces. As an artifact CREATURE it is also a valid target for Hinata's per-target discount (a creature you control); that extra-target synergy is intentionally NOT added to the discount count here -- the same conservative under-approximation Forbidden Orchard's Spirits carry.]",
+            "template": "mana_dork",
+            "parameters": {
+                "produces": [
+                    "W",
+                    "U",
+                    "B",
+                    "R",
+                    "G"
+                ]
+            }
+        },
+        {
+            "name": "Gamble",
+            "mana_cost": "{R}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Search your library for a card, put that card into your hand, then discard a card at random. [Tutor for ANY card (no type filter). The HinataProvider narrows it combo-aware: while no Hinata is in play or hand it fetches Hinata (a no-Hinata hand is a dead hand); once she is online it fetches the missing payoff/ritual. The 'discard a card at random' downside IS modelled (discard_random_after_tutor): one uniformly-random card is removed from hand AFTER the fetched card lands, off a deterministic seed (game_seed/turn/search_count, lockstep across rollout+executor), so it can hit the just-tutored card -- exactly the real Gamble risk on a small hand. The search resolving that seeded discard deterministically is the same clairvoyance simplification all known-library effects carry; Gamble is a 1-of.]",
+            "template": "custom",
+            "parameters": {
+                "tutor_to_hand": true,
+                "discard_random_after_tutor": true
+            }
+        },
+        {
+            "name": "Irencrag Feat",
+            "mana_cost": "{3}{R}{R}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Add six {R}. Activate this ability only once each turn. [A burst-mana RITUAL (pay 5, get six {R}; net +1 and a colour fix into Crackle). It depends on the SAME deferred same-turn chaining as Reality Spasm: the static-pool planner cannot yet cast a ritual and spend the freed mana on a same-turn Crackle, so until that Layer-2 (2d) HinataProvider mana model lands, Irencrag Feat has no exploitable effect and is treated as a non-cast dead card (goldfish_inert) -- a conservative UNDER-approximation (its real ritual value is omitted, never over-counted). Grouped with Reality Spasm in the deferred ritual-chaining work; NOT a counterspell-style inert card.]",
+            "template": "custom",
+            "parameters": {
+                "goldfish_inert": true
+            }
         }
     ]
 }

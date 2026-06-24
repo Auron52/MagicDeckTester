@@ -291,6 +291,10 @@ struct CardParams
     // enabler (lifegain_to_loss) while none is active, else the wincon engine (verse_damage),
     // else the first match. (Until searched-tutor lands, the default also uses TutorPick.)
     std::string              tutor_heuristic;
+    // Gamble's downside: after the fetched card lands in hand, discard one uniformly-random card
+    // (can be the tutored card). Deterministic seed (game_seed/turn/search_count), applied inside
+    // PerformTutor so the rollout and executor stay lockstep. Off everywhere else.
+    bool                     discard_random_after_tutor = false;
 
     // Removal rider (Swords to Plowshares): the exiled creature's controller gains life equal
     // to its power. Routed through OpponentGainsLife when that controller is the opponent (so

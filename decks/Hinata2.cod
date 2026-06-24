@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Hinata, Dawn-Crowned"/>
+        <card number="4" name="Crackle with Power"/>
+        <card number="2" name="Distorting Wake"/>
+        <card number="4" name="Forbidden Orchard"/>
+        <card number="1" name="Icy Blast"/>
+        <card number="4" name="Soulfire Eruption"/>
+        <card number="4" name="Reality Spasm"/>
+        <card number="3" name="Remand"/>
+        <card number="2" name="Izzet Boilerworks"/>
+        <card number="2" name="Cascade Bluffs"/>
+        <card number="3" name="Island"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="3" name="Mountain"/>
+        <card number="2" name="Memory Lapse"/>
+        <card number="4" name="Mystic Monastery"/>
+        <card number="2" name="Reflecting Pool"/>
+        <card number="1" name="Expressive Iteration"/>
+        <card number="3" name="Ornithopter of Paradise"/>
+        <card number="4" name="Ponder"/>
+        <card number="4" name="Preordain"/>
+        <card number="1" name="Gamble"/>
+        <card number="1" name="Irencrag Feat"/>
+        <card number="1" name="Magma Opus"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Aether Gale"/>
+        <card number="4" name="Dregs of Sorrow"/>
+        <card number="1" name="Profane Command"/>
+        <card number="1" name="Kozilek's Command"/>
+        <card number="2" name="Inscription of Insight"/>
+        <card number="1" name="Mystic Confluence"/>
+        <card number="1" name="Sublime Epiphany"/>
+        <card number="1" name="Illithid Harvester // Plant Tadpoles"/>
+        <card number="4" name="Preordain"/>
+        <card number="4" name="Ponder"/>
+        <card number="1" name="Izzet Signet"/>
+        <card number="2" name="Magma Opus"/>
+    </zone>
+</cockatrice_deck>

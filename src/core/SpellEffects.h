@@ -366,6 +366,24 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
     ShuffleAfterSearch(state, controller_index);
     if (pp.tutor_to_hand)     { ap.hand.push_back(std::move(c)); }
     else if (pp.tutor_to_top) { ap.library.insert(ap.library.begin(), std::move(c)); }
+
+    // Gamble: "then discard a card at random." Deterministic seed (game_seed / turn /
+    // search_count) so the rollout and the real executor pick the IDENTICAL victim -- the
+    // search resolves it clairvoyantly (the engine-wide known-library simplification), but it
+    // can still hit the just-tutored card (the real Gamble risk on a small hand). Only fires
+    // for to-hand tutors that set the flag; off everywhere else.
+    if (pp.discard_random_after_tutor && pp.tutor_to_hand && !ap.hand.empty())
+    {
+        uint64_t mix = state.game_seed * 0x9E3779B97F4A7C15ull
+                     + (static_cast<uint64_t>(state.turn_number) + 1) * 0xD1B54A32D192ED03ull
+                     + (state.search_count + 1) * 0xCA5A826395121157ull
+                     + ap.hand.size();
+        mix ^= mix >> 30; mix *= 0xBF58476D1CE4E5B9ull;
+        mix ^= mix >> 27; mix *= 0x94D049BB133111EBull;
+        mix ^= mix >> 31;
+        int victim = static_cast<int>(mix % ap.hand.size());
+        ap.hand.erase(ap.hand.begin() + victim);
+    }
 }
 
 // Exalted (Ignoble Hierarch): "Whenever a creature you control attacks ALONE, that creature

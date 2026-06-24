@@ -382,6 +382,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("tutor_types", json::array()))
         p.tutor_types.push_back(s);
     p.tutor_heuristic           = params.value("tutor_heuristic", std::string{});
+    p.discard_random_after_tutor = params.value("discard_random_after_tutor", false);
     p.controller_lifegain_equals_power = params.value("controller_lifegain_equals_power", false);
     p.tap_opponent_lifegain     = params.value("tap_opponent_lifegain", 0);
     for (const std::string& s : params.value("fetch_land_types", json::array()))

@@ -53,7 +53,9 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
         const Card&           card = def ? def->card : lc;
-        bool type_ok = false;
+        // Empty tutor_types == no restriction ("search for a card", e.g. Gamble): every card is
+        // a legal target. A non-empty filter keeps only the matching types (Idyllic/Enlightened).
+        bool type_ok = pp.tutor_types.empty();
         for (const std::string& t : pp.tutor_types)
         { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
         if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
@@ -612,6 +614,35 @@ bool VialProvider::WantVialCharge(const GameState& s, const Permanent& vial) con
 }
 
 // ---- HinataProvider ---------------------------------------------------------
+
+std::vector<std::string>
+HinataProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    // Unpruned A/B: do not narrow -- let the search branch over every legal tutor target.
+    if (DecisionUnpruned()) { return GenericProvider::TutorCandidates(s, controller, pp); }
+
+    // Already have Hinata in play or hand? The payoffs are live -> search the full set for the
+    // missing piece. Otherwise the deck is dead without her, so fetch Hinata if she's findable.
+    bool have_hinata = HinataInPlay(s);
+    if (!have_hinata)
+    {
+        for (const Card& c : s.players[controller].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.hinata_cost_reducer) { have_hinata = true; break; }
+        }
+    }
+    if (!have_hinata)
+    {
+        for (const Card& lc : s.players[controller].library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+            if (d && d->params.hinata_cost_reducer) { return { lc.m_name }; }   // decided: fetch her
+        }
+        // Hinata not in library (all copies drawn/played but none counted above is rare) -> fall through.
+    }
+    return GenericProvider::TutorCandidates(s, controller, pp);
+}
 
 bool HinataProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
 {
