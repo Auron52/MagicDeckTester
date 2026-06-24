@@ -87,6 +87,15 @@ void GameEngine::RunTurn(GameState& state)
     if (state.player_lost_on_draw) { return; }
     MainPhase(state, /*is_pre_combat=*/true);
     CombatPhase(state);
+    // State-based action (CR 704.5a / 104.3a): a player at 0 or less life loses
+    // immediately -- before its controller gets priority for the post-combat main. Without
+    // this check the turn would continue and a post-combat lifegain could "un-kill" a dead
+    // opponent (e.g. Swords to Plowshares' controller-lifegain rider once a Tainted Remedy
+    // has left), pushing the realised win to a later turn than the search (which checks
+    // opp.life <= 0 right after combat, SimulateToEndImpl) predicts. Mirrors the leaf so the
+    // executor realises the win the search commits. Opp-loss wins even if we also died this
+    // turn (CheckWinCondition is the opponent's loss; PlayOut handles our own loss after).
+    if (CheckWinCondition(state)) { return; }
     MainPhase(state, /*is_pre_combat=*/false);
     EndStep(state);
     CleanupStep(state);
