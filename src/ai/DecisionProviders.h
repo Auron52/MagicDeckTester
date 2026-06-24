@@ -95,6 +95,10 @@ class HinataProvider : public GenericProvider
 {
 public:
     bool OpponentPlaysLands() const override { return true; }
+    // Combo-aware scry/dig: a no-Hinata hand is a dead hand (the payoffs are uncastable at full
+    // price), so while no Hinata is in play or hand the dig HUNTS her -- keep Hinata, keep only
+    // the lands/ramp/cantrips that cast or continue finding her, and bottom the dead payoffs.
+    bool ScryKeepOnTop(const GameState&, const Card&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

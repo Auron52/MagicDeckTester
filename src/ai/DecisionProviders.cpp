@@ -611,6 +611,60 @@ bool VialProvider::WantVialCharge(const GameState& s, const Permanent& vial) con
     return ::WantVialCharge(s, vial);
 }
 
+// ---- HinataProvider ---------------------------------------------------------
+
+bool HinataProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+{
+    const int active = s.active_player_index;
+    const CardDefinition* tdef = CardDatabase::Instance().LookupCached(top_card);
+
+    // Hinata herself is always kept -- the whole deck is dead without her.
+    if (tdef && tdef->params.hinata_cost_reducer) { return true; }
+
+    // Do we already have Hinata (on the battlefield or in hand)? If so, the payoffs are live.
+    bool have_hinata = HinataInPlay(s);
+    if (!have_hinata)
+    {
+        for (const Card& c : s.players[active].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.hinata_cost_reducer) { have_hinata = true; break; }
+        }
+    }
+
+    const bool is_land = tdef ? tdef->card.IsLand() : top_card.IsLand();
+
+    if (!have_hinata)
+    {
+        // No Hinata yet -> dig HARD for her. Keep only what casts or continues finding her:
+        // lands and ramp up to ~4 mana sources (enough for her {1}{U}{R}{W}), and cheap card
+        // selection (cantrips) that keeps digging. Bottom the expensive payoffs (Crackle /
+        // Magma / Soulfire / Reality Spasm) and the goldfish-inert interaction -- all dead
+        // until Hinata arrives, so cycling past them gets to her sooner.
+        int sources = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && (p.card.IsLand() || d->params.mana_rock)) { ++sources; }
+        }
+        if (is_land)                                { return sources < 4; }
+        if (tdef && tdef->params.mana_rock)         { return sources < 4; }
+        if (tdef && tdef->params.cast_scry > 0)     { return true; }   // cantrips keep digging
+        return false;                                                  // bottom dead payoffs
+    }
+
+    // Have Hinata: the payoffs are castable -> keep nonlands, keep a land only while short
+    // (mirrors the generic keep so we don't flood once the engine is online).
+    if (!is_land) { return true; }
+    int lands_in_play = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == active && p.card.IsLand()) { ++lands_in_play; }
+    }
+    return lands_in_play < 2;
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
