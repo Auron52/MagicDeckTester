@@ -538,9 +538,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         // templates (DrawX) stay skipped until their effect is scaled in BOTH cast paths.
         if (def.card.m_mana_cost.has_x)
         {
+            // Reality Spasm (untap RITUAL): emit ONE action that floats mana for a same-turn
+            // payoff (Crackle). Only productive with Hinata in play (her discount makes the {X}
+            // free), so chosen_x = #mana sources -> untap/refloat them ALL. Cost is the fixed
+            // {U}{U} (the X discounts away via the same formula as Crackle). It deals no damage;
+            // its value is the floating it adds (credited in Solve::consider).
+            if (def.params.untap_x_mana_sources)
+            {
+                if (!HinataInPlay(state)) { continue; }
+                int x = ManaSourceCount(state);
+                if (x <= 0) { continue; }
+                int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
+                ManaCost xcost = EffectiveCost(def, state);
+                xcost.generic += x * pips;
+                xcost.generic = std::max(0, xcost.generic - HinataGenericDiscount(def, state, x));
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = xcost;
+                a.chosen_x       = x;
+                a.eval           = 0;                  // ritual deals nothing; value is enabling Crackle
+                a.direct_damage  = 0;
+                a.is_noncreature = !def.card.IsCreature();
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                actions.push_back(std::move(a));
+                continue;
+            }
             if (def.tmpl != CardTemplate::DirectDamage) { continue; }
             ManaCost base  = EffectiveCost(def, state);   // fixed part; ManaValue() ignores X
             ManaPool xpool = BuildPool(state);
+            // Hinata combo: a ritual in hand (Reality Spasm) funds a bigger X this turn. Credit
+            // its NET mana so this payoff's max X reaches the combo's lethal value. Over-generates
+            // candidates affordable ONLY with the ritual; Solve::consider rejects any subset that
+            // does not actually include the ritual (only the ritual+payoff subset passes CanPay).
+            // 0 with no Hinata / no ritual in hand -> byte-identical for every other deck.
+            xpool.wild += HinataRitualNetBonus(state);
             // Each point of X is paid x_pips times (Crackle {X}{X}{X} = 3), so the max
             // affordable X divides the leftover mana by x_pips.
             int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
@@ -797,6 +830,22 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     int n = static_cast<int>(ap.hand.size());
 
+    // Hinata combo: per-candidate GROSS floating-mana credit (Reality Spasm refloat / Irencrag
+    // burst). `consider` sums ritual_float[j] over the chosen subset and adds it to the pool's
+    // CanPay, so a subset that actually casts the ritual can fund a bigger same-turn payoff
+    // (Crackle). All zero for every non-ritual deck (any_ritual stays false) -> byte-identical.
+    std::vector<int> ritual_float(cands.size(), 0);
+    bool any_ritual = false;
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(cands[j].card_name);
+        if (cd && IsManaRitual(*cd))
+        {
+            ritual_float[j] = RitualFloatAmount(state, *cd, cands[j].chosen_x);
+            any_ritual = true;
+        }
+    }
+
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
     int lands_in_hand = 0;
@@ -879,8 +928,24 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             }
         }
 
-        if (!pool.CanPay(combined))                          { return; }
-        if (!pool_noncreature.CanPay(noncreature_combined))  { return; }
+        // Hinata combo: a ritual cast in THIS subset floats mana for the rest of the subset.
+        // Credit its gross float to the affordable pool (the ritual's own cost is already in
+        // `combined`, so pool+gross-cost == pool+net -> exact, conservative). Zero unless a
+        // ritual is selected -> byte-identical for every non-ritual deck.
+        int ritual_credit = 0;
+        if (any_ritual) { for (int j : sel) { ritual_credit += ritual_float[j]; } }
+        if (ritual_credit > 0)
+        {
+            ManaPool eff    = pool;             eff.wild    += ritual_credit;
+            ManaPool eff_nc = pool_noncreature; eff_nc.wild += ritual_credit;
+            if (!eff.CanPay(combined))                       { return; }
+            if (!eff_nc.CanPay(noncreature_combined))        { return; }
+        }
+        else
+        {
+            if (!pool.CanPay(combined))                          { return; }
+            if (!pool_noncreature.CanPay(noncreature_combined))  { return; }
+        }
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
@@ -1794,6 +1859,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
+        else if (IsManaRitual(def))
+        {
+            // Reality Spasm / Irencrag Feat -- mana RITUAL. Float its mana into the turn-scoped
+            // reserve for a same-turn payoff (Crackle). Mirrors EffectHandler so the rollout and
+            // the real executor realise the identical floating mana (lockstep); the planner
+            // credits this same amount, so the predicted combo and the executed one never diverge.
+            ApplyRitualFloat(state, def, chosen_x);
+        }
         else if (def.params.tutor_to_hand || def.params.tutor_to_top)
         {
             // Tutor (Idyllic / Enlightened): fetch the SEARCHED target (tutor_target); empty
@@ -2309,6 +2382,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Start of next turn
     ++state.turn_number;
     state.opponent_lost_life_this_turn = false;
+    state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
 
@@ -2532,6 +2606,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (cdef ? cdef->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
     }
 
+    // Hinata combo: per-candidate gross ritual float (mirrors Solve), so the deep search also
+    // enumerates the ritual->payoff combo as a branch. All zero for non-ritual decks (any_ritual
+    // false) -> byte-identical.
+    std::vector<int> ritual_float(cands.size(), 0);
+    bool any_ritual = false;
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(cands[j].card_name);
+        if (cd && IsManaRitual(*cd))
+        {
+            ritual_float[j] = RitualFloatAmount(state, *cd, cands[j].chosen_x);
+            any_ritual = true;
+        }
+    }
+
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
 
@@ -2693,8 +2782,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
 
-        if (!pool.CanPay(combined))                          { return; }
-        if (!pool_noncreature.CanPay(noncreature_combined))  { return; }
+        int ritual_credit = 0;
+        if (any_ritual) { for (int j : sel) { ritual_credit += ritual_float[j]; } }
+        if (ritual_credit > 0)
+        {
+            ManaPool eff    = pool;             eff.wild    += ritual_credit;
+            ManaPool eff_nc = pool_noncreature; eff_nc.wild += ritual_credit;
+            if (!eff.CanPay(combined))                       { return; }
+            if (!eff_nc.CanPay(noncreature_combined))        { return; }
+        }
+        else
+        {
+            if (!pool.CanPay(combined))                          { return; }
+            if (!pool_noncreature.CanPay(noncreature_combined))  { return; }
+        }
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).

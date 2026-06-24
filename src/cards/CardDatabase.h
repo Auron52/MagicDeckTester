@@ -401,6 +401,9 @@ struct CardParams
     // into a same-turn cast (the Reality Spasm -> Crackle combo), so in the current model this
     // is rarely productive -- the deferred Layer-2 HinataProvider search item. Gated false.
     bool untap_x_mana_sources = false;
+    // Irencrag Feat: a fixed mana-burst RITUAL -- on resolution, add this much mana to the
+    // turn-scoped reserve (state.floating_mana) for a same-turn payoff. 0 for non-ritual cards.
+    int  ritual_floating_mana = 0;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

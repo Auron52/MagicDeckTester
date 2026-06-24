@@ -106,6 +106,7 @@ void GameEngine::UntapStep(GameState& state)
     state.phase = Phase::Beginning;
     state.step  = Step::Untap;
     state.opponent_lost_life_this_turn = false;
+    state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;

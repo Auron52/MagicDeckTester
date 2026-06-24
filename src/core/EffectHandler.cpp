@@ -137,12 +137,13 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                 {
                     ResolveCascade(state, entry, def);
                 }
-                // Reality Spasm: untap X of the caster's tapped mana sources. (Currently the
-                // planner does not OFFER this spell -- X-untap spells aren't enumerated -- so
-                // this is reached only once the Layer-2 ritual search lands; wired for fidelity.)
-                if (def.params.untap_x_mana_sources)
+                // Reality Spasm / Irencrag Feat -- mana RITUAL. On resolution, add its floating
+                // mana to the turn-scoped reserve so a later same-turn cast (Crackle) can spend
+                // it (the Hinata combo). Modelled as floating, NOT a literal untap, so this stays
+                // EXACTLY in lockstep with the planner's ritual credit and the rollout's apply_one.
+                if (IsManaRitual(def))
                 {
-                    UntapManaSources(state, entry.chosen_x.value_or(0));
+                    ApplyRitualFloat(state, def, entry.chosen_x.value_or(0));
                 }
                 MoveToGraveyard(state, entry);
             }

@@ -644,6 +644,15 @@ HinataProvider::TutorCandidates(const GameState& s, int controller, const CardPa
     return GenericProvider::TutorCandidates(s, controller, pp);
 }
 
+int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    // A mana ritual must resolve BEFORE the payoff X-spell so its floating mana is available to
+    // pay the bigger Crackle. Rank it between creatures (Hinata, 10) and other noncreatures
+    // (Crackle, 20). Everything else uses the generic order.
+    if (IsManaRitual(def)) { return 15; }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
 bool HinataProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
 {
     const int active = s.active_player_index;

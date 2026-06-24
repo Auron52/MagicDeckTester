@@ -1497,10 +1497,10 @@
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Add six {R}. Activate this ability only once each turn. [A burst-mana RITUAL (pay 5, get six {R}; net +1 and a colour fix into Crackle). It depends on the SAME deferred same-turn chaining as Reality Spasm: the static-pool planner cannot yet cast a ritual and spend the freed mana on a same-turn Crackle, so until that Layer-2 (2d) HinataProvider mana model lands, Irencrag Feat has no exploitable effect and is treated as a non-cast dead card (goldfish_inert) -- a conservative UNDER-approximation (its real ritual value is omitted, never over-counted). Grouped with Reality Spasm in the deferred ritual-chaining work; NOT a counterspell-style inert card.]",
+            "oracle_text": "Add six {R}. Spend this mana only during this turn. [A burst-mana RITUAL: pay {3}{R}{R}, add six {R} to the turn-scoped reserve (state.floating_mana) for a same-turn payoff (Crackle) -- net +1 mana and a red fix. Modelled via ritual_floating_mana:6 (the floating-mana engine, shared with Reality Spasm). The planner credits the SAME 6 it floats (gross 6, base cost 5), so the search's predicted combo and the executed one stay exactly in lockstep; conservative (planner<=executor). Needs no Hinata (no {X} to discount), so it nets even without her.]",
             "template": "custom",
             "parameters": {
-                "goldfish_inert": true
+                "ritual_floating_mana": 6
             }
         }
     ]

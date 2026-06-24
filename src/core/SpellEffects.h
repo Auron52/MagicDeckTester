@@ -1042,6 +1042,108 @@ inline void UntapManaSources(GameState& state, int count)
     }
 }
 
+// Reality Spasm ritual: with Hinata in play (who makes its {X} free), untapping X of your mana
+// sources lets you tap them a SECOND time this turn -> +their output. Returns that extra mana =
+// the sum of the outputs of the `count` highest-output mana sources the active player controls.
+// Modelled as FLOATING mana (NOT a literal untap), so the planner's feasibility credit and the
+// executor/rollout resolution both call this one function and agree EXACTLY -> no rollout<->
+// executor divergence. Conservative: counts only sources a normal tap could use (lands, mana
+// rocks, and non-summoning-sick dorks -- the same set BuildPool draws from).
+inline int RitualRefloatMana(const GameState& state, int count)
+{
+    if (count <= 0) { return 0; }
+    const int active = state.active_player_index;
+    std::vector<int> outs;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool is_src = d->card.IsLand()
+                         || (d->tmpl == CardTemplate::ManaDork && p.CanTap())
+                         || d->params.mana_rock;
+        if (!is_src) { continue; }
+        outs.push_back(ManaProducedPerTap(*d));
+    }
+    std::sort(outs.begin(), outs.end(), [](int a, int b) { return a > b; });
+    int total = 0;
+    for (int i = 0; i < static_cast<int>(outs.size()) && i < count; ++i) { total += outs[i]; }
+    return total;
+}
+
+// Number of mana sources the active player controls (the natural chosen X for Reality Spasm:
+// untap them ALL, which Hinata makes free). Used to size the ritual's X in the planner.
+inline int ManaSourceCount(const GameState& state)
+{
+    const int active = state.active_player_index;
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->card.IsLand() || (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock) { ++n; }
+    }
+    return n;
+}
+
+// Is `def` a mana RITUAL that floats mana for a same-turn payoff (Reality Spasm's untap-refloat,
+// or a fixed mana burst like Irencrag Feat)? Drives the planner's ritual credit and the eager-
+// float resolution. False for every non-ritual card -> inert for other decks.
+inline bool IsManaRitual(const CardDefinition& def)
+{
+    return def.params.untap_x_mana_sources || def.params.ritual_floating_mana > 0;
+}
+
+// Gross floating mana the ritual `def` adds when cast this turn (its X = `chosen_x` for untap
+// rituals). Reality Spasm -> RitualRefloatMana(chosen_x); a fixed burst -> its ritual_floating_mana.
+inline int RitualFloatAmount(const GameState& state, const CardDefinition& def, int chosen_x)
+{
+    if (def.params.untap_x_mana_sources) { return RitualRefloatMana(state, chosen_x); }
+    if (def.params.ritual_floating_mana > 0) { return def.params.ritual_floating_mana; }
+    return 0;
+}
+
+// Apply a ritual's floating mana ON RESOLUTION (shared by EffectHandler -- the real executor --
+// and the rollout's apply_one). Adds the gross float as WILD to the turn-scoped reserve
+// (state.floating_mana) so a later same-turn cast (Crackle) can spend it. Modelled as floating,
+// NOT a literal untap: the planner credits this exact amount, so the search's predicted combo
+// and the executed combo never diverge. No-op for non-ritual cards.
+inline void ApplyRitualFloat(GameState& state, const CardDefinition& def, int chosen_x)
+{
+    const int amt = RitualFloatAmount(state, def, chosen_x);
+    if (amt > 0) { state.floating_mana.wild += amt; }
+}
+
+// Forward decl: HinataInPlay (defined just below). Used by HinataRitualNetBonus.
+inline bool HinataInPlay(const GameState& state);
+
+// NET floating mana the active player's in-hand rituals would add THIS turn = gross float minus
+// the ritual's own cast cost, assuming Hinata is in play (so an untap ritual's {X} is free). The
+// planner adds this to a payoff X-spell's (Crackle's) affordable pool so its max X reaches the
+// combo's lethal value. 0 with no Hinata or no ritual in hand -> the X-enum is unchanged for
+// every non-Hinata deck. (Gross is credited per-subset in Solve::consider; the base cost lives
+// in `combined` there, so pool+gross-cost == pool+net == this -- exact, conservative.)
+inline int HinataRitualNetBonus(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    const bool hinata = HinataInPlay(state);
+    int net = 0;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || !IsManaRitual(*d)) { continue; }
+        // An untap ritual (Reality Spasm) only NETS mana when Hinata makes its {X} free; without
+        // her, untapping X costs X mana to recast (break-even). A fixed burst (Irencrag) nets always.
+        if (d->params.untap_x_mana_sources && !hinata) { continue; }
+        const int count = d->params.untap_x_mana_sources ? ManaSourceCount(state) : 0;
+        const int gross = RitualFloatAmount(state, *d, count);
+        const int base  = d->card.m_mana_cost.ManaValue();   // RS {X}{U}{U}->2 (X ignored); Irencrag->5
+        net += std::max(0, gross - base);
+    }
+    return net;
+}
+
 // Does the active player control a Hinata (cost-reduction static)?
 inline bool HinataInPlay(const GameState& state)
 {
