@@ -120,7 +120,8 @@ void GameEngine::UntapStep(GameState& state)
 
     // Materialise any passive opponent creatures scheduled for this turn.
     int opp_index = 1 - state.active_player_index;
-    for (const OpponentSpawn& spawn : state.opponent_spawns)
+    if (state.opponent_spawns)
+    for (const OpponentSpawn& spawn : *state.opponent_spawns)
     {
         if (spawn.turn != state.turn_number) { continue; }
 

@@ -66,7 +66,11 @@ struct GameState
                                                           // Copied with state so the search rollout reproduces the
                                                           // same shuffle the executor will -> lockstep. Inert (always
                                                           // 0) unless MTG_SEARCH_SHUFFLE is set.
-    std::vector<OpponentSpawn> opponent_spawns;           // passive creatures to place on opp side each turn
+    // Non-owning pointer to this game's passive opponent-spawn schedule (creatures to place on
+    // the opp side at scheduled turns). Read-only after setup but copied into every search node;
+    // a pointer (like m_provider) drops the per-node vector copy. Owner is the program-lifetime
+    // PATTERNS table in GoldFishRunner (PopulateOpponentSpawns). nullptr -> no spawns.
+    const std::vector<OpponentSpawn>* opponent_spawns = nullptr;
     int                      vial_target_mv        = 0;   // most common creature MV in the deck; Aether Vial stops here
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,

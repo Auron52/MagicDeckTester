@@ -114,10 +114,9 @@ void GoldFishRunner::PopulateOpponentSpawns(GameState& state, int game_index)
         {{1,1,1},{2,1,1},{3,2,2}},                                    // 9: small + small + mid
     };
 
-    for (const OpponentSpawn& spawn : PATTERNS[game_index % 10])
-    {
-        state.opponent_spawns.push_back(spawn);
-    }
+    // PATTERNS is a program-lifetime static, so the GameState (and all its search deep copies)
+    // can hold a non-owning pointer into it instead of copying the vector per node.
+    state.opponent_spawns = &PATTERNS[game_index % 10];
 }
 
 // ---- Run ID ----------------------------------------------------------------

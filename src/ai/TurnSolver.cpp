@@ -2138,10 +2138,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // 5->6), all slightly worse, 0 better. Only commit-the-line, which REPLAYS the
     // search's line and cannot re-decide, actually needs the rollout's board accurate.
     static const bool s_fd_opp_spawns = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
-    if (s_fd_opp_spawns)
+    if (s_fd_opp_spawns && state.opponent_spawns)
     {
         int opp_index = 1 - state.active_player_index;
-        for (const OpponentSpawn& spawn : state.opponent_spawns)
+        for (const OpponentSpawn& spawn : *state.opponent_spawns)
         {
             if (spawn.turn != state.turn_number) { continue; }
             Card token;
