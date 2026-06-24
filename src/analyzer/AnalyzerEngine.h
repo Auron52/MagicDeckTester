@@ -75,15 +75,25 @@ private:
 
     // Computes per-card marginal win-turn scores and a recommended hand threshold.
     // scores[name][k] = improvement from the (k+1)-th copy in opening hand.
-    // *threshold_out is set to mean - 0.5*std_dev of hand scores over records.
+    // *threshold_out is set to mean - 1.5*std_dev of hand scores over records.
+    // *hs_mean_out / *hs_std_out (optional) receive the hand-score distribution's
+    // mean and std so callers can build a set of candidate thresholds to grid over.
     static std::map<std::string, std::vector<double>> ComputeCardScores(
-        const std::vector<GameRecord>& records, int max_turns, double* threshold_out);
+        const std::vector<GameRecord>& records, int max_turns, double* threshold_out,
+        double* hs_mean_out = nullptr, double* hs_std_out = nullptr);
 
-    // Grid-searches min_lands / max_lands / stop_at / skip_curve_check.
-    // Returns the best profile found and writes its avg win turn to best_win_turn.
+    // Grid-searches the hand-keep predicate JOINTLY: min_lands / max_lands / stop_at /
+    // curve_check / bottom_order CROSSED with each candidate hand-score threshold, with
+    // card_scores active on every config so the score gate is exercised during the
+    // search (not bolted on afterward). The returned profile carries the winning land
+    // params AND the winning threshold (+ the supplied card_scores). Pass an empty
+    // card_scores / single {0} threshold to reproduce the gate-free land-only search.
+    // Writes the best config's avg win turn to best_win_turn.
     static MulliganProfile GridSearchLands(
         const Decklist& deck, const MulliganProfile& base_profile,
         int games_per_config, uint64_t seed, int max_turns,
+        const std::map<std::string, std::vector<double>>& card_scores,
+        const std::vector<double>& threshold_candidates,
         double& best_win_turn);
 
     struct OptResult

@@ -14,7 +14,7 @@ static void PrintUsage(const char* prog)
               << " <deckfile> [--seed S] [--max-turns T] [--cards-json path]\n"
               << "  <deckfile>      Plain text (.txt) or Cockatrice (.cod) decklist\n"
               << "  --seed S        Base RNG seed (omit to generate randomly)\n"
-              << "  --max-turns T   Maximum turns per game (default: 20)\n"
+              << "  --max-turns T   Maximum turns per game (default: 8)\n"
               << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n"
               << "\nGenerates the deck's profile (optimised mulligan + card scores) and writes\n"
                  "it to <deckname>.profile.json. Win-rate evaluation is the regression suite's\n"
@@ -32,7 +32,11 @@ int main(int argc, char* argv[])
 
     std::filesystem::path deck_path   = argv[1];
     std::filesystem::path cards_json  = "src/cards/data/cards.json";
-    int      max_turns     = 20;
+    int      max_turns     = 8;   // match the runner's goldfish horizon (mtg.exe also defaults to 8):
+                                  // a real game is lost by then, so "wins" on turns 9+ are de-facto
+                                  // losses -- optimising the mulligan against them (the old 20-turn
+                                  // horizon) rewarded slow non-wins as if they beat a loss. Override
+                                  // with --max-turns for a genuinely slow deck.
     uint64_t seed          = 0;
     bool     seed_provided = false;
 

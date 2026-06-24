@@ -193,7 +193,8 @@ std::map<std::string, double> AnalyzerEngine::ScanCardImpacts(
 }
 
 std::map<std::string, std::vector<double>> AnalyzerEngine::ComputeCardScores(
-    const std::vector<GameRecord>& records, int max_turns, double* threshold_out)
+    const std::vector<GameRecord>& records, int max_turns, double* threshold_out,
+    double* hs_mean_out, double* hs_std_out)
 {
     const int N           = static_cast<int>(records.size());
     const int MIN_SAMPLES = 30;   // minimum games per (card, count) bucket for a reliable estimate
@@ -270,7 +271,10 @@ std::map<std::string, std::vector<double>> AnalyzerEngine::ComputeCardScores(
         double variance = 0.0;
         for (double s : hand_scores) { variance += (s - mean) * (s - mean); }
         variance /= hand_scores.size();
-        *threshold_out = mean - 1.5 * std::sqrt(variance);
+        double stddev = std::sqrt(variance);
+        *threshold_out = mean - 1.5 * stddev;
+        if (hs_mean_out) { *hs_mean_out = mean; }
+        if (hs_std_out)  { *hs_std_out  = stddev; }
     }
 
     return result;
@@ -279,6 +283,8 @@ std::map<std::string, std::vector<double>> AnalyzerEngine::ComputeCardScores(
 MulliganProfile AnalyzerEngine::GridSearchLands(
     const Decklist& deck, const MulliganProfile& base_profile,
     int games_per_config, uint64_t seed, int max_turns,
+    const std::map<std::string, std::vector<double>>& card_scores,
+    const std::vector<double>& threshold_candidates,
     double& best_win_turn)
 {
     static const CurveCheck  CURVE_VALUES[] = {
@@ -289,15 +295,25 @@ MulliganProfile AnalyzerEngine::GridSearchLands(
         BottomOrder::CountFirst, BottomOrder::TotalFirst
     };
 
-    // Enumerate every config in a fixed order. Each config's seed offset is its
-    // index, exactly as the old serial offset counter assigned it, so seeds (and
-    // therefore results) are unchanged.
+    // The threshold gate only fires when card_scores is non-empty (see
+    // AIEngine::ShouldKeepHand). If a caller passes no scores or no candidates, fall
+    // back to a single "no gate" pass so this reduces to the original land-only grid.
+    std::vector<double> thresholds = threshold_candidates;
+    if (card_scores.empty() || thresholds.empty()) { thresholds = {0.0}; }
+
+    // Enumerate every config in a fixed order: land params CROSSED with each candidate
+    // hand-score threshold. card_scores is baked into every config so the score gate is
+    // exercised DURING the search -- land params and the gate are chosen JOINTLY, not in
+    // isolation (the bug that let a tight land grid + a separately-derived aggressive gate
+    // double-mulligan). Each config's seed offset is its index, so results are
+    // deterministic and order-independent.
     std::vector<MulliganProfile> configs;
     for (int min_l = 1; min_l <= 3; ++min_l)
     for (int max_l = min_l; max_l <= 5; ++max_l)
     for (int stop  = 3; stop  <= 5; ++stop)
     for (CurveCheck  cc : CURVE_VALUES)
     for (BottomOrder bo : BOTTOM_VALUES)
+    for (double thr : thresholds)
     {
         MulliganProfile profile  = base_profile;
         profile.min_lands        = min_l;
@@ -305,6 +321,8 @@ MulliganProfile AnalyzerEngine::GridSearchLands(
         profile.stop_at          = stop;
         profile.curve_check      = cc;
         profile.bottom_order     = bo;
+        profile.card_scores          = card_scores;
+        profile.hand_score_threshold = thr;
         configs.push_back(profile);
     }
 
@@ -574,17 +592,54 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
         }
     }
 
-    // ---- Phase 3: land parameter grid search -----------------------------------
-    std::cerr << "  Grid-searching land parameters...\n";
+    // ---- Phase 3a: per-card scores (computed BEFORE the land grid) -------------
+    // Card scores and the hand-score threshold must exist before the land grid so the
+    // grid can evaluate land params WITH the score gate active (joint optimisation).
+    // Computing them earlier -- on working_profile rather than the final land config --
+    // also avoids coupling the scores to the very land params we are about to tune.
+    constexpr uint64_t SCORING_OFFSET = 3'000'000ULL;
+    constexpr int      SCORING_GAMES  = 2000;
+    std::cerr << "  Computing card scores (" << SCORING_GAMES << " games, depth="
+              << ANALYSIS_DEPTH << ")...\n";
+    std::vector<GameRecord> scoring_records = RunForRecords(
+        deck, working_profile, SCORING_GAMES, seed + SCORING_OFFSET, max_turns,
+        ANALYSIS_DEPTH, ANALYSIS_BUDGET);
+    double recommended_thr = 0.0, hs_mean = 0.0, hs_std = 0.0;
+    std::map<std::string, std::vector<double>> card_scores =
+        ComputeCardScores(scoring_records, max_turns, &recommended_thr, &hs_mean, &hs_std);
+
+    // Candidate thresholds to grid jointly with land params. Always include a
+    // "no gate" option (-inf: every hand passes the score check) so the search can
+    // decline to gate at all -- the over-aggressive bolt-on gate was the regression.
+    // The others bracket the old mean-1.5*std recommendation.
+    // "No gate" is a large finite-negative sentinel rather than -inf: ComputeHandScore
+    // is always >= 0, so any hand clears it (gate never fires), and unlike -inf it
+    // serialises cleanly to JSON.
+    constexpr double NO_GATE = -1e18;
+    std::vector<double> thr_candidates;
+    if (!card_scores.empty())
+    {
+        thr_candidates.push_back(NO_GATE);
+        for (double k : {2.0, 1.5, 1.0}) { thr_candidates.push_back(hs_mean - k * hs_std); }
+        std::cerr << "  Hand-score gate candidates (mean=" << hs_mean << " std=" << hs_std
+                  << "): no-gate, " << (hs_mean - 2.0 * hs_std) << ", "
+                  << (hs_mean - 1.5 * hs_std) << ", " << (hs_mean - 1.0 * hs_std) << "\n";
+    }
+
+    // ---- Phase 3b: JOINT land + threshold grid search --------------------------
+    std::cerr << "  Grid-searching land parameters x hand-score gate (joint)...\n";
     double best_win_turn = 0.0;
+    uint64_t grid_seed = seed + SCORING_OFFSET + SCORING_GAMES;
     MulliganProfile optimal = GridSearchLands(
-        deck, working_profile, GRID_GAMES, confirm_seed, max_turns, best_win_turn);
+        deck, working_profile, GRID_GAMES, grid_seed, max_turns,
+        card_scores, thr_candidates, best_win_turn);
 
     std::cerr << "  Done. Optimal profile: min_lands=" << optimal.min_lands
               << " max_lands=" << optimal.max_lands
               << " stop_at=" << optimal.stop_at
               << " curve_check=" << CurveCheckToString(optimal.curve_check)
-              << " bottom_order=" << BottomOrderToString(optimal.bottom_order) << "\n";
+              << " bottom_order=" << BottomOrderToString(optimal.bottom_order)
+              << " hand_score_threshold=" << optimal.hand_score_threshold << "\n";
 
     return {optimal, flags};
 }
@@ -604,30 +659,19 @@ AnalysisResult AnalyzerEngine::Run(const Decklist& deck, uint64_t base_seed, int
     result.seed = base_seed;
 
     int vial_target_mv = ComputeVialTargetMv(deck);
+
+    // OptimizeMulligan now computes the per-card scores and chooses the hand-score
+    // threshold JOINTLY with the land params (the threshold is a grid axis), so the
+    // returned profile already carries card_scores + hand_score_threshold. There is no
+    // separate bolt-on scoring pass -- that ordering (land grid first, gate derived and
+    // attached afterward) is exactly what let the two over-mulligan in combination.
     OptResult opt = OptimizeMulligan(deck, base_seed, max_turns, vial_target_mv);
     opt.profile.vial_target_mv = vial_target_mv;
-    result.mulligan_profile = opt.profile;
-    result.mulligan_flags   = opt.flags;
-
-    // Per-card marginal scores from a dedicated scoring pass. Runs at ANALYSIS_DEPTH
-    // (d5) -- the same depth as optimisation and as real play -- so the lookahead
-    // values delayed-payoff cards (e.g. Aether Vial looks bad at depth 0 because the
-    // greedy AI can't plan its future ticks). Fixed methodology.
-    const int      SCORING_GAMES  = 2000;
-    const uint64_t SCORING_OFFSET = 3'000'000ULL;
-    std::cerr << "  Computing card scores (" << SCORING_GAMES << " games, depth=" << ANALYSIS_DEPTH << ")...\n";
-    std::vector<GameRecord> scoring_records = RunForRecords(
-        deck, opt.profile, SCORING_GAMES, base_seed + SCORING_OFFSET, max_turns,
-        ANALYSIS_DEPTH, ANALYSIS_BUDGET);
-    double threshold = 0.0;
-    result.card_scores          = ComputeCardScores(scoring_records, max_turns, &threshold);
-    result.hand_score_threshold = threshold;
-    std::cerr << "  Card scores computed. Hand threshold: " << threshold << "\n";
-
-    // Persist the scores into the saved profile so the runner can apply them as a
-    // bottoming tiebreak (AIEngine::CardScore) without re-running the analyzer.
-    result.mulligan_profile.card_scores          = result.card_scores;
-    result.mulligan_profile.hand_score_threshold = result.hand_score_threshold;
+    result.mulligan_profile     = opt.profile;
+    result.mulligan_flags       = opt.flags;
+    result.card_scores          = opt.profile.card_scores;
+    result.hand_score_threshold = opt.profile.hand_score_threshold;
+    std::cerr << "  Final hand-score threshold: " << result.hand_score_threshold << "\n";
 
     return result;
 }
