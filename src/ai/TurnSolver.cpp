@@ -650,6 +650,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             {
                 direct = def.params.landfall_damage;
             }
+            // Soulfire Eruption: clairvoyant damage = the top library card's mana value.
+            if (def.params.damage_equals_top_mv) { direct = TopLibraryMV(state); }
         }
 
         Action a;
@@ -1547,6 +1549,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 && def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
             {
                 dmg = def.params.landfall_damage;
+            }
+            // Soulfire Eruption: exile the top library card and deal its mana value (mirrors
+            // EffectHandler::ResolveDirectDamage so the rollout matches the executor).
+            if (def.params.damage_equals_top_mv)
+            {
+                dmg = TopLibraryMV(state);
+                ExileTopLibrary(state);
             }
 
             if (t == Targeting::Any || t == Targeting::Player)

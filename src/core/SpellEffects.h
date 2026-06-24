@@ -988,6 +988,42 @@ inline int ManaProducedPerTap(const CardDefinition& def)
     return std::max(1, def.params.produces_amount);
 }
 
+// Mana value of the top card of the active player's library (0 if empty). Soulfire Eruption's
+// clairvoyant face damage = this. Read identically by the planner, rollout, and executor.
+inline int TopLibraryMV(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    if (ap.library.empty()) { return 0; }
+    const Card& top = ap.library.front();
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(top);
+    return d ? d->card.m_mana_cost.ManaValue() : top.m_mana_cost.ManaValue();
+}
+
+// Soulfire Eruption: exile the top card of the active player's library (it dealt its MV in
+// damage). "You may play the exiled card" is not modelled, so it is simply removed.
+inline void ExileTopLibrary(GameState& state)
+{
+    Player& ap = state.ActivePlayer();
+    if (!ap.library.empty()) { ap.library.erase(ap.library.begin()); }
+}
+
+// Untap X of the active player's tapped mana sources (Reality Spasm). Deterministic order
+// (lowest battlefield index first) so the rollout and executor agree.
+inline void UntapManaSources(GameState& state, int count)
+{
+    const int active = state.active_player_index;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()) && count > 0; ++i)
+    {
+        Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || !p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        bool is_src = d && (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock);
+        if (!is_src) { continue; }
+        p.tapped = false;
+        --count;
+    }
+}
+
 // Hinata, Dawn-Crowned: "Spells you cast cost {1} less to cast for each target." Returns the
 // GENERIC reduction for `def` being cast by the active player with the chosen X, or 0 when no
 // Hinata is in play. discount_targets is the spell's target count; discount_targets_scale_x adds

@@ -137,6 +137,13 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                 {
                     ResolveCascade(state, entry, def);
                 }
+                // Reality Spasm: untap X of the caster's tapped mana sources. (Currently the
+                // planner does not OFFER this spell -- X-untap spells aren't enumerated -- so
+                // this is reached only once the Layer-2 ritual search lands; wired for fidelity.)
+                if (def.params.untap_x_mana_sources)
+                {
+                    UntapManaSources(state, entry.chosen_x.value_or(0));
+                }
                 MoveToGraveyard(state, entry);
             }
             return true;
@@ -187,6 +194,12 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
             && state.players[entry.controller_index].lands_played_this_turn > 0)
         {
             damage = def.params.landfall_damage;
+        }
+        // Soulfire Eruption: exile the top library card and deal its mana value.
+        if (def.params.damage_equals_top_mv)
+        {
+            damage = TopLibraryMV(state);
+            ExileTopLibrary(state);
         }
     }
 

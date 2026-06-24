@@ -395,6 +395,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.discount_targets          = params.value("discount_targets", 0);
     p.discount_targets_scale_x  = params.value("discount_targets_scale_x", false);
     p.etb_bounce_land           = params.value("etb_bounce_land", false);
+    p.damage_equals_top_mv      = params.value("damage_equals_top_mv", false);
+    p.untap_x_mana_sources      = params.value("untap_x_mana_sources", false);
 
     return p;
 }

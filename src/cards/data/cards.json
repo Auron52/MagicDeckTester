@@ -1394,6 +1394,54 @@
                 "enters_tapped": true,
                 "etb_bounce_land": true
             }
+        },
+        {
+            "name": "Soulfire Eruption",
+            "mana_cost": "{6}{R}{R}{R}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Choose any number of target creatures, planeswalkers, and/or players. For each of them, exile the top card of your library, then Soulfire Eruption deals damage equal to that card's mana value to that permanent or player. You may play the exiled cards until the end of your next turn. [PARTIAL: modelled as single-target FACE -- exile the top library card, deal its mana value to the opponent (clairvoyant). The deck's real use is multi-target including YOURSELF to exile+play several cards as a dig into the combo; that dig (and the 'play exiled cards' card advantage) is the deferred Layer-2 item, so this conservatively UNDER-rates Soulfire (face damage only, the exiled card is lost rather than playable). Hinata discount: 1 target.]",
+            "template": "direct_damage",
+            "parameters": {
+                "damage": 0,
+                "targeting": "any",
+                "damage_equals_top_mv": true,
+                "discount_targets": 1
+            }
+        },
+        {
+            "name": "Magma Opus",
+            "mana_cost": "{6}{U}{R}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Magma Opus deals 4 damage divided as you choose among any number of targets. Tap two target permanents. Create a 4/4 blue and red Elemental creature token. Draw two cards.\n{U/R}{U/R}, Discard this card: Create a Treasure token. [PARTIAL: modelled as 4 damage to the opponent's face (the win-relevant part). The 4/4 Elemental token, draw two, tap-two (inert vs a passive opponent), and the {U/R}{U/R}-discard-for-Treasure ramp mode are NOT modelled -- a conservative UNDER-approximation (Magma contributes only its 4 face damage here; its token/card-advantage/early-Treasure value is omitted). Deferred to Layer 2. Hinata discount: 1 target.]",
+            "template": "direct_damage",
+            "parameters": {
+                "damage": 4,
+                "targeting": "any",
+                "discount_targets": 1
+            }
+        },
+        {
+            "name": "Reality Spasm",
+            "mana_cost": "{X}{U}{U}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Choose one -\n- Tap X target permanents.\n- Untap X target permanents. [PARTIAL: the untap mode (untap X of your tapped mana sources) is implemented, and Hinata cancels its {X} via discount_targets_scale_x -- the intended ritual. BUT the static-pool planner does not yet OFFER X-untap spells nor CHAIN the freed mana into a same-turn Crackle, so in the current model Reality Spasm is not cast (a dead card) -- the Reality-Spasm -> Crackle same-turn combo is the headline deferred Layer-2 HinataProvider search item. The tap mode is goldfish-inert (tapping a passive opponent's permanents does nothing).]",
+            "template": "custom",
+            "parameters": {
+                "untap_x_mana_sources": true,
+                "discount_targets_scale_x": true
+            }
         }
     ]
 }

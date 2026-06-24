@@ -373,6 +373,21 @@ struct CardParams
     // produces[U,R] + produces_amount 2. The bounce is the real tempo cost (a future land drop
     // re-plays the returned land) and is modelled so the deck's mana is not over-rated. Gated.
     bool etb_bounce_land = false;
+
+    // Soulfire Eruption (partial): "for each target, exile the top card of your library, then
+    // deal damage equal to that card's mana value." Modelled (single target = the opponent's
+    // face) as DirectDamage whose damage = the top library card's mana value, exiling that card.
+    // The multi-target + "you may play the exiled cards" DIG (Soulfire's real value -- targeting
+    // yourself/creatures to draw into the combo) is the deferred Layer-2 item; this captures the
+    // clairvoyant face-damage faithfully and under-rates the dig. Gated false.
+    bool damage_equals_top_mv = false;
+
+    // Reality Spasm (partial): "Untap X target permanents." On resolution, untap X of the
+    // caster's tapped mana sources. With Hinata in play discount_targets_scale_x cancels the
+    // {X}, the intended ritual. NOTE the static-pool planner does not yet CHAIN the freed mana
+    // into a same-turn cast (the Reality Spasm -> Crackle combo), so in the current model this
+    // is rarely productive -- the deferred Layer-2 HinataProvider search item. Gated false.
+    bool untap_x_mana_sources = false;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.
