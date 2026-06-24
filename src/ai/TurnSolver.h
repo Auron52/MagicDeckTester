@@ -274,4 +274,32 @@ public:
                                      TranspositionTable* tt = nullptr,
                                      SearchBudget* budget = nullptr,
                                      int* out_committed_depth = nullptr);
+
+    // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic) -------------------
+    // For the CURRENT pre-combat main, score EVERY candidate top-level play (the same
+    // EnumeratePlansWithLand candidates the search ranks -- run with MTG_SEARCH_ORDER=1 to
+    // also expand cast ORDERINGS) by the EARLIEST full-game win turn it leads to: apply the
+    // play, run its combat, then full B&B-search the rest of the game (no cross-plan pruning,
+    // so each candidate gets its TRUE earliest win, not the first one the search commits).
+    // Emitting all candidates -- and especially the set tied at the minimum win turn -- lets
+    // the analyzer mine the COMMON structure of optimal lines (cast order, which land, which
+    // target) to ground ordering/targeting heuristics. EXPENSIVE (a full rollout per
+    // candidate); single-game offline use only, never in the hot search. See analyze-deck 5g.
+    struct EarliestWinCandidate
+    {
+        std::vector<std::string> cast_order;   // non-sacrifice hand casts in execution order
+        std::vector<std::string> sac_casts;    // sacrifice-land casts (Shard Volley) -- after
+        std::string land;                      // land played this turn ("" = none)
+        std::string fetch;                     // fetch target if land is a fetchland ("" = n/a)
+        bool        searched_order = false;    // true => cast_order is a searched permutation
+        int         win_turn       = 0;        // earliest full-game win if this play is committed
+    };
+    struct EarliestWinReport
+    {
+        int turn     = 0;                      // the decision turn
+        int earliest = 0;                      // min win_turn over all candidates
+        std::vector<EarliestWinCandidate> candidates;
+    };
+    static EarliestWinReport EnumerateEarliestWins(const GameState& state, int max_turns,
+                                                   bool second_main);
 };

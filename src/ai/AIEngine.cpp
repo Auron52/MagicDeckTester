@@ -13,6 +13,7 @@
 #include <limits>
 #include <numeric>
 #include <sstream>
+#include <mutex>
 #include <stdexcept>
 
 // Non-convergence detector gate, read once. When set (MTG_FLAG_NONCONV in the
@@ -34,6 +35,18 @@ static const bool s_full_depth = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
 // its predicted win — a rollout/real-execution divergence. Flag the seed + turn so it
 // can be traced. Only meaningful with s_full_depth.
 static const bool s_fd_oracle = std::getenv("MTG_FD_ORACLE") != nullptr;
+
+// Enumerate-all-earliest-wins rule-miner (MTG_DUMP_EWINS): at each REAL pre-combat main,
+// emit one JSON line ({"ewins":...}) scoring every candidate top-level play by the earliest
+// full-game win it leads to (TurnSolver::EnumerateEarliestWins). Feeds the analyzer's
+// heuristic-grounding pattern analysis (scripts/analyze_earliest_wins.py). EXPENSIVE -- run
+// single-threaded on a few games. MTG_DUMP_EWINS_TURN limits it to one decision turn (default
+// 1 = opening only, to bound cost; 0 = every turn). Set MTG_SEARCH_ORDER=1 to also expand
+// cast orderings. Inert (zero overhead) unless MTG_DUMP_EWINS is set.
+static const bool s_dump_ewins = std::getenv("MTG_DUMP_EWINS") != nullptr;
+static const int  s_dump_ewins_turn = []{
+    const char* e = std::getenv("MTG_DUMP_EWINS_TURN"); return e ? std::atoi(e) : 1;
+}();
 
 // Provider cast-order rank for a hand cast by name (lower = cast earlier). MUST stay
 // byte-for-byte identical to TurnSolver::CastRankOf so the executor's canonical cast
@@ -739,6 +752,42 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         sc.card.m_is_staged     = true;
         sc.card.m_staged_expiry = sc.expiry_turn;  // travels with the card so the rollout can expire it
         ap_ref.hand.push_back(sc.card);
+    }
+
+    // Enumerate-all-earliest-wins dump (offline rule-miner; inert unless MTG_DUMP_EWINS).
+    // Emitted here -- after the staged merge, before any play -- so the candidate set matches
+    // what the search sees. One compact JSON line per real pre-combat decision (or only the
+    // MTG_DUMP_EWINS_TURN turn). See scripts/analyze_earliest_wins.py.
+    if (s_dump_ewins && !m_in_rollout && is_pre_combat_main
+        && (s_dump_ewins_turn <= 0 || state.turn_number == s_dump_ewins_turn))
+    {
+        TurnSolver::EarliestWinReport rep =
+            TurnSolver::EnumerateEarliestWins(state, m_max_turns, m_search_post_combat);
+        auto esc = [](const std::string& s) { return s; };   // names are already JSON-safe
+        std::ostringstream js;
+        js << "{\"ewins\":{\"seed\":" << state.game_seed
+           << ",\"turn\":" << rep.turn << ",\"earliest\":" << rep.earliest
+           << ",\"candidates\":[";
+        for (size_t i = 0; i < rep.candidates.size(); ++i)
+        {
+            const TurnSolver::EarliestWinCandidate& c = rep.candidates[i];
+            if (i) { js << ","; }
+            js << "{\"win\":" << c.win_turn
+               << ",\"land\":\"" << esc(c.land) << "\""
+               << ",\"fetch\":\"" << esc(c.fetch) << "\""
+               << ",\"searched\":" << (c.searched_order ? "true" : "false")
+               << ",\"casts\":[";
+            for (size_t k = 0; k < c.cast_order.size(); ++k)
+            { js << (k ? "," : "") << "\"" << esc(c.cast_order[k]) << "\""; }
+            js << "],\"sac\":[";
+            for (size_t k = 0; k < c.sac_casts.size(); ++k)
+            { js << (k ? "," : "") << "\"" << esc(c.sac_casts[k]) << "\""; }
+            js << "]}";
+        }
+        js << "]}}\n";
+        static std::mutex s_ewins_mtx;   // one whole line at a time (workers share cerr)
+        std::lock_guard<std::mutex> lk(s_ewins_mtx);
+        std::cerr << js.str();
     }
 
     // The post-combat (second) main phase does NOTHING unless post-combat search

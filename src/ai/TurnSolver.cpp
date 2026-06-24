@@ -3621,6 +3621,90 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     return line;
 }
 
+// ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic, see header) ----------
+TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState& state,
+                                                                int max_turns, bool second_main)
+{
+    EarliestWinReport report;
+    report.turn     = state.turn_number;
+    report.earliest = max_turns + 1;
+
+    // Same candidate set the search ranks (cast ORDERINGS included iff MTG_SEARCH_ORDER /
+    // MTG_UNPRUNED is set -- EnumeratePlansWithLand expands them there).
+    std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
+
+    // Deep enough to reach any win up to max_turns from this turn; NO cross-candidate B&B
+    // (cutoff = max_turns+1) so each candidate gets its TRUE earliest win, not a pruned bound.
+    int depth = max_turns - state.turn_number + 1;
+    if (depth < 1) { depth = 1; }
+
+    // Shared tail memo across candidates (downstream states transpose). Budget is never armed
+    // for overrun here, so FSLineTail runs to completion -- this is an offline tool.
+    TranspositionTable tt;
+    FSLineCache        lc;
+    SearchBudget       budget = SearchBudget::FromVirtualMs(1000000);
+
+    for (const TurnSolver::Plan& p : pre)
+    {
+        GameState s = state;
+        std::vector<Action> bp;
+        ApplyPlanDirect(s, p, true, &bp);
+
+        int wt;
+        if (s.ActivePlayer().life <= 0)                 // self-lethal line -> never a win
+        {
+            wt = max_turns + 1;
+        }
+        else
+        {
+            SimulateAnimateLands(s);
+            SimulateTapTokens(s);
+            SimulateCombat(s);
+            if (s.Opponent().life <= 0)
+            {
+                wt = state.turn_number;                 // wins THIS turn
+            }
+            else
+            {
+                TurnSolver::SearchLine tail = FSLineTail(s, depth - 1, max_turns,
+                                                         max_turns + 1, second_main,
+                                                         &tt, &lc, &budget);
+                wt = tail.win_turn;
+            }
+        }
+
+        EarliestWinCandidate c;
+        c.land           = p.land_to_play;
+        c.fetch          = p.fetch_target;
+        c.searched_order = p.searched_order;
+        c.win_turn       = wt;
+
+        // Effective cast order, mirroring apply_plan_actions: a searched plan casts in vector
+        // order; otherwise the canonical clean-set order (stable-sort by CastRankOf). The
+        // enabler-first / opaque-set nuance is approximated (a searched_order flag marks the
+        // exact-order plans). Sacrifice-land casts are reported separately (they execute last).
+        std::vector<int> hand_casts;
+        for (int i = 0; i < static_cast<int>(p.actions.size()); ++i)
+        {
+            const Action& a = p.actions[i];
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.sacrifice_land) { c.sac_casts.push_back(a.card_name); }
+            else                  { hand_casts.push_back(i); }
+        }
+        if (!p.searched_order)
+        {
+            std::stable_sort(hand_casts.begin(), hand_casts.end(), [&](int x, int y)
+            { return CastRankOf(state, p.actions[x].card_name)
+                   < CastRankOf(state, p.actions[y].card_name); });
+        }
+        for (int i : hand_casts) { c.cast_order.push_back(p.actions[i].card_name); }
+
+        if (wt < report.earliest) { report.earliest = wt; }
+        report.candidates.push_back(std::move(c));
+    }
+    return report;
+}
+
 // ---- Public API ----
 
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,

@@ -349,6 +349,41 @@ into the mulligan optimisation (raise `GRID_GAMES`, add threshold candidates, wi
 grid) — the whole point is a *better* profile at the same wall-clock. Disclose every pruning
 heuristic in Stage 6a alongside the accuracy heuristics, and note its measured cost saving.
 
+### 5g. Earliest-win rule-miner (grounds the 5e heuristics; `MTG_DUMP_EWINS`)
+
+Step 4 of the 5e workflow ("derive the rule from what the oracle's optimal lines share")
+is automated by an offline rule-miner. For each **real pre-combat decision**, the runner
+scores EVERY candidate top-level play (the same `EnumeratePlansWithLand` candidates the
+search ranks — including cast ORDERINGS when `MTG_SEARCH_ORDER=1`) by the EARLIEST full-game
+win turn it leads to, by applying the play, running its combat, then full-search the rest of
+the game (no cross-candidate B&B, so each gets its TRUE earliest win — `TurnSolver::Enumerate-
+EarliestWins`). It writes one `{"ewins":...}` JSON line per decision to **stderr**. Inert
+(zero overhead) unless `MTG_DUMP_EWINS` is set.
+
+```
+# generate the dump (orderings on; one decision turn keeps cost bounded — it is EXPENSIVE,
+# a full rollout per candidate, so use few games and single-deck). TURN default 1 (opening);
+# 0 = every turn. Redirect STDERR to the file.
+MTG_DUMP_EWINS=1 MTG_SEARCH_ORDER=1 MTG_DUMP_EWINS_TURN=3 \
+    ./build/Release/mtg <deck> --profile <prof> --seed 2002 --games 50 \
+    --depth 5 --budget-ms 1500 2>dump.jsonl >/dev/null
+python3 scripts/analyze_earliest_wins.py dump.jsonl      # --min-support N (default 3)
+```
+
+The analyzer emits three grounded reports with support/conflict counts:
+- **ORDER rules** — ordered card pairs whose faster lines agree on direction (e.g. burn:
+  *cast Lightning Bolt before Light Up the Stage / Searing Blaze*, 0 conflict). A 0-conflict
+  rule is a `CastOrderRank` candidate; a high-conflict pair is situation-dependent → leave to
+  the search.
+- **INCLUSION rules** — casting card C this turn's avg win-turn delta (e.g. burn: *Shard Volley
+  +0.25 → AVOID early*; the land-sacrifice slows the clock).
+- **LAND / FETCH** — which land/fetch target the earliest-win lines pick (e.g. antilife: Forest
+  most-picked, matching the Forest-first fetch rule).
+
+These are PROPOSALS, not law: still run the 5e step-6 with/without A/B before shipping any rule
+(the dump can over-fit a few seeds; the permutation oracle can itself commit a slower line at
+fixed budget — see step 4's caveat). Use it to *find* candidate rules fast, not to bless them.
+
 ### Convergence criteria
 
 Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
