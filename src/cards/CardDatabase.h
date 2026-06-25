@@ -431,6 +431,10 @@ struct CardParams
     // turn) -- created at turn start for existing copies + on-play for a freshly-played copy. The
     // Spirits are real opponent creatures -> first-class Soulfire/Crackle/removal targets.
     bool taps_spawn_opp_token = false;
+    // Expressive Iteration: "look at the top 3; 1 to hand, 1 to bottom, 1 exiled & playable THIS
+    // turn." Resolved by ResolveExpressiveIteration (NOT the normal draw/scry path). A DrawSpell so
+    // the existing draw-breakpoint re-solve lets the staged (this-turn-only) card be played.
+    bool expressive_iteration = false;
     // Magma Opus: a non-draw spell that ALSO draws on resolution ("draw two cards"). Drawn to
     // hand in both cast paths (executor + rollout) -- deterministic, lockstep. 0 = no draw rider.
     int  cast_draw = 0;

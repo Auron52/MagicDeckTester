@@ -69,6 +69,7 @@ static bool OrderingOpaqueAI(const std::string& name)
         || d->params.stages_cards
         || d->params.cascade_max_mv > 0
         || d->params.retrace
+        || d->params.expressive_iteration
         || d->params.draw > 0;
 }
 
@@ -1279,7 +1280,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         return d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
-                     || d->params.stages_cards);
+                     || d->params.stages_cards || d->params.expressive_iteration);
     };
 
     // SCRIPTED draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): cast the

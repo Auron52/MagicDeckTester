@@ -1445,6 +1445,7 @@ static bool OrderingOpaque(const std::string& name)
         || d->params.stages_cards
         || d->params.cascade_max_mv > 0
         || d->params.retrace
+        || d->params.expressive_iteration
         || d->params.draw > 0;
 }
 
@@ -1813,12 +1814,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (def.tmpl == CardTemplate::DrawSpell)
         {
+            // Expressive Iteration: look 3 -> 1 hand / 1 exiled-staged-this-turn / 1 bottom (its own
+            // model). Mirrors EffectHandler::ResolveDrawSpell (lockstep). The breakpoint re-solve
+            // below then plays the staged (this-turn-only) card.
+            const bool is_ei = def.params.expressive_iteration;
+            if (is_ei) { ResolveExpressiveIteration(state); }
             // Scry-then-draw (Preordain) / reorder-or-shuffle-then-draw (Ponder): mirror
             // ResolveDrawSpell exactly so the rollout's realised draw matches the executor.
-            if (def.params.cast_scry > 0)    { ScryTop(state, def.params.cast_scry); }
-            if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, ponder_keep); }
-            int n = std::min(def.params.draw, static_cast<int>(ap.library.size()));
-            if (def.params.stages_cards)
+            if (!is_ei && def.params.cast_scry > 0)    { ScryTop(state, def.params.cast_scry); }
+            if (!is_ei && def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, ponder_keep); }
+            int n = is_ei ? 0 : std::min(def.params.draw, static_cast<int>(ap.library.size()));
+            if (!is_ei && def.params.stages_cards)
             {
                 // Mirror ResolveDrawSpell: the cards are exiled and playable only until
                 // the end of the controller's next turn (CR 406). Carry that expiry on

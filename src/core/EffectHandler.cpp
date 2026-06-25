@@ -313,6 +313,15 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     Player& controller = state.players[entry.controller_index];
     int n = def.params.draw;
 
+    // Expressive Iteration: look 3 -> 1 hand / 1 exiled-staged-this-turn / 1 bottom (its own model,
+    // not the normal draw/scry path). Mirrors the rollout's apply_one DrawSpell branch (lockstep).
+    if (def.params.expressive_iteration)
+    {
+        ResolveExpressiveIteration(state);
+        MoveToGraveyard(state, entry);
+        return;
+    }
+
     // Scry-then-draw (Preordain): bottom the unwanted, reorder the rest, before drawing.
     if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry, def.card.m_name); }
     // Reorder-or-shuffle-then-draw (Ponder): keep all on top in best order, or shuffle away.

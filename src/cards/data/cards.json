@@ -1272,11 +1272,11 @@
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Look at the top three cards of your library. Put one of them into your hand, put one of them on the bottom of your library, and exile one of them. You may play the exiled card this turn. [Modelled as Scry 3 then draw 2 (best two of the top three to hand, worst to the bottom). The exiled card is 'play this turn only'; modelling it as a second hand draw is a minor OVER-approximation -- it lets the search hold that card for a later turn, whereas the real card forces use-or-lose -- but the card count (2 gained, 1 bottomed) matches and a ramp/dig deck almost always plays it the same turn. Flagged for review in the heuristics/assumptions disclosure.]",
+            "oracle_text": "Look at the top three cards of your library. Put one of them into your hand, put one of them on the bottom of your library, and exile one of them. You may play the exiled card this turn. [Modelled faithfully (expressive_iteration, ResolveExpressiveIteration): look at the top 3, rank by ScryKeepOnTop; most-wanted -> HAND (banked), next -> EXILED & STAGED playable THIS TURN ONLY (m_staged_expiry = turn_number), least -> BOTTOM. The earlier draw:2+cast_scry:3 over-rated it (banked both gained cards); the real card forces use-or-lose on the exiled one. Stays a DrawSpell so the existing draw-breakpoint re-solve plays the staged card this turn.]",
             "template": "draw_spell",
             "parameters": {
-                "draw": 2,
-                "cast_scry": 3
+                "draw": 1,
+                "expressive_iteration": true
             }
         },
         {

@@ -1915,6 +1915,61 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
     }
 }
 
+// Expressive Iteration {U}{R}: "Look at the top three cards of your library. Put one into your hand,
+// put one on the bottom of your library, and exile one. You may play the exiled card this turn."
+// Model: look at the top 3, rank by ScryKeepOnTop (wanted first); the most-wanted goes to HAND
+// (banked), the next is EXILED and STAGED playable THIS TURN ONLY (m_staged_expiry = turn_number),
+// the least goes to the BOTTOM. Shared by the executor (ResolveDrawSpell) and the rollout -> lockstep.
+// (NOT modelled as draw-2: the second card can only be played this turn, not banked -- the prior
+// draw:2 + cast_scry:3 entry over-rated it.)
+inline void ResolveExpressiveIteration(GameState& state)
+{
+    Player& ap = state.ActivePlayer();
+    const int look = std::min(3, static_cast<int>(ap.library.size()));
+    if (look == 0) { return; }
+
+    std::vector<Card>        cards;
+    std::vector<int>         seen_nums;
+    std::vector<std::string> seen_names;
+    const bool capture = (g_reveal_logger != nullptr);
+    for (int i = 0; i < look; ++i)
+    {
+        Card c = ap.library.front();
+        ap.library.erase(ap.library.begin());
+        if (capture) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
+        cards.push_back(std::move(c));
+    }
+    // Rank wanted-first (stable -> preserves look order within each group).
+    std::stable_sort(cards.begin(), cards.end(), [&](const Card& a, const Card& b) {
+        return (ResolveProvider(state).ScryKeepOnTop(state, a) ? 1 : 0)
+             > (ResolveProvider(state).ScryKeepOnTop(state, b) ? 1 : 0);
+    });
+
+    std::vector<int> kept_nums, bottom_nums;
+    // [0] -> hand (banked, drawn).
+    kept_nums.push_back(cards[0].m_number);
+    ap.hand.push_back(std::move(cards[0]));
+    // [1] -> exiled, staged playable THIS TURN ONLY.
+    if (look >= 2)
+    {
+        Card s = std::move(cards[1]);
+        s.m_is_staged     = true;
+        s.m_staged_expiry = state.turn_number;   // this turn only (vs turn+1 for Light Up / Soulfire)
+        kept_nums.push_back(s.m_number);
+        ap.hand.push_back(std::move(s));
+    }
+    // [2] -> bottom of library.
+    if (look >= 3)
+    {
+        bottom_nums.push_back(cards[2].m_number);
+        ap.library.push_back(std::move(cards[2]));
+    }
+    if (capture && !seen_nums.empty())
+    {
+        g_reveal_logger->LogReveal("Expressive Iteration", seen_nums, seen_names, kept_nums, bottom_nums);
+    }
+}
+
 // Karoo bounce land ETB (Izzet Boilerworks): return one of `controller`'s OTHER lands to hand.
 // Deterministic so the rollout and executor agree: prefer a TAPPED land (already spent this turn
 // -> no mana lost), else the lowest-index other land; never the just-entered karoo (self_index,

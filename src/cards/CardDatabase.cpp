@@ -405,6 +405,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.ritual_floating_mana      = params.value("ritual_floating_mana", 0);
     p.max_casts_after           = params.value("max_casts_after", -1);
     p.taps_spawn_opp_token      = params.value("taps_spawn_opp_token", false);
+    p.expressive_iteration      = params.value("expressive_iteration", false);
     p.cast_draw                 = params.value("cast_draw", 0);
 
     return p;
