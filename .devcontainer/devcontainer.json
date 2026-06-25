@@ -35,7 +35,7 @@
   //                        (pure stdlib; python-is-python3 makes `python` work,
   //                        matching how the skills invoke the scripts).
   //   iptables ipset dnsutils jq curl ca-certificates -> the egress firewall.
-  "onCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build python3 python-is-python3 iptables ipset dnsutils jq curl ca-certificates",
+  "onCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build python3 python-is-python3 iptables ipset dnsutils jq bc curl ca-certificates",
 
   // Keep the Linux CMake build tree in a Docker volume mounted over build/. The
   // host's Windows build/ (a Visual Studio cache) is bind-mounted underneath and
