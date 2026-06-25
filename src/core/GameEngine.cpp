@@ -154,6 +154,11 @@ void GameEngine::UntapStep(GameState& state)
         // not subject to summoning sickness (irrelevant since they never attack).
         state.battlefield.push_back(perm);
     }
+
+    // Forbidden Orchard: one opponent 1/1 Spirit per Orchard the active player controls this turn
+    // (assume each is tapped for mana). Same point + order as the rollout (TurnSolver SimulateToEnd)
+    // so the executor and the search stay in lockstep. On-play copies are handled in TryPlaySpecificLand.
+    SpawnForbiddenOrchardTokensTurnStart(state);
 }
 
 void GameEngine::UpkeepStep(GameState& state)

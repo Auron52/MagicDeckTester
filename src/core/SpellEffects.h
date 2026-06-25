@@ -749,6 +749,37 @@ inline void CreateToken(
     state.battlefield.push_back(token);
 }
 
+// Forbidden Orchard: "{T}: Add one mana of any color. Whenever you tap this land for mana, target
+// opponent creates a 1/1 colorless Spirit creature token." Modelled (per user) as: assume each
+// Orchard the active player controls is tapped for mana EVERY turn it is in play -> the opponent
+// gets one 1/1 colourless Spirit per Orchard per turn. The Spirit is a real opponent creature, so it
+// is a first-class target for Soulfire (extra dig) / Crackle (discount) / removal automatically.
+// In the passive-opponent goldfish (Hinata flies) the Spirits never block -- they are pure targets.
+inline bool IsForbiddenOrchard(const CardDefinition* d)
+{
+    return d && d->params.taps_spawn_opp_token;
+}
+
+// Create one 1/1 colourless Spirit for the opponent (the Forbidden Orchard token).
+inline void SpawnOpponentSpirit(GameState& state)
+{
+    CreateToken(state, 1 - state.active_player_index, 1, 1, std::vector<std::string>{"Spirit"});
+}
+
+// Turn-start spawn: one Spirit per Orchard the ACTIVE player already controls (re-tapped this turn).
+// Called where opponent_spawns are materialised, in BOTH the rollout and the executor -> lockstep.
+// Count first (CreateToken appends to battlefield) so we don't iterate over the new tokens.
+inline void SpawnForbiddenOrchardTokensTurnStart(GameState& state)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index
+            && IsForbiddenOrchard(CardDatabase::Instance().LookupCached(p.card))) { ++n; }
+    }
+    for (int i = 0; i < n; ++i) { SpawnOpponentSpirit(state); }
+}
+
 // Number of creatures `controller_index` controls (including itself and tokens, plus
 // animated lands). Used for characteristic-defining power (Adeline: power = creatures
 // you control).

@@ -426,6 +426,11 @@ struct CardParams
     // CastOrderRank); the provider ranks the restricting ritual as the LAST ritual (just before the
     // payoff) so the only legal shape is ...setup -> Irencrag -> Crackle.
     int  max_casts_after = -1;
+    // Forbidden Orchard: "whenever you tap this land for mana, target opponent creates a 1/1 Spirit."
+    // Modelled as one opponent 1/1 colourless Spirit per turn the land is in play (assume tapped each
+    // turn) -- created at turn start for existing copies + on-play for a freshly-played copy. The
+    // Spirits are real opponent creatures -> first-class Soulfire/Crackle/removal targets.
+    bool taps_spawn_opp_token = false;
     // Magma Opus: a non-draw spell that ALSO draws on resolution ("draw two cards"). Drawn to
     // hand in both cast paths (executor + rollout) -- deterministic, lockstep. 0 = no draw rider.
     int  cast_draw = 0;

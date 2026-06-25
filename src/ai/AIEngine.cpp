@@ -1669,6 +1669,10 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
         if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry, def->card.m_name); }
         if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil, def->card.m_name); }
         if (def->params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
+        // Forbidden Orchard played this turn: it is tapped for mana this turn too, so spawn the
+        // opponent's Spirit now (the turn-start spawn only covers copies already in play). Lockstep
+        // with the rollout's PlayLandByName.
+        if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }
         return true;
     }
     return false;

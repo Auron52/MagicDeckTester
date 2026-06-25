@@ -2508,6 +2508,11 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         }
     }
 
+    // Forbidden Orchard: one opponent 1/1 Spirit per Orchard the active player controls this turn
+    // (assume each is tapped for mana). Mirrors GameEngine (executor) at the same turn-start point
+    // -> lockstep. Gated by s_fd_opp_spawns so MTG_LEGACY_SEARCH stays byte-identical to the old model.
+    if (s_fd_opp_spawns) { SpawnForbiddenOrchardTokensTurnStart(state); }
+
     Player& ap_upkeep = state.ActivePlayer();
     for (Permanent& p : state.battlefield)
     {
@@ -2594,6 +2599,14 @@ static bool PlayLandByName(GameState& state, const std::string& name,
         if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry); }
         if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil); }
         if (def->params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
+        // Forbidden Orchard played this turn -> tapped this turn -> opponent Spirit now (the
+        // turn-start spawn only covers copies already in play). Mirrors AIEngine::TryPlaySpecificLand;
+        // gated like the turn-start spawn so MTG_LEGACY_SEARCH keeps the old model.
+        if (IsForbiddenOrchard(def))
+        {
+            static const bool s_orchard_onplay = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+            if (s_orchard_onplay) { SpawnOpponentSpirit(state); }
+        }
         return true;
     }
     return false;

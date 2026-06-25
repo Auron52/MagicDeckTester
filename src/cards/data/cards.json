@@ -1146,7 +1146,7 @@
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}: Add one mana of any color.\nWhenever you tap this land for mana, target opponent creates a 1/1 colorless Spirit creature token. [Modelled as a 5-colour land. The 'opponent creates a 1/1 Spirit' drawback is inert for goldfishing: the passive opponent never attacks or blocks, so a 1/1 it controls changes no outcome. (The spirits could in principle be extra Crackle/Soulfire targets for Hinata's cost reduction; that synergy is intentionally NOT modelled here -- a conservative under-approximation of the deck, never an over-count.)]",
+            "oracle_text": "{T}: Add one mana of any color.\nWhenever you tap this land for mana, target opponent creates a 1/1 colorless Spirit creature token. [5-colour land + the Spirit trigger (taps_spawn_opp_token). Modelled per the deck's actual play: assume the active player taps each Orchard for mana EVERY turn it is in play, so the opponent gets one 1/1 colourless Spirit per Orchard per turn -- created at turn start for copies already in play + on-play for a freshly-played copy (SpawnForbiddenOrchardTokensTurnStart / on-play hook, lockstep in executor + rollout). The Spirits are real opponent creatures, so they are first-class Soulfire-dig / Crackle-discount / removal targets (counted by SoulfireTargetCount, HinataAvailableTargets, FindOpponentCreature). In the passive-opponent goldfish (Hinata flies) they never block -- pure targets. NOT modelled: extra Spirits from Reality Spasm RE-tapping Orchards within a turn (RS is floating-mana, no literal re-tap) -- deferred to the combo heuristic where the Soulfire+RS line is evaluated.]",
             "template": "basic_land",
             "parameters": {
                 "produces": [
@@ -1155,7 +1155,8 @@
                     "B",
                     "R",
                     "G"
-                ]
+                ],
+                "taps_spawn_opp_token": true
             }
         },
         {
