@@ -175,31 +175,39 @@ Linux build, remove the volume: `docker volume rm mdt-build`.
 > want `-DMTG_PROFILE=ON` builds in the container, add a second volume mount over
 > `build-prof/` the same way.
 
-## Profiling with perf
+## Profiling (perf / callgrind)
 
-`perf` is installed (generic `linux-tools` symlinked onto `PATH`) and the container
-has `--cap-add=PERFMON`, so you can sample the simulator. Profile an optimized build
-*with* debug info so symbols/call-graphs resolve:
+**WSL2 has no hardware PMU.** Under Docker Desktop's WSL2 kernel the CPU's hardware
+performance counters are **not exposed to the guest** (`perf list` shows no
+`cpu`/`cpu_core` PMU). So perf here has **no hardware events** — no `cycles`,
+`instructions`, `cache-misses`, or `branch-misses` — and the *default*
+`perf record`/`perf stat` (which sample `cycles`) capture nothing or error out on the
+missing `cpu_core` topdown group. This is a virtualization limit, **not** a perf
+version or `perf_event_paranoid` problem — building a kernel-matched perf would not
+change it. (`perf` is the Ubuntu generic build, symlinked onto `PATH`; the container
+has `--cap-add=PERFMON`. Both are fine; the PMU is simply absent.)
+
+What works is **software-timer sampling** (`task-clock`) — PMU-free, and still a real
+hotspot profile with call graphs. Build with debug info so symbols resolve, and name
+the event explicitly:
 
 ```bash
 cmake --build build --config RelWithDebInfo
-perf record -g --call-graph dwarf ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
-perf report            # or: perf script | <FlameGraph>/stackcollapse-perf.pl | ...
-perf stat ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
+perf record -e task-clock -F 999 -g --call-graph dwarf \
+  ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
+perf report                      # where CPU time goes, with call stacks
+perf stat -e task-clock,context-switches,cpu-migrations,page-faults \
+  ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
 ```
 
-Notes / caveats (Docker Desktop + WSL2 kernel):
-- The perf binary is Ubuntu's **generic** one, not an exact match for the
-  `*-microsoft-standard-WSL2` kernel (no apt package matches it). User-space sampling
-  of `mtg` works; some kernel-side features may not.
-- If perf reports `Permission denied` despite `CAP_PERFMON`, lower the paranoid level
-  (this affects the shared WSL2 VM and may need `--cap-add=SYS_ADMIN`):
-  ```bash
-  sudo sysctl kernel.perf_event_paranoid=1
-  ```
-- For pure call-graph/instruction profiling with no kernel dependency, `valgrind
-  --tool=callgrind` (already in the image) or the in-code `-DMTG_PROFILE=ON` build are
-  alternatives — slower, but exact and portable.
+For everything else:
+- **Exact instruction counts + call graph (deterministic, PMU-free)** —
+  `valgrind --tool=callgrind` (already in the image; ~10–50× slower but byte-exact —
+  the right tool for A/B comparisons, and what this repo's profiling history uses).
+  The in-code `-DMTG_PROFILE=ON` build is the other deterministic option.
+- **Real microarchitectural counters** (cycles, IPC, cache, branch-miss) — need a
+  **native Linux host** (or a vPMU-enabled hypervisor, which Docker Desktop's WSL2
+  does not provide).
 
 ## Egress firewall (default-deny)
 
