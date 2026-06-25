@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MagicDeckTester — Game Replay Viewer</title>
+<style>
+  :root { --bg:#1a1c20; --panel:#24272d; --ink:#e8e8ea; --muted:#9aa0a8; --acc:#5aa9e6;
+          --good:#5ad17a; --bad:#e6695a; --land:#caa46a; --spell:#7fb3ff; --line:#33373e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line);
+           display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; font-weight:600; color:var(--acc); }
+  .drop { border:1px dashed var(--line); border-radius:8px; padding:6px 12px; color:var(--muted); cursor:pointer; }
+  .drop:hover { border-color:var(--acc); color:var(--ink); }
+  input[type=file]{ display:none; }
+  main { display:grid; grid-template-columns:280px 1fr; height:calc(100vh - 49px); }
+  #meta { background:var(--panel); border-right:1px solid var(--line); padding:14px 16px; overflow:auto; }
+  #meta h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:16px 0 6px; }
+  #meta .kv { display:flex; justify-content:space-between; gap:8px; padding:2px 0; }
+  #meta .kv span:first-child { color:var(--muted); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; }
+  .win { background:rgba(90,209,122,.15); color:var(--good); }
+  .loss { background:rgba(230,105,90,.15); color:var(--bad); }
+  #stage { display:flex; flex-direction:column; overflow:hidden; }
+
+  /* transport */
+  #transport { display:flex; align-items:center; gap:12px; padding:10px 18px; border-bottom:1px solid var(--line); background:var(--panel); }
+  #transport button { background:#2e323a; color:var(--ink); border:1px solid var(--line); border-radius:6px;
+    padding:5px 11px; font-size:14px; cursor:pointer; }
+  #transport button:hover { border-color:var(--acc); }
+  #transport button:disabled { opacity:.4; cursor:default; }
+  #slider { flex:1; }
+  #stepinfo { min-width:230px; font-size:13px; }
+  #stepinfo b { font-size:15px; }
+  #stepinfo .phase { color:var(--muted); text-transform:uppercase; font-size:11px; letter-spacing:.04em; }
+  select { background:#2e323a; color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:4px; }
+
+  /* board */
+  #board { flex:1; overflow:hidden; display:flex; }
+  #mainboard { flex:1; overflow:auto; padding:16px 18px 30px; }
+  #castzone { width:212px; flex:none; border-left:1px solid var(--line); background:var(--panel); overflow:auto; padding:14px 12px; }
+  #castzone h3 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 10px; }
+  .castcard { margin-bottom:16px; text-align:center; cursor:help; }
+  .castcard img { width:155px; border-radius:7px; display:block; margin:0 auto; background:#0b0c0e; min-height:100px; }
+  .castcard .mana { display:block; margin-top:5px; font-size:13px; color:var(--ink); }
+  .zone.lands { opacity:.92; }
+  .lifebar { display:flex; gap:26px; align-items:center; margin-bottom:6px; }
+  .life { font-size:13px; color:var(--muted); }
+  .life b { font-size:22px; }
+  .life b.you { color:var(--good); } .life b.opp { color:var(--bad); }
+  .nowacts { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
+  .nowact { background:rgba(90,169,230,.12); border:1px solid rgba(90,169,230,.3); border-radius:6px;
+            padding:3px 9px; font-size:12px; }
+  .nowact .mana { color:var(--muted); }
+  .nowact.win { background:rgba(90,209,122,.15); border-color:rgba(90,209,122,.4); color:var(--good); }
+  .zone h3 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+             margin:16px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
+  .hint { color:var(--muted); font-size:12px; }
+
+  /* card thumbs */
+  .thumb { width:90px; text-align:center; cursor:help; }
+  .thumb.sm { width:60px; }
+  .thumb img { width:100%; border-radius:5px; display:block; background:#0b0c0e; min-height:60px; transition:transform .12s; }
+  .thumb.tapped { margin:16px 24px; }
+  .thumb.tapped img { transform:rotate(90deg); }
+  .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:2px; }
+  .thumbs { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .card { padding:1px 7px; border-radius:4px; background:#2e323a; font-size:12px; cursor:help; }
+  .card.land { color:var(--land); } .card.spell { color:var(--spell); }
+
+  /* Scryfall hover popover */
+  #pop { position:fixed; display:none; z-index:50; pointer-events:none; }
+  #pop img { width:244px; border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.65); display:block; background:#0b0c0e; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Game Replay Viewer</h1>
+  <label class="drop">Open game log .json<input type="file" id="file" accept=".json"/></label>
+  <span class="hint" id="status">Drop a <code>--log-dir</code> game JSON anywhere, or click Open.</span>
+</header>
+<main>
+  <aside id="meta"><div class="empty">No game loaded.</div></aside>
+  <section id="stage">
+    <div id="transport" style="display:none">
+      <button id="first" title="First (Home)">⏮</button>
+      <button id="prev"  title="Previous (←)">◀</button>
+      <button id="play"  title="Play / Pause (Space)">▶</button>
+      <button id="next"  title="Next (→)">▶▏</button>
+      <button id="last"  title="Last (End)">⏭</button>
+      <input type="range" id="slider" min="0" value="0"/>
+      <select id="speed" title="Playback speed">
+        <option value="1400">Slow</option>
+        <option value="800" selected>Normal</option>
+        <option value="350">Fast</option>
+      </select>
+      <span id="stepinfo"></span>
+    </div>
+    <div id="board"><div class="empty">Load a game to begin.</div></div>
+  </section>
+</main>
+<script>
+const LANDISH = /Island|Mountain|Plains|Swamp|Forest|Orchard|Boilerworks|Bluffs|Monastery|Reflecting Pool|Karoo|Sol Ring|Signet|\bLand\b/i;
+let DATA=null, INV={}, STEPS=[], idx=0, timer=null;
+
+function invert(n){ const m={}; for(const k in n) for(const id of n[k]) m[id]=k; return m; }
+function nm(id){ return INV[id] || ('#'+id); }
+function cardOf(x){ return (x && typeof x==='object') ? (x.cardName||nm(x.card)) : nm(x); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function scryImg(name,ver){ return 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small'); }
+// Land vs other-permanent classifier (name-based; rocks/dorks are NOT lands).
+const ROCK_RE=/Sol Ring|Signet|Ornithopter|Mind Stone|Talisman|Mana Crypt|Lotus|Medallion|\bMox\b|Diamond|Locket|Cluestone|Banner|Obelisk|Springleaf/i;
+const LAND_RE=/\b(Island|Mountain|Plains|Swamp|Forest|Wastes)\b|Orchard|Boilerworks|Bluffs|Monastery|Reflecting Pool|Karoo|Temple|Tower|Vivid|Lake|Snarl|Islet|Cavern|Sanctuary|Grove|Garden|Vista|Foundry|Spire|Citadel|Atoll|Reef|Heath|Mire|Delta|Tarn|Catacombs|Vents|Grave|Fountain|Hall|Verge|Strand|Crag|Field|Coast|Shore|Flats|Hollow|Pool|Nykthos|Academy|Mine|Tron|Yard|Bog|Oasis|Dunes|Ruins|Sanctum|Gate|Path|Tomb|Pit|Lair|Den|Marsh|Fen|Glade|Thicket|Plaza|Station|Outpost|Pier|Refuge|Haven/i;
+function isLand(name){ return ROCK_RE.test(name) ? false : LAND_RE.test(name); }
+// A battlefield entry may be a bare id or {card, tapped}. tapped -> rotated 90deg (latent:
+// renders once the log includes per-permanent tapped state).
+function thumb(x,sm){ const name=cardOf(x); const tapped = x && typeof x==='object' && x.tapped;
+  return `<span class="thumb ${sm?'sm':''} ${tapped?'tapped':''} card" data-name="${esc(name)}">`+
+    `<img loading="lazy" src="${scryImg(name,'small')}" alt="${esc(name)}" onerror="this.style.opacity=.15"/>`+
+    `<em>${name}</em></span>`; }
+function thumbs(arr,sm){ if(!arr||!arr.length) return '<span class="hint">—</span>';
+  return '<div class="thumbs">'+arr.map(x=>thumb(x,sm)).join('')+'</div>'; }
+function cardSpan(x){ const name=cardOf(x); const cls=LANDISH.test(name)?'land':'spell';
+  return `<span class="card ${cls}" data-name="${esc(name)}">${name}</span>`; }
+
+function renderMeta(d){
+  const r=d.result||{}; const won=r.winner==='player';
+  const res = won?`<span class="pill win">WIN · turn ${r.turn}</span>`
+                 :`<span class="pill loss">NO WIN${r.turn?(' · '+r.turn):''}</span>`;
+  let h=`<div class="kv"><span>Result</span><span>${res}</span></div>`;
+  h+=`<div class="kv"><span>Seed</span><span>${d.seed??'—'}</span></div>`;
+  h+=`<div class="kv"><span>Game #</span><span>${d.gameNumber??'—'}</span></div>`;
+  h+=`<h2>Opening hand</h2>${thumbs(d.openingHand,true)}`;
+  const ms=d.mulliganSequence;
+  if(Array.isArray(ms)&&ms.length){
+    h+=`<h2>Mulligans</h2>`;
+    h+=ms.map((s,i)=>{
+      const dec=s.kept===true?'<span class="pill win">KEPT</span>':s.kept===false?'<span class="pill loss">mull</span>':'';
+      let x=`<div class="kv"><span>attempt ${s.attempt??i}</span><span>${dec}</span></div>`;
+      if(s.hand) x+=thumbs(s.hand,true);
+      if(s.bottomed&&s.bottomed.length) x+=`<div class="hint" style="margin-top:3px">bottomed:</div>`+thumbs(s.bottomed,true);
+      return x;
+    }).join('');
+  }
+  document.getElementById('meta').innerHTML=h;
+}
+
+function renderStep(){
+  const s=STEPS[idx]; if(!s){ return; }
+  const b=s.boardAfter||{};
+  const all=s.actions||[];
+  const casts=all.filter(a=>a.type==='CAST_SPELL');
+  const others=all.filter(a=>a.type!=='CAST_SPELL');
+  const oacts=others.map(a=>{
+    const verb=(a.type||'?').replace(/_/g,' ').toLowerCase();
+    const name=a.cardName||(a.card!=null?nm(a.card):'');
+    const win=/win|lethal/.test(verb);
+    return `<span class="nowact ${win?'win':''}" ${name?`data-name="${esc(name)}"`:''}>${verb}${name?' <b>'+name+'</b>':''}</span>`;
+  }).join('');
+  const bf=b.battlefield||[];
+  const lands=bf.filter(x=>isLand(cardOf(x)));
+  const perms=bf.filter(x=>!isLand(cardOf(x)));
+  const zone=(title,arr,cls)=>`<div class="zone ${cls||''}"><h3>${title} (${arr.length})</h3>`+
+    `<div class="row">${arr.length?arr.map(x=>thumb(x)).join(''):'<span class="hint">none</span>'}</div></div>`;
+  let main=`<div id="mainboard">`+
+    `<div class="lifebar"><span class="life">Opponent <b class="opp">${b.opponentLife??'?'}</b></span>`+
+    `<span class="life">You <b class="you">${b.playerLife??'?'}</b></span>`+
+    `<span class="nowacts">${oacts}</span></div>`+
+    zone('Permanents', perms)+
+    zone('Lands', lands, 'lands')+
+    zone('Hand', b.hand||[])+
+    `</div>`;
+  let cast=`<div id="castzone"><h3>Cast this step</h3>`;
+  cast += casts.length ? casts.map(a=>{
+      const name=a.cardName||nm(a.card);
+      const mana=a.manaPaid?`<span class="mana">${a.manaPaid}</span>`:'';
+      return `<div class="castcard" data-name="${esc(name)}"><img loading="lazy" src="${scryImg(name,'normal')}" alt="${esc(name)}" onerror="this.style.opacity=.15"/>${mana}</div>`;
+    }).join('') : `<span class="hint">— no spell cast —</span>`;
+  cast+=`</div>`;
+  document.getElementById('board').innerHTML=main+cast;
+  document.getElementById('slider').value=idx;
+  document.getElementById('stepinfo').innerHTML=
+    `<b>Turn ${s.turn}</b> <span class="phase">${s.phase||''}</span> &nbsp; <span class="hint">step ${idx+1}/${STEPS.length}</span>`;
+  document.getElementById('first').disabled=document.getElementById('prev').disabled=(idx===0);
+  document.getElementById('last').disabled=document.getElementById('next').disabled=(idx===STEPS.length-1);
+}
+function go(i){ idx=Math.max(0,Math.min(STEPS.length-1,i)); renderStep(); }
+function play(){ const btn=document.getElementById('play');
+  if(timer){ clearInterval(timer); timer=null; btn.textContent='▶'; return; }
+  if(idx>=STEPS.length-1) idx=0;
+  btn.textContent='⏸';
+  const ms=+document.getElementById('speed').value;
+  timer=setInterval(()=>{ if(idx>=STEPS.length-1){ clearInterval(timer); timer=null; btn.textContent='▶'; return; } go(idx+1); }, ms);
+}
+
+function load(d){
+  DATA=d; INV=invert(d.cardNumbering||{});
+  STEPS=(d.turns||[]); idx=0;
+  document.getElementById('transport').style.display='flex';
+  document.getElementById('slider').max=Math.max(0,STEPS.length-1);
+  document.getElementById('status').textContent=`Loaded game #${d.gameNumber??'?'} (seed ${d.seed??'?'})`;
+  renderMeta(d); renderStep();
+}
+function readFile(f){ const r=new FileReader();
+  r.onload=()=>{ try{ load(JSON.parse(r.result)); }catch(e){ alert('Not a valid game JSON: '+e.message); } };
+  r.readAsText(f); }
+
+document.getElementById('file').addEventListener('change',e=>{ if(e.target.files[0]) readFile(e.target.files[0]); });
+document.getElementById('first').onclick=()=>go(0);
+document.getElementById('prev').onclick=()=>go(idx-1);
+document.getElementById('next').onclick=()=>go(idx+1);
+document.getElementById('last').onclick=()=>go(STEPS.length-1);
+document.getElementById('play').onclick=play;
+document.getElementById('slider').addEventListener('input',e=>{ if(timer)play(); go(+e.target.value); });
+document.addEventListener('keydown',e=>{ if(!STEPS.length) return;
+  if(e.key==='ArrowRight'){go(idx+1);} else if(e.key==='ArrowLeft'){go(idx-1);}
+  else if(e.key===' '){e.preventDefault();play();}
+  else if(e.key==='Home'){go(0);} else if(e.key==='End'){go(STEPS.length-1);} });
+['dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault()));
+document.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) readFile(f); });
+
+// Scryfall hover popover (full card on hover of any .card / .thumb / .nowact[data-name])
+const pop=document.createElement('div'); pop.id='pop'; pop.innerHTML='<img alt=""/>'; document.body.appendChild(pop);
+const popImg=pop.querySelector('img'); let popName=null;
+function placePop(e){ const w=252,h=352; let x=e.clientX+18,y=e.clientY+18;
+  if(x+w>innerWidth)x=e.clientX-w-18; if(y+h>innerHeight)y=Math.max(8,innerHeight-h-8);
+  pop.style.left=x+'px'; pop.style.top=y+'px'; }
+document.addEventListener('mouseover',e=>{ const c=e.target.closest('[data-name]'); if(!c)return;
+  const n=c.getAttribute('data-name'); if(!n)return;
+  if(n!==popName){ popName=n; popImg.src=scryImg(n,'normal'); }
+  pop.style.display='block'; placePop(e); });
+document.addEventListener('mousemove',e=>{ if(pop.style.display==='block') placePop(e); });
+document.addEventListener('mouseout',e=>{ if(e.target.closest('[data-name]')){ pop.style.display='none'; popName=null; } });
+</script>
+</body>
+</html>
