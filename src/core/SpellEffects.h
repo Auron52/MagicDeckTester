@@ -1908,7 +1908,14 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         if (def->params.creature_mana_only && !for_creature) { continue; }
 
         const std::vector<Color>& produces = def->params.produces;
-        const std::vector<Permanent> bf_snap = state.battlefield;  // undo across this source's options
+        // Undo across this source's options. `activate` only ever modifies THIS source (its
+        // tapped flag + a depletion counter); deeper recursion taps OTHER sources but each level
+        // self-restores on failure ("returns false => state unchanged", by induction over the
+        // same activate-restore pattern), and the function never resizes the battlefield. So
+        // snapshotting/restoring the single source permanent is byte-identical to snapshotting
+        // the whole battlefield vector -- and avoids an O(battlefield) copy per recursion node
+        // (this copy was ~59% of a combo-turn search; see hinata-profile-perf callgrind).
+        const Permanent src_snap = state.battlefield[i];
         const int life_snap = state.players[active].life;
         const int opp_life_snap = state.players[1 - active].life;   // for tap_opponent_lifegain undo
         const bool oll_snap = state.opponent_lost_life_this_turn;
@@ -1925,7 +1932,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             if (def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
             if (TapForCostBacktrack(state, cost, for_creature, next)) { return true; }
-            state.battlefield          = bf_snap;
+            state.battlefield[i]       = src_snap;   // only this source was touched at this level
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;
             state.opponent_lost_life_this_turn  = oll_snap;
