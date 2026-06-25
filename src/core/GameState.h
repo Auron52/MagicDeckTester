@@ -41,6 +41,10 @@ struct StackEntry
     int                 controller_index = 0;
     std::vector<Target> targets;
     std::optional<int>  chosen_x;
+    std::optional<int>  soulfire_own_targets;  // Soulfire Eruption: searched # of own creatures
+                                               // added as extra targets (deeper dig). EffectHandler
+                                               // passes it to SoulfireDig so the executor's dig
+                                               // matches the rollout's (lockstep). Unset elsewhere.
     std::string         tutor_target;   // for a tutor spell: the specific library card to fetch
                                         // (searched choice). Empty -> PerformTutor uses the
                                         // heuristic's top pick.

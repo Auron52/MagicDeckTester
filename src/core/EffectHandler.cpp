@@ -202,7 +202,8 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         // target loop below; self-damage is applied here.
         if (def.params.damage_equals_top_mv)
         {
-            SoulfireResult sr = SoulfireDig(state, entry.controller_index);
+            SoulfireResult sr = SoulfireDig(state, entry.controller_index,
+                                            entry.soulfire_own_targets.value_or(0));
             damage = sr.face_damage;
             state.players[entry.controller_index].life -= sr.self_damage;
         }

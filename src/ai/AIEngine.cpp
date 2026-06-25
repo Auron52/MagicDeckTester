@@ -1158,14 +1158,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
     // Cast a spell from hand by name.
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
-                            int chosen_x = 0)
+                            int chosen_x = 0, int own_targets = 0)
     {
         Player& ap = state.ActivePlayer();
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);
-        CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x);
+        CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets);
     };
 
     // Cast a spell from hand via its alternative cost (Invigorate / Skyshroud Cutter /
@@ -1324,7 +1324,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
-            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x); } resolve_now(); }
+            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::DigDraw)
@@ -1357,14 +1357,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
             {
-                cast_by_name(a.card_name, a.tutor_target, a.chosen_x); resolve_now();
+                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets); resolve_now();
                 if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(); }
             }
         }
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x); resolve_now(); }
+            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets); resolve_now(); }
         }
         for (const Action& a : extra.actions)
         {
@@ -1442,7 +1442,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -1474,7 +1474,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
             && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets); note_draw_engine(a.card_name); resolve_now();
         }
     }
     for (const Action& a : plan.actions)
@@ -1486,7 +1486,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -1516,7 +1516,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[oi];
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now();
+        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets); note_draw_engine(a.card_name); resolve_now();
     }
     }
     }
@@ -1524,7 +1524,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (staged_break) { break; }
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x); note_draw_engine(a.card_name); resolve_now(); }
+        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets); note_draw_engine(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
@@ -2203,7 +2203,7 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
 
 void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
                                  int alt_lifegain, const std::string& tutor_target,
-                                 int chosen_x)
+                                 int chosen_x, int own_targets)
 {
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
@@ -2219,6 +2219,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // X is 0 except on the stack, where it is the chosen value -- so it is NOT in the card's
     // mana value, only here on the stack entry.
     if (chosen_x > 0) { entry.chosen_x = chosen_x; }
+    // Soulfire Eruption: carry the searched own-creature target count so EffectHandler's dig
+    // exiles the same N cards and kills the same own creatures as the rollout (lockstep).
+    if (own_targets > 0) { entry.soulfire_own_targets = own_targets; }
 
     int opp_index = 1 - state.active_player_index;
     switch (def->params.targeting)
@@ -2266,6 +2269,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     }
 
     ManaCost effective = EffectiveCost(*def, state);
+    // Soulfire Eruption: extra Hinata discount from the searched own-creature targets (mirrors the
+    // enumeration cost and the rollout's apply_one -> lockstep).
+    effective.generic = std::max(0, effective.generic
+                          - SoulfireOwnTargetDiscount(*def, state, state.active_player_index, own_targets));
     // {X} is paid as generic mana, once per {X} pip (Crackle {X}{X}{X} -> 3X).
     if (chosen_x > 0)
     {
@@ -2313,6 +2320,22 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             }
             else { continue; }
             tgts.push_back(std::move(d));
+        }
+        // Soulfire Eruption: the searched own creatures are extra targets (deeper dig) but are NOT
+        // in entry.targets (the face-damage loop), so add them to the log here for visibility.
+        if (own_targets > 0 && def->params.damage_equals_top_mv)
+        {
+            std::vector<int> own = SoulfireOwnCreatureOrder(state, state.active_player_index);
+            for (int oi = 0; oi < own_targets && oi < static_cast<int>(own.size()); ++oi)
+            {
+                const Permanent& cp = state.battlefield[own[oi]];
+                GameLogger::TargetDesc d;
+                d.kind      = "permanent";
+                d.who       = "you";
+                d.card_num  = cp.card.m_number;
+                d.card_name = cp.card.m_name;
+                tgts.push_back(std::move(d));
+            }
         }
         m_logger->LogCastSpell(hand_card.m_number, hand_card.m_name,
                                alt_lifegain > 0 ? ("(alt: opp +" + std::to_string(alt_lifegain) + ")")

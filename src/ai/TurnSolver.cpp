@@ -685,6 +685,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             continue;
         }
 
+        // Soulfire Eruption: the own-creature target COUNT is a searched parameter. Emit one cast
+        // variant per own_targets value 0..K (K = #own creatures). More targets = a deeper dig
+        // (face = max MV over more exiled cards) + a bigger Hinata discount, paid for with mana-
+        // value damage to those creatures (see SoulfireDig). All share hand_index (mutually
+        // exclusive), so the search picks the count by playing each out. own_targets = 0 = 6a.
+        if (def.tmpl == CardTemplate::DirectDamage && def.params.damage_equals_top_mv)
+        {
+            const int active   = state.active_player_index;
+            // Own-targeting only earns its keep with Hinata in play: each own target is {1} less
+            // (the discount that can ENABLE an otherwise-unaffordable Soulfire) plus a deeper dig.
+            // Without her, an own target gives no discount -- only marginal extra dig at the cost of
+            // creature damage on a 9-mana spell -- so we don't branch on it (keeps the K+1 variants
+            // off every non-combo turn). With her, the search still picks the count 0..K.
+            const int K        = HinataInPlay(state) ? SoulfireOwnCreatureCount(state, active) : 0;
+            ManaCost base_cost = EffectiveCost(def, state);   // base Hinata discount already applied
+            const int eval     = EvalCard(def, state);
+            const bool to_face = def.params.targeting != Targeting::Creature;
+            for (int ot = 0; ot <= K; ++ot)
+            {
+                ManaCost c = base_cost;
+                c.generic = std::max(0, c.generic - SoulfireOwnTargetDiscount(def, state, active, ot));
+                Action a;
+                a.kind                 = Action::Kind::CastFromHand;
+                a.card_name            = ap.hand[i].m_name;
+                a.hand_index           = i;
+                a.cost                 = c;
+                a.eval                 = eval;
+                a.direct_damage        = to_face ? SoulfireFaceDamage(state, active, ot) : 0;
+                a.is_noncreature       = !def.card.IsCreature();
+                a.card_mv              = def.card.m_mana_cost.ManaValue();
+                a.soulfire_own_targets = ot;
+                actions.push_back(std::move(a));
+            }
+            continue;
+        }
+
         // Only count damage that actually reaches the opponent's life total.
         // Creature-only targeting (e.g. Searing Blood) deals damage to a permanent,
         // not to the player, so it doesn't contribute to face-lethal calculations.
@@ -697,8 +733,6 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             {
                 direct = def.params.landfall_damage;
             }
-            // Soulfire Eruption: clairvoyant damage = the top library card's mana value.
-            if (def.params.damage_equals_top_mv) { direct = TopLibraryMV(state); }
         }
 
         Action a;
@@ -1516,9 +1550,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
-                    bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x)
+                    bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
+                    int own_targets)
     {
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
@@ -1550,6 +1585,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         bool free_cast = cascade_free;
         cascade_free = false;
         ManaCost ec = EffectiveCost(def, state);
+        // Soulfire Eruption: extra Hinata discount from the searched own-creature targets (mirrors
+        // the enumeration cost and the executor's CastSpellFromHand -> lockstep).
+        ec.generic = std::max(0, ec.generic
+                       - SoulfireOwnTargetDiscount(def, state, state.active_player_index, own_targets));
         // {X} spells: pay the chosen X, once per {X} pip (Crackle {X}{X}{X} -> 3X generic).
         if (def.card.m_mana_cost.has_x && chosen_x > 0)
         {
@@ -1583,6 +1622,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.alt_lifegain   = alt_lifegain;
             rec.tutor_target   = tutor_target;
             rec.chosen_x       = chosen_x;
+            rec.soulfire_own_targets = own_targets;
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -1635,7 +1675,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // self = min MV). Mirrors EffectHandler so the rollout matches the executor (lockstep).
             if (def.params.damage_equals_top_mv)
             {
-                SoulfireResult sr = SoulfireDig(state, state.active_player_index);
+                SoulfireResult sr = SoulfireDig(state, state.active_player_index, own_targets);
                 dmg = sr.face_damage;
                 state.players[state.active_player_index].life -= sr.self_damage;
             }
@@ -1828,7 +1868,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0);
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0);
                 }
             }
         }
@@ -1958,7 +1998,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets);
                 }
             }
         }
@@ -1985,11 +2025,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x); } }
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets); } }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x); }
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets); }
                 }
             }
             else
@@ -2009,7 +2049,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets);
                 }
             }
         }
@@ -2017,14 +2057,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets);
             }
         }
 
@@ -2047,7 +2087,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };

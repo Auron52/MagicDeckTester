@@ -68,6 +68,14 @@ struct Action
                                        // picks. cost already includes the X generic; chosen_x is
                                        // carried so the cast (rollout AND executor) scales the
                                        // effect (X damage) identically. 0 = not an X spell.
+    int         soulfire_own_targets = 0;
+                                       // Soulfire Eruption: searched COUNT of own creatures to add
+                                       // as extra targets (0..#own creatures). CollectActions emits
+                                       // one variant per value (sharing hand_index -> mutually
+                                       // exclusive) so the search weighs deeper dig + cheaper
+                                       // Hinata cost against the mana-value damage to those
+                                       // creatures. SoulfireDig picks WHICH (expendable first,
+                                       // Hinata last). 0 for every non-Soulfire action.
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;

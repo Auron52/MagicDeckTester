@@ -1057,7 +1057,8 @@ inline void StageTopLibraryCard(GameState& state)
 // realise the identical dig + damage (lockstep).
 struct SoulfireResult { int face_damage = 0; int self_damage = 0; };
 
-// Number of Soulfire targets in the current state (opponent + opp creatures + self-if-safe).
+// Number of BASE Soulfire targets (opponent face + opp creatures + self-if-safe). Own creatures are
+// NOT counted here -- they are the SEARCHED extra (soulfire_own_targets), added at the call site.
 inline int SoulfireTargetCount(const GameState& state, int controller, bool& target_self_out)
 {
     const int opp = 1 - controller;
@@ -1071,12 +1072,49 @@ inline int SoulfireTargetCount(const GameState& state, int controller, bool& tar
     return n;
 }
 
-// Estimate (no mutation): the opponent-face damage = the MAX mana value among the top N cards
-// (the controller assigns the highest exiled card to the face). Used by the Solve win projection.
-inline int SoulfireFaceDamage(const GameState& state, int controller)
+// True if this permanent is Hinata (the cost-reducer lynchpin). Soulfire targets own creatures
+// most-expendable-FIRST and Hinata LAST, so only the maximal own-target count risks her -- and the
+// clairvoyant search rejects that line when losing her makes the rest of the combo unaffordable.
+inline bool IsHinataPermanent(const Permanent& p)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    return d && d->params.hinata_cost_reducer;
+}
+
+// Battlefield indices of the controller's creatures in Soulfire target order (non-Hinata before
+// Hinata; ties keep battlefield order). SoulfireDig targets the FIRST `own_targets` of these.
+inline std::vector<int> SoulfireOwnCreatureOrder(const GameState& state, int controller)
+{
+    std::vector<int> idx;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.IsCreature()) { idx.push_back(i); }
+    }
+    std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) {
+        return (IsHinataPermanent(state.battlefield[a]) ? 1 : 0)
+             < (IsHinataPermanent(state.battlefield[b]) ? 1 : 0);
+    });
+    return idx;
+}
+
+// How many own creatures the controller could add as Soulfire targets (the search range is 0..K).
+inline int SoulfireOwnCreatureCount(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.IsCreature()) { ++n; } }
+    return n;
+}
+
+// Estimate (no mutation): face damage = the MAX mana value among the top (base + own_targets) cards
+// (the controller assigns the highest exiled card to the face). Used by the Solve win projection;
+// matches SoulfireDig's resolution exactly (clairvoyant), so it never invents a phantom win.
+inline int SoulfireFaceDamage(const GameState& state, int controller, int own_targets = 0)
 {
     bool target_self = false;
-    const int n = SoulfireTargetCount(state, controller, target_self);
+    int n = SoulfireTargetCount(state, controller, target_self);
+    n += std::min(own_targets, SoulfireOwnCreatureCount(state, controller));
     const Player& ap = state.players[controller];
     const int cnt = std::min(n, static_cast<int>(ap.library.size()));
     int max_mv = 0;
@@ -1090,13 +1128,38 @@ inline int SoulfireFaceDamage(const GameState& state, int controller)
     return max_mv;
 }
 
-// Apply (mutates): exile the top N cards, STAGE them all (playable through next turn), and return
-// the face damage (max MV, -> opponent) and self damage (min MV, -> controller, only if self is a
-// target). N comes from SoulfireTargetCount so the real engine and the rollout agree exactly.
-inline SoulfireResult SoulfireDig(GameState& state, int controller)
+inline bool HinataInPlay(const GameState& state);   // defined below; used by the discount helper
+
+// EXTRA Hinata generic discount from targeting `own_targets` own creatures (each extra target =
+// {1} less). EffectiveCost already removed the BASE discount min(cap, base targets); this returns
+// the DELTA min(cap, base+own) - min(cap, base) so the caller subtracts it once more. 0 with no
+// Hinata. Applied identically at the enumeration, rollout, and executor cost sites (lockstep).
+inline int SoulfireOwnTargetDiscount(const CardDefinition& def, const GameState& state,
+                                     int controller, int own_targets)
+{
+    if (!def.params.damage_equals_top_mv || own_targets <= 0) { return 0; }
+    if (!HinataInPlay(state)) { return 0; }
+    const int cap = def.params.discount_max_targets;
+    if (cap <= 0) { return 0; }
+    bool dummy = false;
+    const int base = SoulfireTargetCount(state, controller, dummy);
+    return std::min(cap, base + own_targets) - std::min(cap, base);   // >= 0
+}
+
+// Apply (mutates): exile the top N = base + own_targets cards, STAGE them all (playable through next
+// turn), assign exiled mana values to targets optimally, and return the face damage (-> opponent)
+// and self damage (-> controller). Own creatures (most-expendable first, Hinata last) take the
+// SMALLEST exiled MVs and are destroyed if that is lethal -- the price the search weighs against the
+// deeper dig + cheaper cost. Deterministic given (state, controller, own_targets) so the rollout
+// (ApplyPlanDirect) and the executor (EffectHandler) realise the identical board (lockstep). With
+// own_targets = 0 it is byte-identical to the prior single-set dig (face = max MV, self = min MV).
+inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targets = 0)
 {
     bool target_self = false;
-    const int n = SoulfireTargetCount(state, controller, target_self);
+    const int base = SoulfireTargetCount(state, controller, target_self);
+    std::vector<int> own = SoulfireOwnCreatureOrder(state, controller);
+    if (static_cast<int>(own.size()) > std::max(0, own_targets)) { own.resize(std::max(0, own_targets)); }
+    const int n = base + static_cast<int>(own.size());
     Player& ap = state.players[controller];
 
     std::vector<int> mvs;
@@ -1113,9 +1176,34 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller)
 
     SoulfireResult r;
     if (mvs.empty()) { return r; }
-    std::sort(mvs.begin(), mvs.end(), std::greater<int>());
-    r.face_damage = mvs.front();                                   // highest MV -> opponent's face
-    if (target_self && mvs.size() >= 2) { r.self_damage = mvs.back(); }  // lowest MV -> yourself
+    std::sort(mvs.begin(), mvs.end(), std::greater<int>());   // descending: front = highest MV
+    r.face_damage = mvs.front();                              // highest MV -> opponent's face
+
+    // The smallest MVs go to self + own creatures (minimise self-damage and own-creature deaths);
+    // the opponent's own creatures absorb the middle values (goldfish-irrelevant, not modelled).
+    // Take from the BACK (smallest) without ever reusing the face card (front, index 0).
+    int back = static_cast<int>(mvs.size()) - 1;
+    if (target_self && back > 0) { r.self_damage = mvs[back]; --back; }
+
+    // Apply own-creature damage; destroy the lethal ones AFTER (descending battlefield index so the
+    // erase stays valid). A dead own creature moves to its owner's graveyard (faithful SBA), and
+    // later casts this turn recompute their cost from the new board -- so killing Hinata correctly
+    // removes her discount, which is exactly what makes the search avoid those lines.
+    std::vector<int> dead;
+    for (int oi = 0; oi < static_cast<int>(own.size()) && back > 0; ++oi)
+    {
+        const int dmg = mvs[back]; --back;
+        Permanent& cre = state.battlefield[own[oi]];
+        cre.damage += dmg;
+        if (cre.damage >= cre.EffectiveToughness()) { dead.push_back(own[oi]); }
+    }
+    std::sort(dead.begin(), dead.end(), std::greater<int>());
+    for (int bi : dead)
+    {
+        Permanent& cre = state.battlefield[bi];
+        state.players[cre.owner_index].graveyard.push_back(cre.card);
+        state.battlefield.erase(state.battlefield.begin() + bi);
+    }
     return r;
 }
 
