@@ -750,6 +750,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         a.has_spectacle         = def.params.spectacle_cost.has_value();
         a.is_draw_until_nonland = (def.tmpl == CardTemplate::DrawUntilNonland);
         a.discard_land_damage   = def.params.discard_land_damage;
+        a.max_casts_after       = def.params.max_casts_after;   // Irencrag "one more spell" restriction
         if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
         // Ponder (cast_reorder): the keep-vs-shuffle call is SEARCHED -- emit two variants (keep top
         // N in the provider's order vs shuffle them away) sharing hand_index, so the clairvoyant
@@ -992,6 +993,28 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
         // W/R/B-only land). Strict tightening; inert for decks whose lands produce their colors.
         if (!SubsetPayable(have_colors, cands, sel))         { return; }
+
+        // Irencrag Feat "you can cast only one more spell this turn": reject any subset that casts
+        // more than max_casts_after spells AFTER the restricting ritual (ordered by CastOrderRank).
+        // The provider ranks Irencrag as the last ritual (18, just before the Crackle payoff at 20),
+        // so the realised cast order ...Reality Spasm(15) -> Irencrag(18) -> Crackle(20) is legal and
+        // the executor/rollout (which cast in CastOrderRank order) match this judgement -> lockstep.
+        // Loop runs lookups only when a restrictor is actually selected (rare); flag-check otherwise.
+        for (int j : sel)
+        {
+            if (cands[j].max_casts_after < 0) { continue; }
+            const CardDefinition* rd = CardDatabase::Instance().Lookup(cands[j].card_name);
+            const int r_rank = rd ? ResolveProvider(state).CastOrderRank(state, *rd) : 20;
+            int after = 0;
+            for (int k : sel)
+            {
+                if (k == j) { continue; }
+                const CardDefinition* kd = CardDatabase::Instance().Lookup(cands[k].card_name);
+                const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
+                if (k_rank > r_rank) { ++after; }
+            }
+            if (after > cands[j].max_casts_after) { return; }   // illegal: too many spells after it
+        }
 
         // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so they
         // resolve BEFORE the spell. A plan that kills us via self-damage cannot win.
@@ -2843,6 +2866,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
         if (!SubsetPayable(have_colors, cands, sel))         { return; }
+
+        // Irencrag "one more spell this turn": reject subsets casting > max_casts_after spells after
+        // the restricting ritual (mirrors Solve::consider; keeps the commit-the-line enumerator legal).
+        for (int j : sel)
+        {
+            if (cands[j].max_casts_after < 0) { continue; }
+            const CardDefinition* rd = CardDatabase::Instance().Lookup(cands[j].card_name);
+            const int r_rank = rd ? ResolveProvider(state).CastOrderRank(state, *rd) : 20;
+            int after = 0;
+            for (int k : sel)
+            {
+                if (k == j) { continue; }
+                const CardDefinition* kd = CardDatabase::Instance().Lookup(cands[k].card_name);
+                const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
+                if (k_rank > r_rank) { ++after; }
+            }
+            if (after > cands[j].max_casts_after) { return; }
+        }
 
         if (self_damage >= ap.life) { return; }
 

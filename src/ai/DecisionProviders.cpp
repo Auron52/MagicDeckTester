@@ -646,6 +646,11 @@ HinataProvider::TutorCandidates(const GameState& s, int controller, const CardPa
 
 int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
+    // Irencrag Feat restricts further casts ("you can cast only one more spell this turn"), so it
+    // must be the LAST ritual: cast AFTER other rituals (Reality Spasm, 15) but BEFORE the payoff
+    // (Crackle, 20), so the only spell that follows it is the payoff. Rank 18 -> the cast order and
+    // the max_casts_after check in Solve::consider agree on ...Reality Spasm -> Irencrag -> Crackle.
+    if (def.params.max_casts_after >= 0) { return 18; }
     // A mana ritual must resolve BEFORE the payoff X-spell so its floating mana is available to
     // pay the bigger Crackle. Rank it between creatures (Hinata, 10) and other noncreatures
     // (Crackle, 20). Everything else uses the generic order.

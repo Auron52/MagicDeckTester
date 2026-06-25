@@ -1493,16 +1493,17 @@
         },
         {
             "name": "Irencrag Feat",
-            "mana_cost": "{3}{R}{R}",
+            "mana_cost": "{1}{R}{R}{R}",
             "types": [
                 "Sorcery"
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Add six {R}. Spend this mana only during this turn. [A burst-mana RITUAL: pay {3}{R}{R}, add six {R} to the turn-scoped reserve (state.floating_mana) for a same-turn payoff (Crackle) -- net +1 mana and a red fix. Modelled via ritual_floating_mana:6 (the floating-mana engine, shared with Reality Spasm). The planner credits the SAME 6 it floats (gross 6, base cost 5), so the search's predicted combo and the executed one stay exactly in lockstep; conservative (planner<=executor). Needs no Hinata (no {X} to discount), so it nets even without her.]",
+            "oracle_text": "Add seven {R}. You can cast only one more spell this turn. [A burst-mana RITUAL: pay {1}{R}{R}{R} (4), add seven {R} to the turn-scoped reserve (state.floating_mana) -- net +3 mana and a red fix. Modelled via ritual_floating_mana:7 (the floating-mana engine, shared with Reality Spasm); the planner credits the SAME 7 it floats so the predicted combo and the executed one stay in lockstep. DRAWBACK 'you can cast only one more spell this turn' modelled via max_casts_after:1 -- after Irencrag resolves the active player may cast at most ONE more spell, so the only legal combo shape is (other rituals/setup) -> Irencrag -> Crackle (Crackle = the one more spell). Without this the search could illegally chain Irencrag -> Reality Spasm -> Crackle. Needs no Hinata (no {X} to discount).]",
             "template": "custom",
             "parameters": {
-                "ritual_floating_mana": 6
+                "ritual_floating_mana": 7,
+                "max_casts_after": 1
             }
         }
     ]

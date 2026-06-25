@@ -420,6 +420,12 @@ struct CardParams
     // Irencrag Feat: a fixed mana-burst RITUAL -- on resolution, add this much mana to the
     // turn-scoped reserve (state.floating_mana) for a same-turn payoff. 0 for non-ritual cards.
     int  ritual_floating_mana = 0;
+    // Irencrag Feat: "You can cast only one more spell this turn." After this spell resolves, the
+    // controller may cast at most this many MORE spells this turn. -1 = no restriction (default).
+    // Enforced in Solve::consider (reject a subset with > this many spells ordered AFTER it by
+    // CastOrderRank); the provider ranks the restricting ritual as the LAST ritual (just before the
+    // payoff) so the only legal shape is ...setup -> Irencrag -> Crackle.
+    int  max_casts_after = -1;
     // Magma Opus: a non-draw spell that ALSO draws on resolution ("draw two cards"). Drawn to
     // hand in both cast paths (executor + rollout) -- deterministic, lockstep. 0 = no draw rider.
     int  cast_draw = 0;

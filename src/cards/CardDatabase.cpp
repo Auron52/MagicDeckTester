@@ -403,6 +403,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.damage_equals_top_mv      = params.value("damage_equals_top_mv", false);
     p.untap_x_mana_sources      = params.value("untap_x_mana_sources", false);
     p.ritual_floating_mana      = params.value("ritual_floating_mana", 0);
+    p.max_casts_after           = params.value("max_casts_after", -1);
     p.cast_draw                 = params.value("cast_draw", 0);
 
     return p;

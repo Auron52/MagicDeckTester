@@ -76,6 +76,12 @@ struct Action
                                        // Hinata cost against the mana-value damage to those
                                        // creatures. SoulfireDig picks WHICH (expendable first,
                                        // Hinata last). 0 for every non-Soulfire action.
+    int         max_casts_after  = -1;
+                                       // Irencrag Feat: after this cast resolves the controller may
+                                       // cast at most this many MORE spells this turn. -1 = no limit.
+                                       // Solve::consider rejects a subset with more than this many
+                                       // spells ordered after it (by CastOrderRank). Set only for the
+                                       // restricting ritual; -1 for every other action.
     int         ponder_keep      = -1;
                                        // Ponder-style cast_reorder: the SEARCHED keep-vs-shuffle
                                        // call. CollectActions emits TWO variants (1 = keep top N in
