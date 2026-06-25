@@ -352,13 +352,27 @@ MulliganProfile AnalyzerEngine::GridSearchLands(
     // nesting a parallel game loop inside would oversubscribe.
     const uint64_t seed_step = static_cast<uint64_t>(games_per_config);
     std::vector<double> avgs(configs.size(), std::numeric_limits<double>::max());
-    ParallelFor(static_cast<int>(configs.size()), [&](int ci)
+    // Progress: this is the single most expensive phase (e.g. ~1152 configs x ~1000 games at
+    // full scale = the multi-hour grind). Emit a line every ~5% of configs completed so the run
+    // is observable rather than a black box. Lossless -- the counter doesn't affect results.
+    const int          total_cfg     = static_cast<int>(configs.size());
+    const int          progress_step = std::max(1, total_cfg / 20);
+    std::atomic<int>   completed{0};
+    std::cerr << "    grid: " << total_cfg << " configs x " << games_per_config
+              << " games each...\n" << std::flush;
+    ParallelFor(total_cfg, [&](int ci)
     {
         std::vector<GameRecord> records = RunForRecordsSerial(
             deck, configs[ci], games_per_config,
             seed + static_cast<uint64_t>(ci) * seed_step, max_turns,
             ANALYSIS_DEPTH, ANALYSIS_BUDGET);
         avgs[ci] = AverageWinTurn(records, max_turns);
+        const int done = ++completed;
+        if (done % progress_step == 0 || done == total_cfg)
+        {
+            std::cerr << "    grid: " << done << "/" << total_cfg
+                      << " configs (" << (100 * done / total_cfg) << "%)\n" << std::flush;
+        }
     });
 
     // Reduce in config order with strict-< so ties resolve to the first config,
