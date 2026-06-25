@@ -1185,9 +1185,10 @@
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}: Add one mana of any type that a land you control could produce. [Modelled as producing any of this deck's three colours (W/U/R). Faithful approximation: the deck's lands collectively make all of W, U and R, so a Reflecting Pool with almost any other land out can make any of them; the rare one-land opening is a minor over-approximation that the per-colour payability check (SubsetPayable) does not tighten for multi-colour (wild) sources. The deck needs no B/G, so 'any colour a land could produce' never reaches outside W/U/R.]",
+            "oracle_text": "{T}: Add one mana of any type that a land you control could produce. [Modelled faithfully via the `reflecting` flag: its colours are the runtime UNION of the controller's OTHER non-reflecting lands (EffectiveProduces), and it produces NOTHING when it is the only land (so a solo / all-Reflecting-Pool hand is manaless -> mulligan). The static `produces` below is IGNORED for a reflecting source; it is kept only as documentation of the deck's colour identity.]",
             "template": "basic_land",
             "parameters": {
+                "reflecting": true,
                 "produces": [
                     "W",
                     "U",
@@ -1240,11 +1241,11 @@
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card. [Modelled as Scry 3 then draw 1: with a known library, the optimal 'reorder the top three in any order' is exactly what ScryTop (keep wanted on top, bottom the rest) achieves for the immediately-following draw. The 'you may shuffle' line is never beneficial for a clairvoyant player and is not modelled.]",
+            "oracle_text": "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card. [Modelled as cast_reorder 3 then draw 1 (NOT scry -- Ponder cannot bottom cards). It is all-or-nothing: keep all three on top in best order (draw the best; the other two stay on top and you are stuck drawing them next), OR shuffle them all away and draw fresh. ReorderTopOrShuffle keeps when at least one of the top three is wanted, else shuffles (deterministic, lockstep). This removes the over-powered selective-bottom the old Scry 3 model granted.]",
             "template": "draw_spell",
             "parameters": {
                 "draw": 1,
-                "cast_scry": 3
+                "cast_reorder": 3
             }
         },
         {
@@ -1403,7 +1404,7 @@
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "Choose any number of target creatures, planeswalkers, and/or players. For each of them, exile the top card of your library, then Soulfire Eruption deals damage equal to that card's mana value to that permanent or player. You may play the exiled cards until the end of your next turn. [PARTIAL: modelled as single-target FACE -- exile the top library card, deal its mana value to the opponent (clairvoyant). The deck's real use is multi-target including YOURSELF to exile+play several cards as a dig into the combo; that dig (and the 'play exiled cards' card advantage) is the deferred Layer-2 item, so this conservatively UNDER-rates Soulfire (face damage only, the exiled card is lost rather than playable). Hinata discount: 1 target.]",
+            "oracle_text": "Choose any number of target creatures, planeswalkers, and/or players. For each of them, exile the top card of your library, then Soulfire Eruption deals damage equal to that card's mana value to that permanent or player. You may play the exiled cards until the end of your next turn. [PARTIAL (single-target): modelled as ONE target -- the opponent's face -- exiling the top library card, dealing its mana value to the opponent (clairvoyant via damage_equals_top_mv), AND staging that card playable until end of next turn (StageTopLibraryCard) so its card advantage / dig-of-1 is captured, lockstep in EffectHandler + ApplyPlanDirect. STILL DEFERRED: the MULTI-target dig -- targeting your own permanents / yourself to exile+stage SEVERAL cards (deeper dig) at the cost of mana-value damage to those targets. That needs variable target-count search branching + a self-damage-vs-dig heuristic; it conservatively UNDER-rates Soulfire as a combo engine (dig 1 instead of N). Hinata discount: 1 target.]",
             "template": "direct_damage",
             "parameters": {
                 "damage": 0,

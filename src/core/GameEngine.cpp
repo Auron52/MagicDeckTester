@@ -16,16 +16,19 @@ void GameEngine::SetLogger(GameLogger* logger)
 // ---- Helper: collect board state for logging ----
 
 static void CollectBoardState(const GameState& state,
-                               std::vector<int>& battlefield_out,
-                               std::vector<int>& hand_out)
+                               std::vector<GameLogger::PermSnapshot>& battlefield_out,
+                               std::vector<int>& hand_out,
+                               std::vector<GameLogger::PermSnapshot>& opp_battlefield_out)
 {
     const Player& ap = state.ActivePlayer();
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index == state.active_player_index)
-        {
-            battlefield_out.push_back(p.card.m_number);
-        }
+        GameLogger::PermSnapshot snap;
+        snap.card_num  = p.card.m_number;
+        snap.card_name = p.card.m_name;
+        snap.tapped    = p.tapped;
+        if (p.controller_index == state.active_player_index) { battlefield_out.push_back(std::move(snap)); }
+        else { opp_battlefield_out.push_back(std::move(snap)); }  // Forbidden Orchard tokens / spawns
     }
     for (const Card& c : ap.hand)
     {
@@ -39,6 +42,15 @@ static void CollectBoardState(const GameState& state,
 
 int GameEngine::RunGame(GameState& state, int max_turns)
 {
+    // Capture scry/dig reveals during this real game's resolution. The search/rollout
+    // pauses this (RevealLogPause) so only actual game reveals are logged. Restored at
+    // scope exit so a thread reused across games never leaks a stale logger.
+    struct RevealScope {
+        GameLogger* prev;
+        RevealScope(GameLogger* l) : prev(g_reveal_logger) { g_reveal_logger = l; }
+        ~RevealScope() { g_reveal_logger = prev; }
+    } reveal_scope(m_logger);
+
     m_ai.HandleMulligan(state, max_turns);
 
     if (m_logger)
@@ -204,12 +216,13 @@ void GameEngine::DrawStep(GameState& state)
     Card drawn = ap.library.DrawTop();
     if (m_logger)
     {
-        std::vector<int> bf, hand;
-        CollectBoardState(state, bf, hand);
+        std::vector<GameLogger::PermSnapshot> bf, obf;
+        std::vector<int> hand;
+        CollectBoardState(state, bf, hand, obf);
         m_logger->StartPhase(state.turn_number, "DRAW");
         m_logger->LogDraw(drawn.m_number, drawn.m_name);
         hand.push_back(drawn.m_number);
-        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand);
+        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf);
     }
     ap.hand.push_back(std::move(drawn));
     ResolveStack(state);
@@ -247,9 +260,10 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 
     if (m_logger)
     {
-        std::vector<int> bf, hand;
-        CollectBoardState(state, bf, hand);
-        m_logger->CommitPhase(state.ActivePlayer().life, state.Opponent().life, bf, hand);
+        std::vector<GameLogger::PermSnapshot> bf, obf;
+        std::vector<int> hand;
+        CollectBoardState(state, bf, hand, obf);
+        m_logger->CommitPhase(state.ActivePlayer().life, state.Opponent().life, bf, hand, obf);
     }
 }
 
@@ -354,9 +368,10 @@ void GameEngine::CombatPhase(GameState& state)
 
     if (m_logger)
     {
-        std::vector<int> bf, hand;
-        CollectBoardState(state, bf, hand);
-        m_logger->CommitPhase(state.ActivePlayer().life, opp.life, bf, hand);
+        std::vector<GameLogger::PermSnapshot> bf, obf;
+        std::vector<int> hand;
+        CollectBoardState(state, bf, hand, obf);
+        m_logger->CommitPhase(state.ActivePlayer().life, opp.life, bf, hand, obf);
     }
 }
 
@@ -385,8 +400,6 @@ void GameEngine::CleanupStep(GameState& state)
     // Discard down to maximum hand size (7 unless unlimited by a permanent).
     if (!unlimited_hand && ap.hand.size() > 7 && m_logger)
     {
-        std::vector<int> bf, hand;
-        CollectBoardState(state, bf, hand);
         m_logger->StartPhase(state.turn_number, "CLEANUP");
     }
     while (!unlimited_hand && ap.hand.size() > 7)
@@ -399,9 +412,10 @@ void GameEngine::CleanupStep(GameState& state)
     }
     if (m_logger && m_logger->InPhase())
     {
-        std::vector<int> bf, hand;
-        CollectBoardState(state, bf, hand);
-        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand);
+        std::vector<GameLogger::PermSnapshot> bf, obf;
+        std::vector<int> hand;
+        CollectBoardState(state, bf, hand, obf);
+        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf);
     }
 
     // Remove all damage marks, "until end of turn" boosts, and animation effects (CR 514.2).

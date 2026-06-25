@@ -24,6 +24,19 @@ no-win brick — from `decks/Hinata2.cod`, seed 7000).
 - **Card images via Scryfall** — opening hand and every mulligan attempt render as thumbnails;
   **hover any card** anywhere to see the full card (read the real oracle text vs what the sim did).
   No API key; images are lazy-loaded and browser-cached.
+- **Tapped permanents render rotated 90°** — lands tapped for mana, mana rocks/dorks whose
+  ability fired, and attackers all show sideways (from the log's per-permanent `tapped` state).
+- **Chosen X** on `{X}` spells — Crackle with Power / Reality Spasm show `X=N` next to the mana
+  paid (and the mana now reads as the resolved cost, e.g. `{8}{R}{R}`, not a stray `{X}`).
+- **Scry/dig reveals** — Ponder/Preordain/Scry etc. show the cards they looked at in the
+  "Revealed" panel (right), each marked **▲ top** (kept on top) or **▼ away** (bottomed/binned).
+  Ponder is reorder-or-shuffle (never bottoms); a shuffled Ponder is labelled "Ponder (shuffle)".
+- **Opponent's side** — the opponent's permanents (Forbidden Orchard tokens, scheduled spawns,
+  modelled opponent lands) render across the table above your board, so spell targets are visible.
+- **Spell targets** — each cast shows `→ opponent` / `→ you` / `→ CardName (opp)` so you can see
+  exactly what Crackle with Power (etc.) is pointed at.
+- **Playback speed** — Very slow → Very fast in the transport bar (the slow end is good for
+  stepping through a combo turn).
 
 ## Generating logs
 
@@ -35,13 +48,19 @@ flagged game is exactly reproducible):
     --budget-ms 20 --max-turns 8 --threads 0 --log-dir logs/hinata_games
 ```
 
-## Planned (needs log-side fields)
+## Log schema notes
 
-The viewer already has latent support for these; they light up once the engine logs the data:
+- `boardAfter.battlefield` / `boardAfter.opponentBattlefield` are arrays of `{card, cardName,
+  tapped}` objects (cardName lets the viewer label tokens, which have no deck card number).
+- `CAST_SPELL` actions carry `manaPaid` (resolved cost string), `chosenX` (for `{X}` spells),
+  and `targets` (`[{kind:'player'|'permanent', who:'you'|'opponent', card, cardName}]`).
+- `REVEAL` actions carry `source` (the spell), `lookedAt` (`[{card, cardName}]` in look order),
+  `kept` (card numbers kept on top) and `bottomed` (numbers sent to bottom / graveyard).
+- `ABILITY` actions carry `card`/`cardName` (the source) and `ability` (description). Logged for
+  audit; the non-tap visual is not drawn yet (mana taps are already shown via `tapped`).
 
-- **Tapped state** — any permanent the log marks `tapped` renders rotated 90° (lands tapped for
-  mana, dorks/rocks whose ability was used, attackers after combat).
-- **Chosen X** — the real X value for `{X}` spells (Crackle / Reality Spasm) on cast actions.
-- **Scry/dig reveals** — what Ponder/Preordain/Scry looked at, kept, and bottomed.
+## Planned
 
-A human-play / compare mode is a later phase.
+- **Non-tap ability visuals** — sac / pay-life / discard-cost abilities are logged (`ABILITY`)
+  but not yet drawn distinctly; add when a deck uses them.
+- A human-play / compare mode is a later phase.

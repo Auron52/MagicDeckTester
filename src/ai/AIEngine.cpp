@@ -223,7 +223,7 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
                                    || (def->tmpl == CardTemplate::ManaDork)
                                    || (def->params.mana_rock);
                 if (!is_mana_source) { continue; }
-                for (Color produced : def->params.produces)
+                for (Color produced : EffectiveProducesInHand(hand, *def))   // RP -> union of other hand lands
                 {
                     if (produced == req.first) { ++sources; break; }
                 }
@@ -247,11 +247,12 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
             auto def = CardDatabase::Instance().LookupCached(c);
             if (!def || !def->card.IsLand()) { continue; }
             ++total_land_mana;
-            if (def->params.produces.size() == 1)
+            const std::vector<Color>& prod = EffectiveProducesInHand(hand, *def);  // RP-aware
+            if (prod.size() == 1)
             {
-                ++pool[def->params.produces[0]];
+                ++pool[prod[0]];
             }
-            else if (!def->params.produces.empty())
+            else if (!prod.empty())
             {
                 ++wild_mana;
             }
@@ -349,7 +350,7 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
         auto def = CardDatabase::Instance().LookupCached(c);
         if (!def || !def->card.IsLand()) { continue; }
         ++land_count;
-        for (Color produced : def->params.produces) { ++pool[produced]; }
+        for (Color produced : EffectiveProducesInHand(hand, *def)) { ++pool[produced]; }  // RP-aware
     }
 
     // Helper: single-spell deficit given a pool.
@@ -431,7 +432,7 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
             std::map<Color, int> tmp_pool = pool;
             if (def)
             {
-                for (Color c : def->params.produces)
+                for (Color c : EffectiveProducesInHand(hand, *def))   // RP-aware (mirror of pool build)
                 {
                     auto it = tmp_pool.find(c);
                     if (it != tmp_pool.end()) { --it->second; }
@@ -460,7 +461,7 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
             int usefulness = 0;
             if (def)
             {
-                for (Color c : def->params.produces)
+                for (Color c : EffectiveProducesInHand(hand, *def))   // RP-aware
                 {
                     auto it = demand.find(c);
                     usefulness = std::max(usefulness,
@@ -628,6 +629,7 @@ void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan
 
 int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
 {
+    RevealLogPause _rlp;  // rollout: suppress scry/dig reveal logging (real play only)
     GameLogger* saved = m_logger;
     m_logger          = nullptr;
     m_in_rollout      = true;
@@ -1664,8 +1666,8 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
         state.battlefield.push_back(perm);
         ap.hand.erase(it);
         ++ap.lands_played_this_turn;
-        if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry); }
-        if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil); }
+        if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry, def->card.m_name); }
+        if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil, def->card.m_name); }
         if (def->params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
         return true;
     }
@@ -1712,8 +1714,8 @@ bool AIEngine::TryPlayLand(GameState& state)
         ++ap.lands_played_this_turn;
         // ETB scry/surveil (e.g. Temple of Epiphany scry; Thundering Falls surveil),
         // after the land is on the battlefield.
-        if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }
-        if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil); }
+        if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry, def.card.m_name); }
+        if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil, def.card.m_name); }
         if (def.params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
         return true;
     };
@@ -1992,16 +1994,17 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
+            const std::vector<Color>& prod = EffectiveProduces(state, active, *def);  // RP-aware
             Color col;
             if (any)
             {
-                if (def->params.produces.empty()) { continue; }
-                col = def->params.produces[0];
+                if (prod.empty()) { continue; }
+                col = prod[0];
             }
             else
             {
                 bool match = false;
-                for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
+                for (Color c : prod) { if (c == needed) { match = true; break; } }
                 if (!match) { continue; }
                 col = needed;
             }
@@ -2062,7 +2065,7 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
                         bool m = false;
-                        for (Color c : sd->params.produces) { if (c == ic) { m = true; break; } }
+                        for (Color c : EffectiveProduces(state, active, *sd)) { if (c == ic) { m = true; break; } }  // RP feeder
                         if (!m) { continue; }
                         tap_source(s, *sd, ic);
                         fed = true; break;
@@ -2269,6 +2272,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         int pips = def->card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
         effective.generic += chosen_x * pips;
         effective.generic = std::max(0, effective.generic - HinataGenericDiscount(*def, state, chosen_x));
+        // X is now resolved into the generic cost: drop the {X} symbol so ToString()
+        // prints the actual mana paid (e.g. "{4}{R}{R}") and not a stray "{X}" on top.
+        effective.has_x  = false;
+        effective.x_pips = 0;
     }
     if (alt_lifegain > 0)
     {
@@ -2280,9 +2287,37 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
 
     if (m_logger)
     {
+        // chosen_x is the resolved X for {X} spells; pass -1 when the spell has no {X}
+        // so the viewer only annotates "X=N" where it is meaningful.
+        int logged_x = (def->card.m_mana_cost.has_x && chosen_x > 0) ? chosen_x : -1;
+        // Resolve the spell's targets to stable descriptors (card identity + controller),
+        // so the viewer can show e.g. Crackle -> opponent, removal -> a specific creature.
+        std::vector<GameLogger::TargetDesc> tgts;
+        for (const Target& t : entry.targets)
+        {
+            GameLogger::TargetDesc d;
+            if (t.type == Target::Type::Player)
+            {
+                d.kind = "player";
+                d.who  = (t.player_index == state.active_player_index) ? "you" : "opponent";
+            }
+            else if (t.type == Target::Type::Permanent
+                     && t.permanent_index >= 0
+                     && t.permanent_index < static_cast<int>(state.battlefield.size()))
+            {
+                const Permanent& tp = state.battlefield[t.permanent_index];
+                d.kind      = "permanent";
+                d.who       = (tp.controller_index == state.active_player_index) ? "you" : "opponent";
+                d.card_num  = tp.card.m_number;
+                d.card_name = tp.card.m_name;
+            }
+            else { continue; }
+            tgts.push_back(std::move(d));
+        }
         m_logger->LogCastSpell(hand_card.m_number, hand_card.m_name,
                                alt_lifegain > 0 ? ("(alt: opp +" + std::to_string(alt_lifegain) + ")")
-                                                : effective.ToString());
+                                                : effective.ToString(),
+                               logged_x, tgts);
     }
 
     if (def->params.sacrifice_land)

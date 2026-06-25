@@ -1,6 +1,7 @@
 #pragma once
 #include "GameState.h"
 #include "ManaPool.h"
+#include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
 #include "../cards/CardDatabase.h"
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
 #include <algorithm>
@@ -1030,8 +1031,6 @@ inline void ExileTopLibrary(GameState& state)
 // through next turn (expiry = turn+1, the same primitive Light Up the Stage uses; SimulateToEndImpl
 // expires it). This is the card-advantage the deck digs for (find Hinata / combo pieces). Shared by
 // EffectHandler (executor) and apply_one (rollout) so the realised dig matches exactly (lockstep).
-// CONSERVATIVE: only the single (opponent-targeted) card is dug; the fuller multi-target exile-N
-// dig (with its self/own-creature damage downside) is left unmodelled -> never over-rates Soulfire.
 inline void StageTopLibraryCard(GameState& state)
 {
     Player& ap = state.ActivePlayer();
@@ -1041,6 +1040,83 @@ inline void StageTopLibraryCard(GameState& state)
     c.m_is_staged     = true;
     c.m_staged_expiry = state.turn_number + 1;
     ap.hand.push_back(std::move(c));
+}
+
+// ---- Soulfire Eruption: bounded-heuristic MULTI-TARGET model -----------------------------------
+// "Choose any number of target creatures/.../players. For each, exile the top card and deal its
+// mana value to that target; you may play the exiled cards until end of your next turn."
+//
+// Bounded heuristic target set (user spec): ALWAYS the opponent (face) + each OPPONENT creature;
+// PLUS yourself, unless your life < 9 (don't risk self-kill). Your OWN creatures (Hinata /
+// Ornithopter) are NOT auto-targeted -- killing the combo lynchpin or a mana dork is a real risk
+// left for a future searched decision. Each target exiles the next top card; the controller orders
+// targets optimally, so the FACE takes the highest-MV exiled card (max damage) and SELF takes the
+// lowest (min self-damage). ALL exiled cards are staged (the dig of N, the deck's real payoff).
+// Opponent-creature damage is goldfish-irrelevant (passive tokens) and omitted; those targets count
+// only toward the dig. Shared exile/stage so EffectHandler (real) and ApplyPlanDirect (rollout)
+// realise the identical dig + damage (lockstep).
+struct SoulfireResult { int face_damage = 0; int self_damage = 0; };
+
+// Number of Soulfire targets in the current state (opponent + opp creatures + self-if-safe).
+inline int SoulfireTargetCount(const GameState& state, int controller, bool& target_self_out)
+{
+    const int opp = 1 - controller;
+    int n = 1;   // the opponent's face
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == opp && p.card.IsCreature()) { ++n; } }
+    // Self-target only with life > 9: the worst exiled card is Soulfire itself (MV 9), so at 9
+    // life a self-target could be lethal -- require >= 10 to survive even the max-MV self-hit.
+    target_self_out = state.players[controller].life > 9;
+    if (target_self_out) { ++n; }
+    return n;
+}
+
+// Estimate (no mutation): the opponent-face damage = the MAX mana value among the top N cards
+// (the controller assigns the highest exiled card to the face). Used by the Solve win projection.
+inline int SoulfireFaceDamage(const GameState& state, int controller)
+{
+    bool target_self = false;
+    const int n = SoulfireTargetCount(state, controller, target_self);
+    const Player& ap = state.players[controller];
+    const int cnt = std::min(n, static_cast<int>(ap.library.size()));
+    int max_mv = 0;
+    for (int i = 0; i < cnt; ++i)
+    {
+        const Card& c = *std::next(ap.library.begin(), i);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        int mv = d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
+        if (mv > max_mv) { max_mv = mv; }
+    }
+    return max_mv;
+}
+
+// Apply (mutates): exile the top N cards, STAGE them all (playable through next turn), and return
+// the face damage (max MV, -> opponent) and self damage (min MV, -> controller, only if self is a
+// target). N comes from SoulfireTargetCount so the real engine and the rollout agree exactly.
+inline SoulfireResult SoulfireDig(GameState& state, int controller)
+{
+    bool target_self = false;
+    const int n = SoulfireTargetCount(state, controller, target_self);
+    Player& ap = state.players[controller];
+
+    std::vector<int> mvs;
+    for (int i = 0; i < n && !ap.library.empty(); ++i)
+    {
+        Card c = ap.library.front();
+        ap.library.erase(ap.library.begin());
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        mvs.push_back(d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue());
+        c.m_is_staged     = true;
+        c.m_staged_expiry = state.turn_number + 1;
+        ap.hand.push_back(std::move(c));   // dig: stage every exiled card
+    }
+
+    SoulfireResult r;
+    if (mvs.empty()) { return r; }
+    std::sort(mvs.begin(), mvs.end(), std::greater<int>());
+    r.face_damage = mvs.front();                                   // highest MV -> opponent's face
+    if (target_self && mvs.size() >= 2) { r.self_damage = mvs.back(); }  // lowest MV -> yourself
+    return r;
 }
 
 // Untap X of the active player's tapped mana sources (Reality Spasm). Deterministic order
@@ -1184,6 +1260,15 @@ inline bool HinataInPlay(const GameState& state)
 inline int HinataAvailableTargets(const CardDefinition& def, const GameState& state)
 {
     const int active = state.active_player_index;
+    // Soulfire Eruption: the discount must count exactly the targets the resolution heuristic
+    // actually chooses (opponent + opp creatures + self-if-life>9), NOT own creatures -- otherwise
+    // it would be discounted for targets it never uses (a free, rules-illegal discount). Own
+    // creatures are added by the searched own-target count at the call site (see SoulfireDig).
+    if (def.params.damage_equals_top_mv)
+    {
+        bool dummy = false;
+        return SoulfireTargetCount(state, active, dummy);
+    }
     int avail = 1;                                   // the opponent (a player target)
     if (def.params.discount_self_safe) { avail += 1; }   // yourself
     for (const Permanent& p : state.battlefield)
@@ -1209,6 +1294,88 @@ inline int HinataGenericDiscount(const CardDefinition& def, const GameState& sta
     return cap < avail ? cap : avail;
 }
 
+// ---- Reflecting Pool: "{T}: Add one mana of any type that a LAND you control could produce."
+// Reflecting Pool has no inherent colour: it can make only what your OTHER lands can make, and
+// nothing at all if it is your only land (so a solo / all-Reflecting-Pool hand is effectively
+// manaless -> mulligan). Other Reflecting Pools don't count (the rule is circular and adds no
+// colour). `ReflectedColors` returns the union of colours the controller's other non-reflecting
+// LANDS could produce; `EffectiveProduces` returns this for a reflecting source and the plain
+// static produces[] for every other source. Tapped state is irrelevant (a tapped land still
+// "could produce" its colour). Scans the battlefield (in_hand=false) or the controller's hand
+// (in_hand=true, for mulligan evaluation).
+//
+// NB: ReflectedColors returns a reference to a thread_local buffer, valid until the next call.
+// All call sites consume it within a single source's loop before evaluating another source, and
+// the union is built only from NON-reflecting lands (no recursion), so at most one buffer is
+// ever live -- safe. Do not hold the returned reference across another EffectiveProduces call.
+inline const std::vector<Color>& ReflectedColors(const GameState& state, int controller,
+                                                 bool in_hand)
+{
+    static thread_local std::vector<Color> buf;
+    bool seen[6] = { false, false, false, false, false, false };  // W,U,B,R,G,C
+    auto mark = [&](const CardDefinition* def)
+    {
+        if (!def || def->params.reflecting || !def->card.IsLand()) { return; }
+        for (Color c : def->params.produces) { seen[static_cast<int>(c)] = true; }
+    };
+    if (in_hand)
+    {
+        for (const Card& c : state.players[controller].hand)
+        { mark(CardDatabase::Instance().LookupCached(c)); }
+    }
+    else
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            mark(CardDatabase::Instance().LookupCached(p.card));
+        }
+    }
+    buf.clear();
+    const Color order[6] = { Color::White, Color::Blue, Color::Black,
+                             Color::Red, Color::Green, Color::Colorless };
+    for (Color c : order) { if (seen[static_cast<int>(c)]) { buf.push_back(c); } }
+    return buf;
+}
+
+// The colours a mana source currently produces. Identical to def.params.produces (by const ref,
+// zero cost, byte-identical) for every normal source; the dynamic Reflecting-Pool union only for
+// a `reflecting` source. controller = the source's controller (active player on the battlefield).
+inline const std::vector<Color>& EffectiveProduces(const GameState& state, int controller,
+                                                   const CardDefinition& def, bool in_hand = false)
+{
+    if (!def.params.reflecting) { return def.params.produces; }
+    return ReflectedColors(state, controller, in_hand);
+}
+
+// Hand-context variant for mulligan / bottoming evaluation, where the relevant "other lands" are
+// the ones in the passed-in candidate `hand` (not state's hand). A Reflecting Pool reflects the
+// union of the OTHER non-reflecting lands in this hand -- so an all-Reflecting-Pool hand reads as
+// manaless (-> mulligan). Returns the static produces[] for every non-reflecting card.
+inline const std::vector<Color>& ReflectedColorsInHand(const std::vector<Card>& hand)
+{
+    static thread_local std::vector<Color> buf;
+    bool seen[6] = { false, false, false, false, false, false };
+    for (const Card& c : hand)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (!def || def->params.reflecting || !def->card.IsLand()) { continue; }
+        for (Color col : def->params.produces) { seen[static_cast<int>(col)] = true; }
+    }
+    buf.clear();
+    const Color order[6] = { Color::White, Color::Blue, Color::Black,
+                             Color::Red, Color::Green, Color::Colorless };
+    for (Color c : order) { if (seen[static_cast<int>(c)]) { buf.push_back(c); } }
+    return buf;
+}
+
+inline const std::vector<Color>& EffectiveProducesInHand(const std::vector<Card>& hand,
+                                                         const CardDefinition& def)
+{
+    if (!def.params.reflecting) { return def.params.produces; }
+    return ReflectedColorsInHand(hand);
+}
+
 // True if `state.active_player` controls an untapped NON-filter mana source producing
 // one of `colors`. A filter land (e.g. Cascade Bluffs) can only make its colours when
 // such a feeder exists, since its filter ability requires a coloured mana input.
@@ -1225,7 +1392,7 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
                    || def->params.mana_rock;
         if (!is_src) { continue; }
-        for (Color pc : def->params.produces)
+        for (Color pc : EffectiveProduces(state, active, *def))   // RP -> union of other lands
         {
             for (Color want : colors)
             {
@@ -1278,8 +1445,11 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         return;
     }
     int amt = ManaProducedPerTap(def);
-    if (def.params.produces.size() == 1)      { pool.Add(def.params.produces[0], amt); }
-    else if (!def.params.produces.empty())    { pool.wild += amt; }
+    // Reflecting Pool: its colours are the union of the controller's other lands (empty -> adds
+    // nothing, the solo-RP dead case). For every normal source this is the static produces[].
+    const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
+    if (prod.size() == 1)      { pool.Add(prod[0], amt); }
+    else if (!prod.empty())    { pool.wild += amt; }
 }
 
 // Decrements one mana of colour `c` from a floating pool. Returns true on success.
@@ -1508,9 +1678,17 @@ inline bool HasAnyDigSource(const GameState& state)
 // land on top when it still helps — a DrawUntilNonland (Treasure Hunt) in hand is fed
 // by lands, or the player controls fewer than two lands and still needs mana —
 // otherwise bottom it to dig toward action.
-inline void ScryTop(GameState& state, int n)
+inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
 {
     Player& ap = state.ActivePlayer();
+
+    // Reveal capture (real play only; null during search). Records the cards seen at the
+    // top of the library and which were kept on top vs bottomed, in look order.
+    std::vector<int>         seen_nums;
+    std::vector<std::string> seen_names;
+    std::vector<int>         kept_nums;
+    std::vector<int>         bottom_nums;
+    const bool capture = (g_reveal_logger != nullptr);
 
     std::vector<Card> keep_top;
     std::vector<Card> bottomed;
@@ -1519,6 +1697,12 @@ inline void ScryTop(GameState& state, int n)
         Card c = ap.library.front();
         ap.library.erase(ap.library.begin());
         bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
+        if (capture)
+        {
+            seen_nums.push_back(c.m_number);
+            seen_names.push_back(c.m_name);
+            (keep ? kept_nums : bottom_nums).push_back(c.m_number);
+        }
         if (keep) { keep_top.push_back(std::move(c)); }
         else      { bottomed.push_back(std::move(c)); }
     }
@@ -1527,6 +1711,75 @@ inline void ScryTop(GameState& state, int n)
         ap.library.insert(ap.library.begin(), std::move(*it));
     }
     for (Card& c : bottomed) { ap.library.push_back(std::move(c)); }
+
+    if (capture && !seen_nums.empty())
+    {
+        g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_nums, bottom_nums);
+    }
+}
+
+// Ponder-style "look at the top N, put them back in ANY ORDER, you may shuffle, then draw".
+// Unlike Scry this CANNOT bottom cards: it is all-or-nothing. We keep all N on top (wanted
+// cards first, so the immediately-following draw takes a wanted one and the rest stay on
+// top -- the real Ponder drawback) WHEN at least one of the top N is wanted; otherwise we
+// shuffle the whole library (deterministic, lockstep ShuffleAfterSearch) so the draw is a
+// fresh card instead of a dead one. The keep-vs-shuffle call uses the same ScryKeepOnTop
+// predicate the provider already exposes, so it is deck-aware without a new hook.
+inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& source = "Ponder")
+{
+    Player& ap = state.ActivePlayer();
+    if (ap.library.empty()) { return; }
+
+    const int look = std::min(n, static_cast<int>(ap.library.size()));
+
+    // Remove the top `look` cards and split into wanted (keep on top) vs the rest, in look order.
+    std::vector<Card> wanted, rest;
+    std::vector<int>         seen_nums;
+    std::vector<std::string> seen_names;
+    const bool capture = (g_reveal_logger != nullptr);
+    for (int i = 0; i < look; ++i)
+    {
+        Card c = ap.library.front();
+        ap.library.erase(ap.library.begin());
+        bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
+        if (capture) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
+        (keep ? wanted : rest).push_back(std::move(c));
+    }
+
+    if (wanted.empty())
+    {
+        // None of the top N is worth drawing -> shuffle them all away (CR "you may shuffle").
+        // Put the looked-at cards back on top (original order), then shuffle the whole library
+        // (deterministic, lockstep). Under the MTG_NO_SEARCH_SHUFFLE A/B opt-out the shuffle is a
+        // no-op (cards stay on top in original order), which conservatively under-rates Ponder.
+        for (std::vector<Card>::reverse_iterator it = rest.rbegin(); it != rest.rend(); ++it)
+        { ap.library.insert(ap.library.begin(), std::move(*it)); }
+        ShuffleAfterSearch(state, state.active_player_index);
+        if (capture && !seen_nums.empty())
+        {
+            // Disposition = shuffled away (none kept on top); flag it in the source label.
+            g_reveal_logger->LogReveal(source + " (shuffle)", seen_nums, seen_names,
+                                       /*kept*/ std::vector<int>{}, /*bottomed*/ seen_nums);
+        }
+        return;
+    }
+
+    // Keep all N on top, wanted first (in look order), then the unwanted ones below them.
+    // Nothing is bottomed -- the unwanted cards remain on top to be drawn on later turns.
+    for (std::vector<Card>::reverse_iterator it = rest.rbegin(); it != rest.rend(); ++it)
+    { ap.library.insert(ap.library.begin(), std::move(*it)); }
+    for (std::vector<Card>::reverse_iterator it = wanted.rbegin(); it != wanted.rend(); ++it)
+    { ap.library.insert(ap.library.begin(), std::move(*it)); }
+    if (capture && !seen_nums.empty())
+    {
+        // Report the final top order (wanted first) as "kept on top"; nothing bottomed.
+        std::vector<int> kept_order_nums;
+        int i = 0;
+        for (auto it = ap.library.begin(); it != ap.library.end() && i < look; ++it, ++i)
+        { kept_order_nums.push_back(it->m_number); }
+        g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_order_nums,
+                                   /*bottomed*/ std::vector<int>{});
+    }
 }
 
 // Karoo bounce land ETB (Izzet Boilerworks): return one of `controller`'s OTHER lands to hand.
@@ -1564,9 +1817,15 @@ inline void BounceKarooLand(GameState& state, int controller, int self_index)
 // heuristic as ScryTop: keep nonlands always; keep lands only while they are still useful
 // (a DrawUntilNonland in hand wants land fuel, or fewer than two lands are in play),
 // otherwise bin the surplus land to the graveyard to dig toward action.
-inline void SurveilTop(GameState& state, int n)
+inline void SurveilTop(GameState& state, int n, const std::string& source = "Surveil")
 {
     Player& ap = state.ActivePlayer();
+
+    std::vector<int>         seen_nums;
+    std::vector<std::string> seen_names;
+    std::vector<int>         kept_nums;
+    std::vector<int>         grave_nums;
+    const bool capture = (g_reveal_logger != nullptr);
 
     std::vector<Card> keep_top;
     for (int i = 0; i < n && !ap.library.empty(); ++i)
@@ -1574,12 +1833,25 @@ inline void SurveilTop(GameState& state, int n)
         Card c = ap.library.front();
         ap.library.erase(ap.library.begin());
         bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
+        if (capture)
+        {
+            seen_nums.push_back(c.m_number);
+            seen_names.push_back(c.m_name);
+            (keep ? kept_nums : grave_nums).push_back(c.m_number);
+        }
         if (keep) { keep_top.push_back(std::move(c)); }
         else      { ap.graveyard.push_back(std::move(c)); }  // surveil bins to graveyard
     }
     for (std::vector<Card>::reverse_iterator it = keep_top.rbegin(); it != keep_top.rend(); ++it)
     {
         ap.library.insert(ap.library.begin(), std::move(*it));
+    }
+
+    if (capture && !seen_nums.empty())
+    {
+        // For surveil the "bottomed" set is really the graveyard set; the viewer labels
+        // the disposition from the source, so reusing the bottomed slot is fine.
+        g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_nums, grave_nums);
     }
 }
 
@@ -1889,11 +2161,22 @@ inline void DecrementDepletionOnTap(Permanent& source)
 // run ONLY after the greedy fails, so every payment the greedy already solves stays
 // byte-identical. `floating` carries mana produced-but-unconsumed down the recursion.
 inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
-                                bool for_creature, ManaPool floating)
+                                bool for_creature, ManaPool floating,
+                                const std::vector<Color>* rp_colors = nullptr)
 {
     if (floating.CanPay(cost)) { return true; }
     const int active = state.active_player_index;
     const int n      = static_cast<int>(state.battlefield.size());
+
+    // Reflecting Pool's colour union is INVARIANT during a tap-backtrack (no land enters or leaves
+    // while paying mana) and SHARED by all of the controller's Reflecting Pools. Compute it ONCE
+    // per top-level call -- lazily, only when the first reflecting source is actually reached --
+    // then thread the pointer through the recursion so it is never rescanned per node. Without this
+    // it was an O(battlefield) rescan per RP per recursion node, ~9x on a Reality-Spasm combo turn
+    // with two RPs in play (seed-7000 game 53). Every non-RP deck never hits the branch -> 0 cost.
+    std::vector<Color> rp_local;
+    bool rp_ready = (rp_colors != nullptr);
+
     for (int i = 0; i < n; ++i)
     {
         if (state.battlefield[i].controller_index != active || state.battlefield[i].tapped)
@@ -1907,7 +2190,11 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }
 
-        const std::vector<Color>& produces = def->params.produces;
+        // Reflecting Pool -> the shared, hoisted union (empty = solo RP = no mana); every other
+        // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)
+        if (def->params.reflecting && !rp_ready)
+        { rp_local = ReflectedColors(state, active, /*in_hand=*/false); rp_colors = &rp_local; rp_ready = true; }
+        const std::vector<Color>& produces = def->params.reflecting ? *rp_colors : def->params.produces;
         // Undo across this source's options. `activate` only ever modifies THIS source (its
         // tapped flag + a depletion counter); deeper recursion taps OTHER sources but each level
         // self-restores on failure ("returns false => state unchanged", by induction over the
@@ -1931,7 +2218,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // below on failure alongside the active player's life.
             if (def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
-            if (TapForCostBacktrack(state, cost, for_creature, next)) { return true; }
+            if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors)) { return true; }
             state.battlefield[i]       = src_snap;   // only this source was touched at this level
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;
@@ -1969,7 +2256,13 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         {
             const int amt = ManaProducedPerTap(*def);
             if (produces.empty())
-            { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f)) { return true; } }
+            {
+                // Empty colours: a {C}-only source taps for colourless. A reflecting source with
+                // no other land, though, produces NOTHING -- don't let a solo Reflecting Pool tap
+                // for {C} (it would falsely pay a generic pip). Skip it entirely.
+                if (!def->params.reflecting)
+                { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f)) { return true; } }
+            }
             else
             {
                 for (Color c : produces)

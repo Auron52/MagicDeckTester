@@ -45,6 +45,17 @@
   .castcard { margin-bottom:16px; text-align:center; cursor:help; }
   .castcard img { width:155px; border-radius:7px; display:block; margin:0 auto; background:#0b0c0e; min-height:100px; }
   .castcard .mana { display:block; margin-top:5px; font-size:13px; color:var(--ink); }
+  .xval { display:inline-block; margin-left:6px; padding:0 6px; border-radius:8px;
+          background:rgba(127,179,255,.18); color:var(--spell); font-weight:600; }
+  .castcard .tgt { display:block; margin-top:3px; font-size:12px; color:var(--bad); }
+  .oppside { padding:6px 0 2px; opacity:.92; }
+  .oppside .zone h3 { color:var(--bad); border-color:rgba(230,105,90,.25); }
+  .midline { height:0; border-top:1px dashed rgba(230,105,90,.35); margin:10px 0 4px; }
+  .reveal { margin-bottom:14px; }
+  .reveal .rsrc { font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .thumb.kept img { box-shadow:0 0 0 2px var(--good); }
+  .thumb.binned img { opacity:.5; box-shadow:0 0 0 2px var(--bad); }
+  .thumb.kept em { color:var(--good); } .thumb.binned em { color:var(--bad); }
   .zone.lands { opacity:.92; }
   .lifebar { display:flex; gap:26px; align-items:center; margin-bottom:6px; }
   .life { font-size:13px; color:var(--muted); }
@@ -94,9 +105,11 @@
       <button id="last"  title="Last (End)">⏭</button>
       <input type="range" id="slider" min="0" value="0"/>
       <select id="speed" title="Playback speed">
-        <option value="1400">Slow</option>
-        <option value="800" selected>Normal</option>
-        <option value="350">Fast</option>
+        <option value="3000">Very slow</option>
+        <option value="2000">Slow</option>
+        <option value="1200" selected>Normal</option>
+        <option value="700">Fast</option>
+        <option value="350">Very fast</option>
       </select>
       <span id="stepinfo"></span>
     </div>
@@ -154,32 +167,66 @@ function renderStep(){
   const b=s.boardAfter||{};
   const all=s.actions||[];
   const casts=all.filter(a=>a.type==='CAST_SPELL');
-  const others=all.filter(a=>a.type!=='CAST_SPELL');
+  const reveals=all.filter(a=>a.type==='REVEAL');
+  const others=all.filter(a=>a.type!=='CAST_SPELL'&&a.type!=='REVEAL');
   const oacts=others.map(a=>{
     const verb=(a.type||'?').replace(/_/g,' ').toLowerCase();
     const name=a.cardName||(a.card!=null?nm(a.card):'');
     const win=/win|lethal/.test(verb);
-    return `<span class="nowact ${win?'win':''}" ${name?`data-name="${esc(name)}"`:''}>${verb}${name?' <b>'+name+'</b>':''}</span>`;
+    const extra=a.type==='ABILITY'&&a.ability?(': '+esc(a.ability)):'';
+    return `<span class="nowact ${win?'win':''}" ${name?`data-name="${esc(name)}"`:''}>${verb}${name?' <b>'+name+'</b>':''}${extra}</span>`;
   }).join('');
   const bf=b.battlefield||[];
   const lands=bf.filter(x=>isLand(cardOf(x)));
   const perms=bf.filter(x=>!isLand(cardOf(x)));
+  const opp=b.opponentBattlefield||[];
+  const oppLands=opp.filter(x=>isLand(cardOf(x)));
+  const oppPerms=opp.filter(x=>!isLand(cardOf(x)));
   const zone=(title,arr,cls)=>`<div class="zone ${cls||''}"><h3>${title} (${arr.length})</h3>`+
     `<div class="row">${arr.length?arr.map(x=>thumb(x)).join(''):'<span class="hint">none</span>'}</div></div>`;
+  // Opponent's side, across the table (only shown when the opponent has permanents).
+  let oppZone='';
+  if(opp.length){
+    oppZone=`<div class="oppside">`+
+      zone('Opponent permanents', oppPerms)+
+      (oppLands.length?zone('Opponent lands', oppLands, 'lands'):'')+
+      `</div><div class="midline"></div>`;
+  }
   let main=`<div id="mainboard">`+
     `<div class="lifebar"><span class="life">Opponent <b class="opp">${b.opponentLife??'?'}</b></span>`+
     `<span class="life">You <b class="you">${b.playerLife??'?'}</b></span>`+
     `<span class="nowacts">${oacts}</span></div>`+
+    oppZone+
     zone('Permanents', perms)+
     zone('Lands', lands, 'lands')+
     zone('Hand', b.hand||[])+
     `</div>`;
   let cast=`<div id="castzone"><h3>Cast this step</h3>`;
+  const tgtStr=t=>t.kind==='player'
+      ? (t.who==='opponent'?'opponent':'you')
+      : `${t.cardName||nm(t.card)}${t.who==='opponent'?" (opp)":''}`;
   cast += casts.length ? casts.map(a=>{
       const name=a.cardName||nm(a.card);
-      const mana=a.manaPaid?`<span class="mana">${a.manaPaid}</span>`:'';
-      return `<div class="castcard" data-name="${esc(name)}"><img loading="lazy" src="${scryImg(name,'normal')}" alt="${esc(name)}" onerror="this.style.opacity=.15"/>${mana}</div>`;
+      const xs=(a.chosenX!=null&&a.chosenX>=0)?` <span class="xval">X=${a.chosenX}</span>`:'';
+      const mana=a.manaPaid?`<span class="mana">${a.manaPaid}${xs}</span>`:(xs?`<span class="mana">${xs}</span>`:'');
+      const tg=(a.targets&&a.targets.length)
+        ? `<span class="tgt">→ ${a.targets.map(tgtStr).map(esc).join(', ')}</span>` : '';
+      return `<div class="castcard" data-name="${esc(name)}"><img loading="lazy" src="${scryImg(name,'normal')}" alt="${esc(name)}" onerror="this.style.opacity=.15"/>${mana}${tg}</div>`;
     }).join('') : `<span class="hint">— no spell cast —</span>`;
+  // Scry/dig reveals: what Ponder/Preordain/Scry looked at, and what was kept on top.
+  if(reveals.length){
+    cast+=`<h3 style="margin-top:22px">Revealed</h3>`;
+    cast+=reveals.map(a=>{
+      const kept=new Set(a.kept||[]);
+      const seen=(a.lookedAt||[]).map(c=>{
+        const top=kept.has(c.card);
+        return `<span class="thumb sm card ${top?'kept':'binned'}" data-name="${esc(c.cardName||nm(c.card))}">`+
+          `<img loading="lazy" src="${scryImg(c.cardName||nm(c.card),'small')}" onerror="this.style.opacity=.15"/>`+
+          `<em>${top?'▲ top':'▼ away'}</em></span>`;
+      }).join('');
+      return `<div class="reveal"><div class="rsrc">${esc(a.source||'Scry')}</div><div class="thumbs">${seen}</div></div>`;
+    }).join('');
+  }
   cast+=`</div>`;
   document.getElementById('board').innerHTML=main+cast;
   document.getElementById('slider').value=idx;

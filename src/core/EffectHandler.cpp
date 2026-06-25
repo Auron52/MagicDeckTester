@@ -196,13 +196,15 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         {
             damage = def.params.landfall_damage;
         }
-        // Soulfire Eruption: deal the top library card's mana value, and DIG -- "you may play
-        // the exiled card" -> stage it playable (card advantage toward the combo) rather than
-        // losing it. Mirrors apply_one (lockstep).
+        // Soulfire Eruption: bounded multi-target dig. Exile + STAGE the top N cards (opponent +
+        // opp creatures + self-if-safe), the face takes the highest MV, the controller the lowest.
+        // Mirrors ApplyPlanDirect (lockstep). `damage` = face damage, applied to the opp by the
+        // target loop below; self-damage is applied here.
         if (def.params.damage_equals_top_mv)
         {
-            damage = TopLibraryMV(state);
-            StageTopLibraryCard(state);
+            SoulfireResult sr = SoulfireDig(state, entry.controller_index);
+            damage = sr.face_damage;
+            state.players[entry.controller_index].life -= sr.self_damage;
         }
     }
 
@@ -310,8 +312,10 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     Player& controller = state.players[entry.controller_index];
     int n = def.params.draw;
 
-    // Scry-then-draw (Preordain/Ponder): reorder the top of the library before drawing.
-    if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry); }
+    // Scry-then-draw (Preordain): bottom the unwanted, reorder the rest, before drawing.
+    if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry, def.card.m_name); }
+    // Reorder-or-shuffle-then-draw (Ponder): keep all on top in best order, or shuffle away.
+    if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name); }
 
     if (def.params.stages_cards)
     {

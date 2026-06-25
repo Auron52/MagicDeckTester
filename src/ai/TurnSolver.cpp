@@ -181,7 +181,7 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
                    || def->params.mana_rock;
         if (!is_src) { continue; }
-        for (Color c : def->params.produces)
+        for (Color c : EffectiveProduces(state, active, *def))   // RP -> union of other lands
         {
             switch (c)
             {
@@ -821,6 +821,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
 
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 {
+    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     const Player& ap = state.ActivePlayer();
     ManaPool pool             = BuildPool(state);
     ManaPool pool_noncreature = BuildNonCreaturePool(state);
@@ -1189,16 +1190,17 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
+            const std::vector<Color>& prod = EffectiveProduces(state, active, *def);  // RP-aware
             Color col;
             if (any)
             {
-                if (def->params.produces.empty()) { continue; }
-                col = def->params.produces[0];
+                if (prod.empty()) { continue; }
+                col = prod[0];
             }
             else
             {
                 bool match = false;
-                for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
+                for (Color c : prod) { if (c == needed) { match = true; break; } }
                 if (!match) { continue; }
                 col = needed;
             }
@@ -1256,7 +1258,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
                         bool m = false;
-                        for (Color c : sd->params.produces) { if (c == ic) { m = true; break; } }
+                        for (Color c : EffectiveProduces(state, active, *sd)) { if (c == ic) { m = true; break; } }  // RP feeder
                         if (!m) { continue; }
                         tap_source(s, *sd, ic);
                         fed = true; break;
@@ -1629,13 +1631,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 dmg = def.params.landfall_damage;
             }
-            // Soulfire Eruption: deal the top library card's mana value, and DIG -- stage the
-            // card playable (card advantage) rather than losing it. Mirrors EffectHandler so the
-            // rollout matches the executor (lockstep).
+            // Soulfire Eruption: bounded multi-target dig (exile + stage top N; face = max MV,
+            // self = min MV). Mirrors EffectHandler so the rollout matches the executor (lockstep).
             if (def.params.damage_equals_top_mv)
             {
-                dmg = TopLibraryMV(state);
-                StageTopLibraryCard(state);
+                SoulfireResult sr = SoulfireDig(state, state.active_player_index);
+                dmg = sr.face_damage;
+                state.players[state.active_player_index].life -= sr.self_damage;
             }
 
             if (t == Targeting::Any || t == Targeting::Player)
@@ -1734,9 +1736,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (def.tmpl == CardTemplate::DrawSpell)
         {
-            // Scry-then-draw (Preordain/Ponder): reorder the top before drawing, mirroring
-            // ResolveDrawSpell so the rollout's realised draw matches the executor.
-            if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry); }
+            // Scry-then-draw (Preordain) / reorder-or-shuffle-then-draw (Ponder): mirror
+            // ResolveDrawSpell exactly so the rollout's realised draw matches the executor.
+            if (def.params.cast_scry > 0)    { ScryTop(state, def.params.cast_scry); }
+            if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder); }
             int n = std::min(def.params.draw, static_cast<int>(ap.library.size()));
             if (def.params.stages_cards)
             {
@@ -3452,6 +3455,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                          SearchBudget* budget, int cutoff_turn,
                          bool second_main, TranspositionTable* tt)
 {
+    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     TranspositionTable::Key key;
     if (tt != nullptr)
     {
@@ -3723,6 +3727,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                                                   TranspositionTable* tt, SearchBudget* budget,
                                                   int* out_committed_depth)
 {
+    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     // Memoize the greedy tail rollouts across the whole branch-and-bound tree. The
     // deep search revisits identical leaf states many times; without a table each
     // is a fresh full rollout. When the caller hands no table (the common non-
@@ -3912,6 +3917,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState& state,
                                                                 int max_turns, bool second_main)
 {
+    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     EarliestWinReport report;
     report.turn     = state.turn_number;
     report.earliest = max_turns + 1;
@@ -4001,6 +4007,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                   int* out_committed_win,
                                                   int* out_committed_sub_depth)
 {
+    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     // Report the committed pass's (win turn, sub_depth) to the caller's optional
     // out-params. Used by the non-convergence detector; every return path calls it.
     auto report = [&](int win, int sub_depth)

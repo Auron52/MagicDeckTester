@@ -334,14 +334,30 @@ struct CardParams
     // per-target cost reduction. Gated > 0/false so other decks are unaffected.
     bool mana_rock = false;
 
-    // Scry-on-resolution for a draw spell (Preordain "Scry 2, then draw a card"; Ponder
-    // "look at the top three cards, then put them back in any order. Draw a card." -- modelled
-    // as Scry N then draw, the standard clairvoyant deck-ordering approximation: ScryTop keeps
-    // the wanted cards on top via DecisionProvider::ScryKeepOnTop, which is what an optimal
-    // reorder of a known library does for the immediately-following draw). Applied BEFORE the
-    // draw in BOTH the executor (ResolveDrawSpell) and the rollout (ApplyPlanDirect DrawSpell
-    // branch), so the realised draw matches the searched line. Gated > 0.
+    // Reflecting Pool: "{T}: Add one mana of any type that a land you control could produce."
+    // The `produces` list is IGNORED for a reflecting source; its real colours are computed at
+    // runtime as the union of the controller's OTHER non-reflecting lands (EffectiveProduces),
+    // nothing if it controls no other land. Gated false -> every other card uses static produces.
+    bool reflecting = false;
+
+    // Scry-on-resolution for a draw spell (Preordain "Scry 2, then draw a card"). Scry lets you
+    // put any of the top N on the BOTTOM and the rest on top: ScryTop keeps the wanted cards on
+    // top via DecisionProvider::ScryKeepOnTop and bottoms the rest -- deck filtering. Applied
+    // BEFORE the draw in BOTH the executor (ResolveDrawSpell) and the rollout (ApplyPlanDirect
+    // DrawSpell branch), so the realised draw matches the searched line. Gated > 0.
+    // NB: do NOT use this for Ponder -- Ponder cannot bottom cards (see cast_reorder).
     int cast_scry = 0;
+
+    // Reorder-or-shuffle on resolution for a draw spell (Ponder: "look at the top three cards,
+    // then put them back in ANY ORDER. You may shuffle. Draw a card."). Unlike Scry, Ponder
+    // CANNOT send cards to the bottom -- it is all-or-nothing: either keep all N on top in your
+    // best order (you then draw the best, but the rest stay on top and you are stuck drawing
+    // them), or shuffle them all away and draw fresh. Modelled by ReorderTopOrShuffle: the
+    // provider's ScryKeepOnTop decides keep-vs-shuffle (keep when at least one of the top N is
+    // wanted, ordering wanted-first; shuffle the whole library when none are). The shuffle is
+    // the same DETERMINISTIC, lockstep ShuffleAfterSearch used for fetch/tutor (CR "you may
+    // shuffle"). Applied BEFORE the draw in both executor and rollout. Gated > 0.
+    int cast_reorder = 0;
 
     // X-damage scaling for an {X} DirectDamage spell (Crackle with Power "deals five times X
     // damage" -> 5). The damage dealt per target is chosen_x * x_damage_multiplier; combined with

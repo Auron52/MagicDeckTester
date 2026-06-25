@@ -690,7 +690,8 @@ bool HinataProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) con
         }
         if (is_land)                                { return sources < 4; }
         if (tdef && tdef->params.mana_rock)         { return sources < 4; }
-        if (tdef && tdef->params.cast_scry > 0)     { return true; }   // cantrips keep digging
+        if (tdef && (tdef->params.cast_scry > 0
+                  || tdef->params.cast_reorder > 0)) { return true; }   // cantrips keep digging
         return false;                                                  // bottom dead payoffs
     }
 

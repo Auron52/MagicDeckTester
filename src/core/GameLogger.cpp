@@ -5,6 +5,8 @@
 
 using json = nlohmann::json;
 
+thread_local GameLogger* g_reveal_logger = nullptr;
+
 void GameLogger::StartGame(const std::string& run_id, int game_number,
                             const std::string& deck_id, uint64_t seed,
                             const std::map<std::string, std::vector<int>>& card_numbering)
@@ -66,7 +68,8 @@ void GameLogger::LogPlayLand(int card_num, const std::string& card_name)
 }
 
 void GameLogger::LogCastSpell(int card_num, const std::string& card_name,
-                               const std::string& mana_paid)
+                               const std::string& mana_paid, int chosen_x,
+                               const std::vector<TargetDesc>& targets)
 {
     if (!m_in_phase) { return; }
     Action a;
@@ -74,6 +77,37 @@ void GameLogger::LogCastSpell(int card_num, const std::string& card_name,
     a.card_num  = card_num;
     a.card_name = card_name;
     a.mana_paid = mana_paid;
+    a.chosen_x  = chosen_x;
+    a.targets   = targets;
+    m_current.actions.push_back(std::move(a));
+}
+
+void GameLogger::LogReveal(const std::string& source_name,
+                            const std::vector<int>& looked_at_nums,
+                            const std::vector<std::string>& looked_at_names,
+                            const std::vector<int>& kept_nums,
+                            const std::vector<int>& bottomed_nums)
+{
+    if (!m_in_phase) { return; }
+    Action a;
+    a.type            = "REVEAL";
+    a.card_name       = source_name;
+    a.looked_at       = looked_at_nums;
+    a.looked_at_names = looked_at_names;
+    a.kept            = kept_nums;
+    a.bottomed        = bottomed_nums;
+    m_current.actions.push_back(std::move(a));
+}
+
+void GameLogger::LogAbility(int source_card_num, const std::string& source_card_name,
+                             const std::string& ability)
+{
+    if (!m_in_phase) { return; }
+    Action a;
+    a.type      = "ABILITY";
+    a.card_num  = source_card_num;
+    a.card_name = source_card_name;
+    a.ability   = ability;
     m_current.actions.push_back(std::move(a));
 }
 
@@ -108,14 +142,16 @@ void GameLogger::LogAttack(int damage, int opp_life_after)
 }
 
 void GameLogger::CommitPhase(int player_life, int opp_life,
-                              const std::vector<int>& battlefield,
-                              const std::vector<int>& hand)
+                              const std::vector<PermSnapshot>& battlefield,
+                              const std::vector<int>& hand,
+                              const std::vector<PermSnapshot>& opp_battlefield)
 {
     if (!m_in_phase) { return; }
-    m_current.player_life = player_life;
-    m_current.opp_life    = opp_life;
-    m_current.battlefield = battlefield;
-    m_current.hand        = hand;
+    m_current.player_life     = player_life;
+    m_current.opp_life        = opp_life;
+    m_current.battlefield     = battlefield;
+    m_current.opp_battlefield = opp_battlefield;
+    m_current.hand            = hand;
     m_phases.push_back(std::move(m_current));
     m_in_phase = false;
 }
@@ -212,15 +248,58 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
             {
                 act["card"]     = a.card_num;
                 act["cardName"] = a.card_name;
-                if (a.type == "CAST_SPELL" && !a.mana_paid.empty())
+                if (a.type == "CAST_SPELL")
                 {
-                    act["manaPaid"] = a.mana_paid;
+                    if (!a.mana_paid.empty()) { act["manaPaid"] = a.mana_paid; }
+                    if (a.chosen_x >= 0)      { act["chosenX"]  = a.chosen_x; }
+                    if (!a.targets.empty())
+                    {
+                        json tgts = json::array();
+                        for (const TargetDesc& t : a.targets)
+                        {
+                            json tj;
+                            tj["kind"] = t.kind;
+                            tj["who"]  = t.who;
+                            if (t.kind == "permanent")
+                            {
+                                tj["card"]     = t.card_num;
+                                tj["cardName"] = t.card_name;
+                            }
+                            tgts.push_back(std::move(tj));
+                        }
+                        act["targets"] = tgts;
+                    }
                 }
             }
             else if (a.type == "ATTACK")
             {
                 act["damage"]  = a.damage;
                 act["oppLife"] = a.opp_life;
+            }
+            else if (a.type == "REVEAL")
+            {
+                act["source"] = a.card_name;
+                json looked = json::array();
+                for (std::size_t i = 0; i < a.looked_at.size(); ++i)
+                {
+                    json c;
+                    c["card"] = a.looked_at[i];
+                    if (i < a.looked_at_names.size()) { c["cardName"] = a.looked_at_names[i]; }
+                    looked.push_back(std::move(c));
+                }
+                act["lookedAt"] = looked;
+                json kept = json::array();
+                for (int n : a.kept)     { kept.push_back(n); }
+                act["kept"] = kept;
+                json bot = json::array();
+                for (int n : a.bottomed) { bot.push_back(n); }
+                act["bottomed"] = bot;
+            }
+            else if (a.type == "ABILITY")
+            {
+                act["card"]     = a.card_num;
+                act["cardName"] = a.card_name;
+                act["ability"]  = a.ability;
             }
             actions_arr.push_back(std::move(act));
         }
@@ -229,9 +308,23 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
         json board;
         board["playerLife"]  = pe.player_life;
         board["opponentLife"] = pe.opp_life;
-        json bf = json::array();
-        for (int n : pe.battlefield) { bf.push_back(n); }
-        board["battlefield"] = bf;
+        // Battlefield as [{card, cardName, tapped}] so the viewer can name tokens and rotate
+        // tapped permanents. opponentBattlefield is the opponent's side (tokens/spawns).
+        auto serialize_bf = [](const std::vector<PermSnapshot>& perms)
+        {
+            json arr = json::array();
+            for (const PermSnapshot& p : perms)
+            {
+                json j;
+                j["card"]     = p.card_num;
+                j["cardName"] = p.card_name;
+                j["tapped"]   = p.tapped;
+                arr.push_back(std::move(j));
+            }
+            return arr;
+        };
+        board["battlefield"]         = serialize_bf(pe.battlefield);
+        board["opponentBattlefield"] = serialize_bf(pe.opp_battlefield);
         json hand = json::array();
         for (int n : pe.hand) { hand.push_back(n); }
         board["hand"] = hand;
