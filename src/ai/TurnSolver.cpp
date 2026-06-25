@@ -751,7 +751,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         a.is_draw_until_nonland = (def.tmpl == CardTemplate::DrawUntilNonland);
         a.discard_land_damage   = def.params.discard_land_damage;
         if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
-        actions.push_back(std::move(a));
+        // Ponder (cast_reorder): the keep-vs-shuffle call is SEARCHED -- emit two variants (keep top
+        // N in the provider's order vs shuffle them away) sharing hand_index, so the clairvoyant
+        // search plays both futures out and picks. The provider supplies only the ORDER.
+        if (def.params.cast_reorder > 0)
+        {
+            Action keep_a = a;            keep_a.ponder_keep    = 1;
+            a.ponder_keep = 0;            // `a` becomes the shuffle variant
+            actions.push_back(std::move(keep_a));
+            actions.push_back(std::move(a));
+        }
+        else
+        {
+            actions.push_back(std::move(a));
+        }
     }
 
     // --- Aether Vial activations: one per (Vial, creature) pair ---
@@ -1550,10 +1563,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
-                    int own_targets)
+                    int own_targets, int ponder_keep)
     {
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
@@ -1623,6 +1636,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.tutor_target   = tutor_target;
             rec.chosen_x       = chosen_x;
             rec.soulfire_own_targets = own_targets;
+            rec.ponder_keep    = ponder_keep;
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -1779,7 +1793,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Scry-then-draw (Preordain) / reorder-or-shuffle-then-draw (Ponder): mirror
             // ResolveDrawSpell exactly so the rollout's realised draw matches the executor.
             if (def.params.cast_scry > 0)    { ScryTop(state, def.params.cast_scry); }
-            if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder); }
+            if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, ponder_keep); }
             int n = std::min(def.params.draw, static_cast<int>(ap.library.size()));
             if (def.params.stages_cards)
             {
@@ -1868,7 +1882,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0);
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1);
                 }
             }
         }
@@ -1998,7 +2012,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
                 }
             }
         }
@@ -2025,11 +2039,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets); } }
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); } }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets); }
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); }
                 }
             }
             else
@@ -2049,7 +2063,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
                 }
             }
         }
@@ -2057,14 +2071,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
             }
         }
 
@@ -2087,7 +2101,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };

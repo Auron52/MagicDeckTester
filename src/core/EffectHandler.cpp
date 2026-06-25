@@ -316,7 +316,7 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     // Scry-then-draw (Preordain): bottom the unwanted, reorder the rest, before drawing.
     if (def.params.cast_scry > 0) { ScryTop(state, def.params.cast_scry, def.card.m_name); }
     // Reorder-or-shuffle-then-draw (Ponder): keep all on top in best order, or shuffle away.
-    if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name); }
+    if (def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, entry.ponder_keep.value_or(-1)); }
 
     if (def.params.stages_cards)
     {

@@ -45,6 +45,10 @@ struct StackEntry
                                                // added as extra targets (deeper dig). EffectHandler
                                                // passes it to SoulfireDig so the executor's dig
                                                // matches the rollout's (lockstep). Unset elsewhere.
+    std::optional<int>  ponder_keep;           // Ponder cast_reorder: searched keep(1)-vs-shuffle(0)
+                                               // call. ResolveDrawSpell passes it to
+                                               // ReorderTopOrShuffle so the executor matches the
+                                               // rollout (lockstep). Unset for non-reorder spells.
     std::string         tutor_target;   // for a tutor spell: the specific library card to fetch
                                         // (searched choice). Empty -> PerformTutor uses the
                                         // heuristic's top pick.

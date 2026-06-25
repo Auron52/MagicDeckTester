@@ -1813,7 +1813,13 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
 // shuffle the whole library (deterministic, lockstep ShuffleAfterSearch) so the draw is a
 // fresh card instead of a dead one. The keep-vs-shuffle call uses the same ScryKeepOnTop
 // predicate the provider already exposes, so it is deck-aware without a new hook.
-inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& source = "Ponder")
+// keep_decision: -1 = legacy heuristic (shuffle iff NONE of the top N is wanted); 0 = the SEARCH
+// chose to shuffle them away; 1 = the SEARCH chose to keep them on top. Per the user's design, the
+// keep-vs-shuffle CALL is searched (a 2-way cast branch, ponder_keep) while the provider's
+// ScryKeepOnTop only supplies the ORDER (wanted cards first) within the keep branch. Both the
+// rollout and the executor pass the same carried decision -> identical realised library (lockstep).
+inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& source = "Ponder",
+                                int keep_decision = -1)
 {
     Player& ap = state.ActivePlayer();
     if (ap.library.empty()) { return; }
@@ -1834,13 +1840,21 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
         (keep ? wanted : rest).push_back(std::move(c));
     }
 
-    if (wanted.empty())
+    // Shuffle when the search chose to (keep_decision == 0), or in legacy mode when nothing on top
+    // is worth drawing (keep_decision == -1 && no wanted card). keep_decision == 1 never shuffles.
+    const bool do_shuffle = (keep_decision == 0)
+                         || (keep_decision == -1 && wanted.empty());
+    if (do_shuffle)
     {
-        // None of the top N is worth drawing -> shuffle them all away (CR "you may shuffle").
-        // Put the looked-at cards back on top (original order), then shuffle the whole library
+        // Shuffle them all away (CR "you may shuffle"). Put EVERY looked-at card back on top first
+        // (wanted + rest -- order is irrelevant before the shuffle), then shuffle the whole library
         // (deterministic, lockstep). Under the MTG_NO_SEARCH_SHUFFLE A/B opt-out the shuffle is a
-        // no-op (cards stay on top in original order), which conservatively under-rates Ponder.
+        // no-op (cards stay on top), which conservatively under-rates Ponder. In legacy mode
+        // (keep_decision == -1) this branch only fires when `wanted` is empty, so reinserting it is
+        // a no-op and the behaviour is byte-identical to before.
         for (std::vector<Card>::reverse_iterator it = rest.rbegin(); it != rest.rend(); ++it)
+        { ap.library.insert(ap.library.begin(), std::move(*it)); }
+        for (std::vector<Card>::reverse_iterator it = wanted.rbegin(); it != wanted.rend(); ++it)
         { ap.library.insert(ap.library.begin(), std::move(*it)); }
         ShuffleAfterSearch(state, state.active_player_index);
         if (capture && !seen_nums.empty())

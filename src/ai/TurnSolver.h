@@ -76,6 +76,13 @@ struct Action
                                        // Hinata cost against the mana-value damage to those
                                        // creatures. SoulfireDig picks WHICH (expendable first,
                                        // Hinata last). 0 for every non-Soulfire action.
+    int         ponder_keep      = -1;
+                                       // Ponder-style cast_reorder: the SEARCHED keep-vs-shuffle
+                                       // call. CollectActions emits TWO variants (1 = keep top N in
+                                       // the provider's order, 0 = shuffle them away), sharing
+                                       // hand_index -> mutually exclusive, so the search plays both
+                                       // out and picks. -1 = not a reorder spell (legacy heuristic
+                                       // path in ReorderTopOrShuffle).
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;
