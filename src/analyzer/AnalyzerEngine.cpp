@@ -37,13 +37,15 @@ const int ANALYSIS_DEPTH = []{
     const char* e = std::getenv("MTG_ANALYZE_DEPTH");
     return (e && *e) ? std::max(0, std::atoi(e)) : 5;
 }();
-// MTG_ANALYZE_SCALE divides every phase's game count (default 1 -> UNSET is byte-identical to the
-// committed profiles). A scale >1 trades profile precision (higher per-cell variance) for speed --
-// for decks whose ~288k-game grid is too slow to profile at full resolution. Floored so a phase
-// never drops below a usable sample. Read once at startup.
+// MTG_ANALYZE_SCALE divides every phase's game count, trading profile precision (higher per-cell
+// variance) for speed. DEFAULT 2: the full-resolution (scale-1) ~1.15M-game grid overran a single
+// overnight window even for burn, so a fresh profile now defaults to half-resolution to fit the
+// night. Set MTG_ANALYZE_SCALE=1 to restore full resolution (and the resolution the committed
+// decks/*.profile.json were generated at). Floored so a phase never drops below a usable sample.
+// Read once at startup. Does NOT affect play or the regression suite -- only analyzer output.
 const int ANALYZE_SCALE = []{
     const char* e = std::getenv("MTG_ANALYZE_SCALE");
-    int s = (e && *e) ? std::atoi(e) : 1;
+    int s = (e && *e) ? std::atoi(e) : 2;
     return s < 1 ? 1 : s;
 }();
 inline int Scaled(int games, int floor_games = 200)
