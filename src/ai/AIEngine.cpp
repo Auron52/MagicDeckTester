@@ -1339,8 +1339,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // stuck Solve plan, which carries no recorded script): re-solve from the post-draw
     // state and cast revealed cards, recursing on further draws. This is the rare
     // no-win-found path, so the re-solve's land/mana drift is harmless (no win to miss).
-    std::function<void()> resolve_draw_breakpoint = [&]()
+    // Depth bound: this fallback RE-SOLVES and re-casts after each draw engine, recursing on the
+    // next draw engine it casts. A cost-reduced cantrip/dig chain (Hinata makes its spells cheap and
+    // Reality Spasm refloats mana) can chain dozens deep in one turn -- enough to overflow the stack,
+    // since each frame holds a full TurnSolver::Plan (a real game crashed at ~241 levels). No real
+    // turn re-solves this many times after draws, and this is the no-win greedy-pilot fallback whose
+    // drift is already documented as harmless, so capping the chain only stops a pathological loop --
+    // it never abandons a win (the win paths use the bounded committed-line replay, not this).
+    constexpr int kMaxDrawBreakpointDepth = 40;
+    std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
+        if (bp_depth >= kMaxDrawBreakpointDepth) { return; }
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -1359,7 +1368,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
             {
                 cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); resolve_now();
-                if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(); }
+                if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(bp_depth + 1); }
             }
         }
         for (const Action& a : extra.actions)
@@ -1448,7 +1457,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 if (fd_plan_committed)
                 { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
-                else { resolve_draw_breakpoint(); }
+                else { resolve_draw_breakpoint(0); }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
         }
@@ -1492,7 +1501,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 if (fd_plan_committed)
                 { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
-                else { resolve_draw_breakpoint(); }
+                else { resolve_draw_breakpoint(0); }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
         }
