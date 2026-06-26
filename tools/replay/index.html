@@ -32,9 +32,12 @@
   #transport button:hover { border-color:var(--acc); }
   #transport button:disabled { opacity:.4; cursor:default; }
   #slider { flex:1; }
-  #stepinfo { min-width:230px; font-size:13px; }
-  #stepinfo b { font-size:15px; }
-  #stepinfo .phase { color:var(--muted); text-transform:uppercase; font-size:11px; letter-spacing:.04em; }
+  /* Prominent turn/phase indicator, far left of the transport bar */
+  #stepinfo { display:flex; align-items:center; gap:10px; margin-right:6px; }
+  #stepinfo .turnbadge { font-size:20px; font-weight:700; color:var(--acc); white-space:nowrap; }
+  #stepinfo .phasebadge { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--ink); background:#2e323a; border:1px solid var(--acc); border-radius:11px; padding:2px 11px; white-space:nowrap; }
+  #stepinfo .stepcount { font-size:12px; color:var(--muted); white-space:nowrap; }
   select { background:#2e323a; color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:4px; }
 
   /* board */
@@ -98,6 +101,7 @@
   <aside id="meta"><div class="empty">No game loaded.</div></aside>
   <section id="stage">
     <div id="transport" style="display:none">
+      <span id="stepinfo"></span>
       <button id="first" title="First (Home)">⏮</button>
       <button id="prev"  title="Previous (←)">◀</button>
       <button id="play"  title="Play / Pause (Space)">▶</button>
@@ -111,7 +115,6 @@
         <option value="700">Fast</option>
         <option value="350">Very fast</option>
       </select>
-      <span id="stepinfo"></span>
     </div>
     <div id="board"><div class="empty">Load a game to begin.</div></div>
   </section>
@@ -139,6 +142,11 @@ function thumbs(arr,sm){ if(!arr||!arr.length) return '<span class="hint">—</s
   return '<div class="thumbs">'+arr.map(x=>thumb(x,sm)).join('')+'</div>'; }
 function cardSpan(x){ const name=cardOf(x); const cls=LANDISH.test(name)?'land':'spell';
   return `<span class="card ${cls}" data-name="${esc(name)}">${name}</span>`; }
+// Source-aware kept/away labels for a REVEAL: a tutor fetches, Soulfire exiles, scry keeps on top.
+function revealLabels(src){ const s=(src||'').toLowerCase();
+  if(/search|fetch|tutor|gamble/.test(s)) return {keep:'✦ fetched', away:'▼ left'};
+  if(/exile|soulfire/.test(s))            return {keep:'⊗ exiled',  away:'▼ left'};
+  return {keep:'▲ top', away:'▼ away'}; }
 
 function renderMeta(d){
   const r=d.result||{}; const won=r.winner==='player';
@@ -168,7 +176,8 @@ function renderStep(){
   const all=s.actions||[];
   const casts=all.filter(a=>a.type==='CAST_SPELL');
   const reveals=all.filter(a=>a.type==='REVEAL');
-  const others=all.filter(a=>a.type!=='CAST_SPELL'&&a.type!=='REVEAL');
+  const discards=all.filter(a=>a.type==='DISCARD');
+  const others=all.filter(a=>a.type!=='CAST_SPELL'&&a.type!=='REVEAL'&&a.type!=='DISCARD');
   const oacts=others.map(a=>{
     const verb=(a.type||'?').replace(/_/g,' ').toLowerCase();
     const name=a.cardName||(a.card!=null?nm(a.card):'');
@@ -213,25 +222,40 @@ function renderStep(){
         ? `<span class="tgt">→ ${a.targets.map(tgtStr).map(esc).join(', ')}</span>` : '';
       return `<div class="castcard" data-name="${esc(name)}"><img loading="lazy" src="${scryImg(name,'normal')}" alt="${esc(name)}" onerror="this.style.opacity=.15"/>${mana}${tg}</div>`;
     }).join('') : `<span class="hint">— no spell cast —</span>`;
-  // Scry/dig reveals: what Ponder/Preordain/Scry looked at, and what was kept on top.
+  // Reveals: scry/dig look-at-top (Ponder/Preordain), tutor fetches (Gamble), and library
+  // flips (Soulfire Eruption). The kept/away label is source-aware so a fetched or exiled card
+  // doesn't read as "kept on top".
   if(reveals.length){
     cast+=`<h3 style="margin-top:22px">Revealed</h3>`;
     cast+=reveals.map(a=>{
+      const lab=revealLabels(a.source);
       const kept=new Set(a.kept||[]);
       const seen=(a.lookedAt||[]).map(c=>{
         const top=kept.has(c.card);
         return `<span class="thumb sm card ${top?'kept':'binned'}" data-name="${esc(c.cardName||nm(c.card))}">`+
           `<img loading="lazy" src="${scryImg(c.cardName||nm(c.card),'small')}" onerror="this.style.opacity=.15"/>`+
-          `<em>${top?'▲ top':'▼ away'}</em></span>`;
+          `<em>${top?lab.keep:lab.away}</em></span>`;
       }).join('');
       return `<div class="reveal"><div class="rsrc">${esc(a.source||'Scry')}</div><div class="thumbs">${seen}</div></div>`;
     }).join('');
+  }
+  // Discards (Gamble's random discard, Land's Edge, etc.) shown as their own block so the
+  // searched-then-discarded pair (e.g. Gamble hitting the card it just fetched) is obvious.
+  if(discards.length){
+    cast+=`<h3 style="margin-top:22px">Discarded</h3><div class="thumbs">`;
+    cast+=discards.map(a=>{ const name=a.cardName||nm(a.card);
+      return `<span class="thumb sm card binned" data-name="${esc(name)}">`+
+        `<img loading="lazy" src="${scryImg(name,'small')}" onerror="this.style.opacity=.15"/>`+
+        `<em>discarded</em></span>`;
+    }).join('')+`</div>`;
   }
   cast+=`</div>`;
   document.getElementById('board').innerHTML=main+cast;
   document.getElementById('slider').value=idx;
   document.getElementById('stepinfo').innerHTML=
-    `<b>Turn ${s.turn}</b> <span class="phase">${s.phase||''}</span> &nbsp; <span class="hint">step ${idx+1}/${STEPS.length}</span>`;
+    `<span class="turnbadge">Turn ${s.turn}</span>`+
+    `<span class="phasebadge">${esc((s.phase||'').replace(/_/g,' '))}</span>`+
+    `<span class="stepcount">step ${idx+1}/${STEPS.length}</span>`;
   document.getElementById('first').disabled=document.getElementById('prev').disabled=(idx===0);
   document.getElementById('last').disabled=document.getElementById('next').disabled=(idx===STEPS.length-1);
 }

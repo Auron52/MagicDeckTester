@@ -127,7 +127,8 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                 {
                     // Fetch the searched target carried on the stack entry (empty -> the
                     // heuristic's top pick), matching the rollout's ApplyPlanDirect.
-                    PerformTutor(state, entry.controller_index, def.params, entry.tutor_target);
+                    PerformTutor(state, entry.controller_index, def.params, entry.tutor_target,
+                                 def.card.m_name);
                 }
                 if (def.params.destroy_all_enchantments)
                 {

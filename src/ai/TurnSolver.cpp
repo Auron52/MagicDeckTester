@@ -2087,7 +2087,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Tutor (Idyllic / Enlightened): fetch the SEARCHED target (tutor_target); empty
             // falls back to the heuristic's top pick. Identical to the real game (EffectHandler)
             // so the clairvoyant rollout sees the same fetched card.
-            PerformTutor(state, state.active_player_index, def.params, tutor_target);
+            PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name);
         }
         else if (def.params.destroy_all_enchantments)
         {

@@ -343,7 +343,8 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
 // order past the tutored card is a goldfish-irrelevant simplification that keeps the real game
 // and rollout byte-consistent). Shared by EffectHandler (real) and ApplyPlanDirect (rollout).
 inline void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
-                         const std::string& target_name = "")
+                         const std::string& target_name = "",
+                         const std::string& source_name = "Tutor")
 {
     std::string want = target_name;
     if (want.empty())
@@ -360,6 +361,8 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
     }
     if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
     Card c = ap.library[idx];
+    const int         fetched_num  = c.m_number;   // capture before the move into hand/library
+    const std::string fetched_name = c.m_name;
     ap.library.erase(ap.library.begin() + idx);
     // Searching the library shuffles it (CR 701.19) -- BEFORE a "put on top" placement
     // (you shuffle, then put the card on top). Deterministic + lockstep; no-op unless
@@ -367,6 +370,15 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
     ShuffleAfterSearch(state, controller_index);
     if (pp.tutor_to_hand)     { ap.hand.push_back(std::move(c)); }
     else if (pp.tutor_to_top) { ap.library.insert(ap.library.begin(), std::move(c)); }
+
+    // Record WHAT was searched up so the replay viewer shows it (real play only -- the reveal
+    // logger is null during search/rollout, so this is byte-identical to the suite). Modelled as
+    // a one-card reveal "kept" by the tutor (the fetched-to-hand/top card).
+    if (g_reveal_logger)
+    {
+        g_reveal_logger->LogReveal(source_name + " (searched)",
+                                   { fetched_num }, { fetched_name }, { fetched_num }, {});
+    }
 
     // Gamble: "then discard a card at random." Deterministic seed (game_seed / turn /
     // search_count) so the rollout and the real executor pick the IDENTICAL victim -- the
@@ -383,7 +395,10 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         mix ^= mix >> 27; mix *= 0x94D049BB133111EBull;
         mix ^= mix >> 31;
         int victim = static_cast<int>(mix % ap.hand.size());
+        const int         victim_num  = ap.hand[victim].m_number;
+        const std::string victim_name = ap.hand[victim].m_name;
         ap.hand.erase(ap.hand.begin() + victim);
+        if (g_reveal_logger) { g_reveal_logger->LogDiscard(victim_num, victim_name); }
     }
 }
 
@@ -1193,6 +1208,13 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     const int n = base + static_cast<int>(own.size());
     Player& ap = state.players[controller];
 
+    // Capture the flipped cards for the replay viewer (real play only; the reveal logger is null
+    // during search/rollout, so this is byte-identical to the suite). Every exiled card is staged
+    // (playable until end of next turn), so all are logged as "kept".
+    const bool               capture = (g_reveal_logger != nullptr);
+    std::vector<int>         flip_nums;
+    std::vector<std::string> flip_names;
+
     std::vector<int> mvs;
     for (int i = 0; i < n && !ap.library.empty(); ++i)
     {
@@ -1200,9 +1222,15 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
         ap.library.erase(ap.library.begin());
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         mvs.push_back(d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue());
+        if (capture) { flip_nums.push_back(c.m_number); flip_names.push_back(c.m_name); }
         c.m_is_staged     = true;
         c.m_staged_expiry = state.turn_number + 1;
         ap.hand.push_back(std::move(c));   // dig: stage every exiled card
+    }
+    if (capture && !flip_nums.empty())
+    {
+        g_reveal_logger->LogReveal("Soulfire Eruption (exiled)",
+                                   flip_nums, flip_names, flip_nums, {});
     }
 
     SoulfireResult r;
