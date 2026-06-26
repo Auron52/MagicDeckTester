@@ -1761,6 +1761,16 @@ bool AIEngine::TryPlayLand(GameState& state)
         }
     }
 
+    // A Karoo bounce land with no other land in play must return ITSELF (the bounce is mandatory)
+    // -- net no land in play and a wasted drop, never the right play. Skip it below until another
+    // land is down (matches SimulateLandPlay and the searched land drop).
+    bool has_other_land = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.IsLand())
+        { has_other_land = true; break; }
+    }
+
     // Four-pass priority: prefer untapped-entering over tapped-entering, and
     // multi-color (wild mana) over single-color within each group.
     //   Pass 0: untapped + multi-color
@@ -1775,6 +1785,7 @@ bool AIEngine::TryPlayLand(GameState& state)
         {
             auto def = CardDatabase::Instance().Lookup(it->m_name);
             if (!def || !def->card.IsLand()) { continue; }
+            if (def->params.etb_bounce_land && !has_other_land) { continue; }
             bool is_tapped = def->params.enters_tapped;
             bool is_multi  = def->params.produces.size() > 1;
             if (want_untapped && is_tapped)  { continue; }

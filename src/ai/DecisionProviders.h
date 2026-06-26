@@ -103,6 +103,12 @@ public:
     // price), so while no Hinata is in play or hand the dig HUNTS her -- keep Hinata, keep only
     // the lands/ramp/cantrips that cast or continue finding her, and bottom the dead payoffs.
     bool ScryKeepOnTop(const GameState&, const Card&) const override;
+    // Ponder reorder keep-vs-shuffle (Hook 9b): Hinata is in a class of her own -- while she is not
+    // in play or hand the combo (and even an affordable Soulfire) is out of reach, so a top set is
+    // only worth keeping if it advances toward her: it contains Hinata, OR a dig/tutor toward her
+    // plus at least one other useful card. Otherwise shuffle and dig fresh. Once she is online, keep
+    // iff any card is wanted (the generic rank-threshold behaviour).
+    bool KeepReorderTop(const GameState&, const std::vector<Card>&) const override;
     // Situational "what do I need THIS turn" ranking (Hook 19): drives EI / Ponder / Preordain
     // card selection deterministically. ScryKeepOnTop above is re-expressed as a threshold on this
     // rank, so the keep/bottom gate and the ordering share one source of truth.

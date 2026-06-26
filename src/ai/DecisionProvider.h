@@ -65,6 +65,18 @@ public:
     // SurveilTop); only the keep DECISION is provider-owned.
     virtual bool ScryKeepOnTop(const GameState& s, const Card& top_card) const = 0;
 
+    // Hook 9b -- Ponder-style reorder keep-vs-shuffle: a SET decision over the cards looked at
+    // (top N). Return true to KEEP them on top (SituationalCardRank then ORDERS them), false to
+    // SHUFFLE them all away. Unlike the per-card ScryKeepOnTop gate, this judges the WHOLE set --
+    // e.g. the Hinata deck must shuffle a top set that contains no way to advance toward Hinata,
+    // even if one card would individually pass ScryKeepOnTop. Default mirrors the legacy rule
+    // (keep iff any single card is wanted), so every non-overriding deck is byte-identical.
+    virtual bool KeepReorderTop(const GameState& s, const std::vector<Card>& top) const
+    {
+        for (const Card& c : top) { if (ScryKeepOnTop(s, c)) { return true; } }
+        return false;
+    }
+
     // Hook 5 -- cast-sequencing: should this hand cast go in the ENABLER-FIRST pass (cast
     // + resolve before other spells, so a same-turn payload sees the enabler active)?
     // The engine keeps the multi-pass apply MECHANISM; only the partition is provider-owned.

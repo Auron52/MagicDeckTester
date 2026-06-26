@@ -1885,8 +1885,9 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
 
     const int look = std::min(n, static_cast<int>(ap.library.size()));
 
-    // Remove the top `look` cards and split into wanted (keep on top) vs the rest, in look order.
-    std::vector<Card> wanted, rest;
+    // Remove the top `look` cards (in look order) so the keep-vs-shuffle hook can judge the WHOLE
+    // set, then split into wanted (keep on top) vs the rest.
+    std::vector<Card> looked;
     std::vector<int>         seen_nums;
     std::vector<std::string> seen_names;
     const bool capture = (g_reveal_logger != nullptr);
@@ -1894,8 +1895,21 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
     {
         Card c = ap.library.front();
         ap.library.erase(ap.library.begin());
-        bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
         if (capture) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
+        looked.push_back(std::move(c));
+    }
+
+    // Keep-vs-shuffle. The SEARCH may force it (keep_decision 0 = shuffle, 1 = keep); otherwise the
+    // provider's KeepReorderTop judges the whole looked-at set (default: keep iff any card is wanted,
+    // byte-identical; HinataProvider shuffles a set that can't advance toward Hinata).
+    const bool do_shuffle = (keep_decision == 0)
+                         || (keep_decision == -1 && !ResolveProvider(state).KeepReorderTop(state, looked));
+
+    // Split into wanted (keep on top) vs the rest, in look order, for the keep-branch ordering.
+    std::vector<Card> wanted, rest;
+    for (Card& c : looked)
+    {
+        bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
         (keep ? wanted : rest).push_back(std::move(c));
     }
 
@@ -1908,10 +1922,6 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
              > ResolveProvider(state).SituationalCardRank(state, b);
     });
 
-    // Shuffle when the search chose to (keep_decision == 0), or in legacy mode when nothing on top
-    // is worth drawing (keep_decision == -1 && no wanted card). keep_decision == 1 never shuffles.
-    const bool do_shuffle = (keep_decision == 0)
-                         || (keep_decision == -1 && wanted.empty());
     if (do_shuffle)
     {
         // Shuffle them all away (CR "you may shuffle"). Put EVERY looked-at card back on top first
@@ -2011,12 +2021,15 @@ inline void ResolveExpressiveIteration(GameState& state)
     }
 }
 
-// Karoo bounce land ETB (Izzet Boilerworks): return one of `controller`'s OTHER lands to hand.
-// Deterministic so the rollout and executor agree: prefer a TAPPED land (already spent this turn
-// -> no mana lost), else the lowest-index other land; never the just-entered karoo (self_index,
-// which is always the last-pushed battlefield element when this is called). If the karoo is the
-// only land, nothing is returned (a pathological play the search avoids; a tiny, conservative
-// deviation from the rules' forced self-bounce).
+// Karoo bounce land ETB (Izzet Boilerworks): return one of `controller`'s lands to hand. The
+// bounce is MANDATORY (CR -- "return a land you control"), so there is always a victim. Deterministic
+// so the rollout and executor agree: prefer one of the controller's OTHER lands, tapped first
+// (already spent this turn -> no mana lost) then the lowest-index other land; only if the karoo is
+// the controller's ONLY land does it return ITSELF (self_index, the just-entered karoo, always the
+// last-pushed battlefield element). A self-bounce nets no land in play AND consumes the land drop,
+// so the land-selection search correctly avoids playing a Karoo as your only land -- the old code
+// bounced NOTHING here, which masked that cost and let the AI play a lone Karoo (a rules-illegal
+// free land; see Hinata seed 1009 T1).
 inline void BounceKarooLand(GameState& state, int controller, int self_index)
 {
     auto find = [&](bool want_tapped) -> int
@@ -2033,7 +2046,8 @@ inline void BounceKarooLand(GameState& state, int controller, int self_index)
     };
     int pick = find(true);
     if (pick < 0) { pick = find(false); }
-    if (pick < 0) { return; }
+    if (pick < 0) { pick = self_index; }   // mandatory: no other land -> return the karoo itself
+    if (pick < 0 || pick >= static_cast<int>(state.battlefield.size())) { return; }  // defensive
     Card c = state.battlefield[pick].card;
     c.m_is_staged = false;
     c.m_def = nullptr;

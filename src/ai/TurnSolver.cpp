@@ -2762,12 +2762,25 @@ static std::string SimulateLandPlay(GameState& state)
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return std::string(); }
 
+    // Does the active player control another land (one a Karoo could bounce)?
+    const int active = state.active_player_index;
+    bool has_other_land = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == active && p.card.IsLand()) { has_other_land = true; break; }
+    }
+
     for (int pass = 0; pass < 2; ++pass)
     {
         for (const Card& c : ap.hand)
         {
             auto def = CardDatabase::Instance().LookupCached(c);
             if (!def || !def->card.IsLand()) { continue; }
+
+            // A Karoo bounce land with no other land in play must return ITSELF (the bounce is
+            // mandatory) -- net no land in play and a wasted drop. Never the greedy choice; play a
+            // real land first (matches the searched land drop, which rejects the self-bounce).
+            if (def->params.etb_bounce_land && !has_other_land) { continue; }
 
             bool is_multi = def->params.produces.size() > 1;
             if (pass == 0 && !is_multi) { continue; }

@@ -801,6 +801,73 @@ bool HinataProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) con
     return SituationalCardRank(s, top_card) >= kHinataKeepThreshold;
 }
 
+bool HinataProvider::KeepReorderTop(const GameState& s, const std::vector<Card>& top) const
+{
+    if (top.empty()) { return false; }
+    const int active = s.active_player_index;
+    const Player& ap = s.players[active];
+
+    // Hinata online (in play or hand)? Once she is, the pieces are live and worth holding, so fall
+    // back to the generic "keep iff any card is individually wanted" rule.
+    bool have_hinata = HinataInPlay(s);
+    if (!have_hinata)
+    {
+        for (const Card& h : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (d && d->params.hinata_cost_reducer) { have_hinata = true; break; }
+        }
+    }
+    if (have_hinata)
+    {
+        for (const Card& c : top) { if (ScryKeepOnTop(s, c)) { return true; } }
+        return false;
+    }
+
+    // --- Missing Hinata: she is in a class of her own -- without her the combo and even an
+    // affordable Soulfire are unreachable, so a top set is only worth keeping if it advances toward
+    // her: it contains Hinata herself, OR a dig/tutor toward her PLUS at least one other useful card
+    // (a land/rock we still need for mana, or a holdable combo piece). A lone dig amid dead cards is
+    // NOT enough -- shuffle and dig fresh for her. ---
+
+    // Mana sources in play + this turn's land-drop need (mirrors SituationalCardRank).
+    int sources = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (p.card.IsLand() || d->params.mana_rock)) { ++sources; }
+    }
+    const int  source_target  = 4;   // enough to cast Hinata ({1}{U}{R}{W})
+    const bool land_drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
+    const bool need_land      = land_drop_open && sources < source_target;
+
+    bool has_hinata = false;
+    int  dig = 0, other_useful = 0;
+    for (const Card& c : top)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        const CardParams& p = d->params;
+        if (p.hinata_cost_reducer) { has_hinata = true; continue; }
+        const bool is_dig = p.cast_scry > 0 || p.cast_reorder > 0 || p.expressive_iteration
+                          || p.tutor_to_hand || p.tutor_to_top;
+        if (is_dig) { ++dig; continue; }
+        // A non-dig card is "useful other" if it helps reach or execute the combo: a land/rock we
+        // still need for mana, or a combo piece (Crackle / Soulfire / Magma / a mana ritual) worth
+        // holding for after she lands. Surplus lands and goldfish-inert cards are dead weight here.
+        const bool is_land  = d->card.IsLand();
+        const bool is_rock  = p.mana_rock;
+        const bool is_piece = (p.x_damage_multiplier > 1) || p.damage_equals_top_mv
+                            || p.cast_draw > 0 || IsManaRitual(*d);
+        if (is_land || is_rock) { if (need_land || sources < source_target) { ++other_useful; } }
+        else if (is_piece)      { ++other_useful; }
+    }
+    if (has_hinata) { return true; }
+    // dig + (a second dig OR a useful other) -> keep; a lone dig or no dig at all -> shuffle.
+    return dig >= 1 && (dig + other_useful) >= 2;
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
