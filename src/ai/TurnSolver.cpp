@@ -2191,7 +2191,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
 
             // Draw one. Record EVERY dig (even a land) so the executor replays the exact
-            // cycle/sacrifice sequence and stays in library/hand sync.
+            // cycle/sacrifice sequence and stays in library/hand sync. Deck-out safe: stop digging
+            // if the library is empty (can't draw from an empty library).
+            if (ap.library.empty()) { break; }
             Card drawn = ap.library.DrawTop();
             const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
             bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();

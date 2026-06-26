@@ -96,13 +96,18 @@ public:
         return std::move(m_cards[m_top++]);
     }
 
-    // Draws exactly n cards from the top and appends them to destination.
-    void DrawN(int n, std::vector<Card>& destination)
+    // Draws up to n cards from the top and appends them to destination, stopping if the library
+    // runs out (deck-out safe -- never throws). Returns the number actually drawn, so a caller can
+    // detect a short draw (fewer than n) and apply the draw-from-empty loss (CR 104.3c). Byte-
+    // identical for every game that does not deck out (the suite never empties its library).
+    int DrawN(int n, std::vector<Card>& destination)
     {
-        for (int i = 0; i < n; ++i)
+        int drawn = 0;
+        for (; drawn < n && !empty(); ++drawn)
         {
             destination.push_back(DrawTop());
         }
+        return drawn;
     }
 
     // Cross-platform deterministic shuffle of the LIVE window [m_top, end).

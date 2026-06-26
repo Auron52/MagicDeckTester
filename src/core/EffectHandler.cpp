@@ -341,7 +341,12 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     }
     else
     {
-        controller.library.DrawN(n, controller.hand);
+        // Deck-out: if the library cannot supply all n, draw what is left and the drawing player
+        // loses (CR 104.3c, drawing from an empty library). Routed through the same loss flag the
+        // draw step uses, so PlayOut ends the game. Reachable on this combo deck once a deep
+        // Soulfire/cantrip dig has emptied the library; harmless for decks that never deck out.
+        int drew = controller.library.DrawN(n, controller.hand);
+        if (drew < n) { state.player_lost_on_draw = true; }
     }
 
     MoveToGraveyard(state, entry);
