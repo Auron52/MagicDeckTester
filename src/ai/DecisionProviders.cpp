@@ -658,57 +658,147 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
     return GenericProvider::CastOrderRank(s, def);
 }
 
-bool HinataProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+// Situational "what do I need THIS turn" ranking (Hook 19). HIGHER = more wanted. The decisive
+// idea is that situational NEED overrides static card power: a land tops the list on a turn we need
+// the land drop (even though a land is a generically weak card), and once mana is covered the
+// MISSING combo pieces outrank the digging cantrips, which outrank the dead/duplicate payoffs.
+// Used to ORDER the cards a dig spell (Expressive Iteration / Ponder / Preordain) looks at, so the
+// selection is deterministic (no search branch) and combo-aware. ScryKeepOnTop below is a threshold
+// on this rank, so the keep/bottom gate and the ordering share one source of truth.
+//
+// Tiers (named so the relative order is the contract, not the magnitudes):
+namespace
+{
+    enum HinataRank
+    {
+        kRankHinataLynchpin = 1000,  // Hinata when not yet online -- the deck is dead without her
+        kRankNeededLand     =  900,  // a land when we need this turn's drop and are land-light
+        kRankMissingCrackle =  800,  // the lethal finisher, not yet in hand (Hinata online)
+        kRankMissingSpasm   =  750,  // Reality Spasm (the ritual that powers the lethal X)
+        kRankIrencragShort  =  720,  // Irencrag Feat when MANA-SHORT: a mana ritual beats Soulfire
+        kRankSoulfire       =  700,  // Soulfire Eruption: digs AND finishes
+        kRankIrencrag       =  650,  // Irencrag Feat (mana not the bottleneck): more mana, but late
+        kRankMagma          =  600,  // Magma Opus: secondary payoff (tokens + draw)
+        kRankCantrip        =  500,  // Ponder / Preordain / EI -- keep digging toward pieces
+        kRankRamp           =  450,  // a mana rock while still short of the mana target
+        kRankExtraLand      =  380,  // a land beyond the urgent drop: still mana for the combo
+        kRankFloodedLand    =  340,  // a land once well past the mana target (mild)
+        kRankDeadPayoff     =  200,  // a payoff/ritual while Hinata is NOT online -- dead now
+        kRankDigPastLand    =  250,  // a surplus land/rock while hunting Hinata -- dig past it
+        kRankDuplicate      =  150,  // a second copy of a piece we already hold -- redundant
+        kRankInert          =  100,  // goldfish-inert interaction / unknown
+    };
+    const int kHinataKeepThreshold = 300;   // ScryKeepOnTop = keep-on-top iff rank >= this
+}
+
+int HinataProvider::SituationalCardRank(const GameState& s, const Card& card) const
 {
     const int active = s.active_player_index;
-    const CardDefinition* tdef = CardDatabase::Instance().LookupCached(top_card);
+    const Player& ap = s.players[active];
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
+    const Card& c = def ? def->card : card;
 
-    // Hinata herself is always kept -- the whole deck is dead without her.
-    if (tdef && tdef->params.hinata_cost_reducer) { return true; }
+    const bool is_land     = c.IsLand();
+    const bool is_hinata   = def && def->params.hinata_cost_reducer;
+    const bool is_rock     = def && def->params.mana_rock;
+    const bool is_ritual   = def && IsManaRitual(*def);                 // Reality Spasm / Irencrag
+    const bool is_spasm    = def && def->params.untap_x_mana_sources;   // Reality Spasm
+    const bool is_crackle  = def && def->params.x_damage_multiplier > 1;// Crackle with Power (5X)
+    const bool is_soulfire = def && def->params.damage_equals_top_mv;   // Soulfire Eruption
+    const bool is_magma    = def && def->params.cast_draw > 0;          // Magma Opus (draw payoff)
+    const bool is_cantrip  = def && (def->params.cast_scry > 0 || def->params.cast_reorder > 0
+                                     || def->params.expressive_iteration);
+    const bool is_payoff   = is_crackle || is_soulfire || is_magma;
 
-    // Do we already have Hinata (on the battlefield or in hand)? If so, the payoffs are live.
+    // Hinata online (battlefield or hand)? Determines whether the payoffs are live.
     bool have_hinata = HinataInPlay(s);
     if (!have_hinata)
     {
-        for (const Card& c : s.players[active].hand)
+        for (const Card& h : ap.hand)
         {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
             if (d && d->params.hinata_cost_reducer) { have_hinata = true; break; }
         }
     }
 
-    const bool is_land = tdef ? tdef->card.IsLand() : top_card.IsLand();
-
-    if (!have_hinata)
+    // Do we already hold a card matching `pred` in hand (duplicate demotion)?
+    auto have_in_hand = [&](bool (*pred)(const CardParams&)) -> bool
     {
-        // No Hinata yet -> dig HARD for her. Keep only what casts or continues finding her:
-        // lands and ramp up to ~4 mana sources (enough for her {1}{U}{R}{W}), and cheap card
-        // selection (cantrips) that keeps digging. Bottom the expensive payoffs (Crackle /
-        // Magma / Soulfire / Reality Spasm) and the goldfish-inert interaction -- all dead
-        // until Hinata arrives, so cycling past them gets to her sooner.
-        int sources = 0;
-        for (const Permanent& p : s.battlefield)
+        for (const Card& h : ap.hand)
         {
-            if (p.controller_index != active) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && (p.card.IsLand() || d->params.mana_rock)) { ++sources; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (d && pred(d->params)) { return true; }
         }
-        if (is_land)                                { return sources < 4; }
-        if (tdef && tdef->params.mana_rock)         { return sources < 4; }
-        if (tdef && (tdef->params.cast_scry > 0
-                  || tdef->params.cast_reorder > 0)) { return true; }   // cantrips keep digging
-        return false;                                                  // bottom dead payoffs
-    }
+        return false;
+    };
 
-    // Have Hinata: the payoffs are castable -> keep nonlands, keep a land only while short
-    // (mirrors the generic keep so we don't flood once the engine is online).
-    if (!is_land) { return true; }
-    int lands_in_play = 0;
+    // Mana sources in play and this turn's land-drop need.
+    int sources = 0;
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index == active && p.card.IsLand()) { ++lands_in_play; }
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (p.card.IsLand() || d->params.mana_rock)) { ++sources; }
     }
-    return lands_in_play < 2;
+    // The combo wants a lot of mana once Hinata is online (more sources = more Reality Spasm
+    // refloat); before her we just need enough to cast her ({1}{U}{R}{W} = four sources).
+    const int  source_target  = have_hinata ? 7 : 4;
+    const bool land_drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
+    bool land_in_hand = false;
+    for (const Card& h : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d ? d->card.IsLand() : h.IsLand()) { land_in_hand = true; break; }
+    }
+    const bool need_land = land_drop_open && sources < source_target;
+
+    // --- the lynchpin / a needed land outrank everything else ---
+    if (is_hinata) { return have_hinata ? kRankDuplicate : kRankHinataLynchpin; }
+    if (is_land)
+    {
+        if (need_land && !land_in_hand) { return kRankNeededLand; }          // land-light, no drop in hand
+        if (sources < source_target)   { return kRankExtraLand; }           // more mana still helps
+        return have_hinata ? kRankFloodedLand : kRankDigPastLand;           // flooded: keep (combo) / dig (hunt)
+    }
+
+    // --- before Hinata: payoffs/rituals are DEAD; dig past them, keep ramp + cantrips ---
+    if (!have_hinata)
+    {
+        if (is_rock)                { return sources < source_target ? kRankRamp : kRankDigPastLand; }
+        if (is_cantrip)             { return kRankCantrip; }    // keep digging for her
+        if (is_payoff || is_ritual) { return kRankDeadPayoff; } // uncastable until she lands
+        return kRankInert;
+    }
+
+    // --- Hinata online: the payoffs are live. Missing pieces > digging > duplicates. ---
+    if (is_crackle)
+    {
+        const bool dup = have_in_hand([](const CardParams& p) { return p.x_damage_multiplier > 1; });
+        return dup ? kRankDuplicate : kRankMissingCrackle;
+    }
+    if (is_spasm)
+    {
+        const bool dup = have_in_hand([](const CardParams& p) { return p.untap_x_mana_sources; });
+        return dup ? kRankDuplicate : kRankMissingSpasm;
+    }
+    if (is_soulfire) { return kRankSoulfire; }
+    // Irencrag Feat (fixed ritual burst). When mana is the bottleneck it outranks Soulfire -- the
+    // shortage is exactly what the +7 mana fixes, and a {6}{R}{R}{R} Soulfire is uncastable while
+    // short anyway; otherwise it ranks below the dig (Soulfire finds pieces, Irencrag is just mana).
+    if (is_ritual)   { return (sources < source_target) ? kRankIrencragShort : kRankIrencrag; }
+    if (is_magma)    { return kRankMagma; }
+    if (is_cantrip)  { return kRankCantrip; }
+    if (is_rock)     { return sources < source_target ? kRankRamp : kRankDigPastLand; }
+    return kRankInert;
+}
+
+bool HinataProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+{
+    // One source of truth: keep on top exactly the cards the situational ranking wants this turn.
+    // (Reproduces the previous keep/bottom decisions in both phases -- dig hard for Hinata before
+    // she lands, keep the live pieces after -- while the rank ALSO orders the kept cards for the
+    // dig spells, which the old binary keep could not.)
+    return SituationalCardRank(s, top_card) >= kHinataKeepThreshold;
 }
 
 // ---- instances + selection --------------------------------------------------

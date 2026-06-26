@@ -1871,6 +1871,15 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
         (keep ? wanted : rest).push_back(std::move(c));
     }
 
+    // Order the kept cards most-wanted-first so the immediately-following draw takes the best one
+    // (the rest stay on top for later turns -- the real Ponder drawback). For a provider without a
+    // situational override the rank is ScryKeepOnTop?1:0 and every kept card shares rank 1, so this
+    // stable_sort is a no-op (byte-identical); HinataProvider supplies the combo-aware order.
+    std::stable_sort(wanted.begin(), wanted.end(), [&](const Card& a, const Card& b) {
+        return ResolveProvider(state).SituationalCardRank(state, a)
+             > ResolveProvider(state).SituationalCardRank(state, b);
+    });
+
     // Shuffle when the search chose to (keep_decision == 0), or in legacy mode when nothing on top
     // is worth drawing (keep_decision == -1 && no wanted card). keep_decision == 1 never shuffles.
     const bool do_shuffle = (keep_decision == 0)
@@ -1939,10 +1948,14 @@ inline void ResolveExpressiveIteration(GameState& state)
         if (capture) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
         cards.push_back(std::move(c));
     }
-    // Rank wanted-first (stable -> preserves look order within each group).
+    // Rank most-wanted-first by the provider's situational ranking (stable -> preserves look order
+    // within a rank tier): [0] -> hand, [1] -> exiled-playable-this-turn, [2] -> bottom. For a
+    // provider without a situational override the rank is ScryKeepOnTop?1:0, so this is byte-identical
+    // to the old binary keep ordering; HinataProvider supplies the fine combo-aware order (a needed
+    // land to hand, the next-best piece to the exile slot, the least-useful card to the bottom).
     std::stable_sort(cards.begin(), cards.end(), [&](const Card& a, const Card& b) {
-        return (ResolveProvider(state).ScryKeepOnTop(state, a) ? 1 : 0)
-             > (ResolveProvider(state).ScryKeepOnTop(state, b) ? 1 : 0);
+        return ResolveProvider(state).SituationalCardRank(state, a)
+             > ResolveProvider(state).SituationalCardRank(state, b);
     });
 
     std::vector<int> kept_nums, bottom_nums;

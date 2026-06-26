@@ -103,6 +103,10 @@ public:
     // price), so while no Hinata is in play or hand the dig HUNTS her -- keep Hinata, keep only
     // the lands/ramp/cantrips that cast or continue finding her, and bottom the dead payoffs.
     bool ScryKeepOnTop(const GameState&, const Card&) const override;
+    // Situational "what do I need THIS turn" ranking (Hook 19): drives EI / Ponder / Preordain
+    // card selection deterministically. ScryKeepOnTop above is re-expressed as a threshold on this
+    // rank, so the keep/bottom gate and the ordering share one source of truth.
+    int  SituationalCardRank(const GameState&, const Card&) const override;
     // Cast a mana RITUAL (Reality Spasm / Irencrag Feat) BEFORE the payoff so its floating mana
     // funds the same-turn Crackle: Hinata (creature, 10) -> ritual (15) -> Crackle (noncreature, 20).
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;

@@ -169,6 +169,25 @@ public:
     // the open-land-drop precondition; only this card-choice is provider-owned. Generic = "".
     virtual std::string PostDrawKeepLandName(const GameState& s, int controller) const = 0;
 
+    // Hook 19 -- SITUATIONAL card rank: "how much do I want THIS card on THIS turn" (HIGHER =
+    // more wanted). Unlike ScryKeepOnTop (a binary keep-on-top / bottom gate) this is a continuous
+    // priority that lets the dig spells (Expressive Iteration, Ponder, Preordain) ORDER their
+    // looked-at cards DETERMINISTICALLY -- most-wanted to hand/top, least-wanted to bottom -- instead
+    // of leaving the selection to a search branch. The decisive nuance is that situational NEED
+    // overrides static card power: a land ranks at the top on a turn you need the land drop, even
+    // though it is a generically weak card; once lands are covered the missing combo pieces outrank
+    // the digging cantrips, which outrank the dead/duplicate payoffs. The engine keeps the selection
+    // MECHANISM (which slot each ranked card goes to); only the ranking is provider-owned.
+    //
+    // Default (here) mirrors ScryKeepOnTop (keep -> 1, bottom -> 0) so every non-overriding deck
+    // keeps its current 2-level ordering byte-identical (a stable_sort by a 2-valued key is a no-op
+    // within each group). Only HinataProvider overrides it with the real situational ranking, and
+    // re-expresses its ScryKeepOnTop in terms of this rank (single source of truth).
+    virtual int SituationalCardRank(const GameState& s, const Card& card) const
+    {
+        return ScryKeepOnTop(s, card) ? 1 : 0;
+    }
+
     // Hook 16 -- does this deck's goldfish opponent play lands? Decks whose spells target the
     // OPPONENT'S permanents for value (Hinata: Magma Opus taps them, the spread-damage / cost-
     // reduction targeting points at them) need a realistic opponent board. When true the engine
