@@ -101,6 +101,14 @@ struct Action
     bool is_draw_until_nonland = false;// Treasure Hunt (Solve's LE/TH combo valuation)
     int  discard_land_damage   = 0;    // if this card IS a Land's Edge being cast (Solve)
 
+    // Cached card definition for `card_name`, resolved ONCE by CollectActions (where the
+    // name is assigned) so the hot subset evaluators (consider's max_casts_after loop, the
+    // combo-line scan, CapGroupsBySituationalRank) read the pointer instead of re-hashing the
+    // name string per node. Behaviour-identical to Lookup(card_name) -- same result, just no
+    // repeated hashtable find (callgrind 2026-06-26: string-keyed Lookup ~3.5% of a Hinata d2
+    // game). Transient enumeration scratch like the eval scalars; never enters a TT key/output.
+    const CardDefinition* def  = nullptr;
+
     // Commit-the-line (MTG_FULL_DEPTH) faithful replay of DYNAMIC draw turns: the
     // exact casts the search's draw-breakpoint re-solve made right AFTER this card's
     // resolution revealed new cards (DrawSpell staging / DrawUntilNonland / the

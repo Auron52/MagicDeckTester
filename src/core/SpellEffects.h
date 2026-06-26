@@ -2361,13 +2361,56 @@ inline void DecrementDepletionOnTap(Permanent& source)
 // and tap self-damage); on failure it leaves `state` exactly as it found it. Intended to
 // run ONLY after the greedy fails, so every payment the greedy already solves stays
 // byte-identical. `floating` carries mana produced-but-unconsumed down the recursion.
+// Hash for the failure-memo key (active player's tapped-source bitmask, packed floating pool).
+struct TapBacktrackMemoHash
+{
+    std::size_t operator()(const std::pair<std::uint64_t, std::uint64_t>& p) const
+    {
+        return std::hash<std::uint64_t>{}(p.first)
+             ^ (std::hash<std::uint64_t>{}(p.second) * 1099511628211ull);
+    }
+};
+using TapBacktrackMemo =
+    std::unordered_set<std::pair<std::uint64_t, std::uint64_t>, TapBacktrackMemoHash>;
+
 inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
-                                const std::vector<Color>* rp_colors = nullptr)
+                                const std::vector<Color>* rp_colors = nullptr,
+                                TapBacktrackMemo* fail_memo = nullptr)
 {
     if (floating.CanPay(cost)) { return true; }
     const int active = state.active_player_index;
     const int n      = static_cast<int>(state.battlefield.size());
+
+    // Failure-state memo. The backtracker explores tap ORDERINGS, and many orderings converge on the
+    // same (tapped-source set, floating pool) state -- once such a state is proven to admit no legal
+    // payment, every other ordering reaching it also fails, so re-exploring it is pure waste. Caching
+    // PROVEN FAILURES (only) collapses the permutation explosion toward the powerset (the combo-turn
+    // blowup was 54% self-time, almost all deep re-exploration). Byte-identical: failures never yield
+    // a payment, so the FIRST solution the DFS finds -- and the exact sources it leaves tapped -- is
+    // unchanged; we only short-circuit revisits that would have returned false anyway. The key is the
+    // active player's tapped-source bitmask (complete: untapped sources = the remaining choices; cost,
+    // for_creature and the RP union are invariant per top-level call) plus the packed floating pool;
+    // stored as the full pair (not a lossy hash) so a hash collision can never cause a false prune.
+    // Set up once at the top-level call and threaded down; disabled when n>64 (bitmask won't fit).
+    TapBacktrackMemo memo_local;
+    if (!fail_memo && n <= 64) { fail_memo = &memo_local; }
+
+    std::pair<std::uint64_t, std::uint64_t> key{0, 0};
+    if (fail_memo)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (state.battlefield[i].controller_index == active && state.battlefield[i].tapped)
+            { key.first |= (1ull << i); }
+        }
+        auto cl = [](int v) -> std::uint64_t
+        { return static_cast<std::uint64_t>(v < 0 ? 0 : (v > 255 ? 255 : v)); };
+        key.second = cl(floating.white) | (cl(floating.blue) << 8) | (cl(floating.black) << 16)
+                   | (cl(floating.red) << 24) | (cl(floating.green) << 32)
+                   | (cl(floating.colorless) << 40) | (cl(floating.wild) << 48);
+        if (fail_memo->count(key)) { return false; }
+    }
 
     // Reflecting Pool's colour union is INVARIANT during a tap-backtrack (no land enters or leaves
     // while paying mana) and SHARED by all of the controller's Reflecting Pools. Compute it ONCE
@@ -2375,7 +2418,11 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // then thread the pointer through the recursion so it is never rescanned per node. Without this
     // it was an O(battlefield) rescan per RP per recursion node, ~9x on a Reality-Spasm combo turn
     // with two RPs in play (seed-7000 game 53). Every non-RP deck never hits the branch -> 0 cost.
-    std::vector<Color> rp_local;
+    // We alias ReflectedColors' thread_local buffer DIRECTLY rather than copying it into a local
+    // vector: nothing inside this recursion subtree calls ReflectedColors/EffectiveProduces again
+    // (deeper nodes are guarded by rp_ready, and activate/CanPay touch no mana-colour scan), so the
+    // buffer stays valid for the whole call -- and we save a heap vector alloc per top-level call
+    // (the stl_vector alloc churn in the combo-turn callgrind).
     bool rp_ready = (rp_colors != nullptr);
 
     for (int i = 0; i < n; ++i)
@@ -2394,7 +2441,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         // Reflecting Pool -> the shared, hoisted union (empty = solo RP = no mana); every other
         // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)
         if (def->params.reflecting && !rp_ready)
-        { rp_local = ReflectedColors(state, active, /*in_hand=*/false); rp_colors = &rp_local; rp_ready = true; }
+        { rp_colors = &ReflectedColors(state, active, /*in_hand=*/false); rp_ready = true; }
         const std::vector<Color>& produces = def->params.reflecting ? *rp_colors : def->params.produces;
         // Undo across this source's options. `activate` only ever modifies THIS source (its
         // tapped flag + a depletion counter); deeper recursion taps OTHER sources but each level
@@ -2419,7 +2466,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // below on failure alongside the active player's life.
             if (def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
-            if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors)) { return true; }
+            if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo)) { return true; }
             state.battlefield[i]       = src_snap;   // only this source was touched at this level
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;
@@ -2471,6 +2518,10 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             }
         }
     }
+    // Every option from this (tapped-set, floating) state was exhausted without paying -> record the
+    // proven failure so a different tap ordering reaching the same state short-circuits instead of
+    // re-exploring. State is unchanged here (the invariant), so this is byte-identical.
+    if (fail_memo) { fail_memo->insert(key); }
     return false;
 }
 

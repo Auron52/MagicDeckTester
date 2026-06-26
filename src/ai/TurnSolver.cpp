@@ -873,6 +873,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         }
     }
 
+    // Resolve each action's card definition ONCE so the per-node subset evaluators read the
+    // cached pointer instead of re-hashing card_name. Equivalent to Lookup(card_name) at each
+    // use site (every kind's card_name is a real DB name: hand-cast/vial creature/dig source).
+    for (Action& a : actions) { a.def = CardDatabase::Instance().Lookup(a.card_name); }
+
     return actions;
 }
 
@@ -916,7 +921,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         int best_r = -1;
         for (int idx : groups[g])
         {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(cands[idx].card_name);
+            const CardDefinition* d = cands[idx].def;
             if (!d) { continue; }
             int r = prov.SituationalCardRank(state, d->card);
             if (r > best_r) { best_r = r; }
@@ -1077,13 +1082,13 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         for (int j : sel)
         {
             if (cands[j].max_casts_after < 0) { continue; }
-            const CardDefinition* rd = CardDatabase::Instance().Lookup(cands[j].card_name);
+            const CardDefinition* rd = cands[j].def;
             const int r_rank = rd ? ResolveProvider(state).CastOrderRank(state, *rd) : 20;
             int after = 0;
             for (int k : sel)
             {
                 if (k == j) { continue; }
-                const CardDefinition* kd = CardDatabase::Instance().Lookup(cands[k].card_name);
+                const CardDefinition* kd = cands[k].def;
                 const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
                 if (k_rank > r_rank) { ++after; }
             }
@@ -1101,7 +1106,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (has_extra_lethal)
         {
             casting.clear();
-            for (int j : sel) { casting.push_back(CardDatabase::Instance().Lookup(cands[j].card_name)); }
+            for (int j : sel) { casting.push_back(cands[j].def); }
             extra_lethal = provider.ExtraLethalDamage(state, casting);
         }
         bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
@@ -1147,7 +1152,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         {
             const Action& c = cands[j];
             if (c.kind != Action::Kind::CastFromHand) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().Lookup(c.card_name);
+            const CardDefinition* d = c.def;
             if (!d) { continue; }
             // The lethal payoff: an {X} direct-damage finisher (Crackle with Power, 5X) cast at the
             // largest X CollectActions emitted (it already credited the rituals' net mana into X).
@@ -3077,13 +3082,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (int j : sel)
         {
             if (cands[j].max_casts_after < 0) { continue; }
-            const CardDefinition* rd = CardDatabase::Instance().Lookup(cands[j].card_name);
+            const CardDefinition* rd = cands[j].def;
             const int r_rank = rd ? ResolveProvider(state).CastOrderRank(state, *rd) : 20;
             int after = 0;
             for (int k : sel)
             {
                 if (k == j) { continue; }
-                const CardDefinition* kd = CardDatabase::Instance().Lookup(cands[k].card_name);
+                const CardDefinition* kd = cands[k].def;
                 const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
                 if (k_rank > r_rank) { ++after; }
             }
