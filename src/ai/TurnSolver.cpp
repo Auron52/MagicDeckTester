@@ -1207,6 +1207,55 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
 
+    // --- Breadth cap on a bloated hand (combo-dig turns) -------------------------------------
+    // The odometer's cost is product_g(1 + |group_g|) * 2^num_ind. A deep Soulfire/cantrip dig can
+    // leave ~20 distinct nonland casts in hand, exploding it -- and Solve runs PER rollout node, so
+    // a couple of such non-lethal turns dominated the whole search (profiling: 2 of 24 games held
+    // ~90% of the time at low node counts -> the cost was the odometer, not the rollout). Keep only
+    // the top-K groups by the provider's situational rank; the lowest-ranked groups (dig duplicates
+    // / dead cards) are dropped from THIS turn's enumeration. Lossy, so gated: inert for any normal
+    // hand (num_groups <= cap -> the whole suite is byte-identical), and disabled by MTG_UNPRUNED /
+    // MTG_NO_GROUP_CAP for the standing A/B. The lethal combo line is already returned by the
+    // short-circuit above, so a non-lethal turn (the only kind that reaches here) never drops a win.
+    static const int  s_group_cap = []{
+        const char* e = std::getenv("MTG_SOLVE_GROUP_CAP"); int v = e ? std::atoi(e) : 12;
+        return v < 1 ? 1 : v;
+    }();
+    static const bool s_no_group_cap = std::getenv("MTG_NO_GROUP_CAP") != nullptr;
+    if (!s_no_group_cap && !DecisionUnpruned() && num_groups > s_group_cap)
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        std::vector<std::pair<int, int>> ranked;   // (situational rank, original group index)
+        ranked.reserve(num_groups);
+        for (int g = 0; g < num_groups; ++g)
+        {
+            int best_r = -1;
+            for (int idx : groups[g])
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(cands[idx].card_name);
+                if (!d) { continue; }
+                int r = prov.SituationalCardRank(state, d->card);
+                if (r > best_r) { best_r = r; }
+            }
+            ranked.push_back({ best_r, g });
+        }
+        std::stable_sort(ranked.begin(), ranked.end(),
+            [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first > b.first; });
+        std::vector<char> keep(num_groups, 0);
+        for (int i = 0; i < s_group_cap; ++i) { keep[ranked[i].second] = 1; }
+        std::vector<std::vector<int>> kept_groups;
+        std::vector<int>              kept_hand_index;
+        for (int g = 0; g < num_groups; ++g)
+        {
+            if (!keep[g]) { continue; }
+            kept_groups.push_back(std::move(groups[g]));
+            kept_hand_index.push_back(group_hand_index[g]);
+        }
+        groups.swap(kept_groups);
+        group_hand_index.swap(kept_hand_index);
+        num_groups = static_cast<int>(groups.size());
+    }
+
     // Reject combinations whose Vial deploys exceed the per-charge capacity.
     auto vial_ok = [&](const std::vector<int>& s) -> bool
     {
