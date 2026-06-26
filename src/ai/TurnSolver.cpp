@@ -1047,6 +1047,55 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
     std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-call alloc)
 
+    // ---- Combo-line short-circuit (the breadth cut; see hinata-combo-heuristic-spec) ----------
+    // On a ritual-funded combo turn (Hinata: Reality Spasm / Irencrag float mana for a big Crackle)
+    // the hand is bloated with the cards a deep Soulfire/cantrip dig staged, so the powerset/odometer
+    // below explodes. But the lethal line is structurally fixed: cast the rituals, then the X-damage
+    // finisher at the largest affordable X. So before enumerating, evaluate JUST that line -- the
+    // finisher (max-X variant) plus every available ritual (more rituals == more mana == strictly
+    // more affordable, and the max_casts_after order RS->Irencrag->finisher is legal) -- via the same
+    // consider() the powerset uses. consider() enforces ALL the feasibility it always does: total +
+    // per-color mana (the {U}{U}-for-Reality-Spasm and {R}{R}-for-Crackle pruning is exactly its
+    // CanPay + SubsetPayable), the Irencrag one-more-spell restriction, self-damage, and the EXACT
+    // win projection (the finisher's 5X is direct_damage). We skip the powerset ONLY when that line
+    // WINS -- a turn-winning plan dominates every other plan this turn, so we lose nothing; when it
+    // does not win we fall through to the full enumeration (best is merely pre-seeded, like move
+    // ordering), so a line the full search would find is never missed. Gated on any_ritual, so every
+    // non-ritual deck is byte-identical; MTG_UNPRUNED also disables it, leaving the full search as the
+    // standing A/B that proves the cut wins the same games. MTG_NO_COMBO_LINE is a dedicated isolation
+    // toggle (disables ONLY this cut, keeping every other heuristic) for a clean perf A/B.
+    static const bool s_no_combo_line = std::getenv("MTG_NO_COMBO_LINE") != nullptr;
+    if (any_ritual && !s_no_combo_line && !DecisionUnpruned())
+    {
+        int finisher = -1, finisher_dmg = -1;
+        std::vector<int> rituals;
+        for (int j = 0; j < m; ++j)
+        {
+            const Action& c = cands[j];
+            if (c.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(c.card_name);
+            if (!d) { continue; }
+            // The lethal payoff: an {X} direct-damage finisher (Crackle with Power, 5X) cast at the
+            // largest X CollectActions emitted (it already credited the rituals' net mana into X).
+            if (d->params.x_damage_multiplier > 1 && c.chosen_x > 0 && c.direct_damage > 0)
+            {
+                if (c.direct_damage > finisher_dmg) { finisher_dmg = c.direct_damage; finisher = j; }
+            }
+            else if (c.ritual_float > 0)   // a mana ritual (Reality Spasm / Irencrag Feat)
+            {
+                rituals.push_back(j);
+            }
+        }
+        if (finisher >= 0)
+        {
+            std::vector<int> combo = rituals;   // all rituals -> max mana to fund the finisher's X
+            combo.push_back(finisher);
+            consider(combo);
+            if (best.wins_this_turn) { return best; }   // lethal combo found -> skip the powerset
+            // Not lethal/affordable: fall through; `best` is pre-seeded (harmless move-ordering).
+        }
+    }
+
     // The default enumeration replaces the 2^m action powerset with the PRODUCT of per-hand-card
     // choices {skip, cast, deploy-via-Vial} (same-charge Vial deploys collapse to one
     // representative, bounded by an aggregate per-charge capacity) crossed with the 2^independent
