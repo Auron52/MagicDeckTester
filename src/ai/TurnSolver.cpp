@@ -752,10 +752,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         a.discard_land_damage   = def.params.discard_land_damage;
         a.max_casts_after       = def.params.max_casts_after;   // Irencrag "one more spell" restriction
         if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
-        // Ponder (cast_reorder): the keep-vs-shuffle call is SEARCHED -- emit two variants (keep top
-        // N in the provider's order vs shuffle them away) sharing hand_index, so the clairvoyant
-        // search plays both futures out and picks. The provider supplies only the ORDER.
-        if (def.params.cast_reorder > 0)
+        // Ponder (cast_reorder): keep-vs-shuffle. This was the #1 branching source (MTG_BRANCH_STATS:
+        // ~47% of all enumeration) because searching BOTH futures emits two variants that multiply
+        // every plan where Ponder is castable. By default we now DECIDE it with the heuristic
+        // (ponder_keep = -1 -> ReorderTopOrShuffle shuffles iff none of the top N pass ScryKeepOnTop,
+        // which for Hinata is the situational-rank threshold) -- one variant, no branch. MTG_UNPRUNED
+        // restores the searched 2-way branch for the standing A/B. The provider still supplies the
+        // kept-card ORDER (by situational rank) either way.
+        static const bool s_ponder_search = std::getenv("MTG_PONDER_SEARCH") != nullptr;
+        if (def.params.cast_reorder > 0 && (s_ponder_search || DecisionUnpruned()))
         {
             Action keep_a = a;            keep_a.ponder_keep    = 1;
             a.ponder_keep = 0;            // `a` becomes the shuffle variant
@@ -764,7 +769,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         }
         else
         {
-            actions.push_back(std::move(a));
+            // Heuristic decides keep-vs-shuffle at RESOLUTION (ponder_keep = -1, the Action default):
+            // ReorderTopOrShuffle shuffles iff none of the top N cards passes ScryKeepOnTop (the
+            // situational-rank threshold for Hinata), else keeps them on top ordered by rank. One
+            // variant, no branch. Deciding at resolution (vs at enumeration) measured strictly better
+            // -- the top of library reflects this turn's earlier cantrips by then -- and at the SAME
+            // fd-diverge as the searched 2-variant baseline (no lockstep regression).
+            actions.push_back(std::move(a));   // a.ponder_keep stays -1
         }
     }
 
@@ -888,6 +899,7 @@ bool GroupCapDisabled()
     static const bool v = std::getenv("MTG_NO_GROUP_CAP") != nullptr;
     return v;
 }
+
 static void CapGroupsBySituationalRank(const GameState& state, const std::vector<Action>& cands,
                                        std::vector<std::vector<int>>& groups,
                                        std::vector<int>& group_hand_index)
@@ -2795,6 +2807,57 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 // revealed cards with the remaining mana — a line that static evaluation cannot
 // see.  The lookahead simulation compares these against the base plans and picks
 // whichever leads to the earliest win.
+// --- Branching diagnostics (MTG_BRANCH_STATS, off by default = zero cost) ---------------------
+// Answers "which situations cause the most branching?": per EnumeratePlans call it attributes the
+// raw odometer size (product of per-group option counts x 2^independent) and the final plan count
+// to the card driving the biggest option-group, aggregates by that driver, and dumps a ranked
+// table at exit. Run single-threaded for clean numbers (MTG_BRANCH_STATS=1 ... --threads 1).
+namespace branchstats
+{
+    inline bool Enabled() { static const bool v = std::getenv("MTG_BRANCH_STATS") != nullptr; return v; }
+    struct Bucket { uint64_t calls = 0; double odo = 0, final_plans = 0, raw_plans = 0; uint64_t max_odo = 0; };
+    inline std::mutex                          g_mtx;
+    inline std::map<std::string, Bucket>       g_by_driver;   // keyed by biggest-group card name
+    inline std::map<std::string, Bucket>       g_by_situ;     // keyed by coarse situation label
+    inline Bucket                              g_total;
+
+    inline void Record(const std::string& driver, const std::string& situ,
+                       double odo, uint64_t raw, uint64_t final_plans)
+    {
+        std::lock_guard<std::mutex> lk(g_mtx);
+        auto upd = [&](Bucket& b) {
+            ++b.calls; b.odo += odo; b.raw_plans += raw; b.final_plans += final_plans;
+            if (static_cast<uint64_t>(odo) > b.max_odo) { b.max_odo = static_cast<uint64_t>(odo); }
+        };
+        upd(g_by_driver[driver]); upd(g_by_situ[situ]); upd(g_total);
+    }
+
+    struct Dumper {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            auto dump = [](const char* title, std::map<std::string, Bucket>& m) {
+                std::vector<std::pair<std::string, Bucket>> v(m.begin(), m.end());
+                std::sort(v.begin(), v.end(), [](auto& a, auto& b){ return a.second.odo > b.second.odo; });
+                std::fprintf(stderr, "\n=== BRANCH STATS: %s (sorted by total odometer) ===\n", title);
+                std::fprintf(stderr, "%-34s %10s %14s %12s %12s %10s\n",
+                             "key", "calls", "sum_odo", "sum_final", "avg_odo", "max_odo");
+                for (size_t i = 0; i < v.size() && i < 20; ++i) {
+                    const Bucket& b = v[i].second;
+                    std::fprintf(stderr, "%-34s %10llu %14.0f %12.0f %12.1f %10llu\n",
+                        v[i].first.c_str(), (unsigned long long)b.calls, b.odo, b.final_plans,
+                        b.calls ? b.odo / b.calls : 0.0, (unsigned long long)b.max_odo);
+                }
+            };
+            std::fprintf(stderr, "\n=== BRANCH STATS: total EnumeratePlans calls=%llu sum_odo=%.0f sum_final=%.0f sum_raw=%.0f ===\n",
+                (unsigned long long)g_total.calls, g_total.odo, g_total.final_plans, g_total.raw_plans);
+            dump("by driver card (biggest option-group)", g_by_driver);
+            dump("by situation", g_by_situ);
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     PROF_INC(enumerate_calls);
@@ -3205,6 +3268,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     for (TurnSolver::Plan& p : plans)
     {
         if (seen.insert(plan_signature(p)).second) { deduped.push_back(std::move(p)); }
+    }
+
+    // Branching diagnostics (off by default): attribute this call's odometer size + plan count to
+    // the card driving the biggest option-group and to a coarse situation label.
+    if (branchstats::Enabled())
+    {
+        double odo = 1.0;
+        for (const std::vector<int>& gp : groups) { odo *= (1.0 + static_cast<double>(gp.size())); }
+        odo *= static_cast<double>(1u << std::min(num_ind, 24));
+        int max_opts = 0; std::string driver = "(casts<=1)";
+        for (const std::vector<int>& gp : groups)
+        {
+            if (static_cast<int>(gp.size()) > max_opts)
+            { max_opts = static_cast<int>(gp.size()); driver = cands[gp[0]].card_name; }
+        }
+        const int bf = static_cast<int>(state.battlefield.size());
+        char situ[96];
+        std::snprintf(situ, sizeof situ, "groups=%s board=%s hinata=%d",
+            (num_groups <= 4 ? "0-4" : num_groups <= 8 ? "5-8" : num_groups <= 12 ? "9-12" : "13+"),
+            (bf <= 6 ? "0-6" : bf <= 10 ? "7-10" : bf <= 15 ? "11-15" : "16+"),
+            HinataInPlay(state) ? 1 : 0);
+        branchstats::Record(driver, situ, odo,
+                            static_cast<uint64_t>(plans.size()), static_cast<uint64_t>(deduped.size()));
     }
 
     // Cast-ordering search (C): expand each action set into the DISTINCT orderings of its
