@@ -121,6 +121,15 @@ public:
     // GameEngine). Defaults to the heuristic; consults the external vial chooser if set.
     bool DecideVialCharge(const GameState& state, const Permanent& vial) const;
 
+    // Mulligan keep-model GENERATOR hook (analyzer-only): clairvoyant "keep value" of an
+    // opening hand. Bottoms `mulligan_count` cards using the SAME lookahead bottoming that
+    // real play uses (depth > 0), then rolls the game out and returns the win turn
+    // (max_turns + 1 = no win within the horizon). `trial` must be a freshly set-up state
+    // with a 7-card hand and on_the_play / required_pieces already set on it. Used by
+    // BuildKeepModel to label hands keep-vs-mulligan against the rollout oracle, so the
+    // label uses exactly the same bottoming + rollout the deck is actually played with.
+    int RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns);
+
 private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
@@ -183,7 +192,9 @@ private:
                             int committed_win, int committed_sub_depth);
 
     // --- Mulligan helpers ---
-    bool KeepHand(const std::vector<Card>& hand, int mulligan_count) const;
+    // on_the_play: true if the active player is on the play (skips the turn-1 draw). Fed to the
+    // analyzer-generated keep model (KeepModel) as a feature; ignored by the legacy keep path.
+    bool KeepHand(const std::vector<Card>& hand, int mulligan_count, bool on_the_play) const;
     void BottomCards(GameState& state, int count, int max_turns);
 
     // Picks the index of the card the curve/castability heuristic would bottom,

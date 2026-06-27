@@ -4,9 +4,11 @@
 #include <string>
 #include <random>
 #include "AnalyzerEngine.h"
+#include "KeepModelTrainer.h"
 #include "../deck/DeckLoader.h"
 #include "../cards/CardDatabase.h"
 #include "../ai/MulliganProfileIO.h"
+#include <cstdlib>
 
 static void PrintUsage(const char* prog)
 {
@@ -80,6 +82,38 @@ int main(int argc, char* argv[])
         }
 
         Decklist deck = DeckLoader::LoadFromFile(deck_path);
+
+        // Keep-model-only mode (MTG_KEEP_MODEL_ONLY): skip the whole land/score grid; load the
+        // deck's EXISTING committed profile and fit ONLY the interpretable keep model onto it,
+        // writing <deck>.keepmodel.profile.json. This is the fast Phase-3 A/B path -- the output is
+        // byte-identical to the committed profile except for the added keep_model, so a suite A/B
+        // isolates exactly the keep-decision change without re-running the (slow) grid.
+        if (const char* e = std::getenv("MTG_KEEP_MODEL_ONLY"); e && *e && std::string(e) != "0")
+        {
+            std::filesystem::path in_path =
+                deck_path.parent_path() / (deck_path.stem().string() + ".profile.json");
+            MulliganProfile base = LoadDeckProfile(in_path);
+
+            const int scale = []{ const char* s = std::getenv("MTG_ANALYZE_SCALE");
+                                  int v = (s && *s) ? std::atoi(s) : 2; return v < 1 ? 1 : v; }();
+            const int depth = []{ const char* s = std::getenv("MTG_ANALYZE_DEPTH");
+                                  return (s && *s) ? std::max(0, std::atoi(s)) : 5; }();
+            KeepModelTrainConfig cfg;
+            cfg.depth     = depth;
+            cfg.budget_ms = 20;
+            cfg.max_turns = max_turns;
+            cfg.games     = std::max(200, 2000 / scale);
+            cfg.seed      = seed;
+            base.keep_model = BuildKeepModel(deck, base, base.card_scores, cfg);
+
+            std::filesystem::path out_path =
+                deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.profile.json");
+            if (SaveDeckProfile(out_path, base))
+            { std::cerr << "Keep-model profile written to " << out_path.string() << "\n"; }
+            else
+            { std::cerr << "Warning: could not write " << out_path.string() << "\n"; return 1; }
+            return 0;
+        }
 
         AnalyzerEngine engine;
         AnalysisResult result = engine.Run(deck, seed, max_turns);

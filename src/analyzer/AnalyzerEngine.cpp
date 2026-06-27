@@ -1,4 +1,5 @@
 #include "AnalyzerEngine.h"
+#include "KeepModelTrainer.h"
 #include "../core/GameEngine.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
@@ -52,6 +53,15 @@ inline int Scaled(int games, int floor_games = 200)
 {
     return std::max(floor_games, games / ANALYZE_SCALE);
 }
+// MTG_KEEP_MODEL=1 turns ON the analyzer-generated mulligan KEEP model (Phase 2): after the
+// static-profile optimisation, fit an interpretable keep decision tree and emit it in the profile,
+// REPLACING the static-filter keep path at runtime (see KeepModelTrainer / KeepModel). DEFAULT OFF
+// so regenerating a deck's profile is byte-identical to today until the model is explicitly opted
+// into and validated. Read once at startup.
+const bool BUILD_KEEP_MODEL = []{
+    const char* e = std::getenv("MTG_KEEP_MODEL");
+    return e && *e && std::string(e) != "0";
+}();
 constexpr int ANALYSIS_BUDGET = 20;    // deterministic virtual-ms node budget; matches the
                                        // regression suite's proven-sufficient d5 budget (the
                                        // node budget is iterative-deepening refinement WITHIN
@@ -709,6 +719,22 @@ AnalysisResult AnalyzerEngine::Run(const Decklist& deck, uint64_t base_seed, int
     result.card_scores          = opt.profile.card_scores;
     result.hand_score_threshold = opt.profile.hand_score_threshold;
     std::cerr << "  Final hand-score threshold: " << result.hand_score_threshold << "\n";
+
+    // Phase 2 (opt-in): fit the interpretable keep model on the clairvoyant rollout oracle and
+    // attach it to the profile. When present it REPLACES the static keep path at runtime; the
+    // separately-loaded human constraints still wrap it as a hard guard. Off by default so a
+    // plain regeneration is byte-identical to today (see BUILD_KEEP_MODEL).
+    if (BUILD_KEEP_MODEL)
+    {
+        KeepModelTrainConfig kc;
+        kc.depth     = ANALYSIS_DEPTH;
+        kc.budget_ms = ANALYSIS_BUDGET;
+        kc.max_turns = max_turns;
+        kc.games     = Scaled(2000);
+        kc.seed      = base_seed;
+        result.mulligan_profile.keep_model =
+            BuildKeepModel(deck, result.mulligan_profile, result.card_scores, kc);
+    }
 
     return result;
 }

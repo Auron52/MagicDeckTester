@@ -1,7 +1,9 @@
 #pragma once
 #include "MulliganProfile.h"
 #include <nlohmann/json.hpp>
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 
@@ -73,6 +75,121 @@ inline Color CharToColor(const std::string& s)
     throw std::runtime_error("Unknown color string: " + s);
 }
 
+// ---- KeepModel JSON (the analyzer-generated keep decision tree, stored in the profile) -----
+
+inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
+{
+    using json = nlohmann::json;
+    json m;
+
+    json kp = json::array();
+    for (const std::string& s : km.key_pieces) { kp.push_back(s); }
+    m["key_pieces"] = kp;
+
+    json dc = json::array();
+    for (Color c : km.deck_colors) { dc.push_back(ColorToChar(c)); }
+    m["deck_colors"] = dc;
+
+    json nodes = json::array();
+    for (const KeepNode& n : km.nodes)
+    {
+        json jn;
+        if (n.feat < 0)   // leaf
+        {
+            jn["leaf"] = (n.keep != 0) ? "keep" : "mull";
+        }
+        else
+        {
+            jn["feat"] = KeepFeatureName(static_cast<KeepFeature>(n.feat));
+            jn["op"]   = KeepOpName(static_cast<KeepOp>(n.op));
+            jn["val"]  = n.val;
+            jn["yes"]  = n.yes;
+            jn["no"]   = n.no;
+        }
+        nodes.push_back(jn);
+    }
+    m["nodes"] = nodes;
+    return m;
+}
+
+inline KeepModel KeepModelFromJsonObj(const nlohmann::json& m)
+{
+    using json = nlohmann::json;
+    KeepModel km;
+    if (m.contains("key_pieces"))
+    {
+        for (const json& v : m["key_pieces"]) { km.key_pieces.push_back(v.get<std::string>()); }
+    }
+    if (m.contains("deck_colors"))
+    {
+        for (const json& v : m["deck_colors"])
+        {
+            try { km.deck_colors.push_back(CharToColor(v.get<std::string>())); } catch (...) {}
+        }
+    }
+    if (m.contains("nodes"))
+    {
+        for (const json& jn : m["nodes"])
+        {
+            KeepNode n;
+            if (jn.contains("leaf"))
+            {
+                n.feat = -1;
+                n.keep = (jn["leaf"].get<std::string>() == "keep") ? 1 : 0;
+            }
+            else
+            {
+                n.feat = KeepFeatureFromName(jn.value("feat", std::string{}));
+                n.op   = static_cast<int>(KeepOpFromName(jn.value("op", std::string("<="))));
+                n.val  = jn.value("val", 0);
+                n.yes  = jn.value("yes", -1);
+                n.no   = jn.value("no", -1);
+            }
+            km.nodes.push_back(n);
+        }
+    }
+    return km;
+}
+
+// ---- KeepConstraints JSON (a SEPARATE durable per-deck input file) ----------
+//   { "version": 1, "required_pieces": [ ... ] }
+// Loaded alongside the profile but NEVER written by SaveDeckProfile, so regenerating the profile
+// cannot clobber a deck author's hand-set constraints.
+
+inline KeepConstraints KeepConstraintsFromJson(const std::string& json_str)
+{
+    using json = nlohmann::json;
+    KeepConstraints kc;
+    json root = json::parse(json_str);
+    if (root.contains("required_pieces"))
+    {
+        for (const json& v : root["required_pieces"]) { kc.required_pieces.push_back(v.get<std::string>()); }
+    }
+    return kc;
+}
+
+// Sibling constraints path for a profile path: <stem>.profile.json -> <stem>.constraints.json.
+inline std::filesystem::path ConstraintsPathFor(const std::filesystem::path& profile_path)
+{
+    const std::string s = profile_path.string();
+    const std::string suffix = ".profile.json";
+    if (s.size() >= suffix.size()
+        && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0)
+    {
+        return s.substr(0, s.size() - suffix.size()) + ".constraints.json";
+    }
+    return profile_path.parent_path() / (profile_path.stem().string() + ".constraints.json");
+}
+
+inline KeepConstraints LoadKeepConstraints(const std::filesystem::path& path)
+{
+    std::ifstream file(path);
+    if (!file) { return KeepConstraints{}; }
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    try   { return KeepConstraintsFromJson(content); }
+    catch (...) { return KeepConstraints{}; }
+}
+
 // ---- Mulligan JSON object (used by both DeckProfileToJson and AnalyzerEngine) --
 
 inline nlohmann::json MulliganProfileToJsonObj(const MulliganProfile& profile)
@@ -124,6 +241,10 @@ inline std::string DeckProfileToJson(const MulliganProfile& profile)
         }
         root["card_scores"] = cs;
         root["hand_score_threshold"] = profile.hand_score_threshold;
+    }
+    if (!profile.keep_model.empty())
+    {
+        root["keep_model"] = KeepModelToJsonObj(profile.keep_model);
     }
     return root.dump(2);
 }
@@ -194,6 +315,9 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
     if (root.contains("hand_score_threshold"))
         profile.hand_score_threshold = root["hand_score_threshold"].get<double>();
 
+    if (root.contains("keep_model"))
+        profile.keep_model = KeepModelFromJsonObj(root["keep_model"]);
+
     return profile;
 }
 
@@ -201,15 +325,21 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
 // Returns a default profile if the file cannot be opened or parsed.
 inline MulliganProfile LoadDeckProfile(const std::filesystem::path& path)
 {
+    MulliganProfile profile;
     std::ifstream file(path);
-    if (!file) { return MulliganProfile{}; }
-
-    std::string content(
-        (std::istreambuf_iterator<char>(file)),
-        std::istreambuf_iterator<char>());
-
-    try   { return DeckProfileFromJson(content); }
-    catch (...) { return MulliganProfile{}; }
+    if (file)
+    {
+        std::string content(
+            (std::istreambuf_iterator<char>(file)),
+            std::istreambuf_iterator<char>());
+        try   { profile = DeckProfileFromJson(content); }
+        catch (...) { profile = MulliganProfile{}; }
+    }
+    // Durable human constraints live in a SEPARATE sibling file, loaded even when the profile itself
+    // is absent/default (a deck can carry constraints without a generated profile). SaveDeckProfile
+    // never writes them back, so regeneration cannot clobber them.
+    profile.keep_constraints = LoadKeepConstraints(ConstraintsPathFor(path));
+    return profile;
 }
 
 // Writes a DeckProfile to a file on disk. Returns true on success.

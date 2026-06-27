@@ -147,7 +147,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     while (true)
     {
         bool keep = static_cast<int>(ap.hand.size()) <= m_profile.stop_at
-                 || KeepHand(ap.hand, mulligan_count);
+                 || KeepHand(ap.hand, mulligan_count, state.on_the_play);
 
         if (m_logger)
         {
@@ -179,11 +179,29 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     }
 }
 
-bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count) const
+bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count, bool on_the_play) const
 {
     int effective_size = static_cast<int>(hand.size()) - mulligan_count;
     if (effective_size <= 1)                 { return true; }
     if (effective_size <= m_profile.stop_at) { return true; }
+
+    // Analyzer-generated keep model: when present it REPLACES the static-filter + linear-score path
+    // below. The durable human constraints (separately loaded, never regenerated) act as a hard
+    // guard wrapping it; then the decision tree decides on the named feature vector (which includes
+    // on-the-play and mulligan depth -- the axes the legacy path ignores). An empty model falls
+    // through to the legacy path, so every deck without a generated model is byte-identical.
+    if (!m_profile.keep_model.empty())
+    {
+        switch (ApplyKeepConstraints(hand, m_profile.keep_constraints))
+        {
+            case KeepGuard::ForceMulligan: return false;
+            case KeepGuard::ForceKeep:     return true;
+            case KeepGuard::Undecided:     break;
+        }
+        const std::vector<int> feats =
+            ComputeKeepFeatures(hand, mulligan_count, on_the_play, m_profile.keep_model);
+        return m_profile.keep_model.Keep(feats);
+    }
 
     int land_count = 0;
     for (const Card& c : hand)
@@ -646,6 +664,18 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
     m_in_rollout = false;
     m_logger     = saved;
     return win_turn > 0 ? win_turn : max_turns + 1;
+}
+
+int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns)
+{
+    // The keep-model generator's oracle: evaluate the value of KEEPING this opening hand at
+    // the given mulligan depth. Bottom `mulligan_count` cards exactly as HandleMulligan would
+    // (lookahead bottoming, on at depth > 0), then play the game out clairvoyantly. The result
+    // is the same win turn the deck would realise if it kept this hand -- so a label derived
+    // from it (keep iff this beats the expected value of mulliganing) matches real play.
+    SetMaxTurns(max_turns);
+    if (mulligan_count > 0) { BottomCards(trial, mulligan_count, max_turns); }
+    return RolloutWinTurn(std::move(trial), max_turns);
 }
 
 void AIEngine::BottomCards(GameState& state, int count, int max_turns)
@@ -2410,6 +2440,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             if (!TapForCost(state, rep_cost, available, true)) { break; }
             remaining = BuildAvailableMana(state);
             replicate_tokens.push_back(def->card);
+        }
+        if (m_logger && !replicate_tokens.empty())
+        {
+            m_logger->LogAbility(def->card.m_number, def->card.m_name,
+                                 "replicate \xc3\x97" + std::to_string(replicate_tokens.size()));
         }
     }
 

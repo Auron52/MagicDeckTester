@@ -34,6 +34,7 @@ add_library(mtg-core STATIC
     src/ai/AIEngine.cpp
     src/ai/DecisionProviders.cpp
     src/ai/TurnSolver.cpp
+    src/ai/KeepModel.cpp
     src/runner/GoldFishRunner.cpp
     src/runner/BatchRunner.cpp
     src/cards/CardDatabase.cpp
@@ -93,5 +94,6 @@ target_link_libraries(mtg PRIVATE mtg-core)
 add_executable(mtg-analyze
     src/analyzer/main.cpp
     src/analyzer/AnalyzerEngine.cpp
+    src/analyzer/KeepModelTrainer.cpp
 )
 target_link_libraries(mtg-analyze PRIVATE mtg-core)

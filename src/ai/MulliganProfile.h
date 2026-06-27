@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/Card.h"
+#include "KeepModel.h"
 #include <map>
 #include <string>
 #include <vector>
@@ -69,6 +70,17 @@ struct MulliganProfile
     // hand_score = sum of marginal values for all cards in hand.
     // 0.0 with empty card_scores = scoring disabled.
     double hand_score_threshold = 0.0;
+
+    // Analyzer-generated interpretable mulligan-KEEP model (decision tree over named features incl.
+    // on-the-play and mulligan depth). When non-empty it REPLACES the static-filter + linear-score
+    // keep path above (AIEngine::KeepHand); empty => legacy path (so existing decks are unchanged
+    // until regenerated). Serialized in the profile JSON. See KeepModel.h / mulligan-model-direction.
+    KeepModel keep_model;
+
+    // Durable human-authored keep constraints, loaded from a SEPARATE sibling file
+    // (<deck>.constraints.json) -- NOT part of the profile JSON, so regenerating the profile never
+    // clobbers them. Applied as a hard guard wrapping keep_model at runtime. Empty => no constraints.
+    KeepConstraints keep_constraints;
 
     static MulliganProfile DefaultProfile() { return {}; }
 };
