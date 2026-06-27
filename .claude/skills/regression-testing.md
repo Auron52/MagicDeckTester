@@ -17,10 +17,13 @@ The harness lives in `test/`:
 |------|------|-----------|
 | `regression.sh` | runs a mode, compares to ground truth, and (with `--accept`) promotes a run into ground truth | yes |
 | `regression_cases.sh` | the test matrix (deck × depth × seed × games × budget) + deck metadata — **single source of truth** | yes |
-| `regression_gt.txt` | ground truth: `<deck>_<mode>_d<depth>_s<seed>=<won>/<avg_win_turn>` | yes |
+| `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<won>/<avg_win_turn>` | yes |
+| `gt_logs/<key>.wins` | ground truth, **per-game** (the counterpart to the aggregate above): one `<game_index> <win_turn>` line per game, `-1` = loss. This is the committed old-side baseline for the per-game audit — `--accept` promotes it together with `regression_gt.txt`. | yes |
 | `TIMINGS.md` | measured per-case wall times; sizing reference for the matrix | yes |
 | `results/<mode>.env` | last run's fingerprints (what `--accept` promotes) | no (gitignored) |
 | `logs/<mode>/<key>.log` (+ `.err`) | full binary output per case | no (gitignored) |
+| `logs/<mode>/wins/<key>.wins` | **this run's** per-game outcomes (same `<index> <win_turn>` format); diff against `gt_logs/<key>.wins` for the per-game audit | no (gitignored) |
+| `logs/<mode>/mtg.run` | snapshot of the exact binary that produced this run (`+ .meta` records its git hash/state) | no (gitignored) |
 | `regression_result_<mode>.txt` | last run's summary table | no (gitignored) |
 
 All runs are **deterministic and thread-invariant** — same seed + budget ⇒ same
@@ -59,6 +62,37 @@ Each line is `STATUS  <key>  exp=<won>/<awt>  got=<won>/<awt>  <wall>s`:
   turn, or the per-game loss list.
 - **NEW** — no ground-truth key yet (e.g. first overnight run before it is
   accepted). Does **not** fail the suite.
+
+**Per-game audit needs NO re-run** — the old-side baseline is already committed.
+To see *which* games changed (the win↔loss flips the aggregate hides), diff the
+committed per-game GT against this run directly:
+
+```bash
+diff <(sort -n test/gt_logs/<key>.wins) \
+     <(sort -n test/logs/<mode>/wins/<key>.wins)   # < = committed GT, > = this run
+```
+
+That reveals the exact flips a fingerprint conceals — e.g. a net `−11` can be **26
+win→loss vs 15 loss→win**, which a single number never shows.
+
+**Re-run policy (minimize it):**
+- **Never re-run the whole case or suite to learn "what changed vs GT"** — the
+  committed `.wins` already hold every per-game outcome; it's a file diff.
+- When you genuinely need *decision detail* for a flip (which keep/play differed),
+  re-run **only that one changed game** — `--log-dir` (or `MTG_DUMP_WINS`) on its
+  exact seed (`base + gi`), one at a time — never the surrounding thousands. The
+  committed `.wins` is **outcome-only** (`<index> <win_turn>`, ~6 B/game); the full
+  per-game trace (`--log-dir`, ~38 KB/game — turns/casts/reveals/board) is too bulky
+  to commit across the matrix. Determinism makes that one-game regen an **exact**
+  reproduction, so storing traces would buy nothing over regenerating the single
+  game you care about.
+- **If the committed logs lack what an audit needs, EXPAND what the harness
+  captures** (add the datum to the `.wins`/snapshot it records on every run) rather
+  than defaulting to a re-run. Re-running is the last resort, only when we truly
+  can't reconstruct what happened from committed logs.
+- The one legitimate full A/B re-run is *isolating a code change* from a stale
+  baseline (the `MTG_DUMP_WINS` A/B below, rules 5–6) — a different question from
+  "what did this run change vs its GT."
 
 The fingerprint is **`games_won/avg_win_turn`**. The won-count catches win↔loss
 flips that barely move the average (important for Treasure Hunt: ~95% at depth 0,
