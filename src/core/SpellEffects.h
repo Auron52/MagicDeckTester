@@ -1092,15 +1092,18 @@ inline void StageTopLibraryCard(GameState& state)
 // "Choose any number of target creatures/.../players. For each, exile the top card and deal its
 // mana value to that target; you may play the exiled cards until end of your next turn."
 //
-// Bounded heuristic target set (user spec): ALWAYS the opponent (face) + each OPPONENT creature;
-// PLUS yourself, unless your life < 9 (don't risk self-kill). Your OWN creatures (Hinata /
-// Ornithopter) are NOT auto-targeted -- killing the combo lynchpin or a mana dork is a real risk
-// left for a future searched decision. Each target exiles the next top card; the controller orders
-// targets optimally, so the FACE takes the highest-MV exiled card (max damage) and SELF takes the
-// lowest (min self-damage). ALL exiled cards are staged (the dig of N, the deck's real payoff).
-// Opponent-creature damage is goldfish-irrelevant (passive tokens) and omitted; those targets count
-// only toward the dig. Shared exile/stage so EffectHandler (real) and ApplyPlanDirect (rollout)
-// realise the identical dig + damage (lockstep).
+// Bounded target set: ALWAYS the opponent (face) + each OPPONENT creature; PLUS yourself unless your
+// life <= 9 (a self-flip could be a lethal MV-9 Soulfire); PLUS a SEARCHED count of your OWN creatures
+// (expendable-first, Hinata last -- killing the lynchpin removes her discount, so the search avoids it).
+// Choosing the target SET is a legal non-clairvoyant decision. What is NOT modelled (deliberately, as
+// of the faithfulness pass) is steering the random flips: the exiled cards are assigned to targets in
+// a FIXED canonical order -- face gets the TOP card, then you, then opponent creatures (board order),
+// then your own creatures. The controller CANNOT route the highest-MV flip onto the face, because the
+// flips are a random event chosen blind. Creature targets take their card's MV and are DESTROYED if
+// lethal (so they leave the target pool for later target-dependent spells -- the faithful interaction).
+// ALL exiled cards are staged (the dig of N, the deck's real payoff). Shared exile/stage/assign so
+// EffectHandler (real) and ApplyPlanDirect (rollout) realise the identical board (lockstep), and
+// SoulfireFaceDamage (the Solve projection) returns the same top-card face damage.
 struct SoulfireResult { int face_damage = 0; int self_damage = 0; };
 
 // Number of BASE Soulfire targets (opponent face + opp creatures + self-if-safe). Own creatures are
@@ -1153,25 +1156,31 @@ inline int SoulfireOwnCreatureCount(const GameState& state, int controller)
     return n;
 }
 
-// Estimate (no mutation): face damage = the MAX mana value among the top (base + own_targets) cards
-// (the controller assigns the highest exiled card to the face). Used by the Solve win projection;
-// matches SoulfireDig's resolution exactly (clairvoyant), so it never invents a phantom win.
-inline int SoulfireFaceDamage(const GameState& state, int controller, int own_targets = 0)
+// Battlefield indices of the OPPONENT's creatures in board order. Soulfire targets them after the
+// face + you; each is dealt the next exiled card (positionally) and destroyed if that is lethal.
+inline std::vector<int> SoulfireOppCreatureOrder(const GameState& state, int controller)
 {
-    bool target_self = false;
-    int n = SoulfireTargetCount(state, controller, target_self);
-    n += std::min(own_targets, SoulfireOwnCreatureCount(state, controller));
-    const Player& ap = state.players[controller];
-    const int cnt = std::min(n, static_cast<int>(ap.library.size()));
-    int max_mv = 0;
-    for (int i = 0; i < cnt; ++i)
+    const int opp = 1 - controller;
+    std::vector<int> idx;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
-        const Card& c = *std::next(ap.library.begin(), i);
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        int mv = d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
-        if (mv > max_mv) { max_mv = mv; }
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == opp && p.card.IsCreature()) { idx.push_back(i); }
     }
-    return max_mv;
+    return idx;
+}
+
+// Estimate (no mutation): face damage = the mana value of the TOP card of the library. The first
+// exiled card ALWAYS goes to the opponent's face -- Soulfire's flips are a random event, so the
+// controller cannot steer the highest-MV card onto the face. own_targets no longer affects the face
+// (it only deepens the dig + Hinata discount). Matches SoulfireDig's positional assignment (lockstep).
+inline int SoulfireFaceDamage(const GameState& state, int controller, int /*own_targets*/ = 0)
+{
+    const Player& ap = state.players[controller];
+    if (ap.library.empty()) { return 0; }
+    const Card& c = ap.library.front();
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    return d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
 }
 
 inline bool HinataInPlay(const GameState& state);   // defined below; used by the discount helper
@@ -1192,30 +1201,36 @@ inline int SoulfireOwnTargetDiscount(const CardDefinition& def, const GameState&
     return std::min(cap, base + own_targets) - std::min(cap, base);   // >= 0
 }
 
-// Apply (mutates): exile the top N = base + own_targets cards, STAGE them all (playable through next
-// turn), assign exiled mana values to targets optimally, and return the face damage (-> opponent)
-// and self damage (-> controller). Own creatures (most-expendable first, Hinata last) take the
-// SMALLEST exiled MVs and are destroyed if that is lethal -- the price the search weighs against the
-// deeper dig + cheaper cost. Deterministic given (state, controller, own_targets) so the rollout
-// (ApplyPlanDirect) and the executor (EffectHandler) realise the identical board (lockstep). With
-// own_targets = 0 it is byte-identical to the prior single-set dig (face = max MV, self = min MV).
+// Apply (mutates): exile the top N cards and STAGE them all (playable through next turn -- the deck's
+// real dig of N), assigning the exiled mana values to targets in a FIXED, NON-clairvoyant order:
+//   1. opponent's face   (the TOP card -- the controller cannot steer the biggest flip here)
+//   2. you               (next card, only if life > 9 so a self-flip can't be lethal)
+//   3. opponent creatures (board order; each dealt the next card, DESTROYED if lethal -> they leave
+//                          the target pool for later target-dependent spells, the faithful interaction)
+//   4. your own creatures (expendable-first, Hinata last; the SEARCHED own_targets count; destroyed
+//                          if lethal -- the search weighs the deeper dig + discount against the loss)
+// Returns face/self damage. Deterministic given (state, controller, own_targets) so the rollout
+// (ApplyPlanDirect) and executor (EffectHandler) realise the identical board (lockstep). Choosing
+// the target SET (which/how-many own creatures, self if safe) is a legal non-clairvoyant decision;
+// what is removed here is steering the unknown random flip onto the best target.
 inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targets = 0)
 {
-    bool target_self = false;
-    const int base = SoulfireTargetCount(state, controller, target_self);
-    std::vector<int> own = SoulfireOwnCreatureOrder(state, controller);
-    if (static_cast<int>(own.size()) > std::max(0, own_targets)) { own.resize(std::max(0, own_targets)); }
-    const int n = base + static_cast<int>(own.size());
     Player& ap = state.players[controller];
 
-    // Capture the flipped cards for the replay viewer (real play only; the reveal logger is null
-    // during search/rollout, so this is byte-identical to the suite). Every exiled card is staged
-    // (playable until end of next turn), so all are logged as "kept".
+    // Target list in canonical order. Self only when safe (a self-exiled Soulfire is MV 9).
+    const bool target_self = ap.life > 9;
+    std::vector<int> opp_creatures = SoulfireOppCreatureOrder(state, controller);   // board order
+    std::vector<int> own           = SoulfireOwnCreatureOrder(state, controller);   // expendable-first
+    if (static_cast<int>(own.size()) > std::max(0, own_targets)) { own.resize(std::max(0, own_targets)); }
+
+    const int n = 1 + (target_self ? 1 : 0)
+                + static_cast<int>(opp_creatures.size()) + static_cast<int>(own.size());
+
+    // Exile n cards top-down; every exiled card is staged (the dig). Keep per-flip MV in flip order.
     const bool               capture = (g_reveal_logger != nullptr);
     std::vector<int>         flip_nums;
     std::vector<std::string> flip_names;
-
-    std::vector<int> mvs;
+    std::vector<int>         mvs;
     for (int i = 0; i < n && !ap.library.empty(); ++i)
     {
         Card c = ap.library.front();
@@ -1225,43 +1240,49 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
         if (capture) { flip_nums.push_back(c.m_number); flip_names.push_back(c.m_name); }
         c.m_is_staged     = true;
         c.m_staged_expiry = state.turn_number + 1;
-        ap.hand.push_back(std::move(c));   // dig: stage every exiled card
-    }
-    if (capture && !flip_nums.empty())
-    {
-        g_reveal_logger->LogReveal("Soulfire Eruption (exiled)",
-                                   flip_nums, flip_names, flip_nums, {});
+        ap.hand.push_back(std::move(c));
     }
 
+    // Assign cards to targets POSITIONALLY (top card -> first target, in canonical order).
     SoulfireResult r;
-    if (mvs.empty()) { return r; }
-    std::sort(mvs.begin(), mvs.end(), std::greater<int>());   // descending: front = highest MV
-    r.face_damage = mvs.front();                              // highest MV -> opponent's face
+    std::vector<std::string> disp(mvs.size());
+    int slot = 0;
+    auto label = [&](const std::string& tgt) {
+        if (capture && slot < static_cast<int>(mvs.size()))
+        { disp[slot] = "→ " + tgt + " (" + std::to_string(mvs[slot]) + ")"; }
+    };
 
-    // The smallest MVs go to self + own creatures (minimise self-damage and own-creature deaths);
-    // the opponent's own creatures absorb the middle values (goldfish-irrelevant, not modelled).
-    // Take from the BACK (smallest) without ever reusing the face card (front, index 0).
-    int back = static_cast<int>(mvs.size()) - 1;
-    if (target_self && back > 0) { r.self_damage = mvs[back]; --back; }
+    if (slot < static_cast<int>(mvs.size())) { label("opponent face"); r.face_damage = mvs[slot]; ++slot; }
+    if (target_self && slot < static_cast<int>(mvs.size())) { label("you"); r.self_damage = mvs[slot]; ++slot; }
 
-    // Apply own-creature damage; destroy the lethal ones AFTER (descending battlefield index so the
-    // erase stays valid). A dead own creature moves to its owner's graveyard (faithful SBA), and
-    // later casts this turn recompute their cost from the new board -- so killing Hinata correctly
-    // removes her discount, which is exactly what makes the search avoid those lines.
+    // Creature targets take real damage; lethal ones are destroyed (SBA) so later casts recompute
+    // costs from the new board and later target-dependent spells see one fewer target.
     std::vector<int> dead;
-    for (int oi = 0; oi < static_cast<int>(own.size()) && back > 0; ++oi)
-    {
-        const int dmg = mvs[back]; --back;
-        Permanent& cre = state.battlefield[own[oi]];
+    auto hit_creature = [&](int bi, const char* who) {
+        if (slot >= static_cast<int>(mvs.size())) { return; }
+        const std::string cname = state.battlefield[bi].card.m_name;   // InternedName -> string
+        label(std::string(who) + " " + cname);
+        const int dmg = mvs[slot];
+        ++slot;
+        Permanent& cre = state.battlefield[bi];
         cre.damage += dmg;
-        if (cre.damage >= cre.EffectiveToughness()) { dead.push_back(own[oi]); }
-    }
-    std::sort(dead.begin(), dead.end(), std::greater<int>());
+        if (cre.damage >= cre.EffectiveToughness()) { dead.push_back(bi); }
+    };
+    for (int bi : opp_creatures) { hit_creature(bi, "opponent"); }
+    for (int bi : own)           { hit_creature(bi, "your"); }
+
+    std::sort(dead.begin(), dead.end(), std::greater<int>());   // descending so erase stays valid
     for (int bi : dead)
     {
         Permanent& cre = state.battlefield[bi];
         state.players[cre.owner_index].graveyard.push_back(cre.card);
         state.battlefield.erase(state.battlefield.begin() + bi);
+    }
+
+    if (capture && !flip_nums.empty())
+    {
+        g_reveal_logger->LogReveal("Soulfire Eruption (exiled)",
+                                   flip_nums, flip_names, flip_nums, {}, disp);
     }
     return r;
 }

@@ -385,12 +385,17 @@ void EffectHandler::ResolvePumpSpell(GameState& state, const StackEntry& entry,
 }
 
 void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& entry,
-                                             const CardDefinition& /*def*/)
+                                             const CardDefinition& def)
 {
     Player& controller = state.players[entry.controller_index];
     // Reveal cards from the top until a nonland is found; put ALL revealed cards
     // (including the triggering nonland) into hand (CR oracle: "put all cards
     // revealed this way into your hand").
+    // Capture the revealed -> hand cards for the replay viewer (real play only; the reveal
+    // logger is paused during search/rollout, so this never fires off the real game's resolution).
+    const bool capture = (g_reveal_logger != nullptr);
+    std::vector<int>         revealed_nums;
+    std::vector<std::string> revealed_names;
     while (!controller.library.empty())
     {
         Card c = controller.library.DrawTop();
@@ -399,8 +404,16 @@ void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& 
             auto cdef = CardDatabase::Instance().LookupCached(c);
             is_land = cdef ? cdef->card.IsLand() : c.IsLand();
         }
+        if (capture) { revealed_nums.push_back(c.m_number); revealed_names.push_back(c.m_name); }
         controller.hand.push_back(std::move(c));
         if (!is_land) { break; }
+    }
+    if (capture && !revealed_nums.empty())
+    {
+        // All revealed cards go to hand, so "kept" = every revealed card (the viewer labels a
+        // Treasure-Hunt source as "to hand").
+        g_reveal_logger->LogReveal(def.card.m_name, revealed_nums, revealed_names,
+                                   revealed_nums, /*bottomed*/ std::vector<int>{});
     }
     MoveToGraveyard(state, entry);
 }

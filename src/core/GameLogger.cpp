@@ -86,7 +86,8 @@ void GameLogger::LogReveal(const std::string& source_name,
                             const std::vector<int>& looked_at_nums,
                             const std::vector<std::string>& looked_at_names,
                             const std::vector<int>& kept_nums,
-                            const std::vector<int>& bottomed_nums)
+                            const std::vector<int>& bottomed_nums,
+                            const std::vector<std::string>& dispositions)
 {
     if (!m_in_phase) { return; }
     Action a;
@@ -96,6 +97,7 @@ void GameLogger::LogReveal(const std::string& source_name,
     a.looked_at_names = looked_at_names;
     a.kept            = kept_nums;
     a.bottomed        = bottomed_nums;
+    a.dispositions    = dispositions;
     m_current.actions.push_back(std::move(a));
 }
 
@@ -144,7 +146,9 @@ void GameLogger::LogAttack(int damage, int opp_life_after)
 void GameLogger::CommitPhase(int player_life, int opp_life,
                               const std::vector<PermSnapshot>& battlefield,
                               const std::vector<int>& hand,
-                              const std::vector<PermSnapshot>& opp_battlefield)
+                              const std::vector<PermSnapshot>& opp_battlefield,
+                              const std::vector<int>& graveyard,
+                              const std::vector<int>& staged)
 {
     if (!m_in_phase) { return; }
     m_current.player_life     = player_life;
@@ -152,6 +156,8 @@ void GameLogger::CommitPhase(int player_life, int opp_life,
     m_current.battlefield     = battlefield;
     m_current.opp_battlefield = opp_battlefield;
     m_current.hand            = hand;
+    m_current.graveyard       = graveyard;
+    m_current.staged          = staged;
     m_phases.push_back(std::move(m_current));
     m_in_phase = false;
 }
@@ -285,6 +291,8 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
                     json c;
                     c["card"] = a.looked_at[i];
                     if (i < a.looked_at_names.size()) { c["cardName"] = a.looked_at_names[i]; }
+                    if (i < a.dispositions.size() && !a.dispositions[i].empty())
+                    { c["to"] = a.dispositions[i]; }
                     looked.push_back(std::move(c));
                 }
                 act["lookedAt"] = looked;
@@ -319,6 +327,16 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
                 j["card"]     = p.card_num;
                 j["cardName"] = p.card_name;
                 j["tapped"]   = p.tapped;
+                j["isLand"]   = p.is_land;
+                if (!p.counters.empty())
+                {
+                    json cs = json::array();
+                    for (const CounterInfo& c : p.counters)
+                    {
+                        cs.push_back({ {"kind", c.kind}, {"count", c.count} });
+                    }
+                    j["counters"] = cs;
+                }
                 arr.push_back(std::move(j));
             }
             return arr;
@@ -328,6 +346,12 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
         json hand = json::array();
         for (int n : pe.hand) { hand.push_back(n); }
         board["hand"] = hand;
+        json gy = json::array();
+        for (int n : pe.graveyard) { gy.push_back(n); }
+        board["graveyard"] = gy;
+        json staged = json::array();
+        for (int n : pe.staged) { staged.push_back(n); }
+        board["staged"] = staged;
         entry["boardAfter"] = board;
 
         turns_arr.push_back(std::move(entry));

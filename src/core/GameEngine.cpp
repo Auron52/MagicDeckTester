@@ -18,7 +18,9 @@ void GameEngine::SetLogger(GameLogger* logger)
 static void CollectBoardState(const GameState& state,
                                std::vector<GameLogger::PermSnapshot>& battlefield_out,
                                std::vector<int>& hand_out,
-                               std::vector<GameLogger::PermSnapshot>& opp_battlefield_out)
+                               std::vector<GameLogger::PermSnapshot>& opp_battlefield_out,
+                               std::vector<int>& graveyard_out,
+                               std::vector<int>& staged_out)
 {
     const Player& ap = state.ActivePlayer();
     for (const Permanent& p : state.battlefield)
@@ -27,12 +29,34 @@ static void CollectBoardState(const GameState& state,
         snap.card_num  = p.card.m_number;
         snap.card_name = p.card.m_name;
         snap.tapped    = p.tapped;
+        snap.is_land   = p.card.IsLand();   // REAL type, so the viewer never name-guesses zones
+
+        // Surface counters as viewer badges (depletion on Saprazzan Skerry, charge on Aether Vial,
+        // verse on Aria of Flame, +1/+1, etc.).
+        for (const Counter& c : p.counters)
+        {
+            const char* kind = c.type == Counter::Type::PlusOnePlusOne   ? "+1/+1"
+                             : c.type == Counter::Type::MinusOneMinusOne ? "-1/-1"
+                             : c.type == Counter::Type::Loyalty          ? "loyalty"
+                             : c.type == Counter::Type::Poison           ? "poison"
+                             : c.type == Counter::Type::Depletion        ? "depletion"
+                             :                                             "counter";
+            if (c.count != 0) { snap.counters.push_back({ kind, c.count }); }
+        }
+        if (p.charge_counters != 0) { snap.counters.push_back({ "charge", p.charge_counters }); }
+        if (p.verse_counters  != 0) { snap.counters.push_back({ "verse",  p.verse_counters  }); }
+
         if (p.controller_index == state.active_player_index) { battlefield_out.push_back(std::move(snap)); }
         else { opp_battlefield_out.push_back(std::move(snap)); }  // Forbidden Orchard tokens / spawns
     }
     for (const Card& c : ap.hand)
     {
         hand_out.push_back(c.m_number);
+        if (c.m_is_staged) { staged_out.push_back(c.m_number); }  // exiled-but-playable (Light Up etc.)
+    }
+    for (const Card& c : ap.graveyard)
+    {
+        graveyard_out.push_back(c.m_number);
     }
 }
 
@@ -222,12 +246,12 @@ void GameEngine::DrawStep(GameState& state)
     if (m_logger)
     {
         std::vector<GameLogger::PermSnapshot> bf, obf;
-        std::vector<int> hand;
-        CollectBoardState(state, bf, hand, obf);
+        std::vector<int> hand, gy, staged;
+        CollectBoardState(state, bf, hand, obf, gy, staged);
         m_logger->StartPhase(state.turn_number, "DRAW");
         m_logger->LogDraw(drawn.m_number, drawn.m_name);
         hand.push_back(drawn.m_number);
-        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf);
+        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged);
     }
     ap.hand.push_back(std::move(drawn));
     ResolveStack(state);
@@ -266,9 +290,9 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     if (m_logger)
     {
         std::vector<GameLogger::PermSnapshot> bf, obf;
-        std::vector<int> hand;
-        CollectBoardState(state, bf, hand, obf);
-        m_logger->CommitPhase(state.ActivePlayer().life, state.Opponent().life, bf, hand, obf);
+        std::vector<int> hand, gy, staged;
+        CollectBoardState(state, bf, hand, obf, gy, staged);
+        m_logger->CommitPhase(state.ActivePlayer().life, state.Opponent().life, bf, hand, obf, gy, staged);
     }
 }
 
@@ -374,9 +398,9 @@ void GameEngine::CombatPhase(GameState& state)
     if (m_logger)
     {
         std::vector<GameLogger::PermSnapshot> bf, obf;
-        std::vector<int> hand;
-        CollectBoardState(state, bf, hand, obf);
-        m_logger->CommitPhase(state.ActivePlayer().life, opp.life, bf, hand, obf);
+        std::vector<int> hand, gy, staged;
+        CollectBoardState(state, bf, hand, obf, gy, staged);
+        m_logger->CommitPhase(state.ActivePlayer().life, opp.life, bf, hand, obf, gy, staged);
     }
 }
 
@@ -418,9 +442,9 @@ void GameEngine::CleanupStep(GameState& state)
     if (m_logger && m_logger->InPhase())
     {
         std::vector<GameLogger::PermSnapshot> bf, obf;
-        std::vector<int> hand;
-        CollectBoardState(state, bf, hand, obf);
-        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf);
+        std::vector<int> hand, gy, staged;
+        CollectBoardState(state, bf, hand, obf, gy, staged);
+        m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged);
     }
 
     // Remove all damage marks, "until end of turn" boosts, and animation effects (CR 514.2).

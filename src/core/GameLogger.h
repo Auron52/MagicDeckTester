@@ -48,14 +48,27 @@ public:
         std::string card_name;        // permanent only
     };
 
+    // A counter (or counter-like badge) on a permanent, surfaced for the viewer: depletion on
+    // Saprazzan Skerry, charge on Aether Vial, verse on Aria of Flame, +1/+1, etc. kind is a short
+    // human label; count is the number shown.
+    struct CounterInfo
+    {
+        std::string kind;
+        int         count = 0;
+    };
+
     // One battlefield permanent. card_name is carried explicitly so TOKENS (Forbidden Orchard
     // spirits, scheduled opponent spawns, Magma/replicate tokens) -- which have no deck card
     // number -- are still nameable in the viewer; deck cards also resolve via cardNumbering.
+    // is_land is the REAL card type (from the permanent's card), so the viewer no longer guesses
+    // land-ness from the name (which mis-zoned nonbasic lands and creatures like Monastery Swiftspear).
     struct PermSnapshot
     {
-        int         card_num = 0;
-        std::string card_name;
-        bool        tapped   = false;
+        int                      card_num = 0;
+        std::string              card_name;
+        bool                     tapped   = false;
+        bool                     is_land  = false;
+        std::vector<CounterInfo> counters;
     };
 
     void LogPlayLand(int card_num, const std::string& card_name);
@@ -72,11 +85,15 @@ public:
     // A scry/dig/look-at-top reveal (Ponder, Preordain, Scry, etc.): the cards seen
     // at the top of the library and what happened to each. kept/bottomed are subsets
     // of looked_at by card number.
+    // dispositions (optional): a human label per looked_at card describing where it went / what it
+    // did -- used by Soulfire Eruption to show which exiled card hit which target ("-> opponent face
+    // (9)"). Parallel to looked_at_*; empty => no per-card disposition shown.
     void LogReveal(const std::string& source_name,
                    const std::vector<int>& looked_at_nums,
                    const std::vector<std::string>& looked_at_names,
                    const std::vector<int>& kept_nums,
-                   const std::vector<int>& bottomed_nums);
+                   const std::vector<int>& bottomed_nums,
+                   const std::vector<std::string>& dispositions = {});
 
     // An activated ability firing (mana tap, sac, pay-life, discard-cost, etc.).
     // For mana abilities the board `tapped` rotation already conveys the visible
@@ -89,7 +106,9 @@ public:
     void CommitPhase(int player_life, int opp_life,
                      const std::vector<PermSnapshot>& battlefield,
                      const std::vector<int>& hand,
-                     const std::vector<PermSnapshot>& opp_battlefield = {});
+                     const std::vector<PermSnapshot>& opp_battlefield = {},
+                     const std::vector<int>& graveyard = {},
+                     const std::vector<int>& staged = {});
 
     // Returns true if a phase was started but not yet committed.
     bool InPhase() const { return m_in_phase; }
@@ -125,6 +144,7 @@ private:
         std::vector<std::string> looked_at_names;
         std::vector<int>         kept;
         std::vector<int>         bottomed;
+        std::vector<std::string> dispositions;   // REVEAL: per-card destination label (optional)
         // ABILITY: the ability description (source recorded in card_num/card_name).
         std::string ability;
     };
@@ -139,6 +159,8 @@ private:
         std::vector<PermSnapshot> battlefield;
         std::vector<PermSnapshot> opp_battlefield;
         std::vector<int>          hand;
+        std::vector<int>          graveyard;
+        std::vector<int>          staged;   // hand cards exiled-but-playable (Light Up / Soulfire dig)
     };
 
     std::string                             m_run_id;

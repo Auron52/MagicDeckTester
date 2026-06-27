@@ -76,12 +76,33 @@
   .hint { color:var(--muted); font-size:12px; }
 
   /* card thumbs */
-  .thumb { width:90px; text-align:center; cursor:help; }
+  .thumb { width:90px; text-align:center; cursor:help; position:relative; }
   .thumb.sm { width:60px; }
   .thumb img { width:100%; border-radius:5px; display:block; background:#0b0c0e; min-height:60px; transition:transform .12s; }
   .thumb.tapped { margin:16px 24px; }
   .thumb.tapped img { transform:rotate(90deg); }
   .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:2px; }
+  /* Counter badges: a number in a coloured circle centred on the card. */
+  .cbadges { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    display:flex; gap:2px; pointer-events:none; z-index:2; }
+  .cbadge { min-width:20px; height:20px; padding:0 4px; border-radius:11px; font-size:12px;
+    font-weight:700; color:#fff; display:flex; align-items:center; justify-content:center;
+    background:#5b6470; box-shadow:0 0 0 2px #0b0c0e, 0 1px 3px rgba(0,0,0,.6); }
+  .cbadge.charge { background:#3d7fd6; } .cbadge.verse { background:#d65a3d; }
+  .cbadge.depletion { background:#8a6d3b; } .cbadge.poison { background:#5a8a3b; }
+  .cbadge.plus11 { background:#4caf6a; } .cbadge.minus11 { background:#c0504d; }
+  .cbadge.loyalty { background:#7a5ad6; }
+  /* Deck-card id badge: a small "#n" in the top-left so targets can name a specific permanent. */
+  .idbadge { position:absolute; top:2px; left:2px; font-size:9px; font-weight:700; color:#cdd2da;
+    background:rgba(11,12,14,.82); border-radius:4px; padding:0 3px; z-index:2; pointer-events:none; }
+  /* Graveyard: compact + dim so it's present but not prominent. */
+  .zone.gy { opacity:.55; }
+  .zone.gy .thumb { width:40px; }
+  .zone.gy .thumb em, .zone.gy .idbadge { display:none; }
+  /* Staged (Light Up / Soulfire dig): a hand resource playable now -- gold accent, slightly compact. */
+  .zone.staged h3 { color:#d6b84c; }
+  .zone.staged .thumb { width:64px; }
+  .zone.staged .thumb img { box-shadow:0 0 0 2px #d6b84c; }
   .thumbs { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
   .card { padding:1px 7px; border-radius:4px; background:#2e323a; font-size:12px; cursor:help; }
   .card.land { color:var(--land); } .card.spell { color:var(--spell); }
@@ -132,11 +153,27 @@ function scryImg(name,ver){ return 'https://api.scryfall.com/cards/named?exact='
 const ROCK_RE=/Sol Ring|Signet|Ornithopter|Mind Stone|Talisman|Mana Crypt|Lotus|Medallion|\bMox\b|Diamond|Locket|Cluestone|Banner|Obelisk|Springleaf/i;
 const LAND_RE=/\b(Island|Mountain|Plains|Swamp|Forest|Wastes)\b|Orchard|Boilerworks|Bluffs|Monastery|Reflecting Pool|Karoo|Temple|Tower|Vivid|Lake|Snarl|Islet|Cavern|Sanctuary|Grove|Garden|Vista|Foundry|Spire|Citadel|Atoll|Reef|Heath|Mire|Delta|Tarn|Catacombs|Vents|Grave|Fountain|Hall|Verge|Strand|Crag|Field|Coast|Shore|Flats|Hollow|Pool|Nykthos|Academy|Mine|Tron|Yard|Bog|Oasis|Dunes|Ruins|Sanctum|Gate|Path|Tomb|Pit|Lair|Den|Marsh|Fen|Glade|Thicket|Plaza|Station|Outpost|Pier|Refuge|Haven/i;
 function isLand(name){ return ROCK_RE.test(name) ? false : LAND_RE.test(name); }
+// Prefer the REAL type from the log (x.isLand); only fall back to the name heuristic for older
+// logs that predate the field. This is what fixed nonbasics landing in Permanents and creatures
+// like Monastery Swiftspear landing in Lands.
+function landOf(x){ return (x && typeof x==='object' && 'isLand' in x) ? !!x.isLand : isLand(cardOf(x)); }
+// Counter badges ("3" in a coloured circle) for depletion / charge / verse / +1+1, etc.
+function counterBadges(x){
+  const cs = (x && typeof x==='object' && x.counters) ? x.counters : null;
+  if(!cs || !cs.length) return '';
+  return `<span class="cbadges">`+cs.map(c=>
+    `<span class="cbadge ${String(c.kind).replace(/[^a-z0-9]/gi,'').toLowerCase()}" title="${esc(c.kind)}">${c.count}</span>`
+  ).join('')+`</span>`;
+}
 // A battlefield entry may be a bare id or {card, tapped}. tapped -> rotated 90deg (latent:
 // renders once the log includes per-permanent tapped state).
-function thumb(x,sm){ const name=cardOf(x); const tapped = x && typeof x==='object' && x.tapped;
+function thumb(x,sm,idb){ const name=cardOf(x); const o = x && typeof x==='object'; const tapped = o && x.tapped;
+  // Deck-card id badge (#4): lets the targets list refer to a specific permanent (#12) instead of a
+  // bare name when several share a name. Tokens (card 0) stay nameless/fungible.
+  const id = (idb && o && x.card) ? `<span class="idbadge">#${x.card}</span>` : '';
   return `<span class="thumb ${sm?'sm':''} ${tapped?'tapped':''} card" data-name="${esc(name)}">`+
     `<img loading="lazy" src="${scryImg(name,'small')}" alt="${esc(name)}" onerror="this.style.opacity=.15"/>`+
+    id+counterBadges(x)+
     `<em>${name}</em></span>`; }
 function thumbs(arr,sm){ if(!arr||!arr.length) return '<span class="hint">—</span>';
   return '<div class="thumbs">'+arr.map(x=>thumb(x,sm)).join('')+'</div>'; }
@@ -146,7 +183,11 @@ function cardSpan(x){ const name=cardOf(x); const cls=LANDISH.test(name)?'land':
 function revealLabels(src){ const s=(src||'').toLowerCase();
   if(/search|fetch|tutor|gamble/.test(s)) return {keep:'✦ fetched', away:'▼ left'};
   if(/exile|soulfire/.test(s))            return {keep:'⊗ exiled',  away:'▼ left'};
+  if(/treasure hunt|draw until/.test(s))  return {keep:'↦ to hand', away:'▼ left'};
   return {keep:'▲ top', away:'▼ away'}; }
+// A reveal that REORDERS the top (Ponder/Preordain/scry) should show the resulting draw order;
+// a fetch/exile/draw reveal has no meaningful "order" to show.
+function showsOrder(src){ return !/fetch|tutor|gamble|search|exile|soulfire|treasure hunt|draw until/i.test(src||''); }
 
 function renderMeta(d){
   const r=d.result||{}; const won=r.winner==='player';
@@ -186,13 +227,13 @@ function renderStep(){
     return `<span class="nowact ${win?'win':''}" ${name?`data-name="${esc(name)}"`:''}>${verb}${name?' <b>'+name+'</b>':''}${extra}</span>`;
   }).join('');
   const bf=b.battlefield||[];
-  const lands=bf.filter(x=>isLand(cardOf(x)));
-  const perms=bf.filter(x=>!isLand(cardOf(x)));
+  const lands=bf.filter(x=>landOf(x));
+  const perms=bf.filter(x=>!landOf(x));
   const opp=b.opponentBattlefield||[];
-  const oppLands=opp.filter(x=>isLand(cardOf(x)));
-  const oppPerms=opp.filter(x=>!isLand(cardOf(x)));
+  const oppLands=opp.filter(x=>landOf(x));
+  const oppPerms=opp.filter(x=>!landOf(x));
   const zone=(title,arr,cls)=>`<div class="zone ${cls||''}"><h3>${title} (${arr.length})</h3>`+
-    `<div class="row">${arr.length?arr.map(x=>thumb(x)).join(''):'<span class="hint">none</span>'}</div></div>`;
+    `<div class="row">${arr.length?arr.map(x=>thumb(x,false,true)).join(''):'<span class="hint">none</span>'}</div></div>`;
   // Opponent's side, across the table (only shown when the opponent has permanents).
   let oppZone='';
   if(opp.length){
@@ -209,11 +250,13 @@ function renderStep(){
     zone('Permanents', perms)+
     zone('Lands', lands, 'lands')+
     zone('Hand', b.hand||[])+
+    ((b.staged&&b.staged.length)?zone('Staged · playable (exiled)', b.staged, 'staged'):'')+
+    ((b.graveyard&&b.graveyard.length)?zone('Graveyard', b.graveyard, 'gy'):'')+
     `</div>`;
   let cast=`<div id="castzone"><h3>Cast this step</h3>`;
   const tgtStr=t=>t.kind==='player'
       ? (t.who==='opponent'?'opponent':'you')
-      : `${t.cardName||nm(t.card)}${t.who==='opponent'?" (opp)":''}`;
+      : `${t.cardName||nm(t.card)}${t.card?(' #'+t.card):''}${t.who==='opponent'?" (opp)":''}`;
   cast += casts.length ? casts.map(a=>{
       const name=a.cardName||nm(a.card);
       const xs=(a.chosenX!=null&&a.chosenX>=0)?` <span class="xval">X=${a.chosenX}</span>`:'';
@@ -229,14 +272,25 @@ function renderStep(){
     cast+=`<h3 style="margin-top:22px">Revealed</h3>`;
     cast+=reveals.map(a=>{
       const lab=revealLabels(a.source);
-      const kept=new Set(a.kept||[]);
+      const keptArr=a.kept||[];
+      const kept=new Set(keptArr);
+      // For a reorder (Ponder/scry), keptArr is the resulting top-of-library order, so annotate
+      // each kept card with its draw position (#1 = next draw). Only shown when it's meaningful.
+      const order=showsOrder(a.source) && keptArr.length>1;
+      const pos={}; keptArr.forEach((n,i)=>{ pos[n]=i+1; });
       const seen=(a.lookedAt||[]).map(c=>{
         const top=kept.has(c.card);
+        // c.to (Soulfire's per-card -> target mapping) wins when present; else top/draw-order label.
+        const lbl=c.to ? esc(c.to) : (top ? (order ? `${lab.keep} #${pos[c.card]}` : lab.keep) : lab.away);
         return `<span class="thumb sm card ${top?'kept':'binned'}" data-name="${esc(c.cardName||nm(c.card))}">`+
           `<img loading="lazy" src="${scryImg(c.cardName||nm(c.card),'small')}" onerror="this.style.opacity=.15"/>`+
-          `<em>${top?lab.keep:lab.away}</em></span>`;
+          `<em>${lbl}</em></span>`;
       }).join('');
-      return `<div class="reveal"><div class="rsrc">${esc(a.source||'Scry')}</div><div class="thumbs">${seen}</div></div>`;
+      const ord = order
+        ? `<div class="hint" style="margin-top:2px">draw order: `+
+          keptArr.map((n,i)=>`<b>${i+1}.</b> ${esc(nm(n))}`).join(' &nbsp; ')+`</div>`
+        : '';
+      return `<div class="reveal"><div class="rsrc">${esc(a.source||'Scry')}</div><div class="thumbs">${seen}</div>${ord}</div>`;
     }).join('');
   }
   // Discards (Gamble's random discard, Land's Edge, etc.) shown as their own block so the
