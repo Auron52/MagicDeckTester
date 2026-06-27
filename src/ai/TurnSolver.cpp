@@ -1598,6 +1598,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // top-level out_breakpoint). See Action::breakpoint_casts.
     std::vector<std::vector<Action>*> sink_stack;
 
+    // Deferred plain-cantrip (Ponder/Preordain) re-solve. A plain DrawSpell cast at the
+    // MAIN-plan level used to re-solve INLINE — casting freshly-affordable spells right
+    // after its draw, BEFORE the main plan's remaining casts. The executor instead casts
+    // every main-plan spell first and replays the breakpoint only afterwards (its
+    // is_draw_engine excludes plain cantrips), so the inline re-solve could spend mana a
+    // later main cast still needed (Ponder+Ponder+Preordain off two blue sources) and
+    // diverge from the realised game. We defer the re-solve to AFTER all main casts so it
+    // uses only leftover mana — byte-for-byte the executor's post-loop replay. EI / staging
+    // / Treasure Hunt / cascade (the executor's real draw engines) keep their inline
+    // re-solve, and a plain cantrip cast INSIDE a re-solve (sink_stack non-empty) also stays
+    // inline so its nested breakpoint records correctly. MTG_NO_DEFER_CANTRIP opts out
+    // (the old inline behaviour) for the A/B. Inert for decks without plain cantrips.
+    static const bool s_defer_cantrip = std::getenv("MTG_NO_DEFER_CANTRIP") == nullptr;
+    bool deferred_cantrip_resolve = false;
+
     // Land drop first, so the land's mana is available to the spells that follow.
     // A searched plan (land_decided) plays exactly its chosen land ("" == a deliberate
     // defer); an unsearched plan (depth-0 static Solve) falls back to greedy land play.
@@ -1981,11 +1996,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Draw breakpoint: play a revealed land (the real engine's second pass
             // does), then re-solve with updated hand and remaining mana so newly
             // revealed cards can be cast with mana still available this turn.
-            if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
-            play_breakpoint_land(my_bp_sink);
-            TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-            apply_plan_actions(extra.actions, false);
-            if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+            // A plain cantrip (Ponder/Preordain — NOT EI/staging) at the MAIN-plan level
+            // (sink_stack empty) defers its re-solve until after every main cast, matching
+            // the executor's post-loop replay (see deferred_cantrip_resolve). Everything
+            // else (EI/staging, or a cantrip already inside a re-solve) re-solves inline.
+            const bool plain_cantrip = !is_ei && !def.params.stages_cards;
+            if (s_defer_cantrip && plain_cantrip && sink_stack.empty())
+            {
+                deferred_cantrip_resolve = true;
+            }
+            else
+            {
+                if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                play_breakpoint_land(my_bp_sink);
+                TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+                apply_plan_actions(extra.actions, false);
+                if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+            }
         }
         else if (def.tmpl == CardTemplate::DrawUntilNonland)
         {
@@ -2269,6 +2296,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     };
 
     apply_plan_actions(plan.actions, plan.searched_order);
+
+    // Deferred plain-cantrip re-solve: run ONCE, after every main-plan cast, using only the
+    // mana those casts left — the executor's post-loop breakpoint replay does exactly this,
+    // so recording it into out_breakpoint (the committed breakpoint_actions) keeps the two in
+    // lockstep. A cantrip cast within this re-solve has sink_stack non-empty and so re-solves
+    // inline, recording into its own nested breakpoint (replayed recursively by the executor).
+    if (deferred_cantrip_resolve)
+    {
+        deferred_cantrip_resolve = false;
+        if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
+        play_breakpoint_land(out_breakpoint);
+        TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+        apply_plan_actions(extra.actions, false);
+        if (out_breakpoint) { sink_stack.pop_back(); }
+    }
 
     // Dig when stuck (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar, Forgotten
     // Cave, Fiery Islet): spend a surplus land to draw toward action -- chiefly Treasure
