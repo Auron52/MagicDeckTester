@@ -882,6 +882,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     bool fd_plan_committed = false;  // full-depth: plan came from the committed line
                                      // (carries a recorded breakpoint script to replay)
 
+    // Karoo play-at-end timing -- mirror of ApplyPlanDirect's karoo_deferred. A planned Karoo
+    // bounce land (etb_bounce_land, enters tapped) is NOT played at the fold_land step; it is
+    // deferred to AFTER the main cast loop so BounceKarooLand returns a spent (tapped) land
+    // rather than an untapped one we still need. MTG_NO_KAROO_DEFER restores the old land-first.
+    static const bool s_karoo_defer = std::getenv("MTG_NO_KAROO_DEFER") == nullptr;
+    bool        karoo_deferred = false;
+    std::string karoo_land_name;
+    std::string karoo_fetch;
+
     if (play_this_phase)
     {
         // The land drop is searched (folded into SolveWithLookahead) ONLY for the
@@ -1134,7 +1143,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
-                TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target);
+                const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
+                if (s_karoo_defer && ld && ld->params.etb_bounce_land)
+                {
+                    // Reserve the drop; play it after the main cast loop (see karoo_deferred).
+                    karoo_deferred  = true;
+                    karoo_land_name = plan.land_to_play;
+                    karoo_fetch     = plan.fetch_target;
+                }
+                else
+                {
+                    TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target);
+                }
             }
         }
         else
@@ -1595,6 +1615,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             cast_alt(nm, amt); resolve_now();
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
+    }
+
+    // Play the deferred Karoo bounce land now (mirror of ApplyPlanDirect): the main casts have
+    // tapped the lands we needed, so BounceKarooLand returns a spent land at no tempo cost. Sits
+    // after the cast loop (incl. any inline draw-engine breakpoint replay) and before the
+    // catch-all breakpoint/dig replay below -- the same logical point as the rollout (which
+    // plays it right after apply_plan_actions, before its deferred-cantrip re-solve). Taking the
+    // drop here (lands_played==1) keeps a later breakpoint from playing a revealed land as it.
+    if (karoo_deferred)
+    {
+        karoo_deferred = false;
+        TryPlaySpecificLand(state, karoo_land_name, karoo_fetch);
     }
 
     // Commit-the-line: replay any recorded dig (Kind::DigDraw) the draw-engine breakpoint

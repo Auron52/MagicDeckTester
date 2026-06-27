@@ -1613,6 +1613,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     static const bool s_defer_cantrip = std::getenv("MTG_NO_DEFER_CANTRIP") == nullptr;
     bool deferred_cantrip_resolve = false;
 
+    // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
+    // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
+    // still-UNTAPPED land we then need, losing that land's mana this turn. A Karoo enters
+    // tapped, so it provides no mana this turn regardless -- we therefore DEFER its play until
+    // AFTER the main casts (below, before the deferred-cantrip re-solve). By then the lands we
+    // needed are tapped, and BounceKarooLand returns a spent land for zero tempo loss. The land
+    // drop is RESERVED for the Karoo: while deferred, a draw/cantrip breakpoint must not play a
+    // revealed land as the drop (guarded in play_breakpoint_land / play_drawn_flood_keep_land).
+    // Lockstep: AIEngine::TakeTurn defers its fold_land the same way. MTG_NO_KAROO_DEFER opts
+    // out (old land-first behaviour) for the A/B. Inert for decks without a Karoo.
+    static const bool s_karoo_defer = std::getenv("MTG_NO_KAROO_DEFER") == nullptr;
+    bool        karoo_deferred = false;
+    std::string karoo_land_name;
+    std::string karoo_fetch;
+
     // Land drop first, so the land's mana is available to the spells that follow.
     // A searched plan (land_decided) plays exactly its chosen land ("" == a deliberate
     // defer); an unsearched plan (depth-0 static Solve) falls back to greedy land play.
@@ -1620,7 +1635,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         if (plan.land_decided)
         {
-            if (!plan.land_to_play.empty()) { PlayLandByName(state, plan.land_to_play, plan.fetch_target); }
+            if (!plan.land_to_play.empty())
+            {
+                const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
+                if (s_karoo_defer && ld && ld->params.etb_bounce_land)
+                {
+                    // Reserve the drop; play it after the main casts (see karoo_deferred above).
+                    karoo_deferred  = true;
+                    karoo_land_name = plan.land_to_play;
+                    karoo_fetch     = plan.fetch_target;
+                }
+                else
+                {
+                    PlayLandByName(state, plan.land_to_play, plan.fetch_target);
+                }
+            }
         }
         else
         {
@@ -1687,6 +1716,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // back into the held-out baseline (byte-frozen old ground truth) for A/Bs.
         static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
         if (!s_fd || !is_pre_combat) { return; }
+        if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
         std::string played = SimulateLandPlay(state);
         if (!played.empty() && out_breakpoint != nullptr && sink != nullptr)
         {
@@ -1709,6 +1739,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
         if (!s_fd || !is_pre_combat) { return; }
+        if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
         Player& lp = state.ActivePlayer();
         if (lp.lands_played_this_turn >= lp.LandDropsAvailable()) { return; }   // drop already used
 
@@ -2296,6 +2327,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     };
 
     apply_plan_actions(plan.actions, plan.searched_order);
+
+    // Play the deferred Karoo bounce land now -- after the main casts have tapped the lands we
+    // needed, so BounceKarooLand returns a SPENT land at no tempo cost (see karoo_deferred
+    // above). Done before the deferred-cantrip re-solve so the drop is taken (lands_played==1)
+    // and that re-solve never plays a freshly-revealed land as the drop. AIEngine mirrors this
+    // (its Karoo play sits between the main cast loop and the breakpoint replay).
+    if (karoo_deferred)
+    {
+        karoo_deferred = false;
+        PlayLandByName(state, karoo_land_name, karoo_fetch);
+    }
 
     // Deferred plain-cantrip re-solve: run ONCE, after every main-plan cast, using only the
     // mana those casts left — the executor's post-loop breakpoint replay does exactly this,

@@ -2053,20 +2053,39 @@ inline void ResolveExpressiveIteration(GameState& state)
 // free land; see Hinata seed 1009 T1).
 inline void BounceKarooLand(GameState& state, int controller, int self_index)
 {
-    auto find = [&](bool want_tapped) -> int
+    // Choose which of our lands to return to hand. Preference, best first:
+    //   (1) NEVER bounce another Karoo bounce land -- replaying it just triggers ANOTHER
+    //       ETB bounce (a tempo-negative loop), so avoid it unless it is the only option;
+    //   (2) prefer a land that is already TAPPED (spent this turn) so returning it costs no
+    //       mana this turn -- the play-at-end timing (ApplyPlanDirect / AIEngine defer the
+    //       Karoo until after the main casts) means the lands we needed are already tapped;
+    //   (3) among those, prefer a land that ENTERS UNTAPPED when replayed (a basic / untapped
+    //       dual) over one that enters tapped (a tapland / another Karoo), so the forced
+    //       replay gives mana immediately rather than wasting next turn's tempo.
+    // Lexicographic via additive weights; ties break to the lowest index (deterministic).
+    auto land_score = [&](int i) -> long
     {
-        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-        {
-            if (i == self_index) { continue; }
-            const Permanent& p = state.battlefield[i];
-            if (p.controller_index != controller || !p.card.IsLand()) { continue; }
-            if (want_tapped && !p.tapped) { continue; }
-            return i;
-        }
-        return -1;
+        const Permanent& p = state.battlefield[i];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const bool is_karoo = d && d->params.etb_bounce_land;
+        const bool enters_untapped =
+            !(d && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
+        long s = 0;
+        if (is_karoo)        { s -= 1000; }   // (1) avoid the bounce loop
+        if (p.tapped)        { s += 100;  }   // (2) no mana lost this turn
+        if (enters_untapped) { s += 10;   }   // (3) clean replay
+        return s;
     };
-    int pick = find(true);
-    if (pick < 0) { pick = find(false); }
+    int  pick = -1;
+    long best = 0;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (i == self_index) { continue; }
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        const long s = land_score(i);
+        if (pick < 0 || s > best) { pick = i; best = s; }   // strict > => lowest index wins ties
+    }
     if (pick < 0) { pick = self_index; }   // mandatory: no other land -> return the karoo itself
     if (pick < 0 || pick >= static_cast<int>(state.battlefield.size())) { return; }  // defensive
     Card c = state.battlefield[pick].card;
