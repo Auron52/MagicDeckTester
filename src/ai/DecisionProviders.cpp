@@ -641,7 +641,24 @@ HinataProvider::TutorCandidates(const GameState& s, int controller, const CardPa
         }
         // Hinata not in library (all copies drawn/played but none counted above is rare) -> fall through.
     }
-    return GenericProvider::TutorCandidates(s, controller, pp);
+
+    // Hinata is online: return the full legal set (search-primary -- still branches over everything),
+    // but ORDER it by situational need (Hook 19). The plan tie-break is win-turn then plan.value, and
+    // every tutor candidate shares the tutor spell's eval, so win-turn-equal fetches tie on value and
+    // the FIRST listed wins. Ordering by SituationalCardRank therefore makes an indifferent
+    // (clairvoyant-tie) search fetch the most-wanted MISSING piece -- e.g. Reality Spasm (rank 750)
+    // over a third Crackle when two are already in hand (rank 150, duplicate) -- instead of an
+    // arbitrary library-order card. Pure tie-break: a fetch that wins strictly sooner still wins.
+    std::vector<std::string> cands = GenericProvider::TutorCandidates(s, controller, pp);
+    auto rank_of = [&](const std::string& name) -> int
+    {
+        for (const Card& lc : s.players[controller].library)
+        { if (lc.m_name == name) { return SituationalCardRank(s, lc); } }
+        return 0;
+    };
+    std::stable_sort(cands.begin(), cands.end(),
+                     [&](const std::string& a, const std::string& b) { return rank_of(a) > rank_of(b); });
+    return cands;
 }
 
 int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
