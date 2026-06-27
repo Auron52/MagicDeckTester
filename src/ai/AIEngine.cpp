@@ -2572,11 +2572,11 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     if (m_lookahead_depth > 0 && !m_in_rollout && fire_count < lands_in_hand)
     {
         GameState trial_heuristic = state;
-        DoActivateLandsEdge(trial_heuristic, fire_count, rate);
+        DoActivateLandsEdge(trial_heuristic, fire_count, rate, /*log=*/false);
         int w_heuristic = RolloutWinTurn(std::move(trial_heuristic), m_max_turns);
 
         GameState trial_all = state;
-        DoActivateLandsEdge(trial_all, lands_in_hand, rate);
+        DoActivateLandsEdge(trial_all, lands_in_hand, rate, /*log=*/false);
         int w_all = RolloutWinTurn(std::move(trial_all), m_max_turns);
 
         if (w_all < w_heuristic) { fire_count = lands_in_hand; }
@@ -2585,7 +2585,7 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     DoActivateLandsEdge(state, fire_count, rate);
 }
 
-void AIEngine::DoActivateLandsEdge(GameState& state, int count, int rate)
+void AIEngine::DoActivateLandsEdge(GameState& state, int count, int rate, bool log)
 {
     if (count <= 0) { return; }
     Player& ap  = state.ActivePlayer();
@@ -2602,7 +2602,10 @@ void AIEngine::DoActivateLandsEdge(GameState& state, int count, int rate)
             ap.graveyard.push_back(c);
             opp.life -= rate;
             if (rate > 0) { state.opponent_lost_life_this_turn = true; }
-            if (m_logger) { m_logger->LogAttack(rate, opp.life); }
+            // `log` is false for the trial copies in ActivateLandsEdge (those are throwaway
+            // win-turn projections, not the realised game) -- logging them leaked phantom
+            // ATTACK entries into the real game log. Only the final fire below logs.
+            if (log && m_logger) { m_logger->LogAttack(rate, opp.life); }
             ++fired;
         }
         else

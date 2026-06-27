@@ -221,7 +221,9 @@ private:
 
     // Discards up to `count` lands from hand to Land's Edge at `rate` damage each.
     // Used by ActivateLandsEdge for both the real game path and rollout comparisons.
-    void DoActivateLandsEdge(GameState& state, int count, int rate);
+    // `log` is false for throwaway trial copies so their projected pings do not leak
+    // phantom ATTACK entries into the real game log.
+    void DoActivateLandsEdge(GameState& state, int count, int rate, bool log = true);
 
     // --- Turn helpers ---
 
