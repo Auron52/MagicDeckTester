@@ -3613,6 +3613,78 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     }
     add_for_land("", "");   // defer: play no land this turn
 
+    // A tapped land that is a fine early play (a dual/tri/scry/surveil/depletion/Karoo tap
+    // land played on a turn you don't need its mana) vs one you'd rather NOT play as a normal
+    // tapped land. EXCLUDED: cycling lands -- kept in hand for their from-hand cycling utility
+    // (draw a card when flooding), not played as plain tap lands. KEPT (strong early when you
+    // don't need the mana): scry/surveil duals (Thundering Falls, Temple of Epiphany), plain
+    // tapped duals, depletion bursts (Saprazzan Skerry), and Karoo bounce lands (Izzet
+    // Boilerworks) -- a Karoo SHOULD take a tapland turn; its only issue is play TIMING (it must
+    // be played last so it bounces an already-tapped land), fixed separately.
+    //
+    // COLOUR-COVERAGE gate (field-aware): a tapped land is a fine early play UNLESS playing it
+    // wastes the drop on a colour we don't need while a colour we DO need goes uncovered. The
+    // discriminator is UNCOVERED need = (colours a non-land hand card requires) minus (colours the
+    // lands we already control on the battlefield can make). Two refinements over a naive
+    // colour-need check, both proven on logs/tiebreak_changed:
+    //   * Field-aware: if the field already produces every colour our hand demands, colour is MOOT
+    //     -- fall back to plain tapped-first tempo (== colour-blind). (gi=68: T1 Saprazzan Skerry
+    //     already gives the U that Treasure Hunt needs, so at T2 we must NOT prefer the on-colour
+    //     surveil land over a vanilla tapland just for redundant blue.)
+    //   * Demand from the HAND, coverage from the FIELD only (not other hand lands): an empty field
+    //     leaves the need uncovered, so an off-colour tapland is still correctly demoted. (gi=271:
+    //     T1 field empty, Treasure Hunt needs U, Sandstone Needle makes only R -> demote; play a
+    //     U source instead.) This is the "somewhere in between colour-blind and strict-colour-need"
+    //     rule. MTG_COLOR_BLIND_TIEBREAK restores the old colour-blind rule for A/B.
+    static const bool s_color_blind_tiebreak = std::getenv("MTG_COLOR_BLIND_TIEBREAK") != nullptr;
+    bool needed[6] = { false, false, false, false, false, false };
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand()) { continue; }
+        const ManaCost& mc = d->card.m_mana_cost;   // authoritative cost (hand Card's may be unset)
+        if (mc.white > 0) { needed[static_cast<int>(Color::White)] = true; }
+        if (mc.blue  > 0) { needed[static_cast<int>(Color::Blue)]  = true; }
+        if (mc.black > 0) { needed[static_cast<int>(Color::Black)] = true; }
+        if (mc.red   > 0) { needed[static_cast<int>(Color::Red)]   = true; }
+        if (mc.green > 0) { needed[static_cast<int>(Color::Green)] = true; }
+    }
+    // Colours the lands we already control can make (tapped or not -- a tapped land still covers
+    // its colour on later turns, which is what "do we already have this colour" asks).
+    bool have[6] = { false, false, false, false, false, false };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->card.IsLand()) { continue; }
+        for (Color col : EffectiveProduces(state, state.active_player_index, *d))
+        {
+            have[static_cast<int>(col)] = true;
+        }
+    }
+    bool any_uncovered = false;
+    bool uncovered[6];
+    for (int i = 0; i < 6; ++i)
+    {
+        uncovered[i] = needed[i] && !have[i];
+        if (i != static_cast<int>(Color::Colorless) && uncovered[i]) { any_uncovered = true; }
+    }
+    auto land_good_early_tapped = [&](const std::string& name) -> bool
+    {
+        if (name.empty()) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        if (!d || !d->params.enters_tapped) { return false; }
+        if (d->params.cycling_cost.has_value()) { return false; }   // hold to cycle for a card
+        if (s_color_blind_tiebreak) { return true; }                // legacy colour-blind A/B
+        if (!any_uncovered) { return true; }                        // colour moot -> tempo governs
+        for (Color col : d->params.produces)
+        {
+            if (col != Color::Colorless && uncovered[static_cast<int>(col)]) { return true; }
+        }
+        return false;   // off-colour: wastes the drop while a needed colour stays uncovered
+    };
+    static const bool s_develop_tiebreak = std::getenv("MTG_NO_DEVELOP_TIEBREAK") == nullptr;
+
     // Winning plans first, then by value — matches EnumeratePlans' ordering so the
     // win-this-turn shortcut in SolveWithLookahead still returns the best winning plan.
     // Final tiebreak (only fires on equal wins AND equal value, i.e. true search
@@ -3626,6 +3698,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         {
             if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
             if (a.value != b.value) { return a.value > b.value; }
+            if (s_develop_tiebreak)
+            {
+                const bool a_has = !a.land_to_play.empty();
+                const bool b_has = !b.land_to_play.empty();
+                if (a_has != b_has) { return a_has > b_has; }                    // (1) develop
+                if (a_has && b_has)
+                {
+                    const bool a_tap = land_good_early_tapped(a.land_to_play);
+                    const bool b_tap = land_good_early_tapped(b.land_to_play);
+                    if (a_tap != b_tap) { return a_tap > b_tap; }                // (2) tapped-first
+                }
+            }
             bool a_greedy = (a.land_to_play == greedy_land_name);
             bool b_greedy = (b.land_to_play == greedy_land_name);
             return a_greedy > b_greedy;
