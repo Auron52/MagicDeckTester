@@ -130,6 +130,14 @@ public:
     // label uses exactly the same bottoming + rollout the deck is actually played with.
     int RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns);
 
+    // Analyzer-only: the reference (static-profile) keep decision, exposed so BuildKeepModel can
+    // BOOTSTRAP its policy-simulated mulligan baseline from the current static policy. Routes through
+    // the same KeepHand the runtime uses; with an empty keep_model in the profile (as the rollout
+    // profile is) this is exactly the legacy static keep path -- a blind (outcome-independent)
+    // function of the hand, which is what the unbiased policy simulation requires.
+    bool ReferenceKeep(const std::vector<Card>& hand, int mulligan_count, bool on_the_play) const
+    { return KeepHand(hand, mulligan_count, on_the_play); }
+
 private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;

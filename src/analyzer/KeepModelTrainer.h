@@ -47,7 +47,10 @@ struct KeepModelTrainConfig
 // at); card_scores helps pick key pieces when the profile has no required_pieces. Returns
 // an EMPTY model (so the runtime keeps the legacy path) if there is not enough signal to
 // fit one. All progress + the fitted rules + the accuracy-bar verdict are logged to stderr.
+// When MTG_KEEP_SPLIT=both and out_alt is non-null, the GINI model is returned and the REGRET
+// model is written through out_alt (both fitted from the one shared kv table -- cheap second tree).
 KeepModel BuildKeepModel(const Decklist& deck,
                          const MulliganProfile& base_profile,
                          const std::map<std::string, std::vector<double>>& card_scores,
-                         const KeepModelTrainConfig& cfg);
+                         const KeepModelTrainConfig& cfg,
+                         KeepModel* out_alt = nullptr);

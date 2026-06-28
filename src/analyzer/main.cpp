@@ -110,7 +110,13 @@ int main(int argc, char* argv[])
             cfg.max_turns = max_turns;
             cfg.games     = keep_games ? keep_games : std::max(200, 2000 / scale);
             cfg.seed      = seed;
-            base.keep_model = BuildKeepModel(deck, base, base.card_scores, cfg);
+            // MTG_KEEP_SPLIT=both fits BOTH the gini and regret trees from one (expensive) kv table:
+            // the gini model is returned (standard file) and the regret model comes back via out_alt,
+            // written to a .keepmodel.regret.profile.json side file for a matched A/B.
+            const bool both = []{ const char* e = std::getenv("MTG_KEEP_SPLIT");
+                                  return e && std::string(e) == "both"; }();
+            KeepModel alt;
+            base.keep_model = BuildKeepModel(deck, base, base.card_scores, cfg, both ? &alt : nullptr);
 
             std::filesystem::path out_path =
                 deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.profile.json");
@@ -118,6 +124,18 @@ int main(int argc, char* argv[])
             { std::cerr << "Keep-model profile written to " << out_path.string() << "\n"; }
             else
             { std::cerr << "Warning: could not write " << out_path.string() << "\n"; return 1; }
+
+            if (both && !alt.empty())
+            {
+                MulliganProfile alt_prof = base;
+                alt_prof.keep_model = alt;
+                std::filesystem::path alt_path =
+                    deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.regret.profile.json");
+                if (SaveDeckProfile(alt_path, alt_prof))
+                { std::cerr << "Keep-model (regret) profile written to " << alt_path.string() << "\n"; }
+                else
+                { std::cerr << "Warning: could not write " << alt_path.string() << "\n"; }
+            }
             return 0;
         }
 

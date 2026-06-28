@@ -15,6 +15,7 @@
 #include <map>
 #include <set>
 #include <thread>
+#include <tuple>
 
 namespace
 {
@@ -64,6 +65,7 @@ struct GameData
     bool valid = false;
     int  kv[2][M_CAP + 1];                       // keep value (win turn), [on_play][mulligan_count]
     std::vector<int> feats[2][M_CAP + 1];        // feature vector (size g_nf), [on_play][mull][feature]
+    std::vector<Card> hand;                       // the sampled opening 7 (for bootstrap reference keep)
 };
 
 // One labeled training row.
@@ -211,8 +213,15 @@ double Gini(int keep, int n)
 class TreeBuilder
 {
 public:
-    TreeBuilder(const std::vector<Row>& rows, int max_depth, int min_leaf)
-        : m_rows(rows), m_max_depth(max_depth), m_min_leaf(min_leaf) {}
+    // regret=false: classic Gini over the binary keep label (the default; majority-vote leaves =>
+    // decides on the MEDIAN kv vs thr). regret=true: split + leaf minimize TOTAL expected win-turn
+    // directly, using each row's (kv, thr=V[m+1]) -- a leaf keeps iff mean(kv) <= mean(thr), i.e. it
+    // compares EXPECTED outcomes (distribution-aware: the loss tail counts), which is the exact
+    // optimal-stopping rule and the user's turn-regret objective. The recursive option to mulligan
+    // FURTHER is already baked into thr=V[m+1] (the policy continuation value); the regret leaf only
+    // fixes the mean-vs-median aggregation at the leaf.
+    TreeBuilder(const std::vector<Row>& rows, int max_depth, int min_leaf, bool regret = false)
+        : m_rows(rows), m_max_depth(max_depth), m_min_leaf(min_leaf), m_regret(regret) {}
 
     std::vector<KeepNode> Build(const std::vector<int>& idx)
     {
@@ -225,65 +234,85 @@ private:
     const std::vector<Row>& m_rows;
     int                     m_max_depth;
     int                     m_min_leaf;
+    bool                    m_regret = false;
     std::vector<KeepNode>   m_nodes;
 
     int BuildNode(const std::vector<int>& idx, int depth)
     {
         const int n = static_cast<int>(idx.size());
         int keep = 0;
-        for (int i : idx) { keep += m_rows[i].y; }
+        double skv = 0.0, sthr = 0.0;   // regret mode: sum of kept / mulliganed win-turns over idx
+        for (int i : idx) { keep += m_rows[i].y; skv += m_rows[i].kv; sthr += m_rows[i].thr; }
 
         const int node_idx = static_cast<int>(m_nodes.size());
         m_nodes.push_back(KeepNode{});   // placeholder; patched below
 
-        const double parent_gini = Gini(keep, n);
-        bool make_leaf = depth >= m_max_depth || n <= m_min_leaf || keep == 0 || keep == n;
+        // Parent impurity to beat: Gini of the labels, or (regret) the min achievable expected
+        // win-turn of a single leaf action = min(sum kv, sum thr).
+        const double parent_score = m_regret ? std::min(skv, sthr) : Gini(keep, n);
+        bool make_leaf = depth >= m_max_depth || n <= m_min_leaf
+                      || (!m_regret && (keep == 0 || keep == n));
 
         int    best_feat = -1, best_val = 0;
-        double best_score = parent_gini;   // require a strict improvement to split
+        double best_score = parent_score;   // require a strict improvement to split
 
         if (!make_leaf)
         {
             for (int f = 0; f < g_nf; ++f)
             {
-                // (value, label) pairs for this feature, sorted by value.
-                std::vector<std::pair<int, int>> vv;
+                // (value, kv, thr, label) tuples for this feature, sorted by value.
+                std::vector<std::tuple<int, double, double, int>> vv;
                 vv.reserve(n);
-                for (int i : idx) { vv.emplace_back(m_rows[i].x[f], m_rows[i].y); }
+                for (int i : idx)
+                { vv.emplace_back(m_rows[i].x[f], m_rows[i].kv, m_rows[i].thr, m_rows[i].y); }
                 std::sort(vv.begin(), vv.end(),
-                          [](const auto& a, const auto& b) { return a.first < b.first; });
+                          [](const auto& a, const auto& b) { return std::get<0>(a) < std::get<0>(b); });
 
                 // Sweep thresholds at each distinct value boundary; "<= v" goes left.
                 int yes_keep = 0, yes_n = 0;
+                double yes_kv = 0.0, yes_thr = 0.0;
                 for (int k = 0; k < n; ++k)
                 {
-                    yes_keep += vv[k].second;
+                    yes_keep += std::get<3>(vv[k]);
+                    yes_kv   += std::get<1>(vv[k]);
+                    yes_thr  += std::get<2>(vv[k]);
                     ++yes_n;
                     // evaluate a split only at the last index of a run of equal values
-                    if (k + 1 < n && vv[k + 1].first == vv[k].first) { continue; }
+                    if (k + 1 < n && std::get<0>(vv[k + 1]) == std::get<0>(vv[k])) { continue; }
                     if (yes_n < m_min_leaf || n - yes_n < m_min_leaf) { continue; }
                     if (k + 1 >= n) { continue; }   // no right child (split at max value)
 
-                    const int no_keep = keep - yes_keep;
-                    const int no_n    = n - yes_n;
-                    const double score =
-                        (yes_n * Gini(yes_keep, yes_n) + no_n * Gini(no_keep, no_n)) / n;
-                    // strict-< with feature/value iteration order makes ties deterministic
+                    double score;
+                    if (m_regret)
+                    {
+                        // Total expected win-turn if each side takes its own best leaf action.
+                        score = std::min(yes_kv, yes_thr) + std::min(skv - yes_kv, sthr - yes_thr);
+                    }
+                    else
+                    {
+                        const int no_keep = keep - yes_keep;
+                        const int no_n    = n - yes_n;
+                        score = (yes_n * Gini(yes_keep, yes_n) + no_n * Gini(no_keep, no_n)) / n;
+                    }
+                    // strict-< with feature/value iteration order makes ties deterministic. 1e-12
+                    // keeps the gini path byte-identical to the committed engine; regret-mode score
+                    // deltas are turn-scale sums (>> 1e-12 when nonzero), so the same epsilon only
+                    // rejects exact ties there too.
                     if (score < best_score - 1e-12)
                     {
                         best_score = score;
                         best_feat  = f;
-                        best_val   = vv[k].first;
+                        best_val   = std::get<0>(vv[k]);
                     }
                 }
             }
         }
 
-        if (best_feat < 0)   // leaf: majority label, ties -> keep (conservative)
+        if (best_feat < 0)   // leaf: best single action. ties -> keep (conservative)
         {
             KeepNode& nd = m_nodes[node_idx];
             nd.feat = -1;
-            nd.keep = (keep * 2 >= n) ? 1 : 0;
+            nd.keep = m_regret ? (skv <= sthr ? 1 : 0) : ((keep * 2 >= n) ? 1 : 0);
             return node_idx;
         }
 
@@ -368,7 +397,8 @@ void PrintTree(const KeepModel& model, const std::vector<KeepNode>& nodes, int i
 KeepModel BuildKeepModel(const Decklist& deck,
                          const MulliganProfile& base_profile,
                          const std::map<std::string, std::vector<double>>& card_scores,
-                         const KeepModelTrainConfig& cfg)
+                         const KeepModelTrainConfig& cfg,
+                         KeepModel* out_alt)
 {
     std::cerr << "Building mulligan keep model (" << cfg.games
               << " hands, depth=" << cfg.depth << ")...\n";
@@ -408,6 +438,7 @@ KeepModel BuildKeepModel(const Decklist& deck,
             {
                 data[g].feats[p][m] = ComputeKeepFeatures(hand, m, (p == 1), feat_model);
             }
+            data[g].hand  = hand;   // kept for the bootstrap reference keep policy (policy baseline)
             data[g].valid = true;
             const int d = ++done;
             if (d % prog_step == 0 || d == G)
@@ -513,171 +544,286 @@ KeepModel BuildKeepModel(const Decklist& deck,
               << ", forced-keep anchor at size " << (7 - kv_max)
               << " (reach-prob eps=" << eps << ").\n";
 
-    std::vector<Row> rows;
-    for (int g = 0; g < G; ++g)
+    // ---- 3. fit a tree against a per-(play,depth) BASELINE ---------------------------
+    // Tree split criterion (`regret` arg): regret=true minimises total EXPECTED win-turn directly
+    // (distribution-aware mean(kv)<=V leaves -- the optimal-stopping rule); regret=false uses the
+    // classic Gini majority-vote (median) leaf. Regret pairs naturally with the policy baseline.
+    // fit_nodes builds the labeled rows for a given mulligan baseline[p][m] (= "value of mulliganing
+    // on" at depth m, on-play p), labels y=(kv<=thr), 80/20 splits by game, and picks the shallowest
+    // tree within MARGIN of a deep baseline. Returns the UNCOMPACTED node vector (feat indices into
+    // the full candidate vector, so a fitted tree can be re-evaluated on the cached feats during
+    // policy iteration); compaction happens once at the end. Empty -> too few rows (caller bails).
+    auto fit_nodes = [&](const double (&baseline)[2][M_CAP + 1], const std::string& tag,
+                         bool dump_rows, bool regret) -> std::vector<KeepNode>
     {
-        if (!data[g].valid) { continue; }
-        for (int p = 0; p < 2; ++p)
-        for (int m = 0; m <= label_max; ++m)
+        std::vector<Row> rows;
+        for (int g = 0; g < G; ++g)
         {
-            const int eff = 7 - m;
-            if (eff <= 1) { continue; }   // size 1 is the forced-keep anchor, not a decision
-            Row r;
-            r.x    = data[g].feats[p][m];
-            r.kv   = data[g].kv[p][m];
-            r.thr  = M[p][m + 1];                            // value of mulliganing once more
-            r.y    = (r.kv <= r.thr) ? 1 : 0;
-            r.game = g;
-            rows.push_back(r);
+            if (!data[g].valid) { continue; }
+            for (int p = 0; p < 2; ++p)
+            for (int m = 0; m <= label_max; ++m)
+            {
+                const int eff = 7 - m;
+                if (eff <= 1) { continue; }   // size 1 is the forced-keep anchor, not a decision
+                Row r;
+                r.x    = data[g].feats[p][m];
+                r.kv   = data[g].kv[p][m];
+                r.thr  = baseline[p][m + 1];                 // value of mulliganing once more
+                r.y    = (r.kv <= r.thr) ? 1 : 0;
+                r.game = g;
+                rows.push_back(r);
+            }
         }
-    }
 
-    if (static_cast<int>(rows.size()) < 200)
-    {
-        std::cerr << "  keep-model: too few labeled hands (" << rows.size()
-                  << ") -- keeping the legacy keep path.\n";
-        return KeepModel{};
-    }
-
-    int keep_rows = 0;
-    for (const Row& r : rows) { keep_rows += r.y; }
-    std::cerr << "  keep-model: " << rows.size() << " labeled hands ("
-              << keep_rows << " keep / " << (rows.size() - keep_rows) << " mull).\n";
-
-    // DIAGNOSTIC (MTG_KEEP_DUMP=path): dump every labeled training row so we can inspect what
-    // signal the clairvoyant labels actually carry (e.g. keep-rate / kv vs land_count). Off by
-    // default; env-gated; never committed-on.
-    if (const char* dp = std::getenv("MTG_KEEP_DUMP"); dp && *dp)
-    {
-        std::ofstream out(dp);
-        // Generic over the full feature vector (base + constructed) so the dump never goes stale.
-        for (int k = 0; k < g_nf; ++k) { out << FeatureNameAt(feat_model, k) << ','; }
-        out << "kv,thr,y\n";
-        for (const Row& r : rows)
+        if (static_cast<int>(rows.size()) < 200)
         {
-            for (int k = 0; k < g_nf; ++k) { out << r.x[k] << ','; }
-            out << r.kv << ',' << r.thr << ',' << r.y << '\n';
+            std::cerr << "  keep-model" << tag << ": too few labeled hands (" << rows.size()
+                      << ") -- keeping the legacy keep path.\n";
+            return {};
         }
-        std::cerr << "  keep-model: dumped " << rows.size() << " rows to " << dp << "\n";
-    }
 
-    // ---- 3. fit, then pick the shallowest tree within the accuracy bar ---------------
-    // Deterministic 80/20 train/test split by game index (every row of a game stays together).
-    std::vector<int> train, test;
-    for (int i = 0; i < static_cast<int>(rows.size()); ++i)
+        int keep_rows = 0;
+        for (const Row& r : rows) { keep_rows += r.y; }
+        std::cerr << "  keep-model" << tag << ": " << rows.size() << " labeled hands ("
+                  << keep_rows << " keep / " << (rows.size() - keep_rows) << " mull).\n";
+
+        // DIAGNOSTIC (MTG_KEEP_DUMP=path): dump every labeled training row so we can inspect what
+        // signal the labels actually carry (keep-rate / kv vs features). Off by default; env-gated.
+        if (dump_rows)
+        if (const char* dp = std::getenv("MTG_KEEP_DUMP"); dp && *dp)
+        {
+            std::ofstream out(dp);
+            // Generic over the full feature vector (base + constructed) so the dump never goes stale.
+            for (int k = 0; k < g_nf; ++k) { out << FeatureNameAt(feat_model, k) << ','; }
+            out << "kv,thr,y\n";
+            for (const Row& r : rows)
+            {
+                for (int k = 0; k < g_nf; ++k) { out << r.x[k] << ','; }
+                out << r.kv << ',' << r.thr << ',' << r.y << '\n';
+            }
+            std::cerr << "  keep-model: dumped " << rows.size() << " rows to " << dp << "\n";
+        }
+
+        // Deterministic 80/20 train/test split by game index (every row of a game stays together).
+        std::vector<int> train, test;
+        for (int i = 0; i < static_cast<int>(rows.size()); ++i)
+        {
+            if (rows[i].game % 5 == 0) { test.push_back(i); } else { train.push_back(i); }
+        }
+
+        const int N        = static_cast<int>(rows.size());
+        const int min_leaf = std::max(10, N / 200);
+
+        // Strong (unconstrained) baseline: a deep tree. Its held-out regret is the bar the
+        // interpretable form must approach -- the win-turn cost a far more complex model pays.
+        std::vector<KeepNode> deep = TreeBuilder(rows, 9, std::max(4, N / 1000), regret).Build(train);
+        const double deep_regret = MeanRegret(deep, rows, test);
+
+        // Context: the cost of NOT learning at all (always keep / always mulligan).
+        double always_keep = 0.0, always_mull = 0.0;
+        for (int i : test)
+        {
+            const Row& r = rows[i];
+            const double oracle = std::min(r.kv, r.thr);
+            always_keep += r.kv  - oracle;
+            always_mull += r.thr - oracle;
+        }
+        if (!test.empty()) { always_keep /= test.size(); always_mull /= test.size(); }
+
+        std::cerr << "  keep-model" << tag << " accuracy bar (held-out mean regret, turns):\n"
+                  << "    always-keep=" << always_keep << "  always-mull=" << always_mull
+                  << "  deep-tree=" << deep_regret << "\n";
+
+        // Pick the SHALLOWEST depth whose held-out regret is within MARGIN of the deep baseline
+        // (the readable form may not pay a meaningful win-turn cost). If none qualifies, fall back
+        // to the depth with the LOWEST regret -- accuracy over brevity when they genuinely trade off.
+        // NOTE: the bar is deliberately CONSERVATIVE (prefers shallow). Held-out regret here is
+        // measured on the same sampled-hand split, not on fresh games, so a deeper tree that lowers
+        // in-sample regret can still GENERALISE worse downstream. Bias toward simplicity; let the
+        // richer feature axes earn their splits only when the SAMPLE is large enough to justify them.
+        constexpr double MARGIN = 0.02;   // turns: max regret a readable tree may pay over deep
+        int    chosen_depth  = -1;
+        double chosen_regret = 1e18;
+        int    best_depth    = 3;
+        double best_regret   = 1e18;
+        for (int d = 3; d <= 6; ++d)
+        {
+            std::vector<KeepNode> t = TreeBuilder(rows, d, min_leaf, regret).Build(train);
+            const double rg = MeanRegret(t, rows, test);
+            std::cerr << "    depth=" << d << " -> regret=" << rg
+                      << " (" << t.size() << " nodes)\n";
+            if (rg < best_regret) { best_regret = rg; best_depth = d; }
+            if (chosen_depth < 0 && rg <= deep_regret + MARGIN) { chosen_depth = d; chosen_regret = rg; }
+        }
+        if (chosen_depth < 0) { chosen_depth = best_depth; chosen_regret = best_regret; }
+
+        // Final model: refit the chosen depth on ALL rows (report held-out, ship full-data fit).
+        std::vector<KeepNode> fit =
+            TreeBuilder(rows, chosen_depth, min_leaf, regret).Build([&]{
+                std::vector<int> all(N);
+                for (int i = 0; i < N; ++i) { all[i] = i; }
+                return all;
+            }());
+        std::cerr << "  keep-model" << tag << ": chose depth " << chosen_depth
+                  << " (held-out regret " << chosen_regret << " turns, " << fit.size() << " nodes).\n";
+        return fit;
+    };
+
+    // ---- 3b. baseline selection: legacy optimizer's-curse min vs policy-simulated --------------
+    // Default ("min"): the legacy backward-induction M (computed above) -- M[p][m]=mean_g min(kv,M[m+1]).
+    // Each hand self-selects keep-vs-mull on its OWN single realised game, so M is biased LOW (the
+    // OPTIMIZER'S/WINNER'S CURSE) and the fitted model OVER-MULLIGANS. Opt-in ("policy"): a
+    // POLICY-SIMULATED baseline V[p][m] = expected win-turn of being at depth m and following a FIXED,
+    // OUTCOME-BLIND keep policy pi to the anchor:
+    //     V[p][anchor] = mean_g kv                                   (forced keep at the anchor)
+    //     V[p][m]      = mean_g ( pi(hand_g@m) ? kv[p][m][g] : V[p][m+1] )
+    // pi never sees a hand's realised kv (it is a function of the hand/features only), so a kept hand
+    // contributes its own UNBIASED mean win-turn and a mulliganed hand the common continuation value --
+    // no self-selection on the outcome, so the curse is gone. pi is bootstrapped from the static profile
+    // keep decision and POLICY-ITERATED (refit -> re-simulate V -> refit) toward the fixed point.
+    const std::string baseline_mode = []{ const char* e = std::getenv("MTG_KEEP_BASELINE");
+                                          return std::string(e && *e ? e : "min"); }();
+    const int policy_iters = []{ const char* e = std::getenv("MTG_KEEP_POLICY_ITERS");
+                                 int v = (e && *e) ? std::atoi(e) : 3; return v < 0 ? 0 : v; }();
+
+    // Split criterion selection. "gini" (default) / "regret" / "both" (fit BOTH from the one shared,
+    // expensive kv table: only the cheap CART fit differs, so emitting both costs ~nothing extra).
+    const std::string split_mode = []{ const char* e = std::getenv("MTG_KEEP_SPLIT");
+                                       return std::string(e && *e ? e : "gini"); }();
+
+    // Build ONE model variant (regret or gini split) over the shared kv/baseline. vtag prefixes the
+    // disclosure so the two variants are distinguishable in "both" mode. Returns empty on too-few rows.
+    auto make_model = [&](bool regret, const std::string& vtag) -> KeepModel
     {
-        if (rows[i].game % 5 == 0) { test.push_back(i); } else { train.push_back(i); }
-    }
+        std::vector<KeepNode> final_nodes;
+        if (baseline_mode != "policy")
+        {
+            final_nodes = fit_nodes(M, vtag, /*dump_rows=*/!regret, regret);
+            if (final_nodes.empty()) { return KeepModel{}; }
+        }
+        else
+        {
+            std::cerr << "  keep-model" << vtag << ": POLICY-SIMULATED baseline (bootstrap=static, iters="
+                      << policy_iters << ").\n";
+            AIEngine ref_ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            ref_ai.SetSearchPostCombat(second_main);
 
-    const int N        = static_cast<int>(rows.size());
-    const int min_leaf = std::max(10, N / 200);
+            double V[2][M_CAP + 1] = {{0}};
+            auto simulate_V = [&](auto keep_fn)
+            {
+                for (int p = 0; p < 2; ++p)
+                {
+                    double sum = 0.0; int cnt = 0;
+                    for (int g = 0; g < G; ++g)
+                    { if (data[g].valid) { sum += data[g].kv[p][kv_max]; ++cnt; } }
+                    V[p][kv_max] = cnt ? sum / cnt : static_cast<double>(cfg.max_turns + 1);
+                    for (int m = kv_max - 1; m >= 0; --m)
+                    {
+                        double s2 = 0.0; int c2 = 0;
+                        for (int g = 0; g < G; ++g)
+                        {
+                            if (!data[g].valid) { continue; }
+                            const bool keep = keep_fn(p, m, g);
+                            s2 += keep ? static_cast<double>(data[g].kv[p][m]) : V[p][m + 1];
+                            ++c2;
+                        }
+                        V[p][m] = c2 ? s2 / c2 : V[p][m + 1];
+                    }
+                }
+            };
+            auto nodes_equal = [](const std::vector<KeepNode>& a, const std::vector<KeepNode>& b)
+            {
+                if (a.size() != b.size()) { return false; }
+                for (size_t i = 0; i < a.size(); ++i)
+                {
+                    const KeepNode& x = a[i]; const KeepNode& y = b[i];
+                    if (x.feat != y.feat || x.op != y.op || x.val != y.val
+                     || x.yes  != y.yes  || x.no  != y.no  || x.keep != y.keep) { return false; }
+                }
+                return true;
+            };
 
-    // Strong (unconstrained) baseline: a deep tree. Its held-out regret is the bar the
-    // interpretable form must approach -- the win-turn cost a far more complex model pays.
-    std::vector<KeepNode> deep = TreeBuilder(rows, 9, std::max(4, N / 1000)).Build(train);
-    const double deep_regret = MeanRegret(deep, rows, test);
+            // Iteration 0: bootstrap pi from the static profile keep decision (outcome-blind).
+            simulate_V([&](int p, int m, int g)
+                       { return ref_ai.ReferenceKeep(data[g].hand, m, (p == 1)); });
+            final_nodes = fit_nodes(V, vtag + " [it0]", /*dump_rows=*/!regret && policy_iters == 0, regret);
+            if (final_nodes.empty()) { return KeepModel{}; }
 
-    // Context: the cost of NOT learning at all (always keep / always mulligan).
-    double always_keep = 0.0, always_mull = 0.0;
-    for (int i : test)
-    {
-        const Row& r = rows[i];
-        const double oracle = std::min(r.kv, r.thr);
-        always_keep += r.kv  - oracle;
-        always_mull += r.thr - oracle;
-    }
-    if (!test.empty()) { always_keep /= test.size(); always_mull /= test.size(); }
+            // Policy iteration: pi <- fitted tree, re-simulate V, refit. Converges to the fixed point.
+            for (int it = 1; it <= policy_iters; ++it)
+            {
+                KeepModel pi;
+                pi.nodes          = final_nodes;   // UNCOMPACTED -> indices align with the full vector
+                pi.key_pieces     = feat_model.key_pieces;
+                pi.deck_colors    = feat_model.deck_colors;
+                pi.extra_features = feat_model.extra_features;
+                simulate_V([&](int p, int m, int g) { return pi.Keep(data[g].feats[p][m]); });
 
-    std::cerr << "  keep-model accuracy bar (held-out mean regret, turns):\n"
-              << "    always-keep=" << always_keep << "  always-mull=" << always_mull
-              << "  deep-tree=" << deep_regret << "\n";
+                const std::string tag = vtag + " [it" + std::to_string(it) + "]";
+                std::vector<KeepNode> next = fit_nodes(V, tag, /*dump_rows=*/!regret && it == policy_iters, regret);
+                if (next.empty()) { break; }
+                const bool same = nodes_equal(next, final_nodes);
+                final_nodes = next;
+                if (same) { std::cerr << "  keep-model" << vtag << ": policy converged at iter " << it << ".\n"; break; }
+            }
+        }
 
-    // Pick the SHALLOWEST depth whose held-out regret is within MARGIN of the deep baseline
-    // (the readable form may not pay a meaningful win-turn cost). If none qualifies, fall back
-    // to the depth with the LOWEST regret -- accuracy over brevity when they genuinely trade off.
-    // NOTE: the bar is deliberately CONSERVATIVE (prefers shallow). Held-out regret here is measured
-    // on the same sampled-hand split, not on fresh games, so a deeper tree that lowers in-sample
-    // regret can still GENERALISE worse downstream (observed: a 25-node antilife fit on a small
-    // sample was net-negative in the d0 A/B vs a shallower tree). Bias toward simplicity; let the
-    // richer feature axes earn their splits only when the SAMPLE is large enough to justify them.
-    constexpr double MARGIN = 0.02;   // turns: max regret a readable tree may pay over deep
-    int    chosen_depth  = -1;
-    double chosen_regret = 1e18;
-    int    best_depth    = 3;
-    double best_regret   = 1e18;
-    for (int d = 3; d <= 6; ++d)
-    {
-        std::vector<KeepNode> t = TreeBuilder(rows, d, min_leaf).Build(train);
-        const double rg = MeanRegret(t, rows, test);
-        std::cerr << "    depth=" << d << " -> regret=" << rg
-                  << " (" << t.size() << " nodes)\n";
-        if (rg < best_regret) { best_regret = rg; best_depth = d; }
-        if (chosen_depth < 0 && rg <= deep_regret + MARGIN) { chosen_depth = d; chosen_regret = rg; }
-    }
-    if (chosen_depth < 0) { chosen_depth = best_depth; chosen_regret = best_regret; }
+        // Keep ONLY the constructed extra specs the final tree splits on, remapping node feat indices to
+        // the compacted [base ++ kept-extras] layout (composite operands reference BASE indices, stable
+        // under compaction). The "surfaced levers" set; the rest of the candidate basis went unused.
+        std::vector<int> used_extra;
+        for (const KeepNode& nd : final_nodes) { if (nd.feat >= BASE_FN) { used_extra.push_back(nd.feat); } }
+        std::sort(used_extra.begin(), used_extra.end());
+        used_extra.erase(std::unique(used_extra.begin(), used_extra.end()), used_extra.end());
 
-    // Final model: refit the chosen depth on ALL rows (report held-out, ship full-data fit).
-    std::vector<KeepNode> final_nodes =
-        TreeBuilder(rows, chosen_depth, min_leaf).Build([&]{
-            std::vector<int> all(N);
-            for (int i = 0; i < N; ++i) { all[i] = i; }
-            return all;
-        }());
+        std::vector<FeatureSpec> kept;
+        std::map<int, int> remap;
+        for (int oldidx : used_extra)
+        {
+            remap[oldidx] = BASE_FN + static_cast<int>(kept.size());
+            kept.push_back(feat_model.extra_features[oldidx - BASE_FN]);
+        }
+        for (KeepNode& nd : final_nodes)
+        { if (nd.feat >= BASE_FN) { nd.feat = remap[nd.feat]; } }
 
-    // Keep ONLY the constructed extra specs the final tree actually splits on, and remap the node
-    // feat indices to the compacted [base ++ kept-extras] layout. The serialized model then carries a
-    // minimal, self-consistent feature set (composite operands reference BASE indices, which are
-    // unchanged by compaction). This is the "surfaced levers" set -- the rest of the rich candidate
-    // basis was available but the data didn't justify it.
-    std::vector<int> used_extra;
-    for (const KeepNode& nd : final_nodes) { if (nd.feat >= BASE_FN) { used_extra.push_back(nd.feat); } }
-    std::sort(used_extra.begin(), used_extra.end());
-    used_extra.erase(std::unique(used_extra.begin(), used_extra.end()), used_extra.end());
+        KeepModel model;
+        model.nodes          = final_nodes;
+        model.key_pieces     = feat_model.key_pieces;
+        model.deck_colors    = feat_model.deck_colors;
+        model.extra_features = kept;
 
-    std::vector<FeatureSpec> kept;
-    std::map<int, int> remap;
-    for (int oldidx : used_extra)
-    {
-        remap[oldidx] = BASE_FN + static_cast<int>(kept.size());
-        kept.push_back(feat_model.extra_features[oldidx - BASE_FN]);
-    }
-    for (KeepNode& nd : final_nodes)
-    { if (nd.feat >= BASE_FN) { nd.feat = remap[nd.feat]; } }
+        std::cerr << "  keep-model" << vtag << ": final tree (" << model.nodes.size()
+                  << " nodes, " << (regret ? "regret" : "gini") << " split). Rules:\n";
+        PrintTree(model, final_nodes, 0, 2);
 
-    KeepModel model;
-    model.nodes          = final_nodes;
-    model.key_pieces     = feat_model.key_pieces;
-    model.deck_colors    = feat_model.deck_colors;
-    model.extra_features = kept;
-
-    std::cerr << "  keep-model: chose depth " << chosen_depth
-              << " (held-out regret " << chosen_regret << " turns, "
-              << final_nodes.size() << " nodes). Rules:\n";
-    PrintTree(model, final_nodes, 0, 2);
-
-    // Surfaced levers: which features the fitted tree actually splits on (across the FULL basis).
-    {
         std::map<int, int> splits;
         for (const KeepNode& nd : final_nodes) { if (nd.feat >= 0) { ++splits[nd.feat]; } }
-        std::cerr << "  keep-model features used:";
+        std::cerr << "  keep-model" << vtag << " features used:";
         if (splits.empty()) { std::cerr << " (none -- constant policy)"; }
         for (const auto& kv : splits)
         { std::cerr << " " << FeatureNameAt(model, kv.first) << "x" << kv.second; }
         std::cerr << "\n";
         if (!kept.empty())
         {
-            std::cerr << "  keep-model constructed features kept:";
+            std::cerr << "  keep-model" << vtag << " constructed features kept:";
             for (const FeatureSpec& s : kept) { std::cerr << " [" << s.name << "]"; }
             std::cerr << "\n";
         }
-    }
+        return model;
+    };
+
+    // "both": primary = gini (the standard <deck>.keepmodel.profile.json), out_alt = regret (side file).
+    // "regret": primary = regret. default/"gini": primary = gini. The kv table is computed once above.
+    const bool want_both = (split_mode == "both");
+    KeepModel primary = make_model(/*regret=*/split_mode == "regret", want_both ? " (gini)" : "");
+    if (want_both && out_alt) { *out_alt = make_model(/*regret=*/true, " (regret)"); }
 
     std::cerr << "  keep-model key_pieces:";
-    if (model.key_pieces.empty()) { std::cerr << " (none)"; }
-    for (const std::string& s : model.key_pieces) { std::cerr << " [" << s << "]"; }
+    if (primary.key_pieces.empty()) { std::cerr << " (none)"; }
+    for (const std::string& s : primary.key_pieces) { std::cerr << " [" << s << "]"; }
     std::cerr << "\n  keep-model deck_colors:";
-    for (Color c : model.deck_colors) { std::cerr << " " << ColorToChar(c); }
+    for (Color c : primary.deck_colors) { std::cerr << " " << ColorToChar(c); }
     std::cerr << "\n";
 
-    return model;
+    return primary;
 }
