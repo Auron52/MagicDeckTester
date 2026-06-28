@@ -640,7 +640,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         if (def.params.alt_lifegain_cost > 0
             && ControlsSubtype(state, state.active_player_index, def.params.alt_cost_requires_subtype))
         {
-            if (ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def))
+            // Default (pruned): only the RISKY alt is a search choice; the SAFE ones are auto-fired
+            // below (byte-identical). UNPRUNED opens the safe alt to the search too -- firing a free
+            // payload is NOT always correct (e.g. Invigorate with no attacker just feeds the
+            // opponent life), so the search-primary A/B (and human play) must be able to weigh
+            // not-firing it. When opened here, the auto-fire pass is suppressed (gated on the same
+            // DecisionUnpruned), so the choice is made exactly once, by the search/human.
+            if (ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def)
+                || DecisionUnpruned())
             {
                 constexpr int DMG = 100;
                 Action a;
@@ -1628,6 +1635,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     std::string karoo_land_name;
     std::string karoo_fetch;
 
+    // Human-play mode (tools/play GUI): execute EXACTLY the committed plan -- suppress every
+    // auto-heuristic that would play cards the human didn't choose (draw-breakpoint re-solve,
+    // auto-dig, auto Land's Edge). After a draw the AIEngine chooser re-fires so the human
+    // re-decides with the revealed cards. Set ONLY under --claude-play, so normal search /
+    // goldfish runs are byte-identical (the flag is never set there). Function-local static so
+    // it reads the env AFTER main's setenv (file-scope statics init too early).
+    static const bool s_human_play = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+
     // Land drop first, so the land's mana is available to the spells that follow.
     // A searched plan (land_decided) plays exactly its chosen land ("" == a deliberate
     // defer); an unsearched plan (depth-0 static Solve) falls back to greedy land play.
@@ -2032,7 +2047,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // the executor's post-loop replay (see deferred_cantrip_resolve). Everything
             // else (EI/staging, or a cantrip already inside a re-solve) re-solves inline.
             const bool plain_cantrip = !is_ei && !def.params.stages_cards;
-            if (s_defer_cantrip && plain_cantrip && sink_stack.empty())
+            if (s_human_play)
+            {
+                // Human play: the cantrip drew; STOP here. The chooser re-fires so the human
+                // re-decides with the drawn card (no auto re-solve, no auto land play).
+            }
+            else if (s_defer_cantrip && plain_cantrip && sink_stack.empty())
             {
                 deferred_cantrip_resolve = true;
             }
@@ -2061,11 +2081,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // B) plays a drawn Reliquary Tower as the open land drop so a flooded draw is KEPT
             // for Land's Edge rather than discarded at cleanup; other revealed lands remain
             // Land's Edge ammo (no land played). See play_drawn_flood_keep_land.
-            if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
-            play_drawn_flood_keep_land(my_bp_sink);
-            TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-            apply_plan_actions(extra.actions, false);
-            if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+            if (!s_human_play)
+            {
+                if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                play_drawn_flood_keep_land(my_bp_sink);
+                TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+                apply_plan_actions(extra.actions, false);
+                if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+            }
+            // Human play: Treasure Hunt's reveal is now in hand; the chooser re-fires so the
+            // human plays a land / Land's Edge / another Treasure Hunt with the revealed cards.
         }
         else if (def.params.cascade_max_mv > 0)
         {
@@ -2302,12 +2327,54 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
         }
 
+        // Discard-to-Land's-Edge activations the human/search committed as an explicit plan
+        // action (Kind::DiscardToLandsEdge). In autonomous play Land's Edge is auto-fired by the
+        // post-cast heuristic loop below (suppressed under s_human_play); here we apply the
+        // EXACT count the committed plan carries -- discard `discard_lands` lands from hand and
+        // deal `rate` per land, where rate is the best discard_land_damage among controlled
+        // permanents. Fired after all casts (it is a post-stack main-phase activation), in plan
+        // order; a count > lands-in-hand simply fires every land present.
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::DiscardToLandsEdge || a.discard_lands <= 0) { continue; }
+            int le_rate = 0;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                auto le_def = CardDatabase::Instance().LookupCached(p.card);
+                if (le_def && le_def->params.discard_land_damage > 0)
+                { le_rate = std::max(le_rate, le_def->params.discard_land_damage); }
+            }
+            if (le_rate <= 0) { continue; }   // no Land's Edge in play -> nothing to fire
+            Player& le_ap = state.ActivePlayer();
+            std::vector<Card> keep;
+            int fired = 0;
+            for (Card& c : le_ap.hand)
+            {
+                auto cdef    = CardDatabase::Instance().LookupCached(c);
+                bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+                if (is_land && fired < a.discard_lands)
+                {
+                    le_ap.graveyard.push_back(c);
+                    state.players[opp_idx].life -= le_rate;
+                    state.opponent_lost_life_this_turn = true;
+                    ++fired;
+                }
+                else { keep.push_back(std::move(c)); }
+            }
+            le_ap.hand = std::move(keep);
+        }
+
         // Auto-fire safe alt payloads (Invigorate / Skyshroud) once everything else has
         // resolved and a Remedy is live -> each is free face damage. Deterministic (not a
         // search choice), so no enumeration blow-up; re-scan after each because firing one
         // mutates the hand (and can add a verse trigger). No-op for decks without alt cards.
         // Hard termination guard: each pass must REMOVE the chosen card from hand; if a cast
         // does not (a fizzled/uncastable alt), stop -- never spin on the same card.
+        // SUPPRESSED under UNPRUNED: there the safe alt is enumerated as a real cast choice
+        // (CollectActions), so the search/human decides whether to fire it -- auto-firing it
+        // here too would double-cast it AND override that decision.
+        if (!DecisionUnpruned())
         for (;;)
         {
             Player& ap2 = state.ActivePlayer();
@@ -2364,7 +2431,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // a dig source enter the loop, so burn/slivers stay byte-identical. ShouldConsiderDig
     // encodes when NOT to dig (a draw engine already in hand, a retrace engine in the
     // graveyard, fewer than two lands, or Land's Edge already lethal from the hand).
-    if (is_pre_combat && ResolveProvider(state).HasAnyDigSource(state))
+    if (!s_human_play && is_pre_combat && ResolveProvider(state).HasAnyDigSource(state))
     {
         int dig_guard = 0;
         while (dig_guard++ < 16 && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
@@ -2443,7 +2510,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
 
     // Activate Land's Edge after all spells resolve (mirrors GameEngine::MainPhase's
-    // post-stack ActivateLandsEdge call).
+    // post-stack ActivateLandsEdge call). Human play: SUPPRESSED -- the human decides whether to
+    // discard lands to Land's Edge (else the engine would auto-burn the lands they just drew).
+    if (!s_human_play)
     {
         int rate = 0;
         for (const Permanent& p : state.battlefield)
@@ -3612,6 +3681,63 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         add_for_land(ln, "");   // ordinary land, or fetchland with <=1 candidate (heuristic)
     }
     add_for_land("", "");   // defer: play no land this turn
+
+    // Land's Edge activation as a PICKABLE plan action (human play only). Autonomous search
+    // auto-fires Land's Edge in ApplyPlanDirect's post-cast heuristic loop (suppressed under
+    // s_human_play), so the human had no way to fire it -- a Land's-Edge deck (treasure_hunt)
+    // could be cast but never won in the play GUI. Here, when the active player ALREADY controls
+    // a Land's Edge and holds lands, we fan out a DiscardToLandsEdge(N) variant of every base
+    // plan for N = 1..min(lands-after-this-plan's-drop, lethal). Deterministic, so the plan
+    // indices stay stable across CheckLine validation and the --choices stateless replay.
+    // Bounded at `lethal` because firing past lethal only pings a dead opponent (the over-fire
+    // class). v1 offers this only with an in-play Land's Edge -- cast-and-fire same turn is
+    // deferred. Gated entirely on human play, so autonomous goldfish enumeration is unchanged.
+    static const bool s_human_play_enum = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    if (s_human_play_enum)
+    {
+        int le_rate = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.discard_land_damage > 0)
+            { le_rate = std::max(le_rate, d->params.discard_land_damage); }
+        }
+        int lands_in_hand = 0;
+        std::string le_name = "Land's Edge";
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d ? d->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
+        }
+        if (le_rate > 0 && lands_in_hand > 0)
+        {
+            const int opp_life = state.players[1 - state.active_player_index].life;
+            const int lethal_lands = (opp_life > 0) ? (opp_life + le_rate - 1) / le_rate : 0;
+            // Snapshot the base plans now; appending while iterating would re-fan the variants.
+            const size_t base_count = all.size();
+            for (size_t i = 0; i < base_count; ++i)
+            {
+                // Lands left in hand after this plan takes its land drop (a played land leaves
+                // hand; a fetchland still leaves hand, fetching to the battlefield).
+                const bool plays_land = !all[i].land_to_play.empty();
+                const int  avail = lands_in_hand - (plays_land ? 1 : 0);
+                const int  maxN  = std::min(avail, std::max(0, lethal_lands));
+                for (int n = 1; n <= maxN; ++n)
+                {
+                    TurnSolver::Plan v = all[i];
+                    Action le;
+                    le.kind          = Action::Kind::DiscardToLandsEdge;
+                    le.card_name     = le_name;
+                    le.discard_lands = n;
+                    v.actions.push_back(std::move(le));
+                    v.value          = all[i].value + n * le_rate;
+                    v.wins_this_turn = all[i].wins_this_turn || (opp_life - n * le_rate <= 0);
+                    all.push_back(std::move(v));
+                }
+            }
+        }
+    }
 
     // A tapped land that is a fine early play (a dual/tri/scry/surveil/depletion/Karoo tap
     // land played on a turn you don't need its mana) vs one you'd rather NOT play as a normal
@@ -4793,6 +4919,249 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                                                              bool is_pre_combat)
 {
     return EnumeratePlansWithLand(state, is_pre_combat);
+}
+
+// One-line "land=...; cast: a, b" summary of a plan (for the human-play accept verdict).
+static std::string LineSummaryOfPlan(const TurnSolver::Plan& p)
+{
+    std::string s;
+    if (p.land_decided && !p.land_to_play.empty()) { s += "land=" + p.land_to_play + "; "; }
+    int le_count = 0;
+    std::vector<std::string> cast_names;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::DiscardToLandsEdge) { le_count += a.discard_lands; }
+        else { cast_names.push_back(a.card_name); }
+    }
+    s += "cast: ";
+    if (cast_names.empty()) { s += "(nothing)"; }
+    else
+    {
+        for (size_t i = 0; i < cast_names.size(); ++i) { if (i) s += ", "; s += cast_names[i]; }
+    }
+    if (le_count > 0) { s += "; Land's Edge x" + std::to_string(le_count); }
+    return s;
+}
+
+// Deduct a KNOWN-PAYABLE cost from an accounting pool (caller checks CanPay first).
+// Mirrors ManaPool::CanPay's allocation: colour pips from their own colour then wild;
+// generic from leftover specific mana (any colour / {C}) then wild.
+static void DeductPayable(ManaPool& p, const ManaCost& cost)
+{
+    auto pay = [&](int need, int& specific)
+    {
+        int u = std::min(need, specific); specific -= u; need -= u;
+        int w = std::min(need, p.wild);   p.wild   -= w; need -= w;
+    };
+    pay(cost.white, p.white); pay(cost.blue, p.blue); pay(cost.black, p.black);
+    pay(cost.red,   p.red);   pay(cost.green, p.green); pay(cost.colorless, p.colorless);
+    int g = cost.generic;
+    for (int* src : { &p.colorless, &p.white, &p.blue, &p.black, &p.red, &p.green })
+    { int u = std::min(g, *src); *src -= u; g -= u; }
+    int w = std::min(g, p.wild); p.wild -= w; g -= w;
+}
+
+TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_combat,
+                                            const LineSpec& spec)
+{
+    using V = LineCheck::Verdict;
+    LineCheck out;
+
+    // --- 0) Pass / cast-nothing maps to the engine's "idx < 0" pass ------------
+    // A line that only activates Land's Edge (no land, no casts) is NOT a pass.
+    if (spec.pass || (!spec.has_land && spec.casts.empty() && spec.lands_edge == 0))
+    {
+        out.verdict = V::Accept; out.plan_index = -1;
+        out.matched_summary = "pass / cast nothing";
+        return out;
+    }
+
+    const std::string wantLand = spec.has_land ? spec.land : std::string();
+    std::vector<std::string> sortedCasts = spec.casts;
+    std::sort(sortedCasts.begin(), sortedCasts.end());
+
+    // --- 1) Does the line match a plan (or several variants) the model would play? ----
+    // A "match" is same land + same multiset of cast card names. Several enumerated plans can
+    // match while differing in a per-spell sub-decision (tutor target / X / Ponder keep /
+    // Soulfire count) -- in human-play mode (MTG_UNPRUNED) the search enumerates them all, so we
+    // surface the distinct ones for the human to pick among. Pure cast-ORDER duplicates (same
+    // sub-decisions, different order) collapse to one representative by their param signature.
+    std::vector<Plan> plans = EnumerateMainPlans(state, is_pre_combat);
+
+    // Collect every plan matching land + cast-name MULTISET, recording each plan's cast order and
+    // a sub-decision signature/label (tutor target / X / Ponder keep / Soulfire count / fetch
+    // target). The land + the plan index come along so we can both honour the player's ORDER and
+    // surface genuine sub-decision choices.
+    struct Cand { int idx; std::vector<std::string> order; std::string sig, label;
+                  std::vector<std::string> cards; };
+    std::vector<Cand> cands;
+    for (size_t i = 0; i < plans.size(); ++i)
+    {
+        const Plan& p = plans[i];
+        const std::string planLand = p.land_decided ? p.land_to_play : std::string();
+        if (planLand != wantLand) { continue; }
+        // Land's Edge activations are matched by COUNT against spec.lands_edge, not folded into
+        // the cast-name multiset (their card_name is "Land's Edge" but the human commits them via
+        // the separate landsedge= verb, not as a cast).
+        int planLE = 0;
+        std::vector<std::string> orderNames;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
+            orderNames.push_back(a.card_name);
+        }
+        if (planLE != spec.lands_edge) { continue; }
+        std::vector<std::string> sortedNames = orderNames;
+        std::sort(sortedNames.begin(), sortedNames.end());
+        if (sortedNames != sortedCasts) { continue; }
+
+        // Per-decision tokens, order-INDEPENDENT (sorted) so plans differing only in cast order
+        // share a signature; a real sub-decision difference (target / X / keep / fetch) splits it.
+        std::vector<std::string> toks, artCards;
+        for (const Action& a : p.actions)
+        {
+            if (!a.tutor_target.empty())   { toks.push_back(a.card_name + " \xE2\x86\x92 " + a.tutor_target); artCards.push_back(a.tutor_target); }
+            if (a.chosen_x > 0)            { toks.push_back(a.card_name + " X=" + std::to_string(a.chosen_x)); artCards.push_back(a.card_name); }
+            if (a.ponder_keep >= 0)        { toks.push_back(a.card_name + (a.ponder_keep ? ": keep top" : ": shuffle")); artCards.push_back(a.card_name); }
+            if (a.soulfire_own_targets > 0){ toks.push_back(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own"); artCards.push_back(a.card_name); }
+        }
+        // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
+        if (!p.fetch_target.empty()) { toks.push_back(p.land_to_play + " fetches " + p.fetch_target); artCards.push_back(p.fetch_target); }
+        std::sort(toks.begin(), toks.end());
+        std::string sig, label;
+        for (size_t t = 0; t < toks.size(); ++t) { sig += "|" + toks[t]; label += (t?"; ":"") + toks[t]; }
+        if (label.empty()) { label = LineSummaryOfPlan(p); }
+        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards });
+    }
+
+    // Honour the player's ORDER: prefer candidates whose cast sequence equals the queued order, so
+    // the executed plan (a searched_order variant) plays in that order. If none matches exactly
+    // (the only enumerated plan is an end-state-equivalent ordering), fall back to all candidates
+    // -- the result is identical, only the displayed order may differ.
+    std::vector<const Cand*> pool;
+    for (const Cand& c : cands) { if (c.order == spec.casts) { pool.push_back(&c); } }
+    if (pool.empty()) { for (const Cand& c : cands) { pool.push_back(&c); } }
+
+    std::vector<std::string> seenSig;
+    for (const Cand* c : pool)
+    {
+        if (std::find(seenSig.begin(), seenSig.end(), c->sig) != seenSig.end()) { continue; }
+        seenSig.push_back(c->sig);
+        out.variants.push_back({ c->idx, c->label, c->cards });
+    }
+    if (out.variants.size() == 1)
+    {
+        out.verdict = V::Accept; out.plan_index = out.variants[0].plan_index;
+        out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index]);
+        return out;
+    }
+    if (out.variants.size() > 1)
+    {
+        out.verdict = V::Choose;
+        out.reason = "this line resolves several ways -- pick the sub-decisions";
+        return out;
+    }
+
+    // --- 2) Not enumerated: is it rules-legal (modelling same-turn ramp)? ------
+    GameState s = state;   // work on a copy; CheckLine must not mutate the real game
+
+    if (spec.has_land)
+    {
+        if (!PlayLandByName(s, spec.land))
+        {
+            out.verdict = V::Illegal;
+            out.failed_action = "land=" + spec.land;
+            out.reason = "can't play land '" + spec.land +
+                         "' (land drop unavailable, or it is not a land in hand)";
+            return out;
+        }
+    }
+
+    // Resolve each named cast to a card definition; bail to Unsupported for the action
+    // kinds this v1 check cannot honestly validate (X spells, alt-cost, tutors).
+    struct PendingCast { std::string name; const CardDefinition* def; ManaCost cost; bool rock; };
+    std::vector<PendingCast> pending;
+    for (const std::string& name : spec.casts)
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+        if (!def)
+        {
+            out.verdict = V::Illegal; out.failed_action = "cast=" + name;
+            out.reason = "unknown card '" + name + "'";
+            return out;
+        }
+        const ManaCost& mc = def->card.m_mana_cost;
+        if (mc.has_x || def->params.alt_lifegain_cost > 0 ||
+            def->params.tutor_to_hand || def->params.tutor_to_top)
+        {
+            out.verdict = V::Unsupported; out.failed_action = "cast=" + name;
+            out.reason = "'" + name + "' uses an action kind (X / alt-cost / tutor) the v1 "
+                         "line check cannot validate yet";
+            return out;
+        }
+        pending.push_back({ name, def, mc, def->params.mana_rock && !def->card.IsCreature() });
+    }
+
+    // Each named card must actually be in hand (multiset-correct for duplicates).
+    {
+        std::vector<std::string> handNames;
+        for (const Card& c : s.ActivePlayer().hand) { handNames.push_back(c.m_name); }
+        for (const PendingCast& pc : pending)
+        {
+            auto it = std::find(handNames.begin(), handNames.end(), pc.name);
+            if (it == handNames.end())
+            {
+                out.verdict = V::Illegal; out.failed_action = "cast=" + pc.name;
+                out.reason = "'" + pc.name + "' is not in hand (already cast, or never there)";
+                return out;
+            }
+            handNames.erase(it);
+        }
+    }
+
+    // Greedy affordability fixpoint: repeatedly cast any affordable not-yet-cast spell,
+    // mana producers FIRST so a freshly-cast rock's mana is online for the rest of the
+    // line (the same-turn ramp the enumerator's BuildPool does not credit). Order-
+    // independent, so it doesn't penalise the human's click order.
+    ManaPool avail = BuildPool(s);
+    std::vector<bool> done(pending.size(), false);
+    size_t remaining = pending.size();
+    bool progress = true;
+    while (remaining > 0 && progress)
+    {
+        progress = false;
+        for (int phase = 0; phase < 2 && !progress; ++phase)
+        {
+            const bool want_rock = (phase == 0);
+            for (size_t k = 0; k < pending.size(); ++k)
+            {
+                if (done[k] || pending[k].rock != want_rock) { continue; }
+                if (!avail.CanPay(pending[k].cost)) { continue; }
+                DeductPayable(avail, pending[k].cost);
+                if (pending[k].rock) { AddSourceToPool(avail, s, *pending[k].def); }
+                done[k] = true; --remaining; progress = true; break;
+            }
+        }
+    }
+
+    if (remaining == 0)
+    {
+        out.verdict = V::LegalNotEnumerated;
+        out.reason  = "rules-legal (an affordability simulation can execute it), but the "
+                      "search never enumerated this line";
+        return out;
+    }
+    for (size_t k = 0; k < pending.size(); ++k)
+    {
+        if (!done[k])
+        {
+            out.verdict = V::Illegal; out.failed_action = "cast=" + pending[k].name;
+            out.reason  = "can't pay " + pending[k].cost.ToString() + " for '" +
+                          pending[k].name + "' with the mana available this phase";
+            break;
+        }
+    }
+    return out;
 }
 
 void TurnSolver::ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat)

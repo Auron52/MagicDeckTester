@@ -79,15 +79,57 @@ static void JsonNameArray(std::ostream& os, const std::vector<std::string>& name
     os << ']';
 }
 
-static std::vector<std::string> BattlefieldNames(const GameState& s, int controller)
+// Battlefield as {name, is_land} objects so the GUI classifies lands by the REAL card type
+// (Permanent::card.IsLand) instead of a fragile name regex (e.g. Blood Crypt is a land but
+// matches no obvious land suffix). Sorted by name for a stable render.
+static void JsonBattlefield(std::ostream& os, const GameState& s, int controller)
 {
-    std::vector<std::string> names;
+    struct Row { std::string name; bool is_land; bool is_le; };
+    std::vector<Row> rows;
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index == controller) { names.push_back(p.card.m_name); }
+        if (p.controller_index != controller) { continue; }
+        // is_le: this permanent is a "discard a land: deal N" outlet (Land's Edge) -> the GUI
+        // makes it the clickable SOURCE for the discard-to-Land's-Edge activation.
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        bool is_le = d && d->params.discard_land_damage > 0;
+        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le });
     }
-    std::sort(names.begin(), names.end());
-    return names;
+    std::sort(rows.begin(), rows.end(),
+              [](const Row& a, const Row& b){ return a.name < b.name; });
+    os << '[';
+    for (size_t i = 0; i < rows.size(); ++i)
+    {
+        if (i) { os << ", "; }
+        os << "{ \"name\": "; JsonStr(os, rows[i].name);
+        os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
+        if (rows[i].is_le) { os << ", \"is_le\": true"; }
+        os << " }";
+    }
+    os << ']';
+}
+
+// Card category for the play palette / on-field plan rendering. NB "spell" is avoided on purpose:
+// in MTG every non-land cast is a spell, so it's ambiguous. The useful split for the board is
+// where the card ends up -- a land plays as the land drop; an instant/sorcery is NON-PERMANENT
+// (won't stay on the battlefield, shown set apart); everything else casts into a permanent.
+static const char* HandKind(const CardDefinition* d)
+{
+    if (!d) { return "permanent"; }
+    if (d->card.IsLand()) { return "land"; }
+    if (d->card.IsInstant() || d->card.IsSorcery()) { return "nonpermanent"; }
+    return "permanent";
+}
+
+// A draw-engine card (Treasure Hunt, Ponder, ...) -- casting it draws, which triggers a
+// human-play breakpoint (the chooser re-fires so you re-decide with the revealed cards). The
+// GUI flags these so you know to commit them WITHOUT a land if you want to play a revealed one.
+static bool HandIsDraw(const CardDefinition* d)
+{
+    if (!d) { return false; }
+    return d->tmpl == CardTemplate::DrawSpell
+        || d->tmpl == CardTemplate::DrawX
+        || d->tmpl == CardTemplate::DrawUntilNonland;
 }
 
 // One-line human-readable summary of a candidate plan (land drop + casts).
@@ -144,7 +186,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     os << "  \"phase\": \"" << (is_pre_combat ? "pre_main" : "post_main") << "\",\n";
     os << "  \"on_the_play\": " << (s.on_the_play ? "true" : "false") << ",\n";
     os << "  \"me\": { \"life\": " << me.life << ", \"battlefield\": ";
-    JsonNameArray(os, BattlefieldNames(s, s.active_player_index));
+    JsonBattlefield(os, s, s.active_player_index);
     // Aether Vial charge counters (a Vial deploys a creature whose MV EQUALS its
     // counters) — exposed so the player needn't guess the Vial's state.
     {
@@ -168,7 +210,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         const CardDefinition* d = CardDatabase::Instance().Lookup(hand[i]);
         os << "{ \"name\": "; JsonStr(os, hand[i]);
         os << ", \"cost\": "; JsonStr(os, d ? d->card.m_mana_cost.ToString() : std::string());
-        os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0) << " }";
+        os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0);
+        os << ", \"kind\": \"" << HandKind(d) << "\"";
+        if (HandIsDraw(d)) { os << ", \"is_draw\": true"; }
+        os << " }";
     }
     os << "]";
     os << ", \"graveyard\": "; JsonNameArray(os, gy);
@@ -186,13 +231,75 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     }
     os << " },\n";
     os << "  \"opponent\": { \"life\": " << s.players[opp].life << ", \"battlefield\": ";
-    JsonNameArray(os, BattlefieldNames(s, opp));
+    JsonBattlefield(os, s, opp);
     os << " },\n";
+    // Land's Edge availability: when the active player controls a Land's Edge (or any
+    // "discard a land: deal N" outlet) and holds lands, the GUI single-click-activates it.
+    // rate = damage per land discarded; lands_in_hand = how many can be fired (the UI caps
+    // its picker at lethal). Absent when no outlet is in play.
+    {
+        int le_rate = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.discard_land_damage > 0)
+            { le_rate = std::max(le_rate, d->params.discard_land_damage); }
+        }
+        if (le_rate > 0)
+        {
+            int lih = 0;
+            for (const Card& c : me.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d ? d->card.IsLand() : c.IsLand()) { ++lih; }
+            }
+            os << "  \"lands_edge\": { \"rate\": " << le_rate
+               << ", \"lands_in_hand\": " << lih << " },\n";
+        }
+    }
     os << "  \"plans\": [\n";
     for (size_t i = 0; i < plans.size(); ++i)
     {
+        const TurnSolver::Plan& p = plans[i];
         os << "    { \"index\": " << i << ", \"summary\": ";
-        JsonStr(os, SummarizePlan(plans[i]));
+        JsonStr(os, SummarizePlan(p));
+        // Structured land + cast list so the GUI can match a hand-assembled line against
+        // the model's plans (and show, after a reject, exactly which lines it WOULD play).
+        os << ", \"land\": ";
+        if (p.land_decided && !p.land_to_play.empty()) { JsonStr(os, p.land_to_play); }
+        else                                            { os << "null"; }
+        // Plain name list (used for the land+cast multiset match). Land's Edge activations
+        // are NOT casts -- they are surfaced via the action's "landsedge" count below and the
+        // top-level "lands_edge" object, so the GUI's cast match doesn't treat them as spells.
+        os << ", \"casts\": [";
+        {
+            bool first = true;
+            for (size_t a = 0; a < p.actions.size(); ++a)
+            {
+                if (p.actions[a].kind == Action::Kind::DiscardToLandsEdge) { continue; }
+                if (!first) { os << ", "; }
+                first = false;
+                JsonStr(os, p.actions[a].card_name);
+            }
+        }
+        os << "]";
+        // ... plus the per-action variant params (tutor target / X / Ponder keep / Soulfire
+        // own-targets) so the GUI can show WHICH variant when several plans share the same casts.
+        os << ", \"actions\": [";
+        for (size_t a = 0; a < p.actions.size(); ++a)
+        {
+            if (a) { os << ", "; }
+            const Action& ac = p.actions[a];
+            os << "{ \"card\": "; JsonStr(os, ac.card_name);
+            if (ac.kind == Action::Kind::DiscardToLandsEdge) { os << ", \"landsedge\": " << ac.discard_lands; }
+            if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
+            if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
+            if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
+            if (ac.soulfire_own_targets > 0) { os << ", \"soulfire_targets\": " << ac.soulfire_own_targets; }
+            os << " }";
+        }
+        os << "]";
         os << (i + 1 < plans.size() ? " },\n" : " }\n");
     }
     os << "  ],\n";
@@ -227,10 +334,38 @@ static void WriteVialDecisionJson(std::ostream& os, const GameState& s,
     os << "}\n";
 }
 
+// Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
+// "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
+// and commas (no MTG name contains ';' or '='), so they pass through verbatim.
+static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
+{
+    TurnSolver::LineSpec ls;
+    std::stringstream ss(spec);
+    std::string tok;
+    while (std::getline(ss, tok, ';'))
+    {
+        // trim surrounding whitespace
+        size_t b = tok.find_first_not_of(" \t");
+        size_t e = tok.find_last_not_of(" \t");
+        if (b == std::string::npos) { continue; }
+        tok = tok.substr(b, e - b + 1);
+        if (tok == "pass") { ls.pass = true; continue; }
+        auto eq = tok.find('=');
+        if (eq == std::string::npos) { continue; }
+        std::string key = tok.substr(0, eq);
+        std::string val = tok.substr(eq + 1);
+        if      (key == "land")      { ls.has_land = true; ls.land = val; }
+        else if (key == "cast")      { ls.casts.push_back(val); }
+        else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
+    }
+    return ls;
+}
+
 static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          uint64_t seed, int game_index, int max_turns,
                          int lookahead_depth, int timeout_ms, std::vector<int> choices,
-                         int reveal_count, const std::filesystem::path& log_dir)
+                         int reveal_count, const std::filesystem::path& log_dir,
+                         const std::string& validate_line = "")
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -259,6 +394,47 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                     trace.push_back(ss.str());
                 }
                 return chosen;
+            }
+            // Human-play line reconciliation: if a --validate-line was supplied, this is the
+            // FIRST un-chosen main-phase decision -- reconcile the hand-assembled line against
+            // the model instead of dumping the plan menu. Accept -> emit the matched plan index
+            // (the bridge records it and the game proceeds); reject -> classify (illegal vs
+            // legal-but-not-enumerated) so the GUI can offer to store it as an artifact.
+            if (!validate_line.empty())
+            {
+                TurnSolver::LineSpec spec = ParseLineSpec(validate_line);
+                TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, is_pre, spec);
+                using Vd = TurnSolver::LineCheck::Verdict;
+                const char* vstr =
+                    chk.verdict == Vd::Accept             ? "accept" :
+                    chk.verdict == Vd::Choose             ? "choose" :
+                    chk.verdict == Vd::LegalNotEnumerated ? "legal_not_enumerated" :
+                    chk.verdict == Vd::Unsupported        ? "unsupported" :
+                                                            "illegal";
+                std::cout << "<<<CLAUDE_VALIDATION>>>\n{\n";
+                std::cout << "  \"decision_index\": " << di << ",\n";
+                std::cout << "  \"verdict\": \""  << vstr << "\",\n";
+                std::cout << "  \"plan_index\": " << chk.plan_index << ",\n";
+                std::cout << "  \"matched_summary\": "; JsonStr(std::cout, chk.matched_summary); std::cout << ",\n";
+                std::cout << "  \"failed_action\": ";   JsonStr(std::cout, chk.failed_action);   std::cout << ",\n";
+                std::cout << "  \"reason\": ";          JsonStr(std::cout, chk.reason);          std::cout << ",\n";
+                std::cout << "  \"variants\": [";
+                for (size_t vi = 0; vi < chk.variants.size(); ++vi)
+                {
+                    if (vi) { std::cout << ", "; }
+                    std::cout << "{ \"plan_index\": " << chk.variants[vi].plan_index
+                              << ", \"label\": "; JsonStr(std::cout, chk.variants[vi].label);
+                    std::cout << ", \"cards\": [";
+                    for (size_t ci = 0; ci < chk.variants[vi].cards.size(); ++ci)
+                    { if (ci) std::cout << ", "; JsonStr(std::cout, chk.variants[vi].cards[ci]); }
+                    std::cout << "] }";
+                }
+                std::cout << "],\n";
+                std::cout << "  \"decision\": ";
+                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count);
+                std::cout << "}\n<<<END_VALIDATION>>>\n";
+                std::cout.flush();
+                std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
             WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count);
@@ -319,9 +495,15 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         std::cerr << "Claude-play trace written to " << (log_dir / fn.str()).string() << "\n";
     }
 
+    // Final life totals (player 0 = goldfish, player 1 = opponent) so the GUI can show the
+    // opponent at 0/negative on a win, making the lethal blow visible rather than freezing the
+    // board at the pre-win life.
     std::cout << "<<<CLAUDE_RESULT>>>\n{ \"win_turn\": " << (won ? win_turn : -1)
               << ", \"won\": " << (won ? "true" : "false")
-              << ", \"decisions_made\": " << decisions_made << " }\n<<<END_RESULT>>>\n";
+              << ", \"decisions_made\": " << decisions_made
+              << ", \"opponent_life\": " << state.players[1].life
+              << ", \"player_life\": " << state.players[0].life
+              << " }\n<<<END_RESULT>>>\n";
     return 0;
 }
 
@@ -689,6 +871,8 @@ int main(int argc, char* argv[])
     bool        claude_play = false;
     std::string choices_str;          // comma-separated plan indices for --claude-play
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
+    std::string validate_line;        // --validate-line "<spec>": human-play line to reconcile
+                                       // at the first un-chosen main phase (tools/play GUI)
 
     for (int i = 2; i < argc; ++i)
     {
@@ -732,6 +916,10 @@ int main(int argc, char* argv[])
                 else if (flag == "--reveal")
                 {
                     reveal_count = std::stoi(argv[++i]);
+                }
+                else if (flag == "--validate-line")
+                {
+                    validate_line = argv[++i];
                 }
                 else if (flag == "--depth")
                 {
@@ -804,6 +992,20 @@ int main(int argc, char* argv[])
 
         if (claude_play)
         {
+            // Human-play mode unrestricts the search's choice heuristics: the human should be
+            // able to pick ANY legal tutor/fetch target, X value, Ponder keep/shuffle, dig, and
+            // un-gated draw-engine/alt-payload cast -- not just the heuristic-narrowed one. These
+            // standing A/B switches widen exactly those gates (see DecisionUnpruned / the order
+            // and Ponder enumeration). setenv before any TurnSolver call so the cached getenv
+            // reads pick them up. Anything still narrowed is fixed if it turns out to matter.
+            setenv("MTG_UNPRUNED", "1", 1);
+            setenv("MTG_PONDER_SEARCH", "1", 1);
+            // Human play executes EXACTLY the committed plan -- no auto re-solve after a draw, no
+            // auto-dig, no auto Land's Edge. Instead the chooser re-fires after any draw so the
+            // human re-decides with the revealed cards (a draw "breakpoint"). See ApplyPlanDirect
+            // (gated on MTG_HUMAN_PLAY) and AIEngine's external-chooser segment loop.
+            setenv("MTG_HUMAN_PLAY", "1", 1);
+
             std::vector<int> choices;
             std::stringstream ss(choices_str);
             std::string tok;
@@ -812,7 +1014,8 @@ int main(int argc, char* argv[])
                 if (!tok.empty()) { choices.push_back(std::stoi(tok)); }
             }
             return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
-                                 lookahead_depth, timeout_ms, choices, reveal_count, log_dir);
+                                 lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
+                                 validate_line);
         }
 
         GoldFishRunner runner;

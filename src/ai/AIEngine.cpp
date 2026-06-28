@@ -845,16 +845,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // sweep). Combat and cleanup discard stay on the engine heuristics.
     if (m_external_chooser && play_this_phase)
     {
-        std::vector<TurnSolver::Plan> plans =
-            TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
-        if (!plans.empty())
+        // Segment loop for DRAW BREAKPOINTS (human play): execute one committed plan, and if it
+        // DREW cards (a Treasure Hunt / dig / cantrip resolved -> library shrank), re-enumerate
+        // from the post-draw state and ask the chooser again so the human plays the revealed
+        // cards (a land, Land's Edge, another Treasure Hunt). A plan that draws nothing ends the
+        // phase (one decision, as before). The guard bounds a pathological chain; a real game
+        // terminates when the library empties or the human passes. In the autonomous (search) AI
+        // path ApplyPlan resolves draws inline and never shrinks the library across a no-draw
+        // plan, so non-human external choosers still see exactly one decision per phase.
+        for (int seg = 0; seg < 64; ++seg)
         {
+            std::vector<TurnSolver::Plan> plans =
+                TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
+            if (plans.empty()) { break; }
+            size_t lib_before = state.ActivePlayer().library.size();
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
-            if (idx >= 0 && idx < static_cast<int>(plans.size()))
-            {
-                TurnSolver::ApplyPlan(state, plans[idx], is_pre_combat_main);
-            }
-            // (idx < 0 or out of range => pass / cast nothing this phase)
+            if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
+            TurnSolver::ApplyPlan(state, plans[idx], is_pre_combat_main);
+            // No draw this segment -> phase complete; a draw -> loop and let the human re-decide.
+            if (state.ActivePlayer().library.size() >= lib_before) { break; }
         }
 
         // Restore unplayed staged cards (mirror the normal end-of-TakeTurn restore):

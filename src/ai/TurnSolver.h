@@ -203,6 +203,53 @@ public:
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
 
+    // --- Human-play line reconciliation (tools/play GUI) ------------------------
+    // A human assembles a free-form main-phase line by hand (play a land, cast some
+    // spells) and commits it at the phase breakpoint. CheckLine reconciles that line
+    // against what the model would actually do:
+    //   - Accept             : the line matches one of the enumerated plans -> the
+    //                          game can proceed with that plan index (recorded for the
+    //                          stateless --choices replay).
+    //   - LegalNotEnumerated : the line is rules-legal (an affordability simulation
+    //                          that DOES model same-turn ramp from a freshly-cast mana
+    //                          rock can execute it) but the search never enumerated it
+    //                          -- an enumeration gap worth flagging, not a misplay.
+    //   - Illegal            : the line cannot be executed (a cast is unaffordable, a
+    //                          land can't be played); `failed_action`/`reason` say why.
+    //   - Unsupported        : the line uses an action kind this v1 check can't yet
+    //                          validate (X spells, tutors, alt-costs); reported, not
+    //                          guessed at.
+    // The affordability simulation is deliberately INDEPENDENT of the enumerator's
+    // mana model: BuildPool (used by enumeration) does not credit mana produced by a
+    // rock cast THIS turn toward a later same-turn cast, which is exactly why lines
+    // like Mountain -> Sol Ring -> Ornithopter of Paradise are legal-but-not-enumerated.
+    struct LineSpec
+    {
+        bool        pass = false;            // explicit pass / cast nothing, no land
+        bool        has_land = false;        // play a land this phase
+        std::string land;                    // the land card name (has_land)
+        std::vector<std::string> casts;      // hand spells to cast, in clicked order
+        int         lands_edge = 0;          // discard this many lands to Land's Edge (0 = none)
+    };
+    // One concrete plan variant the human's line matched -- when several enumerated plans
+    // share the same land + cast names but differ in a per-spell sub-decision (tutor target,
+    // X value, Ponder keep/shuffle, Soulfire own-target count), each distinct combination is a
+    // variant the human picks among (Verdict::Choose). `label` describes what's distinct.
+    struct LineVariant { int plan_index = -1; std::string label;
+                         std::vector<std::string> cards; };  // card names to show as art
+    struct LineCheck
+    {
+        enum class Verdict { Accept, Choose, LegalNotEnumerated, Illegal, Unsupported };
+        Verdict     verdict       = Verdict::Illegal;
+        int         plan_index    = -1;      // Accept: matched enumerated plan (-1 == pass)
+        std::string matched_summary;         // Accept: the matched plan's summary
+        std::string reason;                  // Illegal/Unsupported: human-readable detail
+        std::string failed_action;           // Illegal: the action that could not be made
+        std::vector<LineVariant> variants;   // Choose: the distinct sub-decision variants
+    };
+    static LineCheck CheckLine(const GameState& state, bool is_pre_combat,
+                               const LineSpec& spec);
+
     // Returns the plan that leads to the earliest win, evaluated by simulating
     // the rest of the game for each candidate play at this turn.
     // depth=0 falls back to Solve.  depth=1 simulates one turn ahead using Solve

@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MagicDeckTester — Play</title>
+<style>
+  :root { --bg:#1a1c20; --panel:#24272d; --ink:#e8e8ea; --muted:#9aa0a8; --acc:#5aa9e6;
+          --good:#5ad17a; --bad:#e6695a; --warn:#d6b84c; --land:#caa46a; --spell:#7fb3ff; --line:#33373e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line);
+           display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; font-weight:600; color:var(--acc); }
+  header label { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:4px; }
+  header input, header select { background:#2e323a; color:var(--ink); border:1px solid var(--line);
+           border-radius:5px; padding:4px 7px; font-size:13px; }
+  header input[type=number]{ width:70px; }
+  button { background:#2e323a; color:var(--ink); border:1px solid var(--line); border-radius:6px;
+           padding:6px 12px; font-size:13px; cursor:pointer; }
+  button:hover:not(:disabled){ border-color:var(--acc); }
+  button:disabled { opacity:.4; cursor:default; }
+  button.primary { background:var(--acc); color:#0c1116; border-color:var(--acc); font-weight:600; }
+  button.ghost { background:transparent; }
+
+  main { display:grid; grid-template-columns:1fr 340px; height:calc(100vh - 51px); }
+  #board { padding:14px 20px 40px; overflow:auto; }
+  #side  { background:var(--panel); border-left:1px solid var(--line); padding:14px 16px; overflow:auto; }
+
+  #turnbar { display:flex; align-items:center; gap:12px; margin:0 0 8px; }
+  #turnbar .turn { font-size:20px; font-weight:700; color:var(--acc); }
+  #turnbar .phase { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+          background:#2e323a; border:1px solid var(--acc); border-radius:11px; padding:2px 11px; }
+  #turnbar .who { color:var(--muted); font-size:12px; }
+
+  /* turn-plan action bar — sticky footer, near the hand where you're choosing */
+  #planbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:12px 0 0;
+      position:sticky; bottom:0; z-index:6;
+      background:#1f2530; border:1px solid var(--good); border-radius:9px; padding:9px 12px;
+      box-shadow:0 -6px 18px rgba(0,0,0,.45); }
+  #planbar .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--good); font-weight:600; }
+  #planbar .chips { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
+  #planbar .chip { display:inline-flex; align-items:center; gap:5px; background:#2a313b; border:1px solid var(--line);
+      border-radius:13px; padding:2px 6px 2px 4px; font-size:12px; }
+  #planbar .chip .n { background:var(--good); color:#0c1116; border-radius:9px; width:17px; height:17px;
+      font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  #planbar .chip.land .nm { color:var(--land); } #planbar .chip.spell .nm { color:var(--spell); }
+  #planbar .chip .x { cursor:pointer; color:var(--muted); margin-left:2px; } #planbar .chip .x:hover { color:var(--bad); }
+  #planbar .empty { color:var(--muted); font-size:12px; flex:1; }
+
+  /* big result banner */
+  #banner { display:none; position:sticky; top:0; z-index:20; padding:14px 20px; border-radius:10px;
+            font-size:24px; font-weight:800; letter-spacing:.01em; margin:0 0 14px; box-shadow:0 4px 14px rgba(0,0,0,.35); }
+  #banner.win  { background:linear-gradient(180deg,rgba(90,209,122,.28),rgba(90,209,122,.14)); color:var(--good); border:1px solid #3a8a54; }
+  #banner.loss { background:linear-gradient(180deg,rgba(230,105,90,.26),rgba(230,105,90,.12)); color:var(--bad);  border:1px solid #7a3838; }
+  #banner small { display:block; font-size:13px; font-weight:400; color:var(--muted); margin-top:3px; letter-spacing:0; }
+  .life b.opp.dead { color:#fff; background:var(--bad); border-radius:5px; padding:0 7px; }
+
+  .lifebar { display:flex; gap:26px; align-items:center; margin:4px 0 2px; }
+  .life { font-size:13px; color:var(--muted); } .life b { font-size:22px; }
+  .life b.you { color:var(--good); } .life b.opp { color:var(--bad); } .life b.lo { color:var(--bad); }
+  .midline { height:0; border-top:1px dashed rgba(230,105,90,.35); margin:10px 0 6px; }
+
+  .fieldrow { display:flex; gap:14px; align-items:flex-start; }
+  .fieldrow .perms { flex:1; min-width:0; }
+  .fieldrow .turnspells { width:240px; flex:none; border-left:1px solid var(--line); padding-left:14px; }
+
+  .zone h3 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+             margin:14px 0 7px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  .zone h3 .help { color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0; margin-left:8px; font-size:11px; }
+  .turnspells h3, #stagewrap h3 { color:var(--good); border-color:rgba(90,209,122,.3); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; min-height:8px; }
+  .zone.lands { opacity:.97; } .zone.gy { opacity:.6; } .zone.gy .thumb { width:46px; } .zone.gy .thumb em { display:none; }
+  .zone.oppz h3 { color:var(--bad); border-color:rgba(230,105,90,.25); }
+  .hint { color:var(--muted); font-size:12px; }
+
+  .thumb { width:90px; text-align:center; position:relative; }
+  .thumb.sm { width:62px; }
+  .thumb img { width:100%; border-radius:6px; display:block; background:#0b0c0e; min-height:64px; }
+  .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:3px; }
+  .thumb.land em { color:var(--land); } .thumb.spell em { color:var(--spell); }
+  .thumb .pip { position:absolute; top:2px; right:2px; font-size:10px; color:var(--muted);
+      background:rgba(11,12,14,.82); border-radius:4px; padding:0 4px; z-index:2; }
+  /* planned (this-turn) card: green ring + order badge + remove */
+  .thumb.planned img { box-shadow:0 0 0 2px var(--good); }
+  .thumb.planned .ord { position:absolute; top:-7px; left:-7px; background:var(--good); color:#0c1116;
+      border-radius:11px; width:20px; height:20px; font-size:12px; font-weight:700; z-index:3;
+      display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px #0b0c0e; }
+  .thumb.planned .rm { position:absolute; top:-7px; right:-7px; background:var(--bad); color:#0c1116; cursor:pointer;
+      border-radius:11px; width:18px; height:18px; font-size:12px; font-weight:700; z-index:3;
+      display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px #0b0c0e; }
+
+  /* hand palette */
+  .hand .thumb { cursor:pointer; transition:transform .1s; }
+  .hand .thumb:hover { transform:translateY(-4px); }
+  .hand .thumb img { box-shadow:0 0 0 1px var(--line); }
+  .hand .thumb.queued img { box-shadow:0 0 0 2px var(--good); opacity:.45; }
+  .hand .thumb .qct { position:absolute; top:-6px; right:-6px; background:var(--good); color:#0c1116;
+      border-radius:11px; min-width:18px; height:18px; font-size:11px; font-weight:700;
+      display:flex; align-items:center; justify-content:center; z-index:2; padding:0 4px; }
+  .hand .thumb .draws { position:absolute; top:2px; left:2px; background:rgba(127,179,255,.92); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 4px; z-index:2; }
+  /* Land's Edge: the source permanent, the activation mode, and the discard zone */
+  .thumb.le-src { cursor:pointer; box-shadow:0 0 0 1px #7a5a1e inset; }
+  .thumb.le-src.active { box-shadow:0 0 0 2px #ffb84d, 0 0 10px rgba(255,184,77,.5); }
+  .thumb .lebadge { position:absolute; top:2px; left:2px; background:rgba(255,184,77,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
+  .hand .thumb.lehot { cursor:pointer; box-shadow:0 0 0 2px #ffb84d; }
+  .hand .thumb.lehot:hover { box-shadow:0 0 0 2px #ffd27f, 0 0 8px rgba(255,184,77,.45); }
+  .hand .thumb.spent { opacity:.42; }
+  .hand .thumb .lealloc { position:absolute; bottom:2px; right:2px; background:rgba(255,184,77,.95); color:#0c1116;
+      border-radius:4px; font-size:10px; font-weight:700; padding:0 3px; z-index:2; }
+  .zone.ledrop { border:1px dashed #7a5a1e; border-radius:10px; background:rgba(58,47,27,.35); padding:2px 6px; }
+  .zone.ledrop.active { border-color:#ffb84d; background:rgba(58,47,27,.6); }
+  /* the order-number and ✕ badges overhang each thumb by ~7px, so give the activation list
+     extra horizontal+vertical gap to stop adjacent badges from colliding */
+  .zone.ledrop .row { gap:22px 20px; padding:6px 4px; }
+  .zone.ledrop h3 { color:#ffb84d; }
+  .zone.ledrop .lehint { font-weight:400; color:var(--muted); font-size:11px; margin-left:6px; }
+  #planbar .chip.le { border-color:#7a5a1e; background:#3a2f1b; }
+  #planbar .chip.le .nm { color:#ffb84d; }
+  #drawtip { font-size:12px; color:var(--spell); margin-left:6px; }
+  /* drag-drop target is the PLAY FIELD (where cards get played), not the hand */
+  #playfield { border:1px dashed transparent; border-radius:10px; padding:2px 6px; transition:border-color .1s, background .1s; }
+  #playfield.drop-hi { border-color:var(--good); background:rgba(90,209,122,.06); }
+  #playfield .dh { color:var(--good); font-size:11px; opacity:0; transition:opacity .1s; }
+  #playfield.drop-hi .dh { opacity:1; }
+
+  /* card thumbnails inside the choose-variant picker */
+  #verdict .vthumbs { display:flex; gap:6px; margin:4px 0 2px; flex-wrap:wrap; }
+  #verdict .vthumbs img { width:54px; border-radius:5px; background:#0b0c0e; }
+  #verdict .variant { display:flex; gap:8px; align-items:center; }
+  #verdict .variant .vlab { text-align:left; }
+
+  /* what-changed strip */
+  #effects { margin:8px 0 4px; }
+  #effects .ef { display:inline-flex; gap:5px; align-items:center; font-size:12px; padding:3px 9px; margin:0 6px 6px 0;
+      border-radius:7px; background:#262b32; border:1px solid var(--line); }
+  #effects .ef.add { border-color:#2f5a3c; color:var(--good); } #effects .ef.gy { border-color:#5a4030; color:var(--land); }
+  #effects .ef.gone { border-color:#444; color:var(--muted); } #effects .ef.draw { border-color:#2f4055; color:var(--spell); }
+  #effects .ef.opp { border-color:#5a3030; color:var(--bad); }
+
+  #side h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px; }
+  #verdict { border-radius:8px; padding:12px 14px; font-size:13px; display:none; margin-bottom:10px; }
+  #verdict.choose { background:rgba(90,169,230,.12); border:1px solid #2f4a5a; }
+  #verdict.legal  { background:rgba(214,184,76,.12); border:1px solid #5a5030; color:#e7d79a; }
+  #verdict.illegal{ background:rgba(230,105,90,.12); border:1px solid #5a3030; }
+  #verdict.unsupported{ background:rgba(154,160,168,.12); border:1px solid #444; }
+  #verdict h4 { margin:0 0 6px; font-size:13px; }
+  #verdict .vtag { display:inline-block; font-size:11px; font-weight:700; text-transform:uppercase;
+      letter-spacing:.04em; padding:1px 8px; border-radius:9px; margin-bottom:6px; color:#1a1c20; }
+  #verdict.choose .vtag { background:var(--acc); } #verdict.legal .vtag { background:var(--warn); }
+  #verdict.illegal .vtag { background:var(--bad); } #verdict.unsupported .vtag { background:var(--muted); }
+  #verdict .variant { display:block; width:100%; text-align:left; margin:5px 0; }
+  #verdict .actions { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+  #verdict .modelplans { margin-top:10px; font-size:12px; color:var(--muted); }
+
+  .vial { border:1px solid var(--acc); border-radius:8px; padding:12px 14px; margin:8px 0; }
+  .vial .vrow { display:flex; gap:8px; margin-top:8px; }
+  .hist { list-style:none; margin:0; padding:0; font-size:12.5px; }
+  .hist li { padding:5px 8px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
+  .hist li .t { color:var(--muted); white-space:nowrap; } .hist li.rej .lab { color:var(--bad); } .hist li.win .lab { color:var(--good); }
+  #saveinfo { margin-top:10px; font-size:12px; color:var(--muted); word-break:break-all; }
+  .err { color:var(--bad); white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12px; }
+
+  #pop { position:fixed; display:none; z-index:50; pointer-events:none; }
+  #pop img { width:244px; border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.65); display:block; background:#0b0c0e; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MagicDeckTester — Play</h1>
+  <label>Deck <select id="deck"></select></label>
+  <label>Seed <input id="seed" type="number" value="1"/></label>
+  <label>Game # <input id="gi" type="number" value="0"/></label>
+  <label>Max turns <input id="maxturns" type="number" value="12"/></label>
+  <button id="newgame" class="primary">New game</button>
+  <button id="undo" disabled>Undo</button>
+  <span class="hint">no clairvoyance — your win-turn is a ground-truth bound</span>
+</header>
+
+<main>
+  <section id="board"><div class="hint">Start a new game.</div></section>
+  <aside id="side">
+    <div id="verdict"></div>
+    <div id="vialslot"></div>
+    <h2>History</h2>
+    <ul id="hist" class="hist"></ul>
+    <div id="endcontrols" style="display:none; margin-top:14px;">
+      <button id="saveref" class="primary">Save as reference</button>
+      <div id="saveinfo"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small');
+
+// S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
+// kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
+let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
+          plan:[], hadReject:false, busy:false, leMode:false };
+
+function cfg(extra) {
+  return Object.assign({
+    deck:$('deck').value, seed:+$('seed').value, gameIndex:+$('gi').value,
+    maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
+  }, extra || {});
+}
+async function post(path, body) {
+  const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  return r.json();
+}
+
+// ---- plan helpers ----------------------------------------------------------
+function planLand() { return S.plan.find(p=>p.kind==='land') || null; }
+function handCounts() { const m={}; (S.decision.me.hand||[]).forEach(c=>{m[c.name]=(m[c.name]||0)+1;}); return m; }
+// 'le' entries are Land's Edge discards, not casts -- exclude them from the cast count.
+function plannedCount(name) { return S.plan.filter(p=>p.name===name && p.kind!=='land' && p.kind!=='le').length; }
+function leCount() { return S.plan.filter(p=>p.kind==='le').length; }
+// How many lands may still be discarded to Land's Edge: lands in hand minus the one taken by a
+// queued land drop, minus those already queued, capped at lethal (mirrors the engine's enum cap).
+function leMax() {
+  const le = S.decision && S.decision.lands_edge; if (!le) return 0;
+  const avail = (le.lands_in_hand||0) - (planLand()?1:0);
+  const lethal = le.rate>0 ? Math.ceil((S.decision.opponent.life||0)/le.rate) : 0;
+  return Math.max(0, Math.min(avail, lethal));
+}
+function encodeLine() {
+  const parts=[]; const l=planLand(); if(l) parts.push('land='+l.name);
+  for(const p of S.plan) if(p.kind!=='land' && p.kind!=='le') parts.push('cast='+p.name);
+  const n=leCount(); if(n>0) parts.push('landsedge='+n);
+  return parts.length ? parts.join(';') : 'pass';
+}
+function queueCard(name, kind) {
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  hideVerdict();
+  if (kind==='land') {
+    const cur=planLand();
+    if (cur && cur.name===name) S.plan = S.plan.filter(p=>p!==cur);   // toggle land off
+    else { S.plan = S.plan.filter(p=>p.kind!=='land'); S.plan.push({name,kind}); } // one land
+    // A queued land drop consumes a land that can no longer feed Land's Edge -> trim excess.
+    while (leCount() > leMax()) { const i=S.plan.map(p=>p.kind).lastIndexOf('le'); if(i<0) break; S.plan.splice(i,1); }
+  } else {
+    if (plannedCount(name) < (handCounts()[name]||0)) S.plan.push({name,kind});
+  }
+  renderBoard();
+}
+function removePlanAt(i) { S.plan.splice(i,1); renderBoard(); }
+function clearPlan() { S.plan=[]; S.leMode=false; hideVerdict(); renderBoard(); }
+
+// ---- rendering -------------------------------------------------------------
+function bfThumb(o) {   // battlefield entry {name, is_land, is_le}
+  const land = !!o.is_land;
+  const le = !!o.is_le;   // a Land's Edge-style "discard a land: deal N" source
+  const cls = le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell');
+  return `<span class="thumb ${cls}" data-name="${esc(o.name)}"${le?' data-le="1" title="click to discard lands to Land’s Edge"':''}>`+
+    `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
+    (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
+    `<em>${esc(o.name)}</em></span>`;
+}
+function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
+  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}" data-name="${esc(entry.name)}">`+
+    `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
+    `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
+    `<em>${esc(entry.name)}</em></span>`;
+}
+function zoneRow(items) { return `<div class="row">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
+
+function renderBoard() {
+  const d = S.decision, board = $('board');
+  if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; return; }
+  if (!S.over && d.type === 'vial_charge') { renderVialBoard(d); wireBoard(); return; }
+  const me = d.me||{}, opp = d.opponent||{};
+  const oppBf = opp.battlefield||[];
+  const oppLands = oppBf.filter(x=>x.is_land), oppPerms = oppBf.filter(x=>!x.is_land);
+  // At game end, show the FINAL life totals from the result (opponent at 0/negative makes the
+  // lethal blow visible) instead of freezing on the pre-win decision's life.
+  const oppLifeDisp = (S.over && S.result && S.result.opponent_life!=null) ? S.result.opponent_life : opp.life;
+  const meLifeDisp  = (S.over && S.result && S.result.player_life!=null)   ? S.result.player_life   : me.life;
+
+  // order map: planIdx -> order number (1-based, in queue order)
+  const ord = S.plan.map((_,i)=>i+1);
+  const plannedLands = [], plannedPerms = [], plannedSpells = [], plannedLE = [];
+  S.plan.forEach((p,i)=>{
+    const t=plannedThumb(p,i,ord[i]);
+    if(p.kind==='le') plannedLE.push(t);           // discarded to Land's Edge -> its own zone
+    else if(p.kind==='land') plannedLands.push(t);
+    else if(p.kind==='nonpermanent') plannedSpells.push(t);
+    else plannedPerms.push(t); });
+
+  const meBf = me.battlefield||[];
+  const meLands = meBf.filter(x=>x.is_land).map(bfThumb);
+  const mePerms = meBf.filter(x=>!x.is_land).map(bfThumb);
+
+  // Result banner FIRST (sticky top) so the outcome is the most prominent thing on the board,
+  // not buried below the turn bar / tucked into the History panel on the right.
+  let h = `<div id="banner"></div>`;
+  h += `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span>`+
+    `<span class="phase">${esc((d.phase||'').replace('_',' '))}</span>`+
+    `<span class="who">${d.on_the_play ? 'on the play' : 'on the draw'}</span></div>`;
+  h += `<div id="effects"></div>`;
+  // opponent (across the table — NOT a drop target)
+  h += `<div class="lifebar"><span class="life">Opponent <b class="opp ${oppLifeDisp<=0?'dead':''}">${oppLifeDisp ?? '?'}</b></span></div>`;
+  if (oppBf.length) { h += `<div class="zone oppz"><h3>Opponent permanents (${oppPerms.length})</h3>${zoneRow(oppPerms.map(bfThumb))}</div>`;
+    if (oppLands.length) h += `<div class="zone oppz lands"><h3>Opponent lands (${oppLands.length})</h3>${zoneRow(oppLands.map(bfThumb))}</div>`; }
+  else h += `<div class="hint">opponent has no permanents</div>`;
+  h += `<div class="midline"></div>`;
+  // MY field = the play area (drop target). Drop a hand card here to plan playing it.
+  h += `<div id="playfield">`;
+  h += `<div class="lifebar"><span class="life">You <b class="you ${meLifeDisp<=5?'lo':''}">${meLifeDisp ?? '?'}</b></span>`+
+       `<span class="life">library <b>${me.library_size ?? '?'}</b></span>`+
+       (me.vial_counters && me.vial_counters.length ? `<span class="life">vial <b>${me.vial_counters.join(', ')}</b></span>` : '')+
+       (!S.over?`<span class="dh">▼ drop here to plan a play</span>`:'')+`</div>`;
+  h += `<div class="fieldrow"><div class="zone perms"><h3>Permanents (${mePerms.length+plannedPerms.length})</h3>`+
+       zoneRow(mePerms.concat(plannedPerms))+`</div>`;
+  if (plannedSpells.length || (!S.over))
+    h += `<div class="zone turnspells"><h3>Instants &amp; Sorceries — this turn (${plannedSpells.length})</h3>`+
+         (plannedSpells.length?zoneRow(plannedSpells):`<span class="hint">non-permanent spells you queue appear here</span>`)+`</div>`;
+  h += `</div>`;
+  // Land's Edge discard zone: lands you've committed to discard move HERE (out of hand), shown
+  // with the running damage. Visible while the mode is active or any land is queued.
+  if (d.lands_edge && (S.leMode || plannedLE.length)) {
+    const rate=d.lands_edge.rate||0, dmg=plannedLE.length*rate;
+    h += `<div class="zone ledrop${S.leMode?' active':''}"><h3>⚡ Discarding to Land’s Edge `+
+         `(${plannedLE.length} → ${dmg} dmg${plannedLE.length?`, opp to ${(opp.life||0)-dmg}`:''})`+
+         `${S.leMode?` <span class="lehint">click lands to add · click Land’s Edge to finish</span>`:''}</h3>`+
+         zoneRow(plannedLE.length?plannedLE:[])+`</div>`;
+  }
+  h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})</h3>`+zoneRow(meLands.concat(plannedLands))+`</div>`;
+  h += `</div>`;  // /playfield
+  if (me.graveyard && me.graveyard.length)
+    h += `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})</h3>`+
+         zoneRow(me.graveyard.map(n=>bfThumb({name:n,is_land:false})))+`</div>`;
+  // hand palette (the SOURCE you drag from; only while playing)
+  if (!S.over) h += `<div class="zone hand" id="handzone"><h3>Hand <span class="help">double-click = cast/play · drag onto your field above`+
+       (d.lands_edge?(S.leMode?` · ⚡ <b>Land’s Edge active</b> — click lands to discard (${d.lands_edge.rate} dmg each)`:` · ⚡ click your Land’s Edge to discard lands to it`):` · single-click = activate ability`)+`</span></h3>`+
+       `<div class="row" id="handrow"></div></div>`;
+  // sticky commit/turn-plan footer, near the hand
+  if (!S.over) h += `<div id="planbar"></div>`;
+  board.innerHTML = h;
+  renderBanner(); renderEffects(); if(!S.over){ renderPlanbar(); renderHand(); } wireBoard();
+}
+
+function renderBanner() {
+  const b=$('banner'); if(!b) return;
+  if (S.over && S.result) { const r=S.result; b.style.display='block';
+    b.className = r.won?'win':'loss';
+    const oppFin = r.opponent_life!=null ? ` · opponent at ${r.opponent_life}` : '';
+    b.innerHTML = r.won ? `🏆 Won — Turn ${r.win_turn}<small>${r.decisions_made} decisions · no clairvoyance${oppFin}</small>`
+                        : `✖ No win within ${$('maxturns').value} turns<small>${r.decisions_made} decisions${oppFin}</small>`;
+  } else b.style.display='none';
+}
+
+function renderPlanbar() {
+  const pb=$('planbar'); if(!pb) return;
+  const rate = (S.decision.lands_edge&&S.decision.lands_edge.rate)||0;
+  // Non-LE entries get their own chip; all Land's Edge discards collapse into one summary chip
+  // (per-land removal lives in the discard zone), appended at the end.
+  const chips = S.plan.map((p,i)=>{
+    if (p.kind==='le') return '';
+    return `<span class="chip ${p.kind==='land'?'land':'spell'}"><span class="n">${i+1}</span>`+
+      `<span class="nm" data-name="${esc(p.name)}">${esc(p.name)}</span><span class="x" data-rm="${i}">✕</span></span>`;
+  }).join('');
+  const nLE = leCount();
+  const leChip = nLE ? `<span class="chip le"><span class="nm">⚡ Land’s Edge ×${nLE} → ${nLE*rate} dmg</span></span>` : '';
+  const empty = !S.plan.length;
+  // Tip when a draw spell is queued: it re-prompts after drawing; queuing a land too spends the drop.
+  const drawNames = new Set((S.decision.me.hand||[]).filter(c=>c.is_draw).map(c=>c.name));
+  const planHasDraw = S.plan.some(p=>drawNames.has(p.name));
+  const planHasLand = !!planLand();
+  const tip = planHasDraw
+    ? `<span id="drawtip">↻ draws — you’ll re-decide after${planHasLand?'; the queued land uses your drop (drop a draw spell <b>without</b> a land to play a revealed one)':''}</span>`
+    : '';
+  pb.innerHTML = `<span class="lbl">Turn plan</span>`+
+    (empty?`<span class="empty">double-click or drag cards in hand to build a line</span>`:`<div class="chips">${chips}${leChip}</div>`)+
+    tip+
+    `<button id="commit" class="primary">${empty?'Pass / cast nothing':'Commit phase'}</button>`+
+    (empty?'':`<button id="clearp" class="ghost">Clear</button>`);
+  $('commit').onclick = commitLine;
+  if ($('clearp')) $('clearp').onclick = clearPlan;
+  pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
+}
+
+function renderHand() {
+  const row=$('handrow'); if(!row) return;
+  const counts=handCounts(); const seen=new Set(); let html='';
+  for (const c of (S.decision.me.hand||[])) {
+    if (seen.has(c.name)) continue; seen.add(c.name);
+    const land = c.kind==='land';
+    const q = land ? (planLand()&&planLand().name===c.name?1:0) : plannedCount(c.name);
+    const leN = land ? S.plan.filter(p=>p.kind==='le' && p.name===c.name).length : 0;  // copies moved to Land's Edge
+    const total = counts[c.name]||0;
+    const spent = land && (q+leN) >= total;          // every copy is played or discarded -> dim it
+    const lehot = land && S.leMode && (q+leN) < total;  // a clickable discard target in active mode
+    html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
+      `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
+      (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
+      (c.is_draw?`<span class="draws" title="draws — re-prompts after; commit without a land to play a revealed one">↻ draws</span>`:'')+
+      (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
+      `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
+  }
+  row.innerHTML = html;
+  row.querySelectorAll('.thumb[data-card]').forEach(t => {
+    const card=t.dataset.card, kind=t.dataset.kind;
+    t.addEventListener('click', () => { if (S._clickT) return;
+      S._clickT = setTimeout(()=>{ S._clickT=null; activateAbility(card); }, 220); });
+    t.addEventListener('dblclick', () => { if (S._clickT){ clearTimeout(S._clickT); S._clickT=null; } queueCard(card, kind); });
+    t.addEventListener('dragstart', e => { e.dataTransfer.setData('text/card', card); e.dataTransfer.setData('text/kind', kind); });
+  });
+}
+
+function wireBoard() {
+  // remove ✕ on planned cards in the field
+  $('board').querySelectorAll('.thumb.planned .rm[data-rm]').forEach(x =>
+    x.onclick = e => { e.stopPropagation(); removePlanAt(+x.dataset.rm); });
+  // click the Land's Edge permanent (the ability source) to enter/exit discard mode
+  $('board').querySelectorAll('.thumb[data-le]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); toggleLeMode(); });
+}
+
+function renderEffects() {
+  const el=$('effects'); if(!el) return;
+  const eff=computeDiff(); el.innerHTML = eff ? eff.map(e=>`<span class="ef ${e.cls}" data-name="${esc(e.name||'')}">${esc(e.text)}</span>`).join('') : '';
+}
+function computeDiff() {
+  const a=S.prev, b=S.decision;
+  if (!a||!b||a.type!=='main_phase'||b.type!=='main_phase') return null;
+  const out=[];
+  const ms=(arr,key)=>{ const m={}; (arr||[]).forEach(x=>{const k=key?x[key]:x; m[k]=(m[k]||0)+1;}); return m; };
+  const addedNames=(na,nb,key)=>{ const A=ms(na,key),B=ms(nb,key),r=[]; for(const k in B){const d=B[k]-(A[k]||0);for(let i=0;i<d;i++)r.push(k);} return r; };
+  addedNames(a.me.battlefield,b.me.battlefield,'name').forEach(n=>out.push({cls:'add',text:'▲ '+n,name:n}));
+  addedNames(a.me.graveyard,b.me.graveyard).forEach(n=>out.push({cls:'gy',text:'⤓ '+n+' → graveyard',name:n}));
+  const drew=(a.me.library_size||0)-(b.me.library_size||0);
+  if (drew>0) out.push({cls:'draw',text:'drew '+drew});
+  const oppd=(a.opponent.life||0)-(b.opponent.life||0);
+  if (oppd>0) out.push({cls:'opp',text:'opp −'+oppd+' life'});
+  return out.length?out:null;
+}
+
+// Click the Land's Edge permanent (the ability SOURCE) to enter/exit activation mode.
+// In the mode, clicking lands adds them to the discard; clicking Land's Edge again exits.
+function toggleLeMode() {
+  if (S.over || !S.decision || S.decision.type!=='main_phase' || !S.decision.lands_edge) return;
+  hideVerdict();
+  S.leMode = !S.leMode;
+  if (S.leMode) flashHint(`Land’s Edge active — click lands to discard them (${S.decision.lands_edge.rate} dmg each). Click Land’s Edge again to finish.`);
+  renderBoard();
+}
+
+function activateAbility(name) {
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  const le = S.decision.lands_edge;
+  const card = (S.decision.me.hand||[]).find(c=>c.name===name);
+  // Clicking a land only feeds Land's Edge while the mode is active (entered by clicking the
+  // Land's Edge permanent). Each click discards one land; the engine fires lands generically,
+  // so we only track the count, but we carry the clicked land's name so it shows in the zone.
+  if (S.leMode && le) {
+    if (!card || card.kind!=='land') { flashHint('Land’s Edge: only LANDS can be discarded.'); return; }
+    hideVerdict();
+    if (leCount() >= leMax()) {
+      const why = leMax()===0 ? 'no lands free to discard' : `already lethal (${leMax()} max)`;
+      flashHint(`Land’s Edge: ${why}.`); return;
+    }
+    S.plan.push({name, kind:'le'});
+    const n=leCount(), dmg=n*(le.rate||0);
+    flashHint(`Land’s Edge: discarding ${n} land${n>1?'s':''} → ${dmg} damage (opponent to ${(S.decision.opponent.life||0)-dmg}).`);
+    renderBoard(); return;
+  }
+  flashHint(`“${name}”: double-click or drag to CAST/PLAY it.`+(le?' Click your Land’s Edge to discard lands to it.':''));
+}
+
+// ---- commit / validate -----------------------------------------------------
+async function commitLine() {
+  if (S.busy) return; S.busy=true;
+  const btn=$('commit'); if(btn){btn.disabled=true; btn.textContent='Checking…';}
+  const line=encodeLine();
+  const res=await post('/api/validate', cfg({ line }));
+  S.busy=false;
+  if (res.kind==='validation') return handleVerdict(res, line);
+  if (res.kind==='decision') { advanceTo(res.decision); return; }
+  if (res.kind==='result') return showResult(res.result);
+  showError(res.error||'validate failed', res.raw);
+}
+function applyAccepted(planIndex, label) {
+  S.history.push({ turn:S.decision.turn, label });
+  S.prev = S.decision; S.choices.push(planIndex); S.plan=[]; S.leMode=false;
+  renderHistory(); hideVerdict(); step();
+}
+function handleVerdict(v, line) {
+  if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line);
+  if (v.verdict==='choose') {
+    const ve=$('verdict'); ve.className='choose';
+    ve.innerHTML=`<span class="vtag">choose</span><h4>This line resolves several ways — pick one:</h4>`+
+      v.variants.map(x=>{
+        const art=(x.cards||[]).map(n=>`<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" data-name="${esc(n)}" onerror="this.style.display='none'"/>`).join('');
+        return `<button class="variant" data-pi="${x.plan_index}" data-lab="${esc(x.label)}">`+
+          (art?`<span class="vthumbs">${art}</span>`:'')+`<span class="vlab">${esc(x.label)}</span></button>`;
+      }).join('')+
+      `<div class="actions"><button id="cancelv" class="ghost">Cancel</button></div>`;
+    ve.style.display='block';
+    ve.querySelectorAll('.variant').forEach(b=>b.onclick=()=>applyAccepted(+b.dataset.pi, b.dataset.lab));
+    $('cancelv').onclick=hideVerdict; return;
+  }
+  const cls=v.verdict==='legal_not_enumerated'?'legal':(v.verdict==='unsupported'?'unsupported':'illegal');
+  const tag=v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
+  const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
+            :v.verdict==='unsupported'?'The v1 line check can’t validate this yet.':'The model can’t play this line.';
+  const plans=(v.decision&&v.decision.plans)||[];
+  const mp=plans.map(p=>`<div>• ${esc(p.summary)}</div>`).join('')||'<div>• (only pass)</div>';
+  const ve=$('verdict'); ve.className=cls;
+  ve.innerHTML=`<span class="vtag">${tag}</span><h4>${head}</h4>`+
+    `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
+    `<div class="modelplans"><b>What the model would accept:</b>${mp}</div>`+
+    `<div class="actions"><button id="artbtn" class="primary">Store as artifact</button>`+
+    `<button id="retrybtn" class="ghost">Clear &amp; retry</button></div><div id="artinfo" class="hint" style="margin-top:8px"></div>`;
+  ve.style.display='block';
+  $('retrybtn').onclick=clearPlan; $('artbtn').onclick=()=>storeArtifact(v, line);
+}
+async function storeArtifact(v, line) {
+  S.hadReject=true; $('artinfo').textContent='saving…';
+  const d=S.decision;
+  const res=await post('/api/reject-artifact', cfg({ line, turn:d.turn, phase:d.phase,
+    attemptedLine:{ plan:S.plan.slice() }, verdict:v.verdict, reason:v.reason, failed_action:v.failed_action,
+    modelPlans:(v.decision&&v.decision.plans)||[], state:{me:d.me, opponent:d.opponent} }));
+  $('artinfo').innerHTML = res.savedAs?`Stored: <b>${esc(res.savedAs)}</b>`:`<span class="err">save failed: ${esc(res.error||'unknown')}</span>`;
+  S.history.push({ turn:d.turn, label:`tried (${v.verdict}): ${line}`, rej:true }); renderHistory();
+}
+
+// ---- vial ------------------------------------------------------------------
+function renderVialBoard(d) {
+  $('board').innerHTML=`<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span><span class="phase">aether vial</span></div>`+
+    `<div class="lifebar"><span class="life">You <b class="you">${d.me.life}</b></span><span class="life">Opponent <b class="opp">${d.opponent.life}</b></span></div>`+
+    `<div class="zone"><h3>Hand (${(d.me.hand||[]).length})</h3>`+zoneRow((d.me.hand||[]).map(n=>bfThumb({name:n,is_land:false})))+`</div>`;
+}
+function renderVialSlot() {
+  const d=S.decision, slot=$('vialslot');
+  if (!d || d.type!=='vial_charge' || S.over) { slot.innerHTML=''; return; }
+  slot.innerHTML=`<div class="vial"><b>Aether Vial — ${esc(d.vial)}</b> (counters: ${d.current_counters})`+
+    `<div class="hint">deploys a creature whose mana value EQUALS its counter count</div>`+
+    `<div class="vrow"><button class="primary" data-v="1">Add a counter</button><button data-v="0">Hold</button></div></div>`;
+  slot.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>{
+    S.history.push({turn:d.turn, label:b.dataset.v==='1'?'Vial: +counter':'Vial: hold'});
+    S.prev=S.decision; S.choices.push(+b.dataset.v); renderHistory(); step();
+  });
+}
+
+// ---- flow ------------------------------------------------------------------
+function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; $('endcontrols').style.display='none'; renderBoard(); renderVialSlot(); }
+function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
+function hideVerdict() { $('verdict').style.display='none'; }
+function showError(msg, raw) { $('board').innerHTML=`<div class="err">⚠ ${esc(msg)}${raw?'\n\n'+esc(raw):''}</div>`; }
+function flashHint(msg) { const ve=$('verdict'); ve.className=''; ve.style.display='block';
+  ve.innerHTML=`<div class="hint">${esc(msg)}</div>`; clearTimeout(S._ht); S._ht=setTimeout(hideVerdict,4000); }
+
+function showResult(r) {
+  S.over=true; S.result=r;
+  S.history.push({ turn:r.won?r.win_turn:'—', label:r.won?`WON turn ${r.win_turn}`:'no win', win:r.won });
+  renderHistory(); renderBoard(); hideVerdict(); $('vialslot').innerHTML='';
+  $('endcontrols').style.display='';
+  $('saveref').textContent = S.hadReject ? 'Save game log (had rejects)' : 'Save as reference (clean)';
+  $('saveref').className = S.hadReject ? '' : 'primary';
+  $('saveinfo').textContent = S.hadReject
+    ? 'This game had rejected lines — saved to logs/play/, not the permanent reference set.' : '';
+}
+
+async function step() {
+  if (S.busy) return; S.busy=true;
+  const res=await post('/api/step', cfg());
+  S.busy=false; $('undo').disabled = S.choices.length===0;
+  if (res.kind==='decision') advanceTo(res.decision);
+  else if (res.kind==='result') showResult(res.result);
+  else showError(res.error||'unknown error', res.raw);
+}
+async function newGame() {
+  S={ choices:[], history:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false };
+  renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); await step();
+}
+async function undo() {
+  if (!S.choices.length) return;
+  S.choices.pop(); S.history=S.history.filter(h=>!h.win); S.history.pop();
+  S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false;
+  renderHistory(); await step();
+}
+async function saveRef() {
+  $('saveinfo').textContent='saving…';
+  const route = S.hadReject ? '/api/save' : '/api/save-reference';
+  const res=await post(route, cfg());
+  $('saveinfo').innerHTML = res.savedAs ? `Saved:<br><b>${esc(res.savedAs)}</b><br>Open it in <code>tools/replay/</code>.`
+    : `<span class="err">save failed: ${esc(res.error||'unknown')}</span>`;
+}
+async function loadDecks() {
+  const j=await (await fetch('/api/decks')).json();
+  $('deck').innerHTML=j.decks.map(d=>`<option value="${esc(d.deck)}"${d.hasProfile?'':' disabled'}>${esc(d.name)}${d.hasProfile?'':' (no profile)'}</option>`).join('');
+  if(!j.binExists) showError('Simulator binary not found — build Release first:\n  cmake --build build --config Release');
+}
+
+// drag from hand onto YOUR FIELD (#playfield) — the area where cards get played — queues the card
+(function(){
+  const pf=()=>$('playfield');
+  document.addEventListener('dragover', e=>{ if(e.target.closest('#playfield')){ e.preventDefault(); pf()&&pf().classList.add('drop-hi'); } });
+  document.addEventListener('dragleave', e=>{ if(e.target.closest('#playfield') && !(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('#playfield'))) pf()&&pf().classList.remove('drop-hi'); });
+  document.addEventListener('drop', e=>{ if(!e.target.closest('#playfield')) return; e.preventDefault();
+    pf()&&pf().classList.remove('drop-hi');
+    const card=e.dataTransfer.getData('text/card'); if(card) queueCard(card, e.dataTransfer.getData('text/kind')||'permanent'); });
+})();
+
+$('newgame').onclick=newGame; $('undo').onclick=undo; $('saveref').onclick=saveRef;
+
+// Scryfall hover popover
+const pop=document.createElement('div'); pop.id='pop'; pop.innerHTML='<img alt=""/>'; document.body.appendChild(pop);
+const popImg=pop.querySelector('img'); let popName=null;
+function placePop(e){ const w=252,h=352; let x=e.clientX+18,y=e.clientY+18;
+  if(x+w>innerWidth)x=e.clientX-w-18; if(y+h>innerHeight)y=Math.max(8,innerHeight-h-8); pop.style.left=x+'px'; pop.style.top=y+'px'; }
+document.addEventListener('mouseover',e=>{ const c=e.target.closest('[data-name]'); if(!c)return; const n=c.getAttribute('data-name'); if(!n)return;
+  if(n!==popName){ popName=n; popImg.src=scryImg(n,'normal'); } pop.style.display='block'; placePop(e); });
+document.addEventListener('mousemove',e=>{ if(pop.style.display==='block') placePop(e); });
+document.addEventListener('mouseout',e=>{ if(e.target.closest('[data-name]')){ pop.style.display='none'; popName=null; } });
+
+loadDecks();
+</script>
+</body>
+</html>
