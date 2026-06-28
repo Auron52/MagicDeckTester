@@ -374,11 +374,13 @@ function renderPlanbar() {
   const tip = planHasDraw
     ? `<span id="drawtip">↻ draws — you’ll re-decide after${planHasLand?'; the queued land uses your drop (drop a draw spell <b>without</b> a land to play a revealed one)':''}</span>`
     : '';
-  pb.innerHTML = `<span class="lbl">Turn plan</span>`+
+  // Buttons FIRST (left edge, next to the hand) so Commit/Clear are within easy reach while
+  // you build the line; the Turn-plan label + chips follow and the chips flex to fill the rest.
+  pb.innerHTML = `<button id="commit" class="primary">${empty?'Pass / cast nothing':'Commit phase'}</button>`+
+    (empty?'':`<button id="clearp" class="ghost">Clear</button>`)+
+    `<span class="lbl">Turn plan</span>`+
     (empty?`<span class="empty">double-click or drag cards in hand to build a line</span>`:`<div class="chips">${chips}${leChip}</div>`)+
-    tip+
-    `<button id="commit" class="primary">${empty?'Pass / cast nothing':'Commit phase'}</button>`+
-    (empty?'':`<button id="clearp" class="ghost">Clear</button>`);
+    tip;
   $('commit').onclick = commitLine;
   if ($('clearp')) $('clearp').onclick = clearPlan;
   pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
