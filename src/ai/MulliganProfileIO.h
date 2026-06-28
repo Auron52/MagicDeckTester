@@ -90,6 +90,25 @@ inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
     for (Color c : km.deck_colors) { dc.push_back(ColorToChar(c)); }
     m["deck_colors"] = dc;
 
+    // Data-defined extra features (Stage 2). Each carries both a human name (= the tree-node split
+    // name) and its machine definition (kind + params) so runtime recomputes it in lockstep.
+    if (!km.extra_features.empty())
+    {
+        json ef = json::array();
+        for (const FeatureSpec& s : km.extra_features)
+        {
+            json js;
+            js["name"] = s.name;
+            js["kind"] = FeatureKindName(static_cast<FeatureKind>(s.kind));
+            if (s.p != 0)        { js["p"] = s.p; }
+            if (s.a >= 0)        { js["a"] = s.a; }
+            if (s.b >= 0)        { js["b"] = s.b; }
+            if (!s.s.empty())    { js["s"] = s.s; }
+            ef.push_back(js);
+        }
+        m["extra_features"] = ef;
+    }
+
     json nodes = json::array();
     for (const KeepNode& n : km.nodes)
     {
@@ -100,7 +119,7 @@ inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
         }
         else
         {
-            jn["feat"] = KeepFeatureName(static_cast<KeepFeature>(n.feat));
+            jn["feat"] = FeatureNameAt(km, n.feat);   // base name or extra-spec name
             jn["op"]   = KeepOpName(static_cast<KeepOp>(n.op));
             jn["val"]  = n.val;
             jn["yes"]  = n.yes;
@@ -127,6 +146,21 @@ inline KeepModel KeepModelFromJsonObj(const nlohmann::json& m)
             try { km.deck_colors.push_back(CharToColor(v.get<std::string>())); } catch (...) {}
         }
     }
+    // Extra features MUST be loaded before the nodes -- a node may split on one (resolved by name).
+    if (m.contains("extra_features"))
+    {
+        for (const json& js : m["extra_features"])
+        {
+            FeatureSpec s;
+            s.name = js.value("name", std::string{});
+            s.kind = FeatureKindFromName(js.value("kind", std::string{}));
+            s.p    = js.value("p", 0);
+            s.a    = js.value("a", -1);
+            s.b    = js.value("b", -1);
+            s.s    = js.value("s", std::string{});
+            if (s.kind >= 0 && !s.name.empty()) { km.extra_features.push_back(s); }
+        }
+    }
     if (m.contains("nodes"))
     {
         for (const json& jn : m["nodes"])
@@ -139,7 +173,7 @@ inline KeepModel KeepModelFromJsonObj(const nlohmann::json& m)
             }
             else
             {
-                n.feat = KeepFeatureFromName(jn.value("feat", std::string{}));
+                n.feat = FeatureIndexFromName(km, jn.value("feat", std::string{}));
                 n.op   = static_cast<int>(KeepOpFromName(jn.value("op", std::string("<="))));
                 n.val  = jn.value("val", 0);
                 n.yes  = jn.value("yes", -1);

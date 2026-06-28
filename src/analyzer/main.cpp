@@ -98,11 +98,17 @@ int main(int argc, char* argv[])
                                   int v = (s && *s) ? std::atoi(s) : 2; return v < 1 ? 1 : v; }();
             const int depth = []{ const char* s = std::getenv("MTG_ANALYZE_DEPTH");
                                   return (s && *s) ? std::max(0, std::atoi(s)) : 5; }();
+            // MTG_KEEP_GAMES overrides the keep-model sample size (distinct opening hands) directly,
+            // decoupling it from the land-grid's MTG_ANALYZE_SCALE. The default (2000/scale) is a fast
+            // probe; a robust policy wants grid-comparable scale (tens of thousands of hands), since
+            // each hand is one clairvoyant library realisation and the tree denoises by pooling hands.
+            const int keep_games = []{ const char* s = std::getenv("MTG_KEEP_GAMES");
+                                       return (s && *s) ? std::max(200, std::atoi(s)) : 0; }();
             KeepModelTrainConfig cfg;
             cfg.depth     = depth;
             cfg.budget_ms = 20;
             cfg.max_turns = max_turns;
-            cfg.games     = std::max(200, 2000 / scale);
+            cfg.games     = keep_games ? keep_games : std::max(200, 2000 / scale);
             cfg.seed      = seed;
             base.keep_model = BuildKeepModel(deck, base, base.card_scores, cfg);
 

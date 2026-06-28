@@ -182,14 +182,16 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
 bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count, bool on_the_play) const
 {
     int effective_size = static_cast<int>(hand.size()) - mulligan_count;
-    if (effective_size <= 1)                 { return true; }
-    if (effective_size <= m_profile.stop_at) { return true; }
+    if (effective_size <= 1) { return true; }   // hard floor: a 1-card hand is always kept
 
-    // Analyzer-generated keep model: when present it REPLACES the static-filter + linear-score path
-    // below. The durable human constraints (separately loaded, never regenerated) act as a hard
-    // guard wrapping it; then the decision tree decides on the named feature vector (which includes
-    // on-the-play and mulligan depth -- the axes the legacy path ignores). An empty model falls
-    // through to the legacy path, so every deck without a generated model is byte-identical.
+    // Analyzer-generated keep model: when present it OWNS the keep/mulligan decision at EVERY level
+    // above the size-1 floor -- there is NO separate stop_at short-circuit, because the model was
+    // trained at every hand size (7..2) and learned where to stop mulliganing itself. It REPLACES the
+    // static-filter + linear-score path below. The durable human constraints (separately loaded, never
+    // regenerated) act as a hard guard wrapping it; then the decision tree decides on the named feature
+    // vector (which includes on-the-play and mulligan depth -- the axes the legacy path ignores). An
+    // empty model falls through to the legacy path (with its stop_at floor), so every deck without a
+    // generated model is byte-identical.
     if (!m_profile.keep_model.empty())
     {
         switch (ApplyKeepConstraints(hand, m_profile.keep_constraints))
@@ -202,6 +204,9 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count, bool 
             ComputeKeepFeatures(hand, mulligan_count, on_the_play, m_profile.keep_model);
         return m_profile.keep_model.Keep(feats);
     }
+
+    // Legacy static path retains the grid-tuned stop_at floor (keep-model decks bypass it above).
+    if (effective_size <= m_profile.stop_at) { return true; }
 
     int land_count = 0;
     for (const Card& c : hand)

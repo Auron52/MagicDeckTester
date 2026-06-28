@@ -10,18 +10,29 @@
 #include <atomic>
 #include <cmath>
 #include <iostream>
+#include <fstream>
+#include <cstdlib>
+#include <map>
 #include <set>
 #include <thread>
 
 namespace
 {
-constexpr int FN = static_cast<int>(KeepFeature::Count);  // # features
+constexpr int BASE_FN = static_cast<int>(KeepFeature::Count);  // # compiled base features
+// Total feature count = base + constructed data-defined specs; set per-run in BuildKeepModel and
+// threaded through the structures below (the CART is generic over the full vector).
+int g_nf = BASE_FN;
 
-// Deepest mulligan we evaluate. A keep value is computed for m = 0..KV_MAX; labels are
-// emitted for m = 0..LABEL_MAX (those the runtime actually consults -- final_hand_size >
-// stop_at). m = KV_MAX is the forced-keep baseline that anchors the backward induction.
-constexpr int KV_MAX    = 3;   // hands of effective size 7..4
-constexpr int LABEL_MAX = 2;   // decision depths 0,1,2 (stop_at >= 4 keeps eff size 4 outright)
+// The keep model OWNS the keep/mulligan decision at every level it is reached at -- it is NOT given a
+// stop_at (the runtime force-keep floor is bypassed when a keep model is present). The training depth
+// is chosen ADAPTIVELY (see the reach-probability descent below): we emit a decision at each mulligan
+// depth that is actually reached with probability >= eps, and compute one depth below it as the
+// forced-keep baseline ("odds of a better hand by mulliganing on"). Deep, rarely-reached depths are
+// never rolled out -- that both saves the expensive bottom-many-cards rollouts and lets the effective
+// floor EMERGE from the data instead of being inherited from the static path's grid-searched stop_at.
+// (The old hardcoded LABEL_MAX=2 assumed stop_at>=4 and decided untrained hand sizes when stop_at was
+// lower -- the Slivers gi=35 landless-keep bug.) M_CAP bounds the per-game arrays: m = 0..6 = sizes 7..1.
+constexpr int M_CAP = 6;
 
 // ---- dynamic self-scheduled parallel-for (mirrors AnalyzerEngine's) ------------------
 template <class Fn>
@@ -51,14 +62,14 @@ void ParallelFor(int n, Fn fn)
 struct GameData
 {
     bool valid = false;
-    int  kv[2][KV_MAX + 1];          // keep value (win turn), [on_play][mulligan_count]
-    int  feats[2][LABEL_MAX + 1][FN]; // feature vector, [on_play][mulligan_count][feature]
+    int  kv[2][M_CAP + 1];                       // keep value (win turn), [on_play][mulligan_count]
+    std::vector<int> feats[2][M_CAP + 1];        // feature vector (size g_nf), [on_play][mull][feature]
 };
 
 // One labeled training row.
 struct Row
 {
-    std::array<int, FN> x;   // feature vector
+    std::vector<int> x;      // feature vector (size g_nf)
     int    y;                // 1 = keep, 0 = mulligan (the oracle label)
     double kv;               // win turn if kept
     double thr;              // win turn if mulliganed (= value of mulliganing once more)
@@ -92,13 +103,14 @@ std::vector<std::string> KeyPieces(const MulliganProfile& base_profile,
 {
     if (!base_profile.required_pieces.empty()) { return base_profile.required_pieces; }
 
+    // All nonland cards by first-copy marginal, sorted desc (name tiebreak -> deterministic).
     std::vector<std::pair<std::string, double>> scored;
     for (const auto& kv : card_scores)
     {
         if (kv.second.empty()) { continue; }
         const CardDefinition* def = CardDatabase::Instance().Lookup(kv.first);
         if (def && def->card.IsLand()) { continue; }   // lands are not "key pieces"
-        if (kv.second[0] >= 0.30) { scored.emplace_back(kv.first, kv.second[0]); }
+        scored.emplace_back(kv.first, kv.second[0]);
     }
     std::sort(scored.begin(), scored.end(),
         [](const auto& a, const auto& b)
@@ -107,13 +119,81 @@ std::vector<std::string> KeyPieces(const MulliganProfile& base_profile,
             return a.first < b.first;
         });
 
+    // Primary: cards carrying a real first-copy marginal (>= 0.30). Synergy decks (e.g. slivers) have
+    // FLAT marginals -- no single payoff clears 0.30 -- so when fewer than 2 qualify, fall back to a
+    // deck-RELATIVE top quartile (the densest few cards) so the model still gets a payoff/density axis
+    // instead of a constant-0 key_piece_count. Data-driven, no per-deck authoring.
+    int primary = 0;
+    for (const auto& s : scored) { if (s.second >= 0.30) { ++primary; } }
+    int want = (primary >= 2) ? std::min(primary, 4)
+                              : std::min<int>(4, std::max<int>(2, static_cast<int>(scored.size()) / 4));
+
     std::vector<std::string> out;
     for (const auto& s : scored)
     {
         out.push_back(s.first);
-        if (static_cast<int>(out.size()) >= 4) { break; }
+        if (static_cast<int>(out.size()) >= want) { break; }
     }
     return out;
+}
+
+// ---- the deck's dominant creature subtype (tribal density signal) --------------------
+// The subtype that appears on the most mainboard cards (>= 4 copies to qualify as a real theme).
+// Empty if no subtype is shared widely -- then no SubtypeDensity feature is constructed.
+std::string DeckDominantSubtype(const Decklist& deck)
+{
+    std::map<std::string, int> counts;
+    for (const Card& c : deck.mainboard)
+    {
+        if (c.IsLand()) { continue; }
+        for (const std::string& st : c.m_subtypes) { ++counts[st]; }
+    }
+    std::string best; int best_n = 0;
+    for (const auto& kv : counts)   // map -> deterministic name order on ties
+    {
+        if (kv.second > best_n) { best_n = kv.second; best = kv.first; }
+    }
+    return best_n >= 4 ? best : std::string{};
+}
+
+// ---- construct the rich candidate feature set (the "train on the inputs" basis) ------
+// These are APPENDED after the base vector; the CART then keeps only what it splits on. We avoid
+// duplicating base features: base already carries source_w..g / uncovered_colors / playable_strict /
+// curve_depth / count_mv1..3, so the extras add the axes the base CANNOT express:
+//   - per-colour DEMAND, per-colour UNCOVERED, per-colour SURPLUS (src-demand, signed screw severity)
+//   - per-CMC inventory (nonland_mv0..6) and per-CMC castability (castable_le1..4)
+//   - tribal density (dominant subtype)
+//   - arithmetic composites over base features the tree can't form by splitting (uncastable, excess
+//     development) -- operands are BASE indices (stable), so no extra->extra ordering dependence.
+std::vector<FeatureSpec> BuildCandidateSpecs(const Decklist& deck, const std::vector<Color>& deck_colors)
+{
+    auto colorTag = [](Color c) { return std::string(ColorToChar(c)); };
+    std::vector<FeatureSpec> specs;
+    auto add = [&](FeatureKind k, int p, int a, int b, const std::string& s, const std::string& name)
+    { FeatureSpec fs; fs.kind = static_cast<int>(k); fs.p = p; fs.a = a; fs.b = b; fs.s = s; fs.name = name; specs.push_back(fs); };
+
+    for (Color c : deck_colors)
+    {
+        const int ci = static_cast<int>(c);
+        const std::string t = colorTag(c);
+        add(FeatureKind::PerColorDemand,    ci, -1, -1, "", "demand_"   + t);
+        add(FeatureKind::PerColorUncovered, ci, -1, -1, "", "uncov_"    + t);
+        add(FeatureKind::PerColorSurplus,   ci, -1, -1, "", "surplus_"  + t);
+    }
+    for (int mv = 0; mv <= 6; ++mv)
+    { add(FeatureKind::NonlandAtMv, mv, -1, -1, "", "nonland_mv" + std::to_string(mv)); }
+    for (int mv = 1; mv <= 4; ++mv)
+    { add(FeatureKind::CastableAtMvLe, mv, -1, -1, "", "castable_le" + std::to_string(mv)); }
+
+    const std::string dom = DeckDominantSubtype(deck);
+    if (!dom.empty()) { add(FeatureKind::SubtypeDensity, 0, -1, -1, dom, "subtype_" + dom); }
+
+    // Composites over base features (stable indices).
+    add(FeatureKind::Diff, 0, static_cast<int>(KeepFeature::NonlandCount),
+        static_cast<int>(KeepFeature::PlayableStrict), "", "uncastable");      // cards stuck in hand
+    add(FeatureKind::Diff, 0, static_cast<int>(KeepFeature::LandCount),
+        static_cast<int>(KeepFeature::CurveDepth), "", "excess_dev");          // lands beyond the curve
+    return specs;
 }
 
 // ==========================================================================
@@ -164,7 +244,7 @@ private:
 
         if (!make_leaf)
         {
-            for (int f = 0; f < FN; ++f)
+            for (int f = 0; f < g_nf; ++f)
             {
                 // (value, label) pairs for this feature, sorted by value.
                 std::vector<std::pair<int, int>> vv;
@@ -265,8 +345,9 @@ double MeanRegret(const std::vector<KeepNode>& nodes,
     return sum / idx.size();
 }
 
-// Pretty-print the tree as nested if/else rules to stderr (the Stage-6a disclosure).
-void PrintTree(const std::vector<KeepNode>& nodes, int idx, int indent)
+// Pretty-print the tree as nested if/else rules to stderr (the Stage-6a disclosure). Resolves feature
+// names via the model so data-defined extra features print by their constructed name.
+void PrintTree(const KeepModel& model, const std::vector<KeepNode>& nodes, int idx, int indent)
 {
     std::string pad(indent * 2, ' ');
     const KeepNode& nd = nodes[idx];
@@ -275,11 +356,11 @@ void PrintTree(const std::vector<KeepNode>& nodes, int idx, int indent)
         std::cerr << pad << (nd.keep ? "KEEP" : "MULLIGAN") << "\n";
         return;
     }
-    std::cerr << pad << "if " << KeepFeatureName(static_cast<KeepFeature>(nd.feat))
+    std::cerr << pad << "if " << FeatureNameAt(model, nd.feat)
               << " " << KeepOpName(static_cast<KeepOp>(nd.op)) << " " << nd.val << ":\n";
-    PrintTree(nodes, nd.yes, indent + 1);
+    PrintTree(model, nodes, nd.yes, indent + 1);
     std::cerr << pad << "else:\n";
-    PrintTree(nodes, nd.no, indent + 1);
+    PrintTree(model, nodes, nd.no, indent + 1);
 }
 } // namespace
 
@@ -295,8 +376,12 @@ KeepModel BuildKeepModel(const Decklist& deck,
     // The feature context the model references. The SAME object is used to featurize during
     // training and is emitted in the final model, so runtime features match training exactly.
     KeepModel feat_model;
-    feat_model.deck_colors = DeckColors(deck);
-    feat_model.key_pieces  = KeyPieces(base_profile, card_scores);
+    feat_model.deck_colors    = DeckColors(deck);
+    feat_model.key_pieces     = KeyPieces(base_profile, card_scores);
+    feat_model.extra_features = BuildCandidateSpecs(deck, feat_model.deck_colors);
+    g_nf = BASE_FN + static_cast<int>(feat_model.extra_features.size());
+    std::cerr << "  keep-model: " << g_nf << " candidate features ("
+              << BASE_FN << " base + " << feat_model.extra_features.size() << " constructed).\n";
 
     // The profile the rollouts use: identical to the analyzer's chosen profile but with NO
     // keep model (the keep model is what we are generating; the rollout decides nothing here).
@@ -307,85 +392,138 @@ KeepModel BuildKeepModel(const Decklist& deck,
     const uint64_t seed_off = cfg.seed + 7'000'000ULL;   // far from the other analyzer phases
     const bool     second_main = GoldFishRunner::DeckUsesSecondMain(deck);
 
-    // ---- 1. sample hands + clairvoyant keep values (parallel over games) -------------
+    // ---- 1. sample hands + features (parallel). Keep VALUES are computed adaptively below. ----
     std::vector<GameData> data(G);
-    std::atomic<int> done{0};
-    const int prog_step = std::max(1, G / 10);
-    ParallelFor(G, [&](int g)
     {
-        AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
-        ai.SetSearchPostCombat(second_main);
+        std::atomic<int> done{0};
+        const int prog_step = std::max(1, G / 10);
+        ParallelFor(G, [&](int g)
+        {
+            GameState s = GoldFishRunner::SetupGame(deck, seed_off + static_cast<uint64_t>(g));
+            s.ActivePlayer().library.DrawN(7, s.ActivePlayer().hand);
+            if (static_cast<int>(s.ActivePlayer().hand.size()) != 7) { return; }
+            const std::vector<Card> hand = s.ActivePlayer().hand;
+            for (int p = 0; p < 2; ++p)
+            for (int m = 0; m <= M_CAP; ++m)
+            {
+                data[g].feats[p][m] = ComputeKeepFeatures(hand, m, (p == 1), feat_model);
+            }
+            data[g].valid = true;
+            const int d = ++done;
+            if (d % prog_step == 0 || d == G)
+            { std::cerr << "    keep-model: sampled " << d << "/" << G << " hands\n" << std::flush; }
+        });
+    }
 
-        GameState s = GoldFishRunner::SetupGame(deck, seed_off + static_cast<uint64_t>(g));
-        s.m_required_pieces = &rollout_profile.required_pieces;
-        s.vial_target_mv    = rollout_profile.vial_target_mv;
-        s.ActivePlayer().library.DrawN(7, s.ActivePlayer().hand);
-        if (static_cast<int>(s.ActivePlayer().hand.size()) != 7) { return; }
-        const std::vector<Card> hand = s.ActivePlayer().hand;
+    // Compute the clairvoyant keep value at mulligan depth m for every sampled hand (parallel).
+    // Re-derives each game's exact opening state from its seed (deterministic), bottoms m, rolls out.
+    // Called on demand by the adaptive descent so we never pay for rarely-reached (expensive) depths.
+    auto compute_kv_level = [&](int m)
+    {
+        std::cerr << "    keep-model: keep-values at hand size " << (7 - m) << "...\n" << std::flush;
+        ParallelFor(G, [&](int g)
+        {
+            if (!data[g].valid) { return; }
+            AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            ai.SetSearchPostCombat(second_main);
+            for (int p = 0; p < 2; ++p)
+            {
+                GameState s = GoldFishRunner::SetupGame(deck, seed_off + static_cast<uint64_t>(g));
+                s.m_required_pieces = &rollout_profile.required_pieces;
+                s.vial_target_mv    = rollout_profile.vial_target_mv;
+                s.ActivePlayer().library.DrawN(7, s.ActivePlayer().hand);
+                s.on_the_play       = (p == 1);
+                data[g].kv[p][m]    = ai.RolloutKeepWinTurn(s, m, cfg.max_turns);
+            }
+        });
+    };
 
+    // Backward induction of the mulligan value M[p][m] given a forced-keep anchor at depth `anchor`:
+    // M[p][anchor] = mean keep value there; shallower M[p][m] = mean min(keep this hand, mulligan on).
+    double M[2][M_CAP + 1] = {{0}};
+    auto induct = [&](int anchor)
+    {
         for (int p = 0; p < 2; ++p)
         {
-            GameState base_p   = s;
-            base_p.on_the_play = (p == 1);
-            for (int m = 0; m <= KV_MAX; ++m)
-            {
-                data[g].kv[p][m] = ai.RolloutKeepWinTurn(base_p, m, cfg.max_turns);
-            }
-            for (int m = 0; m <= LABEL_MAX; ++m)
-            {
-                const std::vector<int> f =
-                    ComputeKeepFeatures(hand, m, (p == 1), feat_model);
-                for (int k = 0; k < FN; ++k) { data[g].feats[p][m][k] = f[k]; }
-            }
-        }
-        data[g].valid = true;
-
-        const int d = ++done;
-        if (d % prog_step == 0 || d == G)
-        {
-            std::cerr << "    keep-model: " << d << "/" << G
-                      << " hands (" << (100 * d / G) << "%)\n" << std::flush;
-        }
-    });
-
-    // ---- 2. backward induction of the mulligan value, then label ---------------------
-    // M[p][m] = expected win turn of the optimal keep/mulligan policy starting from a fresh
-    // hand at depth m. M[p][KV_MAX] is the forced-keep baseline (mean keep value at the
-    // deepest depth); shallower depths take the best of keeping this hand or mulliganing on.
-    double M[2][KV_MAX + 1] = {{0}};
-    for (int p = 0; p < 2; ++p)
-    {
-        double sum = 0.0; int cnt = 0;
-        for (int g = 0; g < G; ++g)
-        {
-            if (!data[g].valid) { continue; }
-            sum += data[g].kv[p][KV_MAX]; ++cnt;
-        }
-        M[p][KV_MAX] = cnt ? sum / cnt : static_cast<double>(cfg.max_turns + 1);
-        for (int m = KV_MAX - 1; m >= 0; --m)
-        {
-            double s2 = 0.0; int c2 = 0;
+            double sum = 0.0; int cnt = 0;
             for (int g = 0; g < G; ++g)
+            { if (data[g].valid) { sum += data[g].kv[p][anchor]; ++cnt; } }
+            M[p][anchor] = cnt ? sum / cnt : static_cast<double>(cfg.max_turns + 1);
+            for (int m = anchor - 1; m >= 0; --m)
             {
-                if (!data[g].valid) { continue; }
-                s2 += std::min(static_cast<double>(data[g].kv[p][m]), M[p][m + 1]);
-                ++c2;
+                double s2 = 0.0; int c2 = 0;
+                for (int g = 0; g < G; ++g)
+                {
+                    if (!data[g].valid) { continue; }
+                    s2 += std::min(static_cast<double>(data[g].kv[p][m]), M[p][m + 1]);
+                    ++c2;
+                }
+                M[p][m] = c2 ? s2 / c2 : M[p][m + 1];
             }
-            M[p][m] = c2 ? s2 / c2 : M[p][m + 1];
         }
+    };
+
+    // P(reach mulligan depth `anchor`) = product over shallower levels of that level's mulligan rate
+    // (fraction of hands whose keep value is worse than mulliganing on). Max over play/draw.
+    auto reach_prob = [&](int anchor) -> double
+    {
+        double pmax = 0.0;
+        for (int p = 0; p < 2; ++p)
+        {
+            double pr = 1.0;
+            for (int j = 0; j < anchor; ++j)
+            {
+                int mull = 0, n = 0;
+                for (int g = 0; g < G; ++g)
+                {
+                    if (!data[g].valid) { continue; }
+                    if (data[g].kv[p][j] > M[p][j + 1]) { ++mull; }
+                    ++n;
+                }
+                pr *= n ? static_cast<double>(mull) / n : 0.0;
+            }
+            pmax = std::max(pmax, pr);
+        }
+        return pmax;
+    };
+
+    // ---- 2. ADAPTIVE descent: deepen the forced-keep anchor only while the next depth is actually
+    // reached with probability >= eps. Decisions are emitted for depths 0..anchor-1; the anchor depth
+    // itself is the "odds of a better hand by mulliganing on" baseline. Deep, rarely-reached depths
+    // (the expensive bottom-many-cards rollouts) are skipped without changing the realised policy.
+    const double eps = []{ const char* e = std::getenv("MTG_KEEP_REACH_EPS");
+                           double v = (e && *e) ? std::atof(e) : 0.01; return v > 0 ? v : 0.01; }();
+    compute_kv_level(0);
+    compute_kv_level(1);
+    int anchor = 1;
+    while (anchor < M_CAP)
+    {
+        induct(anchor);
+        const double pr = reach_prob(anchor);
+        std::cerr << "    keep-model: depth " << anchor << " (hand size " << (7 - anchor)
+                  << ") reached p=" << pr << (pr >= eps ? " -> deepen\n" : " -> stop\n");
+        if (pr < eps) { break; }
+        compute_kv_level(anchor + 1);
+        ++anchor;
     }
+    const int kv_max    = anchor;       // forced-keep baseline depth
+    const int label_max = anchor - 1;   // deepest decision depth
+    induct(kv_max);                     // final M consistent with the chosen anchor
+    std::cerr << "  keep-model: decisions at hand sizes 7.." << (7 - label_max)
+              << ", forced-keep anchor at size " << (7 - kv_max)
+              << " (reach-prob eps=" << eps << ").\n";
 
     std::vector<Row> rows;
     for (int g = 0; g < G; ++g)
     {
         if (!data[g].valid) { continue; }
         for (int p = 0; p < 2; ++p)
-        for (int m = 0; m <= LABEL_MAX; ++m)
+        for (int m = 0; m <= label_max; ++m)
         {
             const int eff = 7 - m;
-            if (eff <= base_profile.stop_at) { continue; }   // runtime force-keeps these
+            if (eff <= 1) { continue; }   // size 1 is the forced-keep anchor, not a decision
             Row r;
-            for (int k = 0; k < FN; ++k) { r.x[k] = data[g].feats[p][m][k]; }
+            r.x    = data[g].feats[p][m];
             r.kv   = data[g].kv[p][m];
             r.thr  = M[p][m + 1];                            // value of mulliganing once more
             r.y    = (r.kv <= r.thr) ? 1 : 0;
@@ -405,6 +543,23 @@ KeepModel BuildKeepModel(const Decklist& deck,
     for (const Row& r : rows) { keep_rows += r.y; }
     std::cerr << "  keep-model: " << rows.size() << " labeled hands ("
               << keep_rows << " keep / " << (rows.size() - keep_rows) << " mull).\n";
+
+    // DIAGNOSTIC (MTG_KEEP_DUMP=path): dump every labeled training row so we can inspect what
+    // signal the clairvoyant labels actually carry (e.g. keep-rate / kv vs land_count). Off by
+    // default; env-gated; never committed-on.
+    if (const char* dp = std::getenv("MTG_KEEP_DUMP"); dp && *dp)
+    {
+        std::ofstream out(dp);
+        // Generic over the full feature vector (base + constructed) so the dump never goes stale.
+        for (int k = 0; k < g_nf; ++k) { out << FeatureNameAt(feat_model, k) << ','; }
+        out << "kv,thr,y\n";
+        for (const Row& r : rows)
+        {
+            for (int k = 0; k < g_nf; ++k) { out << r.x[k] << ','; }
+            out << r.kv << ',' << r.thr << ',' << r.y << '\n';
+        }
+        std::cerr << "  keep-model: dumped " << rows.size() << " rows to " << dp << "\n";
+    }
 
     // ---- 3. fit, then pick the shallowest tree within the accuracy bar ---------------
     // Deterministic 80/20 train/test split by game index (every row of a game stays together).
@@ -440,6 +595,11 @@ KeepModel BuildKeepModel(const Decklist& deck,
     // Pick the SHALLOWEST depth whose held-out regret is within MARGIN of the deep baseline
     // (the readable form may not pay a meaningful win-turn cost). If none qualifies, fall back
     // to the depth with the LOWEST regret -- accuracy over brevity when they genuinely trade off.
+    // NOTE: the bar is deliberately CONSERVATIVE (prefers shallow). Held-out regret here is measured
+    // on the same sampled-hand split, not on fresh games, so a deeper tree that lowers in-sample
+    // regret can still GENERALISE worse downstream (observed: a 25-node antilife fit on a small
+    // sample was net-negative in the d0 A/B vs a shallower tree). Bias toward simplicity; let the
+    // richer feature axes earn their splits only when the SAMPLE is large enough to justify them.
     constexpr double MARGIN = 0.02;   // turns: max regret a readable tree may pay over deep
     int    chosen_depth  = -1;
     double chosen_regret = 1e18;
@@ -464,15 +624,53 @@ KeepModel BuildKeepModel(const Decklist& deck,
             return all;
         }());
 
+    // Keep ONLY the constructed extra specs the final tree actually splits on, and remap the node
+    // feat indices to the compacted [base ++ kept-extras] layout. The serialized model then carries a
+    // minimal, self-consistent feature set (composite operands reference BASE indices, which are
+    // unchanged by compaction). This is the "surfaced levers" set -- the rest of the rich candidate
+    // basis was available but the data didn't justify it.
+    std::vector<int> used_extra;
+    for (const KeepNode& nd : final_nodes) { if (nd.feat >= BASE_FN) { used_extra.push_back(nd.feat); } }
+    std::sort(used_extra.begin(), used_extra.end());
+    used_extra.erase(std::unique(used_extra.begin(), used_extra.end()), used_extra.end());
+
+    std::vector<FeatureSpec> kept;
+    std::map<int, int> remap;
+    for (int oldidx : used_extra)
+    {
+        remap[oldidx] = BASE_FN + static_cast<int>(kept.size());
+        kept.push_back(feat_model.extra_features[oldidx - BASE_FN]);
+    }
+    for (KeepNode& nd : final_nodes)
+    { if (nd.feat >= BASE_FN) { nd.feat = remap[nd.feat]; } }
+
     KeepModel model;
-    model.nodes       = final_nodes;
-    model.key_pieces  = feat_model.key_pieces;
-    model.deck_colors = feat_model.deck_colors;
+    model.nodes          = final_nodes;
+    model.key_pieces     = feat_model.key_pieces;
+    model.deck_colors    = feat_model.deck_colors;
+    model.extra_features = kept;
 
     std::cerr << "  keep-model: chose depth " << chosen_depth
               << " (held-out regret " << chosen_regret << " turns, "
               << final_nodes.size() << " nodes). Rules:\n";
-    PrintTree(final_nodes, 0, 2);
+    PrintTree(model, final_nodes, 0, 2);
+
+    // Surfaced levers: which features the fitted tree actually splits on (across the FULL basis).
+    {
+        std::map<int, int> splits;
+        for (const KeepNode& nd : final_nodes) { if (nd.feat >= 0) { ++splits[nd.feat]; } }
+        std::cerr << "  keep-model features used:";
+        if (splits.empty()) { std::cerr << " (none -- constant policy)"; }
+        for (const auto& kv : splits)
+        { std::cerr << " " << FeatureNameAt(model, kv.first) << "x" << kv.second; }
+        std::cerr << "\n";
+        if (!kept.empty())
+        {
+            std::cerr << "  keep-model constructed features kept:";
+            for (const FeatureSpec& s : kept) { std::cerr << " [" << s.name << "]"; }
+            std::cerr << "\n";
+        }
+    }
 
     std::cerr << "  keep-model key_pieces:";
     if (model.key_pieces.empty()) { std::cerr << " (none)"; }

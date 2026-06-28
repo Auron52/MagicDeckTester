@@ -726,11 +726,15 @@ AnalysisResult AnalyzerEngine::Run(const Decklist& deck, uint64_t base_seed, int
     // plain regeneration is byte-identical to today (see BUILD_KEEP_MODEL).
     if (BUILD_KEEP_MODEL)
     {
+        // MTG_KEEP_GAMES overrides the keep-model sample size (distinct opening hands), decoupled
+        // from the land grid's scale -- a robust keep policy wants grid-comparable hand counts.
+        const int keep_games = []{ const char* s = std::getenv("MTG_KEEP_GAMES");
+                                   return (s && *s) ? std::max(200, std::atoi(s)) : 0; }();
         KeepModelTrainConfig kc;
         kc.depth     = ANALYSIS_DEPTH;
         kc.budget_ms = ANALYSIS_BUDGET;
         kc.max_turns = max_turns;
-        kc.games     = Scaled(2000);
+        kc.games     = keep_games ? keep_games : Scaled(2000);
         kc.seed      = base_seed;
         result.mulligan_profile.keep_model =
             BuildKeepModel(deck, result.mulligan_profile, result.card_scores, kc);
