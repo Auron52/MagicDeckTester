@@ -188,7 +188,11 @@ int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) 
     // their plan/breakpoint order, whose post-draw re-solve is order-sensitive in ways a
     // static rank can't capture (verified: a "draw first" rank fixes some games and breaks
     // others); that ambiguous ordering is left to the search.
+    //    5 non-creature mana rocks (Sol Ring): EARLIEST, so the rock's mana is online for the
+    //      rest of the line (the same-turn ramp the enumerator now credits). Gated on the rock-
+    //      ramp flag so MTG_NO_ROCK_RAMP keeps the legacy order (rocks ranked with noncreatures).
     if (def.params.on_cast_trigger_damage > 0) { return 30; }
+    if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature()) { return 5; }
     if (def.card.IsCreature())                 { return 10; }
     return 20;
 }

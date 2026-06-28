@@ -10,6 +10,26 @@
 #include <limits>
 #include <unordered_set>
 
+// A/B opt-out (default ON): retain leftover / over-produced mana (depletion + filter
+// lands forced to over-tap) into the turn-scoped reserve state.floating_mana, so a later
+// same-(main-)phase cast can spend it (CR 500.4). MTG_NO_FLOAT_LEFTOVER=1 disables the
+// whole change -> byte-identical to the legacy "waste the leftover" behaviour. Read once.
+inline bool FloatLeftoverManaEnabled()
+{
+    static const bool on = std::getenv("MTG_NO_FLOAT_LEFTOVER") == nullptr;
+    return on;
+}
+
+// A/B opt-out (default ON): let the plan enumerator credit a mana rock cast THIS turn
+// (Sol Ring -> {C}{C}) toward the rest of the same subset, so lines like
+// "Sol Ring -> Ornithopter of Paradise" off one land are enumerated. MTG_NO_ROCK_RAMP=1
+// disables it -> byte-identical to the legacy board-only enumeration. Read once.
+inline bool RockRampEnumEnabled()
+{
+    static const bool on = std::getenv("MTG_NO_ROCK_RAMP") == nullptr;
+    return on;
+}
+
 // Land's Edge firing heuristic: how many lands to discard to a Land's Edge of the
 // given `rate` this activation. Fire all when it is lethal; otherwise fire only the
 // excess over the max hand size (so those lands are not simply discarded to the
@@ -2458,9 +2478,17 @@ using TapBacktrackMemo =
 inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors = nullptr,
-                                TapBacktrackMemo* fail_memo = nullptr)
+                                TapBacktrackMemo* fail_memo = nullptr,
+                                ManaPool* out_leftover = nullptr)
 {
-    if (floating.CanPay(cost)) { return true; }
+    if (floating.CanPay(cost))
+    {
+        // Surface the over-produced remainder (forced filter/depletion over-tap) so the
+        // caller can float it for the rest of the main phase. SpendFloatingTowardCost drains
+        // exactly the cost (CanPay is true), leaving the leftover in `lo`. nullptr -> no-op.
+        if (out_leftover) { ManaPool lo = floating; ManaCost c = cost; SpendFloatingTowardCost(lo, c); *out_leftover = lo; }
+        return true;
+    }
     const int active = state.active_player_index;
     const int n      = static_cast<int>(state.battlefield.size());
 
@@ -2548,7 +2576,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // below on failure alongside the active player's life.
             if (def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
-            if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo)) { return true; }
+            if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover)) { return true; }
             state.battlefield[i]       = src_snap;   // only this source was touched at this level
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;

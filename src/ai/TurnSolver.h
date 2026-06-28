@@ -61,6 +61,11 @@ struct Action
                                        // at enumeration (CollectActions, where the def is in hand)
                                        // so Solve/EnumeratePlans credit it WITHOUT a per-node card
                                        // lookup. 0 for every non-ritual action (all other decks).
+    ManaPool    rock_mana;             // Same-turn mana-rock ramp: the mana a non-creature mana rock
+                                       // (Sol Ring -> {C}{C}) taps for once cast, stamped at
+                                       // enumeration so Solve/EnumeratePlans credit it (by real
+                                       // colour) toward the rest of the subset. Total()==0 for every
+                                       // non-rock action. See RockRampEnumEnabled.
     int         chosen_x       = 0;    // CastFromHand of an {X} spell: the X value chosen at
                                        // enumeration. The provider (XCandidates) narrows the X
                                        // range; CollectActions emits one variant per candidate

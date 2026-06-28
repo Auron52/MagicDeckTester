@@ -2032,6 +2032,11 @@ ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
         // lands (Cascade Bluffs) contribute wild iff fed, else {C}. See AddSourceToPool.
         AddSourceToPool(pool, state, *def);
     }
+    // Turn-scoped reserve (ritual float + retained over-production) is spendable on later
+    // same-phase casts -- mirror TurnSolver::BuildPool so the executor's planner and the
+    // rollout's planner agree on affordability (commit-the-line lockstep). Empty for non-
+    // floating decks -> byte-identical; off (MTG_NO_FLOAT_LEFTOVER) -> not added.
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
 }
 
@@ -2220,6 +2225,11 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
     // previously-FAILING casts gain the chain solution. See TapForCostBacktrack.
     const std::vector<Permanent> bf_pre = state.battlefield;
     const int life_pre = state.players[active].life;
+    // Retain over-produced mana into the turn-scoped reserve (CR 500.4) -- mirrors
+    // TurnSolver::TapForCostDirect byte-for-byte so the rollout and the real game realise
+    // identical leftover mana (lockstep). Off (MTG_NO_FLOAT_LEFTOVER) -> no-op.
+    auto commit_leftover = [&](const ManaPool& lo)
+    { if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); } };
     auto greedy = [&]() -> bool
     {
         // Pay coloured requirements first (most restrictive), then generic.
@@ -2232,12 +2242,14 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
         for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) return false; }
         return true;
     };
-    if (greedy()) { return true; }
+    if (greedy()) { commit_leftover(floating); return true; }
     const std::vector<Permanent> bf_greedy_fail = state.battlefield;
     const int life_greedy_fail = state.players[active].life;
     state.battlefield        = bf_pre;
     state.players[active].life = life_pre;
-    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{})) { return true; }
+    ManaPool bt_leftover;
+    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover))
+    { commit_leftover(bt_leftover); return true; }
     state.battlefield        = bf_greedy_fail;
     state.players[active].life = life_greedy_fail;
     state.floating_mana      = reserve_pre;   // payment failed -> return the reserve untouched

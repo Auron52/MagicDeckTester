@@ -32,6 +32,14 @@ struct ManaPool
 
     void Clear() { white = blue = black = red = green = colorless = wild = 0; }
 
+    // Merge another pool into this one, colour for colour (used to retain leftover
+    // mana from a payment into the turn-scoped reserve, state.floating_mana).
+    void AddPool(const ManaPool& o)
+    {
+        white += o.white; blue += o.blue; black += o.black; red += o.red;
+        green += o.green; colorless += o.colorless; wild += o.wild;
+    }
+
     // Returns true if this pool can pay the given cost.
     // Multi-color land taps are stored in `wild` — each unit satisfies exactly one
     // pip (colored or generic). Specific-color sources pay their own color first;

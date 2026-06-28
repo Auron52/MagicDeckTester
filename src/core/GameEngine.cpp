@@ -298,6 +298,10 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 
 void GameEngine::CombatPhase(GameState& state)
 {
+    // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
+    // floated this main phase. Mirrors TurnSolver::SimulateCombat (lockstep). Off
+    // (MTG_NO_FLOAT_LEFTOVER) -> no-op; byte-identical for non-floating decks regardless.
+    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; }
     state.phase = Phase::Combat;
 
     state.step = Step::BeginCombat;

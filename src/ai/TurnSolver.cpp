@@ -119,6 +119,10 @@ static ManaPool BuildPool(const GameState& state)
         if (!is_land && !is_dork) { continue; }
         AddSourceToPool(pool, state, *def);
     }
+    // Turn-scoped reserve (ritual float + retained over-production) is spendable on later
+    // same-phase casts, so it counts toward affordability. Empty for non-floating decks ->
+    // byte-identical; off (MTG_NO_FLOAT_LEFTOVER) -> not added (legacy board-only pool).
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
 }
 
@@ -137,6 +141,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         if (!is_land && !is_dork) { continue; }
         AddSourceToPool(pool, state, *def);
     }
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see BuildPool
     return pool;
 }
 
@@ -759,6 +764,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         a.discard_land_damage   = def.params.discard_land_damage;
         a.max_casts_after       = def.params.max_casts_after;   // Irencrag "one more spell" restriction
         if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
+        // Same-turn mana-rock ramp: a non-creature mana rock (Sol Ring) taps the turn it is cast.
+        // Stamp the mana it produces (by real colour) so the enumerator can fund the rest of the
+        // subset off it. Creatures (mana dorks) are excluded -- they are summoning-sick this turn.
+        if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature())
+        { AddSourceToPool(a.rock_mana, state, def); }
         // Ponder (cast_reorder): keep-vs-shuffle. This was the #1 branching source (MTG_BRANCH_STATS:
         // ~47% of all enumeration) because searching BOTH futures emits two variants that multiply
         // every plan where Ponder is castable. By default we now DECIDE it with the heuristic
@@ -973,6 +983,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // the pool's CanPay. False for every non-ritual deck -> byte-identical.
     bool any_ritual = false;
     for (const Action& ra : cands) { if (ra.ritual_float > 0) { any_ritual = true; break; } }
+    // Same-turn mana-rock ramp: any non-creature rock (Sol Ring) stamped with its production?
+    // Cheap scan -> the credit below is inert for every deck without such a rock.
+    bool any_rock = false;
+    for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
 
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
@@ -1060,12 +1074,36 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Credit its gross float to the affordable pool (the ritual's own cost is already in
         // `combined`, so pool+gross-cost == pool+net -> exact, conservative). Zero unless a
         // ritual is selected -> byte-identical for every non-ritual deck.
-        int ritual_credit = 0;
-        if (any_ritual) { for (int j : sel) { ritual_credit += cands[j].ritual_float; } }
-        if (ritual_credit > 0)
+        // Same-turn ramp credit. Ritual float (Reality Spasm / Irencrag) credited as wild; a mana
+        // rock cast in THIS subset (Sol Ring -> {C}{C}) credited by its REAL produced colours, but
+        // only once the board can already pay for the rocks themselves (a rock never funds its own
+        // cost). The casts' own costs are already in `combined`, so this stays net/conservative.
+        // Both inert -> byte-identical for decks without rituals or rocks.
+        ManaPool eff = pool, eff_nc = pool_noncreature;
+        bool credited = false;
+        if (any_ritual)
         {
-            ManaPool eff    = pool;             eff.wild    += ritual_credit;
-            ManaPool eff_nc = pool_noncreature; eff_nc.wild += ritual_credit;
+            int ritual_credit = 0;
+            for (int j : sel) { ritual_credit += cands[j].ritual_float; }
+            if (ritual_credit > 0) { eff.wild += ritual_credit; eff_nc.wild += ritual_credit; credited = true; }
+        }
+        if (any_rock)
+        {
+            ManaPool rock_prod; ManaCost rock_costs; bool sel_rock = false;
+            for (int j : sel)
+            {
+                if (cands[j].rock_mana.Total() <= 0) { continue; }
+                rock_prod.AddPool(cands[j].rock_mana);
+                const ManaCost& rc = cands[j].cost;
+                rock_costs.white += rc.white; rock_costs.blue += rc.blue; rock_costs.black += rc.black;
+                rock_costs.red   += rc.red;   rock_costs.green += rc.green;
+                rock_costs.colorless += rc.colorless; rock_costs.generic += rc.generic;
+                sel_rock = true;
+            }
+            if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+        }
+        if (credited)
+        {
             if (!eff.CanPay(combined))                       { return; }
             if (!eff_nc.CanPay(noncreature_combined))        { return; }
         }
@@ -1524,6 +1562,12 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
     // casts gain the chain solution. See TapForCostBacktrack.
     const std::vector<Permanent> bf_pre = state.battlefield;
     const int life_pre = state.players[active].life;
+    // Retain over-produced mana (forced filter/depletion over-tap) into the turn-scoped
+    // reserve so a later same-(main-)phase cast can spend it (CR 500.4). state.floating_mana
+    // already holds the un-spent reserve after SpendFloatingTowardCost; add the leftover on top.
+    // Off (MTG_NO_FLOAT_LEFTOVER) -> no-op. Mirrored byte-for-byte in AIEngine::TapForCost.
+    auto commit_leftover = [&](const ManaPool& lo)
+    { if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); } };
     auto greedy = [&]() -> bool
     {
         for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) return false; }
@@ -1535,13 +1579,15 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
         for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) return false; }
         return true;
     };
-    if (greedy()) { return true; }
+    if (greedy()) { commit_leftover(floating); return true; }
     // Greedy failed: try the backtracking solver from a clean board.
     const std::vector<Permanent> bf_greedy_fail = state.battlefield;
     const int life_greedy_fail = state.players[active].life;
     state.battlefield        = bf_pre;
     state.players[active].life = life_pre;
-    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{})) { return true; }
+    ManaPool bt_leftover;
+    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover))
+    { commit_leftover(bt_leftover); return true; }
     // Total failure: restore the greedy's exact end-state to match prior behaviour.
     state.battlefield        = bf_greedy_fail;
     state.players[active].life = life_greedy_fail;
@@ -2562,6 +2608,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 // Deal combat damage: all eligible attackers hit the opponent.
 static void SimulateCombat(GameState& state)
 {
+    // Mana empties when leaving the pre-combat main phase (CR 500.4): drop any reserve
+    // floated this main phase so it cannot fund combat or the post-combat main. Mirrors
+    // GameEngine::CombatPhase. Off (MTG_NO_FLOAT_LEFTOVER) -> no-op (pool only ever held
+    // ritual float, which was already spent this main phase -> byte-identical regardless).
+    if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; }
     int opp_idx = 1 - state.active_player_index;
     int active  = state.active_player_index;
 
@@ -3057,6 +3108,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // search also enumerates the ritual->payoff combo. False for non-ritual decks -> byte-identical.
     bool any_ritual = false;
     for (const Action& ra : cands) { if (ra.ritual_float > 0) { any_ritual = true; break; } }
+    // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
+    bool any_rock = false;
+    for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
 
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
@@ -3224,12 +3278,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
 
-        int ritual_credit = 0;
-        if (any_ritual) { for (int j : sel) { ritual_credit += cands[j].ritual_float; } }
-        if (ritual_credit > 0)
+        // Same-turn ramp credit. Ritual float (Reality Spasm / Irencrag) credited as wild; a mana
+        // rock cast in THIS subset (Sol Ring -> {C}{C}) credited by its REAL produced colours, but
+        // only once the board can already pay for the rocks themselves (a rock never funds its own
+        // cost). The casts' own costs are already in `combined`, so this stays net/conservative.
+        // Both inert -> byte-identical for decks without rituals or rocks.
+        ManaPool eff = pool, eff_nc = pool_noncreature;
+        bool credited = false;
+        if (any_ritual)
         {
-            ManaPool eff    = pool;             eff.wild    += ritual_credit;
-            ManaPool eff_nc = pool_noncreature; eff_nc.wild += ritual_credit;
+            int ritual_credit = 0;
+            for (int j : sel) { ritual_credit += cands[j].ritual_float; }
+            if (ritual_credit > 0) { eff.wild += ritual_credit; eff_nc.wild += ritual_credit; credited = true; }
+        }
+        if (any_rock)
+        {
+            ManaPool rock_prod; ManaCost rock_costs; bool sel_rock = false;
+            for (int j : sel)
+            {
+                if (cands[j].rock_mana.Total() <= 0) { continue; }
+                rock_prod.AddPool(cands[j].rock_mana);
+                const ManaCost& rc = cands[j].cost;
+                rock_costs.white += rc.white; rock_costs.blue += rc.blue; rock_costs.black += rc.black;
+                rock_costs.red   += rc.red;   rock_costs.green += rc.green;
+                rock_costs.colorless += rc.colorless; rock_costs.generic += rc.generic;
+                sel_rock = true;
+            }
+            if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+        }
+        if (credited)
+        {
             if (!eff.CanPay(combined))                       { return; }
             if (!eff_nc.CanPay(noncreature_combined))        { return; }
         }
