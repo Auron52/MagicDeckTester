@@ -2561,6 +2561,15 @@ Card* AIEngine::ChooseDiscard(GameState& state)
 
 void AIEngine::ActivateLandsEdge(GameState& state)
 {
+    // Human play (tools/play): Land's Edge is the human's to fire -- they choose the
+    // DiscardToLandsEdge amount as a plan action, executed in the segment loop via
+    // ApplyPlanDirect. Suppress the autonomous end-of-main auto-fire here (mirrors the
+    // matching !s_human_play guard in TurnSolver::ApplyPlanDirect) so the engine never
+    // burns the lands the human just drew -- which would silently win the turn for them.
+    // MTG_HUMAN_PLAY is set only by --claude-play, so every search/goldfish run is unchanged.
+    static const bool s_human_play = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    if (s_human_play) { return; }
+
     // Find the highest discard_land_damage rate among Land's Edge permanents we control.
     int rate = 0;
     for (const Permanent& p : state.battlefield)

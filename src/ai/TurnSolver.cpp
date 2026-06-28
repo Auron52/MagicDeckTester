@@ -3613,6 +3613,63 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 // at every searched turn — in the real game AND in the rollout — so the land choice is
 // modelled identically end to end (no greedy-rollout / searched-reality divergence,
 // which otherwise makes searched land choices play out worse than the greedy heuristic).
+// Human-play only: make Land's Edge a PICKABLE line action. When the active player controls a
+// Land's Edge and holds lands, fan out a DiscardToLandsEdge(N) variant of every base plan -- and a
+// STANDALONE "pass + Land's Edge" line if there are no base plans (the post-Treasure-Hunt
+// breakpoint: land drop used, no mana left, hand full of drawn lands). Autonomous search auto-fires
+// Land's Edge in ApplyPlanDirect (suppressed under s_human_play), so without this the human could
+// cast a Land's-Edge deck but never fire it. N is bounded at lethal (over-fire only pings a dead
+// opponent). Deterministic -> plan indices stay stable across CheckLine validation and the
+// --choices stateless replay. Gated on MTG_HUMAN_PLAY: a no-op (byte-identical) for every
+// autonomous goldfish/search run. Applied on BOTH EnumeratePlansWithLand return paths.
+static void AppendHumanPlayLandsEdgePlans(const GameState& state, std::vector<TurnSolver::Plan>& all)
+{
+    static const bool s_human_play_enum = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    if (!s_human_play_enum) { return; }
+
+    const Player& ap = state.ActivePlayer();
+    int le_rate = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.discard_land_damage > 0)
+        { le_rate = std::max(le_rate, d->params.discard_land_damage); }
+    }
+    int lands_in_hand = 0;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d ? d->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
+    }
+    if (le_rate <= 0 || lands_in_hand <= 0) { return; }
+
+    const int opp_life = state.players[1 - state.active_player_index].life;
+    const int lethal_lands = (opp_life > 0) ? (opp_life + le_rate - 1) / le_rate : 0;
+    // No base plan to fan from (out of other plays) -> seed a "pass" base so Land's Edge is still
+    // offered as a standalone line; otherwise the chooser sees zero plans and the turn advances.
+    if (all.empty()) { all.push_back(TurnSolver::Plan{}); }
+    const size_t base_count = all.size();
+    for (size_t i = 0; i < base_count; ++i)
+    {
+        const bool plays_land = !all[i].land_to_play.empty();   // a played/fetched land leaves hand
+        const int  avail = lands_in_hand - (plays_land ? 1 : 0);
+        const int  maxN  = std::min(avail, std::max(0, lethal_lands));
+        for (int n = 1; n <= maxN; ++n)
+        {
+            TurnSolver::Plan v = all[i];
+            Action le;
+            le.kind          = Action::Kind::DiscardToLandsEdge;
+            le.card_name     = "Land's Edge";
+            le.discard_lands = n;
+            v.actions.push_back(std::move(le));
+            v.value          = all[i].value + n * le_rate;
+            v.wins_this_turn = all[i].wins_this_turn || (opp_life - n * le_rate <= 0);
+            all.push_back(std::move(v));
+        }
+    }
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
 {
@@ -3623,8 +3680,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     if (!drop_available)
     {
         // Nothing to decide; mark land as resolved so ApplyPlanDirect does not fall
-        // back to greedy land play for these searched plans.
+        // back to greedy land play for these searched plans. Human play: still offer Land's Edge
+        // as a standalone line here (this is the post-Treasure-Hunt breakpoint, drop already used).
         std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, is_pre_combat);
+        AppendHumanPlayLandsEdgePlans(state, plans);
         for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
         return plans;
     }
@@ -3760,62 +3819,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     }
     add_for_land("", "");   // defer: play no land this turn
 
-    // Land's Edge activation as a PICKABLE plan action (human play only). Autonomous search
-    // auto-fires Land's Edge in ApplyPlanDirect's post-cast heuristic loop (suppressed under
-    // s_human_play), so the human had no way to fire it -- a Land's-Edge deck (treasure_hunt)
-    // could be cast but never won in the play GUI. Here, when the active player ALREADY controls
-    // a Land's Edge and holds lands, we fan out a DiscardToLandsEdge(N) variant of every base
-    // plan for N = 1..min(lands-after-this-plan's-drop, lethal). Deterministic, so the plan
-    // indices stay stable across CheckLine validation and the --choices stateless replay.
-    // Bounded at `lethal` because firing past lethal only pings a dead opponent (the over-fire
-    // class). v1 offers this only with an in-play Land's Edge -- cast-and-fire same turn is
-    // deferred. Gated entirely on human play, so autonomous goldfish enumeration is unchanged.
-    static const bool s_human_play_enum = std::getenv("MTG_HUMAN_PLAY") != nullptr;
-    if (s_human_play_enum)
-    {
-        int le_rate = 0;
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && d->params.discard_land_damage > 0)
-            { le_rate = std::max(le_rate, d->params.discard_land_damage); }
-        }
-        int lands_in_hand = 0;
-        std::string le_name = "Land's Edge";
-        for (const Card& c : ap.hand)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d ? d->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
-        }
-        if (le_rate > 0 && lands_in_hand > 0)
-        {
-            const int opp_life = state.players[1 - state.active_player_index].life;
-            const int lethal_lands = (opp_life > 0) ? (opp_life + le_rate - 1) / le_rate : 0;
-            // Snapshot the base plans now; appending while iterating would re-fan the variants.
-            const size_t base_count = all.size();
-            for (size_t i = 0; i < base_count; ++i)
-            {
-                // Lands left in hand after this plan takes its land drop (a played land leaves
-                // hand; a fetchland still leaves hand, fetching to the battlefield).
-                const bool plays_land = !all[i].land_to_play.empty();
-                const int  avail = lands_in_hand - (plays_land ? 1 : 0);
-                const int  maxN  = std::min(avail, std::max(0, lethal_lands));
-                for (int n = 1; n <= maxN; ++n)
-                {
-                    TurnSolver::Plan v = all[i];
-                    Action le;
-                    le.kind          = Action::Kind::DiscardToLandsEdge;
-                    le.card_name     = le_name;
-                    le.discard_lands = n;
-                    v.actions.push_back(std::move(le));
-                    v.value          = all[i].value + n * le_rate;
-                    v.wins_this_turn = all[i].wins_this_turn || (opp_life - n * le_rate <= 0);
-                    all.push_back(std::move(v));
-                }
-            }
-        }
-    }
+    // Land's Edge activation as a PICKABLE plan action (human play only) -- see the helper. Applied
+    // here for the land-drop-available path; the !drop_available early-return applies it too.
+    AppendHumanPlayLandsEdgePlans(state, all);
 
     // A tapped land that is a fine early play (a dual/tri/scry/surveil/depletion/Karoo tap
     // land played on a turn you don't need its mana) vs one you'd rather NOT play as a normal
