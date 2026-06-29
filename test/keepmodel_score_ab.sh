@@ -54,6 +54,7 @@ for key in $DECKS; do
   gini="$work/${stem}.keepmodel.profile.json"
   regret="$work/${stem}.keepmodel.regret.profile.json"
   score="$work/${stem}.keepmodel.score.profile.json"
+  hybrid="$work/${stem}.keepmodel.hybrid.profile.json"
   [ -f "$gini" ]   || { echo "  [$key] no gini model produced -- skip A/B"; continue; }
 
   echo "##### [$key] A/B #####"
@@ -62,6 +63,7 @@ for key in $DECKS; do
     run gini      "$gini"      "$d" "$s" "$wdeck" "$work"
     [ -f "$regret" ] && run regret "$regret" "$d" "$s" "$wdeck" "$work"
     [ -f "$score" ]  && run score  "$score"  "$d" "$s" "$wdeck" "$work"
+    [ -f "$hybrid" ] && run hybrid "$hybrid" "$d" "$s" "$wdeck" "$work"
   done; done
 
   python3 - "$work" "$((MAXT+1))" "$DEPTHS" "$SEEDS" "$key" <<'PY'
@@ -76,7 +78,7 @@ def load(fn):
     return m
 def reg(m,gis): return sum((m[g] if m[g]>0 else loss) for g in gis)/len(gis)
 def won(m,gis): return sum(1 for g in gis if m[g]>0)
-arms=["committed","gini","regret","score"]
+arms=["committed","gini","regret","score","hybrid"]
 print(f"== [{key}] 4-way turn-regret (loss={loss}; lower=better) ==")
 for d in depths:
     tot={a:0.0 for a in arms}; n=0; wl={a:0 for a in arms}

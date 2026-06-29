@@ -113,6 +113,9 @@ struct KeepNode
     int yes  = -1;   // child index when the test is TRUE
     int no   = -1;   // child index when the test is FALSE
     int keep = -1;   // leaf only: 1 = keep, 0 = mulligan
+    int leaf_score = -1;  // leaf only: >=0 => index into KeepModel::leaf_scores (HYBRID model-tree:
+                          // this leaf decides by an additive score, not the constant `keep` bit). -1 =>
+                          // constant-leaf (the pure tree). Append-only/back-compat: old trees load -1.
 };
 
 // A DATA-DEFINED feature, computed by a generic deterministic evaluator from a hand. This is what
@@ -203,6 +206,8 @@ struct KeepModel
     std::vector<Color>       deck_colors;  // colors counted by ColorsCovered (analyzer-chosen)
     std::vector<FeatureSpec> extra_features; // data-defined features appended after the base vector
     KeepScore                score;        // additive-score form (takes precedence over `nodes` if set)
+    std::vector<KeepScore>   leaf_scores;  // HYBRID model-tree: per-leaf additive scores (a leaf's
+                                           // KeepNode::leaf_score indexes here). Empty => pure tree.
 
     bool empty() const { return nodes.empty() && score.empty(); }
 
@@ -212,14 +217,19 @@ struct KeepModel
     // mulligans a hand because of a bad model).
     bool Keep(const std::vector<int>& feats) const
     {
-        if (!score.empty()) { return KeepByScore(feats); }
+        if (!score.empty()) { return KeepByScoreOf(score, feats); }
         if (nodes.empty()) { return true; }
         int idx = 0;
         const int n = static_cast<int>(nodes.size());
         for (int steps = 0; steps <= n; ++steps)   // <= n: cycle guard
         {
             const KeepNode& nd = nodes[idx];
-            if (nd.feat < 0) { return nd.keep != 0; }                 // leaf
+            if (nd.feat < 0)                                          // leaf
+            {
+                if (nd.leaf_score >= 0 && nd.leaf_score < static_cast<int>(leaf_scores.size()))
+                { return KeepByScoreOf(leaf_scores[nd.leaf_score], feats); }   // hybrid: additive leaf
+                return nd.keep != 0;                                  // constant leaf
+            }
             if (nd.feat >= static_cast<int>(feats.size())) { return true; }  // malformed
             const int v = feats[nd.feat];
             const bool test = (nd.op == static_cast<int>(KeepOp::Ge)) ? (v >= nd.val)
@@ -236,12 +246,12 @@ struct KeepModel
     // threshold for this hand's (on_the_play, mulligan_count). Both sides are the same fixed-point
     // scale, so the compare is exact. mulligan_count / on_the_play are read straight from the feature
     // vector (their fixed base indices), so the call site stays the form-agnostic Keep(feats).
-    bool KeepByScore(const std::vector<int>& feats) const
+    static bool KeepByScoreOf(const KeepScore& sc, const std::vector<int>& feats)
     {
         const int nf = static_cast<int>(feats.size());
-        long long est = score.intercept;
-        const int n = std::min(nf, static_cast<int>(score.coefs.size()));
-        for (int i = 0; i < n; ++i) { est += score.coefs[i] * static_cast<long long>(feats[i]); }
+        long long est = sc.intercept;
+        const int n = std::min(nf, static_cast<int>(sc.coefs.size()));
+        for (int i = 0; i < n; ++i) { est += sc.coefs[i] * static_cast<long long>(feats[i]); }
 
         const int play_i = static_cast<int>(KeepFeature::OnThePlay);
         const int mull_i = static_cast<int>(KeepFeature::MulliganCount);
@@ -249,8 +259,8 @@ struct KeepModel
         int mull = (mull_i < nf) ? feats[mull_i] : 0;
         if (mull < 0) { mull = 0; }
 
-        if (score.thr.empty()) { return true; }
-        const std::vector<long long>& row = score.thr[play < static_cast<int>(score.thr.size()) ? play : 0];
+        if (sc.thr.empty()) { return true; }
+        const std::vector<long long>& row = sc.thr[play < static_cast<int>(sc.thr.size()) ? play : 0];
         if (mull >= static_cast<int>(row.size())) { return true; }   // beyond trained depth = forced keep
         return est <= row[mull];
     }

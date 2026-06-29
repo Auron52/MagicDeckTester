@@ -117,9 +117,10 @@ int main(int argc, char* argv[])
                                   return e && std::string(e) == "both"; }();
             // In both-mode, ALSO fit the additive score model from the same kv table (cheap second fit)
             // so a matched gini/regret/score 3-way A/B comes from one rollout pass.
-            KeepModel alt, score;
+            KeepModel alt, score, hybrid;
             base.keep_model = BuildKeepModel(deck, base, base.card_scores, cfg,
-                                             both ? &alt : nullptr, both ? &score : nullptr);
+                                             both ? &alt : nullptr, both ? &score : nullptr,
+                                             both ? &hybrid : nullptr);
 
             std::filesystem::path out_path =
                 deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.profile.json");
@@ -142,8 +143,9 @@ int main(int argc, char* argv[])
             };
             if (both)
             {
-                write_side(alt,   "regret");
-                write_side(score, "score");
+                write_side(alt,    "regret");
+                write_side(score,  "score");
+                write_side(hybrid, "hybrid");
             }
             return 0;
         }

@@ -56,4 +56,5 @@ KeepModel BuildKeepModel(const Decklist& deck,
                          const std::map<std::string, std::vector<double>>& card_scores,
                          const KeepModelTrainConfig& cfg,
                          KeepModel* out_alt = nullptr,
-                         KeepModel* out_score = nullptr);
+                         KeepModel* out_score = nullptr,
+                         KeepModel* out_hybrid = nullptr);

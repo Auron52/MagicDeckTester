@@ -77,6 +77,59 @@ inline Color CharToColor(const std::string& s)
 
 // ---- KeepModel JSON (the analyzer-generated keep decision tree, stored in the profile) -----
 
+// One additive score (coefs keyed by feature NAME, intercept, per-(play,mull) thresholds). Shared by
+// the single-score form and each hybrid leaf score (their coefs align with the same full vector).
+inline nlohmann::json ScoreToJsonObj(const KeepModel& km, const KeepScore& s)
+{
+    using json = nlohmann::json;
+    json sc;
+    sc["intercept"] = s.intercept;
+    json coefs = json::object();
+    for (int j = 0; j < static_cast<int>(s.coefs.size()); ++j)
+    { if (s.coefs[j] != 0) { coefs[FeatureNameAt(km, j)] = s.coefs[j]; } }
+    sc["coefs"] = coefs;
+    json thr = json::array();
+    for (const std::vector<long long>& row : s.thr)
+    {
+        json jr = json::array();
+        for (long long v : row) { jr.push_back(v); }
+        thr.push_back(jr);
+    }
+    sc["thr"] = thr;
+    return sc;
+}
+
+inline KeepScore ScoreFromJsonObj(const KeepModel& km, const nlohmann::json& sc)
+{
+    using json = nlohmann::json;
+    KeepScore s;
+    s.intercept = sc.value("intercept", 0LL);
+    const int full = static_cast<int>(KeepFeature::Count) + static_cast<int>(km.extra_features.size());
+    s.coefs.assign(full, 0LL);
+    if (sc.contains("coefs"))
+    {
+        if (sc["coefs"].is_object())
+        {
+            for (const auto& [name, val] : sc["coefs"].items())
+            {
+                const int idx = FeatureIndexFromName(km, name);
+                if (idx >= 0 && idx < full) { s.coefs[idx] = val.get<long long>(); }
+            }
+        }
+        else { int j = 0; for (const json& v : sc["coefs"]) { if (j < full) { s.coefs[j++] = v.get<long long>(); } } }
+    }
+    if (sc.contains("thr"))
+    {
+        for (const json& jr : sc["thr"])
+        {
+            std::vector<long long> row;
+            for (const json& v : jr) { row.push_back(v.get<long long>()); }
+            s.thr.push_back(row);
+        }
+    }
+    return s;
+}
+
 inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
 {
     using json = nlohmann::json;
@@ -116,6 +169,7 @@ inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
         if (n.feat < 0)   // leaf
         {
             jn["leaf"] = (n.keep != 0) ? "keep" : "mull";
+            if (n.leaf_score >= 0) { jn["leaf_score"] = n.leaf_score; }   // hybrid additive leaf
         }
         else
         {
@@ -129,27 +183,16 @@ inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
     }
     m["nodes"] = nodes;
 
-    // Additive-score form (when present it OWNS the decision; `nodes` is empty for a pure score model).
-    // Coefs are keyed by FEATURE NAME (not position) so the model survives appending new base features
-    // later -- an absent name loads as a zero coef. thr is [on_the_play][mulligan_count] = continuation
-    // value V[mull+1], in the same fixed-point scale as the coefs (the scale cancels in the compare).
-    if (!km.score.empty())
+    // Additive-score form (single): when present it OWNS the decision; `nodes` is empty. Coefs are keyed
+    // by FEATURE NAME so the model survives appending new base features later (absent name => 0 coef).
+    if (!km.score.empty()) { m["score"] = ScoreToJsonObj(km, km.score); }
+
+    // Hybrid model-tree: the per-leaf additive scores the tree's leaves dispatch to.
+    if (!km.leaf_scores.empty())
     {
-        json sc;
-        sc["intercept"] = km.score.intercept;
-        json coefs = json::object();
-        for (int j = 0; j < static_cast<int>(km.score.coefs.size()); ++j)
-        { if (km.score.coefs[j] != 0) { coefs[FeatureNameAt(km, j)] = km.score.coefs[j]; } }
-        sc["coefs"] = coefs;
-        json thr = json::array();
-        for (const std::vector<long long>& row : km.score.thr)
-        {
-            json jr = json::array();
-            for (long long v : row) { jr.push_back(v); }
-            thr.push_back(jr);
-        }
-        sc["thr"] = thr;
-        m["score"] = sc;
+        json ls = json::array();
+        for (const KeepScore& s : km.leaf_scores) { ls.push_back(ScoreToJsonObj(km, s)); }
+        m["leaf_scores"] = ls;
     }
     return m;
 }
@@ -193,6 +236,7 @@ inline KeepModel KeepModelFromJsonObj(const nlohmann::json& m)
             {
                 n.feat = -1;
                 n.keep = (jn["leaf"].get<std::string>() == "keep") ? 1 : 0;
+                n.leaf_score = jn.value("leaf_score", -1);   // hybrid additive leaf (else constant)
             }
             else
             {
@@ -205,40 +249,13 @@ inline KeepModel KeepModelFromJsonObj(const nlohmann::json& m)
             km.nodes.push_back(n);
         }
     }
-    if (m.contains("score"))
+    // Score coefs are rebuilt POSITIONALLY (aligned to base [0..Count) ++ this model's extra_features)
+    // by feature NAME, so appending a base feature later just gives old models a 0 coef. extra_features
+    // are already loaded above, so the name->index resolution is correct.
+    if (m.contains("score")) { km.score = ScoreFromJsonObj(km, m["score"]); }
+    if (m.contains("leaf_scores"))
     {
-        const json& sc = m["score"];
-        km.score.intercept = sc.value("intercept", 0LL);
-        // Rebuild the POSITIONAL coef vector aligned with the full runtime feature vector
-        // (base [0..Count) ++ this model's extra_features). Name-keyed -> absent names stay 0, and a
-        // future appended base feature simply gets a 0 coef instead of mis-aligning the whole vector.
-        const int full = static_cast<int>(KeepFeature::Count) + static_cast<int>(km.extra_features.size());
-        km.score.coefs.assign(full, 0LL);
-        if (sc.contains("coefs"))
-        {
-            if (sc["coefs"].is_object())
-            {
-                for (const auto& [name, val] : sc["coefs"].items())
-                {
-                    const int idx = FeatureIndexFromName(km, name);
-                    if (idx >= 0 && idx < full) { km.score.coefs[idx] = val.get<long long>(); }
-                }
-            }
-            else   // legacy positional array (pre name-keying)
-            {
-                int j = 0;
-                for (const json& v : sc["coefs"]) { if (j < full) { km.score.coefs[j++] = v.get<long long>(); } }
-            }
-        }
-        if (sc.contains("thr"))
-        {
-            for (const json& jr : sc["thr"])
-            {
-                std::vector<long long> row;
-                for (const json& v : jr) { row.push_back(v.get<long long>()); }
-                km.score.thr.push_back(row);
-            }
-        }
+        for (const json& js : m["leaf_scores"]) { km.leaf_scores.push_back(ScoreFromJsonObj(km, js)); }
     }
     return km;
 }
