@@ -44,6 +44,11 @@ enum class KeepFeature : int
     PlayableStrict,     // # nonland castable under a CORRECT per-colour allocation (no fungible wild pool)
     CurveDepth,         // # of turns 1..4 with a sequenceable on-curve play given the hand's land ramp
     CountMv3,           // # nonland spells with mana value <= 3
+    // --- on-time castability: can each spell's EXACT colour cost be produced BY its on-curve turn,
+    //     accounting for lands that enter TAPPED (a tap-land costs a turn of tempo) + correct colour
+    //     allocation. This is the "right colours at the right time" axis the coarse curve_depth misses. ---
+    OnTimeCount,        // # nonland spells castable on their curve turn (mv) -- colour + tapped aware
+    WorstLateness,      // worst # of turns any hand spell is late vs its curve turn (colour screw = capped)
     Count               // sentinel: number of features
 };
 
@@ -71,6 +76,8 @@ inline const char* KeepFeatureName(KeepFeature f)
         case KeepFeature::PlayableStrict:  return "playable_strict";
         case KeepFeature::CurveDepth:      return "curve_depth";
         case KeepFeature::CountMv3:        return "count_mv3";
+        case KeepFeature::OnTimeCount:     return "on_time_count";
+        case KeepFeature::WorstLateness:   return "worst_lateness";
         default:                         return "?";
     }
 }
@@ -128,6 +135,9 @@ enum class FeatureKind : int
     SubtypeDensity,     // s = subtype name: # hand cards carrying that subtype (tribal payoff/density)
     Diff,               // a,b = feature indices into the full vector -> val[a] - val[b]
     Min,                // a,b = indices -> min(val[a], val[b])
+    Product,            // a,b = indices -> val[a] * val[b]  (lets a LINEAR score express a conjunction:
+                        // e.g. key_piece_count x land_count is high only when BOTH hold -> "keep iff
+                        // you have the engine piece AND the lands", the AND a pure additive sum can't do)
 };
 
 inline const char* FeatureKindName(FeatureKind k)
@@ -143,12 +153,13 @@ inline const char* FeatureKindName(FeatureKind k)
         case FeatureKind::SubtypeDensity:    return "subtype_density";
         case FeatureKind::Diff:              return "diff";
         case FeatureKind::Min:               return "min";
+        case FeatureKind::Product:           return "product";
     }
     return "?";
 }
 inline int FeatureKindFromName(const std::string& s)
 {
-    for (int i = 0; i <= static_cast<int>(FeatureKind::Min); ++i)
+    for (int i = 0; i <= static_cast<int>(FeatureKind::Product); ++i)
     { if (s == FeatureKindName(static_cast<FeatureKind>(i))) { return i; } }
     return -1;
 }
@@ -163,20 +174,45 @@ struct FeatureSpec
     std::string name;           // serialized feature name; also the tree-node split name for this spec
 };
 
+// Additive hand-score keep model (an ALTERNATIVE form to the decision tree). Instead of a sequence of
+// hard splits, it predicts the hand's expected (blind) win-turn as a LINEAR sum over the feature
+// vector -- est_win = intercept + Sum_f coef_f * feat_f -- and KEEPS iff that prediction is no worse
+// than the value of mulliganing on (the policy-simulated continuation value V[mull+1]). This matches
+// the real mulligan decision shape the static profile already uses (a graded accumulation of soft
+// penalties vs a threshold), so several individually-acceptable-but-non-ideal factors can SUM past the
+// keep line even when no single hard gate trips -- the conjunctive judgment a shallow greedy tree
+// can't represent. Integer-only (the fit's doubles are quantised to SCORE_SCALE fixed-point at
+// generation time, exactly as card_scores are), so the runtime compare is exact and deterministic.
+// All coefs/thresholds share the same fixed-point scale, so it cancels in the `score <= thr` compare;
+// the scale only governs rounding precision and need not be stored.
+struct KeepScore
+{
+    std::vector<long long>               coefs;      // per full-vector feature, fixed-point units
+    long long                            intercept = 0;
+    // continuation thresholds: thr[on_the_play][mulligan_count] = V[mull+1] in the same fixed-point
+    // units. A mulligan_count beyond the trained range maps to forced-keep (the descent's anchor).
+    std::vector<std::vector<long long>>  thr;
+
+    bool empty() const { return coefs.empty(); }
+};
+
 struct KeepModel
 {
     std::vector<KeepNode>    nodes;        // nodes[0] = root; empty => no model (use legacy KeepHand)
     std::vector<std::string> key_pieces;   // cards counted by KeyPieceCount (analyzer-chosen)
     std::vector<Color>       deck_colors;  // colors counted by ColorsCovered (analyzer-chosen)
     std::vector<FeatureSpec> extra_features; // data-defined features appended after the base vector
+    KeepScore                score;        // additive-score form (takes precedence over `nodes` if set)
 
-    bool empty() const { return nodes.empty(); }
+    bool empty() const { return nodes.empty() && score.empty(); }
 
-    // Walk the tree on a feature vector indexed by KeepFeature. Returns true = keep, false = mull.
-    // Defensive against a malformed/cyclic serialized tree: bounded by node count, defaults to keep
-    // (the conservative choice -- never silently mulligans a hand because of a bad artifact).
+    // Decide keep/mulligan from a feature vector indexed by KeepFeature. The additive-score form takes
+    // precedence when present; otherwise walk the decision tree. Either way returns true = keep.
+    // Defensive against a malformed/cyclic artifact: bounded, defaults to keep (never silently
+    // mulligans a hand because of a bad model).
     bool Keep(const std::vector<int>& feats) const
     {
+        if (!score.empty()) { return KeepByScore(feats); }
         if (nodes.empty()) { return true; }
         int idx = 0;
         const int n = static_cast<int>(nodes.size());
@@ -194,6 +230,29 @@ struct KeepModel
             idx = next;
         }
         return true;   // cycle guard tripped
+    }
+
+    // Additive-score decision: est_win = intercept + Sum coef*feat; KEEP iff est_win <= continuation
+    // threshold for this hand's (on_the_play, mulligan_count). Both sides are the same fixed-point
+    // scale, so the compare is exact. mulligan_count / on_the_play are read straight from the feature
+    // vector (their fixed base indices), so the call site stays the form-agnostic Keep(feats).
+    bool KeepByScore(const std::vector<int>& feats) const
+    {
+        const int nf = static_cast<int>(feats.size());
+        long long est = score.intercept;
+        const int n = std::min(nf, static_cast<int>(score.coefs.size()));
+        for (int i = 0; i < n; ++i) { est += score.coefs[i] * static_cast<long long>(feats[i]); }
+
+        const int play_i = static_cast<int>(KeepFeature::OnThePlay);
+        const int mull_i = static_cast<int>(KeepFeature::MulliganCount);
+        int play = (play_i < nf && feats[play_i] == 1) ? 1 : 0;
+        int mull = (mull_i < nf) ? feats[mull_i] : 0;
+        if (mull < 0) { mull = 0; }
+
+        if (score.thr.empty()) { return true; }
+        const std::vector<long long>& row = score.thr[play < static_cast<int>(score.thr.size()) ? play : 0];
+        if (mull >= static_cast<int>(row.size())) { return true; }   // beyond trained depth = forced keep
+        return est <= row[mull];
     }
 };
 

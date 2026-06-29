@@ -71,8 +71,9 @@ int EvalFeatureSpec(const FeatureSpec& spec, const std::vector<Card>& hand,
             }
             return c;
         }
-        case FeatureKind::Diff: return at(spec.a) - at(spec.b);
-        case FeatureKind::Min:  return std::min(at(spec.a), at(spec.b));
+        case FeatureKind::Diff:    return at(spec.a) - at(spec.b);
+        case FeatureKind::Min:     return std::min(at(spec.a), at(spec.b));
+        case FeatureKind::Product: return at(spec.a) * at(spec.b);
     }
     return 0;
 }
@@ -97,6 +98,7 @@ std::vector<int> ComputeKeepFeatures(const std::vector<Card>& hand, int mulligan
     int src[kNumColors]    = {0};
     int generic_sources    = 0;            // produce only {C}/colourless -> pay generic only
     std::vector<int> duals;                // each = bitmask over the 5 colours the dual can produce
+    int tapped_lands       = 0;            // lands that enter tapped (cost a turn of tempo -> on-time)
 
     for (const Card& c : hand)
     {
@@ -105,6 +107,8 @@ std::vector<int> ComputeKeepFeatures(const std::vector<Card>& hand, int mulligan
         if (is_land)
         {
             ++land;
+            if (def && (def->params.enters_tapped || def->params.enters_tapped_with_depletion > 0))
+            { ++tapped_lands; }
             if (def)
             {
                 const std::vector<Color>& prod = EffectiveProducesInHand(hand, *def);  // RP-aware
@@ -268,6 +272,41 @@ std::vector<int> ComputeKeepFeatures(const std::vector<Card>& hand, int mulligan
         }
     }
 
+    // On-time castability: for each nonland spell, can its EXACT colour cost be produced BY its
+    // curve turn (= mana value), accounting for lands that enter tapped? Mana ONLINE on turn t when you
+    // play one land/turn, tapped lands first (so they untap in time): a tapped land is online only if
+    // played by turn t-1, an untapped land if played by turn t. So two taplands delay a 2-drop to turn 3.
+    // Colour correctness reuses the strict per-colour allocation (a {G}{R} dual can't pay {U}); ramp
+    // (dorks/rocks) is NOT modelled here -- this is the land-tempo + colour axis curve_depth lacks.
+    auto online_mana = [&](int t) -> int
+    {
+        const int drops = std::min(t, land);
+        const int tapped_played   = std::min(tapped_lands, drops);
+        const int untapped_played = drops - tapped_played;
+        const int tapped_online   = std::min(tapped_played, std::max(0, t - 1));
+        return tapped_online + untapped_played;
+    };
+    constexpr int kLateCap = 6;
+    int on_time_count = 0, worst_lateness = 0;
+    for (const Card& c : hand)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (!def || def->card.IsLand()) { continue; }
+        const ManaCost& cost = def->card.m_mana_cost;
+        const int mv = cost.ManaValue();
+        if (mv <= 0) { ++on_time_count; continue; }      // free spell: trivially on time
+        const bool color_ok = strict_castable(cost);
+        int earliest = mv + kLateCap;                    // sentinel "never / colour screwed"
+        if (color_ok)
+        {
+            for (int t = mv; t <= mv + kLateCap; ++t)
+            { if (online_mana(t) >= mv) { earliest = t; break; } }
+        }
+        const int lateness = std::min(kLateCap, earliest - mv);
+        if (color_ok && earliest <= mv) { ++on_time_count; }
+        worst_lateness = std::max(worst_lateness, lateness);
+    }
+
     f[static_cast<int>(KeepFeature::FinalHandSize)] = hand_size - mulligan_count;
     f[static_cast<int>(KeepFeature::MulliganCount)] = mulligan_count;
     f[static_cast<int>(KeepFeature::OnThePlay)]     = on_the_play ? 1 : 0;
@@ -288,6 +327,8 @@ std::vector<int> ComputeKeepFeatures(const std::vector<Card>& hand, int mulligan
     f[static_cast<int>(KeepFeature::PlayableStrict)]  = playable_strict;
     f[static_cast<int>(KeepFeature::CurveDepth)]      = curve_depth;
     f[static_cast<int>(KeepFeature::CountMv3)]        = mv3;
+    f[static_cast<int>(KeepFeature::OnTimeCount)]     = on_time_count;
+    f[static_cast<int>(KeepFeature::WorstLateness)]   = worst_lateness;
 
     // Append the data-defined extra features (empty for a Stage-1/legacy model -> byte-identical).
     // Computed left-to-right so a composite's operands (earlier indices) are already in `f`.

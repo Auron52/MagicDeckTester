@@ -35,6 +35,43 @@ int g_nf = BASE_FN;
 // lower -- the Slivers gi=35 landless-keep bug.) M_CAP bounds the per-game arrays: m = 0..6 = sizes 7..1.
 constexpr int M_CAP = 6;
 
+// Fixed-point scale for the additive-score model's integer coefs/thresholds (mirrors how card_scores
+// quantise a fitted double into the profile). 1e6 makes per-coef rounding error ~1e-6 turn/unit ->
+// negligible vs the turn-scale decision, while staying far inside int64 for the dot product.
+constexpr long long SCORE_SCALE = 1000000;
+
+// Solve A x = b for a small dense DxD system by Gaussian elimination with partial pivoting (doubles,
+// offline -- only the QUANTISED result ships, so this never feeds a GT decision directly). Returns
+// false if singular. A and b are consumed (modified in place).
+inline bool SolveLinear(std::vector<std::vector<double>>& A, std::vector<double>& b, std::vector<double>& x)
+{
+    const int D = static_cast<int>(b.size());
+    for (int col = 0; col < D; ++col)
+    {
+        int piv = col; double best = std::abs(A[col][col]);
+        for (int r = col + 1; r < D; ++r)
+        { if (std::abs(A[r][col]) > best) { best = std::abs(A[r][col]); piv = r; } }
+        if (best < 1e-12) { return false; }
+        std::swap(A[col], A[piv]); std::swap(b[col], b[piv]);
+        const double d = A[col][col];
+        for (int r = col + 1; r < D; ++r)
+        {
+            const double f = A[r][col] / d;
+            if (f == 0.0) { continue; }
+            for (int c = col; c < D; ++c) { A[r][c] -= f * A[col][c]; }
+            b[r] -= f * b[col];
+        }
+    }
+    x.assign(D, 0.0);
+    for (int row = D - 1; row >= 0; --row)
+    {
+        double s = b[row];
+        for (int c = row + 1; c < D; ++c) { s -= A[row][c] * x[c]; }
+        x[row] = s / A[row][row];
+    }
+    return true;
+}
+
 // ---- dynamic self-scheduled parallel-for (mirrors AnalyzerEngine's) ------------------
 template <class Fn>
 void ParallelFor(int n, Fn fn)
@@ -63,7 +100,7 @@ void ParallelFor(int n, Fn fn)
 struct GameData
 {
     bool valid = false;
-    int  kv[2][M_CAP + 1];                       // keep value (win turn), [on_play][mulligan_count]
+    double kv[2][M_CAP + 1];                     // keep value (win turn, blind-averaged), [on_play][mull]
     std::vector<int> feats[2][M_CAP + 1];        // feature vector (size g_nf), [on_play][mull][feature]
     std::vector<Card> hand;                       // the sampled opening 7 (for bootstrap reference keep)
 };
@@ -195,6 +232,18 @@ std::vector<FeatureSpec> BuildCandidateSpecs(const Decklist& deck, const std::ve
         static_cast<int>(KeepFeature::PlayableStrict), "", "uncastable");      // cards stuck in hand
     add(FeatureKind::Diff, 0, static_cast<int>(KeepFeature::LandCount),
         static_cast<int>(KeepFeature::CurveDepth), "", "excess_dev");          // lands beyond the curve
+
+    // CONJUNCTION (interaction) candidates -- products that are high only when BOTH operands hold, so a
+    // LINEAR score can express an AND. These target combo/engine decks (e.g. Treasure Hunt) whose keep
+    // is "have the payoff piece AND the support", which a pure additive sum of single-factor penalties
+    // structurally cannot represent. Operands are BASE indices (stable under compaction).
+    auto prod = [&](KeepFeature a, KeepFeature b, const std::string& nm)
+    { add(FeatureKind::Product, 0, static_cast<int>(a), static_cast<int>(b), "", nm); };
+    prod(KeepFeature::KeyPieceCount, KeepFeature::LandCount,      "piece_x_land");   // engine + mana
+    prod(KeepFeature::KeyPieceCount, KeepFeature::PlayableStrict, "piece_x_castable");
+    prod(KeepFeature::KeyPieceCount, KeepFeature::OnTimeCount,    "piece_x_ontime");
+    prod(KeepFeature::KeyPieceCount, KeepFeature::CurveDepth,     "piece_x_curve");
+    prod(KeepFeature::PlayableStrict, KeepFeature::LandCount,     "castable_x_land");
     return specs;
 }
 
@@ -398,7 +447,8 @@ KeepModel BuildKeepModel(const Decklist& deck,
                          const MulliganProfile& base_profile,
                          const std::map<std::string, std::vector<double>>& card_scores,
                          const KeepModelTrainConfig& cfg,
-                         KeepModel* out_alt)
+                         KeepModel* out_alt,
+                         KeepModel* out_score)
 {
     std::cerr << "Building mulligan keep model (" << cfg.games
               << " hands, depth=" << cfg.depth << ")...\n";
@@ -449,9 +499,19 @@ KeepModel BuildKeepModel(const Decklist& deck,
     // Compute the clairvoyant keep value at mulligan depth m for every sampled hand (parallel).
     // Re-derives each game's exact opening state from its seed (deterministic), bottoms m, rolls out.
     // Called on demand by the adaptive descent so we never pay for rarely-reached (expensive) depths.
+    // Multi-rollout BLIND keep value: average over R reshuffles of the REST of the library (the opening
+    // 7 stay fixed). A single rollout's draw order is one realised game -- high variance for combo/flood
+    // decks (TH/slivers/Hinata) -- so the per-hand label is noisy. Reshuffling the rest marginalises out
+    // the draw (the OPPOSITE of clairvoyance): the label becomes the hand's expected win-turn over random
+    // continuations, which is exactly what the keep decision should be predicting. R=1 (default) keeps
+    // the original single-rollout behaviour (no reshuffle) so existing fits are unchanged.
+    const int rollouts = []{ const char* e = std::getenv("MTG_KEEP_ROLLOUTS");
+                             int v = (e && *e) ? std::atoi(e) : 1; return v < 1 ? 1 : v; }();
     auto compute_kv_level = [&](int m)
     {
-        std::cerr << "    keep-model: keep-values at hand size " << (7 - m) << "...\n" << std::flush;
+        std::cerr << "    keep-model: keep-values at hand size " << (7 - m)
+                  << (rollouts > 1 ? " (x" + std::to_string(rollouts) + " blind rollouts)" : "")
+                  << "...\n" << std::flush;
         ParallelFor(G, [&](int g)
         {
             if (!data[g].valid) { return; }
@@ -459,12 +519,25 @@ KeepModel BuildKeepModel(const Decklist& deck,
             ai.SetSearchPostCombat(second_main);
             for (int p = 0; p < 2; ++p)
             {
-                GameState s = GoldFishRunner::SetupGame(deck, seed_off + static_cast<uint64_t>(g));
-                s.m_required_pieces = &rollout_profile.required_pieces;
-                s.vial_target_mv    = rollout_profile.vial_target_mv;
-                s.ActivePlayer().library.DrawN(7, s.ActivePlayer().hand);
-                s.on_the_play       = (p == 1);
-                data[g].kv[p][m]    = ai.RolloutKeepWinTurn(s, m, cfg.max_turns);
+                double sum = 0.0;
+                for (int r = 0; r < rollouts; ++r)
+                {
+                    GameState s = GoldFishRunner::SetupGame(deck, seed_off + static_cast<uint64_t>(g));
+                    s.m_required_pieces = &rollout_profile.required_pieces;
+                    s.vial_target_mv    = rollout_profile.vial_target_mv;
+                    s.ActivePlayer().library.DrawN(7, s.ActivePlayer().hand);
+                    s.on_the_play       = (p == 1);
+                    // Reshuffle the post-draw library (the rest) with a per-(g,p,r) deterministic seed.
+                    // r==0 at R>1 still reshuffles, so the average is over R independent continuations.
+                    if (rollouts > 1)
+                    {
+                        const uint64_t rs = seed_off + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
+                                          + 1000003ULL * static_cast<uint64_t>(g) + static_cast<uint64_t>(p);
+                        s.ActivePlayer().library.Shuffle(rs);
+                    }
+                    sum += ai.RolloutKeepWinTurn(s, m, cfg.max_turns);
+                }
+                data[g].kv[p][m] = sum / rollouts;
             }
         });
     };
@@ -553,8 +626,9 @@ KeepModel BuildKeepModel(const Decklist& deck,
     // tree within MARGIN of a deep baseline. Returns the UNCOMPACTED node vector (feat indices into
     // the full candidate vector, so a fitted tree can be re-evaluated on the cached feats during
     // policy iteration); compaction happens once at the end. Empty -> too few rows (caller bails).
-    auto fit_nodes = [&](const double (&baseline)[2][M_CAP + 1], const std::string& tag,
-                         bool dump_rows, bool regret) -> std::vector<KeepNode>
+    // Build the labeled rows for a given mulligan baseline[p][m] (= "value of mulliganing on" at depth
+    // m). Shared by the tree fit and the additive-score fit so both see byte-identical rows/order.
+    auto build_rows = [&](const double (&baseline)[2][M_CAP + 1]) -> std::vector<Row>
     {
         std::vector<Row> rows;
         for (int g = 0; g < G; ++g)
@@ -574,6 +648,13 @@ KeepModel BuildKeepModel(const Decklist& deck,
                 rows.push_back(r);
             }
         }
+        return rows;
+    };
+
+    auto fit_nodes = [&](const double (&baseline)[2][M_CAP + 1], const std::string& tag,
+                         bool dump_rows, bool regret) -> std::vector<KeepNode>
+    {
+        std::vector<Row> rows = build_rows(baseline);
 
         if (static_cast<int>(rows.size()) < 200)
         {
@@ -669,6 +750,124 @@ KeepModel BuildKeepModel(const Decklist& deck,
         return fit;
     };
 
+    // ---- additive hand-score fit: ridge-regress kv on the full feature vector ----------------------
+    // Predicts the hand's expected blind win-turn as a LINEAR sum, then KEEP iff that prediction is no
+    // worse than the value of mulliganing on (= baseline[p][m+1]). This is the optimal-stopping rule
+    // with a learned predictor in place of the single noisy realised kv: accurate prediction => optimal
+    // keep. The additive form encodes the user's "graded accumulation of soft factors" directly (each
+    // non-ideal factor adds turns), which a shallow greedy tree structurally can't. Returns the
+    // UNCOMPACTED KeepScore (coefs over the full candidate vector); compaction happens in make_model.
+    auto fit_score = [&](const double (&baseline)[2][M_CAP + 1], const std::string& tag) -> KeepScore
+    {
+        std::vector<Row> rows = build_rows(baseline);
+        if (static_cast<int>(rows.size()) < 200)
+        {
+            std::cerr << "  keep-model" << tag << ": too few labeled hands (" << rows.size()
+                      << ") -- keeping the legacy keep path.\n";
+            return KeepScore{};
+        }
+        const int D = g_nf;
+        const int N = static_cast<int>(rows.size());
+
+        std::vector<int> train, test;
+        for (int i = 0; i < N; ++i)
+        { if (rows[i].game % 5 == 0) { test.push_back(i); } else { train.push_back(i); } }
+
+        // Ridge fit in STANDARDISED feature space (so lambda is scale-free + the normal equations are
+        // well-conditioned despite collinear per-colour features), then map coefs back to raw units.
+        // Constant features (sd==0) get a zero coef automatically. Returns coefs[D] + intercept.
+        auto ridge_fit = [&](const std::vector<int>& idx, double lambda,
+                             std::vector<double>& coef, double& inter) -> bool
+        {
+            const int n = static_cast<int>(idx.size());
+            if (n == 0) { return false; }
+            std::vector<double> mean(D, 0.0), sd(D, 0.0); double ybar = 0.0;
+            for (int i : idx) { ybar += rows[i].kv; for (int j = 0; j < D; ++j) { mean[j] += rows[i].x[j]; } }
+            ybar /= n; for (int j = 0; j < D; ++j) { mean[j] /= n; }
+            for (int i : idx) for (int j = 0; j < D; ++j)
+            { const double d = rows[i].x[j] - mean[j]; sd[j] += d * d; }
+            for (int j = 0; j < D; ++j) { sd[j] = (sd[j] > 1e-9) ? std::sqrt(sd[j] / n) : 0.0; }
+
+            std::vector<std::vector<double>> A(D, std::vector<double>(D, 0.0));
+            std::vector<double> rhs(D, 0.0), z(D, 0.0);
+            for (int i : idx)
+            {
+                for (int j = 0; j < D; ++j) { z[j] = sd[j] > 0.0 ? (rows[i].x[j] - mean[j]) / sd[j] : 0.0; }
+                const double yc = rows[i].kv - ybar;
+                for (int a = 0; a < D; ++a)
+                {
+                    if (z[a] == 0.0) { continue; }
+                    rhs[a] += z[a] * yc;
+                    for (int b = 0; b < D; ++b) { A[a][b] += z[a] * z[b]; }
+                }
+            }
+            for (int j = 0; j < D; ++j) { A[j][j] += lambda; }   // ridge (also de-singularises constants)
+            std::vector<double> w;
+            if (!SolveLinear(A, rhs, w)) { return false; }
+            coef.assign(D, 0.0); inter = ybar;
+            for (int j = 0; j < D; ++j)
+            { if (sd[j] > 0.0) { coef[j] = w[j] / sd[j]; inter -= coef[j] * mean[j]; } }
+            return true;
+        };
+
+        // Held-out turn-regret of the additive DECISION (keep iff pred <= thr) over a row subset.
+        auto score_regret = [&](const std::vector<double>& coef, double inter,
+                                const std::vector<int>& idx) -> double
+        {
+            if (idx.empty()) { return 0.0; }
+            double sum = 0.0;
+            for (int i : idx)
+            {
+                double pred = inter;
+                for (int j = 0; j < D; ++j) { pred += coef[j] * rows[i].x[j]; }
+                const bool keep = pred <= rows[i].thr;
+                const double chosen = keep ? rows[i].kv : rows[i].thr;
+                sum += chosen - std::min(rows[i].kv, rows[i].thr);
+            }
+            return sum / idx.size();
+        };
+
+        // Sweep ridge strength; pick the lambda with the lowest HELD-OUT decision regret.
+        const double lambdas[] = { 0.001, 0.1, 1.0, 10.0, 100.0 };
+        double best_lambda = 1.0, best_rg = 1e18;
+        std::vector<double> coef; double inter = 0.0;
+        for (double lam : lambdas)
+        {
+            if (!ridge_fit(train, lam, coef, inter)) { continue; }
+            const double rg = score_regret(coef, inter, test);
+            std::cerr << "    score lambda=" << lam << " -> held-out regret=" << rg << "\n";
+            if (rg < best_rg - 1e-12) { best_rg = rg; best_lambda = lam; }
+        }
+        // Context bar: cost of never learning.
+        double always_keep = 0.0, always_mull = 0.0;
+        for (int i : test)
+        {
+            const double oracle = std::min(rows[i].kv, rows[i].thr);
+            always_keep += rows[i].kv  - oracle;
+            always_mull += rows[i].thr - oracle;
+        }
+        if (!test.empty()) { always_keep /= test.size(); always_mull /= test.size(); }
+        std::cerr << "  keep-model" << tag << " score accuracy bar (held-out mean regret, turns):\n"
+                  << "    always-keep=" << always_keep << "  always-mull=" << always_mull
+                  << "  best-score=" << best_rg << " (lambda=" << best_lambda << ")\n";
+
+        // Refit on ALL rows at the chosen lambda; quantise to fixed-point integers.
+        if (!ridge_fit(train, best_lambda, coef, inter)) { return KeepScore{}; }
+        std::vector<double> coef_all; double inter_all = 0.0;
+        std::vector<int> all(N); for (int i = 0; i < N; ++i) { all[i] = i; }
+        if (!ridge_fit(all, best_lambda, coef_all, inter_all)) { coef_all = coef; inter_all = inter; }
+
+        KeepScore sc;
+        sc.coefs.resize(D);
+        for (int j = 0; j < D; ++j) { sc.coefs[j] = std::llround(coef_all[j] * SCORE_SCALE); }
+        sc.intercept = std::llround(inter_all * SCORE_SCALE);
+        sc.thr.assign(2, {});
+        for (int p = 0; p < 2; ++p)
+        for (int m = 0; m <= label_max; ++m)
+        { sc.thr[p].push_back(std::llround(baseline[p][m + 1] * SCORE_SCALE)); }
+        return sc;
+    };
+
     // ---- 3b. baseline selection: legacy optimizer's-curse min vs policy-simulated --------------
     // Default ("min"): the legacy backward-induction M (computed above) -- M[p][m]=mean_g min(kv,M[m+1]).
     // Each hand self-selects keep-vs-mull on its OWN single realised game, so M is biased LOW (the
@@ -686,20 +885,66 @@ KeepModel BuildKeepModel(const Decklist& deck,
     const int policy_iters = []{ const char* e = std::getenv("MTG_KEEP_POLICY_ITERS");
                                  int v = (e && *e) ? std::atoi(e) : 3; return v < 0 ? 0 : v; }();
 
-    // Split criterion selection. "gini" (default) / "regret" / "both" (fit BOTH from the one shared,
-    // expensive kv table: only the cheap CART fit differs, so emitting both costs ~nothing extra).
+    // Split criterion selection (TREE form). "gini" (default) / "regret" / "both" (fit BOTH from the
+    // one shared, expensive kv table: only the cheap CART fit differs, so emitting both costs ~nothing).
     const std::string split_mode = []{ const char* e = std::getenv("MTG_KEEP_SPLIT");
                                        return std::string(e && *e ? e : "gini"); }();
 
-    // Build ONE model variant (regret or gini split) over the shared kv/baseline. vtag prefixes the
-    // disclosure so the two variants are distinguishable in "both" mode. Returns empty on too-few rows.
-    auto make_model = [&](bool regret, const std::string& vtag) -> KeepModel
+    // Model FORM. "tree" (default): the interpretable CART (gini/regret split). "score": the learned
+    // ADDITIVE hand-score (ridge regression -> keep iff predicted win-turn <= continuation value). The
+    // score form encodes the graded accumulation of soft factors a shallow greedy tree can't represent.
+    const std::string form_mode = []{ const char* e = std::getenv("MTG_KEEP_FORM");
+                                      return std::string(e && *e ? e : "tree"); }();
+
+    // Build ONE model variant over the shared kv/baseline. `score_form` selects the additive form; for
+    // the tree form `regret` selects the split (ignored by score). vtag prefixes the disclosure.
+    auto make_model = [&](bool score_form, bool regret, const std::string& vtag) -> KeepModel
     {
-        std::vector<KeepNode> final_nodes;
+        std::vector<KeepNode> final_nodes;   // tree form
+        KeepScore             final_score;   // score form
+        // Fit against a baseline; commits to final_nodes/final_score ONLY on success (so a failed refit
+        // during policy iteration leaves the last good model intact). dump only meaningful for tree.
+        auto do_fit = [&](const double (&base)[2][M_CAP + 1], const std::string& t, bool dump) -> bool
+        {
+            if (score_form)
+            { KeepScore s = fit_score(base, t); if (s.empty()) { return false; } final_score = s; return true; }
+            std::vector<KeepNode> n = fit_nodes(base, t, dump, regret);
+            if (n.empty()) { return false; } final_nodes = n; return true;
+        };
+        // Equality of two consecutive fits (policy-iteration convergence test), per form.
+        auto score_equal = [](const KeepScore& a, const KeepScore& b)
+        {
+            if (a.intercept != b.intercept || a.coefs != b.coefs || a.thr.size() != b.thr.size())
+            { return false; }
+            for (size_t i = 0; i < a.thr.size(); ++i) { if (a.thr[i] != b.thr[i]) { return false; } }
+            return true;
+        };
+        auto nodes_equal = [](const std::vector<KeepNode>& a, const std::vector<KeepNode>& b)
+        {
+            if (a.size() != b.size()) { return false; }
+            for (size_t i = 0; i < a.size(); ++i)
+            {
+                const KeepNode& x = a[i]; const KeepNode& y = b[i];
+                if (x.feat != y.feat || x.op != y.op || x.val != y.val
+                 || x.yes  != y.yes  || x.no  != y.no  || x.keep != y.keep) { return false; }
+            }
+            return true;
+        };
+        // The current fit as an UNCOMPACTED policy (indices/coefs align with the full feature vector) so
+        // its Keep can be evaluated on the cached feats during policy iteration.
+        auto current_pi = [&]() -> KeepModel
+        {
+            KeepModel pi;
+            pi.key_pieces     = feat_model.key_pieces;
+            pi.deck_colors    = feat_model.deck_colors;
+            pi.extra_features = feat_model.extra_features;
+            if (score_form) { pi.score = final_score; } else { pi.nodes = final_nodes; }
+            return pi;
+        };
+
         if (baseline_mode != "policy")
         {
-            final_nodes = fit_nodes(M, vtag, /*dump_rows=*/!regret, regret);
-            if (final_nodes.empty()) { return KeepModel{}; }
+            if (!do_fit(M, vtag, /*dump=*/!regret)) { return KeepModel{}; }
         }
         else
         {
@@ -724,55 +969,44 @@ KeepModel BuildKeepModel(const Decklist& deck,
                         {
                             if (!data[g].valid) { continue; }
                             const bool keep = keep_fn(p, m, g);
-                            s2 += keep ? static_cast<double>(data[g].kv[p][m]) : V[p][m + 1];
+                            s2 += keep ? data[g].kv[p][m] : V[p][m + 1];
                             ++c2;
                         }
                         V[p][m] = c2 ? s2 / c2 : V[p][m + 1];
                     }
                 }
             };
-            auto nodes_equal = [](const std::vector<KeepNode>& a, const std::vector<KeepNode>& b)
-            {
-                if (a.size() != b.size()) { return false; }
-                for (size_t i = 0; i < a.size(); ++i)
-                {
-                    const KeepNode& x = a[i]; const KeepNode& y = b[i];
-                    if (x.feat != y.feat || x.op != y.op || x.val != y.val
-                     || x.yes  != y.yes  || x.no  != y.no  || x.keep != y.keep) { return false; }
-                }
-                return true;
-            };
 
             // Iteration 0: bootstrap pi from the static profile keep decision (outcome-blind).
             simulate_V([&](int p, int m, int g)
                        { return ref_ai.ReferenceKeep(data[g].hand, m, (p == 1)); });
-            final_nodes = fit_nodes(V, vtag + " [it0]", /*dump_rows=*/!regret && policy_iters == 0, regret);
-            if (final_nodes.empty()) { return KeepModel{}; }
+            if (!do_fit(V, vtag + " [it0]", /*dump=*/!regret && policy_iters == 0)) { return KeepModel{}; }
 
-            // Policy iteration: pi <- fitted tree, re-simulate V, refit. Converges to the fixed point.
+            // Policy iteration: pi <- fitted model, re-simulate V, refit. Converges to the fixed point.
             for (int it = 1; it <= policy_iters; ++it)
             {
-                KeepModel pi;
-                pi.nodes          = final_nodes;   // UNCOMPACTED -> indices align with the full vector
-                pi.key_pieces     = feat_model.key_pieces;
-                pi.deck_colors    = feat_model.deck_colors;
-                pi.extra_features = feat_model.extra_features;
+                std::vector<KeepNode> prev_nodes = final_nodes;
+                KeepScore             prev_score = final_score;
+                const KeepModel pi = current_pi();
                 simulate_V([&](int p, int m, int g) { return pi.Keep(data[g].feats[p][m]); });
 
                 const std::string tag = vtag + " [it" + std::to_string(it) + "]";
-                std::vector<KeepNode> next = fit_nodes(V, tag, /*dump_rows=*/!regret && it == policy_iters, regret);
-                if (next.empty()) { break; }
-                const bool same = nodes_equal(next, final_nodes);
-                final_nodes = next;
+                if (!do_fit(V, tag, /*dump=*/!regret && it == policy_iters)) { break; }
+                const bool same = score_form ? score_equal(final_score, prev_score)
+                                             : nodes_equal(final_nodes, prev_nodes);
                 if (same) { std::cerr << "  keep-model" << vtag << ": policy converged at iter " << it << ".\n"; break; }
             }
         }
 
-        // Keep ONLY the constructed extra specs the final tree splits on, remapping node feat indices to
-        // the compacted [base ++ kept-extras] layout (composite operands reference BASE indices, stable
-        // under compaction). The "surfaced levers" set; the rest of the candidate basis went unused.
+        // Compact: keep ONLY the constructed extra specs the final model actually USES (tree split or
+        // nonzero score coef), remapping to the compacted [base ++ kept-extras] layout. Composite
+        // operands reference BASE indices (stable under compaction). The rest of the candidate basis
+        // went unused -- this is the "surfaced levers" set.
         std::vector<int> used_extra;
-        for (const KeepNode& nd : final_nodes) { if (nd.feat >= BASE_FN) { used_extra.push_back(nd.feat); } }
+        if (score_form)
+        { for (int e = BASE_FN; e < g_nf; ++e) { if (final_score.coefs[e] != 0) { used_extra.push_back(e); } } }
+        else
+        { for (const KeepNode& nd : final_nodes) { if (nd.feat >= BASE_FN) { used_extra.push_back(nd.feat); } } }
         std::sort(used_extra.begin(), used_extra.end());
         used_extra.erase(std::unique(used_extra.begin(), used_extra.end()), used_extra.end());
 
@@ -783,26 +1017,63 @@ KeepModel BuildKeepModel(const Decklist& deck,
             remap[oldidx] = BASE_FN + static_cast<int>(kept.size());
             kept.push_back(feat_model.extra_features[oldidx - BASE_FN]);
         }
-        for (KeepNode& nd : final_nodes)
-        { if (nd.feat >= BASE_FN) { nd.feat = remap[nd.feat]; } }
 
         KeepModel model;
-        model.nodes          = final_nodes;
         model.key_pieces     = feat_model.key_pieces;
         model.deck_colors    = feat_model.deck_colors;
         model.extra_features = kept;
 
-        std::cerr << "  keep-model" << vtag << ": final tree (" << model.nodes.size()
-                  << " nodes, " << (regret ? "regret" : "gini") << " split). Rules:\n";
-        PrintTree(model, final_nodes, 0, 2);
+        if (score_form)
+        {
+            // Compacted coef vector = base coefs ++ kept-extra coefs (in remap order).
+            KeepScore sc;
+            sc.intercept = final_score.intercept;
+            sc.thr       = final_score.thr;
+            for (int j = 0; j < BASE_FN; ++j) { sc.coefs.push_back(final_score.coefs[j]); }
+            for (int oldidx : used_extra) { sc.coefs.push_back(final_score.coefs[oldidx]); }
+            model.score  = sc;
 
-        std::map<int, int> splits;
-        for (const KeepNode& nd : final_nodes) { if (nd.feat >= 0) { ++splits[nd.feat]; } }
-        std::cerr << "  keep-model" << vtag << " features used:";
-        if (splits.empty()) { std::cerr << " (none -- constant policy)"; }
-        for (const auto& kv : splits)
-        { std::cerr << " " << FeatureNameAt(model, kv.first) << "x" << kv.second; }
-        std::cerr << "\n";
+            std::cerr << "  keep-model" << vtag << ": final ADDITIVE score model ("
+                      << kept.size() << " constructed features used). est_win = "
+                      << (sc.intercept / static_cast<double>(SCORE_SCALE));
+            // Disclose nonzero coefs by descending |weight| (turns added per unit feature).
+            std::vector<std::pair<int, long long>> terms;
+            for (int j = 0; j < static_cast<int>(sc.coefs.size()); ++j)
+            { if (sc.coefs[j] != 0) { terms.emplace_back(j, sc.coefs[j]); } }
+            std::sort(terms.begin(), terms.end(),
+                      [](const auto& a, const auto& b) { return std::llabs(a.second) > std::llabs(b.second); });
+            std::cerr << "\n  keep-model" << vtag << " weights (turns/unit):";
+            for (const auto& t : terms)
+            { std::cerr << "  " << (t.second > 0 ? "+" : "") << (t.second / static_cast<double>(SCORE_SCALE))
+                        << "*" << FeatureNameAt(model, t.first); }
+            std::cerr << "\n  keep-model" << vtag << " keep-thresholds V[mull+1] (play/draw):";
+            for (int p = 0; p < static_cast<int>(sc.thr.size()); ++p)
+            {
+                std::cerr << (p == 1 ? "  play[" : "  draw[");
+                for (size_t m = 0; m < sc.thr[p].size(); ++m)
+                { std::cerr << (m ? "," : "") << (sc.thr[p][m] / static_cast<double>(SCORE_SCALE)); }
+                std::cerr << "]";
+            }
+            std::cerr << "\n";
+        }
+        else
+        {
+            for (KeepNode& nd : final_nodes)
+            { if (nd.feat >= BASE_FN) { nd.feat = remap[nd.feat]; } }
+            model.nodes = final_nodes;
+
+            std::cerr << "  keep-model" << vtag << ": final tree (" << model.nodes.size()
+                      << " nodes, " << (regret ? "regret" : "gini") << " split). Rules:\n";
+            PrintTree(model, final_nodes, 0, 2);
+
+            std::map<int, int> splits;
+            for (const KeepNode& nd : final_nodes) { if (nd.feat >= 0) { ++splits[nd.feat]; } }
+            std::cerr << "  keep-model" << vtag << " features used:";
+            if (splits.empty()) { std::cerr << " (none -- constant policy)"; }
+            for (const auto& kv : splits)
+            { std::cerr << " " << FeatureNameAt(model, kv.first) << "x" << kv.second; }
+            std::cerr << "\n";
+        }
         if (!kept.empty())
         {
             std::cerr << "  keep-model" << vtag << " constructed features kept:";
@@ -812,11 +1083,17 @@ KeepModel BuildKeepModel(const Decklist& deck,
         return model;
     };
 
-    // "both": primary = gini (the standard <deck>.keepmodel.profile.json), out_alt = regret (side file).
-    // "regret": primary = regret. default/"gini": primary = gini. The kv table is computed once above.
-    const bool want_both = (split_mode == "both");
-    KeepModel primary = make_model(/*regret=*/split_mode == "regret", want_both ? " (gini)" : "");
-    if (want_both && out_alt) { *out_alt = make_model(/*regret=*/true, " (regret)"); }
+    // Score form: build ONE additive model (split_mode/both don't apply). Tree form: "both" = gini
+    // primary + regret side file; "regret"/"gini" = that single split. out_score (when set) emits an
+    // additive model from the SAME kv table alongside the tree(s) -- a matched 3-way A/B for one rollout
+    // cost. The kv table is computed once above; every make_model only re-runs the cheap fit.
+    const bool score_form = (form_mode == "score");
+    const bool want_both = !score_form && (split_mode == "both");
+    KeepModel primary = score_form
+        ? make_model(/*score=*/true,  /*regret=*/false, "")
+        : make_model(/*score=*/false, /*regret=*/split_mode == "regret", want_both ? " (gini)" : "");
+    if (want_both && out_alt)     { *out_alt   = make_model(/*score=*/false, /*regret=*/true,  " (regret)"); }
+    if (!score_form && out_score) { *out_score = make_model(/*score=*/true,  /*regret=*/false, " (score)"); }
 
     std::cerr << "  keep-model key_pieces:";
     if (primary.key_pieces.empty()) { std::cerr << " (none)"; }

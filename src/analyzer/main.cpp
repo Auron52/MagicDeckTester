@@ -115,8 +115,11 @@ int main(int argc, char* argv[])
             // written to a .keepmodel.regret.profile.json side file for a matched A/B.
             const bool both = []{ const char* e = std::getenv("MTG_KEEP_SPLIT");
                                   return e && std::string(e) == "both"; }();
-            KeepModel alt;
-            base.keep_model = BuildKeepModel(deck, base, base.card_scores, cfg, both ? &alt : nullptr);
+            // In both-mode, ALSO fit the additive score model from the same kv table (cheap second fit)
+            // so a matched gini/regret/score 3-way A/B comes from one rollout pass.
+            KeepModel alt, score;
+            base.keep_model = BuildKeepModel(deck, base, base.card_scores, cfg,
+                                             both ? &alt : nullptr, both ? &score : nullptr);
 
             std::filesystem::path out_path =
                 deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.profile.json");
@@ -125,16 +128,22 @@ int main(int argc, char* argv[])
             else
             { std::cerr << "Warning: could not write " << out_path.string() << "\n"; return 1; }
 
-            if (both && !alt.empty())
+            auto write_side = [&](const KeepModel& km, const char* variant)
             {
-                MulliganProfile alt_prof = base;
-                alt_prof.keep_model = alt;
-                std::filesystem::path alt_path =
-                    deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.regret.profile.json");
-                if (SaveDeckProfile(alt_path, alt_prof))
-                { std::cerr << "Keep-model (regret) profile written to " << alt_path.string() << "\n"; }
+                if (km.empty()) { return; }
+                MulliganProfile prof = base;
+                prof.keep_model = km;
+                std::filesystem::path p =
+                    deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel." + variant + ".profile.json");
+                if (SaveDeckProfile(p, prof))
+                { std::cerr << "Keep-model (" << variant << ") profile written to " << p.string() << "\n"; }
                 else
-                { std::cerr << "Warning: could not write " << alt_path.string() << "\n"; }
+                { std::cerr << "Warning: could not write " << p.string() << "\n"; }
+            };
+            if (both)
+            {
+                write_side(alt,   "regret");
+                write_side(score, "score");
             }
             return 0;
         }

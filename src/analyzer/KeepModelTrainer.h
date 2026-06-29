@@ -49,8 +49,11 @@ struct KeepModelTrainConfig
 // fit one. All progress + the fitted rules + the accuracy-bar verdict are logged to stderr.
 // When MTG_KEEP_SPLIT=both and out_alt is non-null, the GINI model is returned and the REGRET
 // model is written through out_alt (both fitted from the one shared kv table -- cheap second tree).
+// When out_score is non-null (tree form), an additive hand-score model is ALSO fitted from the same
+// kv table and written through it -- a matched gini/regret/score 3-way A/B for one rollout cost.
 KeepModel BuildKeepModel(const Decklist& deck,
                          const MulliganProfile& base_profile,
                          const std::map<std::string, std::vector<double>>& card_scores,
                          const KeepModelTrainConfig& cfg,
-                         KeepModel* out_alt = nullptr);
+                         KeepModel* out_alt = nullptr,
+                         KeepModel* out_score = nullptr);

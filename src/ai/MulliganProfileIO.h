@@ -128,6 +128,29 @@ inline nlohmann::json KeepModelToJsonObj(const KeepModel& km)
         nodes.push_back(jn);
     }
     m["nodes"] = nodes;
+
+    // Additive-score form (when present it OWNS the decision; `nodes` is empty for a pure score model).
+    // Coefs are keyed by FEATURE NAME (not position) so the model survives appending new base features
+    // later -- an absent name loads as a zero coef. thr is [on_the_play][mulligan_count] = continuation
+    // value V[mull+1], in the same fixed-point scale as the coefs (the scale cancels in the compare).
+    if (!km.score.empty())
+    {
+        json sc;
+        sc["intercept"] = km.score.intercept;
+        json coefs = json::object();
+        for (int j = 0; j < static_cast<int>(km.score.coefs.size()); ++j)
+        { if (km.score.coefs[j] != 0) { coefs[FeatureNameAt(km, j)] = km.score.coefs[j]; } }
+        sc["coefs"] = coefs;
+        json thr = json::array();
+        for (const std::vector<long long>& row : km.score.thr)
+        {
+            json jr = json::array();
+            for (long long v : row) { jr.push_back(v); }
+            thr.push_back(jr);
+        }
+        sc["thr"] = thr;
+        m["score"] = sc;
+    }
     return m;
 }
 
@@ -180,6 +203,41 @@ inline KeepModel KeepModelFromJsonObj(const nlohmann::json& m)
                 n.no   = jn.value("no", -1);
             }
             km.nodes.push_back(n);
+        }
+    }
+    if (m.contains("score"))
+    {
+        const json& sc = m["score"];
+        km.score.intercept = sc.value("intercept", 0LL);
+        // Rebuild the POSITIONAL coef vector aligned with the full runtime feature vector
+        // (base [0..Count) ++ this model's extra_features). Name-keyed -> absent names stay 0, and a
+        // future appended base feature simply gets a 0 coef instead of mis-aligning the whole vector.
+        const int full = static_cast<int>(KeepFeature::Count) + static_cast<int>(km.extra_features.size());
+        km.score.coefs.assign(full, 0LL);
+        if (sc.contains("coefs"))
+        {
+            if (sc["coefs"].is_object())
+            {
+                for (const auto& [name, val] : sc["coefs"].items())
+                {
+                    const int idx = FeatureIndexFromName(km, name);
+                    if (idx >= 0 && idx < full) { km.score.coefs[idx] = val.get<long long>(); }
+                }
+            }
+            else   // legacy positional array (pre name-keying)
+            {
+                int j = 0;
+                for (const json& v : sc["coefs"]) { if (j < full) { km.score.coefs[j++] = v.get<long long>(); } }
+            }
+        }
+        if (sc.contains("thr"))
+        {
+            for (const json& jr : sc["thr"])
+            {
+                std::vector<long long> row;
+                for (const json& v : jr) { row.push_back(v.get<long long>()); }
+                km.score.thr.push_back(row);
+            }
         }
     }
     return km;
