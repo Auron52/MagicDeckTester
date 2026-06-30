@@ -279,6 +279,10 @@
   #decpanel .tutgrid .cardmini { width:72px; cursor:pointer; border-radius:6px; padding:2px; }
   #decpanel .tutgrid .cardmini:hover { background:#1f2d3a; box-shadow:0 0 0 1px var(--acc); }
   #decpanel .tutgrid .cardmini.def img { box-shadow:0 0 0 2px var(--acc); }
+  #decpanel .tutgrid .varpick { position:relative; }
+  #decpanel .tutgrid .varbadge { position:absolute; top:-7px; left:50%; transform:translateX(-50%); z-index:2;
+      background:var(--acc); color:#0c1116; font-size:11px; font-weight:700; padding:1px 7px; border-radius:8px;
+      white-space:nowrap; box-shadow:0 0 0 2px #0b0c0e; }
   #decpanel .tutgrid .cardmini em { max-width:72px; }
   #decpanel .tutgrid .cardmini.tdig { position:relative; }
   #decpanel .tutgrid .cardmini.illegal { cursor:default; opacity:.4; }
@@ -784,7 +788,12 @@ function renderChooseDialog(v, line){
     `<div class="tutgrid">`;
   (v.variants||[]).forEach(x=>{
     const card=(x.cards||[])[0]||'';
+    // The distinguishing detail (e.g. "X=2", "→ Target") is the part of the label past the card name.
+    // Show it as a prominent badge so otherwise-identical card images (Crackle X=1 vs X=2) are tellable.
+    let detail = x.label||'';
+    if (card && detail.indexOf(card)===0) detail = detail.slice(card.length).replace(/^[\s:·-]+/,'');
     h+=`<span class="cardmini varpick" data-pi="${x.plan_index}" data-lab="${esc(x.label)}"${card?` data-name="${esc(card)}"`:''} title="${esc(x.label)}">`+
+       (detail?`<span class="varbadge">${esc(detail)}</span>`:'')+
        (card?`<img loading="lazy" src="${scryImg(card,'small')}" onerror="this.style.opacity=.15"/>`:`<span style="display:block;height:96px"></span>`)+
        `<em>${esc(card||x.label)}</em></span>`;
   });
