@@ -209,4 +209,20 @@ public:
     // (byte-identical); only HinataProvider opts in. NOT pure (defaulted) so no other provider
     // needs to implement it.
     virtual bool OpponentPlaysLands() const { return false; }
+
+    // Hook 20 -- emit the untap-RITUAL cast variant for an {X} untap spell (Reality Spasm)?
+    // The variant floats mana for a same-turn payoff and only earns its keep with Hinata's
+    // discount making the {X} free, so the solver must NOT branch on it otherwise. This is the
+    // archetype GATE only -- the cost math and the ManaSourceCount stay engine-side. Was an inline
+    // `HinataInPlay(state)` check in TurnSolver (audit B2); default false = byte-identical for every
+    // non-Hinata deck, HinataProvider returns HinataInPlay(s).
+    virtual bool ShouldEmitUntapRitual(const GameState& s) const { (void)s; return false; }
+
+    // Hook 21 -- branch on Soulfire Eruption's OWN-creature target count (0..K)? Own-targeting only
+    // pays off with Hinata's per-target discount (which can enable an otherwise-unaffordable cast)
+    // plus a deeper dig; without it the K+1 variants are dead weight every non-combo turn. The
+    // count itself (SoulfireOwnCreatureCount) stays an engine mechanic -- this is the archetype gate
+    // only. Was an inline `HinataInPlay(state)` check in TurnSolver (audit B1); default false =
+    // byte-identical (K collapses to 0), HinataProvider returns HinataInPlay(s).
+    virtual bool BranchSoulfireOwnTargets(const GameState& s) const { (void)s; return false; }
 };

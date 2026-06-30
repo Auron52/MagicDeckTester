@@ -116,6 +116,10 @@ public:
     // Cast a mana RITUAL (Reality Spasm / Irencrag Feat) BEFORE the payoff so its floating mana
     // funds the same-turn Crackle: Hinata (creature, 10) -> ritual (15) -> Crackle (noncreature, 20).
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // Archetype gates relocated out of the solver (audit B1/B2): the untap-ritual cast variant and
+    // Soulfire's own-target branch only earn their keep with Hinata's discount online.
+    bool ShouldEmitUntapRitual(const GameState&) const override;
+    bool BranchSoulfireOwnTargets(const GameState&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

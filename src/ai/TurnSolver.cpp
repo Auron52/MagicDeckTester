@@ -550,7 +550,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // its value is the floating it adds (credited in Solve::consider).
             if (def.params.untap_x_mana_sources)
             {
-                if (!HinataInPlay(state)) { continue; }
+                if (!ResolveProvider(state).ShouldEmitUntapRitual(state)) { continue; }
                 int x = ManaSourceCount(state);
                 if (x <= 0) { continue; }
                 int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
@@ -710,7 +710,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // Without her, an own target gives no discount -- only marginal extra dig at the cost of
             // creature damage on a 9-mana spell -- so we don't branch on it (keeps the K+1 variants
             // off every non-combo turn). With her, the search still picks the count 0..K.
-            const int K        = HinataInPlay(state) ? SoulfireOwnCreatureCount(state, active) : 0;
+            const int K        = ResolveProvider(state).BranchSoulfireOwnTargets(state)
+                                     ? SoulfireOwnCreatureCount(state, active) : 0;
             ManaCost base_cost = EffectiveCost(def, state);   // base Hinata discount already applied
             const int eval     = EvalCard(def, state);
             const bool to_face = def.params.targeting != Targeting::Creature;

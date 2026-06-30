@@ -683,6 +683,13 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
     return GenericProvider::CastOrderRank(s, def);
 }
 
+// Archetype gates relocated out of TurnSolver (audit B1/B2). Both branches only pay off with
+// Hinata's per-target discount online: the untap ritual (Reality Spasm) floats mana for a same-turn
+// Crackle the discount makes free, and Soulfire's own-creature targets each shave {1} (and dig
+// deeper). Off Hinata they are dead weight, so the solver must not branch on them.
+bool HinataProvider::ShouldEmitUntapRitual(const GameState& s) const     { return HinataInPlay(s); }
+bool HinataProvider::BranchSoulfireOwnTargets(const GameState& s) const  { return HinataInPlay(s); }
+
 // Situational "what do I need THIS turn" ranking (Hook 19). HIGHER = more wanted. The decisive
 // idea is that situational NEED overrides static card power: a land tops the list on a turn we need
 // the land drop (even though a land is a generically weak card), and once mana is covered the
