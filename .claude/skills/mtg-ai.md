@@ -50,6 +50,36 @@ These are the moments during a game where the AI must choose between legal optio
 
 ---
 
+## Invariant: only a deck/archetype heuristic may narrow the search
+
+**Before changing the enumerator, solver, or any pruning/dedup/cap, internalize this.**
+
+> The only thing permitted to limit, prune, or narrow the search's legal options is a
+> **deck-specific or archetype-specific heuristic living in its own provider**
+> (`src/ai/DecisionProviders.cpp`: `GenericProvider` / `AntiLifegainProvider` / `HinataProvider` /
+> …). **No generic enumeration machinery may drop a real decision branch.**
+
+Plan-dedup signatures, breadth caps, "keep the first representative" tie-breaks, and ordering
+collapses must be **lossless** — fold only branches with genuinely identical outcomes, never choose
+a winner among distinct alternatives (a tutor target, an X value, a fetch/dig target, a cast no
+heuristic ranked). A dropped alternative never reaches a rollout, so the search can't discover it
+played worse: the loss is **invisible**. "Pick the first enumerated one" is a real decision only if
+that order is a deliberate provider-owned ranking — `library order` is arbitrary, not a heuristic.
+
+The narrowing belongs in a provider because that is **named, single-file, and A/B-testable against
+the full-search oracle** (`MTG_UNPRUNED` / `MTG_SEARCH_ORDER`; see analyze-deck Stage 5e). Perf is
+bounded by the provider returning a *small candidate set*, not by generic machinery silently
+discarding branches. When a deck needs fewer options for speed → add a provider heuristic; when you
+find a generic limiter that drops real branches → remove it.
+
+This is the authoritative statement; the deck-analysis skill (`analyze-deck.md`, "Core invariant"
+and Stage 5e) applies it during per-deck verification. Precedent (2026-06-30): `plan_signature`
+keyed on cast-names alone collapsed all tutor targets to the first → fixed by folding sub-decisions
+(tutor/X/Ponder/Soulfire/fetch/land) into the signature so `TutorCandidates` is the sole narrower;
+zero perf cost, strictly better search.
+
+---
+
 ## Phase 1: Goldfishing AI
 
 The goldfishing AI's single objective is to **win as fast as possible**. Because the opponent does nothing, the AI never needs to evaluate threats or play defensively. All decisions reduce to: *maximize progress toward winning this turn or as few turns from now as possible.*

@@ -6,6 +6,44 @@ Use this skill when the user asks to analyze a deck, add a new deck, or run a si
 
 ---
 
+## Core invariant — ONLY a deck/archetype heuristic may narrow the search
+
+**This is the most important rule for any AI/search work in this repo. Read it before touching the
+enumerator, the solver, or any pruning/dedup/cap.**
+
+> The only thing permitted to limit, prune, or narrow the search's options is a **deck-specific or
+> archetype-specific heuristic that lives in its own provider** (`src/ai/DecisionProviders.cpp` —
+> `GenericProvider` / `AntiLifegainProvider` / `HinataProvider` / …). **Nothing else may drop a real
+> decision branch.**
+
+Generic enumeration machinery — plan-dedup signatures, breadth caps, "keep the first representative"
+tie-breaks, ordering collapses — must be **lossless**: it may fold together branches that are
+genuinely identical in outcome, but it must **never pick a winner among real alternatives**. The
+instant a generic mechanism keeps one of several *distinct* choices (a tutor target, an X value, a
+fetch target, a cast the heuristic didn't rank), it has stolen a decision the search was supposed to
+make — and because the dropped alternatives never reach a rollout, the search cannot even discover it
+played worse. A "the heuristic picks the first one" shortcut is **not** a heuristic unless that
+ordering is a deliberate, reviewed, provider-owned ranking; "first in library/enumeration order" is
+arbitrary, not a decision.
+
+Why the home matters: a provider heuristic is a **named, single-file, A/B-testable** narrowing,
+measured against the full-search oracle (Stage 5e). A generic limiter is an **invisible** narrowing
+scattered in the enumerator that no per-deck review will catch. So when a deck needs its options
+narrowed for performance, the fix is **a provider heuristic, never a generic cap**; when you find a
+generic limiter that drops real branches, **remove it** and let the provider (or the full search)
+decide. Perf is bounded by the provider returning a small candidate set — not by the machinery
+silently discarding branches.
+
+*Concrete precedent (2026-06-30): `EnumeratePlans`' `plan_signature` keyed on cast-names alone, so
+the dedup collapsed every distinct tutor target to the first-enumerated one — a generic limiter that
+forced a single fetch on a bare `cast=Gamble` and hid the alternatives from the depth>0 search. Fix:
+fold the sub-decisions (tutor target / X / Ponder keep / Soulfire count / fetch / land) into the
+signature so the dedup is lossless again; the provider's `TutorCandidates` became the ONLY thing
+narrowing targets. Cost: ~zero (AntiLifegain's provider already bounds the set), and the search got
+**strictly better** — it now evaluates each target and picks the best instead of the arbitrary first.*
+
+---
+
 ## When to Use
 
 - User says "analyze \<deck path\>"
@@ -241,7 +279,10 @@ dismissed with the reason.
 
 ### 5e. Heuristic accuracy vs the full-search oracle (cast ordering, dig, targeting, …)
 
-Several decisions are made by a cheap **heuristic that narrows the search** rather than by
+This sub-stage enforces the **core invariant** above (only a deck/archetype provider heuristic may
+narrow the search). It catches two failures: a provider heuristic that narrows *wrongly* (picks
+worse than the oracle), and a *generic* limiter that narrows at all (which must be removed, not
+tuned). Several decisions are made by a cheap **heuristic that narrows the search** rather than by
 the search branching over every option: cast ORDER within a turn (`DecisionProvider::
 CastOrderRank`), dig-source choice, removal/pump targeting, tutor/fetch targets. A
 narrowing heuristic is only safe if it picks **what the full search would have picked** —
