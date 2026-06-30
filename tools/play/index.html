@@ -77,6 +77,10 @@
   .thumb { width:90px; text-align:center; position:relative; }
   .thumb.sm { width:62px; }
   .thumb img { width:100%; border-radius:6px; display:block; background:#0b0c0e; min-height:64px; }
+  /* tapped permanent: rotate the art like a real tapped card + a corner badge */
+  .thumb.tapped img { transform:rotate(14deg); opacity:.82; filter:saturate(.85); }
+  .thumb .tapbadge { position:absolute; top:2px; left:2px; background:rgba(120,120,130,.92); color:#0c1116;
+      border-radius:4px; font-size:10px; font-weight:700; padding:0 4px; z-index:2; }
   .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:3px; }
   .thumb.land em { color:var(--land); } .thumb.spell em { color:var(--spell); }
   .thumb .pip { position:absolute; top:2px; right:2px; font-size:10px; color:var(--muted);
@@ -407,9 +411,11 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const attrs = le ? ' data-le="1" title="click to discard lands to Land’s Edge"'
               : isVial ? ` data-vial="${charge.count}" title="click to deploy a creature with mana value ${charge.count} via this Vial"` : '';
   const idxAttr = (o.idx!=null) ? ` data-idx="${o.idx}"` : '';
-  return `<span class="thumb ${cls}${vcls}" data-name="${esc(o.name)}"${idxAttr}${attrs}>`+
+  const tcls = o.tapped ? ' tapped' : '';   // #9: show tapped (used / enters-tapped) permanents
+  return `<span class="thumb ${cls}${vcls}${tcls}" data-name="${esc(o.name)}"${idxAttr}${attrs}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
+    (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
     counterBadges(o)+
     `<em>${esc(o.name)}</em></span>`;
 }
