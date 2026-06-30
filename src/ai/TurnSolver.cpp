@@ -239,6 +239,45 @@ static bool SubsetPayable(const bool have[5], const std::vector<Action>& cands,
     return true;
 }
 
+// Same-turn affinity generic credit (Thrumming Hivepool: "Affinity for Slivers"). An affinity card's
+// per-Action cost only credited matching permanents ALREADY in play (EffectiveCost on the base
+// state). When the same plan also casts matching-subtype creatures, those are on the battlefield
+// when the affinity card resolves (CastOrderRank 10 creatures precede the rank-20 artifact, so the
+// executor's apply_one casts them first and recomputes the cheaper EffectiveCost), so they further
+// reduce its generic. Returns the extra generic discount to subtract from the subset's combined cost
+// so an affordable "deploy slivers + Hivepool" line is enumerated rather than dropped as too costly.
+// Only creatures cast BEFORE the affinity card (lower CastOrderRank) count -- matching the order the
+// executor realises. Capped at each affinity card's remaining generic. Returns 0 unless the subset
+// holds an affinity card, so every non-affinity deck/seed is byte-identical.
+static int SameTurnAffinityGenericCredit(const GameState& state, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel)
+{
+    int credit = 0;
+    for (int j : sel)
+    {
+        const CardDefinition* dj = cands[j].def;
+        if (!dj || !dj->params.affinity_for_subtype || dj->params.subtypes_affected.empty()) { continue; }
+        const int j_rank = ResolveProvider(state).CastOrderRank(state, *dj);
+        int same_turn = 0;
+        for (int k : sel)
+        {
+            if (k == j) { continue; }
+            const CardDefinition* dk = cands[k].def;
+            if (!dk || !dk->card.IsCreature()) { continue; }
+            if (ResolveProvider(state).CastOrderRank(state, *dk) >= j_rank) { continue; }  // cast after -> no credit
+            bool match = false;
+            for (const std::string& sub : dj->params.subtypes_affected)
+            {
+                for (const std::string& cs : dk->card.m_subtypes) { if (cs == sub) { match = true; break; } }
+                if (match) { break; }
+            }
+            if (match) { ++same_turn; }
+        }
+        credit += std::min(same_turn, cands[j].cost.generic);
+    }
+    return credit;
+}
+
 static int PendingAttackDamage(const GameState& state)
 {
     int dmg = 0;
@@ -1003,6 +1042,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // Cheap scan -> the credit below is inert for every deck without such a rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
+    bool any_affinity = false;
+    for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
 
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
@@ -1117,6 +1159,16 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 sel_rock = true;
             }
             if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+        }
+        // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
+        if (any_affinity)
+        {
+            int acred = SameTurnAffinityGenericCredit(state, cands, sel);
+            if (acred > 0)
+            {
+                combined.generic             = std::max(0, combined.generic - acred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
+            }
         }
         if (credited)
         {
@@ -3185,6 +3237,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
+    bool any_affinity = false;
+    for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
 
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
@@ -3379,6 +3434,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 sel_rock = true;
             }
             if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+        }
+        // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
+        if (any_affinity)
+        {
+            int acred = SameTurnAffinityGenericCredit(state, cands, sel);
+            if (acred > 0)
+            {
+                combined.generic             = std::max(0, combined.generic - acred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
+            }
         }
         if (credited)
         {
