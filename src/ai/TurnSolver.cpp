@@ -3121,6 +3121,12 @@ namespace branchstats
 
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
+    // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
+    // scry/dig/cantrips), which is hypothetical, not real resolution. Pause the human-play choosers
+    // and reveal logging for the whole scoring pass so claude-play does NOT ask the player to resolve
+    // every candidate's cantrip (that produced a per-turn storm of phantom scry/reorder decisions);
+    // the chooser fires only during the REAL TurnSolver::ApplyPlan, which runs outside enumeration.
+    RevealLogPause _rlp_enum;
     PROF_INC(enumerate_calls);
     const Player& ap              = state.ActivePlayer();
     ManaPool      pool            = BuildPool(state);
@@ -3740,6 +3746,7 @@ static void AppendHumanPlayLandsEdgePlans(const GameState& state, std::vector<Tu
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
 {
+    RevealLogPause _rlp_enum;   // candidate scoring is hypothetical -- see EnumeratePlans
     const Player& ap = state.ActivePlayer();
     bool drop_available = is_pre_combat
                        && ap.lands_played_this_turn < ap.LandDropsAvailable();
