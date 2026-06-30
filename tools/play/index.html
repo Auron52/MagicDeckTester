@@ -28,6 +28,8 @@
   #side  { background:var(--panel); border-left:1px solid var(--line); padding:14px 16px; overflow:auto; }
 
   #turnbar { display:flex; align-items:center; gap:12px; margin:0 0 8px; }
+  .flowtip { font-size:12px; color:var(--muted); background:rgba(90,169,230,.08); border:1px solid rgba(90,169,230,.25);
+      border-radius:7px; padding:5px 9px; margin:0 0 8px; } .flowtip b { color:var(--acc); }
   #turnbar .turn { font-size:20px; font-weight:700; color:var(--acc); }
   #turnbar .phase { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
           background:#2e323a; border:1px solid var(--acc); border-radius:11px; padding:2px 11px; }
@@ -483,9 +485,21 @@ function renderBoard() {
   // Result banner FIRST (sticky top) so the outcome is the most prominent thing on the board,
   // not buried below the turn bar / tucked into the History panel on the right.
   let h = `<div id="banner"></div>`;
+  // Phase label spells out the two-main structure with combat between them, so it's clear that
+  // committing Main 1 runs combat automatically and a post-combat Main 2 follows (where Spectacle
+  // and other after-combat plays happen).
+  const phaseLabel = d.phase==='pre_main' ? 'Main 1 · pre-combat'
+                   : d.phase==='post_main' ? 'Main 2 · post-combat' : (d.phase||'').replace('_',' ');
   h += `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span>`+
-    `<span class="phase">${esc((d.phase||'').replace('_',' '))}</span>`+
+    `<span class="phase">${esc(phaseLabel)}</span>`+
     `<span class="who">${d.on_the_play ? 'on the play' : 'on the draw'}</span></div>`;
+  // Flow hint: explain that combat is automatic and Spectacle spells land in Main 2. Shown in Main 1
+  // when you have a creature that could attack, and always in Main 2 (the post-combat "aha" moment).
+  const hasCreature = (me.battlefield||[]).some(p=>!p.is_land);
+  if (isMain && d.phase==='pre_main' && hasCreature)
+    h += `<div class="flowtip">⚔ After you commit Main 1, your creatures attack automatically, then a <b>Main 2</b> opens — leave mana up to cast Spectacle spells (e.g. Light Up the Stage for {R}) there.</div>`;
+  else if (isMain && d.phase==='post_main')
+    h += `<div class="flowtip">⚔ Combat resolved — this is <b>Main 2</b>. Cast post-combat plays here; Spectacle spells are now cheaper because the opponent lost life this turn.</div>`;
   h += `<div id="effects"></div>`;
   // opponent (across the table — NOT a drop target). When a target decision is active and the
   // opponent's face is a legal target, the life total becomes a clickable, highlightable target.
