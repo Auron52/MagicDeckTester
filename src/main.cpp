@@ -89,10 +89,11 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     // a human label (tooltip), and the count. A permanent may carry several kinds at once
     // (e.g. a depletion land that also caught a +1/+1), hence a vector.
     struct Cnt { const char* kind; const char* label; int count; };
-    struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; };
+    struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped; };
     std::vector<Row> rows;
-    for (const Permanent& p : s.battlefield)
+    for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
+        const Permanent& p = s.battlefield[pi];
         if (p.controller_index != controller) { continue; }
         // is_le: this permanent is a "discard a land: deal N" outlet (Land's Edge) -> the GUI
         // makes it the clickable SOURCE for the discard-to-Land's-Edge activation.
@@ -119,7 +120,7 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (dep)                { cs.push_back({ "depletion", "depletion", dep }); }
         if (p.charge_counters)  { cs.push_back({ "charge",    "charge",    p.charge_counters }); }
         if (p.verse_counters)   { cs.push_back({ "verse",     "verse",     p.verse_counters }); }
-        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs) });
+        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -128,6 +129,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     {
         if (i) { os << ", "; }
         os << "{ \"name\": "; JsonStr(os, rows[i].name);
+        os << ", \"idx\": " << rows[i].idx;
+        if (rows[i].tapped) { os << ", \"tapped\": true"; }
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
         if (!rows[i].counters.empty())
@@ -204,9 +207,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan)
 // Writes the decision as a JSON object (no markers) to `os`. Used for both the live
 // stdout dump (wrapped in <<<CLAUDE_DECISION>>> markers by the caller) and the per-game
 // trace log written on game completion (--log-dir).
-static void WriteDecisionJson(std::ostream& os, const GameState& s,
-                              const std::vector<TurnSolver::Plan>& plans,
-                              bool is_pre_combat, int decision_index, int reveal_count)
+// Emit the shared "me" + "opponent" board/hand context (battlefield, hand, graveyard, life,
+// library size, vial counters, floating mana). Used by the main-phase decision AND every
+// sub-decision (scry/surveil/reorder/target/bounce) so the GUI always has the full board to render
+// and highlight instead of blanking it. reveal_count > 0 appends the next draws (--reveal). Emits
+// two top-level keys ("me": {...}, "opponent": {...}) each followed by a trailing comma+newline.
+static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_count)
 {
     const Player& me  = s.ActivePlayer();
     int           opp = 1 - s.active_player_index;
@@ -219,12 +225,6 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     for (const Card& c : me.graveyard) { gy.push_back(c.m_name); }
     std::sort(gy.begin(), gy.end());
 
-    os << "{\n";
-    os << "  \"decision_index\": " << decision_index << ",\n";
-    os << "  \"type\": \"main_phase\",\n";
-    os << "  \"turn\": " << s.turn_number << ",\n";
-    os << "  \"phase\": \"" << (is_pre_combat ? "pre_main" : "post_main") << "\",\n";
-    os << "  \"on_the_play\": " << (s.on_the_play ? "true" : "false") << ",\n";
     os << "  \"me\": { \"life\": " << me.life << ", \"battlefield\": ";
     JsonBattlefield(os, s, s.active_player_index);
     // Aether Vial charge counters (a Vial deploys a creature whose MV EQUALS its
@@ -307,6 +307,20 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     os << "  \"opponent\": { \"life\": " << s.players[opp].life << ", \"battlefield\": ";
     JsonBattlefield(os, s, opp);
     os << " },\n";
+}
+
+static void WriteDecisionJson(std::ostream& os, const GameState& s,
+                              const std::vector<TurnSolver::Plan>& plans,
+                              bool is_pre_combat, int decision_index, int reveal_count)
+{
+    const Player& me  = s.ActivePlayer();
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"main_phase\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"phase\": \"" << (is_pre_combat ? "pre_main" : "post_main") << "\",\n";
+    os << "  \"on_the_play\": " << (s.on_the_play ? "true" : "false") << ",\n";
+    WriteBoardContext(os, s, reveal_count);
     // Land's Edge availability: when the active player controls a Land's Edge (or any
     // "discard a land: deal N" outlet) and holds lands, the GUI single-click-activates it.
     // rate = damage per land discarded; lands_in_hand = how many can be fired (the UI caps
@@ -387,22 +401,20 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
 static void WriteVialDecisionJson(std::ostream& os, const GameState& s,
                                   const Permanent& vial, int decision_index, bool heuristic)
 {
-    const Player& me  = s.ActivePlayer();
-    int           opp = 1 - s.active_player_index;
-    std::vector<std::string> hand;
-    for (const Card& c : me.hand) { hand.push_back(c.m_name); }
-    std::sort(hand.begin(), hand.end());
-
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
     os << "  \"type\": \"vial_charge\",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"vial\": "; JsonStr(os, vial.card.m_name);
     os << ", \"current_counters\": " << vial.charge_counters << ",\n";
+    // perm_index of THIS vial on the battlefield, so the GUI can highlight it in place on the board.
+    {
+        int vi = -1;
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i) { if (&s.battlefield[i] == &vial) { vi = i; break; } }
+        os << "  \"perm_index\": " << vi << ",\n";
+    }
     os << "  \"heuristic_default\": " << (heuristic ? 1 : 0) << ",\n";
-    os << "  \"me\": { \"life\": " << me.life << ", \"hand\": "; JsonNameArray(os, hand);
-    os << " },\n";
-    os << "  \"opponent\": { \"life\": " << s.players[opp].life << " },\n";
+    WriteBoardContext(os, s, 0);
     os << "  \"note\": \"reply 1 to add a charge counter this upkeep, 0 to hold. Aether "
           "Vial deploys a creature whose mana value EQUALS its counter count.\"\n";
     os << "}\n";
@@ -420,8 +432,6 @@ static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std
     const char* kindstr   = kind == LookKind::Scry ? "scry" : kind == LookKind::Surveil ? "surveil" : "reorder";
     const char* away_zone = kind == LookKind::Surveil ? "graveyard" : kind == LookKind::Scry ? "bottom" : "none";
     const int   m         = static_cast<int>(looked.size());
-    const Player& me      = s.ActivePlayer();
-    int           opp     = 1 - s.active_player_index;
 
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
@@ -429,7 +439,7 @@ static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std
     os << "  \"source\": "; JsonStr(os, source); os << ",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"away_zone\": \"" << away_zone << "\",\n";
-    os << "  \"me\": { \"life\": " << me.life << " }, \"opponent\": { \"life\": " << s.players[opp].life << " },\n";
+    WriteBoardContext(os, s, 0);
     os << "  \"looked\": [";
     for (int i = 0; i < m; ++i)
     {
@@ -533,15 +543,13 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::vector<TargetOption>& options, int per_target,
                                     int max_targets, int heuristic_default, int decision_index)
 {
-    const Player& me = s.ActivePlayer();
-    int           opp = 1 - s.active_player_index;
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
     os << "  \"type\": \"target\",\n";
     os << "  \"source\": "; JsonStr(os, source); os << ",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets << ",\n";
-    os << "  \"me\": { \"life\": " << me.life << " }, \"opponent\": { \"life\": " << s.players[opp].life << " },\n";
+    WriteBoardContext(os, s, 0);
     os << "  \"legal_targets\": [";
     for (size_t i = 0; i < legal.size(); ++i)
     { if (i) os << ", "; os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : "permanent")
@@ -562,6 +570,33 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     os << "],\n";
     os << "  \"note\": \"reply an option index. Each chosen target takes " << per_target
        << " damage (up to " << max_targets << " target(s)). Default = the AI's pick (face).\"\n";
+    os << "}\n";
+}
+
+// Emit a Karoo bounce-land return decision: which of the controller's lands goes back to hand.
+// `legal` are battlefield indices; each option carries that index (so the GUI can highlight the
+// permanent on the board) plus the land's name/tap state. `heuristic_default` indexes into `legal`.
+static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                    const std::vector<int>& legal, int heuristic_default, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"bounce\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"options\": [";
+    for (size_t i = 0; i < legal.size(); ++i)
+    {
+        const Permanent& p = s.battlefield[legal[i]];
+        if (i) os << ", ";
+        os << "{ \"index\": " << i << ", \"perm_index\": " << legal[i] << ", \"tapped\": "
+           << (p.tapped ? "true" : "false") << ", \"name\": "; JsonStr(os, p.card.m_name.str());
+        os << ", \"label\": "; JsonStr(os, p.card.m_name.str()); os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply an option index -- the land to return to your hand. Default = the AI's pick.\"\n";
     os << "}\n";
 }
 
@@ -788,10 +823,42 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_target_chooser = &target_chooser;
 
+    // Karoo bounce-land return: the player picks which land goes back to hand. Shares the --choices
+    // stream; replies one option index into the legal lands. Default = the engine's heuristic pick.
+    BounceChooser bounce_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(legal.size())) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteBounceDecisionJson(ss, s, source, legal, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteBounceDecisionJson(std::cout, s, source, legal, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_bounce_chooser = &bounce_chooser;
+
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);
     g_play_top_chooser = nullptr;
     g_play_target_chooser = nullptr;
+    g_play_bounce_chooser = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.

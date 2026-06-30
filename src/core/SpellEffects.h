@@ -2171,6 +2171,9 @@ inline void BounceKarooLand(GameState& state, int controller, int self_index)
         if (enters_untapped) { s += 10;   }   // (3) clean replay
         return s;
     };
+    // Legal returnable lands (controller's lands other than the karoo), best-scored first kept as
+    // the heuristic default; the karoo itself is the forced fallback when it is the only land.
+    std::vector<int> legal;
     int  pick = -1;
     long best = 0;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -2178,10 +2181,23 @@ inline void BounceKarooLand(GameState& state, int controller, int self_index)
         if (i == self_index) { continue; }
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        legal.push_back(i);
         const long s = land_score(i);
         if (pick < 0 || s > best) { pick = i; best = s; }   // strict > => lowest index wins ties
     }
-    if (pick < 0) { pick = self_index; }   // mandatory: no other land -> return the karoo itself
+    if (pick < 0) { pick = self_index; legal.push_back(self_index); }  // mandatory: only the karoo
+    // Human play (claude-play): let the player choose which land to return. The chooser gets the
+    // legal battlefield indices + the heuristic's pick (as an index INTO `legal`); RevealLogPause
+    // nulls it for search/enumeration, so the autonomous heuristic above stands there.
+    if (g_play_bounce_chooser && legal.size() > 1)
+    {
+        int hidx = 0;
+        for (size_t i = 0; i < legal.size(); ++i) { if (legal[i] == pick) { hidx = static_cast<int>(i); break; } }
+        const std::string src = (self_index >= 0 && self_index < static_cast<int>(state.battlefield.size()))
+                              ? state.battlefield[self_index].card.m_name.str() : std::string("Bounce land");
+        int chosen = (*g_play_bounce_chooser)(state, controller, src, legal, hidx);
+        if (chosen >= 0 && chosen < static_cast<int>(legal.size())) { pick = legal[chosen]; }
+    }
     if (pick < 0 || pick >= static_cast<int>(state.battlefield.size())) { return; }  // defensive
     Card c = state.battlefield[pick].card;
     c.m_is_staged = false;

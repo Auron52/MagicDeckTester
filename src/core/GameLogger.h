@@ -226,6 +226,16 @@ using TargetChooser = std::function<std::vector<ChosenTarget>(
     int max_targets, const std::vector<ChosenTarget>& heuristic_default)>;
 extern thread_local TargetChooser* g_play_target_chooser;
 
+// ---- Human-play Karoo bounce-land chooser (which land to return to hand) ----------------
+// A Karoo bounce land (Izzet Boilerworks) ETB returns one of the controller's lands to hand.
+// Autonomously BounceKarooLand picks deterministically; under --claude-play the human picks off
+// the board. The chooser receives the battlefield indices of the legal lands to return and the
+// heuristic's pick (an index INTO that list); it returns the chosen index into the list. Nulled
+// by RevealLogPause for every search/rollout/enumeration scope, so it fires only for real ETBs.
+using BounceChooser = std::function<int(const GameState& state, int controller, const std::string& source,
+                                        const std::vector<int>& legal_indices, int heuristic_pick)>;
+extern thread_local BounceChooser* g_play_bounce_chooser;
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -234,11 +244,13 @@ struct RevealLogPause
     GameLogger* saved;
     TopChooser* saved_chooser;
     TargetChooser* saved_tchooser;
+    BounceChooser* saved_bchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
-                       saved_tchooser(g_play_target_chooser)
-    { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr; }
+                       saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser)
+    { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
+      g_play_bounce_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
-                        g_play_target_chooser = saved_tchooser; }
+                        g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };
