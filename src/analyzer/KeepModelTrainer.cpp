@@ -873,7 +873,12 @@ KeepModel BuildKeepModel(const Decklist& deck,
         if (N < 400) { std::cerr << "  keep-model" << tag << ": too few rows for hybrid (" << N << ").\n"; return false; }
         std::vector<int> train, test, all(N);
         for (int i = 0; i < N; ++i) { all[i] = i; (rows[i].game % 5 == 0 ? test : train).push_back(i); }
-        const int min_leaf = std::max(80, N / 40);   // each leaf needs enough rows for a stable ridge fit
+        // Partition at the REGRET TREE's granularity (fit_nodes uses N/200), NOT a coarse N/40 -- the
+        // coarse floor capped the hybrid at ~2 leaves on TH so its leaf scores SMEARED the bimodal
+        // structure that the 4-leaf regret tree (downstream -0.009) cleanly partitions. Leaves that end
+        // up too small for a stable ridge (<30 rows) fall back to the node's CONSTANT keep (ridge_score
+        // returns empty), so a fine partition = regret-tree splits + scores grafted onto the big leaves.
+        const int min_leaf = std::max(30, N / 200);
 
         // Assemble a hybrid from a partition tree + per-leaf scores fit on `fit_idx` rows; eval regret on
         // `eval_idx`. Reuses leaf_of to route rows. Returns regret + (optionally) the built model.
@@ -905,18 +910,71 @@ KeepModel BuildKeepModel(const Decklist& deck,
                 else { keep = nodes[lf].keep != 0; }
                 sum += (keep ? rows[i].kv : rows[i].thr) - std::min(rows[i].kv, rows[i].thr); ++cnt;
             }
+            // DIAGNOSTIC (MTG_HYBRID_LEAFDIAG): per-leaf, compare the fitted SCORE's held-out regret to the
+            // leaf's CONSTANT decision (the regret-tree leaf), plus kv loss-mass -- to see WHY a linear leaf
+            // score fails on a bimodal deck (TH) but helps a graded one (slivers). Only on the final build.
+            if (nodes_out)
+            if (const char* dg = std::getenv("MTG_HYBRID_LEAFDIAG"); dg && *dg && *dg != '0')
+            {
+                const double loss = static_cast<double>(cfg.max_turns + 1);
+                for (auto& kv : by_leaf)
+                {
+                    const int lf = kv.first; const std::vector<int>& ri = kv.second;
+                    std::vector<int> tr, te;
+                    for (int i : ri) { (rows[i].game % 5 == 0 ? te : tr).push_back(i); }
+                    if (tr.empty() || te.empty()) { continue; }
+                    // constant decision fit on tr (keep-all vs mull-all, lower aggregate regret), eval on te
+                    double rk = 0, rm = 0;
+                    for (int i : tr) { const double o = std::min(rows[i].kv, rows[i].thr);
+                                       rk += rows[i].kv - o; rm += rows[i].thr - o; }
+                    const bool keep_const = rk <= rm;
+                    double creg = 0, sreg = 0, floss = 0;
+                    auto sit = leaf_index.find(lf);
+                    for (int i : te)
+                    {
+                        const double o = std::min(rows[i].kv, rows[i].thr);
+                        creg += (keep_const ? rows[i].kv : rows[i].thr) - o;
+                        bool ks = (sit != leaf_index.end())
+                                  ? KeepModel::KeepByScoreOf(leaves[sit->second], rows[i].x)
+                                  : keep_const;
+                        sreg += (ks ? rows[i].kv : rows[i].thr) - o;
+                        floss += (rows[i].kv >= loss - 0.5) ? 1.0 : 0.0;
+                    }
+                    std::cerr << "    LEAFDIAG node=" << lf << " n=" << ri.size()
+                              << " frac_loss=" << floss / te.size()
+                              << " const_rg=" << creg / te.size()
+                              << " score_rg=" << sreg / te.size()
+                              << " score_minus_const=" << (sreg - creg) / te.size()
+                              << (sit != leaf_index.end() ? "" : " [no-score]") << "\n";
+                }
+            }
             if (nodes_out) { *nodes_out = nodes; *leaves_out = leaves; }
             return cnt ? sum / cnt : 1e18;
         };
 
-        // Choose partition depth by held-out hybrid regret (0 = single leaf = pure score baseline).
-        int best_depth = 0; double best_rg = 1e18;
+        // Choose partition depth by held-out hybrid regret, but BREAK TIES TOWARD THE DEEPER partition.
+        // (depth 0 = single leaf = pure score baseline.) Rationale: on a BIMODAL-kv deck (e.g. TH: win
+        // ~T3 OR lose ~T9) a leaf's LINEAR score absorbs the very feature a deeper split would use, so
+        // deeper partitions yield IDENTICAL in-sample regret -- the score SMEARS the bimodal boundary that
+        // the in-sample clairvoyant-kv metric is blind to, while a HARD split on that feature is the
+        // structure that actually generalises downstream (it is exactly what the constant-leaf REGRET tree
+        // picks: depth 3 on TH, regret -0.009 vs the score's +0.18). So when extra depth does not STRICTLY
+        // help in-sample, prefer it: pick the DEEPEST depth whose regret is within TIE_EPS of the best.
+        // Decks with a GENUINE interior optimum (slivers/burn d1, antilife d3, hinata d2 -- strict minima
+        // separated by >=1e-3 turns) are untouched; only TH's exact 0.0-gap tie across depths 1..3 flips.
+        std::vector<double> depth_rg;
         for (int depth = 0; depth <= 3; ++depth)
         {
             const double rg = build_eval(depth, train, test, nullptr, nullptr);
             std::cerr << "    hybrid partition-depth=" << depth << " -> held-out regret=" << rg << "\n";
-            if (rg < best_rg - 1e-9) { best_rg = rg; best_depth = depth; }
+            depth_rg.push_back(rg);
         }
+        constexpr double TIE_EPS = 5e-4;   // turns: within this of the best counts as "no real improvement"
+        double best_rg = depth_rg[0];
+        for (double rg : depth_rg) { best_rg = std::min(best_rg, rg); }
+        int best_depth = 0;
+        for (int depth = static_cast<int>(depth_rg.size()) - 1; depth >= 0; --depth)
+        { if (depth_rg[depth] <= best_rg + TIE_EPS) { best_depth = depth; break; } }
         build_eval(best_depth, all, test, &out_nodes, &out_leaves);
         std::cerr << "  keep-model" << tag << ": hybrid partition-depth " << best_depth << " ("
                   << out_leaves.size() << " additive leaves, held-out regret " << best_rg << ").\n";
