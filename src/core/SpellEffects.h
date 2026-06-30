@@ -417,6 +417,12 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         int victim = static_cast<int>(mix % ap.hand.size());
         const int         victim_num  = ap.hand[victim].m_number;
         const std::string victim_name = ap.hand[victim].m_name;
+        // Discard goes to the graveyard (CR 701.8 / a discarded card is put into its owner's
+        // graveyard) -- the prior code erased it from hand without rezoning, so the card silently
+        // left the game and never showed up in the graveyard zone. Inert for the search on every
+        // current deck (no Gamble deck reads graveyard contents -- no retrace/delve/escape/
+        // threshold), so this only restores the correct zone + surfaces the card to the viewer.
+        ap.graveyard.push_back(ap.hand[victim]);
         ap.hand.erase(ap.hand.begin() + victim);
         if (g_reveal_logger) { g_reveal_logger->LogDiscard(victim_num, victim_name); }
     }
