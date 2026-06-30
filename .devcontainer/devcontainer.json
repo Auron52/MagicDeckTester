@@ -42,8 +42,14 @@
   // would otherwise make `cmake -G "Ninja Multi-Config"` fail with a generator
   // mismatch. The volume shadows it ONLY inside the container, so the Windows
   // build is left untouched -- and build artifacts get native FS performance.
+  //
+  // The volume name is PER-WORKSPACE (${localWorkspaceFolderBasename}): a second
+  // checkout (e.g. .../MagicDeckTester2 for a parallel agent) gets its OWN build
+  // volume. A shared/constant name made both containers mount one build/ dir, and
+  // because CMake bakes the absolute source path into its cache, whichever side
+  // ran `cmake` last repointed CMAKE_HOME_DIRECTORY and broke the other's build.
   "mounts": [
-    "source=mdt-build,target=${containerWorkspaceFolder}/build,type=volume",
+    "source=mdt-build-${localWorkspaceFolderBasename},target=${containerWorkspaceFolder}/build,type=volume",
     // Persist the Claude Code login (~/.claude/.credentials.json) across rebuilds,
     // so you only run `/login` once.
     "source=mdt-claude,target=/home/vscode/.claude,type=volume",
