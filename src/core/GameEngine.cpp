@@ -243,6 +243,9 @@ void GameEngine::DrawStep(GameState& state)
         return;
     }
     Card drawn = ap.library.DrawTop();
+    // Human-play (--claude-play) accurate draw reporting: record the per-turn draw so the viewer
+    // can show exactly what was drawn this turn (nulled by RevealLogPause during search).
+    if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }
     if (m_logger)
     {
         std::vector<GameLogger::PermSnapshot> bf, obf;

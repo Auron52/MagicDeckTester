@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Records a single game's events in the structured format defined by the AI skill.
@@ -276,6 +277,18 @@ using EIChooser = std::function<std::pair<int,int>(const GameState& state,
                                                    int heur_hand_idx, int heur_exile_idx)>;
 extern thread_local EIChooser* g_play_ei_chooser;
 
+// ---- Human-play draw sink (accurate per-draw reporting for the viewer history) -------------
+// Under --claude-play the viewer wants to show exactly what was drawn and on which turn, rather
+// than guessing from a hand diff (which can't tell duplicate copies apart or split a cantrip
+// draw from the turn draw). When set, the REAL draw sites append (turn_number, card_name) here
+// at the moment each card is drawn: the per-turn draw (GameEngine::DrawStep) and the cantrip
+// draws executed in TurnSolver::ApplyPlanDirect (Ponder/Preordain DrawN, Treasure Hunt
+// DrawUntilNonland, Light Up staged draws). Expressive Iteration is NOT recorded here -- it has
+// its own decision panel that already shows the hand/exile/bottom split. Nulled by RevealLogPause
+// for every search/rollout/enumeration scope, so it fires ONLY for real draws and autonomous play
+// is byte-identical (appending to an external vector never touches GameState). Inert unless set.
+extern thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink;
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -288,17 +301,18 @@ struct RevealLogPause
     DigChooser* saved_dchooser;
     DiscardChooser* saved_dischooser;
     EIChooser* saved_eichooser;
+    std::vector<std::pair<int, std::string>>* saved_drawsink;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
-                       saved_eichooser(g_play_ei_chooser)
+                       saved_eichooser(g_play_ei_chooser), saved_drawsink(g_play_draw_sink)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
-      g_play_ei_chooser = nullptr; }
+      g_play_ei_chooser = nullptr; g_play_draw_sink = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
-                        g_play_ei_chooser = saved_eichooser; }
+                        g_play_ei_chooser = saved_eichooser; g_play_draw_sink = saved_drawsink; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

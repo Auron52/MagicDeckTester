@@ -321,7 +321,8 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
 
 static void WriteDecisionJson(std::ostream& os, const GameState& s,
                               const std::vector<TurnSolver::Plan>& plans,
-                              bool is_pre_combat, int decision_index, int reveal_count)
+                              bool is_pre_combat, int decision_index, int reveal_count,
+                              const std::vector<std::pair<int, std::string>>& drew = {})
 {
     const Player& me  = s.ActivePlayer();
     os << "{\n";
@@ -330,6 +331,21 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"phase\": \"" << (is_pre_combat ? "pre_main" : "post_main") << "\",\n";
     os << "  \"on_the_play\": " << (s.on_the_play ? "true" : "false") << ",\n";
+    // Cards drawn since the previous main-phase decision (turn draw + any cantrip draws this
+    // segment), each with the turn it was drawn on, so the viewer history can show exactly what
+    // was drawn rather than guessing from a hand diff. Empty for replayed/validation contexts.
+    if (!drew.empty())
+    {
+        os << "  \"drew\": [";
+        for (size_t di = 0; di < drew.size(); ++di)
+        {
+            if (di) { os << ", "; }
+            os << "{ \"turn\": " << drew[di].first << ", \"card\": ";
+            JsonStr(os, drew[di].second);
+            os << " }";
+        }
+        os << "],\n";
+    }
     WriteBoardContext(os, s, reveal_count);
     // Land's Edge availability: when the active player controls a Land's Edge (or any
     // "discard a land: deal N" outlet) and holds lands, the GUI single-click-activates it.
@@ -836,6 +852,12 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     size_t cursor = 0;
     int decisions_made = 0;
     std::vector<std::string> trace;   // one entry per RESOLVED decision (for --log-dir)
+    // Accurate per-draw reporting: the real draw sites append (turn, card_name) here as cards are
+    // drawn (see g_play_draw_sink). It accumulates the draws since the last RESOLVED main-phase
+    // decision, so the NEXT emitted main-phase decision reports exactly the new draws for the
+    // viewer history. Nulled by RevealLogPause during the search, so only real draws land here.
+    std::vector<std::pair<int, std::string>> draw_log;
+    g_play_draw_sink = &draw_log;
     ai.SetExternalChooser(
         [&](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
         {
@@ -850,10 +872,14 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                     // Only the completing full-CSV run writes the trace file (below).
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count);
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
+                // This main-phase decision has been consumed (it was shown in a prior viewer step);
+                // its draws were already reported. Clear so the NEXT emitted decision reports only
+                // the draws that happen AFTER it (turn draw / cantrip draws of the next segment).
+                draw_log.clear();
                 return chosen;
             }
             // Human-play line reconciliation: if a --validate-line was supplied, this is the
@@ -892,13 +918,13 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 }
                 std::cout << "],\n";
                 std::cout << "  \"decision\": ";
-                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count);
+                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log);
                 std::cout << "}\n<<<END_VALIDATION>>>\n";
                 std::cout.flush();
                 std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count);
+            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);   // distinct code: "more input needed"
@@ -1190,6 +1216,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_dig_chooser = nullptr;
     g_play_discard_chooser = nullptr;
     g_play_ei_chooser = nullptr;
+    g_play_draw_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.

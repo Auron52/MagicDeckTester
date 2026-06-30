@@ -1122,8 +1122,21 @@ function logGyAdds(me) {
   if (adds.length) S.history.push({ turn:(S.decision&&S.decision.turn)||'', label:'⤓ to graveyard: '+adds.join(', ') });
   S.lastGy=cur; S.lastCasts=new Set();
 }
+// Log the cards drawn since the previous main-phase decision (turn draw + any cantrip draws of
+// this segment), each on the turn the engine reported it was drawn on. dec.drew is incremental
+// (the engine clears its buffer on every resolved decision), so this never double-counts. Draws
+// of the same reported turn collapse into one "＋ drew: a, b" entry.
+function logDraws(dec) {
+  if (!dec || !dec.drew || !dec.drew.length) return;
+  let i=0;
+  while (i<dec.drew.length) {
+    const t=dec.drew[i].turn, names=[];
+    while (i<dec.drew.length && dec.drew[i].turn===t) { names.push(dec.drew[i].card); i++; }
+    S.history.push({ turn:t, label:'＋ drew: '+names.join(', ') });
+  }
+}
 function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
-  if (dec && dec.type==='main_phase') { logGyAdds(dec.me); renderHistory(); }
+  if (dec && dec.type==='main_phase') { logDraws(dec); logGyAdds(dec.me); renderHistory(); }
   $('endcontrols').style.display='none'; renderBoard(); }
 function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
 function hideVerdict() { $('verdict').style.display='none'; }

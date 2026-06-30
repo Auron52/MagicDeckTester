@@ -2204,7 +2204,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 OpponentGainsLife(state, state.active_player_index, def.params.opponent_lifegain);
             }
             // Magma Opus rider: "draw two cards." Mirrors EffectHandler (lockstep).
-            if (def.params.cast_draw > 0) { ap.library.DrawN(def.params.cast_draw, ap.hand); }
+            if (def.params.cast_draw > 0)
+            {
+                std::size_t before = ap.hand.size();
+                ap.library.DrawN(def.params.cast_draw, ap.hand);
+                // Human-play accurate draw reporting (nulled by RevealLogPause during search).
+                if (g_play_draw_sink)
+                {
+                    for (std::size_t hi = before; hi < ap.hand.size(); ++hi)
+                    { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
+                }
+            }
         }
         else if (is_creature)
         {
@@ -2276,12 +2286,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     Card c = ap.library.DrawTop();
                     c.m_is_staged     = true;
                     c.m_staged_expiry = expiry;
+                    // Human-play accurate draw reporting (nulled by RevealLogPause during search).
+                    if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, c.m_name.str() }); }
                     ap.hand.push_back(std::move(c));
                 }
             }
             else
             {
+                std::size_t before = ap.hand.size();
                 ap.library.DrawN(n, ap.hand);
+                // Human-play accurate draw reporting (nulled by RevealLogPause during search).
+                if (g_play_draw_sink)
+                {
+                    for (std::size_t hi = before; hi < ap.hand.size(); ++hi)
+                    { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
+                }
             }
 
             // Draw breakpoint: play a revealed land (the real engine's second pass
@@ -2318,6 +2337,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 Card c = ap.library.DrawTop();
                 auto cdef = CardDatabase::Instance().LookupCached(c);
                 bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+                // Human-play accurate draw reporting (nulled by RevealLogPause during search).
+                if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, c.m_name.str() }); }
                 ap.hand.push_back(std::move(c));
                 if (!is_land) { break; }
             }
@@ -2650,7 +2671,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ap.graveyard.push_back(*it);
                 ap.hand.erase(it);
             }
-            if (!ap.library.empty()) { ap.hand.push_back(ap.library.DrawTop()); }
+            if (!ap.library.empty())
+            {
+                Card drawn = ap.library.DrawTop();
+                // Human-play accurate draw reporting (nulled by RevealLogPause during search).
+                if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }
+                ap.hand.push_back(std::move(drawn));
+            }
         }
 
         // Auto-fire safe alt payloads (Invigorate / Skyshroud) once everything else has
