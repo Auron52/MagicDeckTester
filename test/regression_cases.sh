@@ -170,19 +170,21 @@ OVERNIGHT_CASES=(
   "antilife 5 6006 1000 20"
   "antilife 5 7007 1000 20"
   # hinata: the deep-search home (gate modes are d0-only -- see SMOKE block). d0 full; d3/d5 kept
-  # LOW (150/100 vs the others' 1000) -- Hinata's combo enumeration is ~1000x/game with occasional
-  # multi-minute turns, so big counts would dominate the whole overnight. Counts are PROVISIONAL,
-  # sized under CPU contention; validate wall time on a free machine and raise if there is headroom.
+  # SMALL -- Hinata's combo enumeration measured ~25-40 s/GAME at d3/d5 (occasional multi-minute
+  # turns), ~1000x the other decks, so these are a crash/divergence SMOKE check, NOT a statistical
+  # sample. At 40 d3 + 25 d5 per seed x4 that is ~2 h of the 8 h overnight; raising the counts buys
+  # little (deep search is converged here) and risks blowing the budget. Cut from 150/100 (2026-06-30)
+  # after measuring real per-game wall time. Validate on a free machine before raising.
   "hinata  0 4004 2000 0"
   "hinata  0 5005 2000 0"
   "hinata  0 6006 2000 0"
   "hinata  0 7007 2000 0"
-  "hinata  3 4004  150 10"
-  "hinata  3 5005  150 10"
-  "hinata  3 6006  150 10"
-  "hinata  3 7007  150 10"
-  "hinata  5 4004  100 20"
-  "hinata  5 5005  100 20"
-  "hinata  5 6006  100 20"
-  "hinata  5 7007  100 20"
+  "hinata  3 4004   40 10"
+  "hinata  3 5005   40 10"
+  "hinata  3 6006   40 10"
+  "hinata  3 7007   40 10"
+  "hinata  5 4004   25 20"
+  "hinata  5 5005   25 20"
+  "hinata  5 6006   25 20"
+  "hinata  5 7007   25 20"
 )
