@@ -77,8 +77,11 @@
   .thumb { width:90px; text-align:center; position:relative; }
   .thumb.sm { width:62px; }
   .thumb img { width:100%; border-radius:6px; display:block; background:#0b0c0e; min-height:64px; }
-  /* tapped permanent: rotate the art like a real tapped card + a corner badge */
-  .thumb.tapped img { transform:rotate(14deg); opacity:.82; filter:saturate(.85); }
+  /* tapped permanent: rotate the art a full 90° clockwise like a real tapped card + a corner badge.
+     The portrait image is narrowed to 64px (so its natural height ≈ the 90px column width); rotated
+     90° that becomes a 90px-wide × 64px-tall landscape card that fills the column exactly without
+     overlapping neighbors, and the cell ends up shorter — just like a tapped card laid on its side. */
+  .thumb.tapped img { width:64px; margin:0 auto; transform:rotate(90deg); opacity:.82; filter:saturate(.85); }
   .thumb .tapbadge { position:absolute; top:2px; left:2px; background:rgba(120,120,130,.92); color:#0c1116;
       border-radius:4px; font-size:10px; font-weight:700; padding:0 4px; z-index:2; }
   .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:3px; }
