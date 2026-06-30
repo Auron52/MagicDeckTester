@@ -534,9 +534,12 @@ function computeDiff() {
   const ms=(arr,key)=>{ const m={}; (arr||[]).forEach(x=>{const k=key?x[key]:x; m[k]=(m[k]||0)+1;}); return m; };
   const addedNames=(na,nb,key)=>{ const A=ms(na,key),B=ms(nb,key),r=[]; for(const k in B){const d=B[k]-(A[k]||0);for(let i=0;i<d;i++)r.push(k);} return r; };
   addedNames(a.me.battlefield,b.me.battlefield,'name').forEach(n=>out.push({cls:'add',text:'▲ '+n,name:n}));
+  // Cards that ENTERED hand since the prior decision (a draw, or a tutor/Gamble fetch). Shown so
+  // the result of a tutor is visible; the matching discard appears below as a graveyard add.
+  addedNames(a.me.hand,b.me.hand,'name').forEach(n=>out.push({cls:'draw',text:'+ '+n+' to hand',name:n}));
   addedNames(a.me.graveyard,b.me.graveyard).forEach(n=>out.push({cls:'gy',text:'⤓ '+n+' → graveyard',name:n}));
   const drew=(a.me.library_size||0)-(b.me.library_size||0);
-  if (drew>0) out.push({cls:'draw',text:'drew '+drew});
+  if (drew>0) out.push({cls:'draw',text:drew+' off library'});
   const oppd=(a.opponent.life||0)-(b.opponent.life||0);
   if (oppd>0) out.push({cls:'opp',text:'opp −'+oppd+' life'});
   return out.length?out:null;
