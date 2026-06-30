@@ -838,7 +838,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the rollout merely assumed, so model and reality would diverge. Decks whose
     // combat enables genuine second-main plays (Bear Umbra / Hidden Strings
     // untapping lands; spectacle costs unlocked by combat damage) turn it on.
-    const bool play_this_phase = is_pre_combat_main || m_search_post_combat;
+    // Human play (claude-play) additionally plays the post-combat (second) main so the player can
+    // cast a spell unlocked by combat -- a Spectacle cost (Light Up the Stage) becomes available
+    // only after combat damage set opponent_lost_life_this_turn. The empty-second-main is skipped
+    // below (only prompted when a cast is actually available), so this is not per-turn decision
+    // spam. m_external_chooser is null for the autonomous search -> play_this_phase unchanged there.
+    const bool play_this_phase =
+        is_pre_combat_main || m_search_post_combat || (m_external_chooser != nullptr);
 
     // External-controller intercept (Claude-play / human-play prototype, opt-in via
     // SetExternalChooser; inert otherwise so the normal autonomous AI path is
@@ -863,6 +869,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             std::vector<TurnSolver::Plan> plans =
                 TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
             if (plans.empty()) { break; }
+            // Post-combat (second) main: only prompt when a real cast is available (e.g. a Spectacle
+            // spell unlocked by combat). With nothing castable the second main is a no-op, so skip it
+            // silently rather than asking the human to "pass" every single turn. The first main always
+            // prompts (land drop + casts), as before.
+            if (!is_pre_combat_main)
+            {
+                bool any_cast = false;
+                for (const TurnSolver::Plan& p : plans) { if (!p.actions.empty()) { any_cast = true; break; } }
+                if (!any_cast) { break; }
+            }
             size_t lib_before = state.ActivePlayer().library.size();
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
             if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
