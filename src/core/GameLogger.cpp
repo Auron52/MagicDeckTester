@@ -6,6 +6,7 @@
 using json = nlohmann::json;
 
 thread_local GameLogger* g_reveal_logger = nullptr;
+thread_local TopChooser*  g_play_top_chooser = nullptr;
 
 void GameLogger::StartGame(const std::string& run_id, int game_number,
                             const std::string& deck_id, uint64_t seed,

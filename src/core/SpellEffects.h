@@ -1866,50 +1866,164 @@ inline bool HasAnyDigSource(const GameState& state)
     return false;
 }
 
-// Scry N (e.g. Temple of Epiphany): look at the top N cards and bottom the unwanted
-// ones using a deck-aware heuristic, then keep the rest on top in their original
-// order. Heuristic: always keep nonland spells (they are the combo pieces). Keep a
-// land on top when it still helps — a DrawUntilNonland (Treasure Hunt) in hand is fed
-// by lands, or the player controls fewer than two lands and still needs mana —
-// otherwise bottom it to dig toward action.
+// ---- "Look at the top N" disposition: shared apply + heuristic + enumeration ----------------
+// Scry / Surveil / Ponder-reorder all reduce to: remove the top `look` cards into a `looked`
+// vector (look order), then redistribute them via a TopDisposition (which indices go on top and
+// in what order; the rest go to bottom / graveyard / are shuffled). ApplyTopDisposition is the
+// single placement routine; HeuristicTopDisposition reproduces the provider-heuristic choice
+// (so the autonomous search/normal play is byte-identical); the human chooser supplies its own
+// disposition. EnumerateTopDispositions lists the legal player options for the claude-play UI.
+
+// Place the looked-at cards back per `disp`. `looked` is consumed (moved from). The `look`
+// cards must ALREADY be removed from the library front by the caller.
+inline void ApplyTopDisposition(GameState& state, std::vector<Card>& looked,
+                                const TopDisposition& disp, LookKind kind)
+{
+    Player& ap = state.ActivePlayer();
+    const int m = static_cast<int>(looked.size());
+    if (kind == LookKind::Reorder && disp.shuffle)
+    {
+        // "you may shuffle": put everything back on top (order irrelevant), then shuffle the
+        // whole library (deterministic, lockstep ShuffleAfterSearch).
+        for (std::vector<Card>::reverse_iterator it = looked.rbegin(); it != looked.rend(); ++it)
+        { ap.library.insert(ap.library.begin(), std::move(*it)); }
+        ShuffleAfterSearch(state, state.active_player_index);
+        return;
+    }
+    std::vector<char> on_top(m, 0);
+    std::vector<int>  top_seq;
+    for (int idx : disp.top_order)
+    { if (idx >= 0 && idx < m && !on_top[idx]) { on_top[idx] = 1; top_seq.push_back(idx); } }
+    // Ponder cannot bottom/bin: any looked card the player didn't explicitly order still stays
+    // on top (below the ordered ones, in look order).
+    if (kind == LookKind::Reorder)
+    { for (int i = 0; i < m; ++i) { if (!on_top[i]) { on_top[i] = 1; top_seq.push_back(i); } } }
+    // Place the on-top sequence so top_seq[0] ends up at the very top (drawn first).
+    for (std::vector<int>::reverse_iterator it = top_seq.rbegin(); it != top_seq.rend(); ++it)
+    { ap.library.insert(ap.library.begin(), std::move(looked[*it])); }
+    // Cards not kept on top: Scry -> library bottom, Surveil -> graveyard (in look order).
+    for (int i = 0; i < m; ++i)
+    {
+        if (on_top[i]) { continue; }
+        if (kind == LookKind::Surveil) { ap.graveyard.push_back(std::move(looked[i])); }
+        else                           { ap.library.push_back(std::move(looked[i])); }
+    }
+}
+
+// The provider-heuristic disposition -- reproduces the ORIGINAL ScryTop/SurveilTop/
+// ReorderTopOrShuffle behaviour so the autonomous search and normal play stay byte-identical.
+// keep_decision applies to Reorder only (-1 legacy heuristic, 0 forced shuffle, 1 forced keep).
+inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
+                                              LookKind kind, int keep_decision = -1)
+{
+    const int m = static_cast<int>(looked.size());
+    TopDisposition disp;
+    if (kind == LookKind::Reorder)
+    {
+        const bool do_shuffle = (keep_decision == 0)
+                             || (keep_decision == -1 && !ResolveProvider(state).KeepReorderTop(state, looked));
+        if (do_shuffle) { disp.shuffle = true; return disp; }
+        // Wanted (ScryKeepOnTop) first, ordered most-wanted-first (stable); then the rest in
+        // look order. Nothing is bottomed -- everything stays on top (the real Ponder drawback).
+        std::vector<int> wanted, rest;
+        for (int i = 0; i < m; ++i)
+        { (ResolveProvider(state).ScryKeepOnTop(state, looked[i]) ? wanted : rest).push_back(i); }
+        std::stable_sort(wanted.begin(), wanted.end(), [&](int a, int b) {
+            return ResolveProvider(state).SituationalCardRank(state, looked[a])
+                 > ResolveProvider(state).SituationalCardRank(state, looked[b]); });
+        disp.top_order = wanted;
+        disp.top_order.insert(disp.top_order.end(), rest.begin(), rest.end());
+        return disp;
+    }
+    // Scry / Surveil: keep the wanted cards on top in LOOK order; the rest are bottomed / binned.
+    for (int i = 0; i < m; ++i)
+    { if (ResolveProvider(state).ScryKeepOnTop(state, looked[i])) { disp.top_order.push_back(i); } }
+    return disp;
+}
+
+// Enumerate the legal player dispositions (for the claude-play decision menu). Scry/Surveil:
+// every ordered subset kept on top (rest away). Reorder: every ordering of all N on top, plus a
+// shuffle option. N is tiny (1-3) for every modelled card, so the factorial blowup is bounded.
+struct TopOption { TopDisposition disp; std::string label; };
+inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std::vector<Card>& looked)
+{
+    const int m = static_cast<int>(looked.size());
+    std::vector<TopOption> opts;
+    auto name = [&](int i) { return looked[i].m_name.str(); };
+    const char* away = (kind == LookKind::Surveil) ? "graveyard"
+                     : (kind == LookKind::Scry)     ? "bottom" : "below";
+    if (kind == LookKind::Reorder)
+    {
+        std::vector<int> perm(m);
+        for (int i = 0; i < m; ++i) { perm[i] = i; }
+        do {
+            TopOption o; o.disp.top_order = perm;
+            std::string lbl = "Top: ";
+            for (int i = 0; i < m; ++i) { lbl += (i ? ", " : ""); lbl += name(perm[i]); }
+            o.label = lbl;
+            opts.push_back(std::move(o));
+        } while (std::next_permutation(perm.begin(), perm.end()));
+        TopOption sh; sh.disp.shuffle = true; sh.label = "Shuffle them away";
+        opts.push_back(std::move(sh));
+        return opts;
+    }
+    // Scry / Surveil: ordered subsets kept on top.
+    for (int mask = 0; mask < (1 << m); ++mask)
+    {
+        std::vector<int> sub;
+        for (int i = 0; i < m; ++i) { if (mask & (1 << i)) { sub.push_back(i); } }
+        std::sort(sub.begin(), sub.end());
+        do {
+            TopOption o; o.disp.top_order = sub;
+            std::string lbl;
+            if (sub.empty()) { lbl = std::string("All to ") + away; }
+            else
+            {
+                lbl = "Top: ";
+                for (size_t i = 0; i < sub.size(); ++i) { lbl += (i ? ", " : ""); lbl += name(sub[i]); }
+                if (static_cast<int>(sub.size()) < m) { lbl += std::string("  (rest to ") + away + ")"; }
+            }
+            o.label = lbl;
+            opts.push_back(std::move(o));
+        } while (std::next_permutation(sub.begin(), sub.end()));
+    }
+    return opts;
+}
+
+// Scry N (e.g. Temple of Epiphany): look at the top N cards and bottom the unwanted ones using a
+// deck-aware heuristic (HeuristicTopDisposition), then keep the rest on top in look order. Under
+// --claude-play g_play_top_chooser is set (and RevealLogPause nulls it during the search, so this
+// is REAL resolution only) and the human picks the disposition instead. Byte-identical for search.
 inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
 {
     Player& ap = state.ActivePlayer();
+    const int look = std::min(n, static_cast<int>(ap.library.size()));
+    if (look <= 0) { return; }
 
-    // Reveal capture (real play only; null during search). Records the cards seen at the
-    // top of the library and which were kept on top vs bottomed, in look order.
-    std::vector<int>         seen_nums;
-    std::vector<std::string> seen_names;
-    std::vector<int>         kept_nums;
-    std::vector<int>         bottom_nums;
-    const bool capture = (g_reveal_logger != nullptr);
+    std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
+    TopDisposition disp = (g_play_top_chooser)
+        ? (*g_play_top_chooser)(state, source, looked, LookKind::Scry)
+        : HeuristicTopDisposition(state, looked, LookKind::Scry);
 
-    std::vector<Card> keep_top;
-    std::vector<Card> bottomed;
-    for (int i = 0; i < n && !ap.library.empty(); ++i)
+    // Reveal capture (real play only; null during search): seen cards in look order, and which
+    // were kept on top vs bottomed -- read from the chosen disposition BEFORE looked is consumed.
+    if (g_reveal_logger)
     {
-        Card c = ap.library.front();
-        ap.library.erase(ap.library.begin());
-        bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
-        if (capture)
+        std::vector<int> seen_nums, kept_nums, bottom_nums;
+        std::vector<std::string> seen_names;
+        std::vector<char> on_top(look, 0);
+        for (int idx : disp.top_order) { if (idx >= 0 && idx < look) { on_top[idx] = 1; } }
+        for (int i = 0; i < look; ++i)
         {
-            seen_nums.push_back(c.m_number);
-            seen_names.push_back(c.m_name);
-            (keep ? kept_nums : bottom_nums).push_back(c.m_number);
+            seen_nums.push_back(looked[i].m_number);
+            seen_names.push_back(looked[i].m_name);
+            (on_top[i] ? kept_nums : bottom_nums).push_back(looked[i].m_number);
         }
-        if (keep) { keep_top.push_back(std::move(c)); }
-        else      { bottomed.push_back(std::move(c)); }
-    }
-    for (std::vector<Card>::reverse_iterator it = keep_top.rbegin(); it != keep_top.rend(); ++it)
-    {
-        ap.library.insert(ap.library.begin(), std::move(*it));
-    }
-    for (Card& c : bottomed) { ap.library.push_back(std::move(c)); }
-
-    if (capture && !seen_nums.empty())
-    {
         g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_nums, bottom_nums);
     }
+
+    for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
+    ApplyTopDisposition(state, looked, disp, LookKind::Scry);
 }
 
 // Ponder-style "look at the top N, put them back in ANY ORDER, you may shuffle, then draw".
@@ -1928,85 +2042,40 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
                                 int keep_decision = -1)
 {
     Player& ap = state.ActivePlayer();
-    if (ap.library.empty()) { return; }
-
     const int look = std::min(n, static_cast<int>(ap.library.size()));
+    if (look <= 0) { return; }
 
-    // Remove the top `look` cards (in look order) so the keep-vs-shuffle hook can judge the WHOLE
-    // set, then split into wanted (keep on top) vs the rest.
-    std::vector<Card> looked;
-    std::vector<int>         seen_nums;
-    std::vector<std::string> seen_names;
-    const bool capture = (g_reveal_logger != nullptr);
-    for (int i = 0; i < look; ++i)
+    std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
+    // Human play (claude-play) picks the reorder/shuffle; otherwise the searched keep_decision +
+    // provider heuristic do (byte-identical to the original -- HeuristicTopDisposition reproduces
+    // the wanted-first ordering, and in legacy mode the shuffle branch still only fires with an
+    // empty `wanted`, so the pre-shuffle order is the same look order).
+    TopDisposition disp = (g_play_top_chooser)
+        ? (*g_play_top_chooser)(state, source, looked, LookKind::Reorder)
+        : HeuristicTopDisposition(state, looked, LookKind::Reorder, keep_decision);
+
+    if (g_reveal_logger)
     {
-        Card c = ap.library.front();
-        ap.library.erase(ap.library.begin());
-        if (capture) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
-        looked.push_back(std::move(c));
-    }
-
-    // Keep-vs-shuffle. The SEARCH may force it (keep_decision 0 = shuffle, 1 = keep); otherwise the
-    // provider's KeepReorderTop judges the whole looked-at set (default: keep iff any card is wanted,
-    // byte-identical; HinataProvider shuffles a set that can't advance toward Hinata).
-    const bool do_shuffle = (keep_decision == 0)
-                         || (keep_decision == -1 && !ResolveProvider(state).KeepReorderTop(state, looked));
-
-    // Split into wanted (keep on top) vs the rest, in look order, for the keep-branch ordering.
-    std::vector<Card> wanted, rest;
-    for (Card& c : looked)
-    {
-        bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
-        (keep ? wanted : rest).push_back(std::move(c));
-    }
-
-    // Order the kept cards most-wanted-first so the immediately-following draw takes the best one
-    // (the rest stay on top for later turns -- the real Ponder drawback). For a provider without a
-    // situational override the rank is ScryKeepOnTop?1:0 and every kept card shares rank 1, so this
-    // stable_sort is a no-op (byte-identical); HinataProvider supplies the combo-aware order.
-    std::stable_sort(wanted.begin(), wanted.end(), [&](const Card& a, const Card& b) {
-        return ResolveProvider(state).SituationalCardRank(state, a)
-             > ResolveProvider(state).SituationalCardRank(state, b);
-    });
-
-    if (do_shuffle)
-    {
-        // Shuffle them all away (CR "you may shuffle"). Put EVERY looked-at card back on top first
-        // (wanted + rest -- order is irrelevant before the shuffle), then shuffle the whole library
-        // (deterministic, lockstep). Under the MTG_NO_SEARCH_SHUFFLE A/B opt-out the shuffle is a
-        // no-op (cards stay on top), which conservatively under-rates Ponder. In legacy mode
-        // (keep_decision == -1) this branch only fires when `wanted` is empty, so reinserting it is
-        // a no-op and the behaviour is byte-identical to before.
-        for (std::vector<Card>::reverse_iterator it = rest.rbegin(); it != rest.rend(); ++it)
-        { ap.library.insert(ap.library.begin(), std::move(*it)); }
-        for (std::vector<Card>::reverse_iterator it = wanted.rbegin(); it != wanted.rend(); ++it)
-        { ap.library.insert(ap.library.begin(), std::move(*it)); }
-        ShuffleAfterSearch(state, state.active_player_index);
-        if (capture && !seen_nums.empty())
+        std::vector<int> seen_nums; std::vector<std::string> seen_names;
+        for (const Card& c : looked) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
+        if (disp.shuffle)
         {
-            // Disposition = shuffled away (none kept on top); flag it in the source label.
             g_reveal_logger->LogReveal(source + " (shuffle)", seen_nums, seen_names,
                                        /*kept*/ std::vector<int>{}, /*bottomed*/ seen_nums);
         }
-        return;
+        else
+        {
+            // Final top order = ordered indices, then any unordered ones (Ponder keeps all on top).
+            std::vector<int> kept_nums; std::vector<char> placed(look, 0);
+            for (int idx : disp.top_order)
+            { if (idx >= 0 && idx < look && !placed[idx]) { placed[idx] = 1; kept_nums.push_back(looked[idx].m_number); } }
+            for (int i = 0; i < look; ++i) { if (!placed[i]) { kept_nums.push_back(looked[i].m_number); } }
+            g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_nums, /*bottomed*/ std::vector<int>{});
+        }
     }
 
-    // Keep all N on top, wanted first (in look order), then the unwanted ones below them.
-    // Nothing is bottomed -- the unwanted cards remain on top to be drawn on later turns.
-    for (std::vector<Card>::reverse_iterator it = rest.rbegin(); it != rest.rend(); ++it)
-    { ap.library.insert(ap.library.begin(), std::move(*it)); }
-    for (std::vector<Card>::reverse_iterator it = wanted.rbegin(); it != wanted.rend(); ++it)
-    { ap.library.insert(ap.library.begin(), std::move(*it)); }
-    if (capture && !seen_nums.empty())
-    {
-        // Report the final top order (wanted first) as "kept on top"; nothing bottomed.
-        std::vector<int> kept_order_nums;
-        int i = 0;
-        for (auto it = ap.library.begin(); it != ap.library.end() && i < look; ++it, ++i)
-        { kept_order_nums.push_back(it->m_number); }
-        g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_order_nums,
-                                   /*bottomed*/ std::vector<int>{});
-    }
+    for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
+    ApplyTopDisposition(state, looked, disp, LookKind::Reorder);
 }
 
 // Expressive Iteration {U}{R}: "Look at the top three cards of your library. Put one into your hand,
@@ -2129,39 +2198,35 @@ inline void BounceKarooLand(GameState& state, int controller, int self_index)
 inline void SurveilTop(GameState& state, int n, const std::string& source = "Surveil")
 {
     Player& ap = state.ActivePlayer();
+    const int look = std::min(n, static_cast<int>(ap.library.size()));
+    if (look <= 0) { return; }
 
-    std::vector<int>         seen_nums;
-    std::vector<std::string> seen_names;
-    std::vector<int>         kept_nums;
-    std::vector<int>         grave_nums;
+    std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
+    TopDisposition disp = (g_play_top_chooser)
+        ? (*g_play_top_chooser)(state, source, looked, LookKind::Surveil)
+        : HeuristicTopDisposition(state, looked, LookKind::Surveil);
+
     const bool capture = (g_reveal_logger != nullptr);
-
-    std::vector<Card> keep_top;
-    for (int i = 0; i < n && !ap.library.empty(); ++i)
+    if (capture)
     {
-        Card c = ap.library.front();
-        ap.library.erase(ap.library.begin());
-        bool keep = ResolveProvider(state).ScryKeepOnTop(state, c);
-        if (capture)
+        std::vector<int> seen_nums, kept_nums, grave_nums;
+        std::vector<std::string> seen_names;
+        std::vector<char> on_top(look, 0);
+        for (int idx : disp.top_order) { if (idx >= 0 && idx < look) { on_top[idx] = 1; } }
+        for (int i = 0; i < look; ++i)
         {
-            seen_nums.push_back(c.m_number);
-            seen_names.push_back(c.m_name);
-            (keep ? kept_nums : grave_nums).push_back(c.m_number);
+            seen_nums.push_back(looked[i].m_number);
+            seen_names.push_back(looked[i].m_name);
+            (on_top[i] ? kept_nums : grave_nums).push_back(looked[i].m_number);
         }
-        if (keep) { keep_top.push_back(std::move(c)); }
-        else      { ap.graveyard.push_back(std::move(c)); }  // surveil bins to graveyard
-    }
-    for (std::vector<Card>::reverse_iterator it = keep_top.rbegin(); it != keep_top.rend(); ++it)
-    {
-        ap.library.insert(ap.library.begin(), std::move(*it));
-    }
-
-    if (capture && !seen_nums.empty())
-    {
         // For surveil the "bottomed" set is really the graveyard set; the viewer labels
         // the disposition from the source, so reusing the bottomed slot is fine.
         g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_nums, grave_nums);
     }
+
+    for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
+    ApplyTopDisposition(state, looked, disp, LookKind::Surveil);
+    return;
 }
 
 // ---- Fetchland resolution (Windswept Heath etc.) ------------------------------

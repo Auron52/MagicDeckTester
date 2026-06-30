@@ -17,6 +17,7 @@
 #include "ai/TurnSolver.h"
 #include "core/GameEngine.h"
 #include "core/GameLogger.h"
+#include "core/SpellEffects.h"   // LookKind / TopDisposition / EnumerateTopDispositions for look-top decisions
 #include "core/HardwareConcurrency.h"
 #include "ai/MulliganProfileIO.h"
 #include "ai/Profiler.h"
@@ -407,6 +408,71 @@ static void WriteVialDecisionJson(std::ostream& os, const GameState& s,
     os << "}\n";
 }
 
+// Emit a resolution-time "look at the top N" decision (Scry / Surveil / Ponder-reorder). The
+// player replies an option INDEX into `opts` (the legal dispositions). Mirrors the vial decision:
+// shares the one --choices stream, consumed in resolution order. The GUI renders `looked`
+// face-up and `options` (each with its resulting top order + away pile) for the pick.
+static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                 const std::vector<Card>& looked, LookKind kind,
+                                 const std::vector<TopOption>& opts, int heuristic_default,
+                                 int decision_index)
+{
+    const char* kindstr   = kind == LookKind::Scry ? "scry" : kind == LookKind::Surveil ? "surveil" : "reorder";
+    const char* away_zone = kind == LookKind::Surveil ? "graveyard" : kind == LookKind::Scry ? "bottom" : "none";
+    const int   m         = static_cast<int>(looked.size());
+    const Player& me      = s.ActivePlayer();
+    int           opp     = 1 - s.active_player_index;
+
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"" << kindstr << "\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"away_zone\": \"" << away_zone << "\",\n";
+    os << "  \"me\": { \"life\": " << me.life << " }, \"opponent\": { \"life\": " << s.players[opp].life << " },\n";
+    os << "  \"looked\": [";
+    for (int i = 0; i < m; ++i)
+    {
+        if (i) { os << ", "; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(looked[i]);
+        os << "{ \"name\": "; JsonStr(os, looked[i].m_name.str());
+        os << ", \"is_land\": " << ((d && d->card.IsLand()) ? "true" : "false") << " }";
+    }
+    os << "],\n";
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"options\": [";
+    for (size_t oi = 0; oi < opts.size(); ++oi)
+    {
+        if (oi) { os << ", "; }
+        const TopDisposition& d = opts[oi].disp;
+        std::vector<char>        on_top(m, 0);
+        std::vector<std::string> top, away;
+        if (!d.shuffle)
+        {
+            for (int idx : d.top_order)
+            { if (idx >= 0 && idx < m && !on_top[idx]) { on_top[idx] = 1; top.push_back(looked[idx].m_name.str()); } }
+            for (int i = 0; i < m; ++i)
+            {
+                if (on_top[i]) { continue; }
+                if (kind == LookKind::Reorder) { top.push_back(looked[i].m_name.str()); }  // Ponder keeps all on top
+                else                           { away.push_back(looked[i].m_name.str()); }
+            }
+        }
+        os << "{ \"index\": " << oi << ", \"label\": "; JsonStr(os, opts[oi].label);
+        os << ", \"shuffle\": " << (d.shuffle ? "true" : "false");
+        os << ", \"top\": ";  JsonNameArray(os, top);
+        os << ", \"away\": "; JsonNameArray(os, away);
+        os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply an option index. "
+       << (kind == LookKind::Scry    ? "Kept cards stay on top (listed order); the rest go to the bottom."
+         : kind == LookKind::Surveil ? "Kept cards stay on top; the rest go to the graveyard."
+         :                             "Order all cards on top, or shuffle them away.")
+       << "\"\n";
+    os << "}\n";
+}
+
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
 // and commas (no MTG name contains ';' or '='), so they pass through verbatim.
@@ -547,8 +613,48 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         });
 
+    // Look-at-top resolution decisions (Scry / Surveil / Ponder-reorder). Fired from inside
+    // ScryTop/SurveilTop/ReorderTopOrShuffle during REAL resolution (gated by g_reveal_logger, so
+    // never the search). The player replies one option index into the enumerated dispositions;
+    // shares the single --choices stream, consumed in resolution order like the vial decision.
+    TopChooser top_chooser =
+        [&](const GameState& s, const std::string& source, const std::vector<Card>& looked,
+            LookKind kind) -> TopDisposition
+        {
+            std::vector<TopOption> opts = EnumerateTopDispositions(kind, looked);
+            TopDisposition hd = HeuristicTopDisposition(s, looked, kind);
+            int def = 0;
+            for (size_t i = 0; i < opts.size(); ++i)
+            {
+                if (opts[i].disp.shuffle == hd.shuffle && opts[i].disp.top_order == hd.top_order) { def = static_cast<int>(i); break; }
+            }
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(opts.size())) { chosen = def; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteTopDecisionJson(ss, s, source, looked, kind, opts, def, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return opts[chosen].disp;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteTopDecisionJson(std::cout, s, source, looked, kind, opts, def, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_top_chooser = &top_chooser;
+
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);
+    g_play_top_chooser = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.

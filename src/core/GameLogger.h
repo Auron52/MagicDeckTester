@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -183,14 +184,43 @@ private:
 // Logging never mutates GameState, so this cannot affect the simulation in any way.
 extern thread_local GameLogger* g_reveal_logger;
 
-// RAII: null g_reveal_logger for the current scope. Placed at the top of every search /
-// rollout "thinking" function so planning-time scry/dig calls are not logged; restores
-// the previous value on exit (so nested scopes compose correctly).
+// ---- Human-play "look at the top N" resolution chooser ---------------------------------
+// Scry / Surveil / Ponder-style reorder all resolve a "look at the top N, decide their
+// disposition" sub-decision. Autonomously the provider heuristic (ScryKeepOnTop / KeepReorderTop)
+// decides; under --claude-play the human does. This optional chooser is the hook: when set,
+// ScryTop/SurveilTop/ReorderTopOrShuffle ask it instead of the heuristic. RevealLogPause nulls it
+// for the duration of every search/rollout "thinking" scope, so it fires ONLY during REAL
+// resolution (which is never paused) -- making the search byte-identical by construction.
+struct GameState;
+struct Card;
+enum class LookKind { Scry, Reorder, Surveil };
+
+// The player's chosen disposition of the looked-at top cards. `top_order` lists indices into
+// the looked-at vector (look order) to place back on top, FIRST = nearest the top (drawn
+// first). Indices NOT listed go elsewhere: bottom of library (Scry), graveyard (Surveil), or
+// are shuffled into the library (Reorder, when `shuffle` is set -- then top_order is ignored).
+struct TopDisposition
+{
+    std::vector<int> top_order;
+    bool             shuffle = false;
+};
+
+using TopChooser = std::function<TopDisposition(const GameState& state, const std::string& source,
+                                                const std::vector<Card>& looked, LookKind kind)>;
+
+// Set for the duration of a --claude-play game; nullptr (and so inert) otherwise.
+extern thread_local TopChooser* g_play_top_chooser;
+
+// RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
+// every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
+// nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
 struct RevealLogPause
 {
     GameLogger* saved;
-    RevealLogPause() : saved(g_reveal_logger) { g_reveal_logger = nullptr; }
-    ~RevealLogPause() { g_reveal_logger = saved; }
+    TopChooser* saved_chooser;
+    RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser)
+    { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; }
+    ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

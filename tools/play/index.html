@@ -192,6 +192,13 @@
 
   .vial { border:1px solid var(--acc); border-radius:8px; padding:12px 14px; margin:8px 0; }
   .vial .vrow { display:flex; gap:8px; margin-top:8px; }
+  /* look-at-top resolution decision (scry / surveil / ponder-reorder) */
+  .zone.reveal { border-color:var(--acc); }
+  .lookoptrow { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  button.lookopt { text-align:left; padding:8px 12px; font-size:13px; border:1px solid var(--line);
+    background:#15171b; color:var(--fg); border-radius:7px; cursor:pointer; font-family:inherit; }
+  button.lookopt:hover { border-color:var(--acc); background:#1a1d22; }
+  button.lookopt.primary { border-color:var(--acc); background:#1f2d3a; }
   .hist { list-style:none; margin:0; padding:0; font-size:12.5px; }
   .hist li { padding:5px 8px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
   .hist li .t { color:var(--muted); white-space:nowrap; } .hist li.rej .lab { color:var(--bad); } .hist li.win .lab { color:var(--good); }
@@ -339,6 +346,7 @@ function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; return; }
   if (!S.over && d.type === 'vial_charge') { renderVialBoard(d); wireBoard(); return; }
+  if (!S.over && (d.type === 'scry' || d.type === 'reorder' || d.type === 'surveil')) { renderLookBoard(d); return; }
   const me = d.me||{}, opp = d.opponent||{};
   const oppBf = opp.battlefield||[];
   const oppLands = oppBf.filter(x=>x.is_land), oppPerms = oppBf.filter(x=>!x.is_land);
@@ -669,6 +677,39 @@ async function storeArtifact(v, line) {
 }
 
 // ---- vial ------------------------------------------------------------------
+// Resolution-time "look at the top N" decision (Scry / Surveil / Ponder-reorder). Shows the
+// revealed cards face-up and the legal dispositions as buttons (each = the resulting top order +
+// the pile the rest go to). Clicking commits that option index to the --choices stream. The
+// heuristic's pick is marked + highlighted as the default. (A drag-to-arrange UI is a later polish;
+// the buttons already let the player pick any order, which is the actual ask.)
+function renderLookBoard(d) {
+  const kind = d.type;                                  // 'scry' | 'surveil' | 'reorder'
+  const awayWord = d.away_zone === 'graveyard' ? 'graveyard' : d.away_zone === 'bottom' ? 'bottom' : 'shuffle';
+  const verb = kind === 'scry' ? 'Scry' : kind === 'surveil' ? 'Surveil' : 'Reorder';
+  let h = `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span><span class="phase">${esc(verb.toLowerCase())} — ${esc(d.source||'')}</span></div>`;
+  h += `<div class="lifebar"><span class="life">You <b class="you">${d.me?.life ?? ''}</b></span><span class="life">Opponent <b class="opp">${d.opponent?.life ?? ''}</b></span></div>`;
+  h += `<div class="zone reveal"><h3>Top of library — ${esc(kind)} (look order)</h3>`+
+       zoneRow((d.looked||[]).map(c=>bfThumb({name:c.name,is_land:c.is_land})))+`</div>`;
+  h += `<div class="zone lookopts"><h3>Choose disposition`+
+       (kind==='scry'?` — kept cards stay on top, the rest go to the bottom`
+        :kind==='surveil'?` — kept cards stay on top, the rest go to the graveyard`
+        :` — order all on top, or shuffle them away`)+`</h3><div class="lookoptrow">`;
+  (d.options||[]).forEach(o=>{
+    const def = o.index === d.heuristic_default;
+    const desc = o.shuffle ? '⤮ Shuffle them away'
+      : '▲ ' + (o.top||[]).join(' · ') + ((o.away&&o.away.length) ? `   ⤓ ${awayWord}: ` + o.away.join(' · ') : '');
+    h += `<button class="lookopt${def?' primary':''}" data-opt="${o.index}" title="${esc(o.label||'')}">${esc(desc)}${def?'  · default':''}</button>`;
+  });
+  h += `</div></div>`;
+  const board = $('board'); board.innerHTML = h;
+  renderEffects();   // keep the what-changed strip (e.g. the cast that triggered this) visible
+  board.querySelectorAll('button[data-opt]').forEach(b=>b.onclick=()=>{
+    const oi = +b.dataset.opt, o = (d.options||[]).find(x=>x.index===oi) || {};
+    const lab = o.shuffle ? `${verb}: shuffle` : `${verb}: ${(o.top||[]).join(' > ')}${(o.away&&o.away.length)?'  | '+awayWord+': '+o.away.join(', '):''}`;
+    S.history.push({ turn:d.turn, label:lab });
+    S.prev = S.decision; S.choices.push(oi); renderHistory(); step();
+  });
+}
 function renderVialBoard(d) {
   $('board').innerHTML=`<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span><span class="phase">aether vial</span></div>`+
     `<div class="lifebar"><span class="life">You <b class="you">${d.me.life}</b></span><span class="life">Opponent <b class="opp">${d.opponent.life}</b></span></div>`+
