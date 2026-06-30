@@ -3707,19 +3707,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         s += pp.is_filter             ? "F" : "-";
         s += pp.cycling_cost          ? "C" : "-";
         s += pp.sacrifice_draw_cost   ? "D" : "-";
+        // creature-only mana (Ancient Ziggurat) is NOT interchangeable with an unrestricted
+        // any-colour land: deduping the two loses the unrestricted land's non-creature lines
+        // (and could force the strictly-worse Ziggurat as the sole representative). Distinguish.
+        s += pp.creature_mana_only    ? "M" : "-";
         // Fetchlands with different target colours are NOT interchangeable; distinguish
         // them. Empty for ordinary lands -> sig unchanged (other decks byte-identical).
         for (const std::string& ft : pp.fetch_land_types) { s += "f" + ft; }
         return s;
     };
 
+    // Human play (the play GUI) enumerates one plan per distinct land NAME rather than per static
+    // signature: the player chose a SPECIFIC land and expects that exact card played (not a
+    // signature-equivalent representative), and a different-but-equivalent land must never read as
+    // a reject. Gated on MTG_HUMAN_PLAY -> byte-identical for every autonomous goldfish/search run,
+    // which keeps deduping by signature for enumeration economy.
+    static const bool s_human_play_lands = std::getenv("MTG_HUMAN_PLAY") != nullptr;
     std::vector<std::string>        land_names;   // representatives, in hand order
-    std::unordered_set<std::string> seen_sig;
+    std::unordered_set<std::string> seen_key;
     for (const Card& c : ap.hand)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def || !def->card.IsLand()) { continue; }
-        if (seen_sig.insert(land_sig(def->params)).second) { land_names.push_back(c.m_name); }
+        const std::string key = s_human_play_lands ? c.m_name : land_sig(def->params);
+        if (seen_key.insert(key).second) { land_names.push_back(c.m_name); }
     }
 
     // Greedy land the heuristic (AIEngine::TryPlayLand) would play from this hand.

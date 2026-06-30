@@ -81,6 +81,25 @@
   .thumb.land em { color:var(--land); } .thumb.spell em { color:var(--spell); }
   .thumb .pip { position:absolute; top:2px; right:2px; font-size:10px; color:var(--muted);
       background:rgba(11,12,14,.82); border-radius:4px; padding:0 4px; z-index:2; }
+  /* counter badges on a permanent — one colored circle per counter kind, hover for a tooltip.
+     Multiple kinds (rare) stack left-to-right so each is distinguishable. */
+  .thumb .cnts { position:absolute; bottom:2px; left:2px; display:flex; gap:2px; z-index:3; }
+  .thumb .cnt { min-width:16px; height:16px; padding:0 3px; border-radius:9px; font-size:10px; font-weight:700;
+      display:flex; align-items:center; justify-content:center; color:#0c1116; box-shadow:0 0 0 1px rgba(0,0,0,.55); cursor:help; }
+  .thumb .cnt.p1p1{ background:var(--good); } .thumb .cnt.m1m1{ background:var(--bad); }
+  .thumb .cnt.loyalty{ background:var(--warn); } .thumb .cnt.poison{ background:#9a6ad1; }
+  .thumb .cnt.depletion{ background:var(--land); } .thumb .cnt.charge{ background:var(--acc); }
+  .thumb .cnt.verse{ background:#e69a5a; }
+  /* floating (unspent) mana, shown beside the Lands header */
+  .floatmana { margin-left:10px; display:inline-flex; gap:3px; vertical-align:middle; }
+  .mpip { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px;
+      border-radius:9px; font-size:11px; font-weight:700; color:#0c1116; box-shadow:0 0 0 1px rgba(0,0,0,.45); }
+  /* staged (exiled-but-playable) cards: set apart at the right of the hand with a purple ring */
+  .hand .stagedsep { align-self:center; color:#b794d6; font-size:11px; font-weight:600; line-height:1.2;
+      border-left:2px solid #5a4a6a; padding-left:10px; margin-left:6px; max-width:90px; }
+  .hand .thumb.staged img { box-shadow:0 0 0 2px #9a6ad1; }
+  .hand .thumb .stagedbadge { position:absolute; top:2px; left:2px; background:rgba(154,106,209,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
   /* planned (this-turn) card: green ring + order badge + remove */
   .thumb.planned img { box-shadow:0 0 0 2px var(--good); }
   .thumb.planned .ord { position:absolute; top:-7px; left:-7px; background:var(--good); color:#0c1116;
@@ -175,6 +194,7 @@
   <label>Game # <input id="gi" type="number" value="0"/></label>
   <label>Max turns <input id="maxturns" type="number" value="12"/></label>
   <button id="newgame" class="primary">New game</button>
+  <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
   <button id="undo" disabled>Undo</button>
   <span class="hint">no clairvoyance — your win-turn is a ground-truth bound</span>
 </header>
@@ -252,13 +272,31 @@ function removePlanAt(i) { S.plan.splice(i,1); renderBoard(); }
 function clearPlan() { S.plan=[]; S.leMode=false; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
-function bfThumb(o) {   // battlefield entry {name, is_land, is_le}
+// Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
+function counterBadges(o) {
+  if (!o.counters || !o.counters.length) return '';
+  return `<span class="cnts">`+o.counters.map(c=>{
+    const plural = c.count===1 ? '' : 's';
+    return `<span class="cnt ${esc(c.kind)}" title="${esc(c.count+' '+c.label+' counter'+plural)}">${esc(c.count)}</span>`;
+  }).join('')+`</span>`;
+}
+// Floating (unspent) mana pips beside the Lands header. me.floating_mana is absent when empty.
+function floatingManaHtml(me) {
+  const fm = me.floating_mana; if (!fm) return '';
+  const order = [['W','#f0e6c8','white'],['U','#a6d8ff','blue'],['B','#b0a4bc','black'],
+                 ['R','#ffb0a0','red'],['G','#a8e0b0','green'],['C','#d8d8d8','colorless'],['wild','#ffd86b','any-color']];
+  const pips = order.filter(([k])=>fm[k]>0).map(([k,col,nm])=>
+    `<span class="mpip" style="background:${col}" title="${fm[k]} ${esc(nm)} mana">${k==='wild'?'✦':k}${fm[k]>1?'×'+fm[k]:''}</span>`).join('');
+  return pips ? `<span class="floatmana" title="floating (unspent) mana in your pool">${pips}</span>` : '';
+}
+function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const land = !!o.is_land;
   const le = !!o.is_le;   // a Land's Edge-style "discard a land: deal N" source
   const cls = le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell');
   return `<span class="thumb ${cls}" data-name="${esc(o.name)}"${le?' data-le="1" title="click to discard lands to Land’s Edge"':''}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
+    counterBadges(o)+
     `<em>${esc(o.name)}</em></span>`;
 }
 function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
@@ -312,7 +350,6 @@ function renderBoard() {
   h += `<div id="playfield">`;
   h += `<div class="lifebar"><span class="life">You <b class="you ${meLifeDisp<=5?'lo':''}">${meLifeDisp ?? '?'}</b></span>`+
        `<span class="life">library <b>${me.library_size ?? '?'}</b></span>`+
-       (me.vial_counters && me.vial_counters.length ? `<span class="life">vial <b>${me.vial_counters.join(', ')}</b></span>` : '')+
        (!S.over?`<span class="dh">▼ drop here to plan a play</span>`:'')+`</div>`;
   h += `<div class="fieldrow"><div class="zone perms"><h3>Permanents (${mePerms.length+plannedPerms.length})</h3>`+
        zoneRow(mePerms.concat(plannedPerms))+`</div>`;
@@ -329,7 +366,7 @@ function renderBoard() {
          `${S.leMode?` <span class="lehint">click lands to add · click Land’s Edge to finish</span>`:''}</h3>`+
          zoneRow(plannedLE.length?plannedLE:[])+`</div>`;
   }
-  h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})</h3>`+zoneRow(meLands.concat(plannedLands))+`</div>`;
+  h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands))+`</div>`;
   h += `</div>`;  // /playfield
   if (me.graveyard && me.graveyard.length)
     h += `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})</h3>`+
@@ -388,8 +425,11 @@ function renderPlanbar() {
 
 function renderHand() {
   const row=$('handrow'); if(!row) return;
+  const all = S.decision.me.hand||[];
+  const normal = all.filter(c=>!c.is_staged);
+  const staged = all.filter(c=>c.is_staged);   // exiled-but-playable cards (Light Up the Stage / Soulfire)
   const counts=handCounts(); const seen=new Set(); let html='';
-  for (const c of (S.decision.me.hand||[])) {
+  for (const c of normal) {
     if (seen.has(c.name)) continue; seen.add(c.name);
     const land = c.kind==='land';
     const q = land ? (planLand()&&planLand().name===c.name?1:0) : plannedCount(c.name);
@@ -403,6 +443,21 @@ function renderHand() {
       (c.is_draw?`<span class="draws" title="draws — re-prompts after; commit without a land to play a revealed one">↻ draws</span>`:'')+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
+  }
+  // Staged (exiled) cards — playable until end of their listed turn — shown set apart at the right.
+  if (staged.length) {
+    html += `<span class="stagedsep">⟂ exiled<br>playable</span>`;
+    const sseen=new Set();
+    for (const c of staged) {
+      const key=c.name+'@'+c.staged_until; if(sseen.has(key)) continue; sseen.add(key);
+      const land = c.kind==='land';
+      const q = land ? (planLand()&&planLand().name===c.name?1:0) : plannedCount(c.name);
+      html += `<span class="thumb staged ${land?'land':'spell'} ${q?'queued':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
+        `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
+        `<span class="stagedbadge" title="exiled — playable through turn ${c.staged_until}">▸T${c.staged_until}</span>`+
+        (q?`<span class="qct">${q}</span>`:'')+
+        `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
+    }
   }
   row.innerHTML = html;
   row.querySelectorAll('.thumb[data-card]').forEach(t => {
@@ -580,6 +635,12 @@ async function newGame() {
   S={ choices:[], history:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false };
   renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); await step();
 }
+// Bump Seed + Game# and start the next game — for playing several in a row.
+async function nextGame() {
+  $('seed').value = (+$('seed').value || 0) + 1;
+  $('gi').value   = (+$('gi').value   || 0) + 1;
+  await newGame();
+}
 async function undo() {
   if (!S.choices.length) return;
   S.choices.pop(); S.history=S.history.filter(h=>!h.win); S.history.pop();
@@ -609,7 +670,7 @@ async function loadDecks() {
     const card=e.dataTransfer.getData('text/card'); if(card) queueCard(card, e.dataTransfer.getData('text/kind')||'permanent'); });
 })();
 
-$('newgame').onclick=newGame; $('undo').onclick=undo; $('saveref').onclick=saveRef;
+$('newgame').onclick=newGame; $('nextgame').onclick=nextGame; $('undo').onclick=undo; $('saveref').onclick=saveRef;
 
 // Scryfall hover popover
 const pop=document.createElement('div'); pop.id='pop'; pop.innerHTML='<img alt=""/>'; document.body.appendChild(pop);

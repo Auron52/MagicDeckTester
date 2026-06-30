@@ -84,7 +84,11 @@ static void JsonNameArray(std::ostream& os, const std::vector<std::string>& name
 // matches no obvious land suffix). Sorted by name for a stable render.
 static void JsonBattlefield(std::ostream& os, const GameState& s, int controller)
 {
-    struct Row { std::string name; bool is_land; bool is_le; };
+    // One displayable counter group on a permanent: a kind (drives the GUI badge colour),
+    // a human label (tooltip), and the count. A permanent may carry several kinds at once
+    // (e.g. a depletion land that also caught a +1/+1), hence a vector.
+    struct Cnt { const char* kind; const char* label; int count; };
+    struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; };
     std::vector<Row> rows;
     for (const Permanent& p : s.battlefield)
     {
@@ -93,7 +97,28 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // makes it the clickable SOURCE for the discard-to-Land's-Edge activation.
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         bool is_le = d && d->params.discard_land_damage > 0;
-        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le });
+        // Aggregate counters by kind so the GUI can draw one badge per kind (with a count).
+        int p1 = 0, m1 = 0, loy = 0, poi = 0, dep = 0;
+        for (const Counter& ct : p.counters)
+        {
+            switch (ct.type)
+            {
+                case Counter::Type::PlusOnePlusOne:   p1  += ct.count; break;
+                case Counter::Type::MinusOneMinusOne: m1  += ct.count; break;
+                case Counter::Type::Loyalty:          loy += ct.count; break;
+                case Counter::Type::Poison:           poi += ct.count; break;
+                case Counter::Type::Depletion:        dep += ct.count; break;
+            }
+        }
+        std::vector<Cnt> cs;
+        if (p1)                 { cs.push_back({ "p1p1",      "+1/+1",     p1 }); }
+        if (m1)                 { cs.push_back({ "m1m1",      "-1/-1",     m1 }); }
+        if (loy)                { cs.push_back({ "loyalty",   "loyalty",   loy }); }
+        if (poi)                { cs.push_back({ "poison",    "poison",    poi }); }
+        if (dep)                { cs.push_back({ "depletion", "depletion", dep }); }
+        if (p.charge_counters)  { cs.push_back({ "charge",    "charge",    p.charge_counters }); }
+        if (p.verse_counters)   { cs.push_back({ "verse",     "verse",     p.verse_counters }); }
+        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs) });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -104,6 +129,18 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         os << "{ \"name\": "; JsonStr(os, rows[i].name);
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
+        if (!rows[i].counters.empty())
+        {
+            os << ", \"counters\": [";
+            for (size_t j = 0; j < rows[i].counters.size(); ++j)
+            {
+                if (j) { os << ", "; }
+                const Cnt& c = rows[i].counters[j];
+                os << "{ \"kind\": \"" << c.kind << "\", \"label\": \"" << c.label
+                   << "\", \"count\": " << c.count << " }";
+            }
+            os << "]";
+        }
         os << " }";
     }
     os << ']';
@@ -172,9 +209,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
 {
     const Player& me  = s.ActivePlayer();
     int           opp = 1 - s.active_player_index;
-    std::vector<std::string> hand;
-    for (const Card& c : me.hand) { hand.push_back(c.m_name); }
-    std::sort(hand.begin(), hand.end());
+    // Iterate hand Cards (not just names) so per-instance flags (m_is_staged / expiry) survive.
+    std::vector<const Card*> hand;
+    for (const Card& c : me.hand) { hand.push_back(&c); }
+    std::sort(hand.begin(), hand.end(),
+              [](const Card* a, const Card* b){ return a->m_name.str() < b->m_name.str(); });
     std::vector<std::string> gy;
     for (const Card& c : me.graveyard) { gy.push_back(c.m_name); }
     std::sort(gy.begin(), gy.end());
@@ -207,17 +246,37 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     for (size_t i = 0; i < hand.size(); ++i)
     {
         if (i) { os << ", "; }
-        const CardDefinition* d = CardDatabase::Instance().Lookup(hand[i]);
-        os << "{ \"name\": "; JsonStr(os, hand[i]);
+        const Card* hc = hand[i];
+        const CardDefinition* d = CardDatabase::Instance().Lookup(hc->m_name);
+        os << "{ \"name\": "; JsonStr(os, hc->m_name);
         os << ", \"cost\": "; JsonStr(os, d ? d->card.m_mana_cost.ToString() : std::string());
         os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0);
         os << ", \"kind\": \"" << HandKind(d) << "\"";
         if (HandIsDraw(d)) { os << ", \"is_draw\": true"; }
+        // Staged (exiled-but-playable) cards live in hand with m_is_staged set; surface that so
+        // the GUI sets them apart (Light Up the Stage / Soulfire Eruption / Expressive Iteration).
+        if (hc->m_is_staged) { os << ", \"is_staged\": true, \"staged_until\": " << hc->m_staged_expiry; }
         os << " }";
     }
     os << "]";
     os << ", \"graveyard\": "; JsonNameArray(os, gy);
     os << ", \"library_size\": " << me.library.size();
+    // Floating (unspent) mana in the pool. Usually empty at a main-phase breakpoint (the pool is
+    // cleared at turn start and a line is committed atomically), so emit only when non-empty.
+    {
+        const ManaPool& fm = s.floating_mana;
+        if (fm.Total() > 0)
+        {
+            os << ", \"floating_mana\": {";
+            bool first = true;
+            auto emit = [&](const char* sym, int n) {
+                if (n > 0) { if (!first) { os << ", "; } first = false; os << "\"" << sym << "\": " << n; }
+            };
+            emit("W", fm.white); emit("U", fm.blue); emit("B", fm.black); emit("R", fm.red);
+            emit("G", fm.green); emit("C", fm.colorless); emit("wild", fm.wild);
+            os << "}";
+        }
+    }
     if (reveal_count > 0)
     {
         // Optional partial clairvoyance (--reveal N): the next N draws, in draw order
