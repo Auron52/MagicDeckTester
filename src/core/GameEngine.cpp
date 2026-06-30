@@ -438,6 +438,18 @@ void GameEngine::CleanupStep(GameState& state)
     while (!unlimited_hand && ap.hand.size() > 7)
     {
         Card* discard = m_ai.ChooseDiscard(state);
+        // Human play: let the player pick WHICH card to discard (one per over-limit card). The
+        // heuristic pick is the prepopulated default. Consulted only here in the real cleanup step
+        // (search rollouts never reach GameEngine::CleanupStep), so autonomous play is unchanged.
+        if (g_play_discard_chooser && !ap.hand.empty())
+        {
+            int heur = static_cast<int>(discard - &ap.hand[0]);
+            if (heur < 0 || heur >= static_cast<int>(ap.hand.size())) { heur = 0; }
+            std::vector<int> idxs(ap.hand.size());
+            for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { idxs[i] = i; }
+            int chosen = (*g_play_discard_chooser)(state, state.active_player_index, idxs, heur);
+            if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { discard = &ap.hand[chosen]; }
+        }
         if (m_logger) { m_logger->LogDiscard(discard->m_number, discard->m_name); }
         ap.graveyard.push_back(*discard);
         ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),

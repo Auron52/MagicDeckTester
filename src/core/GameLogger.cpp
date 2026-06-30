@@ -10,6 +10,7 @@ thread_local TopChooser*    g_play_top_chooser = nullptr;
 thread_local TargetChooser* g_play_target_chooser = nullptr;
 thread_local BounceChooser*  g_play_bounce_chooser = nullptr;
 thread_local DigChooser*     g_play_dig_chooser    = nullptr;
+thread_local DiscardChooser* g_play_discard_chooser = nullptr;
 
 void GameLogger::StartGame(const std::string& run_id, int game_number,
                             const std::string& deck_id, uint64_t seed,

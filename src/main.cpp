@@ -633,6 +633,35 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     os << "}\n";
 }
 
+// Cleanup-discard decision (#2): the player picks WHICH hand card to discard down to maximum hand
+// size. Emits every hand card as an image option; the reply is the hand index to discard. One such
+// decision fires per over-limit card.
+static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
+                                     const std::vector<int>& hand_indices, int heuristic_default,
+                                     int decision_index)
+{
+    const Player& ap = s.players[s.active_player_index];
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"discard\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"over_by\": " << (static_cast<int>(ap.hand.size()) - 7) << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"options\": [";
+    for (size_t i = 0; i < hand_indices.size(); ++i)
+    {
+        int hi = hand_indices[i];
+        if (i) os << ", ";
+        os << "{ \"index\": " << hi << ", \"name\": ";
+        JsonStr(os, (hi >= 0 && hi < static_cast<int>(ap.hand.size())) ? ap.hand[hi].m_name.str() : std::string());
+        os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply a hand index -- the card to discard. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
 // and commas (no MTG name contains ';' or '='), so they pass through verbatim.
@@ -921,12 +950,45 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_dig_chooser = &dig_chooser;
 
+    // Cleanup discard (#2): the player picks which hand card to discard to max hand size. Shares the
+    // --choices stream; the reply is a hand index. Default = the engine's heuristic pick.
+    DiscardChooser discard_chooser =
+        [&](const GameState& s, int controller, const std::vector<int>& hand_indices, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                bool ok = false;
+                for (int hi : hand_indices) { if (hi == chosen) { ok = true; break; } }
+                if (!ok) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteDiscardDecisionJson(ss, s, hand_indices, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteDiscardDecisionJson(std::cout, s, hand_indices, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_discard_chooser = &discard_chooser;
+
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);
     g_play_top_chooser = nullptr;
     g_play_target_chooser = nullptr;
     g_play_bounce_chooser = nullptr;
     g_play_dig_chooser = nullptr;
+    g_play_discard_chooser = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.

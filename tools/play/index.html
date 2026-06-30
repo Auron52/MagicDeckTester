@@ -435,7 +435,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items) { return `<div class="row">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig','discard'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -854,11 +854,12 @@ function wireDecisionBoard(d, dec){
 function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
-  const isModal = isLook || dec==='dig';                  // centered card-image modals
+  const isModal = isLook || dec==='dig' || dec==='discard'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
-  panel.innerHTML = isLook ? lookPanelHtml(d, dec) : dec==='dig' ? digPanelHtml(d) : promptPanelHtml(d, dec);
+  panel.innerHTML = isLook ? lookPanelHtml(d, dec) : dec==='dig' ? digPanelHtml(d)
+                  : dec==='discard' ? discardPanelHtml(d) : promptPanelHtml(d, dec);
   wireDecisionPanel(d, dec);
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
@@ -913,6 +914,21 @@ function digPanelHtml(d){
      `<button class="ghost" data-opt="-1">Take nothing</button></div>`;
   return h;
 }
+// Cleanup-discard panel (#2): IMAGE-based central modal. The hand is shown as art; click a card to
+// discard it. Fires once per card over the maximum hand size. The AI's pick is tagged.
+function discardPanelHtml(d){
+  const over=d.over_by||1;
+  let h=`<h3>Discard to hand size</h3>`;
+  h+=`<div class="sub">Your hand is over the maximum (7). Click a card to discard it${over>1?` — ${over} to go`:''}. The rest stay in your hand.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.options||[]).forEach(o=>{
+    const def=o.index===d.heuristic_default;
+    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${o.index}" data-name="${esc(o.name)}" title="${esc(o.name)}">`+
+       `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(o.name)}</em>`+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  return h+`</div>`;
+}
 // Bottom prompt for board-click decisions: the board is the selector, this just shows the ask + Confirm.
 function promptPanelHtml(d, dec){
   if (dec==='vial_charge'){
@@ -943,6 +959,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>commitVial(d, +b.dataset.v));
   else if (dec==='dig')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDig(d, +b.dataset.opt));
+  else if (dec==='discard')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDiscard(d, +b.dataset.opt));
   else { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec); }
 }
 function pushChoice(d, oi, lab){
@@ -961,6 +979,10 @@ function commitVial(d, v){ pushChoice(d, v, v?'Vial: +counter':'Vial: hold'); }
 function commitDig(d, oi){
   const c=(d.examined||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source}: ${oi<0||!c?'take nothing':'take '+c.name}`);
+}
+function commitDiscard(d, oi){
+  const c=(d.options||[]).find(x=>x.index===oi);
+  pushChoice(d, oi, `discard: ${c?c.name:'card'}`);
 }
 function commitBoardSel(d, dec){
   const sel=[...(S.boardSel||[])];

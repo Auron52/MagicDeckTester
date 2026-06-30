@@ -249,6 +249,17 @@ using DigChooser = std::function<int(const GameState& state, int controller, con
                                      const std::vector<int>& legal_indices, int heuristic_pick)>;
 extern thread_local DigChooser* g_play_dig_chooser;
 
+// ---- Human-play cleanup-discard chooser (which card to discard to hand size) ------------
+// The cleanup step discards down to maximum hand size. Autonomously AIEngine::ChooseDiscard
+// picks; under --claude-play the human picks WHICH hand card to discard (one per over-limit
+// card). The chooser receives the current hand indices and the heuristic's pick (an index into
+// the hand); it returns the chosen hand index. Consulted only in the REAL cleanup step (the
+// search rollouts never run GameEngine::CleanupStep), so autonomous play is byte-identical.
+// Inert (heuristic) unless set.
+using DiscardChooser = std::function<int(const GameState& state, int controller,
+                                         const std::vector<int>& hand_indices, int heuristic_pick)>;
+extern thread_local DiscardChooser* g_play_discard_chooser;
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -259,14 +270,15 @@ struct RevealLogPause
     TargetChooser* saved_tchooser;
     BounceChooser* saved_bchooser;
     DigChooser* saved_dchooser;
+    DiscardChooser* saved_dischooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
-                       saved_dchooser(g_play_dig_chooser)
+                       saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
-      g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; }
+      g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
-                        g_play_dig_chooser = saved_dchooser; }
+                        g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };
