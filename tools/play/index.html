@@ -70,6 +70,9 @@
   .zone h3 .help { color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0; margin-left:8px; font-size:11px; }
   .turnspells h3, #stagewrap h3 { color:var(--good); border-color:rgba(90,209,122,.3); }
   .row { display:flex; flex-wrap:wrap; gap:8px; min-height:8px; }
+  /* rows holding planned (this-turn) cards: the order# and ✕ badges overhang each thumb by ~7px,
+     so widen the gap past 14px (7+7) so adjacent queued cards' badges don't collide. */
+  .row.padrow { gap:20px 16px; }
   .zone.lands { opacity:.97; } .zone.gy { opacity:.6; } .zone.gy .thumb { width:46px; } .zone.gy .thumb em { display:none; }
   .zone.oppz h3 { color:var(--bad); border-color:rgba(230,105,90,.25); }
   .hint { color:var(--muted); font-size:12px; }
@@ -440,7 +443,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
     src+`<em>${esc(entry.name)}</em></span>`;
 }
-function zoneRow(items) { return `<div class="row">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
+function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
 const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig','discard','divide'];
@@ -501,10 +504,10 @@ function renderBoard() {
        `<span class="life">library <b>${me.library_size ?? '?'}</b></span>`+
        (isMain?`<span class="dh">▼ drop here to plan a play</span>`:'')+`</div>`;
   h += `<div class="fieldrow"><div class="zone perms"><h3>Permanents (${mePerms.length+plannedPerms.length})</h3>`+
-       zoneRow(mePerms.concat(plannedPerms))+`</div>`;
+       zoneRow(mePerms.concat(plannedPerms), plannedPerms.length?'padrow':'')+`</div>`;
   if (plannedSpells.length || isMain)
     h += `<div class="zone turnspells"><h3>Instants &amp; Sorceries — this turn (${plannedSpells.length})</h3>`+
-         (plannedSpells.length?zoneRow(plannedSpells):`<span class="hint">non-permanent spells you queue appear here</span>`)+`</div>`;
+         (plannedSpells.length?zoneRow(plannedSpells,'padrow'):`<span class="hint">non-permanent spells you queue appear here</span>`)+`</div>`;
   h += `</div>`;
   // Land's Edge discard zone: lands you've committed to discard move HERE (out of hand), shown
   // with the running damage. Visible while the mode is active or any land is queued.
@@ -515,7 +518,7 @@ function renderBoard() {
          `${S.leMode?` <span class="lehint">click lands to add · click Land’s Edge to finish</span>`:''}</h3>`+
          zoneRow(plannedLE.length?plannedLE:[])+`</div>`;
   }
-  h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands))+`</div>`;
+  h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
   h += `</div>`;  // /playfield
   // Hand sits ABOVE the graveyard: it is the most-used zone, so keeping it high (right under your
   // field) means the turn bar and hand are visible together without scrolling. The graveyard (less
@@ -974,8 +977,13 @@ function promptPanelHtml(d, dec){
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
   const max=d.max_targets||1, n=(S.boardSel||new Set()).size;
+  // "player or planeswalker" spells (Skullcrack) have no creature in their legal targets, so don't
+  // offer creatures in the prompt; any-target burn (Lightning Bolt) does.
+  const hasCreature=(d.legal_targets||[]).some(t=>t.kind==='permanent');
+  const where = hasCreature ? "the opponent's life, a creature, or your own life" : "the opponent's life or your own life";
+  const dmgWord = max>1 ? `${d.per_target_damage} damage each` : `${d.per_target_damage} damage`;
   return `<h3>Choose targets — ${esc(d.source||'')}</h3>`+
-    `<div class="sub">${d.per_target_damage} damage each · pick up to ${max}. Click targets on the board — the opponent's life, a creature, or your own life. The AI's pick is preselected.</div>`+
+    `<div class="sub">${dmgWord} · pick up to ${max}. Click targets on the board — ${where}. The AI's pick is preselected.</div>`+
     `<div class="pbtns"><span class="pcount">${n} / ${max} selected</span><span class="spacer"></span>`+
     `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm ${n} target${n===1?'':'s'}</button></div>`;
 }
