@@ -263,6 +263,19 @@ using DiscardChooser = std::function<int(const GameState& state, int controller,
                                          const std::vector<int>& hand_indices, int heuristic_pick)>;
 extern thread_local DiscardChooser* g_play_discard_chooser;
 
+// ---- Human-play Expressive Iteration chooser (top-3 split: hand / exile / bottom) ----------
+// Expressive Iteration looks at the top 3 of the library: one goes to HAND (banked), one is
+// EXILED and playable THIS TURN ONLY, the third goes to the BOTTOM. Autonomously the provider's
+// SituationalCardRank picks the split; under --claude-play the human chooses WHICH looked card
+// goes to hand and WHICH to exile (the remaining one -> bottom). The chooser receives the looked
+// cards (top-first) and the heuristic's default (hand_idx, exile_idx into `looked`); it returns
+// the chosen {hand_idx, exile_idx}. Nulled by RevealLogPause for every search/rollout/enumeration
+// scope, so it fires only for the REAL cast and the search stays byte-identical. Inert unless set.
+using EIChooser = std::function<std::pair<int,int>(const GameState& state,
+                                                   const std::vector<Card>& looked,
+                                                   int heur_hand_idx, int heur_exile_idx)>;
+extern thread_local EIChooser* g_play_ei_chooser;
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -274,14 +287,18 @@ struct RevealLogPause
     BounceChooser* saved_bchooser;
     DigChooser* saved_dchooser;
     DiscardChooser* saved_dischooser;
+    EIChooser* saved_eichooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
-                       saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser)
+                       saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
+                       saved_eichooser(g_play_ei_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
-      g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr; }
+      g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
+      g_play_ei_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
-                        g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser; }
+                        g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
+                        g_play_ei_chooser = saved_eichooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

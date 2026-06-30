@@ -746,6 +746,53 @@ static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
     os << "}\n";
 }
 
+// Expressive Iteration: enumerate the legal (hand_idx, exile_idx) splits over `look` looked cards
+// (the remaining index -> bottom). Deterministic order, shared by the decision JSON and the chooser,
+// so a --choices option index maps back to the same split.
+static std::vector<std::pair<int,int>> EIAssignments(int look)
+{
+    std::vector<std::pair<int,int>> out;
+    for (int h = 0; h < look; ++h)
+        for (int e = 0; e < look; ++e)
+            if (e != h) { out.emplace_back(h, e); }
+    return out;
+}
+
+// Expressive Iteration decision: the player looks at the top cards and assigns one to HAND
+// (banked), one to EXILE (playable this turn), the rest to the BOTTOM. Each option is one legal
+// split; the reply is an option index. heur_option = the index of the AI's default split.
+static void WriteEIDecisionJson(std::ostream& os, const GameState& s,
+                                const std::vector<Card>& looked, int heur_option, int decision_index)
+{
+    const int look = static_cast<int>(looked.size());
+    std::vector<std::pair<int,int>> asg = EIAssignments(look);
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"expressive_iteration\",\n";
+    os << "  \"source\": \"Expressive Iteration\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"looked\": [";
+    for (int i = 0; i < look; ++i)
+    { if (i) os << ", "; os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, looked[i].m_name.str()); os << " }"; }
+    os << "],\n";
+    os << "  \"heuristic_default\": " << heur_option << ",\n";
+    os << "  \"options\": [";
+    for (size_t oi = 0; oi < asg.size(); ++oi)
+    {
+        int h = asg[oi].first, e = asg[oi].second, b = -1;
+        for (int i = 0; i < look; ++i) { if (i != h && i != e) { b = i; break; } }
+        if (oi) os << ", ";
+        os << "{ \"index\": " << oi << ", \"hand\": ";   JsonStr(os, looked[h].m_name.str());
+        os << ", \"exile\": ";  JsonStr(os, looked[e].m_name.str());
+        os << ", \"bottom\": "; if (b >= 0) { JsonStr(os, looked[b].m_name.str()); } else { os << "null"; }
+        os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply an option index: 'hand' is banked, 'exile' is playable this turn, 'bottom' goes to the library bottom. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
 // and commas (no MTG name contains ';' or '='), so they pass through verbatim.
@@ -1100,6 +1147,41 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_discard_chooser = &discard_chooser;
 
+    // Expressive Iteration (#): the player assigns the looked-at top cards to hand / exile (play this
+    // turn) / bottom. Shares the --choices stream; the reply is an option index into the enumerated
+    // splits. Default = the engine's heuristic split (heur_hand_idx, heur_exile_idx).
+    EIChooser ei_chooser =
+        [&](const GameState& s, const std::vector<Card>& looked, int heur_hand, int heur_exile)
+            -> std::pair<int,int>
+        {
+            std::vector<std::pair<int,int>> asg = EIAssignments(static_cast<int>(looked.size()));
+            int heur_option = 0;
+            for (size_t oi = 0; oi < asg.size(); ++oi)
+            { if (asg[oi].first == heur_hand && asg[oi].second == heur_exile) { heur_option = static_cast<int>(oi); break; } }
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(asg.size())) { chosen = heur_option; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteEIDecisionJson(ss, s, looked, heur_option, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return asg[chosen];
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteEIDecisionJson(std::cout, s, looked, heur_option, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_ei_chooser = &ei_chooser;
+
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);
     g_play_top_chooser = nullptr;
@@ -1107,6 +1189,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_bounce_chooser = nullptr;
     g_play_dig_chooser = nullptr;
     g_play_discard_chooser = nullptr;
+    g_play_ei_chooser = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.

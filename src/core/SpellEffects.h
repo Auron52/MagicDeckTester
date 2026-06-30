@@ -2147,34 +2147,52 @@ inline void ResolveExpressiveIteration(GameState& state)
         if (capture) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
         cards.push_back(std::move(c));
     }
-    // Rank most-wanted-first by the provider's situational ranking (stable -> preserves look order
-    // within a rank tier): [0] -> hand, [1] -> exiled-playable-this-turn, [2] -> bottom. For a
-    // provider without a situational override the rank is ScryKeepOnTop?1:0, so this is byte-identical
-    // to the old binary keep ordering; HinataProvider supplies the fine combo-aware order (a needed
-    // land to hand, the next-best piece to the exile slot, the least-useful card to the bottom).
-    std::stable_sort(cards.begin(), cards.end(), [&](const Card& a, const Card& b) {
-        return ResolveProvider(state).SituationalCardRank(state, a)
-             > ResolveProvider(state).SituationalCardRank(state, b);
+    // Heuristic default split (most-wanted-first by the provider's situational ranking): the
+    // best card -> HAND, the next -> EXILE (playable this turn), the least -> BOTTOM. Computed as
+    // indices INTO `cards` (look order preserved) so the human chooser can reference the cards as
+    // shown. For a provider without a situational override the rank is ScryKeepOnTop?1:0, so the
+    // default order is byte-identical to the old binary; HinataProvider supplies the fine
+    // combo-aware order. A stable sort of an index list keeps look order within a rank tier.
+    std::vector<int> order(look);
+    for (int i = 0; i < look; ++i) { order[i] = i; }
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+        return ResolveProvider(state).SituationalCardRank(state, cards[a])
+             > ResolveProvider(state).SituationalCardRank(state, cards[b]);
     });
+    int hand_idx   = order[0];
+    int exile_idx  = (look >= 2) ? order[1] : -1;
 
-    std::vector<int> kept_nums, bottom_nums;
-    // [0] -> hand (banked, drawn).
-    kept_nums.push_back(cards[0].m_number);
-    ap.hand.push_back(std::move(cards[0]));
-    // [1] -> exiled, staged playable THIS TURN ONLY.
-    if (look >= 2)
+    // Human play (claude-play): let the player choose WHICH looked card is banked to hand and
+    // which is exiled to play this turn (the remaining one -> bottom). Nulled in search/rollout
+    // (RevealLogPause) -> the heuristic split there, byte-identical. Validate the reply: distinct,
+    // in range; fall back to the heuristic on anything malformed.
+    if (g_play_ei_chooser && look >= 2)
     {
-        Card s = std::move(cards[1]);
+        std::pair<int,int> ch = (*g_play_ei_chooser)(state, cards, hand_idx, exile_idx);
+        if (ch.first >= 0 && ch.first < look && ch.second >= 0 && ch.second < look
+            && ch.first != ch.second)
+        { hand_idx = ch.first; exile_idx = ch.second; }
+    }
+
+    // Apply the split. Move by index: hand_idx -> hand, exile_idx -> staged exile (this turn only),
+    // the remaining index (if look == 3) -> bottom. Mark which indices are placed so the leftover
+    // is unambiguous.
+    std::vector<int> kept_nums, bottom_nums;
+    kept_nums.push_back(cards[hand_idx].m_number);
+    ap.hand.push_back(cards[hand_idx]);                       // [hand_idx] -> hand (banked)
+    if (exile_idx >= 0)
+    {
+        Card s = cards[exile_idx];
         s.m_is_staged     = true;
         s.m_staged_expiry = state.turn_number;   // this turn only (vs turn+1 for Light Up / Soulfire)
         kept_nums.push_back(s.m_number);
-        ap.hand.push_back(std::move(s));
+        ap.hand.push_back(std::move(s));                      // [exile_idx] -> exiled, playable now
     }
-    // [2] -> bottom of library.
-    if (look >= 3)
+    for (int i = 0; i < look; ++i)                            // the leftover -> bottom
     {
-        bottom_nums.push_back(cards[2].m_number);
-        ap.library.push_back(std::move(cards[2]));
+        if (i == hand_idx || i == exile_idx) { continue; }
+        bottom_nums.push_back(cards[i].m_number);
+        ap.library.push_back(cards[i]);
     }
     if (capture && !seen_nums.empty())
     {

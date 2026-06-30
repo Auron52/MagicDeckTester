@@ -454,7 +454,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig','discard','divide'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig','discard','divide','expressive_iteration'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -896,12 +896,13 @@ function wireDecisionBoard(d, dec){
 function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
-  const isModal = isLook || dec==='dig' || dec==='discard' || dec==='divide'; // centered card-image modals
+  const isModal = isLook || dec==='dig' || dec==='discard' || dec==='divide' || dec==='expressive_iteration'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
   panel.innerHTML = isLook ? lookPanelHtml(d, dec) : dec==='dig' ? digPanelHtml(d)
                   : dec==='discard' ? discardPanelHtml(d) : dec==='divide' ? dividePanelHtml(d)
+                  : dec==='expressive_iteration' ? eiPanelHtml(d)
                   : promptPanelHtml(d, dec);
   wireDecisionPanel(d, dec);
 }
@@ -988,6 +989,29 @@ function dividePanelHtml(d){
   });
   return h+`</div>`;
 }
+// Expressive Iteration panel: look at the top cards; choose one for HAND (banked), one for EXILE
+// (playable this turn), the last -> BOTTOM. The looked cards are shown as art for context; each
+// option is one legal split (Hand/Play/Bottom). The AI's default split is tagged.
+function eiPanelHtml(d){
+  const looked=d.looked||[];
+  let h=`<h3>Expressive Iteration</h3>`;
+  h+=`<div class="sub">Looking at the top ${looked.length}. Pick the split: one card to your <b>Hand</b>, one to <b>Exile</b> (playable this turn); the last goes to the <b>Bottom</b>.</div>`;
+  h+=`<div class="tutgrid" style="margin-bottom:8px">`;
+  looked.forEach(c=>{
+    h+=`<span class="cardmini" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em></span>`;
+  });
+  h+=`</div><div class="optgrid">`;
+  (d.options||[]).forEach(o=>{
+    const def=o.index===d.heuristic_default;
+    h+=`<button class="optcard${def?' def':''}" data-opt="${o.index}" style="text-align:left">`+
+       `<span class="dchip"><b>Hand</b> ${esc(o.hand)}</span>`+
+       `<span class="dchip"><b>Play</b> ${esc(o.exile)}</span>`+
+       `<span class="dchip" style="opacity:.6"><b>Bottom</b> ${esc(o.bottom||'—')}</span>`+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</button>`;
+  });
+  return h+`</div>`;
+}
 // Bottom prompt for board-click decisions: the board is the selector, this just shows the ask + Confirm.
 function promptPanelHtml(d, dec){
   if (dec==='vial_charge'){
@@ -1027,6 +1051,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDiscard(d, +b.dataset.opt));
   else if (dec==='divide')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDivide(d, +b.dataset.opt));
+  else if (dec==='expressive_iteration')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitEI(d, +b.dataset.opt));
   else { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec); }
 }
 function pushChoice(d, oi, lab){
@@ -1053,6 +1079,10 @@ function commitDiscard(d, oi){
 function commitDivide(d, oi){
   const o=(d.options||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source}: ${o?o.label:'damage'}`);
+}
+function commitEI(d, oi){
+  const o=(d.options||[]).find(x=>x.index===oi)||{};
+  pushChoice(d, oi, `Expressive Iteration: hand ${o.hand||''}, play ${o.exile||''}`);
 }
 function commitBoardSel(d, dec){
   const sel=[...(S.boardSel||[])];
