@@ -73,10 +73,19 @@ discarding branches. When a deck needs fewer options for speed → add a provide
 find a generic limiter that drops real branches → remove it.
 
 This is the authoritative statement; the deck-analysis skill (`analyze-deck.md`, "Core invariant"
-and Stage 5e) applies it during per-deck verification. Precedent (2026-06-30): `plan_signature`
-keyed on cast-names alone collapsed all tutor targets to the first → fixed by folding sub-decisions
-(tutor/X/Ponder/Soulfire/fetch/land) into the signature so `TutorCandidates` is the sole narrower;
-zero perf cost, strictly better search.
+and Stage 5e) applies it during per-deck verification.
+
+Precedent (2026-06-30): `plan_signature` keyed on cast-names alone collapsed all tutor targets to the
+first-enumerated one. Folding the sub-decisions (tutor/X/Ponder/Soulfire/fetch/land) into the
+signature makes the dedup lossless and leaves `TutorCandidates` as the sole narrower. This shipped
+for human play (`MTG_HUMAN_PLAY`). Applying it to the autonomous search, however, exposed a corollary
+worth remembering: **a generic limiter can be masking a latent search-quality bug.** Removing it here
+revealed that the lookahead's leaf valuation over-values an early `tutor_to_top` (committed to a
+tempo-negative Enlightened-Tutor-T1 line, a turn slower at ANY budget — a valuation flaw, not budget
+starvation). So the fix is to remove the limiter AND harden the valuation; deleting it alone trades a
+hidden decision-theft for visible misplays. The autonomous half is deferred to a dedicated
+search-quality step. **When removing a generic limiter makes the search worse, you've found the bug
+it was hiding — fix that, don't restore the limiter.**
 
 ---
 

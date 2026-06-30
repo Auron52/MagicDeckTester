@@ -36,11 +36,24 @@ silently discarding branches.
 
 *Concrete precedent (2026-06-30): `EnumeratePlans`' `plan_signature` keyed on cast-names alone, so
 the dedup collapsed every distinct tutor target to the first-enumerated one — a generic limiter that
-forced a single fetch on a bare `cast=Gamble` and hid the alternatives from the depth>0 search. Fix:
-fold the sub-decisions (tutor target / X / Ponder keep / Soulfire count / fetch / land) into the
-signature so the dedup is lossless again; the provider's `TutorCandidates` became the ONLY thing
-narrowing targets. Cost: ~zero (AntiLifegain's provider already bounds the set), and the search got
-**strictly better** — it now evaluates each target and picks the best instead of the arbitrary first.*
+forced a single fetch on a bare `cast=Gamble` and hid the alternatives from the depth>0 search. The
+fix is to fold the sub-decisions (tutor target / X / Ponder keep / Soulfire count / fetch / land)
+into the signature so the dedup is lossless again, leaving the provider's `TutorCandidates` as the
+ONLY narrower. In the human-play path (`MTG_HUMAN_PLAY`) that shipped immediately and is unambiguously
+correct — the human now sees and picks every legal target.*
+
+*But applying it to the AUTONOMOUS search surfaced a second lesson worth its own warning: a generic
+limiter does not merely steal a decision — it can MASK a latent search-quality bug, and removing it
+exposes that bug as a real regression. Here the now-visible tutor branches revealed that the
+lookahead's leaf valuation OVER-values an early `tutor_to_top` (it committed to a tempo-negative
+Enlightened-Tutor-on-T1 line that projects well but realizes a turn slower), so several games got
+slower at ANY budget — not budget starvation, a valuation flaw the dedup had been hiding. The right
+move is therefore NOT to delete the limiter and accept the misplays (the regression gate forbids
+baking real misplays into GT), but to remove it AND make the search's valuation robust enough to not
+be fooled by the wider plan set. So this autonomous half was deferred to a dedicated search-quality
+step; the human-play half shipped. Takeaway: when you remove a generic limiter and the search gets
+WORSE on some games, you've found the real bug the limiter was concealing — fix that, don't restore
+the limiter.*
 
 ---
 
