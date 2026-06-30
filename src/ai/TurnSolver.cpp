@@ -278,6 +278,62 @@ static int SameTurnAffinityGenericCredit(const GameState& state, const std::vect
     return credit;
 }
 
+// Forward decl of the real backtracking mana payment (defined below); used by the filter
+// affordability fallback so enumeration can recognize filter/depletion/ramp-land lines.
+static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+
+// Real-payment affordability fallback for filter / ramp lands. BuildPool models a filter land
+// (Cascade Bluffs) as a single wild, which cannot express its color conversion (feed {U} -> {R}{R}),
+// so a filter-payable subset (Land's Edge {1}{R}{R} off Saprazzan Skerry + Cascade Bluffs) fails the
+// flat CanPay even though the executor's TapForCostDirect can pay it. When the flat check fails and a
+// filter/ramp land is present, retry the subset by actually tapping real sources on a copy. Returns
+// true iff every selected cast can be paid for real. Only reached when the flat check already failed
+// AND such a land exists, so non-filter decks never run it (byte-identical) and the cost is bounded.
+static bool SubsetPayableWithFilters(const GameState& state, const std::vector<Action>& cands,
+                                     const std::vector<int>& sel)
+{
+    GameState cp = state;
+    // Pay each selected cast's mana cost with real sources; taps persist across casts in cp, so a
+    // filter consumed by one cast is unavailable to the next. Mana producers (rocks) pay first and
+    // join the board so their mana is online for later casts in the subset.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const bool want_rock = (pass == 0);
+        for (int j : sel)
+        {
+            const Action& a = cands[j];
+            if (a.kind == Action::Kind::ActivateVial) { continue; }   // Vial deploys cost no mana
+            const CardDefinition* def = a.def;
+            const bool is_rock = def && def->params.mana_rock && !def->card.IsCreature();
+            if (is_rock != want_rock) { continue; }
+            const bool for_creature = def && def->card.IsCreature();
+            if (!TapForCostDirect(cp, a.cost, for_creature)) { return false; }
+            if (is_rock && def)   // freshly-cast rock joins the board so its mana funds later casts
+            {
+                Permanent perm;
+                perm.card             = def->card;
+                perm.controller_index = cp.active_player_index;
+                perm.owner_index      = cp.active_player_index;
+                cp.battlefield.push_back(perm);
+            }
+        }
+    }
+    return true;
+}
+
+// True if the active player controls an untapped filter / ramp-filter mana source, whose color
+// conversion the flat BuildPool cannot model (so the affordability fallback above is needed).
+static bool HasUntappedFilterSource(const GameState& state)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (d->params.is_filter || d->params.ramp_filter)) { return true; }
+    }
+    return false;
+}
+
 static int PendingAttackDamage(const GameState& state)
 {
     int dmg = 0;
@@ -1045,6 +1101,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // Filter/ramp land present? Enables the real-payment affordability fallback (color conversion
+    // the flat pool can't model). False for every deck without such a land -> byte-identical.
+    const bool any_filter = HasUntappedFilterSource(state);
 
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
@@ -1170,16 +1229,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
             }
         }
-        if (credited)
-        {
-            if (!eff.CanPay(combined))                       { return; }
-            if (!eff_nc.CanPay(noncreature_combined))        { return; }
-        }
-        else
-        {
-            if (!pool.CanPay(combined))                          { return; }
-            if (!pool_noncreature.CanPay(noncreature_combined))  { return; }
-        }
+        const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
+                                       : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
+        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { return; }
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
@@ -3240,6 +3293,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // Filter/ramp land present? (mirrors Solve) Enables the real-payment affordability fallback.
+    const bool any_filter = HasUntappedFilterSource(state);
 
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
@@ -3445,16 +3500,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
             }
         }
-        if (credited)
-        {
-            if (!eff.CanPay(combined))                       { return; }
-            if (!eff_nc.CanPay(noncreature_combined))        { return; }
-        }
-        else
-        {
-            if (!pool.CanPay(combined))                          { return; }
-            if (!pool_noncreature.CanPay(noncreature_combined))  { return; }
-        }
+        const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
+                                       : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
+        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { return; }
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
@@ -5302,7 +5351,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         {
             if (!a.tutor_target.empty())   { toks.push_back(a.card_name + " \xE2\x86\x92 " + a.tutor_target); artCards.push_back(a.tutor_target); }
             if (a.chosen_x > 0)            { toks.push_back(a.card_name + " X=" + std::to_string(a.chosen_x)); artCards.push_back(a.card_name); }
-            if (a.ponder_keep >= 0)        { toks.push_back(a.card_name + (a.ponder_keep ? ": keep top" : ": shuffle")); artCards.push_back(a.card_name); }
+            // NOTE: a.ponder_keep is deliberately NOT a variant token. The Ponder reorder (keep-top
+            // vs shuffle, and the full ordering) is re-asked at REAL resolution via the look-at-top
+            // chooser (g_play_top_chooser), so pre-selecting it here just stacked a redundant "choose
+            // how to resolve" dialog ahead of the actual Reorder dialog. Collapsing the keep/shuffle
+            // plans to one representative makes a Ponder cast 'accept' and lets the look dialog own it.
             if (a.soulfire_own_targets > 0){ toks.push_back(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own"); artCards.push_back(a.card_name); }
         }
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
