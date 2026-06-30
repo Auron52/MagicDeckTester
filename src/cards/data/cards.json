@@ -74,9 +74,9 @@
             "mana_cost": "{1}{R}",
             "types": ["Instant"],
             "keywords": [],
-            "oracle_text": "Players can't gain life this turn. Damage can't be prevented this turn.\nSkullcrack deals 3 damage to any target. [Life-gain lock and damage-prevention lock not modelled]",
+            "oracle_text": "Players can't gain life this turn. Damage can't be prevented this turn.\nSkullcrack deals 3 damage to target player or planeswalker. [Life-gain lock and damage-prevention lock not modelled]",
             "template": "direct_damage",
-            "parameters": { "damage": 3, "targeting": "any" }
+            "parameters": { "damage": 3, "targeting": "player" }
         },
         {
             "name": "Light Up the Stage",

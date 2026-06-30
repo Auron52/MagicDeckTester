@@ -239,11 +239,31 @@
       background:#15171b; color:var(--ink); border-radius:7px; cursor:pointer; }
   #decpanel button.opt:hover { border-color:var(--acc); background:#1a1d22; }
   #decpanel button.opt.def { border-color:var(--acc); background:#1f2d3a; }
-  /* drag-to-reorder chips for Ponder */
-  #decpanel .ord-chips { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 12px; }
-  #decpanel .ord-chip { display:flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid var(--line);
-      border-radius:8px; background:#1a1d22; cursor:grab; font-size:12px; }
-  #decpanel .ord-chip.dragging { opacity:.4; } #decpanel .ord-chip .gi { color:var(--acc); font-weight:700; }
+  /* image-based disposition options: each option is a row of card art ([top/kept] ▸ [away]) */
+  #decpanel .optgrid { display:flex; flex-direction:column; gap:8px; }
+  #decpanel button.optcard { position:relative; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+      padding:9px 10px; border:1px solid var(--line); background:#15171b; border-radius:9px; cursor:pointer; }
+  #decpanel button.optcard:hover { border-color:var(--acc); background:#1a1d22; }
+  #decpanel button.optcard.def { border-color:var(--acc); background:#1f2d3a; box-shadow:0 0 0 1px var(--acc) inset; }
+  #decpanel button.optcard.shuffle { justify-content:center; color:var(--muted); font-size:13px; padding:11px; }
+  #decpanel .grp { display:flex; gap:5px; }
+  #decpanel .grp.away { opacity:.55; }
+  #decpanel .cardmini { width:54px; text-align:center; }
+  #decpanel .cardmini img { width:100%; border-radius:5px; background:#0b0c0e; min-height:40px; box-shadow:0 0 0 1px var(--line); display:block; }
+  #decpanel .cardmini em { font-style:normal; font-size:9px; color:var(--muted); display:block; line-height:1.05; margin-top:2px;
+      max-width:54px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #decpanel .optcard .gi { position:absolute; top:-7px; left:-7px; background:var(--acc); color:#0c1116; width:18px; height:18px;
+      border-radius:10px; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px var(--panel); }
+  #decpanel .optcard .div { font-size:11px; color:var(--bad); font-weight:600; white-space:nowrap; }
+  #decpanel .optcard .lbl { font-size:11px; color:var(--muted); margin-right:2px; align-self:center; }
+  #decpanel .optcard .deftag { position:absolute; top:-8px; right:8px; background:var(--acc); color:#0c1116;
+      font-size:10px; font-weight:700; border-radius:7px; padding:0 6px; box-shadow:0 0 0 2px var(--panel); }
+  /* tutor/Gamble target grid (card images to pick from) */
+  #decpanel .tutgrid { display:flex; flex-wrap:wrap; gap:8px; max-height:42vh; overflow:auto; }
+  #decpanel .tutgrid .cardmini { width:72px; cursor:pointer; border-radius:6px; padding:2px; }
+  #decpanel .tutgrid .cardmini:hover { background:#1f2d3a; box-shadow:0 0 0 1px var(--acc); }
+  #decpanel .tutgrid .cardmini.def img { box-shadow:0 0 0 2px var(--acc); }
+  #decpanel .tutgrid .cardmini em { max-width:72px; }
 
   /* in-place board highlights while a target/bounce/vial decision is active */
   .thumb.selectable { cursor:pointer; box-shadow:0 0 0 2px var(--acc), 0 0 10px rgba(90,169,230,.4); }
@@ -709,26 +729,37 @@ async function commitLine() {
   if (res.kind==='result') return showResult(res.result);
   showError(res.error||'validate failed', res.raw);
 }
+// Variant picker (tutor/Gamble target, Ponder keep, Soulfire count, X) — shown in the CENTRAL image
+// dialog (#5/#12), a grid of the candidate cards (cards[0] = the distinguishing card, e.g. the tutor
+// target). Replaces the old right-side #verdict 'choose' panel so NO decision lives in the side panel.
+function renderChooseDialog(v, line){
+  const panel=$('decpanel'), back=$('decback');
+  back.className='modal'; back.style.display='block'; panel.className='show modal';
+  let h=`<h3>Choose how to resolve</h3>`+
+    `<div class="sub">This line resolves several ways — pick one (the AI chooses among these too).</div>`+
+    `<div class="tutgrid">`;
+  (v.variants||[]).forEach(x=>{
+    const card=(x.cards||[])[0]||'';
+    h+=`<span class="cardmini varpick" data-pi="${x.plan_index}" data-lab="${esc(x.label)}"${card?` data-name="${esc(card)}"`:''} title="${esc(x.label)}">`+
+       (card?`<img loading="lazy" src="${scryImg(card,'small')}" onerror="this.style.opacity=.15"/>`:`<span style="display:block;height:96px"></span>`)+
+       `<em>${esc(card||x.label)}</em></span>`;
+  });
+  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button></div>`;
+  panel.innerHTML=h;
+  panel.querySelectorAll('.varpick').forEach(b=>b.onclick=()=>{ hideDecPanel(); applyAccepted(+b.dataset.pi, b.dataset.lab); });
+  $('choosecancel').onclick=()=>{ hideDecPanel(); renderBoard(); };
+}
 function applyAccepted(planIndex, label) {
   S.history.push({ turn:S.decision.turn, label });
+  // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
+  // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
+  S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
   S.prev = S.decision; S.choices.push(planIndex); S.plan=[]; S.leMode=false; S.vialMode=null;
   renderHistory(); hideVerdict(); step();
 }
 function handleVerdict(v, line) {
   if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line);
-  if (v.verdict==='choose') {
-    const ve=$('verdict'); ve.className='choose';
-    ve.innerHTML=`<span class="vtag">choose</span><h4>This line resolves several ways — pick one:</h4>`+
-      v.variants.map(x=>{
-        const art=(x.cards||[]).map(n=>`<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" data-name="${esc(n)}" onerror="this.style.display='none'"/>`).join('');
-        return `<button class="variant" data-pi="${x.plan_index}" data-lab="${esc(x.label)}">`+
-          (art?`<span class="vthumbs">${art}</span>`:'')+`<span class="vlab">${esc(x.label)}</span></button>`;
-      }).join('')+
-      `<div class="actions"><button id="cancelv" class="ghost">Cancel</button></div>`;
-    ve.style.display='block';
-    ve.querySelectorAll('.variant').forEach(b=>b.onclick=()=>applyAccepted(+b.dataset.pi, b.dataset.lab));
-    $('cancelv').onclick=hideVerdict; return;
-  }
+  if (v.verdict==='choose') return renderChooseDialog(v, line);   // central image dialog, not the side panel
   const cls=v.verdict==='legal_not_enumerated'?'legal':(v.verdict==='unsupported'?'unsupported':'illegal');
   const tag=v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
   const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
@@ -820,25 +851,34 @@ function renderDecisionPanel(d, dec){
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
 
-// Look-at-top panel (#4/#5): reveal the cards FIRST, then offer the dispositions (orderings + a
-// shuffle option) — no blind up-front keep/shuffle prompt. The AI's pick is marked as the default.
+// A small card-art tile (image + truncated name) for the dialogs.
+function cardMini(name, extraCls){ return `<span class="cardmini ${extraCls||''}" data-name="${esc(name)}">`+
+  `<img loading="lazy" src="${scryImg(name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(name)}</em></span>`; }
+
+// Look-at-top panel (#4/#5): IMAGE-based. Each disposition option is a row of card art — the cards
+// kept on top (left, numbered in their final order) then a divider and the cards binned to the
+// bottom/graveyard (right, dimmed). The AI's pick is tagged. Reveal-then-decide; no blind shuffle gate.
 function lookPanelHtml(d, dec){
   const awayWord = d.away_zone==='graveyard'?'graveyard':d.away_zone==='bottom'?'bottom':'shuffle';
   const verb = dec==='scry'?'Scry':dec==='surveil'?'Surveil':'Reorder';
   let h=`<h3>${verb} — ${esc(d.source||'')}</h3>`;
-  h+=`<div class="sub">${dec==='scry'?'Kept cards stay on top (your order); the rest go to the bottom.'
-     :dec==='surveil'?'Kept cards stay on top; the rest go to the graveyard.'
-     :'Put them back on top in any order, or shuffle them away.'} The top of your library is shown below.</div>`;
-  h+=`<div class="revealrow">`+(d.looked||[]).map((c,i)=>
-     `<div class="reveal-card"><span class="ord">${i+1}</span>`+
-     `<img loading="lazy" src="${scryImg(c.name,'small')}" data-name="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
-     `<em>${esc(c.name)}</em></div>`).join('')+`</div>`;
-  h+=`<div class="optlist">`;
+  h+=`<div class="sub">${dec==='scry'?'Pick how the top cards end up: kept cards (left) stay on top in that order; the rest (right) go to the bottom.'
+     :dec==='surveil'?'Kept cards (left) stay on top; the rest (right) go to the graveyard.'
+     :'Choose the order to put them back on top (left→right), or shuffle them away.'}</div>`;
+  h+=`<div class="optgrid">`;
   (d.options||[]).forEach(o=>{
     const def=o.index===d.heuristic_default;
-    const desc=o.shuffle?'⤮ Shuffle them away'
-      :'▲ '+(o.top||[]).join(' · ')+((o.away&&o.away.length)?`   ⤓ ${awayWord}: `+o.away.join(' · '):'');
-    h+=`<button class="opt${def?' def':''}" data-opt="${o.index}" title="${esc(o.label||'')}">${esc(desc)}${def?'  · AI default':''}</button>`;
+    if (o.shuffle){
+      h+=`<button class="optcard shuffle${def?' def':''}" data-opt="${o.index}">⤮ Shuffle them away${def?'  ·  AI default':''}</button>`;
+      return;
+    }
+    const tops=(o.top||[]).map((n,i)=>`<span class="cardmini" data-name="${esc(n)}"><span class="gi">${i+1}</span>`+
+      `<img loading="lazy" src="${scryImg(n,'small')}" onerror="this.style.opacity=.15"/><em>${esc(n)}</em></span>`).join('');
+    const aways=(o.away||[]).map(n=>cardMini(n)).join('');
+    h+=`<button class="optcard${def?' def':''}" data-opt="${o.index}">`+
+       `<span class="lbl">top</span><span class="grp top">${tops||'<span class="lbl">— none —</span>'}</span>`+
+       (aways?`<span class="div">▸ ${esc(awayWord)}</span><span class="grp away">${aways}</span>`:'')+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</button>`;
   });
   return h+`</div>`;
 }
@@ -902,7 +942,21 @@ function commitBoardSel(d, dec){
 }
 
 // ---- flow ------------------------------------------------------------------
-function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null; $('endcontrols').style.display='none'; renderBoard(); }
+// Log involuntary graveyard additions (Gamble discard, mill) to the persistent history, EXCLUDING
+// cards just cast (which naturally go to the yard) so only the discard is named (#1). Only diff at
+// main-phase boundaries vs the last logged graveyard, so sub-decisions don't double-count.
+function logGyAdds(me) {
+  if (!me || !me.graveyard) return;
+  const cur={}; me.graveyard.forEach(n=>cur[n]=(cur[n]||0)+1);
+  if (S.skipGyLog) { S.skipGyLog=false; S.lastGy=cur; S.lastCasts=new Set(); return; }  // seed after undo, no log
+  const prev=S.lastGy||{}, cast=S.lastCasts||new Set(), adds=[];
+  for (const n in cur) { let d=cur[n]-(prev[n]||0); if (cast.has(n)) d=0; for (let i=0;i<d;i++) adds.push(n); }
+  if (adds.length) S.history.push({ turn:(S.decision&&S.decision.turn)||'', label:'⤓ to graveyard: '+adds.join(', ') });
+  S.lastGy=cur; S.lastCasts=new Set();
+}
+function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
+  if (dec && dec.type==='main_phase') { logGyAdds(dec.me); renderHistory(); }
+  $('endcontrols').style.display='none'; renderBoard(); }
 function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
 function hideVerdict() { $('verdict').style.display='none'; }
 function showError(msg, raw) { $('board').innerHTML=`<div class="err">⚠ ${esc(msg)}${raw?'\n\n'+esc(raw):''}</div>`; }
@@ -929,8 +983,8 @@ async function step() {
   else showError(res.error||'unknown error', res.raw);
 }
 async function newGame() {
-  S={ choices:[], history:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null };
-  renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); await step();
+  S={ choices:[], history:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
+  hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); await step();
 }
 // Bump Seed + Game# and start the next game — for playing several in a row.
 async function nextGame() {
@@ -942,6 +996,7 @@ async function undo() {
   if (!S.choices.length) return;
   S.choices.pop(); S.history=S.history.filter(h=>!h.win); S.history.pop();
   S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
+  S.boardSel=null; S._selFor=null; S.lastGy={}; S.lastCasts=new Set(); hideDecPanel();
   renderHistory(); await step();
 }
 async function saveRef() {

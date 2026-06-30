@@ -223,7 +223,7 @@ struct CardDefinition;
 struct ChosenTarget { int kind = 0; int index = 0; };   // kind 0 -> player_index, 1 -> permanent_index
 using TargetChooser = std::function<std::vector<ChosenTarget>(
     const GameState& state, const CardDefinition& def, int controller,
-    int max_targets, const std::vector<ChosenTarget>& heuristic_default)>;
+    int max_targets, int per_target_damage, const std::vector<ChosenTarget>& heuristic_default)>;
 extern thread_local TargetChooser* g_play_target_chooser;
 
 // ---- Human-play Karoo bounce-land chooser (which land to return to hand) ----------------

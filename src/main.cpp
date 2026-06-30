@@ -489,24 +489,29 @@ struct TargetOption { std::vector<ChosenTarget> targets; std::string label; };
 
 // Legal damage targets on the board, in a stable order: opponent face, then every creature
 // (opp first, then yours, board order), then your own face. Each carries a display label.
-static void CollectDamageTargets(const GameState& s, int controller,
+// `players_only` (Targeting::Player, e.g. Skullcrack -> "target player or planeswalker") restricts
+// the set to the two faces -- no creatures. Any-target burn (Lightning Bolt) offers creatures too.
+static void CollectDamageTargets(const GameState& s, int controller, bool players_only,
                                  std::vector<ChosenTarget>& out, std::vector<std::string>& labels)
 {
     int opp = 1 - controller;
     out.push_back({ 0, opp });        labels.push_back("Opponent (face)");
-    auto add_creatures = [&](int side) {
-        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
-        {
-            const Permanent& p = s.battlefield[i];
-            if (p.controller_index != side) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (!d || !d->card.IsCreature()) { continue; }
-            out.push_back({ 1, i });
-            labels.push_back(p.card.m_name.str() + (side == controller ? " (yours)" : " (opponent)"));
-        }
-    };
-    add_creatures(opp);
-    add_creatures(controller);
+    if (!players_only)
+    {
+        auto add_creatures = [&](int side) {
+            for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+            {
+                const Permanent& p = s.battlefield[i];
+                if (p.controller_index != side) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!d || !d->card.IsCreature()) { continue; }
+                out.push_back({ 1, i });
+                labels.push_back(p.card.m_name.str() + (side == controller ? " (yours)" : " (opponent)"));
+            }
+        };
+        add_creatures(opp);
+        add_creatures(controller);
+    }
     out.push_back({ 0, controller }); labels.push_back("You (face)");
 }
 
@@ -784,14 +789,14 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // option index (a target set). Prepopulated default = the AI's heuristic pick (usually face).
     TargetChooser target_chooser =
         [&](const GameState& s, const CardDefinition& def, int controller, int max_targets,
-            const std::vector<ChosenTarget>& heuristic) -> std::vector<ChosenTarget>
+            int per_target_damage, const std::vector<ChosenTarget>& heuristic) -> std::vector<ChosenTarget>
         {
+            const bool players_only = (def.params.targeting == Targeting::Player);
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            CollectDamageTargets(s, controller, legal, legal_labels);
+            CollectDamageTargets(s, controller, players_only, legal, legal_labels);
             std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets);
             if (opts.empty()) { return heuristic; }
-            int per_target = def.params.x_damage_multiplier > 0
-                           ? def.params.x_damage_multiplier * std::max(1, max_targets) : def.params.damage;
+            const int per_target = per_target_damage;   // actual engine damage per target (not recomputed)
             // Default index = the option whose target set matches the heuristic pick.
             auto same = [](const std::vector<ChosenTarget>& a, const std::vector<ChosenTarget>& b) {
                 if (a.size() != b.size()) { return false; }

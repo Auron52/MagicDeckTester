@@ -1967,10 +1967,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // (damage_equals_top_mv) is handled above and never reaches here as a retargetable set.
                 if (g_play_target_chooser && dmg > 0 && !def.params.damage_equals_top_mv)
                 {
-                    int max_targets = def.params.x_damage_multiplier > 0 ? std::max(1, chosen_x) : 1;
+                    int max_targets = (def.card.m_mana_cost.has_x && def.params.x_damage_multiplier > 0)
+                                    ? std::max(1, chosen_x) : 1;
                     std::vector<ChosenTarget> heur = { { 0, opp_idx } };   // default: opponent face
+                    // `dmg` is the ACTUAL per-target damage (fixed burn = base damage; Crackle = X*mult),
+                    // passed so the dialog shows the true number instead of recomputing (x_damage_multiplier
+                    // defaults to 1, which made fixed burn mis-display as "1 damage").
                     std::vector<ChosenTarget> picked =
-                        (*g_play_target_chooser)(state, def, state.active_player_index, max_targets, heur);
+                        (*g_play_target_chooser)(state, def, state.active_player_index, max_targets, dmg, heur);
                     if (picked.empty()) { picked = heur; }
                     for (const ChosenTarget& c : picked)
                     {
