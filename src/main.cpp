@@ -605,6 +605,34 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     os << "}\n";
 }
 
+// ETB-dig decision (Acclaimed Contender): the player picks WHICH examined card enters hand (or
+// declines). Emits the examined cards as image options with a `legal` flag (only legal candidates
+// are takeable); the reply is the examined index to take, or -1 to take nothing.
+static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                 const std::vector<Card>& examined, const std::vector<int>& legal,
+                                 int heuristic_default, int decision_index)
+{
+    std::vector<bool> is_legal(examined.size(), false);
+    for (int li : legal) { if (li >= 0 && li < static_cast<int>(examined.size())) { is_legal[li] = true; } }
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"dig\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"examined\": [";
+    for (size_t i = 0; i < examined.size(); ++i)
+    {
+        if (i) os << ", ";
+        os << "{ \"index\": " << i << ", \"legal\": " << (is_legal[i] ? "true" : "false")
+           << ", \"name\": "; JsonStr(os, examined[i].m_name.str()); os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
 // and commas (no MTG name contains ';' or '='), so they pass through verbatim.
@@ -859,11 +887,46 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_bounce_chooser = &bounce_chooser;
 
+    // ETB dig (Acclaimed Contender): the player picks which examined card enters hand (or declines).
+    // Shares the --choices stream; the reply is an examined index, or -1 to take nothing. Default =
+    // the engine's heuristic pick (the first legal match).
+    DigChooser dig_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<Card>& examined, const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                bool ok = (chosen == -1);
+                for (int li : legal) { if (li == chosen) { ok = true; break; } }
+                if (!ok) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteDigDecisionJson(ss, s, source, examined, legal, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteDigDecisionJson(std::cout, s, source, examined, legal, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_dig_chooser = &dig_chooser;
+
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);
     g_play_top_chooser = nullptr;
     g_play_target_chooser = nullptr;
     g_play_bounce_chooser = nullptr;
+    g_play_dig_chooser = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.

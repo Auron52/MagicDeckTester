@@ -236,6 +236,19 @@ using BounceChooser = std::function<int(const GameState& state, int controller, 
                                         const std::vector<int>& legal_indices, int heuristic_pick)>;
 extern thread_local BounceChooser* g_play_bounce_chooser;
 
+// ---- Human-play ETB-dig chooser (which examined card to put into hand) ------------------
+// An ETB "look at the top N, you may reveal a <type> and put it into your hand" (Acclaimed
+// Contender) digs for a matching card. Autonomously PerformEtbDig takes the FIRST match; under
+// --claude-play the human picks WHICH match (or declines). The chooser receives the examined
+// cards, the indices (into `examined`) of the legal candidates, and the heuristic's pick (an
+// index into `examined`); it returns the chosen index into `examined`, or -1 to take nothing.
+// Nulled by RevealLogPause for every search/rollout/enumeration scope, so it fires only for real
+// ETBs -- and only when there is at least one legal candidate. Inert (heuristic) unless set.
+using DigChooser = std::function<int(const GameState& state, int controller, const std::string& source,
+                                     const std::vector<Card>& examined,
+                                     const std::vector<int>& legal_indices, int heuristic_pick)>;
+extern thread_local DigChooser* g_play_dig_chooser;
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -245,12 +258,15 @@ struct RevealLogPause
     TopChooser* saved_chooser;
     TargetChooser* saved_tchooser;
     BounceChooser* saved_bchooser;
+    DigChooser* saved_dchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
-                       saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser)
+                       saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
+                       saved_dchooser(g_play_dig_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
-      g_play_bounce_chooser = nullptr; }
+      g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
-                        g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser; }
+                        g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
+                        g_play_dig_chooser = saved_dchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

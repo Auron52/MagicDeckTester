@@ -268,6 +268,11 @@
   #decpanel .tutgrid .cardmini:hover { background:#1f2d3a; box-shadow:0 0 0 1px var(--acc); }
   #decpanel .tutgrid .cardmini.def img { box-shadow:0 0 0 2px var(--acc); }
   #decpanel .tutgrid .cardmini em { max-width:72px; }
+  #decpanel .tutgrid .cardmini.tdig { position:relative; }
+  #decpanel .tutgrid .cardmini.illegal { cursor:default; opacity:.4; }
+  #decpanel .tutgrid .cardmini.illegal:hover { background:none; box-shadow:none; }
+  #decpanel .tutgrid .cardmini .deftag { position:absolute; top:-7px; right:-4px; background:var(--acc); color:#0c1116;
+    font-size:8px; font-weight:700; padding:1px 4px; border-radius:7px; z-index:1; }
 
   /* in-place board highlights while a target/bounce/vial decision is active */
   .thumb.selectable { cursor:pointer; box-shadow:0 0 0 2px var(--acc), 0 0 10px rgba(90,169,230,.4); }
@@ -430,7 +435,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items) { return `<div class="row">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -849,10 +854,11 @@ function wireDecisionBoard(d, dec){
 function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
-  back.className = isLook ? 'modal' : '';                 // dim+block only for look decisions
-  back.style.display = isLook ? 'block' : 'none';
-  panel.className = 'show ' + (isLook?'modal':'prompt');
-  panel.innerHTML = isLook ? lookPanelHtml(d, dec) : promptPanelHtml(d, dec);
+  const isModal = isLook || dec==='dig';                  // centered card-image modals
+  back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
+  back.style.display = isModal ? 'block' : 'none';
+  panel.className = 'show ' + (isModal?'modal':'prompt');
+  panel.innerHTML = isLook ? lookPanelHtml(d, dec) : dec==='dig' ? digPanelHtml(d) : promptPanelHtml(d, dec);
   wireDecisionPanel(d, dec);
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
@@ -888,6 +894,25 @@ function lookPanelHtml(d, dec){
   });
   return h+`</div>`;
 }
+// ETB-dig panel (#6, Acclaimed Contender): IMAGE-based central modal. The examined top cards are
+// shown as art; the legal candidates (a Knight, here) are clickable to put into hand, the rest are
+// dimmed/non-takeable, and a "Take nothing" option declines. The AI's pick is tagged. After a card
+// enters hand the engine re-enumerates (the library shrank), so a dug card is playable THIS turn.
+function digPanelHtml(d){
+  let h=`<h3>Dig — ${esc(d.source||'')}</h3>`;
+  h+=`<div class="sub">Look at the top ${ (d.examined||[]).length } cards — put one highlighted card into your hand (it becomes playable this turn), or take nothing. The rest go to the bottom.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.examined||[]).forEach(c=>{
+    const def=c.index===d.heuristic_default;
+    const cls=c.legal?'tdig'+(def?' def':''):'tdig illegal';
+    h+=`<span class="cardmini ${cls}"${c.legal?` data-opt="${c.index}"`:''} data-name="${esc(c.name)}" title="${esc(c.name)}${c.legal?'':' — not a legal pick'}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+     `<button class="ghost" data-opt="-1">Take nothing</button></div>`;
+  return h;
+}
 // Bottom prompt for board-click decisions: the board is the selector, this just shows the ask + Confirm.
 function promptPanelHtml(d, dec){
   if (dec==='vial_charge'){
@@ -916,6 +941,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('button[data-opt]').forEach(b=>b.onclick=()=>commitLook(d, +b.dataset.opt));
   else if (dec==='vial_charge')
     panel.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>commitVial(d, +b.dataset.v));
+  else if (dec==='dig')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDig(d, +b.dataset.opt));
   else { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec); }
 }
 function pushChoice(d, oi, lab){
@@ -931,6 +958,10 @@ function commitLook(d, oi){
   pushChoice(d, oi, lab);
 }
 function commitVial(d, v){ pushChoice(d, v, v?'Vial: +counter':'Vial: hold'); }
+function commitDig(d, oi){
+  const c=(d.examined||[]).find(x=>x.index===oi);
+  pushChoice(d, oi, `${d.source}: ${oi<0||!c?'take nothing':'take '+c.name}`);
+}
 function commitBoardSel(d, dec){
   const sel=[...(S.boardSel||[])];
   let oi, lab;

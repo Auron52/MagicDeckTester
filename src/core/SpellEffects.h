@@ -958,16 +958,33 @@ inline bool PerformEtbDig(GameState& state, int controller_index,
         ap.library.erase(ap.library.begin());
     }
 
-    int take = -1;
-    for (int i = 0; i < static_cast<int>(examined.size()) && take < 0; ++i)
+    // Legal candidates: every examined card whose subtype matches the dig filter (Knight). The
+    // heuristic takes the FIRST; under --claude-play the human picks which one (or declines).
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(examined.size()); ++i)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(examined[i]);
         const SubtypeSet& subs = d ? d->card.m_subtypes : examined[i].m_subtypes;
+        bool match = false;
         for (const std::string& want : pp.etb_dig_subtypes)
         {
-            for (const std::string& cs : subs) { if (cs == want) { take = i; break; } }
-            if (take >= 0) { break; }
+            for (const std::string& cs : subs) { if (cs == want) { match = true; break; } }
+            if (match) { break; }
         }
+        if (match) { legal.push_back(i); }
+    }
+    int take = legal.empty() ? -1 : legal.front();   // heuristic: first match (byte-identical search)
+
+    // Human play: with at least one legal candidate, let the player choose WHICH match enters hand
+    // (or take nothing). Nulled by RevealLogPause for search/rollout, so this never fires during
+    // hypothetical scoring -- only the real ETB. An out-of-range reply falls back to the heuristic.
+    if (!legal.empty() && g_play_dig_chooser)
+    {
+        const std::string src = self ? self->card.m_name.str() : std::string("dig");
+        int picked = (*g_play_dig_chooser)(state, controller_index, src, examined, legal, take);
+        bool ok = (picked == -1);
+        for (int li : legal) { if (li == picked) { ok = true; break; } }
+        take = ok ? picked : take;
     }
 
     bool took = false;
