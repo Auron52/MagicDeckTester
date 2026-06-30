@@ -171,7 +171,9 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       const html = fs.readFileSync(path.join(__dirname, 'index.html'));
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      // no-store so the browser always re-fetches the GUI after an edit (otherwise a stale cached
+      // index.html hides changes until a manual hard-refresh).
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(html);
     }
     if (req.method === 'GET' && url.pathname === '/api/decks') {
