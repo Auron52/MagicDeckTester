@@ -186,6 +186,32 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
     }
 }
 
+// Grove of the Burnwillows drip when a Remedy is active: Grove's coloured tap makes "each
+// opponent gain 1", which a Tainted Remedy / Plague Drone reverses into 1 DAMAGE. Once the
+// reversal is live the player should tap such a land EVERY turn for the free ping even with
+// nothing to cast -- but the normal mana path only taps it when a spell needs the mana, so a
+// turn with no cast wasted the drip. Tap every still-UNTAPPED tap_opponent_lifegain land the
+// player controls and apply the drip (already reversed by OpponentGainsLife). No-op without a
+// Remedy active (the gain would HELP the opponent -- the clairvoyant search avoids that) or
+// without an untapped drip land. Deterministic end-of-pre-combat-main action (NOT a search
+// choice), so the rollout (ApplyPlanDirect) and the real executor (AIEngine::TakeTurn) both call
+// it once per turn at the same point and stay in lockstep. Tapping untapped lands only makes it
+// idempotent within a turn (a multi-segment claude-play main never double-drips). Inert for every
+// deck without both a tap_opponent_lifegain land and a Remedy effect (only Anti-Lifegain has them).
+inline void TapDripLandsForRemedy(GameState& state, int controller_index)
+{
+    if (!RemedyActive(state, controller_index)) { return; }
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller_index || p.tapped) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        if (!def || def->params.tap_opponent_lifegain <= 0) { continue; }
+        p.tapped = true;
+        if (def->params.tap_self_damage > 0) { state.players[controller_index].life -= def->params.tap_self_damage; }
+        OpponentGainsLife(state, controller_index, def->params.tap_opponent_lifegain);
+    }
+}
+
 // True if `controller_index` controls a permanent with the given subtype (e.g. "Forest").
 // Backs the alt-cost condition "If you control a Forest, rather than pay this spell's mana
 // cost ...". Land subtypes (Forest/Plains/...) are stored in the card's m_subtypes.

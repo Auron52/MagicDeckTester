@@ -1674,6 +1674,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         bp_replayed = true;
     }
 
+    // Grove of the Burnwillows drip: once a Remedy is live, tap any still-untapped Grove for its
+    // free 1-damage ping even with nothing to cast. Unconditional (NOT under fd_plan_committed) and
+    // once per turn, matching ApplyPlanDirect's call so the realised game stays in lockstep with the
+    // searched/committed line. After the cast loop so a spell that needed Grove's mana tapped it
+    // first. Inert without a Remedy active + an untapped tap_opponent_lifegain land (every deck but
+    // Anti-Lifegain).
+    if (is_pre_combat_main) { TapDripLandsForRemedy(state, state.active_player_index); }
+
     // Animate lands and activate tap-token abilities with mana remaining after spells.
     // Only in pre-combat main so any resulting creatures can attack this turn.
     if (is_pre_combat_main)

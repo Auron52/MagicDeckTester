@@ -192,6 +192,11 @@ int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) 
     //      rest of the line (the same-turn ramp the enumerator now credits). Gated on the rock-
     //      ramp flag so MTG_NO_ROCK_RAMP keeps the legacy order (rocks ranked with noncreatures).
     if (def.params.on_cast_trigger_damage > 0) { return 30; }
+    // Destroy-all-enchantments (Reverent Silence) wipes our OWN Aria/Remedy, so cast it LAST --
+    // after this turn's wincon casts (Aria's lethal ETB reversal) have already resolved. Casting
+    // it earlier can pre-empt a lethal line and, worse, let a later un-reversed lifegain rider
+    // (Aria with the Remedy now gone) HEAL the opponent. Ranked alongside the self-damage tier.
+    if (def.params.destroy_all_enchantments)   { return 30; }
     if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature()) { return 5; }
     if (def.card.IsCreature())                 { return 10; }
     return 20;
