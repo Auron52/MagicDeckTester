@@ -1122,22 +1122,8 @@ function logGyAdds(me) {
   if (adds.length) S.history.push({ turn:(S.decision&&S.decision.turn)||'', label:'⤓ to graveyard: '+adds.join(', ') });
   S.lastGy=cur; S.lastCasts=new Set();
 }
-// Log cards that ENTERED the hand since the last main-phase decision (the turn draw, a cantrip's
-// draws, a tutor/Gamble fetch, or an Expressive Iteration bank) to the persistent history, so it is
-// clear WHAT you drew. Multiset diff vs the previous hand: only positive deltas (a card both drawn
-// and played nets out). First call just SEEDS (the opening hand is not logged as draws); skipped
-// once after an undo (S.skipGyLog rides along).
-function logDraws(me) {
-  if (!me || !me.hand) return;
-  const cur={}; me.hand.forEach(c=>{ const n=(typeof c==='string')?c:c.name; cur[n]=(cur[n]||0)+1; });
-  if (S.lastHand===undefined || S.skipDrawLog) { S.skipDrawLog=false; S.lastHand=cur; return; }
-  const prev=S.lastHand, adds=[];
-  for (const n in cur) { const d=cur[n]-(prev[n]||0); for (let i=0;i<d;i++) adds.push(n); }
-  if (adds.length) S.history.push({ turn:(S.decision&&S.decision.turn)||'', label:'＋ drew: '+adds.join(', ') });
-  S.lastHand=cur;
-}
 function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
-  if (dec && dec.type==='main_phase') { logDraws(dec.me); logGyAdds(dec.me); renderHistory(); }
+  if (dec && dec.type==='main_phase') { logGyAdds(dec.me); renderHistory(); }
   $('endcontrols').style.display='none'; renderBoard(); }
 function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
 function hideVerdict() { $('verdict').style.display='none'; }
@@ -1178,7 +1164,7 @@ async function undo() {
   if (!S.choices.length) return;
   S.choices.pop(); S.history=S.history.filter(h=>!h.win); S.history.pop();
   S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
-  S.boardSel=null; S._selFor=null; S.lastGy={}; S.lastCasts=new Set(); S.lastHand=undefined; S.handOrder=undefined; hideDecPanel();
+  S.boardSel=null; S._selFor=null; S.lastGy={}; S.lastCasts=new Set(); S.handOrder=undefined; hideDecPanel();
   renderHistory(); await step();
 }
 async function saveRef() {
