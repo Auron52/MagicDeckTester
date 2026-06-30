@@ -188,9 +188,17 @@ MANIFEST="$LOGDIR/manifest.json"
     # depth>0), so d0 automatically runs without bottoming (its greedy rollout cannot
     # discriminate on a deep London mulligan and would bottom the payoff, a d0-only misplay).
     if [ "$depth" -gt 0 ]; then bud=$budget; else bud=0; fi
+    # LPT scheduling weight (see BatchRunner Job::sched_weight): Hinata's deep search measured ~40x
+    # the other decks per game (heavy multi-minute tail), so without a boost its d3/d5 games sort
+    # behind every deck's d5 and become the long tail that dominates the makespan. Give Hinata
+    # depth>0 a high weight so
+    # those games start FIRST and the cheap games backfill while they grind. d5 outranks d3. Other
+    # jobs keep weight 0 (the depth/budget proxy). Ordering is lossless -- results are unchanged.
+    weight=0
+    if [ "$deck" = "hinata" ] && [ "$depth" -gt 0 ]; then weight=$((depth * 1000 + bud)); fi
     [ $first -eq 1 ] && first=0 || printf ',\n'
-    printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "depth": %s, "budget_ms": %s }' \
-      "$name" "$file" "$prof" "$games" "$seed" "$depth" "$bud"
+    printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "depth": %s, "budget_ms": %s, "weight": %s }' \
+      "$name" "$file" "$prof" "$games" "$seed" "$depth" "$bud" "$weight"
   done
   printf '\n] }\n'
 } > "$MANIFEST"

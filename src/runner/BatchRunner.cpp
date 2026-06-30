@@ -32,6 +32,9 @@ struct Job
     int             budget_ms           = 0;
     int             max_turns           = 8;   // goldfish horizon (see main.cpp); per-job overridable
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
+    int             sched_weight        = 0;   // optional LPT scheduling priority (higher = run first);
+                                               // overrides the depth/budget cost proxy for known-slow
+                                               // jobs (e.g. Hinata's combo search). 0 => use the proxy.
 };
 
 // A single unit of pooled work: game `game` of job `job`.
@@ -57,6 +60,7 @@ Job ParseJob(const json& jspec)
     j.seed                = jspec["seed"].get<uint64_t>();
     j.depth               = jspec.value("depth", 0);
     j.budget_ms           = jspec.value("budget_ms", 0);
+    j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
     j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
     // Note: lookahead bottoming is no longer a manifest field -- the engine derives it
     // from depth (on iff depth>0). A stale "lookahead_bottoming" key is simply ignored.
@@ -120,16 +124,20 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     }
 
     // LPT scheduling: run the most expensive games first so cheap games backfill
-    // the tail. Depth then budget is the cost proxy (a deeper / higher-budget
-    // search dominates wall time). Reordering is lossless -- each game is seeded by
-    // its job's seed + game index, so order cannot change any result -- and a
-    // stable sort keeps a job's games contiguous, which maximises the worker's
-    // per-job engine reuse below.
+    // the tail. An explicit per-job `weight` wins first (for jobs whose true cost the
+    // depth/budget proxy misjudges -- e.g. Hinata's combo search measured ~40x the other
+    // decks at the SAME depth, with a heavy multi-minute tail, so without a weight its d3
+    // games sort behind every deck's d5 and become the long tail); then depth, then budget
+    // as the proxy. Reordering is
+    // lossless -- each game is seeded by its job's seed + game index, so order cannot
+    // change any result -- and a stable sort keeps a job's games contiguous, which
+    // maximises the worker's per-job engine reuse below.
     std::stable_sort(items.begin(), items.end(),
         [&](const WorkItem& a, const WorkItem& b)
         {
             const Job& ja = jobs[a.job];
             const Job& jb = jobs[b.job];
+            if (ja.sched_weight != jb.sched_weight) { return ja.sched_weight > jb.sched_weight; }
             if (ja.depth     != jb.depth)     { return ja.depth     > jb.depth; }
             if (ja.budget_ms != jb.budget_ms) { return ja.budget_ms > jb.budget_ms; }
             return a.job < b.job;
