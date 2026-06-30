@@ -3485,6 +3485,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // and removes the duplicate inline-first-turn + transposition lookups they'd
     // otherwise each incur. Done after the sort so the surviving copy is the
     // highest-ranked (identical plans share rank, so order is unaffected either way).
+    // Human play keeps plans that differ ONLY in a sub-decision (tutor target / X / Ponder keep /
+    // Soulfire count / land / fetch) as DISTINCT plans, so the player can choose among them.
+    //
+    // The autonomous dedup collapses them to one cast-name representative (the FIRST enumerated,
+    // i.e. the tutor heuristic's best-first pick). NB this is NOT a correctness property -- it is an
+    // efficiency shortcut that DELEGATES the sub-decision to the heuristic and never search-branches
+    // over the alternatives. It is a real (heuristic-masked) limitation in the search too; it only
+    // "works" there insofar as TutorCandidates' ordering is trusted. For human play that shortcut is
+    // simply wrong -- the human IS the decision-maker -- so we keep every variant. Gated on
+    // MTG_HUMAN_PLAY: the autonomous search and the MTG_UNPRUNED A/B stay byte-identical (the
+    // shortcut, warts and all, is unchanged there -- widening the search is a separate question).
+    static const bool s_human_play_sig = std::getenv("MTG_HUMAN_PLAY") != nullptr;
     auto plan_signature = [](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l;
@@ -3512,6 +3524,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const std::string& n : a) { sig += 'A'; sig += n; }
         for (const std::string& n : g) { sig += 'G'; sig += n; }
         for (const std::string& n : l) { sig += 'L'; sig += n; }
+        if (s_human_play_sig)
+        {
+            // Per-action sub-decisions, order-independent; plus the land/fetch the plan commits.
+            std::vector<std::string> sub;
+            for (const Action& act : p.actions)
+            {
+                if (!act.tutor_target.empty())   { sub.push_back("t" + act.card_name + ">" + act.tutor_target); }
+                if (act.chosen_x > 0)            { sub.push_back("x" + act.card_name + "=" + std::to_string(act.chosen_x)); }
+                if (act.ponder_keep >= 0)        { sub.push_back("p" + act.card_name + "=" + std::to_string(act.ponder_keep)); }
+                if (act.soulfire_own_targets > 0){ sub.push_back("f" + act.card_name + "=" + std::to_string(act.soulfire_own_targets)); }
+            }
+            std::sort(sub.begin(), sub.end());
+            for (const std::string& x : sub) { sig += '#'; sig += x; }
+            if (p.land_decided)            { sig += "|land="  + p.land_to_play; }
+            if (!p.fetch_target.empty())   { sig += "|fetch=" + p.fetch_target; }
+        }
         return sig;
     };
     std::unordered_set<std::string> seen;
