@@ -366,6 +366,13 @@ struct CardParams
     // and ResolveDirectDamage. Gated (defaults to 1) so a plain X burn is unchanged.
     int x_damage_multiplier = 1;
 
+    // "deals N damage divided as you choose among any number of targets" (Fiery Justice, Magma
+    // Opus): the total `damage` is SPLIT across the chosen targets, not dealt in full to each.
+    // Autonomously the model points all of it at the opponent face (optimal vs a passive opponent),
+    // so this is byte-identical there; under --claude-play the player allocates per-target amounts
+    // (the human-play target chooser enumerates allocations, heuristic-defaulted to all-to-face).
+    bool damage_divided = false;
+
     // Goldfish-inert: the card has no productive use against a single passive opponent that
     // never casts spells, attacks, or blocks (counterspells with no spell to counter; "tap X
     // target creatures" / "return X target permanents" with no useful target). CollectActions

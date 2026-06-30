@@ -1983,25 +1983,34 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // (damage_equals_top_mv) is handled above and never reaches here as a retargetable set.
                 if (g_play_target_chooser && dmg > 0 && !def.params.damage_equals_top_mv)
                 {
-                    int max_targets = (def.card.m_mana_cost.has_x && def.params.x_damage_multiplier > 0)
+                    // Divided damage (Fiery Justice): up to `dmg` targets, the chooser returns a
+                    // per-target allocation summing to dmg. Uniform burn: 1 target (or X for Crackle),
+                    // each taking the full dmg. The chooser branches on def.params.damage_divided.
+                    bool divided = def.params.damage_divided;
+                    int max_targets = divided ? dmg
+                                    : (def.card.m_mana_cost.has_x && def.params.x_damage_multiplier > 0)
                                     ? std::max(1, chosen_x) : 1;
-                    std::vector<ChosenTarget> heur = { { 0, opp_idx } };   // default: opponent face
-                    // `dmg` is the ACTUAL per-target damage (fixed burn = base damage; Crackle = X*mult),
-                    // passed so the dialog shows the true number instead of recomputing (x_damage_multiplier
-                    // defaults to 1, which made fixed burn mis-display as "1 damage").
+                    // Default: all damage to the opponent face (amount = dmg for divided, ignored else).
+                    std::vector<ChosenTarget> heur = { { 0, opp_idx, divided ? dmg : 0 } };
+                    // `dmg` is the ACTUAL per-target damage (fixed burn = base damage; Crackle = X*mult)
+                    // or, for a divided spell, the TOTAL to allocate -- passed so the dialog shows the
+                    // true number instead of recomputing (x_damage_multiplier defaults to 1, which made
+                    // fixed burn mis-display as "1 damage").
                     std::vector<ChosenTarget> picked =
                         (*g_play_target_chooser)(state, def, state.active_player_index, max_targets, dmg, heur);
                     if (picked.empty()) { picked = heur; }
                     for (const ChosenTarget& c : picked)
                     {
+                        int amt = divided ? c.amount : dmg;   // divided: per-target share; else flat dmg
+                        if (amt <= 0) { continue; }
                         if (c.kind == 0)
                         {
-                            state.players[c.index].life -= dmg;
-                            if (c.index == opp_idx && dmg > 0) { state.opponent_lost_life_this_turn = true; }
+                            state.players[c.index].life -= amt;
+                            if (c.index == opp_idx) { state.opponent_lost_life_this_turn = true; }
                         }
                         else if (c.index >= 0 && c.index < static_cast<int>(state.battlefield.size()))
                         {
-                            state.battlefield[c.index].damage += dmg;   // SBA sweep below removes the dead
+                            state.battlefield[c.index].damage += amt;   // SBA sweep below removes the dead
                         }
                     }
                     // State-based: destroy creatures with lethal damage (highest index first so the

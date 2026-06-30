@@ -1047,7 +1047,8 @@
             "parameters": {
                 "damage": 5,
                 "targeting": "any",
-                "opponent_lifegain": 5
+                "opponent_lifegain": 5,
+                "damage_divided": true
             }
         },
         {
@@ -1431,7 +1432,8 @@
                 "cast_draw": 2,
                 "discount_max_targets": 6,
                 "discount_self_safe": true,
-                "discount_targets_permanents": true
+                "discount_targets_permanents": true,
+                "damage_divided": true
             }
         },
         {

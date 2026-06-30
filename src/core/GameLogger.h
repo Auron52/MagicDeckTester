@@ -220,7 +220,10 @@ extern thread_local TopChooser* g_play_top_chooser;
 // the player's set. RevealLogPause nulls it for search/rollout scopes, so it fires only for real
 // casts. Inert (heuristic) unless set.
 struct CardDefinition;
-struct ChosenTarget { int kind = 0; int index = 0; };   // kind 0 -> player_index, 1 -> permanent_index
+// kind 0 -> player_index, 1 -> permanent_index. `amount` is the damage assigned to THIS target for
+// a divided-damage spell (Fiery Justice); ignored (0) for uniform-damage spells, which deal the
+// spell's flat per-target damage to every chosen target.
+struct ChosenTarget { int kind = 0; int index = 0; int amount = 0; };
 using TargetChooser = std::function<std::vector<ChosenTarget>(
     const GameState& state, const CardDefinition& def, int controller,
     int max_targets, int per_target_damage, const std::vector<ChosenTarget>& heuristic_default)>;

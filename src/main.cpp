@@ -540,6 +540,78 @@ static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTar
     return opts;
 }
 
+// Enumerate damage-ALLOCATION options for a divided-damage spell (Fiery Justice / Magma Opus): each
+// option assigns positive per-target amounts (carried in ChosenTarget::amount) summing to `total`,
+// over a nonempty subset of the legal targets. Capped at 3 targets per allocation and 256 options so
+// a large board / total can't explode the menu. Order: all-to-one first, then 2-way, then 3-way.
+static std::vector<TargetOption> EnumerateDamageAllocations(const std::vector<ChosenTarget>& legal,
+                                                            const std::vector<std::string>& labels, int total)
+{
+    std::vector<TargetOption> opts;
+    const int n = static_cast<int>(legal.size());
+    if (total <= 0) { return opts; }
+    auto make = [&](std::initializer_list<std::pair<int,int>> parts) {   // (legal index, amount)
+        TargetOption o; std::string lbl;
+        for (auto [li, amt] : parts)
+        {
+            ChosenTarget ct = legal[li]; ct.amount = amt; o.targets.push_back(ct);
+            lbl += (lbl.empty() ? "" : ", ") + std::to_string(amt) + " to " + labels[li];
+        }
+        o.label = lbl; opts.push_back(std::move(o));
+    };
+    // 1-way: all `total` to a single target.
+    for (int i = 0; i < n; ++i) { make({ {i, total} }); }
+    // 2-way: split between an ordered pair (i<j), a+b=total, a,b>=1.
+    for (int i = 0; i < n && opts.size() < 256; ++i)
+        for (int j = i + 1; j < n && opts.size() < 256; ++j)
+            for (int a = 1; a <= total - 1; ++a) { make({ {i, a}, {j, total - a} }); }
+    // 3-way: split among an ordered triple (i<j<k), a+b+c=total, all >=1.
+    for (int i = 0; i < n && opts.size() < 256; ++i)
+        for (int j = i + 1; j < n && opts.size() < 256; ++j)
+            for (int k = j + 1; k < n && opts.size() < 256; ++k)
+                for (int a = 1; a <= total - 2; ++a)
+                    for (int b = 1; b <= total - a - 1; ++b) { make({ {i, a}, {j, b}, {k, total - a - b} }); }
+    return opts;
+}
+
+// Emit a divided-damage allocation decision. Each option carries its per-target amounts; the player
+// replies one option index. `total` = the total damage to divide. Default = all to the opponent face.
+static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                    const std::vector<ChosenTarget>& legal, const std::vector<std::string>& legal_labels,
+                                    const std::vector<TargetOption>& options, int total,
+                                    int heuristic_default, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"divide\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"total_damage\": " << total << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"legal_targets\": [";
+    for (size_t i = 0; i < legal.size(); ++i)
+    { if (i) os << ", "; os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : "permanent")
+                            << "\", \"index\": " << legal[i].index << ", \"label\": "; JsonStr(os, legal_labels[i]); os << " }"; }
+    os << "],\n";
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"options\": [";
+    for (size_t oi = 0; oi < options.size(); ++oi)
+    {
+        if (oi) os << ", ";
+        os << "{ \"index\": " << oi << ", \"label\": "; JsonStr(os, options[oi].label);
+        os << ", \"targets\": [";
+        for (size_t ti = 0; ti < options[oi].targets.size(); ++ti)
+        { const ChosenTarget& c = options[oi].targets[ti];
+          if (ti) os << ", "; os << "{ \"kind\": \"" << (c.kind == 0 ? "player" : "permanent")
+                                  << "\", \"index\": " << c.index << ", \"amount\": " << c.amount << " }"; }
+        os << "] }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply an option index -- an allocation of " << total
+       << " damage among targets. Default = all to the opponent face.\"\n";
+    os << "}\n";
+}
+
 // Emit a board-click target decision for a uniform-damage spell. `options` (built by the caller)
 // each map a target set + label; the player replies one index. `per_target` = damage each target
 // takes (Crackle 5*X, else the fixed damage). `heuristic_default` = the option matching the AI pick.
@@ -851,6 +923,40 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             const bool players_only = (def.params.targeting == Targeting::Player);
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
             CollectDamageTargets(s, controller, players_only, legal, legal_labels);
+
+            // Divided damage (Fiery Justice / Magma Opus): the player allocates `per_target_damage`
+            // (the TOTAL here) among targets. Enumerate allocations; default = all to opponent face.
+            if (def.params.damage_divided)
+            {
+                std::vector<TargetOption> dopts = EnumerateDamageAllocations(legal, legal_labels, per_target_damage);
+                if (dopts.empty()) { return heuristic; }
+                int ddef = 0;   // default = the single all-to-opponent-face allocation
+                for (size_t i = 0; i < dopts.size(); ++i)
+                { if (dopts[i].targets.size() == 1 && dopts[i].targets[0].kind == 0
+                      && dopts[i].targets[0].index == legal[0].index) { ddef = static_cast<int>(i); break; } }
+                int di = static_cast<int>(cursor);
+                if (cursor < choices.size())
+                {
+                    int chosen = choices[cursor++];
+                    ++decisions_made;
+                    if (chosen < 0 || chosen >= static_cast<int>(dopts.size())) { chosen = ddef; }
+                    if (!log_dir.empty())
+                    {
+                        std::ostringstream ss;
+                        ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                        WriteDivideDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, dopts, per_target_damage, ddef, di);
+                        ss << "}";
+                        trace.push_back(ss.str());
+                    }
+                    return dopts[chosen].targets;
+                }
+                std::cout << "<<<CLAUDE_DECISION>>>\n";
+                WriteDivideDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, dopts, per_target_damage, ddef, di);
+                std::cout << "<<<END_DECISION>>>\n";
+                std::cout.flush();
+                std::exit(70);
+            }
+
             std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets);
             if (opts.empty()) { return heuristic; }
             const int per_target = per_target_damage;   // actual engine damage per target (not recomputed)
