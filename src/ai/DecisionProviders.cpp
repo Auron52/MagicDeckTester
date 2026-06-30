@@ -230,6 +230,10 @@ bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
 std::vector<std::string>
 AntiLifegainProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
+    // Human play (unpruned): offer EVERY legal target so the player picks the tutor's card
+    // freely, not the enabler-then-wincon heuristic's single choice. Mirrors HinataProvider;
+    // autonomous search is unchanged (DecisionUnpruned() is false there).
+    if (DecisionUnpruned()) { return GenericProvider::TutorCandidates(s, controller, pp); }
     return ::TutorCandidates(s, controller, pp);
 }
 
