@@ -2107,9 +2107,17 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
         // with Tainted Remedy out). Mirrors TurnSolver's tap_source.
         if (def.params.tap_opponent_lifegain > 0)
         { OpponentGainsLife(state, state.active_player_index, def.params.tap_opponent_lifegain); }
+        // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
+        // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
+        // promised. AddSourceToPool credited it as `amt` wild, so decrement `available.wild`.
+        // Single-colour sources keep `amt` of the matched colour (byte-identical). Mirrored in
+        // TurnSolver::tap_source -- keep the two in lockstep.
         int amt = ManaProducedPerTap(def);
-        floating.Add(col, amt);
-        available.Add(col, -amt);
+        const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
+        if (amt > 1 && prod.size() > 1)
+        { for (Color c : prod) { floating.Add(c, 1); } available.wild -= amt; }
+        else
+        { floating.Add(col, amt); available.Add(col, -amt); }
     };
 
     // Ensure floating can satisfy one pip: `any` = generic, else specific colour

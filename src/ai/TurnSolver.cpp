@@ -1543,7 +1543,18 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
         // with Tainted Remedy out). Mirrored in AIEngine::TapForCost and TapForCostBacktrack.
         if (def.params.tap_opponent_lifegain > 0)
         { OpponentGainsLife(state, active, def.params.tap_opponent_lifegain); }
-        floating.Add(col, ManaProducedPerTap(def));
+        // A Karoo bounce land (Izzet Boilerworks) makes TWO mana of DIFFERENT colours from one tap
+        // ({U}{R}). Crediting `amt` of the single matched colour loses the second colour, so a lone
+        // bounce land could not pay a two-colour cost (Expressive Iteration {U}{R}) even though
+        // BuildPool/AddSourceToPool count it as `amt` wild -- the spell was enumerated but unpayable,
+        // a silent no-op (mana tapped, spell stuck in hand). Produce one mana of EACH colour it makes
+        // so the floating pool actually holds {U}{R}. Single-colour sources (incl. single-tap duals,
+        // amt 1) keep `amt` of the matched colour -> every deck without such a land is byte-identical.
+        // Mirrored in AIEngine::tap_source -- keep the two in lockstep.
+        int amt = ManaProducedPerTap(def);
+        const std::vector<Color>& prod = EffectiveProduces(state, active, def);
+        if (amt > 1 && prod.size() > 1) { for (Color c : prod) { floating.Add(c, 1); } }
+        else                            { floating.Add(col, amt); }
     };
 
     // allow_ramp: may a ramp filter (Ferrous Lake) be used? false when feeding a ramp
