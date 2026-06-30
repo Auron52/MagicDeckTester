@@ -3133,7 +3133,24 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
 
+    // Choose WHICH copy of `name` to play. Default: the first matching land (autonomous search --
+    // byte-identical). Human play (claude-play): when a land of this name exists BOTH as an
+    // exiled/staged copy (Light Up the Stage -- playable only until end of next turn) AND a regular
+    // hand copy, play the STAGED one. The permanent hand copy keeps for a later turn, so playing it
+    // here would waste the exiled copy (it expires unplayed). Gated on s_human_play.
+    static const bool s_human_play = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    auto pick = ap.hand.end();
     for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
+    {
+        if (it->m_name != name) { continue; }
+        auto d = CardDatabase::Instance().LookupCached(*it);
+        if (!d || !d->card.IsLand()) { continue; }
+        if (pick == ap.hand.end()) { pick = it; }                  // first match
+        if (!s_human_play) { break; }                              // autonomous: take it
+        if (it->m_is_staged) { pick = it; break; }                 // human play: prefer the expiring copy
+    }
+
+    for (auto it = pick; it != ap.hand.end(); ++it)
     {
         if (it->m_name != name) { continue; }
         auto def = CardDatabase::Instance().LookupCached(*it);
