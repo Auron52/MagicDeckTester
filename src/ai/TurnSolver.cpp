@@ -3891,7 +3891,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 {
     RevealLogPause _rlp_enum;   // candidate scoring is hypothetical -- see EnumeratePlans
     const Player& ap = state.ActivePlayer();
-    bool drop_available = is_pre_combat
+    // Human play also offers the land drop in the POST-combat main when it is still open: a real
+    // game can pass the drop pre-combat, cast a Spectacle dig (Light Up the Stage) post-combat, then
+    // play a land it revealed as the turn's drop. The autonomous search only drops pre-combat (its
+    // second main is cast-only), so this is gated on MTG_HUMAN_PLAY -> byte-identical for the search.
+    static const bool s_human_play_drop = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    bool drop_available = (is_pre_combat || s_human_play_drop)
                        && ap.lands_played_this_turn < ap.LandDropsAvailable();
 
     if (!drop_available)

@@ -869,15 +869,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             std::vector<TurnSolver::Plan> plans =
                 TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
             if (plans.empty()) { break; }
-            // Post-combat (second) main: only prompt when a real cast is available (e.g. a Spectacle
-            // spell unlocked by combat). With nothing castable the second main is a no-op, so skip it
-            // silently rather than asking the human to "pass" every single turn. The first main always
-            // prompts (land drop + casts), as before.
-            if (!is_pre_combat_main)
+            // Post-combat (second) main: on the FIRST entry, only prompt when there is a real play
+            // available (a Spectacle spell unlocked by combat, a castable spell, or a land drop) --
+            // with nothing to do the second main is a no-op, so skip it silently rather than asking
+            // the human to "pass" every single turn. But on a re-prompt AFTER a draw/stage breakpoint
+            // (seg > 0, e.g. Light Up the Stage just exiled cards), ALWAYS re-prompt so the player can
+            // see and play the revealed cards -- matching the first main, which never suppresses. This
+            // fixes "no breakpoint after Light Up" when the dig leaves you tapped out for the moment.
+            if (!is_pre_combat_main && seg == 0)
             {
-                bool any_cast = false;
-                for (const TurnSolver::Plan& p : plans) { if (!p.actions.empty()) { any_cast = true; break; } }
-                if (!any_cast) { break; }
+                bool any_play = false;
+                for (const TurnSolver::Plan& p : plans)
+                { if (!p.actions.empty() || !p.land_to_play.empty()) { any_play = true; break; } }
+                if (!any_play) { break; }
             }
             size_t lib_before = state.ActivePlayer().library.size();
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
