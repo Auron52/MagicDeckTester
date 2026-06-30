@@ -1119,12 +1119,21 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // Final life totals (player 0 = goldfish, player 1 = opponent) so the GUI can show the
     // opponent at 0/negative on a win, making the lethal blow visible rather than freezing the
     // board at the pre-win life.
-    std::cout << "<<<CLAUDE_RESULT>>>\n{ \"win_turn\": " << (won ? win_turn : -1)
+    // Include the FINAL board (the post-final-turn state) so the win screen shows the permanents
+    // actually in play at the end -- including those played on the winning turn -- rather than
+    // freezing on the last decision's board. Force the player's (player 0) perspective so "me" is
+    // always the goldfish regardless of whose turn the game ended on.
+    int saved_ap = state.active_player_index;
+    state.active_player_index = 0;
+    std::cout << "<<<CLAUDE_RESULT>>>\n{\n";
+    WriteBoardContext(std::cout, state, 0);   // emits "me": {...}, "opponent": {...},
+    state.active_player_index = saved_ap;
+    std::cout << "  \"win_turn\": " << (won ? win_turn : -1)
               << ", \"won\": " << (won ? "true" : "false")
               << ", \"decisions_made\": " << decisions_made
               << ", \"opponent_life\": " << state.players[1].life
               << ", \"player_life\": " << state.players[0].life
-              << " }\n<<<END_RESULT>>>\n";
+              << "\n}\n<<<END_RESULT>>>\n";
     return 0;
 }
 

@@ -27,7 +27,9 @@
   #board { padding:14px 20px 40px; overflow:auto; }
   #side  { background:var(--panel); border-left:1px solid var(--line); padding:14px 16px; overflow:auto; }
 
-  #turnbar { display:flex; align-items:center; gap:12px; margin:0 0 8px; }
+  /* keep the turn + phase pinned to the top of the scrolling board so it's always visible */
+  #turnbar { display:flex; align-items:center; gap:12px; margin:0; position:sticky; top:0; z-index:14;
+      background:var(--bg); padding:8px 0 8px; box-shadow:0 6px 8px -6px var(--bg); }
   .flowtip { font-size:12px; color:var(--muted); background:rgba(90,169,230,.08); border:1px solid rgba(90,169,230,.25);
       border-radius:7px; padding:5px 9px; margin:0 0 8px; } .flowtip b { color:var(--acc); }
   #turnbar .turn { font-size:20px; font-weight:700; color:var(--acc); }
@@ -459,7 +461,10 @@ function renderBoard() {
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
   const boardClick = dec==='target' || dec==='bounce' || dec==='vial_charge';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
-  const me = d.me||{}, opp = d.opponent||{};
+  // At game end, prefer the FINAL board carried on the result (permanents in play after the winning
+  // turn) over the last decision's board, so the win screen reflects what actually resolved.
+  const endBoard = (S.over && S.result && S.result.me) ? S.result : null;
+  const me = (endBoard ? endBoard.me : d.me) || {}, opp = (endBoard ? endBoard.opponent : d.opponent) || {};
   const oppBf = opp.battlefield||[];
   const oppLands = oppBf.filter(x=>x.is_land), oppPerms = oppBf.filter(x=>!x.is_land);
   // At game end, show the FINAL life totals from the result (opponent at 0/negative makes the
