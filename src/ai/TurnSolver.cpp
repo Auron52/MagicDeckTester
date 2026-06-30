@@ -199,6 +199,22 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
             }
         }
     }
+    // Floating mana (turn-scoped reserve) also satisfies colored pips: a floated {U} pays a {U}
+    // pip even when no untapped land produces blue. BuildPool already credits floating into the
+    // count pool, so without this the per-color gate would false-reject an otherwise-payable cast
+    // (e.g. a second Treasure Hunt {1}{U} off a floating {U} plus a colorless land). A wild
+    // floating mana (multi-color ritual float) can pay any single pip. Empty floating ->
+    // byte-identical for every non-floating deck/seed.
+    if (FloatLeftoverManaEnabled())
+    {
+        const ManaPool& f = state.floating_mana;
+        if (f.white > 0) { have[0] = true; }
+        if (f.blue  > 0) { have[1] = true; }
+        if (f.black > 0) { have[2] = true; }
+        if (f.red   > 0) { have[3] = true; }
+        if (f.green > 0) { have[4] = true; }
+        if (f.wild  > 0) { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
+    }
 }
 
 static bool SubsetPayable(const bool have[5], const std::vector<Action>& cands,
