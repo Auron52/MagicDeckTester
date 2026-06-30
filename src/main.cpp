@@ -177,6 +177,14 @@ static bool HandIsDraw(const CardDefinition* d)
 static std::string SummarizePlan(const TurnSolver::Plan& plan)
 {
     std::ostringstream os;
+    // Pure dig line (human play): cycle a land / sacrifice Fiery Islet to draw -- show just the
+    // ability, not "land=none; cast: ...", since a dig spends no land drop and casts nothing.
+    if (plan.actions.size() == 1 && plan.actions[0].kind == Action::Kind::DigDraw
+        && plan.land_to_play.empty())
+    {
+        const Action& a = plan.actions[0];
+        return (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw";
+    }
     if (plan.land_decided && !plan.land_to_play.empty()) { os << "land=" << plan.land_to_play << "; "; }
     else if (plan.land_decided)                           { os << "land=none; "; }
     std::vector<std::string> casts;
@@ -189,6 +197,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan)
             case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
+            case Action::Kind::DigDraw:
+                tag = (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw"; break;
             default:                              tag = a.card_name + " (other)"; break;
         }
         if (a.sacrifice_land) { tag += " +sac-land"; }
@@ -366,6 +376,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             for (size_t a = 0; a < p.actions.size(); ++a)
             {
                 if (p.actions[a].kind == Action::Kind::DiscardToLandsEdge) { continue; }
+                if (p.actions[a].kind == Action::Kind::DigDraw)            { continue; }  // a dig, not a cast
                 if (!first) { os << ", "; }
                 first = false;
                 JsonStr(os, p.actions[a].card_name);
@@ -381,6 +392,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             const Action& ac = p.actions[a];
             os << "{ \"card\": "; JsonStr(os, ac.card_name);
             if (ac.kind == Action::Kind::DiscardToLandsEdge) { os << ", \"landsedge\": " << ac.discard_lands; }
+            if (ac.kind == Action::Kind::DigDraw) { os << ", \"dig\": true, \"dig_sacrifice\": " << (ac.dig_sacrifice ? "true" : "false"); }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }

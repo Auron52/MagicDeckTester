@@ -2592,6 +2592,49 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             le_ap.hand = std::move(keep);
         }
 
+        // Human-play (claude-play) player-initiated dig: cycle a land from hand (Lonely Sandbar /
+        // Forgotten Cave) or sacrifice a land in play (Fiery Islet) to draw one card. The autonomous
+        // search drives digs through its own ShouldConsiderDig loop above (gated !s_human_play); here
+        // the human picks each dig as a standalone plan action and the AIEngine segment loop
+        // re-prompts after the draw (the library shrank), so the player uses the dug card or digs
+        // again. One card per action. Mirrors the auto-loop's cost/zone mechanics exactly. Gated on
+        // s_human_play; the search never puts DigDraw in plan.actions, so this is inert there.
+        if (s_human_play)
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::DigDraw) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().Lookup(a.card_name);
+            if (!sd) { continue; }
+            if (a.dig_sacrifice)
+            {
+                if (!sd->params.sacrifice_draw_cost.has_value()) { continue; }
+                int idx = -1;
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                {
+                    const Permanent& p = state.battlefield[i];
+                    if (p.controller_index == state.active_player_index
+                        && !p.tapped && p.card.m_name == a.card_name) { idx = i; break; }
+                }
+                if (idx < 0) { continue; }
+                state.battlefield[idx].tapped = true;   // {T}: the source can't pay its own cost
+                if (!TapForCostDirect(state, sd->params.sacrifice_draw_cost.value(), false))
+                { state.battlefield[idx].tapped = false; continue; }
+                ap.graveyard.push_back(state.battlefield[idx].card);
+                state.battlefield.erase(state.battlefield.begin() + idx);
+            }
+            else
+            {
+                if (!sd->params.cycling_cost.has_value()) { continue; }
+                if (!TapForCostDirect(state, sd->params.cycling_cost.value(), false)) { continue; }
+                std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
+                    [&a](const Card& c) { return c.m_name == a.card_name; });
+                if (it == ap.hand.end()) { continue; }
+                ap.graveyard.push_back(*it);
+                ap.hand.erase(it);
+            }
+            if (!ap.library.empty()) { ap.hand.push_back(ap.library.DrawTop()); }
+        }
+
         // Auto-fire safe alt payloads (Invigorate / Skyshroud) once everything else has
         // resolved and a Remedy is live -> each is free face damage. Deterministic (not a
         // search choice), so no enumeration blow-up; re-scan after each because firing one
@@ -3894,6 +3937,72 @@ static void AppendHumanPlayLandsEdgePlans(const GameState& state, std::vector<Tu
     }
 }
 
+// Human-play only: make cycling (a land in hand, e.g. Lonely Sandbar / Forgotten Cave) and
+// sac-to-draw (a land in play, e.g. Fiery Islet) PICKABLE standalone lines, so the player can dig
+// "when things go south". The autonomous search drives these digs through its own ShouldConsiderDig
+// loop (suppressed under s_human_play in ApplyPlanDirect); without this the human controlling such a
+// deck could never fire them. Each distinct affordable source becomes one plan with a single
+// Kind::DigDraw action; ApplyPlanDirect draws one card and the AIEngine segment loop re-prompts (the
+// library shrank) so the player uses the dug card or digs again. Affordability is checked with the
+// executor's real payment path (TapForCostDirect on a copy, tapping a sac source first so it can't
+// pay its own {T}) so an offered dig never silently no-ops. Deterministic (zone/battlefield order,
+// one plan per distinct NAME) -> plan indices stay stable for CheckLine + the --choices replay.
+// Gated on MTG_HUMAN_PLAY: a no-op (byte-identical) for every autonomous goldfish/search run.
+static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolver::Plan>& all)
+{
+    static const bool s_human_play_enum = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    if (!s_human_play_enum) { return; }
+    const Player& ap = state.ActivePlayer();
+
+    auto can_afford = [&](const std::string& name, bool is_sac, const ManaCost& cost) -> bool
+    {
+        GameState copy = state;
+        if (is_sac)
+        {
+            int idx = -1;
+            for (int i = 0; i < static_cast<int>(copy.battlefield.size()); ++i)
+            {
+                const Permanent& p = copy.battlefield[i];
+                if (p.controller_index == copy.active_player_index && !p.tapped
+                    && p.card.m_name == name) { idx = i; break; }
+            }
+            if (idx < 0) { return false; }
+            copy.battlefield[idx].tapped = true;   // {T}: source can't pay its own cost
+        }
+        return TapForCostDirect(copy, cost, false);
+    };
+    auto add_dig = [&](const std::string& name, bool is_sac)
+    {
+        TurnSolver::Plan v;
+        v.land_decided = true;   // a dig spends no land drop; never greedy-play a land
+        Action dg;
+        dg.kind          = Action::Kind::DigDraw;
+        dg.card_name     = name;
+        dg.dig_sacrifice = is_sac;
+        v.actions.push_back(std::move(dg));
+        all.push_back(std::move(v));
+    };
+
+    std::unordered_set<std::string> seen;
+    for (const Card& c : ap.hand)   // cycling lands in hand
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || !d->params.cycling_cost.has_value()) { continue; }
+        std::string nm = c.m_name.str();
+        if (!seen.insert("c:" + nm).second) { continue; }
+        if (can_afford(nm, false, d->params.cycling_cost.value())) { add_dig(nm, false); }
+    }
+    for (const Permanent& p : state.battlefield)   // sac-to-draw lands in play (Fiery Islet)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.sacrifice_draw_cost.has_value()) { continue; }
+        std::string nm = p.card.m_name.str();
+        if (!seen.insert("s:" + nm).second) { continue; }
+        if (can_afford(nm, true, d->params.sacrifice_draw_cost.value())) { add_dig(nm, true); }
+    }
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
 {
@@ -3914,6 +4023,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         // as a standalone line here (this is the post-Treasure-Hunt breakpoint, drop already used).
         std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, is_pre_combat);
         AppendHumanPlayLandsEdgePlans(state, plans);
+        AppendHumanPlayDigPlans(state, plans);
         for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
         return plans;
     }
@@ -4064,6 +4174,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // Land's Edge activation as a PICKABLE plan action (human play only) -- see the helper. Applied
     // here for the land-drop-available path; the !drop_available early-return applies it too.
     AppendHumanPlayLandsEdgePlans(state, all);
+    AppendHumanPlayDigPlans(state, all);
 
     // A tapped land that is a fine early play (a dual/tri/scry/surveil/depletion/Karoo tap
     // land played on a turn you don't need its mana) vs one you'd rather NOT play as a normal
@@ -5257,6 +5368,8 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p)
     for (const Action& a : p.actions)
     {
         if (a.kind == Action::Kind::DiscardToLandsEdge) { le_count += a.discard_lands; }
+        else if (a.kind == Action::Kind::DigDraw)
+        { cast_names.push_back((a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name); }
         else { cast_names.push_back(a.card_name); }
     }
     s += "cast: ";
