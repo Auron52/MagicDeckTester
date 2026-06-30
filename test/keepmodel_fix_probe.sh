@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 GENSEED=${GENSEED:-12345}; GEN_GAMES=${GEN_GAMES:-6000}; EPS=${EPS:-0.2}; ITERS=${ITERS:-3}
 GAMES=${GAMES:-600}; SEEDS=${SEEDS:-"4004 5005 6006 7007"}; MAXT=${MAXT:-8}; DEPTHS=${DEPTHS:-"3"}
 DECKS=${DECKS:-"th slivers burn"}
-BIN=./build/Release/mtg; ANALYZE=./build/Release/mtg-analyze
+BIN=${BIN:-./build/Release/mtg}; ANALYZE=${ANALYZE:-./build/Release/mtg-analyze}
 declare -A DECK_FILE=( [burn]=decks/test_deck.txt [antilife]=decks/Anti-Lifegain.cod
   [slivers]=decks/slivers_vial.txt [th]=decks/treasure_hunt.txt [hinata]=decks/Hinata2.cod)
 declare -A DECK_PROF=( [burn]=decks/test_deck.profile.json [antilife]=decks/Anti-Lifegain.profile.json

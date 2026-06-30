@@ -891,10 +891,35 @@ KeepModel BuildKeepModel(const Decklist& deck,
             for (int i : fit_idx) { by_leaf[leaf_of(nodes, rows[i].x)].push_back(i); }
             std::map<int, int> leaf_index;            // leaf node idx -> position in leaves vector
             std::vector<KeepScore> leaves;
+            // A leaf earns its linear SCORE only if it BEATS the leaf's CONSTANT decision (the regret-tree
+            // leaf) by >= LEAF_MARGIN turns on a held-out (game%5) split. Rationale: a score's fine per-hand
+            // threshold is brittle to the clairvoyant-kv -> real-play distribution shift -- on TH the score
+            // TIES its constant in-sample (score_minus_const ~0) yet costs +0.18 turns downstream, while a
+            // hard constant generalises. So the score must clear the robust constant by a MARGIN (not just
+            // match it) -- the same Occam bias fit_nodes applies to tree depth. Calibrated: TH's leaves beat
+            // const by <=0.007 (drop -> regret-tree behaviour); slivers' valuable leaves by 0.03-0.21 (keep).
+            constexpr double LEAF_MARGIN = 0.02;
             for (auto& kv : by_leaf)
             {
                 KeepScore sc = ridge_score(rows, kv.second, baseline);
                 if (sc.empty()) { continue; }         // tiny leaf -> fall back to the node's constant keep
+                std::vector<int> ltr, lte;
+                for (int i : kv.second) { (rows[i].game % 5 == 0 ? lte : ltr).push_back(i); }
+                if (!ltr.empty() && !lte.empty())
+                {
+                    double rk = 0, rm = 0;            // constant decision fit on the leaf's train rows
+                    for (int i : ltr) { const double o = std::min(rows[i].kv, rows[i].thr);
+                                        rk += rows[i].kv - o; rm += rows[i].thr - o; }
+                    const bool keep_const = rk <= rm;
+                    double creg = 0, sreg = 0;        // both decisions' regret on the held-out leaf rows
+                    for (int i : lte)
+                    {
+                        const double o = std::min(rows[i].kv, rows[i].thr);
+                        creg += (keep_const ? rows[i].kv : rows[i].thr) - o;
+                        sreg += (KeepModel::KeepByScoreOf(sc, rows[i].x) ? rows[i].kv : rows[i].thr) - o;
+                    }
+                    if (sreg > creg - LEAF_MARGIN * lte.size()) { continue; }   // score doesn't earn it -> constant
+                }
                 leaf_index[kv.first] = static_cast<int>(leaves.size());
                 leaves.push_back(sc);
                 nodes[kv.first].leaf_score = static_cast<int>(leaves.size()) - 1;
@@ -978,7 +1003,11 @@ KeepModel BuildKeepModel(const Decklist& deck,
         build_eval(best_depth, all, test, &out_nodes, &out_leaves);
         std::cerr << "  keep-model" << tag << ": hybrid partition-depth " << best_depth << " ("
                   << out_leaves.size() << " additive leaves, held-out regret " << best_rg << ").\n";
-        return !out_nodes.empty() && !out_leaves.empty();
+        // A hybrid with ZERO scored leaves is NOT a failure -- it is the all-constant partition tree (= the
+        // regret tree), the valid model the per-leaf guard converges to on a bimodal deck (TH: every leaf's
+        // score fails to beat its constant, so all revert). Emit it; the runtime walks the tree and uses
+        // each leaf's constant keep bit. Requiring >=1 leaf here produced an EMPTY model -> naive fallback.
+        return !out_nodes.empty();
     };
 
     // ---- 3b. baseline selection: legacy optimizer's-curse min vs policy-simulated --------------
