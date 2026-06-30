@@ -20,6 +20,7 @@ declare -A DECK_FILE=(
   [th]=decks/treasure_hunt.txt
   [knights]=decks/Knights.cod
   [antilife]=decks/Anti-Lifegain.cod
+  [hinata]=decks/Hinata2.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial.profile.json
@@ -27,6 +28,7 @@ declare -A DECK_PROF=(
   [th]=decks/treasure_hunt.profile.json
   [knights]=decks/Knights.profile.json
   [antilife]=decks/Anti-Lifegain.profile.json
+  [hinata]=decks/Hinata2.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -55,6 +57,11 @@ SMOKE_CASES=(
   "antilife 0 1001 1000 0"
   "antilife 3 1001  250 10"
   "antilife 5 1001  150 20"
+  # hinata: d0 ONLY in the gate modes. Its combo search at d3/d5 is ~1000x the other decks per game
+  # with occasional multi-minute turns (combo enumeration blowup -- see search-perf memory), so a
+  # single bad game could blow the 3-min smoke budget. d0 (greedy, ~3 ms/game) is cheap and catches
+  # card-implementation regressions; the deep-search coverage lives in OVERNIGHT (8 h budget).
+  "hinata  0 1001 1000 0"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -89,6 +96,8 @@ REGRESSION_CASES=(
   "antilife 3 3003  300 10"
   "antilife 5 2002  250 20"
   "antilife 5 3003  250 20"
+  # hinata: d0 only in the gate modes (see SMOKE block) -- deep search is overnight-only.
+  "hinata  0 2002 1000 0"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -160,4 +169,20 @@ OVERNIGHT_CASES=(
   "antilife 5 5005 1000 20"
   "antilife 5 6006 1000 20"
   "antilife 5 7007 1000 20"
+  # hinata: the deep-search home (gate modes are d0-only -- see SMOKE block). d0 full; d3/d5 kept
+  # LOW (150/100 vs the others' 1000) -- Hinata's combo enumeration is ~1000x/game with occasional
+  # multi-minute turns, so big counts would dominate the whole overnight. Counts are PROVISIONAL,
+  # sized under CPU contention; validate wall time on a free machine and raise if there is headroom.
+  "hinata  0 4004 2000 0"
+  "hinata  0 5005 2000 0"
+  "hinata  0 6006 2000 0"
+  "hinata  0 7007 2000 0"
+  "hinata  3 4004  150 10"
+  "hinata  3 5005  150 10"
+  "hinata  3 6006  150 10"
+  "hinata  3 7007  150 10"
+  "hinata  5 4004  100 20"
+  "hinata  5 5005  100 20"
+  "hinata  5 6006  100 20"
+  "hinata  5 7007  100 20"
 )
