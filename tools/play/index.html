@@ -512,6 +512,17 @@ function renderBoard() {
   }
   h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands))+`</div>`;
   h += `</div>`;  // /playfield
+  // Hand sits ABOVE the graveyard: it is the most-used zone, so keeping it high (right under your
+  // field) means the turn bar and hand are visible together without scrolling. The graveyard (less
+  // important) drops to the bottom.
+  // hand palette: interactive (drag/queue) in the main phase; a read-only reference row during a
+  // sub-decision (so the board+hand stay visible while you resolve scry/target/bounce/vial).
+  if (isMain) h += `<div class="zone hand" id="handzone"><h3>Hand <span class="help">double-click = cast/play · drag onto your field above`+
+       (d.lands_edge?(S.leMode?` · ⚡ <b>Land’s Edge active</b> — click lands to discard (${d.lands_edge.rate} dmg each)`:` · ⚡ click your Land’s Edge to discard lands to it`):` · single-click = activate ability`)+`</span></h3>`+
+       `<div class="row" id="handrow"></div></div>`;
+  else if (dec && (me.hand||[]).length)
+    h += `<div class="zone hand"><h3>Hand (${me.hand.length})</h3>`+
+         zoneRow(me.hand.map(c=>bfThumb({name:typeof c==='string'?c:c.name,is_land:(c&&c.kind==='land')})))+`</div>`;
   if (me.graveyard && me.graveyard.length) {
     const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace
     const gyThumbs = me.graveyard.map(n => rset.has(n)
@@ -522,15 +533,7 @@ function renderBoard() {
     const hint = rset.size ? ` <span class="help">↩ click a Retrace card to cast it from here (discards a land)</span>` : '';
     h += `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})${hint}</h3>`+zoneRow(gyThumbs)+`</div>`;
   }
-  // hand palette: interactive (drag/queue) in the main phase; a read-only reference row during a
-  // sub-decision (so the board+hand stay visible while you resolve scry/target/bounce/vial).
-  if (isMain) h += `<div class="zone hand" id="handzone"><h3>Hand <span class="help">double-click = cast/play · drag onto your field above`+
-       (d.lands_edge?(S.leMode?` · ⚡ <b>Land’s Edge active</b> — click lands to discard (${d.lands_edge.rate} dmg each)`:` · ⚡ click your Land’s Edge to discard lands to it`):` · single-click = activate ability`)+`</span></h3>`+
-       `<div class="row" id="handrow"></div></div>`;
-  else if (dec && (me.hand||[]).length)
-    h += `<div class="zone hand"><h3>Hand (${me.hand.length})</h3>`+
-         zoneRow(me.hand.map(c=>bfThumb({name:typeof c==='string'?c:c.name,is_land:(c&&c.kind==='land')})))+`</div>`;
-  // sticky commit/turn-plan footer, near the hand
+  // sticky commit/turn-plan footer, last so its position:sticky bottom:0 docks to the viewport.
   if (isMain) h += `<div id="planbar"></div>`;
   board.innerHTML = h;
   renderBanner(); renderEffects(); if(isMain){ renderPlanbar(); renderHand(); } wireBoard();
