@@ -1759,14 +1759,16 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost)
 //   - Reveal land (etb_untap_reveal_subtypes): enters untapped iff a card of a listed
 //     subtype (e.g. Island/Mountain) is in hand (Frostboil Snarl).
 //   - Otherwise: the plain enters_tapped flag.
-inline bool LandEntersTapped(GameState& state, const CardDefinition& def)
+inline bool LandEntersTapped(GameState& state, const CardDefinition& def, bool allow_pay_life = true)
 {
     const CardParams& pp = def.params;
 
     if (pp.etb_pay_life_to_untap > 0)
     {
         Player& ap = state.ActivePlayer();
-        if (ap.life > pp.etb_pay_life_to_untap)
+        // allow_pay_life=false (human play, no mana needed this turn) -> take the free tapped
+        // entry instead of paying the shock life for mana you would not use.
+        if (allow_pay_life && ap.life > pp.etb_pay_life_to_untap)
         {
             ap.life -= pp.etb_pay_life_to_untap;
             return false;

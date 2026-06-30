@@ -1725,7 +1725,7 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
 // a specific named land; SimulateLandPlay is the greedy fallback used when a plan did
 // not search the land (depth-0 static plans).
 static bool PlayLandByName(GameState& state, const std::string& name,
-                           const std::string& fetch_target = "");
+                           const std::string& fetch_target = "", bool allow_shock_pay = true);
 static std::string SimulateLandPlay(GameState& state);
 
 // Provider cast-order rank for a hand cast by name (lower = cast earlier). Thin lookup
@@ -1837,7 +1837,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 else
                 {
-                    PlayLandByName(state, plan.land_to_play, plan.fetch_target);
+                    // Shock land (Steam Vents): the autonomous engine always pays the 2 life to
+                    // enter untapped (early speed). Human play pays ONLY when this turn's plan
+                    // actually spends mana (a cast/retrace/dig) -- otherwise the land would ping
+                    // you 2 life for mana you never tap, so enter it tapped. Conservative (pays
+                    // whenever ANY mana-costing action is present) so a needed colour is never
+                    // starved. Gated on s_human_play -> autonomous byte-identical.
+                    bool allow_shock_pay = true;
+                    if (s_human_play)
+                    {
+                        allow_shock_pay = false;
+                        for (const Action& a : plan.actions)
+                        {
+                            if (a.kind == Action::Kind::CastFromHand
+                                || a.kind == Action::Kind::CastFromGraveyard
+                                || a.kind == Action::Kind::DigDraw)
+                            { allow_shock_pay = true; break; }
+                        }
+                    }
+                    PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay);
                 }
             }
         }
@@ -3128,7 +3146,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 // (SimulateLandPlay) and the searched land fold (ApplyPlanDirect) so both produce
 // byte-identical placement for the same card.
 static bool PlayLandByName(GameState& state, const std::string& name,
-                           const std::string& fetch_target)
+                           const std::string& fetch_target, bool allow_shock_pay)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
@@ -3170,7 +3188,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
         }
 
         // Resolve "as this land enters" choices while the card is still in hand.
-        bool tapped = LandEntersTapped(state, *def);
+        bool tapped = LandEntersTapped(state, *def, allow_shock_pay);
         Permanent perm;
         perm.card              = def->card;
         perm.controller_index  = state.active_player_index;
