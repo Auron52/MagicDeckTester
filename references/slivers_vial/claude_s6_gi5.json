@@ -1,0 +1,82 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 4, "won": true,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sliver Hive; cast: Plated Sliver", "land": "Sliver Hive", "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Plated Sliver", "land": "Secluded Courtyard", "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 2, "summary": "land=Sliver Hive; cast: (nothing)", "land": "Sliver Hive", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [{ "name": "Plated Sliver", "idx": 2, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sliver Hive; cast: Predatory Sliver", "land": "Sliver Hive", "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 1, "summary": "land=Sliver Hive; cast: Sinew Sliver", "land": "Sliver Hive", "casts": ["Sinew Sliver"], "actions": [{ "card": "Sinew Sliver" }] },
+    { "index": 2, "summary": "land=Sliver Hive; cast: Plated Sliver", "land": "Sliver Hive", "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 3, "summary": "land=none; cast: Plated Sliver", "land": null, "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 4, "summary": "land=Sliver Hive; cast: (nothing)", "land": "Sliver Hive", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [{ "name": "Plated Sliver", "idx": 2, "is_land": false }, { "name": "Predatory Sliver", "idx": 4, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }, { "name": "Sliver Hive", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Striking Sliver", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Plated Sliver, Striking Sliver", "land": null, "casts": ["Plated Sliver", "Striking Sliver"], "actions": [{ "card": "Plated Sliver" }, { "card": "Striking Sliver" }] },
+    { "index": 1, "summary": "land=none; cast: Striking Sliver, Plated Sliver", "land": null, "casts": ["Striking Sliver", "Plated Sliver"], "actions": [{ "card": "Striking Sliver" }, { "card": "Plated Sliver" }] },
+    { "index": 2, "summary": "land=none; cast: Predatory Sliver", "land": null, "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 3, "summary": "land=none; cast: Sinew Sliver", "land": null, "casts": ["Sinew Sliver"], "actions": [{ "card": "Sinew Sliver" }] },
+    { "index": 4, "summary": "land=none; cast: Plated Sliver", "land": null, "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 5, "summary": "land=none; cast: Striking Sliver", "land": null, "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [{ "name": "Plated Sliver", "idx": 2, "is_land": false }, { "name": "Predatory Sliver", "idx": 4, "is_land": false }, { "name": "Predatory Sliver", "idx": 5, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }, { "name": "Sliver Hive", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Hatchery Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Striking Sliver", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Plated Sliver, Striking Sliver", "land": null, "casts": ["Plated Sliver", "Striking Sliver"], "actions": [{ "card": "Plated Sliver" }, { "card": "Striking Sliver" }] },
+    { "index": 1, "summary": "land=none; cast: Striking Sliver, Plated Sliver", "land": null, "casts": ["Striking Sliver", "Plated Sliver"], "actions": [{ "card": "Striking Sliver" }, { "card": "Plated Sliver" }] },
+    { "index": 2, "summary": "land=none; cast: Hatchery Sliver", "land": null, "casts": ["Hatchery Sliver"], "actions": [{ "card": "Hatchery Sliver" }] },
+    { "index": 3, "summary": "land=none; cast: Sinew Sliver", "land": null, "casts": ["Sinew Sliver"], "actions": [{ "card": "Sinew Sliver" }] },
+    { "index": 4, "summary": "land=none; cast: Plated Sliver", "land": null, "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 5, "summary": "land=none; cast: Striking Sliver", "land": null, "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

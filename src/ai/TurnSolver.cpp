@@ -1813,7 +1813,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Land drop first, so the land's mana is available to the spells that follow.
     // A searched plan (land_decided) plays exactly its chosen land ("" == a deliberate
     // defer); an unsearched plan (depth-0 static Solve) falls back to greedy land play.
-    if (is_pre_combat)
+    // Human play (claude-play) ALSO plays the drop in the POST-combat main: EnumeratePlansWithLand
+    // offers a still-open drop there (a land revealed by Light Up the Stage, played as the turn's
+    // drop), so ApplyPlanDirect must execute the chosen land -- otherwise it AND any cast that needs
+    // its mana are silently dropped (the plan is enumerated but never realized). Gated on
+    // s_human_play, and post-combat follows ONLY the land_decided branch (never the greedy
+    // SimulateLandPlay fallback, which would play a land the human didn't choose). The autonomous
+    // search's post-combat plans carry no land (drop_available is pre-combat-only there), so the
+    // block is a no-op for the search -> byte-identical.
+    if (is_pre_combat || s_human_play)
     {
         if (plan.land_decided)
         {
@@ -1833,7 +1841,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
-        else
+        else if (is_pre_combat)
         {
             SimulateLandPlay(state);
         }

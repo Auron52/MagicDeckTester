@@ -1,0 +1,103 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 4, "won": true,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Leeching Sliver", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }, { "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Plated Sliver", "land": "Unclaimed Territory", "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 1, "summary": "land=Sliver Hive; cast: Plated Sliver", "land": "Sliver Hive", "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Sliver Hive; cast: (nothing)", "land": "Sliver Hive", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [{ "name": "Plated Sliver", "idx": 2, "is_land": false }, { "name": "Sliver Hive", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Leeching Sliver", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Aether Vial, Plated Sliver", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Plated Sliver"], "actions": [{ "card": "Aether Vial" }, { "card": "Plated Sliver" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Plated Sliver, Aether Vial", "land": "Unclaimed Territory", "casts": ["Plated Sliver", "Aether Vial"], "actions": [{ "card": "Plated Sliver" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Crystalline Sliver", "land": "Unclaimed Territory", "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: Leeching Sliver", "land": "Unclaimed Territory", "casts": ["Leeching Sliver"], "actions": [{ "card": "Leeching Sliver" }] },
+    { "index": 6, "summary": "land=Unclaimed Territory; cast: Predatory Sliver", "land": "Unclaimed Territory", "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: Plated Sliver", "land": "Unclaimed Territory", "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 8, "summary": "land=none; cast: Plated Sliver", "land": null, "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 9, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [{ "name": "Plated Sliver", "idx": 2, "is_land": false }, { "name": "Predatory Sliver", "idx": 4, "is_land": false }, { "name": "Sliver Hive", "idx": 1, "is_land": true }, { "name": "Unclaimed Territory", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Leeching Sliver", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial, Plated Sliver", "land": null, "casts": ["Aether Vial", "Plated Sliver"], "actions": [{ "card": "Aether Vial" }, { "card": "Plated Sliver" }] },
+    { "index": 1, "summary": "land=none; cast: Plated Sliver, Aether Vial", "land": null, "casts": ["Plated Sliver", "Aether Vial"], "actions": [{ "card": "Plated Sliver" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=none; cast: Crystalline Sliver", "land": null, "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 3, "summary": "land=none; cast: Leeching Sliver", "land": null, "casts": ["Leeching Sliver"], "actions": [{ "card": "Leeching Sliver" }] },
+    { "index": 4, "summary": "land=none; cast: Predatory Sliver", "land": null, "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 5, "summary": "land=none; cast: Plated Sliver", "land": null, "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 6, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [{ "name": "Plated Sliver", "idx": 2, "is_land": false }, { "name": "Predatory Sliver", "idx": 4, "is_land": false }, { "name": "Predatory Sliver", "idx": 5, "is_land": false }, { "name": "Sliver Hive", "idx": 1, "is_land": true }, { "name": "Unclaimed Territory", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Leeching Sliver", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Plated Sliver", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Crystalline Sliver, Plated Sliver", "land": "Unclaimed Territory", "casts": ["Crystalline Sliver", "Plated Sliver"], "actions": [{ "card": "Crystalline Sliver" }, { "card": "Plated Sliver" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Plated Sliver, Crystalline Sliver", "land": "Unclaimed Territory", "casts": ["Plated Sliver", "Crystalline Sliver"], "actions": [{ "card": "Plated Sliver" }, { "card": "Crystalline Sliver" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Leeching Sliver, Plated Sliver", "land": "Unclaimed Territory", "casts": ["Leeching Sliver", "Plated Sliver"], "actions": [{ "card": "Leeching Sliver" }, { "card": "Plated Sliver" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Plated Sliver, Leeching Sliver", "land": "Unclaimed Territory", "casts": ["Plated Sliver", "Leeching Sliver"], "actions": [{ "card": "Plated Sliver" }, { "card": "Leeching Sliver" }] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: Aether Vial, Crystalline Sliver", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Crystalline Sliver"], "actions": [{ "card": "Aether Vial" }, { "card": "Crystalline Sliver" }] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: Crystalline Sliver, Aether Vial", "land": "Unclaimed Territory", "casts": ["Crystalline Sliver", "Aether Vial"], "actions": [{ "card": "Crystalline Sliver" }, { "card": "Aether Vial" }] },
+    { "index": 6, "summary": "land=Unclaimed Territory; cast: Aether Vial, Leeching Sliver", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Leeching Sliver"], "actions": [{ "card": "Aether Vial" }, { "card": "Leeching Sliver" }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: Leeching Sliver, Aether Vial", "land": "Unclaimed Territory", "casts": ["Leeching Sliver", "Aether Vial"], "actions": [{ "card": "Leeching Sliver" }, { "card": "Aether Vial" }] },
+    { "index": 8, "summary": "land=Unclaimed Territory; cast: Aether Vial, Plated Sliver", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Plated Sliver"], "actions": [{ "card": "Aether Vial" }, { "card": "Plated Sliver" }] },
+    { "index": 9, "summary": "land=Unclaimed Territory; cast: Plated Sliver, Aether Vial", "land": "Unclaimed Territory", "casts": ["Plated Sliver", "Aether Vial"], "actions": [{ "card": "Plated Sliver" }, { "card": "Aether Vial" }] },
+    { "index": 10, "summary": "land=none; cast: Aether Vial, Plated Sliver", "land": null, "casts": ["Aether Vial", "Plated Sliver"], "actions": [{ "card": "Aether Vial" }, { "card": "Plated Sliver" }] },
+    { "index": 11, "summary": "land=none; cast: Plated Sliver, Aether Vial", "land": null, "casts": ["Plated Sliver", "Aether Vial"], "actions": [{ "card": "Plated Sliver" }, { "card": "Aether Vial" }] },
+    { "index": 12, "summary": "land=Unclaimed Territory; cast: Crystalline Sliver", "land": "Unclaimed Territory", "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 13, "summary": "land=none; cast: Crystalline Sliver", "land": null, "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 14, "summary": "land=Unclaimed Territory; cast: Leeching Sliver", "land": "Unclaimed Territory", "casts": ["Leeching Sliver"], "actions": [{ "card": "Leeching Sliver" }] },
+    { "index": 15, "summary": "land=Unclaimed Territory; cast: Plated Sliver", "land": "Unclaimed Territory", "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 16, "summary": "land=none; cast: Leeching Sliver", "land": null, "casts": ["Leeching Sliver"], "actions": [{ "card": "Leeching Sliver" }] },
+    { "index": 17, "summary": "land=none; cast: Plated Sliver", "land": null, "casts": ["Plated Sliver"], "actions": [{ "card": "Plated Sliver" }] },
+    { "index": 18, "summary": "land=Unclaimed Territory; cast: Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 19, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 20, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 21, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

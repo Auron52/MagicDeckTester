@@ -1,0 +1,108 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "decisions": [
+    { "chosen": 2, "decision": {
+  "decision_index": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "name": "Ancient Ziggurat", "cost": "", "mv": 0, "kind": "land" }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Galerider Sliver", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "name": "Striking Sliver", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Ancient Ziggurat; cast: Galerider Sliver", "land": "Ancient Ziggurat", "casts": ["Galerider Sliver"], "actions": [{ "card": "Galerider Sliver" }] },
+    { "index": 1, "summary": "land=Ancient Ziggurat; cast: Striking Sliver", "land": "Ancient Ziggurat", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Galerider Sliver", "land": "Unclaimed Territory", "casts": ["Galerider Sliver"], "actions": [{ "card": "Galerider Sliver" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Striking Sliver", "land": "Unclaimed Territory", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Galerider Sliver", "land": "Secluded Courtyard", "casts": ["Galerider Sliver"], "actions": [{ "card": "Galerider Sliver" }] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: Striking Sliver", "land": "Secluded Courtyard", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 6, "summary": "land=Ancient Ziggurat; cast: (nothing)", "land": "Ancient Ziggurat", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [{ "name": "Galerider Sliver", "idx": 1, "is_land": false }, { "name": "Unclaimed Territory", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Ancient Ziggurat", "cost": "", "mv": 0, "kind": "land" }, { "name": "Cloudshredder Sliver", "cost": "{W}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "name": "Striking Sliver", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Ancient Ziggurat; cast: Crystalline Sliver", "land": "Ancient Ziggurat", "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Crystalline Sliver", "land": "Secluded Courtyard", "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 2, "summary": "land=Ancient Ziggurat; cast: Cloudshredder Sliver", "land": "Ancient Ziggurat", "casts": ["Cloudshredder Sliver"], "actions": [{ "card": "Cloudshredder Sliver" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Cloudshredder Sliver", "land": "Secluded Courtyard", "casts": ["Cloudshredder Sliver"], "actions": [{ "card": "Cloudshredder Sliver" }] },
+    { "index": 4, "summary": "land=Ancient Ziggurat; cast: Predatory Sliver", "land": "Ancient Ziggurat", "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 5, "summary": "land=Ancient Ziggurat; cast: Striking Sliver", "land": "Ancient Ziggurat", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Predatory Sliver", "land": "Secluded Courtyard", "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Striking Sliver", "land": "Secluded Courtyard", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 8, "summary": "land=none; cast: Striking Sliver", "land": null, "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 9, "summary": "land=Ancient Ziggurat; cast: (nothing)", "land": "Ancient Ziggurat", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 9, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [{ "name": "Cloudshredder Sliver", "idx": 3, "is_land": false }, { "name": "Galerider Sliver", "idx": 1, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "is_land": true }, { "name": "Unclaimed Territory", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Ancient Ziggurat", "cost": "", "mv": 0, "kind": "land" }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Predatory Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "name": "Striking Sliver", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 18, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Ancient Ziggurat; cast: Crystalline Sliver, Striking Sliver", "land": "Ancient Ziggurat", "casts": ["Crystalline Sliver", "Striking Sliver"], "actions": [{ "card": "Crystalline Sliver" }, { "card": "Striking Sliver" }] },
+    { "index": 1, "summary": "land=Ancient Ziggurat; cast: Striking Sliver, Crystalline Sliver", "land": "Ancient Ziggurat", "casts": ["Striking Sliver", "Crystalline Sliver"], "actions": [{ "card": "Striking Sliver" }, { "card": "Crystalline Sliver" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Crystalline Sliver, Striking Sliver", "land": "Secluded Courtyard", "casts": ["Crystalline Sliver", "Striking Sliver"], "actions": [{ "card": "Crystalline Sliver" }, { "card": "Striking Sliver" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Striking Sliver, Crystalline Sliver", "land": "Secluded Courtyard", "casts": ["Striking Sliver", "Crystalline Sliver"], "actions": [{ "card": "Striking Sliver" }, { "card": "Crystalline Sliver" }] },
+    { "index": 4, "summary": "land=Ancient Ziggurat; cast: Crystalline Sliver", "land": "Ancient Ziggurat", "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 5, "summary": "land=Ancient Ziggurat; cast: Predatory Sliver, Striking Sliver", "land": "Ancient Ziggurat", "casts": ["Predatory Sliver", "Striking Sliver"], "actions": [{ "card": "Predatory Sliver" }, { "card": "Striking Sliver" }] },
+    { "index": 6, "summary": "land=Ancient Ziggurat; cast: Striking Sliver, Predatory Sliver", "land": "Ancient Ziggurat", "casts": ["Striking Sliver", "Predatory Sliver"], "actions": [{ "card": "Striking Sliver" }, { "card": "Predatory Sliver" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Crystalline Sliver", "land": "Secluded Courtyard", "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: Predatory Sliver, Striking Sliver", "land": "Secluded Courtyard", "casts": ["Predatory Sliver", "Striking Sliver"], "actions": [{ "card": "Predatory Sliver" }, { "card": "Striking Sliver" }] },
+    { "index": 9, "summary": "land=Secluded Courtyard; cast: Striking Sliver, Predatory Sliver", "land": "Secluded Courtyard", "casts": ["Striking Sliver", "Predatory Sliver"], "actions": [{ "card": "Striking Sliver" }, { "card": "Predatory Sliver" }] },
+    { "index": 10, "summary": "land=none; cast: Crystalline Sliver", "land": null, "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 11, "summary": "land=Ancient Ziggurat; cast: Predatory Sliver", "land": "Ancient Ziggurat", "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 12, "summary": "land=Ancient Ziggurat; cast: Striking Sliver", "land": "Ancient Ziggurat", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 13, "summary": "land=Secluded Courtyard; cast: Predatory Sliver", "land": "Secluded Courtyard", "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 14, "summary": "land=Secluded Courtyard; cast: Striking Sliver", "land": "Secluded Courtyard", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 15, "summary": "land=none; cast: Predatory Sliver", "land": null, "casts": ["Predatory Sliver"], "actions": [{ "card": "Predatory Sliver" }] },
+    { "index": 16, "summary": "land=none; cast: Striking Sliver", "land": null, "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 17, "summary": "land=Ancient Ziggurat; cast: (nothing)", "land": "Ancient Ziggurat", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [{ "name": "Cloudshredder Sliver", "idx": 3, "is_land": false }, { "name": "Galerider Sliver", "idx": 1, "is_land": false }, { "name": "Predatory Sliver", "idx": 6, "is_land": false }, { "name": "Secluded Courtyard", "idx": 2, "is_land": true }, { "name": "Secluded Courtyard", "idx": 4, "is_land": true }, { "name": "Striking Sliver", "idx": 5, "is_land": false }, { "name": "Unclaimed Territory", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Ancient Ziggurat", "cost": "", "mv": 0, "kind": "land" }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Crystalline Sliver", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 10, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Ancient Ziggurat; cast: Crystalline Sliver, Crystalline Sliver", "land": "Ancient Ziggurat", "casts": ["Crystalline Sliver", "Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }, { "card": "Crystalline Sliver" }] },
+    { "index": 1, "summary": "land=Ancient Ziggurat; cast: Crystalline Sliver, Muscle Sliver", "land": "Ancient Ziggurat", "casts": ["Crystalline Sliver", "Muscle Sliver"], "actions": [{ "card": "Crystalline Sliver" }, { "card": "Muscle Sliver" }] },
+    { "index": 2, "summary": "land=Ancient Ziggurat; cast: Muscle Sliver, Crystalline Sliver", "land": "Ancient Ziggurat", "casts": ["Muscle Sliver", "Crystalline Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Crystalline Sliver" }] },
+    { "index": 3, "summary": "land=Ancient Ziggurat; cast: Crystalline Sliver", "land": "Ancient Ziggurat", "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 4, "summary": "land=none; cast: Crystalline Sliver", "land": null, "casts": ["Crystalline Sliver"], "actions": [{ "card": "Crystalline Sliver" }] },
+    { "index": 5, "summary": "land=Ancient Ziggurat; cast: Muscle Sliver", "land": "Ancient Ziggurat", "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 6, "summary": "land=none; cast: Muscle Sliver", "land": null, "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 7, "summary": "land=Ancient Ziggurat; cast: (nothing)", "land": "Ancient Ziggurat", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
