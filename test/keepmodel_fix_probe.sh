@@ -11,14 +11,16 @@ GAMES=${GAMES:-600}; SEEDS=${SEEDS:-"4004 5005 6006 7007"}; MAXT=${MAXT:-8}; DEP
 DECKS=${DECKS:-"th slivers burn"}
 BIN=${BIN:-./build/Release/mtg}; ANALYZE=${ANALYZE:-./build/Release/mtg-analyze}
 declare -A DECK_FILE=( [burn]=decks/test_deck.txt [antilife]=decks/Anti-Lifegain.cod
-  [slivers]=decks/slivers_vial.txt [th]=decks/treasure_hunt.txt [hinata]=decks/Hinata2.cod)
+  [slivers]=decks/slivers_vial.txt [th]=decks/treasure_hunt.txt [hinata]=decks/Hinata2.cod
+  [knights]=decks/Knights.cod)
 declare -A DECK_PROF=( [burn]=decks/test_deck.profile.json [antilife]=decks/Anti-Lifegain.profile.json
-  [slivers]=decks/slivers_vial.profile.json [th]=decks/treasure_hunt.profile.json [hinata]=decks/Hinata2.profile.json)
+  [slivers]=decks/slivers_vial.profile.json [th]=decks/treasure_hunt.profile.json [hinata]=decks/Hinata2.profile.json
+  [knights]=decks/Knights.profile.json)
 ROOT=logs/keepmodel_fix_probe; mkdir -p "$ROOT"
 echo "=== fix probe  genseed=$GENSEED gen=${GEN_GAMES}h eps$EPS iters$ITERS | ab=${GAMES}g d=$DEPTHS seeds=$SEEDS ==="
 run(){ local bud=20; [ "$3" = 0 ] && bud=0
   MTG_DUMP_WINS=1 "$BIN" "$5" --profile "$2" --seed "$4" --games "$GAMES" --depth "$3" \
-    --budget-ms $bud --max-turns "$MAXT" --lookahead-bottoming --threads 0 2>&1 1>/dev/null \
+    --budget-ms $bud --max-turns "$MAXT" --lookahead-bottoming --threads ${THREADS:-0} 2>&1 1>/dev/null \
     | grep -oE 'gi=[0-9]+ wt=-?[0-9]+' | sed -E 's/gi=([0-9]+) wt=(-?[0-9]+)/\1 \2/' | sort -n > "$6/${1}_d${3}_s${4}.wins"; }
 for key in $DECKS; do
   df=${DECK_FILE[$key]}; pf=${DECK_PROF[$key]}
