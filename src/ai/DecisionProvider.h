@@ -225,4 +225,19 @@ public:
     // only. Was an inline `HinataInPlay(state)` check in TurnSolver (audit B1); default false =
     // byte-identical (K collapses to 0), HinataProvider returns HinataInPlay(s).
     virtual bool BranchSoulfireOwnTargets(const GameState& s) const { (void)s; return false; }
+
+    // Hook 22 -- enumeration BREADTH policy: the max number of card GROUPS the plan enumerator
+    // keeps for a turn (groups beyond this, lowest by SituationalCardRank, drop out). A tractability
+    // cap -- a deep dig can leave ~20 distinct nonland casts whose powerset dominates the whole
+    // search -- so it is provider-OWNED policy now rather than a hardcoded solver constant (audit
+    // A1): a combo deck that needs wider enumeration can raise it. Default 12 = the prior generic
+    // value (byte-identical; inert for any hand with <= cap groups). MTG_SOLVE_GROUP_CAP /
+    // MTG_NO_GROUP_CAP / MTG_UNPRUNED still override engine-side for A/B.
+    virtual int EnumGroupCap() const { return 12; }
+
+    // Hook 23 -- fetch BREADTH policy: how many of FetchCandidates' ordered targets the search
+    // branches on (the list is best-first; lower ranks are strictly worse colour, a basic ranks
+    // last). Provider-OWNED (audit A2) instead of a hardcoded solver constant. Default 2 = the prior
+    // generic value (byte-identical). MTG_UNPRUNED still opens the full list engine-side.
+    virtual int FetchSearchCap() const { return 2; }
 };

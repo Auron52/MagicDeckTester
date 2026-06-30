@@ -912,15 +912,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
 // dead cards the rank already deprioritizes) drop out of THIS turn's enumeration. Lossy, so gated:
 // inert for any hand with <= cap groups (the whole suite is byte-identical), and disabled by
 // MTG_NO_GROUP_CAP / MTG_UNPRUNED for the standing A/B (ON vs OFF give byte-identical search-node
-// counts on Hinata -- the pruned groups never produced the optimal plan). MTG_SOLVE_GROUP_CAP tunes K.
-int SolveGroupCap()
-{
-    static const int v = []{
-        const char* e = std::getenv("MTG_SOLVE_GROUP_CAP"); int x = e ? std::atoi(e) : 12;
-        return x < 1 ? 1 : x;
-    }();
-    return v;
-}
+// counts on Hinata -- the pruned groups never produced the optimal plan). The cap VALUE is now
+// provider-owned policy (DecisionProvider::EnumGroupCap, audit A1); MTG_SOLVE_GROUP_CAP still tunes K.
 bool GroupCapDisabled()
 {
     static const bool v = std::getenv("MTG_NO_GROUP_CAP") != nullptr;
@@ -931,8 +924,10 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                                        std::vector<std::vector<int>>& groups,
                                        std::vector<int>& group_hand_index)
 {
-    const int cap = SolveGroupCap();
     if (GroupCapDisabled() || DecisionUnpruned()) { return; }
+    // The provider supplies the breadth policy; the env knob is an engine-side A/B override.
+    int cap = ResolveProvider(state).EnumGroupCap();
+    if (const char* e = std::getenv("MTG_SOLVE_GROUP_CAP")) { int x = std::atoi(e); cap = x < 1 ? 1 : x; }
     if (static_cast<int>(groups.size()) <= cap)    { return; }
 
     const DecisionProvider& prov = ResolveProvider(state);
@@ -3879,7 +3874,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // top few (it orders best-first; lower-ranked targets are strictly worse on colour and
     // a basic always ranks last, so the cap drops only clearly-inferior fetches). A single
     // candidate (or none) plays the heuristic top pick with no extra branching (Pass 1).
-    constexpr int kMaxFetchSearchTargets = 2;
+    // The cap is provider-owned policy (DecisionProvider::FetchSearchCap, audit A2).
+    const int kMaxFetchSearchTargets = ResolveProvider(state).FetchSearchCap();
     for (const std::string& ln : land_names)
     {
         const CardDefinition* ld = CardDatabase::Instance().Lookup(ln);
