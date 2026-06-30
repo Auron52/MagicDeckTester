@@ -473,6 +473,98 @@ static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std
     os << "}\n";
 }
 
+// A target-set option for a damage spell's board-click targeting decision: the chosen targets
+// (int-encoded) plus a human label. Built from the live board.
+struct TargetOption { std::vector<ChosenTarget> targets; std::string label; };
+
+// Legal damage targets on the board, in a stable order: opponent face, then every creature
+// (opp first, then yours, board order), then your own face. Each carries a display label.
+static void CollectDamageTargets(const GameState& s, int controller,
+                                 std::vector<ChosenTarget>& out, std::vector<std::string>& labels)
+{
+    int opp = 1 - controller;
+    out.push_back({ 0, opp });        labels.push_back("Opponent (face)");
+    auto add_creatures = [&](int side) {
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& p = s.battlefield[i];
+            if (p.controller_index != side) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || !d->card.IsCreature()) { continue; }
+            out.push_back({ 1, i });
+            labels.push_back(p.card.m_name.str() + (side == controller ? " (yours)" : " (opponent)"));
+        }
+    };
+    add_creatures(opp);
+    add_creatures(controller);
+    out.push_back({ 0, controller }); labels.push_back("You (face)");
+}
+
+// Enumerate legal target-set options for a uniform-damage spell: every nonempty subset of the
+// legal targets with 1..max_targets members. Bounded (capped) so a big board can't explode the menu.
+static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTarget>& legal,
+                                                     const std::vector<std::string>& labels, int max_targets)
+{
+    std::vector<TargetOption> opts;
+    const int n = static_cast<int>(legal.size());
+    const int cap = std::max(1, std::min(max_targets, n));
+    for (int mask = 1; mask < (1 << n) && opts.size() < 256; ++mask)
+    {
+        int bits = __builtin_popcount(static_cast<unsigned>(mask));
+        if (bits > cap) { continue; }
+        TargetOption o; std::string lbl;
+        for (int i = 0; i < n; ++i)
+        {
+            if (!(mask & (1 << i))) { continue; }
+            o.targets.push_back(legal[i]);
+            lbl += (lbl.empty() ? "" : " + ") + labels[i];
+        }
+        o.label = lbl;
+        opts.push_back(std::move(o));
+    }
+    return opts;
+}
+
+// Emit a board-click target decision for a uniform-damage spell. `options` (built by the caller)
+// each map a target set + label; the player replies one index. `per_target` = damage each target
+// takes (Crackle 5*X, else the fixed damage). `heuristic_default` = the option matching the AI pick.
+static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                    const std::vector<ChosenTarget>& legal, const std::vector<std::string>& legal_labels,
+                                    const std::vector<TargetOption>& options, int per_target,
+                                    int max_targets, int heuristic_default, int decision_index)
+{
+    const Player& me = s.ActivePlayer();
+    int           opp = 1 - s.active_player_index;
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"target\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets << ",\n";
+    os << "  \"me\": { \"life\": " << me.life << " }, \"opponent\": { \"life\": " << s.players[opp].life << " },\n";
+    os << "  \"legal_targets\": [";
+    for (size_t i = 0; i < legal.size(); ++i)
+    { if (i) os << ", "; os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : "permanent")
+                            << "\", \"index\": " << legal[i].index << ", \"label\": "; JsonStr(os, legal_labels[i]); os << " }"; }
+    os << "],\n";
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"options\": [";
+    for (size_t oi = 0; oi < options.size(); ++oi)
+    {
+        if (oi) os << ", ";
+        os << "{ \"index\": " << oi << ", \"label\": "; JsonStr(os, options[oi].label);
+        os << ", \"targets\": [";
+        for (size_t ti = 0; ti < options[oi].targets.size(); ++ti)
+        { if (ti) os << ", "; os << "{ \"kind\": \"" << (options[oi].targets[ti].kind == 0 ? "player" : "permanent")
+                                  << "\", \"index\": " << options[oi].targets[ti].index << " }"; }
+        os << "] }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply an option index. Each chosen target takes " << per_target
+       << " damage (up to " << max_targets << " target(s)). Default = the AI's pick (face).\"\n";
+    os << "}\n";
+}
+
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
 // and commas (no MTG name contains ';' or '='), so they pass through verbatim.
@@ -652,9 +744,54 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_top_chooser = &top_chooser;
 
+    // Board-click targeting for uniform-damage spells (fixed burn, Crackle). Fired from
+    // CastSpellFromHand during the real cast; shares the --choices stream. The player replies one
+    // option index (a target set). Prepopulated default = the AI's heuristic pick (usually face).
+    TargetChooser target_chooser =
+        [&](const GameState& s, const CardDefinition& def, int controller, int max_targets,
+            const std::vector<ChosenTarget>& heuristic) -> std::vector<ChosenTarget>
+        {
+            std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
+            CollectDamageTargets(s, controller, legal, legal_labels);
+            std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets);
+            if (opts.empty()) { return heuristic; }
+            int per_target = def.params.x_damage_multiplier > 0
+                           ? def.params.x_damage_multiplier * std::max(1, max_targets) : def.params.damage;
+            // Default index = the option whose target set matches the heuristic pick.
+            auto same = [](const std::vector<ChosenTarget>& a, const std::vector<ChosenTarget>& b) {
+                if (a.size() != b.size()) { return false; }
+                for (size_t i = 0; i < a.size(); ++i) { if (a[i].kind != b[i].kind || a[i].index != b[i].index) { return false; } }
+                return true; };
+            int def_idx = 0;
+            for (size_t i = 0; i < opts.size(); ++i) { if (same(opts[i].targets, heuristic)) { def_idx = static_cast<int>(i); break; } }
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(opts.size())) { chosen = def_idx; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return opts[chosen].targets;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_target_chooser = &target_chooser;
+
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);
     g_play_top_chooser = nullptr;
+    g_play_target_chooser = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.

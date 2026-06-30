@@ -1964,8 +1964,47 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
             if (t == Targeting::Any || t == Targeting::Player)
             {
-                state.players[opp_idx].life -= dmg;
-                if (dmg > 0) { state.opponent_lost_life_this_turn = true; }
+                // Human-play board-click targeting (claude-play): deal `dmg` to each chosen target
+                // (face or a creature) instead of always the opponent face. The chooser is nulled by
+                // RevealLogPause for the search/rollout, so this is byte-identical there (face only).
+                // Uniform per-target damage: a fixed burn, or Crackle's 5X to up to X targets. Soulfire
+                // (damage_equals_top_mv) is handled above and never reaches here as a retargetable set.
+                if (g_play_target_chooser && dmg > 0 && !def.params.damage_equals_top_mv)
+                {
+                    int max_targets = def.params.x_damage_multiplier > 0 ? std::max(1, chosen_x) : 1;
+                    std::vector<ChosenTarget> heur = { { 0, opp_idx } };   // default: opponent face
+                    std::vector<ChosenTarget> picked =
+                        (*g_play_target_chooser)(state, def, state.active_player_index, max_targets, heur);
+                    if (picked.empty()) { picked = heur; }
+                    for (const ChosenTarget& c : picked)
+                    {
+                        if (c.kind == 0)
+                        {
+                            state.players[c.index].life -= dmg;
+                            if (c.index == opp_idx && dmg > 0) { state.opponent_lost_life_this_turn = true; }
+                        }
+                        else if (c.index >= 0 && c.index < static_cast<int>(state.battlefield.size()))
+                        {
+                            state.battlefield[c.index].damage += dmg;   // SBA sweep below removes the dead
+                        }
+                    }
+                    // State-based: destroy creatures with lethal damage (highest index first so the
+                    // erase doesn't shift a not-yet-processed index).
+                    for (int bi = static_cast<int>(state.battlefield.size()) - 1; bi >= 0; --bi)
+                    {
+                        Permanent& p = state.battlefield[bi];
+                        if (p.card.IsCreature() && p.damage > 0 && p.damage >= p.EffectiveToughness())
+                        {
+                            state.players[p.owner_index].graveyard.push_back(p.card);
+                            state.battlefield.erase(state.battlefield.begin() + bi);
+                        }
+                    }
+                }
+                else
+                {
+                    state.players[opp_idx].life -= dmg;
+                    if (dmg > 0) { state.opponent_lost_life_this_turn = true; }
+                }
             }
             else if (t == Targeting::Creature || t == Targeting::Multi)
             {

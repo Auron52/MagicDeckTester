@@ -211,6 +211,21 @@ using TopChooser = std::function<TopDisposition(const GameState& state, const st
 // Set for the duration of a --claude-play game; nullptr (and so inert) otherwise.
 extern thread_local TopChooser* g_play_top_chooser;
 
+// ---- Human-play target chooser (board-click target selection) --------------------------
+// Damage spells (burn, Crackle, ...) target the opponent face by the heuristic. Under
+// --claude-play the human may instead pick targets off the board (face / a creature). A
+// ChosenTarget is an int-encoded Target (kind 0 = player at `index`, 1 = permanent at `index`)
+// so this header needn't see the Target struct. CastSpellFromHand asks the chooser AFTER it has
+// built the heuristic targets (those are passed as the prepopulated default); the chooser returns
+// the player's set. RevealLogPause nulls it for search/rollout scopes, so it fires only for real
+// casts. Inert (heuristic) unless set.
+struct CardDefinition;
+struct ChosenTarget { int kind = 0; int index = 0; };   // kind 0 -> player_index, 1 -> permanent_index
+using TargetChooser = std::function<std::vector<ChosenTarget>(
+    const GameState& state, const CardDefinition& def, int controller,
+    int max_targets, const std::vector<ChosenTarget>& heuristic_default)>;
+extern thread_local TargetChooser* g_play_target_chooser;
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -218,9 +233,12 @@ struct RevealLogPause
 {
     GameLogger* saved;
     TopChooser* saved_chooser;
-    RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser)
-    { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; }
-    ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser; }
+    TargetChooser* saved_tchooser;
+    RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
+                       saved_tchooser(g_play_target_chooser)
+    { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr; }
+    ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
+                        g_play_target_chooser = saved_tchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

@@ -199,6 +199,14 @@
     background:#15171b; color:var(--fg); border-radius:7px; cursor:pointer; font-family:inherit; }
   button.lookopt:hover { border-color:var(--acc); background:#1a1d22; }
   button.lookopt.primary { border-color:var(--acc); background:#1f2d3a; }
+  /* board-click target selection */
+  .zone.targets .trow { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  button.tgt { padding:8px 12px; font-size:13px; border:1px solid var(--line); background:#15171b;
+    color:var(--fg); border-radius:7px; cursor:pointer; font-family:inherit; }
+  button.tgt.face { border-style:dashed; }
+  button.tgt:hover { border-color:var(--acc); }
+  button.tgt.on { border-color:var(--bad); background:#3a1d1d; box-shadow:0 0 0 1px var(--bad) inset; }
+  #tgtconfirm { margin-top:4px; }
   .hist { list-style:none; margin:0; padding:0; font-size:12.5px; }
   .hist li { padding:5px 8px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
   .hist li .t { color:var(--muted); white-space:nowrap; } .hist li.rej .lab { color:var(--bad); } .hist li.win .lab { color:var(--good); }
@@ -347,6 +355,7 @@ function renderBoard() {
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; return; }
   if (!S.over && d.type === 'vial_charge') { renderVialBoard(d); wireBoard(); return; }
   if (!S.over && (d.type === 'scry' || d.type === 'reorder' || d.type === 'surveil')) { renderLookBoard(d); return; }
+  if (!S.over && d.type === 'target') { renderTargetBoard(d); return; }
   const me = d.me||{}, opp = d.opponent||{};
   const oppBf = opp.battlefield||[];
   const oppLands = oppBf.filter(x=>x.is_land), oppPerms = oppBf.filter(x=>!x.is_land);
@@ -710,6 +719,47 @@ function renderLookBoard(d) {
     S.prev = S.decision; S.choices.push(oi); renderHistory(); step();
   });
 }
+// Board-click target selection for a uniform-damage spell. Renders the legal targets (opponent
+// face, creatures, your face) as clickable chips, PREPOPULATED with the AI's heuristic pick, and
+// lets the player toggle up to max_targets. Confirm maps the selection to an enumerated option
+// index (the engine's --choices stream). Each chosen target takes per_target_damage.
+function targetKey(t){ return t.kind+':'+t.index; }
+function renderTargetBoard(d) {
+  // initialise selection from the heuristic default option (once per decision)
+  if (!S.targetSel || S._targetFor !== d.decision_index) {
+    const def = (d.options||[]).find(o=>o.index===d.heuristic_default) || {targets:[]};
+    S.targetSel = (def.targets||[]).map(targetKey);
+    S._targetFor = d.decision_index;
+  }
+  const max = d.max_targets||1, sel = new Set(S.targetSel);
+  let h = `<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span><span class="phase">choose targets — ${esc(d.source||'')}</span></div>`;
+  h += `<div class="lifebar"><span class="life">You <b class="you">${d.me?.life ?? ''}</b></span><span class="life">Opponent <b class="opp">${d.opponent?.life ?? ''}</b></span></div>`;
+  h += `<div class="zone targets"><h3>Targets — ${d.per_target_damage} damage each · pick up to ${max} <span class="help">click to select; the AI's pick is preselected</span></h3><div class="trow">`;
+  (d.legal_targets||[]).forEach(t=>{
+    const k = targetKey(t), on = sel.has(k);
+    const cls = t.kind==='player' ? 'tgt face' : 'tgt creature';
+    h += `<button class="${cls}${on?' on':''}" data-k="${esc(k)}">${esc(t.label)}</button>`;
+  });
+  h += `</div></div>`;
+  h += `<div class="zone"><button id="tgtconfirm" class="primary" ${sel.size?'':'disabled'}>Confirm ${sel.size} target${sel.size===1?'':'s'}</button></div>`;
+  const board = $('board'); board.innerHTML = h;
+  board.querySelectorAll('button[data-k]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.k, s=new Set(S.targetSel);
+    if (s.has(k)) s.delete(k);
+    else { if (max===1) s.clear(); if (s.size<max) s.add(k); }
+    S.targetSel = [...s]; renderTargetBoard(d);   // re-render to update highlight + count
+  });
+  const cb = $('tgtconfirm');
+  if (cb) cb.onclick=()=>{
+    // find the option whose target set matches the selection (order-independent)
+    const want = [...new Set(S.targetSel)].sort().join('|');
+    const opt = (d.options||[]).find(o=>(o.targets||[]).map(targetKey).sort().join('|')===want);
+    const oi = opt ? opt.index : d.heuristic_default;
+    const labels = (d.legal_targets||[]).filter(t=>S.targetSel.includes(targetKey(t))).map(t=>t.label);
+    S.history.push({ turn:d.turn, label:`${d.source}: ${labels.join(', ')||'face'}` });
+    S.prev=S.decision; S.choices.push(oi); S.targetSel=null; renderHistory(); step();
+  };
+}
 function renderVialBoard(d) {
   $('board').innerHTML=`<div id="turnbar"><span class="turn">Turn ${d.turn ?? '?'}</span><span class="phase">aether vial</span></div>`+
     `<div class="lifebar"><span class="life">You <b class="you">${d.me.life}</b></span><span class="life">Opponent <b class="opp">${d.opponent.life}</b></span></div>`+
@@ -728,7 +778,7 @@ function renderVialSlot() {
 }
 
 // ---- flow ------------------------------------------------------------------
-function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; $('endcontrols').style.display='none'; renderBoard(); renderVialSlot(); }
+function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; if(dec&&dec.type!=='target'){S.targetSel=null;S._targetFor=null;} $('endcontrols').style.display='none'; renderBoard(); renderVialSlot(); }
 function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
 function hideVerdict() { $('verdict').style.display='none'; }
 function showError(msg, raw) { $('board').innerHTML=`<div class="err">⚠ ${esc(msg)}${raw?'\n\n'+esc(raw):''}</div>`; }
