@@ -253,6 +253,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0);
         os << ", \"kind\": \"" << HandKind(d) << "\"";
         if (HandIsDraw(d)) { os << ", \"is_draw\": true"; }
+        // is_creature lets the GUI offer an Aether Vial deploy (a creature whose MV equals a
+        // Vial's charge counters can be put onto the battlefield for free).
+        if (d && d->card.IsCreature()) { os << ", \"is_creature\": true"; }
         // Staged (exiled-but-playable) cards live in hand with m_is_staged set; surface that so
         // the GUI sets them apart (Light Up the Stage / Soulfire Eruption / Expressive Iteration).
         if (hc->m_is_staged) { os << ", \"is_staged\": true, \"staged_until\": " << hc->m_staged_expiry; }
@@ -260,6 +263,17 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     }
     os << "]";
     os << ", \"graveyard\": "; JsonNameArray(os, gy);
+    // Retrace: graveyard spells castable from the yard (pay cost + discard a land). The GUI makes
+    // these clickable in the graveyard zone; absent when the yard holds no retrace card.
+    {
+        std::vector<std::string> rt;
+        for (const Card& c : me.graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.retrace) { rt.push_back(c.m_name); }
+        }
+        if (!rt.empty()) { std::sort(rt.begin(), rt.end()); os << ", \"retrace_gy\": "; JsonNameArray(os, rt); }
+    }
     os << ", \"library_size\": " << me.library.size();
     // Floating (unspent) mana in the pool. Usually empty at a main-phase breakpoint (the pool is
     // cleared at turn start and a line is committed atomically), so emit only when non-empty.
@@ -416,6 +430,8 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         if      (key == "land")      { ls.has_land = true; ls.land = val; }
         else if (key == "cast")      { ls.casts.push_back(val); }
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
+        else if (key == "vial")      { ls.vial_deploys.push_back(val); }
+        else if (key == "retrace")   { ls.retrace_casts.push_back(val); }
     }
     return ls;
 }

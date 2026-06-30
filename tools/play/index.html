@@ -100,6 +100,22 @@
   .hand .thumb.staged img { box-shadow:0 0 0 2px #9a6ad1; }
   .hand .thumb .stagedbadge { position:absolute; top:2px; left:2px; background:rgba(154,106,209,.95); color:#0c1116;
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
+  /* Aether Vial: the permanent is a clickable deploy source; matching-MV hand creatures light up */
+  .thumb.vial-src { cursor:pointer; box-shadow:0 0 0 1px var(--acc) inset; }
+  .thumb.vial-src.active img { box-shadow:0 0 0 2px var(--acc), 0 0 10px rgba(90,169,230,.55); }
+  .hand .thumb.vialhot { cursor:pointer; box-shadow:0 0 0 2px var(--acc); }
+  .hand .thumb.vialhot:hover { box-shadow:0 0 0 2px #8fc7f0, 0 0 8px rgba(90,169,230,.5); }
+  /* Retrace: a graveyard card you can cast from there */
+  .zone.gy .thumb.retrace-src { cursor:pointer; opacity:1; box-shadow:0 0 0 2px #c98a3a; }
+  .zone.gy .thumb.retrace-src:hover { box-shadow:0 0 0 2px #e6a94c, 0 0 8px rgba(201,138,58,.5); }
+  .thumb .rtbadge { position:absolute; top:2px; left:2px; background:rgba(201,138,58,.95); color:#0c1116;
+      border-radius:4px; font-size:11px; font-weight:700; padding:0 4px; z-index:2; }
+  /* source badge on a planned (this-turn) vial/retrace card */
+  .thumb.planned .srcbadge { position:absolute; bottom:2px; right:2px; border-radius:4px; font-size:10px;
+      font-weight:700; padding:0 3px; z-index:3; color:#0c1116; }
+  .thumb.planned .srcbadge.vial { background:var(--acc); } .thumb.planned .srcbadge.retrace { background:#e6a94c; }
+  #planbar .chip.vial { border-color:var(--acc); background:#1f2d3a; } #planbar .chip.vial .nm { color:var(--acc); }
+  #planbar .chip.retrace { border-color:#7a5a2e; background:#332817; } #planbar .chip.retrace .nm { color:#e6a94c; }
   /* planned (this-turn) card: green ring + order badge + remove */
   .thumb.planned img { box-shadow:0 0 0 2px var(--good); }
   .thumb.planned .ord { position:absolute; top:-7px; left:-7px; background:var(--good); color:#0c1116;
@@ -221,7 +237,7 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
-          plan:[], hadReject:false, busy:false, leMode:false };
+          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null };
 
 function cfg(extra) {
   return Object.assign({
@@ -250,7 +266,9 @@ function leMax() {
 }
 function encodeLine() {
   const parts=[]; const l=planLand(); if(l) parts.push('land='+l.name);
-  for(const p of S.plan) if(p.kind!=='land' && p.kind!=='le') parts.push('cast='+p.name);
+  for(const p of S.plan) if(p.kind!=='land' && p.kind!=='le' && p.kind!=='vial' && p.kind!=='retrace') parts.push('cast='+p.name);
+  for(const p of S.plan) if(p.kind==='vial')    parts.push('vial='+p.name);
+  for(const p of S.plan) if(p.kind==='retrace') parts.push('retrace='+p.name);
   const n=leCount(); if(n>0) parts.push('landsedge='+n);
   return parts.length ? parts.join(';') : 'pass';
 }
@@ -269,7 +287,7 @@ function queueCard(name, kind) {
   renderBoard();
 }
 function removePlanAt(i) { S.plan.splice(i,1); renderBoard(); }
-function clearPlan() { S.plan=[]; S.leMode=false; hideVerdict(); renderBoard(); }
+function clearPlan() { S.plan=[]; S.leMode=false; S.vialMode=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
 // Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
@@ -292,18 +310,28 @@ function floatingManaHtml(me) {
 function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const land = !!o.is_land;
   const le = !!o.is_le;   // a Land's Edge-style "discard a land: deal N" source
+  // An Aether Vial carries a "charge" counter; clicking it deploys a creature whose mana value
+  // equals the charge count (the counter badge already shows the count).
+  const charge = (o.counters||[]).find(c=>c.kind==='charge');
+  const isVial = !!charge && !S.over;
+  const vialActive = isVial && S.vialMode===charge.count;
   const cls = le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell');
-  return `<span class="thumb ${cls}" data-name="${esc(o.name)}"${le?' data-le="1" title="click to discard lands to Land’s Edge"':''}>`+
+  const vcls = isVial ? ` vial-src${vialActive?' active':''}` : '';
+  const attrs = le ? ' data-le="1" title="click to discard lands to Land’s Edge"'
+              : isVial ? ` data-vial="${charge.count}" title="click to deploy a creature with mana value ${charge.count} via this Vial"` : '';
+  return `<span class="thumb ${cls}${vcls}" data-name="${esc(o.name)}"${attrs}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
     counterBadges(o)+
     `<em>${esc(o.name)}</em></span>`;
 }
 function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
+  const src = entry.kind==='vial'    ? `<span class="srcbadge vial" title="deployed via Aether Vial (free)">⚡</span>`
+            : entry.kind==='retrace' ? `<span class="srcbadge retrace" title="cast from graveyard via Retrace (discards a land)">↩</span>` : '';
   return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}" data-name="${esc(entry.name)}">`+
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
-    `<em>${esc(entry.name)}</em></span>`;
+    src+`<em>${esc(entry.name)}</em></span>`;
 }
 function zoneRow(items) { return `<div class="row">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
@@ -326,8 +354,9 @@ function renderBoard() {
     const t=plannedThumb(p,i,ord[i]);
     if(p.kind==='le') plannedLE.push(t);           // discarded to Land's Edge -> its own zone
     else if(p.kind==='land') plannedLands.push(t);
+    else if(p.kind==='retrace') plannedSpells.push(t);   // retrace = sorcery/instant from the yard
     else if(p.kind==='nonpermanent') plannedSpells.push(t);
-    else plannedPerms.push(t); });
+    else plannedPerms.push(t); });   // 'vial' deploy is a creature -> the permanents zone
 
   const meBf = me.battlefield||[];
   const meLands = meBf.filter(x=>x.is_land).map(bfThumb);
@@ -368,9 +397,16 @@ function renderBoard() {
   }
   h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands))+`</div>`;
   h += `</div>`;  // /playfield
-  if (me.graveyard && me.graveyard.length)
-    h += `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})</h3>`+
-         zoneRow(me.graveyard.map(n=>bfThumb({name:n,is_land:false})))+`</div>`;
+  if (me.graveyard && me.graveyard.length) {
+    const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace
+    const gyThumbs = me.graveyard.map(n => rset.has(n)
+      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-retrace="1" title="click to cast from graveyard via Retrace (discards a land)">`+
+        `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
+        `<span class="rtbadge" title="Retrace — cast from here, discarding a land">↩</span><em>${esc(n)}</em></span>`
+      : bfThumb({name:n,is_land:false}));
+    const hint = rset.size ? ` <span class="help">↩ click a Retrace card to cast it from here (discards a land)</span>` : '';
+    h += `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})${hint}</h3>`+zoneRow(gyThumbs)+`</div>`;
+  }
   // hand palette (the SOURCE you drag from; only while playing)
   if (!S.over) h += `<div class="zone hand" id="handzone"><h3>Hand <span class="help">double-click = cast/play · drag onto your field above`+
        (d.lands_edge?(S.leMode?` · ⚡ <b>Land’s Edge active</b> — click lands to discard (${d.lands_edge.rate} dmg each)`:` · ⚡ click your Land’s Edge to discard lands to it`):` · single-click = activate ability`)+`</span></h3>`+
@@ -398,8 +434,10 @@ function renderPlanbar() {
   // (per-land removal lives in the discard zone), appended at the end.
   const chips = S.plan.map((p,i)=>{
     if (p.kind==='le') return '';
-    return `<span class="chip ${p.kind==='land'?'land':'spell'}"><span class="n">${i+1}</span>`+
-      `<span class="nm" data-name="${esc(p.name)}">${esc(p.name)}</span><span class="x" data-rm="${i}">✕</span></span>`;
+    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='land'?'land':'spell');
+    const tag = p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':'';
+    return `<span class="chip ${cls}"><span class="n">${i+1}</span>`+
+      `<span class="nm" data-name="${esc(p.name)}">${esc(p.name)}${tag}</span><span class="x" data-rm="${i}">✕</span></span>`;
   }).join('');
   const nLE = leCount();
   const leChip = nLE ? `<span class="chip le"><span class="nm">⚡ Land’s Edge ×${nLE} → ${nLE*rate} dmg</span></span>` : '';
@@ -437,7 +475,8 @@ function renderHand() {
     const total = counts[c.name]||0;
     const spent = land && (q+leN) >= total;          // every copy is played or discarded -> dim it
     const lehot = land && S.leMode && (q+leN) < total;  // a clickable discard target in active mode
-    html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
+    const vialhot = S.vialMode!=null && c.is_creature && c.mv===S.vialMode;  // deployable via the active Vial
+    html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
       `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
       (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
       (c.is_draw?`<span class="draws" title="draws — re-prompts after; commit without a land to play a revealed one">↻ draws</span>`:'')+
@@ -476,6 +515,12 @@ function wireBoard() {
   // click the Land's Edge permanent (the ability source) to enter/exit discard mode
   $('board').querySelectorAll('.thumb[data-le]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); toggleLeMode(); });
+  // click an Aether Vial to enter/exit deploy mode (then click a matching-MV creature in hand)
+  $('board').querySelectorAll('.thumb[data-vial]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); toggleVialMode(+t.dataset.vial); });
+  // click a Retrace card in the graveyard to cast it from there (discards a land)
+  $('board').querySelectorAll('.thumb[data-retrace]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); retraceCard(t.dataset.name); });
 }
 
 function renderEffects() {
@@ -502,8 +547,33 @@ function computeDiff() {
 function toggleLeMode() {
   if (S.over || !S.decision || S.decision.type!=='main_phase' || !S.decision.lands_edge) return;
   hideVerdict();
-  S.leMode = !S.leMode;
+  S.leMode = !S.leMode; if (S.leMode) S.vialMode=null;   // mutually exclusive click modes
   if (S.leMode) flashHint(`Land’s Edge active — click lands to discard them (${S.decision.lands_edge.rate} dmg each). Click Land’s Edge again to finish.`);
+  renderBoard();
+}
+
+// Click an Aether Vial to enter deploy mode for its charge value; then click a hand creature
+// whose mana value equals that charge to put it onto the battlefield for free (one per Vial).
+function toggleVialMode(charge) {
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  hideVerdict();
+  S.vialMode = (S.vialMode===charge) ? null : charge;
+  if (S.vialMode!=null) { S.leMode=false;   // mutually exclusive click modes
+    flashHint(`Aether Vial active — click a creature with mana value ${charge} in hand to deploy it free. Click the Vial again to cancel.`); }
+  renderBoard();
+}
+
+// Click a Retrace card in the graveyard to add a graveyard cast (the engine discards a land as
+// the additional cost; you need a land in hand). Toggles off if already queued.
+function retraceCard(name) {
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  hideVerdict();
+  const existing = S.plan.findIndex(p=>p.kind==='retrace' && p.name===name);
+  if (existing >= 0) { S.plan.splice(existing,1); renderBoard(); return; }
+  const hasLand = (S.decision.me.hand||[]).some(c=>c.kind==='land');
+  if (!hasLand) { flashHint(`Retrace needs a land in hand to discard.`); return; }
+  S.plan.push({name, kind:'retrace'});
+  flashHint(`Retracing ${name} from the graveyard (a land will be discarded). Commit to resolve.`);
   renderBoard();
 }
 
@@ -511,6 +581,15 @@ function activateAbility(name) {
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   const le = S.decision.lands_edge;
   const card = (S.decision.me.hand||[]).find(c=>c.name===name);
+  // Aether Vial deploy mode (entered by clicking a Vial): click a creature whose mana value
+  // matches the Vial's charge to put it onto the battlefield for free (one creature per Vial).
+  if (S.vialMode!=null) {
+    if (card && card.is_creature && card.mv===S.vialMode) {
+      hideVerdict(); S.plan.push({name, kind:'vial'}); S.vialMode=null;
+      flashHint(`Deploying ${name} via Aether Vial (free). Commit to resolve.`); renderBoard(); return;
+    }
+    flashHint(`Aether Vial: click a creature with mana value ${S.vialMode} (or click the Vial again to cancel).`); return;
+  }
   // Clicking a land only feeds Land's Edge while the mode is active (entered by clicking the
   // Land's Edge permanent). Each click discards one land; the engine fires lands generically,
   // so we only track the count, but we carry the clicked land's name so it shows in the zone.
@@ -543,7 +622,7 @@ async function commitLine() {
 }
 function applyAccepted(planIndex, label) {
   S.history.push({ turn:S.decision.turn, label });
-  S.prev = S.decision; S.choices.push(planIndex); S.plan=[]; S.leMode=false;
+  S.prev = S.decision; S.choices.push(planIndex); S.plan=[]; S.leMode=false; S.vialMode=null;
   renderHistory(); hideVerdict(); step();
 }
 function handleVerdict(v, line) {
@@ -605,7 +684,7 @@ function renderVialSlot() {
 }
 
 // ---- flow ------------------------------------------------------------------
-function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; $('endcontrols').style.display='none'; renderBoard(); renderVialSlot(); }
+function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; $('endcontrols').style.display='none'; renderBoard(); renderVialSlot(); }
 function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
 function hideVerdict() { $('verdict').style.display='none'; }
 function showError(msg, raw) { $('board').innerHTML=`<div class="err">⚠ ${esc(msg)}${raw?'\n\n'+esc(raw):''}</div>`; }
@@ -632,7 +711,7 @@ async function step() {
   else showError(res.error||'unknown error', res.raw);
 }
 async function newGame() {
-  S={ choices:[], history:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false };
+  S={ choices:[], history:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null };
   renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); await step();
 }
 // Bump Seed + Game# and start the next game — for playing several in a row.
@@ -644,7 +723,7 @@ async function nextGame() {
 async function undo() {
   if (!S.choices.length) return;
   S.choices.pop(); S.history=S.history.filter(h=>!h.win); S.history.pop();
-  S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false;
+  S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
   renderHistory(); await step();
 }
 async function saveRef() {

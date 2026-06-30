@@ -868,8 +868,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 if (!seen_gy.insert(gc.m_name).second) { continue; }
                 // Flood-engine gate (same as hand casts): a retrace card here is Throes of
                 // Chaos, which cascades into Treasure Hunt -- only recast it from the
-                // graveyard when the resulting draw has a payoff this turn.
-                if (!ResolveProvider(state).ShouldCastDrawEngine(state, state.active_player_index, *gdef))
+                // graveyard when the resulting draw has a payoff this turn. In human play the
+                // player owns that call, so the gate is bypassed and the retrace line is always
+                // offered (MTG_HUMAN_PLAY); autonomous search keeps the gate (byte-identical).
+                static const bool s_human_play_retrace = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+                if (!s_human_play_retrace &&
+                    !ResolveProvider(state).ShouldCastDrawEngine(state, state.active_player_index, *gdef))
                 {
                     continue;
                 }
@@ -5063,8 +5067,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     LineCheck out;
 
     // --- 0) Pass / cast-nothing maps to the engine's "idx < 0" pass ------------
-    // A line that only activates Land's Edge (no land, no casts) is NOT a pass.
-    if (spec.pass || (!spec.has_land && spec.casts.empty() && spec.lands_edge == 0))
+    // A line that only activates Land's Edge / deploys via Vial / retraces (no land, no hand
+    // casts) is NOT a pass -- those are real actions committed via their own verbs.
+    if (spec.pass || (!spec.has_land && spec.casts.empty() && spec.lands_edge == 0 &&
+                      spec.vial_deploys.empty() && spec.retrace_casts.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -5074,6 +5080,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     const std::string wantLand = spec.has_land ? spec.land : std::string();
     std::vector<std::string> sortedCasts = spec.casts;
     std::sort(sortedCasts.begin(), sortedCasts.end());
+    std::vector<std::string> sortedVial = spec.vial_deploys;
+    std::sort(sortedVial.begin(), sortedVial.end());
+    std::vector<std::string> sortedRetrace = spec.retrace_casts;
+    std::sort(sortedRetrace.begin(), sortedRetrace.end());
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
     // A "match" is same land + same multiset of cast card names. Several enumerated plans can
@@ -5095,20 +5105,30 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         const Plan& p = plans[i];
         const std::string planLand = p.land_decided ? p.land_to_play : std::string();
         if (planLand != wantLand) { continue; }
-        // Land's Edge activations are matched by COUNT against spec.lands_edge, not folded into
-        // the cast-name multiset (their card_name is "Land's Edge" but the human commits them via
-        // the separate landsedge= verb, not as a cast).
+        // Actions split by how the human commits them, each matched against its own verb:
+        //   DiscardToLandsEdge -> a COUNT vs spec.lands_edge (card_name is "Land's Edge")
+        //   ActivateVial       -> creature names vs spec.vial_deploys (free Vial deploy)
+        //   CastFromGraveyard  -> spell names vs spec.retrace_casts (retrace)
+        //   everything else    -> the plain hand-cast multiset vs spec.casts (order honoured)
         int planLE = 0;
-        std::vector<std::string> orderNames;
+        std::vector<std::string> orderNames, vialNames, retraceNames;
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
+            if (a.kind == Action::Kind::ActivateVial)       { vialNames.push_back(a.card_name); continue; }
+            if (a.kind == Action::Kind::CastFromGraveyard)  { retraceNames.push_back(a.card_name); continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
         std::vector<std::string> sortedNames = orderNames;
         std::sort(sortedNames.begin(), sortedNames.end());
         if (sortedNames != sortedCasts) { continue; }
+        std::vector<std::string> sortedVialNames = vialNames;
+        std::sort(sortedVialNames.begin(), sortedVialNames.end());
+        if (sortedVialNames != sortedVial) { continue; }
+        std::vector<std::string> sortedRetraceNames = retraceNames;
+        std::sort(sortedRetraceNames.begin(), sortedRetraceNames.end());
+        if (sortedRetraceNames != sortedRetrace) { continue; }
 
         // Per-decision tokens, order-INDEPENDENT (sorted) so plans differing only in cast order
         // share a signature; a real sub-decision difference (target / X / keep / fetch) splits it.

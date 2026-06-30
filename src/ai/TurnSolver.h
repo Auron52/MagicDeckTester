@@ -235,6 +235,10 @@ public:
         std::string land;                    // the land card name (has_land)
         std::vector<std::string> casts;      // hand spells to cast, in clicked order
         int         lands_edge = 0;          // discard this many lands to Land's Edge (0 = none)
+        std::vector<std::string> vial_deploys;  // creatures put onto the battlefield via Aether
+                                                // Vial (MV == the Vial's charge counters), free
+        std::vector<std::string> retrace_casts; // spells cast from the graveyard via Retrace
+                                                // (pay cost + discard a land each)
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,
