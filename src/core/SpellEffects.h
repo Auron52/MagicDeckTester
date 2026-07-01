@@ -2659,12 +2659,33 @@ namespace tapstats
     inline Dumper g_dumper;
 }
 
+// Branch-and-bound gate for the backtracker (MTG_NO_MAXMANA_GATE disables it; A/B perf lever).
+// Default ON: it is LOSSLESS (an upper bound only ever short-circuits provably-unpayable costs).
+inline bool MaxManaGateEnabled()
+{ static const bool v = std::getenv("MTG_NO_MAXMANA_GATE") == nullptr; return v; }
+
+// UPPER bound on the net mana one tap of `def` can add to the floating pool -- used to bound the
+// total mana still extractable from a set of untapped sources. Deliberately over- (never under-)
+// counts so the gate stays lossless: an unfed filter/ramp-filter or a solo Reflecting Pool really
+// yields less, but a looser bound only fails to prune, it never prunes a payable cost.
+//   - is_filter    : {T} -> {C} is +1 net; the "feed 1, add 2" branch is also +1 net. Max = 1.
+//   - ramp_filter  : "feed 1, add one of each colour" -> net |produces|-1 (Ferrous Lake, 2c -> +1).
+//   - everything else (basic land / dork / rock / Reflecting Pool) : its per-tap output.
+inline int SourceMaxNet(const CardDefinition& def)
+{
+    if (def.params.is_filter)   { return 1; }
+    if (def.params.ramp_filter) { const int p = static_cast<int>(def.params.produces.size());
+                                  return p > 0 ? p - 1 : 0; }
+    return ManaProducedPerTap(def);
+}
+
 inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors = nullptr,
                                 TapBacktrackMemo* fail_memo = nullptr,
                                 ManaPool* out_leftover = nullptr,
-                                std::uint64_t tapped_mask = 0)
+                                std::uint64_t tapped_mask = 0,
+                                int untapped_max = -1)
 {
     if (floating.CanPay(cost))
     {
@@ -2717,6 +2738,41 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                    | (cl(floating.red) << 24) | (cl(floating.green) << 32)
                    | (cl(floating.colorless) << 40) | (cl(floating.wild) << 48);
         if (fail_memo->count(key)) { return false; }
+    }
+
+    // Branch-and-bound TOTAL-mana gate (lossless). `untapped_max` is an UPPER bound on the total
+    // mana still extractable from the active player's untapped sources (SourceMaxNet summed).
+    // Computed ONCE at the top-level call and threaded down -- activate() subtracts the tapped
+    // source's bound, so every node's check is O(1). If floating + untapped_max cannot cover the
+    // cost's total pips, NO tap ordering from here pays it, so prune the whole subtree now instead
+    // of exploring it to prove failure. This targets the combo-turn tail directly: big-{X} probes
+    // fail on TOTAL mana and otherwise walk the entire tree (why the fail-memo exists). Byte-
+    // identical: an over-count only loosens the bound, so a payable cost is never pruned; on reject
+    // we record the failure (like the loop's fall-through) so revisits short-circuit too.
+    if (MaxManaGateEnabled())
+    {
+        if (untapped_max < 0)   // top-level: sum the board's remaining max output once
+        {
+            untapped_max = 0;
+            for (int i = 0; i < n; ++i)
+            {
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != active || p.tapped) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!d) { continue; }
+                const bool is_src = (d->tmpl == CardTemplate::BasicLand)
+                                 || (d->tmpl == CardTemplate::ManaDork && p.CanTap())
+                                 || d->params.mana_rock;
+                if (!is_src) { continue; }
+                if (d->params.creature_mana_only && !for_creature) { continue; }
+                untapped_max += SourceMaxNet(*d);
+            }
+        }
+        if (floating.Total() + untapped_max < cost.ManaValue())
+        {
+            if (fail_memo) { fail_memo->insert(key); }
+            return false;
+        }
     }
 
     // Reflecting Pool's colour union is INVARIANT during a tap-backtrack (no land enters or leaves
@@ -2783,7 +2839,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             if (def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
             if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
-                                    tapped_mask | (1ull << i))) { return true; }
+                                    tapped_mask | (1ull << i),
+                                    untapped_max < 0 ? -1 : untapped_max - SourceMaxNet(*def))) { return true; }
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.players[active].life = life_snap;
