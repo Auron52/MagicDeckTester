@@ -82,6 +82,454 @@
     ]
   },
   "hand_score_threshold": 0.2659543096326016,
+  "keep_model": {
+    "deck_colors": [
+      "W",
+      "B",
+      "R",
+      "G"
+    ],
+    "extra_features": [
+      {
+        "kind": "per_color_demand",
+        "name": "demand_W"
+      },
+      {
+        "kind": "per_color_uncovered",
+        "name": "uncov_W"
+      },
+      {
+        "kind": "per_color_surplus",
+        "name": "surplus_W"
+      },
+      {
+        "kind": "per_color_demand",
+        "name": "demand_B",
+        "p": 2
+      },
+      {
+        "kind": "per_color_uncovered",
+        "name": "uncov_B",
+        "p": 2
+      },
+      {
+        "kind": "per_color_surplus",
+        "name": "surplus_B",
+        "p": 2
+      },
+      {
+        "kind": "per_color_demand",
+        "name": "demand_R",
+        "p": 3
+      },
+      {
+        "kind": "per_color_uncovered",
+        "name": "uncov_R",
+        "p": 3
+      },
+      {
+        "kind": "per_color_surplus",
+        "name": "surplus_R",
+        "p": 3
+      },
+      {
+        "kind": "per_color_demand",
+        "name": "demand_G",
+        "p": 4
+      },
+      {
+        "kind": "per_color_uncovered",
+        "name": "uncov_G",
+        "p": 4
+      },
+      {
+        "kind": "per_color_surplus",
+        "name": "surplus_G",
+        "p": 4
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv0"
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv1",
+        "p": 1
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv2",
+        "p": 2
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv3",
+        "p": 3
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv4",
+        "p": 4
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv5",
+        "p": 5
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv6",
+        "p": 6
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le1",
+        "p": 1
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le2",
+        "p": 2
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le3",
+        "p": 3
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le4",
+        "p": 4
+      },
+      {
+        "a": 4,
+        "b": 17,
+        "kind": "diff",
+        "name": "uncastable"
+      },
+      {
+        "a": 3,
+        "b": 18,
+        "kind": "diff",
+        "name": "excess_dev"
+      },
+      {
+        "a": 9,
+        "b": 3,
+        "kind": "product",
+        "name": "piece_x_land"
+      },
+      {
+        "a": 9,
+        "b": 17,
+        "kind": "product",
+        "name": "piece_x_castable"
+      },
+      {
+        "a": 9,
+        "b": 20,
+        "kind": "product",
+        "name": "piece_x_ontime"
+      },
+      {
+        "a": 9,
+        "b": 18,
+        "kind": "product",
+        "name": "piece_x_curve"
+      },
+      {
+        "a": 17,
+        "b": 3,
+        "kind": "product",
+        "name": "castable_x_land"
+      }
+    ],
+    "key_pieces": [
+      "Tainted Remedy",
+      "Plague Drone",
+      "Idyllic Tutor"
+    ],
+    "leaf_scores": [
+      {
+        "coefs": {
+          "castable_le1": -66401,
+          "castable_le2": -66401,
+          "castable_le3": -66401,
+          "castable_le4": -66401,
+          "castable_x_land": -66401,
+          "colors_covered": -274945,
+          "count_mv1": 20265,
+          "count_mv2": 20265,
+          "count_mv3": 584,
+          "curve_depth": -66401,
+          "demand_B": -325300,
+          "demand_G": -1295121,
+          "demand_R": 34365,
+          "demand_W": 156416,
+          "excess_dev": 2124,
+          "final_hand_size": 22913,
+          "key_piece_count": 184606,
+          "land_count": -28282,
+          "max_pip_deficit": -20021,
+          "mulligan_count": -22913,
+          "nonland_count": 28282,
+          "nonland_mv1": 20265,
+          "nonland_mv3": -17598,
+          "nonland_mv4": 11346,
+          "on_the_play": 683878,
+          "on_time_count": -66401,
+          "piece_x_castable": -10432,
+          "piece_x_curve": -10432,
+          "piece_x_land": -116921,
+          "piece_x_ontime": -10432,
+          "playable_count": 44248,
+          "playable_strict": -66401,
+          "source_b": -147549,
+          "source_g": -163698,
+          "source_r": 61464,
+          "source_w": -74061,
+          "surplus_B": -25125,
+          "surplus_G": -143270,
+          "surplus_R": 36846,
+          "surplus_W": -86862,
+          "uncastable": 39167,
+          "uncov_B": 24621,
+          "uncov_G": 250135,
+          "uncov_R": -3439,
+          "uncov_W": -196903,
+          "uncovered_colors": 6886
+        },
+        "intercept": 7207138,
+        "thr": [
+          [
+            4147580,
+            4296374,
+            4660500
+          ],
+          [
+            4481385,
+            4706100,
+            5256667
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "colors_covered": 410013,
+          "count_mv1": 190646,
+          "count_mv2": 190646,
+          "count_mv3": 55038,
+          "demand_B": -476017,
+          "demand_G": -1491814,
+          "demand_W": -87938,
+          "excess_dev": -161910,
+          "final_hand_size": -2366,
+          "key_piece_count": 45142,
+          "land_count": -161910,
+          "max_pip_deficit": 907159,
+          "mulligan_count": 2366,
+          "nonland_count": 161910,
+          "nonland_mv1": 190646,
+          "nonland_mv3": 45225,
+          "nonland_mv4": 108859,
+          "on_the_play": 391304,
+          "piece_x_land": 36005,
+          "playable_count": 942812,
+          "source_b": 12393,
+          "source_g": 70597,
+          "source_r": 19518,
+          "source_w": 55843,
+          "surplus_B": 45126,
+          "surplus_G": 88148,
+          "surplus_R": 19518,
+          "surplus_W": 51214,
+          "uncastable": 161910,
+          "uncov_B": -622086,
+          "uncov_W": 414387,
+          "uncovered_colors": -31559,
+          "worst_lateness": -248636
+        },
+        "intercept": 3823245,
+        "thr": [
+          [
+            4147580,
+            4296374,
+            4660500
+          ],
+          [
+            4481385,
+            4706100,
+            5256667
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "castable_le1": -79082,
+          "castable_le2": -79082,
+          "castable_le3": -60423,
+          "castable_le4": 86804,
+          "castable_x_land": -103994,
+          "colors_covered": -363119,
+          "count_mv1": 40372,
+          "count_mv2": 40372,
+          "count_mv3": -16689,
+          "curve_depth": -23806,
+          "demand_B": -361273,
+          "demand_G": -401538,
+          "demand_R": 26546,
+          "demand_W": 167684,
+          "excess_dev": 50399,
+          "final_hand_size": -56893,
+          "key_piece_count": 129810,
+          "land_count": 54759,
+          "max_pip_deficit": 418311,
+          "mulligan_count": 56893,
+          "nonland_count": -54759,
+          "nonland_mv1": 40372,
+          "nonland_mv3": -65499,
+          "nonland_mv4": -44522,
+          "on_the_play": 331324,
+          "on_time_count": 86804,
+          "piece_x_castable": 25368,
+          "piece_x_curve": -37032,
+          "piece_x_land": -25373,
+          "piece_x_ontime": 25368,
+          "playable_count": 47456,
+          "playable_strict": 86804,
+          "source_b": -24652,
+          "source_g": -31282,
+          "source_r": 6876,
+          "source_w": 8294,
+          "surplus_B": 43752,
+          "surplus_G": -16840,
+          "surplus_R": 439,
+          "surplus_W": -22854,
+          "uncastable": -54076,
+          "uncov_B": -188541,
+          "uncov_G": 825485,
+          "uncov_R": 116837,
+          "uncov_W": -279228,
+          "uncovered_colors": -93734,
+          "worst_lateness": -29133
+        },
+        "intercept": 7038774,
+        "thr": [
+          [
+            4147580,
+            4296374,
+            4660500
+          ],
+          [
+            4481385,
+            4706100,
+            5256667
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "castable_le1": -162178,
+          "castable_le2": -162178,
+          "castable_le3": -106120,
+          "castable_le4": 151274,
+          "castable_x_land": -166804,
+          "colors_covered": -386099,
+          "count_mv1": 78561,
+          "count_mv2": 78561,
+          "count_mv3": -21629,
+          "curve_depth": 33525,
+          "demand_B": -399146,
+          "demand_G": -397657,
+          "demand_R": 60250,
+          "demand_W": 212152,
+          "excess_dev": 53198,
+          "key_piece_count": 226345,
+          "land_count": 96532,
+          "max_pip_deficit": 416282,
+          "nonland_count": -96532,
+          "nonland_mv1": 78561,
+          "nonland_mv3": -111223,
+          "nonland_mv4": -92308,
+          "on_the_play": 283297,
+          "on_time_count": 151274,
+          "piece_x_castable": 42452,
+          "piece_x_curve": -78815,
+          "piece_x_land": -44717,
+          "piece_x_ontime": 42452,
+          "playable_count": -20351,
+          "playable_strict": 151274,
+          "source_b": -40405,
+          "source_g": -33502,
+          "source_r": 8467,
+          "source_w": 19021,
+          "surplus_B": 38559,
+          "surplus_G": -18974,
+          "surplus_R": -4297,
+          "surplus_W": -22837,
+          "uncastable": -94734,
+          "uncov_B": -231069,
+          "uncov_G": 919450,
+          "uncov_R": 120272,
+          "uncov_W": -295461,
+          "uncovered_colors": -106607,
+          "worst_lateness": -41353
+        },
+        "intercept": 7386505,
+        "thr": [
+          [
+            4147580,
+            4296374,
+            4660500
+          ],
+          [
+            4481385,
+            4706100,
+            5256667
+          ]
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "feat": "castable_x_land",
+        "no": 4,
+        "op": "<=",
+        "val": 1,
+        "yes": 1
+      },
+      {
+        "feat": "surplus_R",
+        "no": 3,
+        "op": "<=",
+        "val": 1,
+        "yes": 2
+      },
+      {
+        "leaf": "mull",
+        "leaf_score": 0
+      },
+      {
+        "leaf": "keep",
+        "leaf_score": 1
+      },
+      {
+        "feat": "final_hand_size",
+        "no": 6,
+        "op": "<=",
+        "val": 6,
+        "yes": 5
+      },
+      {
+        "leaf": "keep",
+        "leaf_score": 2
+      },
+      {
+        "leaf": "mull",
+        "leaf_score": 3
+      }
+    ]
+  },
   "mulligan": {
     "bottom_order": "count_first",
     "curve_check": "one_drop",

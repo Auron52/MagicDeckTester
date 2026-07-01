@@ -81,6 +81,438 @@
     ]
   },
   "hand_score_threshold": 0.247966407189826,
+  "keep_model": {
+    "deck_colors": [
+      "W",
+      "U",
+      "R"
+    ],
+    "extra_features": [
+      {
+        "kind": "per_color_demand",
+        "name": "demand_W"
+      },
+      {
+        "kind": "per_color_uncovered",
+        "name": "uncov_W"
+      },
+      {
+        "kind": "per_color_surplus",
+        "name": "surplus_W"
+      },
+      {
+        "kind": "per_color_demand",
+        "name": "demand_U",
+        "p": 1
+      },
+      {
+        "kind": "per_color_uncovered",
+        "name": "uncov_U",
+        "p": 1
+      },
+      {
+        "kind": "per_color_surplus",
+        "name": "surplus_U",
+        "p": 1
+      },
+      {
+        "kind": "per_color_demand",
+        "name": "demand_R",
+        "p": 3
+      },
+      {
+        "kind": "per_color_uncovered",
+        "name": "uncov_R",
+        "p": 3
+      },
+      {
+        "kind": "per_color_surplus",
+        "name": "surplus_R",
+        "p": 3
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv0"
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv1",
+        "p": 1
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv2",
+        "p": 2
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv3",
+        "p": 3
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv4",
+        "p": 4
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv5",
+        "p": 5
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv6",
+        "p": 6
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le1",
+        "p": 1
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le2",
+        "p": 2
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le3",
+        "p": 3
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le4",
+        "p": 4
+      },
+      {
+        "a": 4,
+        "b": 17,
+        "kind": "diff",
+        "name": "uncastable"
+      },
+      {
+        "a": 3,
+        "b": 18,
+        "kind": "diff",
+        "name": "excess_dev"
+      },
+      {
+        "a": 9,
+        "b": 3,
+        "kind": "product",
+        "name": "piece_x_land"
+      },
+      {
+        "a": 9,
+        "b": 17,
+        "kind": "product",
+        "name": "piece_x_castable"
+      },
+      {
+        "a": 9,
+        "b": 20,
+        "kind": "product",
+        "name": "piece_x_ontime"
+      },
+      {
+        "a": 9,
+        "b": 18,
+        "kind": "product",
+        "name": "piece_x_curve"
+      },
+      {
+        "a": 17,
+        "b": 3,
+        "kind": "product",
+        "name": "castable_x_land"
+      }
+    ],
+    "key_pieces": [
+      "Sol Ring",
+      "Gamble",
+      "Hinata, Dawn-Crowned",
+      "Ornithopter of Paradise"
+    ],
+    "leaf_scores": [
+      {
+        "coefs": {
+          "castable_le1": -210157,
+          "castable_le2": -234329,
+          "castable_le3": 60600,
+          "castable_le4": 265285,
+          "castable_x_land": -41524,
+          "colors_covered": -151062,
+          "count_mv1": -75369,
+          "count_mv2": 14181,
+          "count_mv3": 30358,
+          "curve_depth": -316706,
+          "demand_R": 10508,
+          "demand_U": 33045,
+          "demand_W": -621607,
+          "excess_dev": 35781,
+          "final_hand_size": 48590,
+          "key_piece_count": 76670,
+          "land_count": -140947,
+          "max_pip_deficit": 55145,
+          "mulligan_count": -48590,
+          "nonland_count": 140947,
+          "nonland_mv1": -75369,
+          "nonland_mv2": 59829,
+          "nonland_mv3": 140902,
+          "nonland_mv4": 260768,
+          "nonland_mv6": 214860,
+          "on_the_play": 478983,
+          "on_time_count": 29995,
+          "piece_x_castable": 93138,
+          "piece_x_curve": 93138,
+          "piece_x_land": -146458,
+          "piece_x_ontime": -295062,
+          "playable_count": -99475,
+          "playable_strict": 265285,
+          "source_b": -49574,
+          "source_g": -49574,
+          "source_r": 206458,
+          "source_u": 94088,
+          "source_w": -123724,
+          "surplus_R": 110884,
+          "surplus_U": 49038,
+          "surplus_W": 3177,
+          "uncastable": -2423,
+          "uncov_R": 8104,
+          "uncov_U": -112390,
+          "uncov_W": 415608,
+          "uncovered_colors": 49419,
+          "worst_lateness": -70516
+        },
+        "intercept": 6372727,
+        "thr": [
+          [
+            5985123,
+            6292333
+          ],
+          [
+            6407304,
+            6791333
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "castable_le1": -105094,
+          "castable_le2": -227664,
+          "castable_le3": 100784,
+          "castable_le4": 100784,
+          "castable_x_land": -14227,
+          "colors_covered": -236723,
+          "count_mv1": -105094,
+          "count_mv2": -215650,
+          "count_mv3": -77586,
+          "demand_R": -89896,
+          "demand_U": -356293,
+          "excess_dev": -75002,
+          "final_hand_size": 22676,
+          "land_count": -75002,
+          "max_pip_deficit": 320829,
+          "mulligan_count": -22676,
+          "nonland_count": 75002,
+          "nonland_mv1": -105094,
+          "nonland_mv2": 12620,
+          "nonland_mv3": 352796,
+          "nonland_mv4": 276537,
+          "nonland_mv6": 200341,
+          "on_the_play": 253219,
+          "on_time_count": -6907,
+          "playable_count": 100784,
+          "playable_strict": 100784,
+          "source_b": -37625,
+          "source_g": -37625,
+          "source_r": -107538,
+          "source_u": -133617,
+          "source_w": -77001,
+          "surplus_R": 26944,
+          "surplus_U": 163311,
+          "surplus_W": -77001,
+          "uncastable": 25776,
+          "uncov_R": -579617,
+          "uncovered_colors": -579617,
+          "worst_lateness": -57859
+        },
+        "intercept": 8866082,
+        "thr": [
+          [
+            5985123,
+            6292333
+          ],
+          [
+            6407304,
+            6791333
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "castable_le2": -119962,
+          "castable_le3": 81378,
+          "castable_le4": 17288,
+          "castable_x_land": -44294,
+          "colors_covered": -680922,
+          "count_mv1": 699132,
+          "count_mv2": -77607,
+          "count_mv3": -63682,
+          "curve_depth": -85129,
+          "demand_R": -400081,
+          "demand_U": -124892,
+          "demand_W": -736588,
+          "excess_dev": -24855,
+          "final_hand_size": 37471,
+          "key_piece_count": -65501,
+          "land_count": -69669,
+          "max_pip_deficit": 228022,
+          "mulligan_count": -37471,
+          "nonland_count": 69669,
+          "nonland_mv1": 699132,
+          "nonland_mv2": -86938,
+          "nonland_mv3": 23593,
+          "nonland_mv4": 100078,
+          "nonland_mv6": 178204,
+          "on_the_play": 331858,
+          "on_time_count": 89541,
+          "piece_x_castable": -53056,
+          "piece_x_curve": -105036,
+          "piece_x_land": 10493,
+          "piece_x_ontime": -27884,
+          "playable_count": 97942,
+          "playable_strict": 17288,
+          "source_b": -34970,
+          "source_g": -34970,
+          "source_r": -183315,
+          "source_u": -23537,
+          "source_w": -17666,
+          "surplus_R": 81633,
+          "surplus_U": 39445,
+          "surplus_W": 139258,
+          "uncastable": 37375,
+          "uncov_R": 399389,
+          "uncov_U": -528462,
+          "uncov_W": -29144,
+          "uncovered_colors": -30401,
+          "worst_lateness": 938
+        },
+        "intercept": 11172996,
+        "thr": [
+          [
+            5985123,
+            6292333
+          ],
+          [
+            6407304,
+            6791333
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "castable_le1": -49165,
+          "castable_le2": -210116,
+          "castable_le3": -16118,
+          "castable_le4": -2431,
+          "castable_x_land": 3971,
+          "colors_covered": -122733,
+          "count_mv1": -84969,
+          "count_mv2": -72037,
+          "count_mv3": -23330,
+          "curve_depth": 75877,
+          "demand_R": -100157,
+          "demand_U": -155994,
+          "demand_W": -504157,
+          "excess_dev": -107634,
+          "final_hand_size": 35931,
+          "key_piece_count": -30002,
+          "land_count": -98825,
+          "max_pip_deficit": -34448,
+          "mulligan_count": -35931,
+          "nonland_count": 98825,
+          "nonland_mv1": -84969,
+          "nonland_mv2": -12194,
+          "nonland_mv3": 341909,
+          "nonland_mv4": 179898,
+          "nonland_mv6": 32997,
+          "on_the_play": 370849,
+          "on_time_count": -24233,
+          "piece_x_castable": 20530,
+          "piece_x_curve": 6889,
+          "piece_x_land": -133030,
+          "piece_x_ontime": -38112,
+          "playable_count": -16615,
+          "playable_strict": -2431,
+          "source_b": -71892,
+          "source_g": -71892,
+          "source_r": 11166,
+          "source_u": 65229,
+          "source_w": -129193,
+          "surplus_R": 51344,
+          "surplus_U": 103029,
+          "surplus_W": 20894,
+          "uncastable": 42684,
+          "uncov_R": -328794,
+          "uncov_U": 172688,
+          "uncov_W": 217621,
+          "uncovered_colors": 58747,
+          "worst_lateness": -18667
+        },
+        "intercept": 7895239,
+        "thr": [
+          [
+            5985123,
+            6292333
+          ],
+          [
+            6407304,
+            6791333
+          ]
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "feat": "piece_x_castable",
+        "no": 4,
+        "op": "<=",
+        "val": 2,
+        "yes": 1
+      },
+      {
+        "feat": "curve_depth",
+        "no": 3,
+        "op": "<=",
+        "val": 3,
+        "yes": 2
+      },
+      {
+        "leaf": "mull",
+        "leaf_score": 0
+      },
+      {
+        "leaf": "keep",
+        "leaf_score": 1
+      },
+      {
+        "feat": "castable_le1",
+        "no": 6,
+        "op": "<=",
+        "val": 0,
+        "yes": 5
+      },
+      {
+        "leaf": "mull",
+        "leaf_score": 2
+      },
+      {
+        "leaf": "keep",
+        "leaf_score": 3
+      }
+    ]
+  },
   "mulligan": {
     "bottom_order": "count_first",
     "curve_check": "one_drop",

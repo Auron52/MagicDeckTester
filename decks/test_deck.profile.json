@@ -38,6 +38,367 @@
     ]
   },
   "hand_score_threshold": 0.46346310265038726,
+  "keep_model": {
+    "deck_colors": [
+      "R"
+    ],
+    "extra_features": [
+      {
+        "kind": "per_color_demand",
+        "name": "demand_R",
+        "p": 3
+      },
+      {
+        "kind": "per_color_uncovered",
+        "name": "uncov_R",
+        "p": 3
+      },
+      {
+        "kind": "per_color_surplus",
+        "name": "surplus_R",
+        "p": 3
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv0"
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv1",
+        "p": 1
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv2",
+        "p": 2
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv3",
+        "p": 3
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv4",
+        "p": 4
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv5",
+        "p": 5
+      },
+      {
+        "kind": "nonland_at_mv",
+        "name": "nonland_mv6",
+        "p": 6
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le1",
+        "p": 1
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le2",
+        "p": 2
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le3",
+        "p": 3
+      },
+      {
+        "kind": "castable_at_mv_le",
+        "name": "castable_le4",
+        "p": 4
+      },
+      {
+        "a": 4,
+        "b": 17,
+        "kind": "diff",
+        "name": "uncastable"
+      },
+      {
+        "a": 3,
+        "b": 18,
+        "kind": "diff",
+        "name": "excess_dev"
+      },
+      {
+        "a": 9,
+        "b": 3,
+        "kind": "product",
+        "name": "piece_x_land"
+      },
+      {
+        "a": 9,
+        "b": 17,
+        "kind": "product",
+        "name": "piece_x_castable"
+      },
+      {
+        "a": 9,
+        "b": 20,
+        "kind": "product",
+        "name": "piece_x_ontime"
+      },
+      {
+        "a": 9,
+        "b": 18,
+        "kind": "product",
+        "name": "piece_x_curve"
+      },
+      {
+        "a": 17,
+        "b": 3,
+        "kind": "product",
+        "name": "castable_x_land"
+      }
+    ],
+    "key_pieces": [
+      "Goblin Guide",
+      "Monastery Swiftspear",
+      "Eidolon of the Great Revel"
+    ],
+    "leaf_scores": [
+      {
+        "coefs": {
+          "castable_le1": 222540,
+          "castable_le2": 105916,
+          "castable_le3": -15470,
+          "castable_le4": -15470,
+          "castable_x_land": 8785,
+          "colors_covered": -393943,
+          "count_mv1": -147405,
+          "count_mv2": -3374,
+          "count_mv3": -26651,
+          "curve_depth": -224194,
+          "demand_R": 625989,
+          "excess_dev": 105429,
+          "final_hand_size": -6646,
+          "key_piece_count": -397752,
+          "land_count": 26651,
+          "max_pip_deficit": -310659,
+          "mulligan_count": 6646,
+          "nonland_count": -26651,
+          "nonland_mv1": -147405,
+          "nonland_mv2": 92205,
+          "nonland_mv3": -112710,
+          "on_the_play": 608725,
+          "on_time_count": -15470,
+          "piece_x_castable": 76042,
+          "piece_x_curve": -332895,
+          "piece_x_land": -129463,
+          "piece_x_ontime": 76042,
+          "playable_count": -15470,
+          "playable_strict": -15470,
+          "source_r": 26651,
+          "surplus_R": -20177,
+          "uncastable": -10353,
+          "uncov_R": 393943,
+          "uncovered_colors": 393943,
+          "worst_lateness": -67473
+        },
+        "intercept": 6628531,
+        "thr": [
+          [
+            4567099,
+            4832621,
+            5363167
+          ],
+          [
+            4961730,
+            5311386,
+            5952167
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "castable_le1": -191386,
+          "castable_le2": 49654,
+          "castable_le3": -22150,
+          "castable_le4": -22150,
+          "castable_x_land": 2611,
+          "count_mv1": -191386,
+          "count_mv2": 54901,
+          "count_mv3": -25583,
+          "curve_depth": 140588,
+          "demand_R": 421477,
+          "excess_dev": -18263,
+          "key_piece_count": -80798,
+          "land_count": 25583,
+          "max_pip_deficit": 213063,
+          "nonland_count": -25583,
+          "nonland_mv1": -191386,
+          "nonland_mv2": 68991,
+          "nonland_mv3": -161615,
+          "on_the_play": 394382,
+          "on_time_count": -22150,
+          "piece_x_castable": -30468,
+          "piece_x_curve": -25804,
+          "piece_x_land": -24163,
+          "piece_x_ontime": -30468,
+          "playable_count": -22150,
+          "playable_strict": -22150,
+          "source_r": 25583,
+          "surplus_R": 15742,
+          "uncastable": -18230,
+          "worst_lateness": -37172
+        },
+        "intercept": 5087151,
+        "thr": [
+          [
+            4567099,
+            4832621,
+            5363167
+          ],
+          [
+            4961730,
+            5311386,
+            5952167
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "castable_le1": -239149,
+          "castable_le2": 80653,
+          "castable_le3": -61383,
+          "castable_le4": -61383,
+          "castable_x_land": -95515,
+          "count_mv1": -239149,
+          "count_mv2": 39866,
+          "count_mv3": -78161,
+          "curve_depth": 864187,
+          "demand_R": 553498,
+          "excess_dev": -145828,
+          "final_hand_size": 4762,
+          "key_piece_count": 1263920,
+          "land_count": 78161,
+          "max_pip_deficit": -2214811,
+          "mulligan_count": -4762,
+          "nonland_count": -78161,
+          "nonland_mv1": -239149,
+          "nonland_mv2": 58078,
+          "nonland_mv3": -217985,
+          "on_the_play": 366667,
+          "on_time_count": -61383,
+          "piece_x_castable": -26526,
+          "piece_x_curve": -338828,
+          "piece_x_land": -85674,
+          "piece_x_ontime": -26526,
+          "playable_count": -61383,
+          "playable_strict": -61383,
+          "source_r": 78161,
+          "surplus_R": 64047,
+          "uncastable": -66273,
+          "worst_lateness": -86450
+        },
+        "intercept": 3978760,
+        "thr": [
+          [
+            4567099,
+            4832621,
+            5363167
+          ],
+          [
+            4961730,
+            5311386,
+            5952167
+          ]
+        ]
+      },
+      {
+        "coefs": {
+          "castable_le1": -79501,
+          "castable_le2": 74320,
+          "castable_le3": -36390,
+          "castable_le4": -36390,
+          "castable_x_land": -64540,
+          "count_mv1": -79501,
+          "count_mv2": -31804,
+          "count_mv3": -84005,
+          "curve_depth": 112059,
+          "demand_R": 394970,
+          "excess_dev": 34732,
+          "final_hand_size": -30569,
+          "key_piece_count": -3031,
+          "land_count": 84005,
+          "max_pip_deficit": -9393,
+          "mulligan_count": 30569,
+          "nonland_count": -84005,
+          "nonland_mv1": -79501,
+          "nonland_mv2": 22624,
+          "nonland_mv3": -129958,
+          "on_the_play": 328493,
+          "on_time_count": -36390,
+          "piece_x_castable": -2427,
+          "piece_x_curve": -7510,
+          "piece_x_land": -112736,
+          "piece_x_ontime": -2427,
+          "playable_count": -36390,
+          "playable_strict": -36390,
+          "source_r": 84005,
+          "surplus_R": -535,
+          "uncastable": -32544,
+          "worst_lateness": -43139
+        },
+        "intercept": 6319378,
+        "thr": [
+          [
+            4567099,
+            4832621,
+            5363167
+          ],
+          [
+            4961730,
+            5311386,
+            5952167
+          ]
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "feat": "piece_x_curve",
+        "no": 2,
+        "op": "<=",
+        "val": 3,
+        "yes": 1
+      },
+      {
+        "leaf": "mull",
+        "leaf_score": 0
+      },
+      {
+        "feat": "count_mv1",
+        "no": 6,
+        "op": "<=",
+        "val": 1,
+        "yes": 3
+      },
+      {
+        "feat": "final_hand_size",
+        "no": 5,
+        "op": "<=",
+        "val": 5,
+        "yes": 4
+      },
+      {
+        "leaf": "keep",
+        "leaf_score": 1
+      },
+      {
+        "leaf": "mull",
+        "leaf_score": 2
+      },
+      {
+        "leaf": "keep",
+        "leaf_score": 3
+      }
+    ]
+  },
   "mulligan": {
     "bottom_order": "count_first",
     "curve_check": "none",
