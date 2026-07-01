@@ -970,6 +970,20 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                     std::cout << ", \"cards\": [";
                     for (size_t ci = 0; ci < chk.variants[vi].cards.size(); ++ci)
                     { if (ci) std::cout << ", "; JsonStr(std::cout, chk.variants[vi].cards[ci]); }
+                    std::cout << "]";
+                    // Structured sub-decision breakdown so the GUI can ask one dimension at a time
+                    // (fetch target, then tutor target, ...) and filter variants after each pick.
+                    std::cout << ", \"subs\": [";
+                    for (size_t si = 0; si < chk.variants[vi].subs.size(); ++si)
+                    {
+                        const auto& sub = chk.variants[vi].subs[si];
+                        if (si) { std::cout << ", "; }
+                        std::cout << "{ \"key\": ";    JsonStr(std::cout, sub.key);
+                        std::cout << ", \"choice\": "; JsonStr(std::cout, sub.choice);
+                        std::cout << ", \"card\": ";   JsonStr(std::cout, sub.card);
+                        std::cout << ", \"kind\": ";   JsonStr(std::cout, sub.kind);
+                        std::cout << " }";
+                    }
                     std::cout << "] }";
                 }
                 std::cout << "],\n";

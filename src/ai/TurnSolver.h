@@ -244,8 +244,16 @@ public:
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,
     // X value, Ponder keep/shuffle, Soulfire own-target count), each distinct combination is a
     // variant the human picks among (Verdict::Choose). `label` describes what's distinct.
+    // One sub-decision dimension within a variant (the fetch target, a tutor target, an X value,
+    // a Soulfire own-target count). `key` is the dimension the GUI groups by (e.g. "Marsh Flats
+    // fetches"); `choice` is this variant's value in that dimension (e.g. "Godless Shrine"); `card`
+    // is the art to show. Structured so the GUI can ask one dimension at a time and FILTER the
+    // remaining variants after each pick -- this respects couplings (a fetch target gates which
+    // tutor targets are affordable this turn), so no illegal combination is ever offered.
+    struct SubChoice { std::string key, choice, card, kind; };
     struct LineVariant { int plan_index = -1; std::string label;
-                         std::vector<std::string> cards; };  // card names to show as art
+                         std::vector<std::string> cards;      // card names to show as art
+                         std::vector<SubChoice> subs; };      // structured sub-decision dimensions
     struct LineCheck
     {
         enum class Verdict { Accept, Choose, LegalNotEnumerated, Illegal, Unsupported };

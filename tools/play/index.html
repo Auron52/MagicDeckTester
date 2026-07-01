@@ -802,7 +802,77 @@ async function commitLine() {
 // Variant picker (tutor/Gamble target, Ponder keep, Soulfire count, X) — shown in the CENTRAL image
 // dialog (#5/#12), a grid of the candidate cards (cards[0] = the distinguishing card, e.g. the tutor
 // target). Replaces the old right-side #verdict 'choose' panel so NO decision lives in the side panel.
+// A committed line can resolve several ways when it involves independent sub-decisions (which land
+// a fetch gets, which enchantment a tutor gets, an X value, a Soulfire own-target count). The engine
+// returns the full set of enumerated `variants`, each carrying a structured `subs` breakdown. Rather
+// than dump the cross-product flat (confusing for e.g. fetch × tutor), ask ONE dimension at a time
+// and FILTER the remaining variants after each pick. Because we only ever offer choices that survive
+// in the remaining set, couplings are respected automatically: a fetch target that can't pay for a
+// given tutor target was never enumerated together, so that combination is simply never offered.
 function renderChooseDialog(v, line){
+  const variants=(v.variants||[]).slice();
+  // Fallback: a variant with no structured subs can't be decomposed (degenerate / older engine).
+  if (!variants.length || variants.some(x=>!x.subs || !x.subs.length)) return renderChooseFlat(v, line);
+  const KIND={fetch:0,tutor:1,x:2,soulfire:3};
+  const kindPri=k=>(KIND[k]===undefined?9:KIND[k]);
+  const subOf=(x,key)=>(x.subs||[]).filter(s=>s.key===key)[0];
+  const choiceOf=(x,key)=>{ const s=subOf(x,key); return s?s.choice:'—'; };
+
+  function stepChoose(remaining, picks){
+    if (remaining.length===1){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
+    // Ordered unique dimension keys among the remaining variants (fetch before tutor before X …).
+    const keys=[];
+    remaining.forEach(x=>(x.subs||[]).forEach(s=>{ if(!keys.some(k=>k.key===s.key)) keys.push({key:s.key,kind:s.kind}); }));
+    keys.sort((a,b)=>kindPri(a.kind)-kindPri(b.kind));
+    // First dimension (by priority) that still has more than one distinct choice is the one to ask.
+    let dim=null, choices=null;
+    for (const k of keys){
+      const seen=[];
+      remaining.forEach(x=>{ const c=choiceOf(x,k.key); if(!seen.some(z=>z.choice===c)){ const s=subOf(x,k.key); seen.push({choice:c, card:s?s.card:''}); } });
+      if (seen.length>1){ dim=k; choices=seen; break; }
+    }
+    // No distinguishing dimension left (shouldn't happen — distinct variants differ in some sub) —
+    // commit the first remaining plan defensively.
+    if (!dim){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
+    renderDimPick(dim, choices, remaining, picks);
+  }
+
+  function renderDimPick(dim, choices, remaining, picks){
+    const panel=$('decpanel'), back=$('decback');
+    back.className='modal'; back.style.display='block'; panel.className='show modal';
+    const crumb=picks.length?`<div class="sub">${picks.map(p=>esc(p.key)+' '+esc(p.choice)).join(' · ')}</div>`:'';
+    let h=`<h3>${esc(dim.key)}?</h3>`+crumb+`<div class="tutgrid">`;
+    choices.forEach((c,i)=>{
+      h+=`<span class="cardmini varpick" data-i="${i}"${c.card?` data-name="${esc(c.card)}"`:''} title="${esc(c.choice)}">`+
+         `<span class="varbadge">${esc(c.choice)}</span>`+
+         (c.card?`<img loading="lazy" src="${scryImg(c.card,'small')}" onerror="this.style.opacity=.15"/>`:`<span style="display:block;height:96px"></span>`)+
+         `<em>${esc(c.card||c.choice)}</em></span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px">`+
+       (picks.length?`<button id="chooseback" class="ghost">Back</button>`:'')+
+       `<span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button></div>`;
+    panel.innerHTML=h;
+    panel.querySelectorAll('.varpick').forEach(b=>b.onclick=()=>{
+      const c=choices[+b.dataset.i];
+      const next=remaining.filter(x=>choiceOf(x,dim.key)===c.choice);
+      stepChoose(next, picks.concat([{key:dim.key, choice:c.choice}]));
+    });
+    if (picks.length) $('chooseback').onclick=()=>replay(picks.slice(0,-1));
+    $('choosecancel').onclick=()=>{ hideDecPanel(); renderBoard(); };
+  }
+
+  // Back: re-filter from the full variant set with all-but-the-last pick, re-asking that dimension.
+  function replay(picks){
+    let remaining=variants.slice();
+    picks.forEach(p=>{ remaining=remaining.filter(x=>choiceOf(x,p.key)===p.choice); });
+    stepChoose(remaining, picks);
+  }
+
+  stepChoose(variants, []);
+}
+// Legacy flat picker (all variants in one grid) — retained as a fallback for variants that lack a
+// structured `subs` breakdown, and for any degenerate case the sequential picker can't split.
+function renderChooseFlat(v, line){
   const panel=$('decpanel'), back=$('decback');
   back.className='modal'; back.style.display='block'; panel.className='show modal';
   let h=`<h3>Choose how to resolve</h3>`+

@@ -5627,7 +5627,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // target). The land + the plan index come along so we can both honour the player's ORDER and
     // surface genuine sub-decision choices.
     struct Cand { int idx; std::vector<std::string> order; std::string sig, label;
-                  std::vector<std::string> cards; };
+                  std::vector<std::string> cards; std::vector<SubChoice> subs; };
     std::vector<Cand> cands;
     for (size_t i = 0; i < plans.size(); ++i)
     {
@@ -5661,25 +5661,41 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
 
         // Per-decision tokens, order-INDEPENDENT (sorted) so plans differing only in cast order
         // share a signature; a real sub-decision difference (target / X / keep / fetch) splits it.
+        // Build the sub-decision dimensions structurally (key = dimension the GUI groups by,
+        // choice = this plan's value, card = art). `toks` (the sorted `key + choice` strings) is
+        // derived from the same subs so the dedup signature/label stays byte-identical to before.
         std::vector<std::string> toks, artCards;
+        std::vector<SubChoice> subs;
+        // `tok` is the exact sig/label token (unchanged from before); key/choice/card are the
+        // structured breakdown the GUI groups by. They are kept separate because the token spacing
+        // (e.g. "X=2", "+2 own") is not a plain "key SPACE choice", and sig/label must stay identical.
+        auto addSub = [&](const std::string& tok, const std::string& key, const std::string& choice,
+                          const std::string& card, const std::string& kind) {
+            subs.push_back({ key, choice, card, kind });
+            toks.push_back(tok);
+            artCards.push_back(card);
+        };
         for (const Action& a : p.actions)
         {
-            if (!a.tutor_target.empty())   { toks.push_back(a.card_name + " \xE2\x86\x92 " + a.tutor_target); artCards.push_back(a.tutor_target); }
-            if (a.chosen_x > 0)            { toks.push_back(a.card_name + " X=" + std::to_string(a.chosen_x)); artCards.push_back(a.card_name); }
+            if (!a.tutor_target.empty())   { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
+            if (a.chosen_x > 0)            { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
             // NOTE: a.ponder_keep is deliberately NOT a variant token. The Ponder reorder (keep-top
             // vs shuffle, and the full ordering) is re-asked at REAL resolution via the look-at-top
             // chooser (g_play_top_chooser), so pre-selecting it here just stacked a redundant "choose
             // how to resolve" dialog ahead of the actual Reorder dialog. Collapsing the keep/shuffle
             // plans to one representative makes a Ponder cast 'accept' and lets the look dialog own it.
-            if (a.soulfire_own_targets > 0){ toks.push_back(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own"); artCards.push_back(a.card_name); }
+            if (a.soulfire_own_targets > 0){ addSub(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own", a.card_name + " own targets", "+" + std::to_string(a.soulfire_own_targets), a.card_name, "soulfire"); }
         }
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
-        if (!p.fetch_target.empty()) { toks.push_back(p.land_to_play + " fetches " + p.fetch_target); artCards.push_back(p.fetch_target); }
+        if (!p.fetch_target.empty()) { addSub(p.land_to_play + " fetches " + p.fetch_target, p.land_to_play + " fetches", p.fetch_target, p.fetch_target, "fetch"); }
+        // Sort the derived token strings so plans differing only in cast order share a signature.
+        // The label preserves the old " → "/" X="/" +N own"/" fetches " spacing (key already ends
+        // with the operator, choice follows a single space) so displayed labels are unchanged.
         std::sort(toks.begin(), toks.end());
         std::string sig, label;
         for (size_t t = 0; t < toks.size(); ++t) { sig += "|" + toks[t]; label += (t?"; ":"") + toks[t]; }
         if (label.empty()) { label = LineSummaryOfPlan(p); }
-        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards });
+        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs });
     }
 
     // Honour the player's ORDER: prefer candidates whose cast sequence equals the queued order, so
@@ -5695,7 +5711,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     {
         if (std::find(seenSig.begin(), seenSig.end(), c->sig) != seenSig.end()) { continue; }
         seenSig.push_back(c->sig);
-        out.variants.push_back({ c->idx, c->label, c->cards });
+        out.variants.push_back({ c->idx, c->label, c->cards, c->subs });
     }
     if (out.variants.size() == 1)
     {
