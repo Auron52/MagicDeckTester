@@ -2130,6 +2130,101 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
         { ManaPool probe = floating;
           if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed)) { return true; } }
 
+        // Scarcity-first source selection (MTG_TAP_SCARCITY): pick the LEAST-flexible qualifying
+        // source for this pip so rainbow sources stay up; filters rank between duals and tri and are
+        // candidates only when feedable now. Default off -> the battlefield-order 4-step path below
+        // runs and the suite is byte-identical. Ramp filters (rare) are left to the default path /
+        // backtracker, which stays the complete fallback either way. Mirror in TurnSolver::TapForCostDirect.
+        if (TapScarcityEnabled())
+        {
+            const int bn = static_cast<int>(state.battlefield.size());
+            int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
+            for (int i = 0; i < bn; ++i)
+            {
+                Permanent& p = state.battlefield[i];
+                if (p.controller_index != active || p.tapped) { continue; }
+                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+                if (!def || !usable(p, *def)) { continue; }
+                int kind = 0;
+                if (def->params.is_filter)
+                {
+                    if (any || needed == Color::Colorless) { kind = 3; }   // {C} mode covers generic/{C}
+                    else
+                    {
+                        bool makes = false;
+                        for (Color c : def->params.produces) { if (c == needed) { makes = true; break; } }
+                        bool feedable = false;
+                        if (makes)
+                        {
+                            for (Color c : def->params.produces)
+                            { ManaPool pr = floating; if (ConsumeFloating(pr, c)) { feedable = true; break; } }
+                            if (!feedable) { feedable = HasUntappedNonFilterSourceProducing(state, def->params.produces); }
+                        }
+                        if (makes && feedable) { kind = 2; } else { continue; }
+                    }
+                }
+                else if (def->params.ramp_filter) { continue; }
+                else
+                {
+                    const std::vector<Color>& prod = EffectiveProduces(state, active, *def);
+                    bool makes = false;
+                    if (any) { makes = !prod.empty(); }
+                    else { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
+                    if (!makes) { continue; }
+                    kind = 1;
+                }
+                const int rank = ResolveProvider(state).ManaSourceRank(state, *def);
+                if (rank < best_rank) { best_rank = rank; best_i = i; best_kind = kind; }
+            }
+            if (best_i < 0) { return false; }
+            Permanent& bp = state.battlefield[best_i];
+            const CardDefinition* bdef = CardDatabase::Instance().LookupCached(bp.card);
+            if (best_kind == 1)
+            {
+                const std::vector<Color>& prod = EffectiveProduces(state, active, *bdef);
+                tap_source(bp, *bdef, any ? prod[0] : needed);
+                return true;
+            }
+            if (best_kind == 3)
+            {
+                bp.tapped = true;
+                floating.Add(Color::Colorless, 1);
+                if (available.colorless > 0)  { --available.colorless; }
+                else if (available.wild > 0)  { --available.wild; }
+                return true;
+            }
+            // kind 2: filter coloured mode -- feed one of its colours (least-flexible feeder), yield 2.
+            const Color out = needed;
+            bool have_input = false;
+            for (Color c : bdef->params.produces)
+            { ManaPool pr = floating; if (ConsumeFloating(pr, c)) { have_input = true; break; } }
+            if (!have_input)
+            {
+                int fi = -1, frank = 1 << 30; Color fcol = Color::Colorless;
+                for (int i = 0; i < bn; ++i)
+                {
+                    Permanent& s = state.battlefield[i];
+                    if (s.controller_index != active || s.tapped) { continue; }
+                    const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
+                    if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
+                    bool m = false; Color match = Color::Colorless;
+                    for (Color pc : EffectiveProduces(state, active, *sd))
+                    { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
+                    if (!m) { continue; }
+                    const int r = ResolveProvider(state).ManaSourceRank(state, *sd);
+                    if (r < frank) { frank = r; fi = i; fcol = match; }
+                }
+                if (fi < 0) { return false; }
+                Permanent& fs = state.battlefield[fi];
+                tap_source(fs, *CardDatabase::Instance().LookupCached(fs.card), fcol);
+            }
+            for (Color c : bdef->params.produces) { if (ConsumeFloating(floating, c)) { break; } }
+            bp.tapped = true;
+            floating.Add(out, 2);
+            if (available.wild > 0) { --available.wild; }
+            return true;
+        }
+
         // 1) Direct non-filter source.
         for (Permanent& p : state.battlefield)
         {

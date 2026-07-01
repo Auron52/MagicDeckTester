@@ -240,4 +240,17 @@ public:
     // last). Provider-OWNED (audit A2) instead of a hardcoded solver constant. Default 2 = the prior
     // generic value (byte-identical). MTG_UNPRUNED still opens the full list engine-side.
     virtual int FetchSearchCap() const { return 2; }
+
+    // Hook 24 -- mana-source TAP ORDER: flexibility rank of a mana source (LOWER = tap earlier).
+    // The greedy mana solver (AIEngine::TapForCost / TurnSolver::TapForCostDirect, scarcity path)
+    // pays each pip from the lowest-ranked qualifying source, so the flexible sources stay up and the
+    // exponential TapForCostBacktrack fallback is rarely entered. This is a QUALITY heuristic for a
+    // sub-decision the search does NOT branch over (searching tap orderings is the very blowup we
+    // avoid); tapping is always a single committed choice, so this only picks WHICH legal payment --
+    // never whether one is found (the complete backtracker remains the fallback). Provider-owned so a
+    // deck can override (e.g. a filter's float-colour preference). GenericProvider supplies the
+    // default (basic/bounce 10, dual 20, filter 25, tri 30, rainbow 50, {C}-only manland 60). Not
+    // pure-virtual-defaulted here because the ranking needs SpellEffects helpers unavailable in this
+    // header; GenericProvider implements it and every archetype inherits that.
+    virtual int ManaSourceRank(const GameState& s, const CardDefinition& def) const = 0;
 };

@@ -46,6 +46,7 @@ public:
     bool        ShouldAttackWith(const GameState&, const Permanent&) const override;
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
+    int         ManaSourceRank(const GameState&, const CardDefinition&) const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the

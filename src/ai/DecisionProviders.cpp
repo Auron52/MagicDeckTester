@@ -221,6 +221,36 @@ std::vector<int> GenericProvider::XCandidates(const GameState&, const CardDefini
     return { max_affordable };
 }
 
+int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    // See DecisionProvider.h Hook 24. Flexibility rank for the scarcity-first tap order (LOWER =
+    // tap earlier). SPEND the least flexible first so the flexible sources stay available.
+    const int active = s.active_player_index;
+    // A COLOURLESS-only manland (Mutavault) has marginal mana (pays only generic) but real attack
+    // value, so SAVE it: rank above even rainbow, so it's tapped only when nothing else can pay. (It
+    // is still used when required; ranking it last just stops the greedy spending it on a pip a real
+    // land could cover, which in the rollout was costing slivers a turn of Mutavault damage.) A
+    // COLOURED manland (dual creature-land) has valuable fixing you tap for many turns before you'd
+    // rather attack, so it falls through to the normal colour rank; holding it to attack is a
+    // situational call left to the search, not this ordering.
+    if (def.params.can_animate)
+    {
+        const std::vector<Color>& mprod = EffectiveProduces(s, active, def);
+        bool has_colored = false;
+        for (Color c : mprod) { if (c != Color::Colorless) { has_colored = true; break; } }
+        if (!has_colored) { return 60; }
+    }
+    // Depletion lands (Saprazzan Skerry, Sandstone Needle) are deliberately NOT reserved: they are
+    // RAMP you normally want to spend, so blanket-conserving them via the ordering would misfire far
+    // more often than the rare "wasted a counter" case helps. They rank by colour like any land.
+    if (def.params.is_filter || def.params.ramp_filter) { return 25; }
+    const std::vector<Color>& prod = EffectiveProduces(s, active, def);
+    const int amt = ManaProducedPerTap(def);
+    if (amt > 1 && static_cast<int>(prod.size()) > 1) { return 10; }  // bounce/fixed-multi: no choice
+    const int ncol = static_cast<int>(prod.size());
+    return ncol <= 1 ? 10 : ncol * 10;                                // mono=10 dual=20 tri=30 rainbow=50
+}
+
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
                                                const CardDefinition& draw_def) const
 {

@@ -6,6 +6,8 @@
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <unordered_set>
@@ -1640,6 +1642,19 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
     return false;
 }
 
+// Scarcity-first mana-payment ordering (DEFAULT ON). The greedy source-selection in TapForCost /
+// TapForCostDirect pays each pip from the LEAST flexible qualifying source (rank via the provider's
+// ManaSourceRank hook) so the flexible (rainbow) sources stay available -- collapsing the exponential
+// TapForCostBacktrack fallback toward "never entered". The backtracker remains the COMPLETE fallback,
+// so this only picks WHICH legal payment is committed, never whether one is found. MTG_TAP_LEGACY
+// reverts to the old battlefield-order greedy (the standing with/without A/B lever -- deliberately NOT
+// tied to MTG_UNPRUNED, since tapping was never in the branch space UNPRUNED opens).
+inline bool TapScarcityEnabled()
+{
+    static const bool v = std::getenv("MTG_TAP_LEGACY") == nullptr;
+    return v;
+}
+
 // Adds one untapped source's mana contribution to an accounting ManaPool, consistent
 // with the floating-pool payment logic in TapForCost / TapForCostDirect:
 //   - depletion / high-yield lands contribute produces_amount of their colour,
@@ -2625,6 +2640,25 @@ struct TapBacktrackMemoHash
 using TapBacktrackMemo =
     std::unordered_set<std::pair<std::uint64_t, std::uint64_t>, TapBacktrackMemoHash>;
 
+// Backtracker-entry counter (MTG_TAP_STATS, off by default = zero cost). Counts top-level
+// TapForCostBacktrack invocations -- i.e. how often the greedy stranded and fell to the exponential
+// solver. The scarcity-first greedy (MTG_TAP_SCARCITY) aims to drive this toward zero; run OFF vs ON
+// single-threaded and compare. Prints one line at exit.
+namespace tapstats
+{
+    inline bool Enabled() { static const bool v = std::getenv("MTG_TAP_STATS") != nullptr; return v; }
+    inline std::atomic<std::uint64_t> g_backtrack_entries{0};
+    struct Dumper {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr, "\n=== TAP STATS: TapForCostBacktrack top-level entries = %llu ===\n",
+                         (unsigned long long)g_backtrack_entries.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors = nullptr,
@@ -2655,6 +2689,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // stored as the full pair (not a lossy hash) so a hash collision can never cause a false prune.
     // Set up once at the top-level call and threaded down; disabled when n>64 (bitmask won't fit).
     const bool top_level = (fail_memo == nullptr);
+    if (top_level && tapstats::Enabled()) { tapstats::g_backtrack_entries.fetch_add(1, std::memory_order_relaxed); }
     TapBacktrackMemo memo_local;
     if (top_level && n <= 64) { fail_memo = &memo_local; }
 
