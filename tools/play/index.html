@@ -903,7 +903,10 @@ function applyAccepted(planIndex, label) {
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
-  S.prev = S.decision; S.choices.push(planIndex); S.plan=[]; S.leMode=false; S.vialMode=null;
+  // Record a one-int step so undo can pop this main-phase decision. Without it S.steps desyncs from
+  // S.choices and undo() (which bails when S.steps is empty) silently does nothing after any line.
+  S.prev = S.decision; S.choices.push(planIndex); (S.steps=S.steps||[]).push(1);
+  S.plan=[]; S.leMode=false; S.vialMode=null;
   renderHistory(); hideVerdict(); step();
 }
 function handleVerdict(v, line) {
