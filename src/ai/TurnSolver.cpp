@@ -2157,17 +2157,34 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
 
         // Retrace additional cost: discard `discard_lands` land cards from hand.
-        // (The mana cost was paid above; CollectActions ensured enough lands exist.)
+        // (The mana cost was paid above; CollectActions ensured enough lands exist.) The heuristic
+        // discards the FIRST land in hand order; under --claude-play the human picks WHICH land
+        // (g_play_retrace_chooser). This is the shared ApplyPlan (real claude-play) + ApplyPlanDirect
+        // (rollout) path; RevealLogPause nulls the chooser for rollout/search, so autonomous play
+        // keeps the first-land pick and stays byte-identical.
         if (from_graveyard && discard_lands > 0)
         {
-            int discarded = 0;
-            for (std::vector<Card>::iterator hit = ap.hand.begin();
-                 hit != ap.hand.end() && discarded < discard_lands; )
+            auto hand_land_indices = [&]() {
+                std::vector<int> idx;
+                for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+                {
+                    const CardDefinition* hdef = CardDatabase::Instance().LookupCached(ap.hand[i]);
+                    if (hdef ? hdef->card.IsLand() : ap.hand[i].IsLand()) { idx.push_back(i); }
+                }
+                return idx;
+            };
+            for (int discarded = 0; discarded < discard_lands; ++discarded)
             {
-                const CardDefinition* hdef = CardDatabase::Instance().LookupCached(*hit);
-                bool is_land = hdef ? hdef->card.IsLand() : hit->IsLand();
-                if (is_land) { ap.graveyard.push_back(*hit); hit = ap.hand.erase(hit); ++discarded; }
-                else         { ++hit; }
+                std::vector<int> lands = hand_land_indices();
+                if (lands.empty()) { break; }
+                int pick = lands.front();   // heuristic default: first land in hand order
+                if (g_play_retrace_chooser && lands.size() > 1)
+                {
+                    int chosen = (*g_play_retrace_chooser)(state, state.active_player_index, name, lands, pick);
+                    for (int li : lands) { if (li == chosen) { pick = chosen; break; } }
+                }
+                ap.graveyard.push_back(ap.hand[pick]);
+                ap.hand.erase(ap.hand.begin() + pick);
             }
         }
 

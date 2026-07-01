@@ -1292,7 +1292,39 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     const bool target_self = ap.life > 9;
     std::vector<int> opp_creatures = SoulfireOppCreatureOrder(state, controller);   // board order
     std::vector<int> own           = SoulfireOwnCreatureOrder(state, controller);   // expendable-first
-    if (static_cast<int>(own.size()) > std::max(0, own_targets)) { own.resize(std::max(0, own_targets)); }
+    {
+        const int k = std::max(0, own_targets);
+        if (static_cast<int>(own.size()) > k)
+        {
+            std::vector<int> chosen(own.begin(), own.begin() + k);   // heuristic default: first k
+            // Human play (claude-play): let the player pick WHICH k own creatures are targeted; the
+            // chooser is nulled during search/rollout so the expendable-first default stands there.
+            if (g_play_soulfire_chooser && k > 0)
+            {
+                std::vector<int> pick =
+                    (*g_play_soulfire_chooser)(state, controller, "Soulfire Eruption", own, k, chosen);
+                // Accept only a well-formed subset: exactly k distinct candidates; else keep default.
+                bool ok = (static_cast<int>(pick.size()) == k);
+                std::vector<int> seen;
+                for (int bi : pick)
+                {
+                    if (!ok) { break; }
+                    if (std::find(own.begin(), own.end(), bi) == own.end()
+                        || std::find(seen.begin(), seen.end(), bi) != seen.end()) { ok = false; break; }
+                    seen.push_back(bi);
+                }
+                if (ok)
+                {
+                    // Keep canonical (heuristic) order among the chosen so the positional card
+                    // assignment stays deterministic regardless of the player's click order.
+                    std::vector<int> ordered;
+                    for (int bi : own) { if (std::find(pick.begin(), pick.end(), bi) != pick.end()) { ordered.push_back(bi); } }
+                    chosen = ordered;
+                }
+            }
+            own = chosen;
+        }
+    }
 
     const int n = 1 + (target_self ? 1 : 0)
                 + static_cast<int>(opp_creatures.size()) + static_cast<int>(own.size());

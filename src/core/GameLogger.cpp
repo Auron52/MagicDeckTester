@@ -12,6 +12,8 @@ thread_local BounceChooser*  g_play_bounce_chooser = nullptr;
 thread_local DigChooser*     g_play_dig_chooser    = nullptr;
 thread_local DiscardChooser* g_play_discard_chooser = nullptr;
 thread_local EIChooser*      g_play_ei_chooser      = nullptr;
+thread_local RetraceDiscardChooser* g_play_retrace_chooser = nullptr;
+thread_local SoulfireTargetChooser* g_play_soulfire_chooser = nullptr;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;
 
 void GameLogger::StartGame(const std::string& run_id, int game_number,

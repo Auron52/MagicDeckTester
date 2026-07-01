@@ -277,6 +277,37 @@ using EIChooser = std::function<std::pair<int,int>(const GameState& state,
                                                    int heur_hand_idx, int heur_exile_idx)>;
 extern thread_local EIChooser* g_play_ei_chooser;
 
+// ---- Human-play Retrace discard chooser (which land to discard as the additional cost) --------
+// Retrace (Throes of Chaos) casts a spell from the graveyard by discarding a land card as an
+// additional cost. Autonomously cast_from_graveyard discards the FIRST land in hand order; under
+// --claude-play the human picks WHICH land to discard. The chooser receives the hand indices of the
+// discardable lands and the heuristic's pick (a hand index); it returns the chosen hand index (one
+// of the offered indices). Called once per land the cast must discard (retrace = 1). Nulled by
+// RevealLogPause for every search/rollout/enumeration scope, so it fires only for the REAL cast and
+// the autonomous heuristic (first land) stands there. Inert (heuristic) unless set.
+using RetraceDiscardChooser = std::function<int(const GameState& state, int controller,
+                                                const std::string& source,
+                                                const std::vector<int>& hand_land_indices,
+                                                int heuristic_pick)>;
+extern thread_local RetraceDiscardChooser* g_play_retrace_chooser;
+
+// ---- Human-play Soulfire own-target chooser (WHICH of your creatures the dig also targets) ------
+// Soulfire Eruption targets the face + opponent creatures + (optionally) you + a SEARCHED COUNT of
+// your OWN creatures (each = a deeper dig + a bigger Hinata discount, but takes a random exiled
+// card's damage). The count is chosen by the search; autonomously SoulfireDig picks WHICH creatures
+// expendable-first (Hinata last). Under --claude-play the human picks which `count` of the candidate
+// own creatures are targeted. The chooser receives the candidate battlefield indices (heuristic
+// order), the count to pick, and the heuristic's default subset; it returns the chosen subset of
+// battlefield indices (size == count, each a candidate). Nulled by RevealLogPause for every
+// search/rollout/enumeration scope (SoulfireDig runs in both the executor and the rollout), so it
+// fires only for the REAL resolution and the search stays byte-identical. Inert unless set.
+using SoulfireTargetChooser = std::function<std::vector<int>(const GameState& state, int controller,
+                                                             const std::string& source,
+                                                             const std::vector<int>& candidates,
+                                                             int count,
+                                                             const std::vector<int>& heuristic_subset)>;
+extern thread_local SoulfireTargetChooser* g_play_soulfire_chooser;
+
 // ---- Human-play draw sink (accurate per-draw reporting for the viewer history) -------------
 // Under --claude-play the viewer wants to show exactly what was drawn and on which turn, rather
 // than guessing from a hand diff (which can't tell duplicate copies apart or split a cantrip
@@ -301,18 +332,23 @@ struct RevealLogPause
     DigChooser* saved_dchooser;
     DiscardChooser* saved_dischooser;
     EIChooser* saved_eichooser;
+    RetraceDiscardChooser* saved_rtchooser;
+    SoulfireTargetChooser* saved_sfchooser;
     std::vector<std::pair<int, std::string>>* saved_drawsink;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
-                       saved_eichooser(g_play_ei_chooser), saved_drawsink(g_play_draw_sink)
+                       saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
+                       saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
-      g_play_ei_chooser = nullptr; g_play_draw_sink = nullptr; }
+      g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
+      g_play_draw_sink = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
-                        g_play_ei_chooser = saved_eichooser; g_play_draw_sink = saved_drawsink; }
+                        g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
+                        g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

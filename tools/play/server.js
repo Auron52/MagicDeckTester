@@ -83,7 +83,7 @@ function buildArgs(p, logDir, validateLine) {
   args.push('--claude-play');
   args.push('--seed', String(intParam(p.seed, 1)));
   args.push('--game-index', String(intParam(p.gameIndex, 0)));
-  args.push('--max-turns', String(intParam(p.maxTurns, 12)));
+  args.push('--max-turns', String(intParam(p.maxTurns, 8)));
   // depth 0 is REQUIRED for human play: at depth > 0 the engine enables lookahead-bottoming
   // and mulligan/lookahead rollouts replay whole games through the SAME external chooser, so the
   // human would be asked to play hypothetical rollout games (the chooser must drive the real

@@ -1295,6 +1295,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!TapForCost(state, effective, available, def->card.IsCreature())) { return; }
 
         // Additional cost: discard `discard_lands` land cards from hand to the graveyard.
+        // (Autonomous ExecutePlan path -- claude-play executes retrace via TurnSolver::ApplyPlan,
+        // where the human's land-discard chooser lives; here the heuristic first-land pick stands.)
         int discarded = 0;
         for (auto hit = ap.hand.begin(); hit != ap.hand.end() && discarded < discard_lands; )
         {

@@ -568,46 +568,16 @@ static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTar
     return opts;
 }
 
-// Enumerate damage-ALLOCATION options for a divided-damage spell (Fiery Justice / Magma Opus): each
-// option assigns positive per-target amounts (carried in ChosenTarget::amount) summing to `total`,
-// over a nonempty subset of the legal targets. Capped at 3 targets per allocation and 256 options so
-// a large board / total can't explode the menu. Order: all-to-one first, then 2-way, then 3-way.
-static std::vector<TargetOption> EnumerateDamageAllocations(const std::vector<ChosenTarget>& legal,
-                                                            const std::vector<std::string>& labels, int total)
-{
-    std::vector<TargetOption> opts;
-    const int n = static_cast<int>(legal.size());
-    if (total <= 0) { return opts; }
-    auto make = [&](std::initializer_list<std::pair<int,int>> parts) {   // (legal index, amount)
-        TargetOption o; std::string lbl;
-        for (auto [li, amt] : parts)
-        {
-            ChosenTarget ct = legal[li]; ct.amount = amt; o.targets.push_back(ct);
-            lbl += (lbl.empty() ? "" : ", ") + std::to_string(amt) + " to " + labels[li];
-        }
-        o.label = lbl; opts.push_back(std::move(o));
-    };
-    // 1-way: all `total` to a single target.
-    for (int i = 0; i < n; ++i) { make({ {i, total} }); }
-    // 2-way: split between an ordered pair (i<j), a+b=total, a,b>=1.
-    for (int i = 0; i < n && opts.size() < 256; ++i)
-        for (int j = i + 1; j < n && opts.size() < 256; ++j)
-            for (int a = 1; a <= total - 1; ++a) { make({ {i, a}, {j, total - a} }); }
-    // 3-way: split among an ordered triple (i<j<k), a+b+c=total, all >=1.
-    for (int i = 0; i < n && opts.size() < 256; ++i)
-        for (int j = i + 1; j < n && opts.size() < 256; ++j)
-            for (int k = j + 1; k < n && opts.size() < 256; ++k)
-                for (int a = 1; a <= total - 2; ++a)
-                    for (int b = 1; b <= total - a - 1; ++b) { make({ {i, a}, {j, b}, {k, total - a - b} }); }
-    return opts;
-}
-
 // Emit a divided-damage allocation decision. Each option carries its per-target amounts; the player
 // replies one option index. `total` = the total damage to divide. Default = all to the opponent face.
+// Divided-damage decision (Fiery Justice / Magma Opus): the player allocates `total` damage among
+// ANY number of the legal targets, each getting >= 1, on the board via editable per-target numbers.
+// The answer is one integer PER legal target (in this `legal_targets` order), 0 = not targeted, so
+// there is no target-count cap (a spell that says "any number of targets" is modelled faithfully).
+// `default_amounts` (aligned to legal_targets) seeds the board with the heuristic pick (all to face).
 static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
                                     const std::vector<ChosenTarget>& legal, const std::vector<std::string>& legal_labels,
-                                    const std::vector<TargetOption>& options, int total,
-                                    int heuristic_default, int decision_index)
+                                    int total, const std::vector<int>& default_amounts, int decision_index)
 {
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
@@ -619,24 +589,11 @@ static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const 
     os << "  \"legal_targets\": [";
     for (size_t i = 0; i < legal.size(); ++i)
     { if (i) os << ", "; os << "{ \"kind\": \"" << (legal[i].kind == 0 ? "player" : "permanent")
-                            << "\", \"index\": " << legal[i].index << ", \"label\": "; JsonStr(os, legal_labels[i]); os << " }"; }
+                            << "\", \"index\": " << legal[i].index << ", \"label\": "; JsonStr(os, legal_labels[i]);
+      os << ", \"default\": " << (i < default_amounts.size() ? default_amounts[i] : 0) << " }"; }
     os << "],\n";
-    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
-    os << "  \"options\": [";
-    for (size_t oi = 0; oi < options.size(); ++oi)
-    {
-        if (oi) os << ", ";
-        os << "{ \"index\": " << oi << ", \"label\": "; JsonStr(os, options[oi].label);
-        os << ", \"targets\": [";
-        for (size_t ti = 0; ti < options[oi].targets.size(); ++ti)
-        { const ChosenTarget& c = options[oi].targets[ti];
-          if (ti) os << ", "; os << "{ \"kind\": \"" << (c.kind == 0 ? "player" : "permanent")
-                                  << "\", \"index\": " << c.index << ", \"amount\": " << c.amount << " }"; }
-        os << "] }";
-    }
-    os << "],\n";
-    os << "  \"note\": \"reply an option index -- an allocation of " << total
-       << " damage among targets. Default = all to the opponent face.\"\n";
+    os << "  \"note\": \"reply one integer per legal target (in this order), each >= 0 and summing to "
+       << total << " -- the damage assigned to each. Default = all to the opponent face.\"\n";
     os << "}\n";
 }
 
@@ -806,6 +763,105 @@ static void WriteEIDecisionJson(std::ostream& os, const GameState& s,
     }
     os << "],\n";
     os << "  \"note\": \"reply an option index: 'hand' is banked, 'exile' is playable this turn, 'bottom' goes to the library bottom. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
+// Retrace discard decision (Throes of Chaos): the player picks WHICH land in hand to discard as
+// Retrace's additional cost. Emits the discardable lands as image options; the reply is the hand
+// index to discard. One decision fires per land the retrace cast must discard (retrace = 1).
+static void WriteRetraceDiscardDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                            const std::vector<int>& hand_land_indices,
+                                            int heuristic_default, int decision_index)
+{
+    const Player& ap = s.players[s.active_player_index];
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"retrace_discard\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"options\": [";
+    for (size_t i = 0; i < hand_land_indices.size(); ++i)
+    {
+        int hi = hand_land_indices[i];
+        if (i) os << ", ";
+        os << "{ \"index\": " << hi << ", \"name\": ";
+        JsonStr(os, (hi >= 0 && hi < static_cast<int>(ap.hand.size())) ? ap.hand[hi].m_name.str() : std::string());
+        os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply a hand index -- the land to discard as this spell's Retrace additional cost. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
+// Enumerate the size-k subsets of `cand` (candidate battlefield indices), in deterministic
+// combination order. Subset 0 is {cand[0..k-1]} -- so when `cand` is in the engine's heuristic
+// (expendable-first) order, option 0 IS the heuristic default. Shared by the decision JSON and the
+// chooser so a --choices option index maps back to the same subset. Capped defensively (own-creature
+// boards are tiny; the cap only guards a pathological board).
+static std::vector<std::vector<int>> SoulfireSubsets(const std::vector<int>& cand, int k)
+{
+    std::vector<std::vector<int>> out;
+    const int n = static_cast<int>(cand.size());
+    if (k < 0 || k > n) { return out; }
+    if (k == 0) { out.push_back({}); return out; }
+    std::vector<int> comb(k);
+    for (int i = 0; i < k; ++i) { comb[i] = i; }
+    while (true)
+    {
+        std::vector<int> subset;
+        for (int i : comb) { subset.push_back(cand[i]); }
+        out.push_back(subset);
+        if (out.size() >= 256) { break; }
+        int i = k - 1;
+        while (i >= 0 && comb[i] == n - k + i) { --i; }
+        if (i < 0) { break; }
+        ++comb[i];
+        for (int j = i + 1; j < k; ++j) { comb[j] = comb[j - 1] + 1; }
+    }
+    return out;
+}
+
+// Soulfire own-target decision (Soulfire Eruption): the player picks WHICH `count` of their own
+// creatures the dig also targets (each takes a random exiled card's damage; more targets = deeper
+// dig + bigger Hinata discount). Emits the candidate creatures (for board highlighting) and the
+// enumerated size-`count` subsets as options; the reply is an option index. The board-click UI lets
+// the player select the creatures, then maps the selected set back to its option index.
+static void WriteSoulfireDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                      const std::vector<int>& candidates, int count,
+                                      const std::vector<std::vector<int>>& subsets, int heur_option,
+                                      int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"soulfire_targets\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"count\": " << count << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"heuristic_default\": " << heur_option << ",\n";
+    os << "  \"candidates\": [";
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+        int bi = candidates[i];
+        if (i) os << ", ";
+        os << "{ \"perm_index\": " << bi << ", \"name\": ";
+        JsonStr(os, (bi >= 0 && bi < static_cast<int>(s.battlefield.size())) ? s.battlefield[bi].card.m_name.str() : std::string());
+        os << " }";
+    }
+    os << "],\n";
+    os << "  \"options\": [";
+    for (size_t oi = 0; oi < subsets.size(); ++oi)
+    {
+        if (oi) os << ", ";
+        os << "{ \"index\": " << oi << ", \"perm_indices\": [";
+        for (size_t j = 0; j < subsets[oi].size(); ++j) { if (j) os << ", "; os << subsets[oi][j]; }
+        os << "] }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply an option index -- which " << count
+       << " of your creatures Soulfire Eruption also targets. Default = the AI's pick (most expendable).\"\n";
     os << "}\n";
 }
 
@@ -1010,33 +1066,42 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             CollectDamageTargets(s, controller, players_only, legal, legal_labels);
 
             // Divided damage (Fiery Justice / Magma Opus): the player allocates `per_target_damage`
-            // (the TOTAL here) among targets. Enumerate allocations; default = all to opponent face.
+            // (the TOTAL here) among ANY number of the legal targets, each >= 1. The answer is ONE
+            // integer per legal target (in `legal` order), 0 = untargeted -- so there is no
+            // target-count cap. The board GUI edits these numbers directly. Default = all to opp face.
             if (def.params.damage_divided)
             {
-                std::vector<TargetOption> dopts = EnumerateDamageAllocations(legal, legal_labels, per_target_damage);
-                if (dopts.empty()) { return heuristic; }
-                int ddef = 0;   // default = the single all-to-opponent-face allocation
-                for (size_t i = 0; i < dopts.size(); ++i)
-                { if (dopts[i].targets.size() == 1 && dopts[i].targets[0].kind == 0
-                      && dopts[i].targets[0].index == legal[0].index) { ddef = static_cast<int>(i); break; } }
+                if (legal.empty()) { return heuristic; }
+                const int total = per_target_damage;
+                const int need  = static_cast<int>(legal.size());
+                std::vector<int> defaults(need, 0);
+                defaults[0] = total;   // legal[0] is the opponent face (CollectDamageTargets order)
+                std::vector<ChosenTarget> heur_alloc = { legal[0] }; heur_alloc[0].amount = total;
                 int di = static_cast<int>(cursor);
-                if (cursor < choices.size())
+                if (cursor + need <= static_cast<int>(choices.size()))
                 {
-                    int chosen = choices[cursor++];
+                    std::vector<int> amts(need);
+                    int sum = 0;
+                    for (int i = 0; i < need; ++i) { int a = choices[cursor++]; if (a < 0) { a = 0; } amts[i] = a; sum += a; }
                     ++decisions_made;
-                    if (chosen < 0 || chosen >= static_cast<int>(dopts.size())) { chosen = ddef; }
+                    std::vector<ChosenTarget> built;
+                    for (int i = 0; i < need; ++i)
+                    { if (amts[i] > 0) { ChosenTarget c = legal[i]; c.amount = amts[i]; built.push_back(c); } }
+                    const bool ok = (sum == total) && !built.empty();   // else fall back to all-to-face
                     if (!log_dir.empty())
                     {
                         std::ostringstream ss;
-                        ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                        WriteDivideDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, dopts, per_target_damage, ddef, di);
+                        ss << "{ \"chosen\": [";
+                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
+                        ss << "], \"decision\": ";
+                        WriteDivideDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di);
                         ss << "}";
                         trace.push_back(ss.str());
                     }
-                    return dopts[chosen].targets;
+                    return ok ? built : heur_alloc;
                 }
                 std::cout << "<<<CLAUDE_DECISION>>>\n";
-                WriteDivideDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, dopts, per_target_damage, ddef, di);
+                WriteDivideDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di);
                 std::cout << "<<<END_DECISION>>>\n";
                 std::cout.flush();
                 std::exit(70);
@@ -1207,6 +1272,78 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         };
     g_play_ei_chooser = &ei_chooser;
+
+    // Retrace discard: the player picks which land to discard as Throes of Chaos's additional cost.
+    // Shares the --choices stream; the reply is a hand index. Default = the engine's heuristic (first
+    // land in hand order).
+    RetraceDiscardChooser retrace_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<int>& lands, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                bool ok = false;
+                for (int li : lands) { if (li == chosen) { ok = true; break; } }
+                if (!ok) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteRetraceDiscardDecisionJson(ss, s, source, lands, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteRetraceDiscardDecisionJson(std::cout, s, source, lands, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_retrace_chooser = &retrace_chooser;
+
+    // Soulfire own-target: the player picks which `count` of their own creatures the dig also targets.
+    // Shares the --choices stream; the reply is an option index into the enumerated size-`count`
+    // subsets. Default = the engine's heuristic subset (option 0 = most-expendable first).
+    SoulfireTargetChooser soulfire_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<int>& candidates, int count,
+            const std::vector<int>& heuristic_subset) -> std::vector<int>
+        {
+            (void)controller;
+            std::vector<std::vector<int>> subsets = SoulfireSubsets(candidates, count);
+            if (subsets.empty()) { return heuristic_subset; }   // defensive: nothing to choose
+            int heur_option = 0;
+            for (size_t oi = 0; oi < subsets.size(); ++oi)
+            { if (subsets[oi] == heuristic_subset) { heur_option = static_cast<int>(oi); break; } }
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(subsets.size())) { chosen = heur_option; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteSoulfireDecisionJson(ss, s, source, candidates, count, subsets, heur_option, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return subsets[chosen];
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteSoulfireDecisionJson(std::cout, s, source, candidates, count, subsets, heur_option, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_soulfire_chooser = &soulfire_chooser;
 
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);

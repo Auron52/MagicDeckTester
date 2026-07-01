@@ -163,6 +163,18 @@
       border-radius:4px; font-size:10px; font-weight:700; padding:0 3px; z-index:2; }
   .zone.ledrop { border:1px dashed #7a5a1e; border-radius:10px; background:rgba(58,47,27,.35); padding:2px 6px; }
   .zone.ledrop.active { border-color:#ffb84d; background:rgba(58,47,27,.6); }
+  /* divided-damage board editor: an inline −[n]+ stepper on each legal target (Fiery Justice / Magma Opus). */
+  .divw { display:inline-flex; align-items:center; gap:1px; vertical-align:middle; z-index:5;
+      background:rgba(230,90,90,.95); border-radius:6px; padding:1px; box-shadow:0 1px 4px rgba(0,0,0,.5); }
+  .divw.face { margin-left:6px; }
+  .thumb .divw { position:absolute; bottom:3px; left:50%; transform:translateX(-50%); }
+  .divw button { width:16px; height:18px; border:0; border-radius:4px; background:rgba(0,0,0,.35); color:#fff;
+      font-size:13px; line-height:1; cursor:pointer; padding:0; }
+  .divw button:hover { background:rgba(0,0,0,.6); }
+  .divw input { width:24px; height:18px; border:0; border-radius:3px; text-align:center; font-size:12px;
+      font-weight:700; background:#fff; color:#111; -moz-appearance:textfield; }
+  .divw input::-webkit-outer-spin-button, .divw input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  .thumb.divtgt img { box-shadow:0 0 0 2px rgba(230,90,90,.9); }
   /* the order-number and ✕ badges overhang each thumb by ~7px, so give the activation list
      extra horizontal+vertical gap to stop adjacent badges from colliding */
   .zone.ledrop .row { gap:22px 20px; padding:6px 4px; }
@@ -321,7 +333,7 @@
   <label>Deck <select id="deck"></select></label>
   <label>Seed <input id="seed" type="number" value="1"/></label>
   <label>Game # <input id="gi" type="number" value="0"/></label>
-  <label>Max turns <input id="maxturns" type="number" value="12"/></label>
+  <label>Max turns <input id="maxturns" type="number" value="8"/></label>
   <button id="newgame" class="primary">New game</button>
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
   <button id="undo" disabled>Undo</button>
@@ -454,7 +466,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig','discard','divide','expressive_iteration'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig','discard','divide','expressive_iteration','retrace_discard','soulfire_targets'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -463,8 +475,9 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='vial_charge';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='vial_charge' || dec==='soulfire_targets';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
+  if (dec==='divide' && S._divFor !== d.decision_index) initDivAlloc(d);   // board-edit damage allocation
   // At game end, prefer the FINAL board carried on the result (permanents in play after the winning
   // turn) over the last decision's board, so the win screen reflects what actually resolved.
   const endBoard = (S.over && S.result && S.result.me) ? S.result : null;
@@ -857,7 +870,7 @@ async function storeArtifact(v, line) {
 function tgtKey(t){ return (t.kind==='player'?'p:':'m:')+t.index; }
 // The legal opponent/your face target for a target decision (matched by label), or null.
 function faceTarget(d, who){
-  if (!d || d.type!=='target') return null;
+  if (!d || (d.type!=='target' && d.type!=='divide')) return null;
   const re = who==='opp' ? /opponent/i : /\byou(r)?\b/i;
   return (d.legal_targets||[]).find(t=>t.kind==='player' && re.test(t.label)) || null;
 }
@@ -872,12 +885,16 @@ function initBoardSel(d){
   } else if (d.type==='bounce'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
+  } else if (d.type==='soulfire_targets'){
+    const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
+    if (def) (def.perm_indices||[]).forEach(pi=>S.boardSel.add('m:'+pi));
   }
   S._selFor = d.decision_index;
 }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
   if (d.type==='bounce') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='soulfire_targets') return new Set((d.candidates||[]).map(c=>'m:'+c.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -889,8 +906,9 @@ function toggleSel(d, key, max){
 // Add highlight classes + click handlers to the real board for an active target/bounce/vial decision.
 function wireDecisionBoard(d, dec){
   const board=$('board');
-  if (dec==='target' || dec==='bounce'){
-    const legal=legalTargetKeys(d), max = dec==='bounce'?1:(d.max_targets||1);
+  if (dec==='target' || dec==='bounce' || dec==='soulfire_targets'){
+    const legal=legalTargetKeys(d);
+    const max = dec==='bounce'?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
       const key='m:'+t.dataset.idx; if (!legal.has(key)) return;
       t.classList.add('selectable'); if (S.boardSel && S.boardSel.has(key)) t.classList.add('selected');
@@ -899,20 +917,74 @@ function wireDecisionBoard(d, dec){
     board.querySelectorAll('.life b[data-tk]').forEach(b=>{ b.onclick=()=>toggleSel(d, b.dataset.tk, max); });
   } else if (dec==='vial_charge' && d.perm_index!=null && d.perm_index>=0){
     const t=board.querySelector(`.thumb[data-idx="${d.perm_index}"]`); if (t) t.classList.add('selectable');
+  } else if (dec==='divide'){
+    wireDivideBoard(d);
   }
+}
+
+// ---- divided-damage board editor (Fiery Justice / Magma Opus): an editable number on each legal
+// target, ANY number of targets each >= 1 summing to total. The answer is one int per legal target
+// (in legal order), matching the engine's per-target read -- no target-count cap.
+function divKey(t){ return (t.kind==='player'?'p:':'m:')+t.index; }
+function initDivAlloc(d){
+  S.divAlloc={};
+  (d.legal_targets||[]).forEach(t=>{ S.divAlloc[divKey(t)] = t.default||0; });
+  S._divFor=d.decision_index;
+}
+function divTotalAssigned(){ let s=0; for(const k in (S.divAlloc||{})) s+=+S.divAlloc[k]||0; return s; }
+function divTargetCount(){ let n=0; for(const k in (S.divAlloc||{})) if((+S.divAlloc[k]||0)>0) n++; return n; }
+// Set one target's amount, clamped so the running sum never exceeds total; refresh the input + prompt
+// in place (no board re-render, so a typed input keeps focus).
+function setDivAmt(d, key, v){
+  const total=d.total_damage||0;
+  let others=0; for(const k in S.divAlloc){ if(k!==key) others+=+S.divAlloc[k]||0; }
+  v=Math.max(0, Math.min(total-others, Math.floor(+v||0)));
+  S.divAlloc[key]=v;
+  const inp=document.querySelector(`.divw[data-k="${key}"] input`); if(inp && +inp.value!==v) inp.value=v;
+  updateDivPrompt(d);
+}
+function updateDivPrompt(d){
+  const sum=divTotalAssigned(), total=d.total_damage||0, n=divTargetCount();
+  const c=document.querySelector('#decpanel .pcount');
+  if(c) c.textContent=`${sum} / ${total} assigned · ${n} target${n===1?'':'s'}`;
+  const btn=document.querySelector('#decpanel #decconfirm'); if(btn) btn.disabled=!(sum===total && n>=1);
+}
+function wireDivideBoard(d){
+  const board=$('board');
+  (d.legal_targets||[]).forEach(t=>{
+    const key=divKey(t);
+    const host = t.kind==='player'
+      ? board.querySelector(`.life b[data-tk="p:${t.index}"]`)
+      : board.querySelector(`.thumb[data-idx="${t.index}"]`);
+    if (!host) return;
+    const cur=(S.divAlloc&&S.divAlloc[key])||0;
+    const w=document.createElement('span');
+    w.className='divw'+(t.kind==='player'?' face':'');
+    w.setAttribute('data-k', key);
+    w.innerHTML=`<button class="dm" tabindex="-1">−</button>`+
+      `<input type="number" min="0" max="${d.total_damage}" value="${cur}"/>`+
+      `<button class="dp" tabindex="-1">+</button>`;
+    const inp=w.querySelector('input');
+    inp.oninput=()=>setDivAmt(d,key,inp.value);
+    w.querySelector('.dm').onclick=(e)=>{ e.stopPropagation(); setDivAmt(d,key,(S.divAlloc[key]||0)-1); };
+    w.querySelector('.dp').onclick=(e)=>{ e.stopPropagation(); setDivAmt(d,key,(S.divAlloc[key]||0)+1); };
+    if (t.kind==='player') host.insertAdjacentElement('afterend', w);
+    else { host.classList.add('divtgt'); host.appendChild(w); }
+  });
 }
 
 function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
-  const isModal = isLook || dec==='dig' || dec==='discard' || dec==='divide' || dec==='expressive_iteration'; // centered card-image modals
+  const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
   panel.innerHTML = isLook ? lookPanelHtml(d, dec) : dec==='dig' ? digPanelHtml(d)
-                  : dec==='discard' ? discardPanelHtml(d) : dec==='divide' ? dividePanelHtml(d)
+                  : dec==='discard' ? discardPanelHtml(d)
                   : dec==='expressive_iteration' ? eiPanelHtml(d)
-                  : promptPanelHtml(d, dec);
+                  : dec==='retrace_discard' ? retraceDiscardPanelHtml(d)
+                  : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
@@ -982,19 +1054,18 @@ function discardPanelHtml(d){
   });
   return h+`</div>`;
 }
-// Divided-damage panel (#10, Fiery Justice / Magma Opus): the player picks how to SPLIT the total
-// damage among targets. Each option is one allocation, shown as "N → target" chips. The all-to-face
-// allocation is the AI default and tagged. Modal option grid (no board interaction).
-function dividePanelHtml(d){
-  const lab={}; (d.legal_targets||[]).forEach(t=>lab[t.kind+':'+t.index]=t.label);
-  let h=`<h3>Divide ${d.total_damage} damage — ${esc(d.source||'')}</h3>`;
-  h+=`<div class="sub">Choose how to split ${d.total_damage} damage among targets. The AI's pick (all to the opponent) is tagged.</div>`;
-  h+=`<div class="optgrid">`;
+// Retrace-discard panel (Throes of Chaos): IMAGE-based central modal. Casting a retrace spell from
+// the graveyard costs an extra discarded land; the discardable lands are shown as art, click one to
+// discard it. The AI's pick (first land) is tagged. Fires once per land the cast must discard.
+function retraceDiscardPanelHtml(d){
+  let h=`<h3>Retrace — discard a land</h3>`;
+  h+=`<div class="sub">Casting <b>${esc(d.source||'this spell')}</b> from your graveyard costs an extra discarded land. Click the land to discard (its other costs are already paid).</div>`;
+  h+=`<div class="tutgrid">`;
   (d.options||[]).forEach(o=>{
     const def=o.index===d.heuristic_default;
-    const chips=(o.targets||[]).map(t=>`<span class="dchip"><b>${t.amount}</b> ▸ ${esc(lab[t.kind+':'+t.index]||(t.kind==='player'?'player':'permanent'))}</span>`).join('');
-    h+=`<button class="optcard${def?' def':''}" data-opt="${o.index}">${chips}`+
-       (def?`<span class="deftag">AI pick</span>`:'')+`</button>`;
+    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${o.index}" data-name="${esc(o.name)}" title="${esc(o.name)}">`+
+       `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(o.name)}</em>`+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
   });
   return h+`</div>`;
 }
@@ -1029,6 +1100,20 @@ function promptPanelHtml(d, dec){
       `<div class="pbtns"><button class="primary" data-v="1">Add a counter</button><button data-v="0">Hold</button>`+
       `<span class="spacer"></span><span class="pcount">AI default: ${d.heuristic_default?'add':'hold'}</span></div>`;
   }
+  if (dec==='soulfire_targets'){
+    const need=d.count||0, n=(S.boardSel||new Set()).size;
+    return `<h3>Soulfire Eruption — target your own creatures</h3>`+
+      `<div class="sub">Pick <b>${need}</b> of your creatures for Soulfire Eruption to also target. Each takes a random exiled card's damage, but every extra target deepens the dig and (with Hinata) shaves {1} off the cost. Eligible creatures are highlighted; the AI's pick (most expendable) is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">${n} / ${need} selected</span><span class="spacer"></span>`+
+      `<button id="decconfirm" class="primary" ${n===need?'':'disabled'}>Confirm</button></div>`;
+  }
+  if (dec==='divide'){
+    const total=d.total_damage||0, sum=divTotalAssigned(), n=divTargetCount();
+    return `<h3>Divide ${total} damage — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">Set the damage on each target on the board (type, or −/+). Any number of targets, each ≥1, summing to <b>${total}</b>.</div>`+
+      `<div class="pbtns"><span class="pcount">${sum} / ${total} assigned · ${n} target${n===1?'':'s'}</span>`+
+      `<span class="spacer"></span><button id="decconfirm" class="primary" ${(sum===total&&n>=1)?'':'disabled'}>Confirm</button></div>`;
+  }
   if (dec==='bounce'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
@@ -1059,14 +1144,21 @@ function wireDecisionPanel(d, dec){
   else if (dec==='discard')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDiscard(d, +b.dataset.opt));
   else if (dec==='divide')
-    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDivide(d, +b.dataset.opt));
+    { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDivide(d); }
   else if (dec==='expressive_iteration')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitEI(d, +b.dataset.opt));
+  else if (dec==='retrace_discard')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitRetraceDiscard(d, +b.dataset.opt));
   else { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec); }
 }
-function pushChoice(d, oi, lab){
+function pushChoice(d, oi, lab){ pushChoices(d, [oi], lab); }
+// A decision's answer is one-or-more integers appended atomically; S.steps records how many each
+// decision contributed so undo can pop a whole variable-length step (divide sends one int per legal
+// target). Existing single-int decisions record a step of 1 -> behaviour unchanged.
+function pushChoices(d, arr, lab){
   S.history.push({ turn:d.turn, label:lab });
-  S.prev=S.decision; S.choices.push(oi); S.boardSel=null; S._selFor=null;
+  S.prev=S.decision; arr.forEach(x=>S.choices.push(x)); (S.steps=S.steps||[]).push(arr.length);
+  S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null;
   renderHistory(); hideDecPanel(); step();
 }
 function commitLook(d, oi){
@@ -1085,13 +1177,20 @@ function commitDiscard(d, oi){
   const c=(d.options||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `discard: ${c?c.name:'card'}`);
 }
-function commitDivide(d, oi){
-  const o=(d.options||[]).find(x=>x.index===oi);
-  pushChoice(d, oi, `${d.source}: ${o?o.label:'damage'}`);
+// Divide: send one integer per legal target (in legal order = the order the engine reads them).
+function commitDivide(d){
+  const amounts=(d.legal_targets||[]).map(t=>(S.divAlloc&&S.divAlloc[divKey(t)])||0);
+  const parts=(d.legal_targets||[]).filter(t=>((S.divAlloc||{})[divKey(t)]||0)>0)
+    .map(t=>`${S.divAlloc[divKey(t)]}→${t.label}`);
+  pushChoices(d, amounts, `${d.source}: ${parts.join(', ')||'—'}`);
 }
 function commitEI(d, oi){
   const o=(d.options||[]).find(x=>x.index===oi)||{};
   pushChoice(d, oi, `Expressive Iteration: hand ${o.hand||''}, play ${o.exile||''}`);
+}
+function commitRetraceDiscard(d, oi){
+  const c=(d.options||[]).find(x=>x.index===oi);
+  pushChoice(d, oi, `${d.source} (retrace): discard ${c?c.name:'land'}`);
 }
 function commitBoardSel(d, dec){
   const sel=[...(S.boardSel||[])];
@@ -1099,6 +1198,12 @@ function commitBoardSel(d, dec){
   if (dec==='bounce'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: return ${opt?opt.name:'land'}`;
+  } else if (dec==='soulfire_targets'){
+    const want=sel.map(k=>+k.slice(2)).sort((a,b)=>a-b).join('|');
+    const opt=(d.options||[]).find(o=>(o.perm_indices||[]).slice().sort((a,b)=>a-b).join('|')===want);
+    oi=opt?opt.index:d.heuristic_default;
+    const names=(d.candidates||[]).filter(c=>S.boardSel.has('m:'+c.perm_index)).map(c=>c.name);
+    lab=`Soulfire: target ${names.join(', ')||'—'}`;
   } else {
     const want=sel.slice().sort().join('|');
     const opt=(d.options||[]).find(o=>(o.targets||[]).map(tgtKey).sort().join('|')===want);
@@ -1170,7 +1275,7 @@ async function step() {
   else showError(res.error||'unknown error', res.raw);
 }
 async function newGame() {
-  S={ choices:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
+  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); await step();
 }
 // Bump Seed + Game# and start the next game — for playing several in a row.
@@ -1180,20 +1285,21 @@ async function nextGame() {
   await newGame();
 }
 async function undo() {
-  if (!S.choices.length) return;
-  S.choices.pop();
+  if (!(S.steps&&S.steps.length)) return;
+  const n=S.steps.pop();                       // ints the last-committed decision contributed (>=1)
+  S.choices.length=Math.max(0,S.choices.length-n);
   S.history=S.history.filter(h=>!h.win);
   // Roll history + gy/hand diff state back to the checkpoint captured when we first advanced to the
-  // decision we're returning to (index = the now-reduced choices length). step() then replays and
-  // re-logs that decision's draws/gy, so a forward step's variable entry count undoes exactly.
-  const cp=(S.checkpoints||[])[S.choices.length];
+  // decision we're returning to (index = the now-reduced DECISION count, not the int count -- divide
+  // is one decision but several ints). step() then replays and re-logs that decision exactly.
+  const cp=(S.checkpoints||[])[S.steps.length];
   if (cp) { S.history.length=Math.min(S.history.length,cp.histLen);
             S.lastGy=Object.assign({},cp.lastGy); S.lastCasts=new Set(cp.lastCasts);
             S.handOrder=cp.handOrder?cp.handOrder.slice():undefined; }
   else    { S.lastGy={}; S.lastCasts=new Set(); S.handOrder=undefined; }
-  (S.checkpoints||[]).length=S.choices.length;   // drop this + the returned decision's cp; advanceTo recreates it
+  (S.checkpoints||[]).length=S.steps.length;   // drop this + the returned decision's cp; advanceTo recreates it
   S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
-  S.boardSel=null; S._selFor=null; hideDecPanel();
+  S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null; hideDecPanel();
   renderHistory(); await step();
 }
 async function saveRef() {
