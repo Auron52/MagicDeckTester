@@ -287,7 +287,7 @@
   #decpanel .optcard .deftag { position:absolute; top:-8px; right:8px; background:var(--acc); color:#0c1116;
       font-size:10px; font-weight:700; border-radius:7px; padding:0 6px; box-shadow:0 0 0 2px var(--panel); }
   /* tutor/Gamble target grid (card images to pick from) */
-  #decpanel .tutgrid { display:flex; flex-wrap:wrap; gap:8px; max-height:42vh; overflow:auto; }
+  #decpanel .tutgrid { display:flex; flex-wrap:wrap; gap:8px; max-height:42vh; overflow:auto; padding-top:9px; }
   #decpanel .tutgrid .cardmini { width:72px; cursor:pointer; border-radius:6px; padding:2px; }
   #decpanel .tutgrid .cardmini:hover { background:#1f2d3a; box-shadow:0 0 0 1px var(--acc); }
   #decpanel .tutgrid .cardmini.def img { box-shadow:0 0 0 2px var(--acc); }
@@ -843,8 +843,12 @@ function renderChooseDialog(v, line){
     const crumb=picks.length?`<div class="sub">${picks.map(p=>esc(p.key)+' '+esc(p.choice)).join(' · ')}</div>`:'';
     let h=`<h3>${esc(dim.key)}?</h3>`+crumb+`<div class="tutgrid">`;
     choices.forEach((c,i)=>{
+      // The badge only adds value when the choice differs from the card name shown below (X=2,
+      // +2 own). For fetch/tutor the choice IS the card name, so the badge just duplicates the
+      // <em> label and its nowrap pill overflows into neighbours -- skip it there.
+      const showBadge = c.card && c.choice!==c.card;
       h+=`<span class="cardmini varpick" data-i="${i}"${c.card?` data-name="${esc(c.card)}"`:''} title="${esc(c.choice)}">`+
-         `<span class="varbadge">${esc(c.choice)}</span>`+
+         (showBadge?`<span class="varbadge">${esc(c.choice)}</span>`:'')+
          (c.card?`<img loading="lazy" src="${scryImg(c.card,'small')}" onerror="this.style.opacity=.15"/>`:`<span style="display:block;height:96px"></span>`)+
          `<em>${esc(c.card||c.choice)}</em></span>`;
     });
