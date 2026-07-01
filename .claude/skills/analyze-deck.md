@@ -1,6 +1,8 @@
 # Deck Analysis Skill
 
-Use this skill when the user asks to analyze a deck, add a new deck, or run a simulation on a deck file. It orchestrates the full workflow: coverage check → implement all gaps → run the C++ analyzer → **verify (mismatch harnesses + multi-depth sanity) and iterate to convergence**. **Do not stop between stages to ask for user approval unless a genuine design decision is required.**
+Use this skill when the user asks to analyze a deck, add a new deck, or run a simulation on a deck file. It orchestrates the full workflow: coverage check → implement all gaps (**including wiring the card's play-viewer decisions**) → run the C++ analyzer → **verify (mismatch harnesses + multi-depth sanity + play-viewer decision surface) and iterate to convergence**. **Do not stop between stages to ask for user approval unless a genuine design decision is required.**
+
+**"Analyzed" includes "viewer-ready."** A deck is not done when the search plays it correctly — it is done when a human can also play it in the viewer (`tools/play`) without hitting a decision the engine silently made for them. The play viewer drives real human games through the *same* `--claude-play` decision protocol the search uses, so any interactive choice a card creates (targeting, mode, X, tutor/fetch/dig target, scry ordering, Vial charge) must be **surfaced** to the human. When it isn't, the engine falls back to its heuristic, the human can't override it, and the gap only ever surfaced by the user hitting it mid-game and reporting it. This skill folds that wiring into card implementation (Stage 2c-ter) and its verification into Stage 5 (5h), so a new deck is viewer-ready without the user having to find and correct each missing decision by hand.
 
 **Convergence, not a one-way pipeline.** Stages 1–4 are necessary but not sufficient: a clean coverage check and a generated profile do not prove the deck is correctly modelled or correctly *played*. Stage 5 stress-tests the result, and **any issue it finds — a card-implementation bug OR an AI/search issue — sends you back to Stage 2 (fix) → 2d (review) → 2d-bis (cost audit) → Stage 4 (regenerate profile) → Stage 5 (re-verify). Loop until every Stage 5 check passes.** A deck is only "analyzed" once it converges.
 
@@ -161,6 +163,49 @@ By default the engine plays **no post-combat (second) main phase** — in a clai
 
 If a second-main-relevant card is present but its detection/wiring is missing, this is a real gap — build it, do not defer silently.
 
+### 2c-ter. Wire the card's play-viewer decisions (so the human never has to correct a silent auto-choice)
+
+This is the analogue of 2c-bis for the *human-play* path: a per-card "does this card need wiring beyond `cards.json`?" gate, but for interactive decisions instead of the second main. The play viewer (`tools/play`) plays real human games through the same `--claude-play` decision protocol the search uses (see the claude-play skill); every interactive choice a card creates must be **surfaced** to the human as a decision, or the engine silently resolves it with its heuristic and the human can't override it. **Historically each of these was retrofitted one deck at a time** (`git log tools/play`: scry/surveil/reorder `e65e994`, board-click targeting `1dd8a5d`/`9c68f1a`, Karoo bounce `5ace156`, ETB-dig `23cf22a`, cleanup discard `1ccbe95`, divided-damage `6d74897`, Expressive Iteration `e4200d8`, Vial-as-a-choice `772ff62`, cycle/sac-to-draw dig `27f58f5`). The point of this step is to stop the retrofitting: classify each card's decisions **now**, at implementation time, not when the user hits the gap mid-game.
+
+For every card you implement, ask **what interactive choices does its Oracle text create for the player** (not for the search), and check each against the catalog below.
+
+| Interactive choice the card creates | Example cards | Surface mechanism | Wired? |
+|---|---|---|---|
+| Which line to play this main phase | every deck | `main_phase` plans | yes — always |
+| Tutor target | Gamble, Enlightened/Idyllic Tutor | `main_phase` plan **variants** (`tutor_target`) | yes — provider `TutorCandidates` |
+| Fetch-land target | fetchlands | plan variants (`fetch_target`) | yes — provider `FetchCandidates` |
+| X value ({X} spells) | any {X} spell | plan variants (`chosen_x`) | yes — provider `XCandidates` |
+| Ponder keep-vs-shuffle | Ponder | plan variants (`ponder_keep`) | yes |
+| Soulfire own-target **count** | Soulfire Eruption | plan variants (`soulfire_own_targets`) | yes (count only — see gaps) |
+| Scry / Surveil / reorder-top disposition | Preordain, Serum Visions, Ponder | `scry`/`surveil`/`reorder` decision (`g_play_top_chooser`) | yes — `e65e994` |
+| Damage-spell targeting (board click) | Bolt, Skullcrack, Searing Blaze | `target` decision (`g_play_target_chooser`) | yes — `1dd8a5d` |
+| Divided-damage allocation | Fiery Justice, Magma Opus | `divide` decision | yes — `6d74897` |
+| Karoo bounce-land return | Karoo/bounce lands | `bounce` decision (`g_play_bounce_chooser`) | yes — `5ace156` |
+| ETB dig / look-and-take | Acclaimed Contender | `dig` decision (`g_play_dig_chooser`) | yes — `23cf22a` |
+| Expressive Iteration 3-way split | Expressive Iteration | `expressive_iteration` (`g_play_ei_chooser`) | yes — `e4200d8` |
+| Cleanup discard to hand size | any flooded hand | `discard` decision (`g_play_discard_chooser`) | yes — `1ccbe95` |
+| Aether Vial upkeep charge | Aether Vial | `vial_charge` (`SetExternalVialChooser`) | yes — `772ff62` |
+| Retrace additional-cost land discard | Throes of Chaos | `retrace_discard` (`g_play_retrace_chooser`) | yes |
+| WHICH permanents a multi/own-target spell hits (not the count) | Soulfire own-targets | `soulfire_targets` board-click (`g_play_soulfire_chooser`) | yes |
+| **Modal "choose one/two" (non-damage)** | Reality Spasm (tap vs untap; also "which sources to untap") | — | **NO — PHASE 2: needs an engine-model change, not viewer wiring (see note)** |
+| **Cascade / Retrace SEARCH target** (which card the cascade/retrace flip casts) | cascade cards | — | **NO — heuristic-picked; build if the deck needs it** |
+
+Then place each of the card's choices into one bucket:
+
+- **Bucket A — reuses an existing decision type (the common case): nothing to build.** The card's choice is already surfaced (a burn spell → `target`, a scry → `scry`, a Karoo → `bounce`). For the plan-variant sub-decisions (tutor/fetch/X/ponder/soulfire-count), the ONLY per-deck work is confirming the provider's `*Candidates` hook returns **every legal option** — human-play runs unpruned (`MTG_UNPRUNED` + `MTG_PONDER_SEARCH`) so every legal sub-decision appears as a distinct `main_phase` plan variant the human picks among. Per the core invariant, the provider is the sole narrower, and **in human-play it must not narrow at all**. No new chooser is needed; just verify surfacing in 5h.
+
+- **Bucket B — introduces a NEW kind of interactive choice with no matching decision type (the bottom three rows, or anything the catalog doesn't cover): build it now.** This is a Tier 2/3 engine change, done under the same escalation ladder and reviewed in 2d. The pattern is **uniform across every viewer commit above** — replicate it, don't invent:
+  1. **Chooser hook** — a `using <Name>Chooser = std::function<…>` typedef + `extern thread_local <Name>Chooser* g_play_<name>_chooser;` in [src/core/GameLogger.h](src/core/GameLogger.h), and null it in the `RevealLogPause` RAII (line ~305) so it is **inert during search/rollout** and fires only on real human resolution.
+  2. **Call site** — invoke the chooser from the resolution code ([src/core/SpellEffects.h](src/core/SpellEffects.h) / [src/core/EffectHandler.cpp](src/core/EffectHandler.cpp)), **gated on the pointer being non-null**, falling back to the existing heuristic when null. This keeps the autonomous engine byte-identical (the search never sets the chooser).
+  3. **Protocol emitter** — a `Write<Name>DecisionJson` + its wiring in `RunClaudePlay` ([src/main.cpp](src/main.cpp)): print the decision between `<<<CLAUDE_DECISION>>>`/`<<<END_DECISION>>>` (exit 70) or consume the next `--choices` index, with a `"type"` string and a `heuristic_default` field (as `vial_charge` does). Prefer **enumerated option indices** so it reuses the existing integer `--choices` stream — that ships without a new input model and is the recommended default (see `logs/viewer-issues-plan.md`).
+  4. **GUI branch** — dispatch on the new decision `type` in [tools/play/index.html](tools/play/index.html) (the GUI switches on `S.decision.type`), routing the choice into the **central dialog or board clicks using card IMAGES, never text** (the play-viewer decision principle — all choices live in the central dialog / board, never the history panel).
+
+  **Wire the chooser at the SHARED resolution site the real game uses, not the autonomous one.** A claude-play main-phase plan is executed via `TurnSolver::ApplyPlan` (see `AIEngine`'s external-chooser branch), NOT `AIEngine`'s autonomous `ExecutePlan` — so a chooser added only to the autonomous path is **dead in the viewer** (real 2026-07-01 bug: the retrace land-discard chooser was first added to `AIEngine::cast_from_graveyard` and never fired; the fix was to move it to the `apply_one` retrace discard inside `ApplyPlan`, which both real claude-play and the rollout share). Resolution effects in `SpellEffects.h`/`EffectHandler.cpp` (scry, bounce, dig, Soulfire) are already on the shared path; plan-execution mechanics (retrace, Land's Edge) live in `TurnSolver`'s `apply_one`. **5h is what catches this** — a chooser that compiles and is byte-identical can still never fire; only driving the deck through the real protocol proves it does.
+
+  A new decision type is the **"stop and check with the user"** case ONLY if it needs a genuinely richer input model than an enumerated option index (e.g. free-form manual ordering), OR if surfacing it faithfully requires an **engine-model change rather than viewer wiring** — that is a Stage-2/phase-2 engine task, not a chooser. *(2026-07-01 precedent — Reality Spasm: its "untap X target permanents" is modeled as a ritual **wild-mana float** (`untap_x_mana_sources` → `RitualRefloatMana` adds the best-X sources' worth as any-color floating mana), so there are no literal permanent targets to pick and "which sources to untap" is currently a no-op — and the produced mana being any-color is itself a latent mis-model. Surfacing the untap-source choice (or the inert tap mode) requires de-abstracting the float into literal colored untap, which is entangled with the deferred Reality-Spasm→Crackle combo and would shift Hinata GT. Deferred to phase 2; disclosed in 6a as an inert-collapse, not silently dropped.)*
+
+Record each card's bucket-A confirmations and any bucket-B wiring; both feed the 5h surface check and the Stage 6a disclosure (a bucket-B choice you deliberately leave auto-resolved because it is provably inert for goldfishing must be disclosed as a known gap, not silently dropped).
+
 ### 2d. Review each implementation
 
 After each card, re-read `.claude/skills/mtg-rules.md` Step 4 (Card Code Review) and verify:
@@ -168,6 +213,7 @@ After each card, re-read `.claude/skills/mtg-rules.md` Step 4 (Card Code Review)
 - Damage values, targeting types, and all parameters match oracle text exactly
 - No clauses are silently omitted without a bracket note
 - If the card's value depends on the post-combat main (spectacle, combat untap, combat-damage triggers), confirm `GoldFishRunner::DeckUsesSecondMain` detects it so the second main is enabled (see 2c-bis)
+- Every interactive choice the card creates for the player is surfaced in the human-play path (2c-ter): each is either a reused decision type (bucket A) with the provider's `*Candidates` returning all legal options, or a newly-wired chooser+type+GUI branch (bucket B) — with no card choice left silently heuristic-resolved except a disclosed, provably-inert known gap
 
 ### 2d-bis. Audit costs against Scryfall (mandatory mechanical gate)
 
@@ -470,6 +516,22 @@ ride `GenericProvider`; add a subclass only when the mined rules diverge from ge
 each. The mining is unattended-safe; the encode+A/B is the next attended step. Disclose every
 encoded heuristic in Stage 6a.
 
+### 5h. Play-viewer decision-surface check (no silent auto-choices)
+
+This is the verification backstop for the 2c-ter wiring: confirm the viewer actually surfaces every interactive choice the deck's cards create, so the user is not the one who discovers a missing decision mid-game. Because the play viewer and the claude-play sweep share **one** decision protocol (the `--claude-play` JSON contract), you verify the viewer by exercising that protocol — no browser needed.
+
+**Reuse the 5d sweep as the check.** From each card's 2c-ter classification, build the set of decision `type`s (and plan-variant sub-decisions) the deck *should* emit. Have each 5d agent record the decision `type`s it actually saw and the sub-decision variants it was offered (e.g. did casting the tutor offer every `tutor_target`? did the burn spell emit a `target` decision rather than resolving pre-aimed?). Aggregate across the sweep and **diff against the expected set**. The failure signature is *"the game advanced past a card's choice without a decision firing"* — that means the heuristic silently resolved it, which is exactly the class of gap the user currently finds by hand. Any such card goes back to 2c-ter (wire it), not to the user.
+
+**Targeted repro for anything the sweep didn't reach.** A decision only appears when a game reaches the triggering state, so a card that rarely gets cast may never surface in the sweep. For each such card, play a seed/line that casts it and confirm the expected `type` fires (exit 70) with the full option list:
+```bash
+./build/Release/mtg <deck> --profile <deck>.profile.json --claude-play \
+  --seed <S> --game-index <GI> --max-turns 8 --choices "<CSV that casts the card>"
+# expect a <<<CLAUDE_DECISION>>> block whose "type" matches the card's catalog row
+```
+A burn spell must emit `target`, a Karoo must emit `bounce`, a scry must emit `scry`, and a tutor's `main_phase` plans must include a variant per legal target. **Targeting must be a real choice, not a pre-baked target** — confirm the `legal_targets`/`plans` list is *complete* (every legal target the human could pick), which is the human-play unpruned guarantee; a truncated list is a surfacing bug even though a game still "works."
+
+**Gate:** no card in the deck has an interactive choice the viewer silently auto-resolves — each is surfaced, or is a Stage 6a-disclosed known gap the user has signed off on as provably inert for goldfishing.
+
 ### Convergence criteria
 
 Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
@@ -478,8 +540,9 @@ Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
 3. Multi-depth results are monotonic and plausible, with **every outlier game explained** (legitimate line, budget starvation, or a fixed bug — not an unexplained slowdown).
 4. The 100-game claude-play sweep (5d) ran, and **every legality/invariant flag is resolved** — fixed (engine/card/data bug) or dismissed with a reason (verified false positive). Win-turn deltas are noted but do not block.
 5. Any narrowing heuristic introduced/relied on for this deck (cast ordering, dig, targeting, tutor/fetch) passed the **5e oracle diff + with/without A/B** — its proposals match the full search where it matters, with every per-game regression explained.
+6. **Play-viewer decision surface (5h) is clean**: every interactive choice the deck's cards create is surfaced in the human-play path — no card's choice is silently heuristic-resolved except a Stage 6a-disclosed, provably-inert known gap the user signed off on.
 
-Only a deck that satisfies all three is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
+Only a deck that satisfies all of these is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
 
 ---
 
@@ -489,7 +552,7 @@ Present a concise summary:
 1. **Cards implemented this run**: list any new/updated implementations, noting the tier used for each
 2. **Mulligan profile**: the optimised settings (and notable card scores / required-piece flags)
 3. **Win rate / average win turn**: from a regression-suite run on the new profile (the analyzer no longer reports these)
-4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, any budget-starvation threshold noted, and the 100-game claude-play sweep result (games played, flags raised and their resolution, win-turn comparison vs the search)
+4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, any budget-starvation threshold noted, the 100-game claude-play sweep result (games played, flags raised and their resolution, win-turn comparison vs the search), and the **play-viewer decision surface (5h)**: any new decision types wired this run for the deck's cards, and confirmation that no card choice is left silently auto-resolved (or the disclosed known gaps that are)
 5. **Encoded heuristics & assumptions disclosure** (mandatory — see Stage 6a): the full reviewable list of every assumption and heuristic that shapes this deck's results, so the user can catch anything unexpected and decide whether it should be full-searched instead.
 6. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
 7. **Suggested next steps**: any Tier 4 deferrals worth revisiting, or interesting profile observations
@@ -506,7 +569,7 @@ has explicitly asked to lean toward fully searching the space, so **every heuris
 or pre-decides a choice must be surfaced for review** — some past assumptions were unexpected, and
 the user must be able to veto any that isn't earning its keep.
 
-Compile the disclosure from three sources (do NOT write it from memory — read the code):
+Compile the disclosure from four sources (do NOT write it from memory — read the code):
 
 1. **Global engine assumptions in force** (restate the ones that materially shape this deck's
    numbers): single passive opponent that never blocks / casts / gains or prevents life;
@@ -531,6 +594,15 @@ Compile the disclosure from three sources (do NOT write it from memory — read 
 
    A deck routed to `GenericProvider` overrides nothing — say so explicitly (no deck-specific
    heuristics; pure search within the global assumptions above).
+
+4. **Play-viewer auto-resolved decisions (from 2c-ter / 5h)** — any interactive choice a card in
+   this deck creates that the human-play path does NOT surface and instead resolves with a
+   heuristic (the catalog's known-gap rows — modal "choose one," which-permanents targeting,
+   cascade/retrace target — or any bucket-B choice you deliberately left unwired). For each, name
+   the card and choice, the heuristic that resolves it, and why it is provably inert for
+   goldfishing (or that it isn't, and is a viewer-wiring follow-up the user should schedule). A deck
+   whose every card choice is surfaced states that explicitly ("viewer-ready; no auto-resolved
+   decisions").
 
 Present this as a short table (assumption/heuristic | source | classification | what it costs us /
 why it's safe). Flag anything you'd expect the user to find surprising. If the user decides a
