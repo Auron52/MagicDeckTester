@@ -2629,7 +2629,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors = nullptr,
                                 TapBacktrackMemo* fail_memo = nullptr,
-                                ManaPool* out_leftover = nullptr)
+                                ManaPool* out_leftover = nullptr,
+                                std::uint64_t tapped_mask = 0)
 {
     if (floating.CanPay(cost))
     {
@@ -2653,17 +2654,28 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // for_creature and the RP union are invariant per top-level call) plus the packed floating pool;
     // stored as the full pair (not a lossy hash) so a hash collision can never cause a false prune.
     // Set up once at the top-level call and threaded down; disabled when n>64 (bitmask won't fit).
+    const bool top_level = (fail_memo == nullptr);
     TapBacktrackMemo memo_local;
-    if (!fail_memo && n <= 64) { fail_memo = &memo_local; }
+    if (top_level && n <= 64) { fail_memo = &memo_local; }
 
     std::pair<std::uint64_t, std::uint64_t> key{0, 0};
     if (fail_memo)
     {
-        for (int i = 0; i < n; ++i)
+        // key.first = the active player's tapped-source bitmask. Computed ONCE by scanning at the
+        // top-level call, then maintained incrementally as `tapped_mask` threaded through the
+        // recursion (each activate() ORs in the bit of the source it taps) -- so deeper nodes skip
+        // the O(n) battlefield rescan that used to run per node. Byte-identical: the top-level scan
+        // captures the same already-tapped permanents, and the recursion only ever taps active-player
+        // sources by index, so the running mask equals what the per-node scan would have produced.
+        if (top_level)
         {
-            if (state.battlefield[i].controller_index == active && state.battlefield[i].tapped)
-            { key.first |= (1ull << i); }
+            for (int i = 0; i < n; ++i)
+            {
+                if (state.battlefield[i].controller_index == active && state.battlefield[i].tapped)
+                { tapped_mask |= (1ull << i); }
+            }
         }
+        key.first = tapped_mask;
         auto cl = [](int v) -> std::uint64_t
         { return static_cast<std::uint64_t>(v < 0 ? 0 : (v > 255 ? 255 : v)); };
         key.second = cl(floating.white) | (cl(floating.blue) << 8) | (cl(floating.black) << 16)
@@ -2710,7 +2722,16 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         // snapshotting/restoring the single source permanent is byte-identical to snapshotting
         // the whole battlefield vector -- and avoids an O(battlefield) copy per recursion node
         // (this copy was ~59% of a combo-turn search; see hinata-profile-perf callgrind).
-        const Permanent src_snap = state.battlefield[i];
+        // Narrower still: activate() mutates ONLY this source's `tapped` flag and (via
+        // DecrementDepletionOnTap) at most one Depletion counter, so we snapshot just those --
+        // avoiding even the single-Permanent copy (and its `counters` heap vector) per node. The
+        // pre-tap `tapped` is always false here (the loop skips already-tapped sources). `counters`
+        // is copied only when non-empty (depletion decks); a source with no counters -- every land
+        // in a ritual-combo deck like Hinata -- restores with a plain bool assignment. Byte-identical.
+        const bool tapped_snap = state.battlefield[i].tapped;
+        const bool has_counters = !state.battlefield[i].counters.empty();
+        std::vector<Counter> counters_snap;
+        if (has_counters) { counters_snap = state.battlefield[i].counters; }
         const int life_snap = state.players[active].life;
         const int opp_life_snap = state.players[1 - active].life;   // for tap_opponent_lifegain undo
         const bool oll_snap = state.opponent_lost_life_this_turn;
@@ -2726,8 +2747,10 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // below on failure alongside the active player's life.
             if (def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
-            if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover)) { return true; }
-            state.battlefield[i]       = src_snap;   // only this source was touched at this level
+            if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
+                                    tapped_mask | (1ull << i))) { return true; }
+            state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
+            if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;
             state.opponent_lost_life_this_turn  = oll_snap;
