@@ -21,6 +21,9 @@ Ground truth is recorded by running a mode and, once inspected, promoting it wit
 | th      | 0     | -      | 1000  | ~0s         | 95% win at d0 |
 | th      | 3     | 100    | 500   | 132–206s    | |
 | th      | 5     | 200    | 300   | 213–305s    | |
+| hinata  | 0     | -      | 1000  | ~0s         | ~48% win at d0 |
+| hinata  | 3     | 10     | 400   | ~237s (1thr) | **~0.59 s/game, tail-inclusive** — post max-mana gate (commit 9229b25); was ~40x this pre-gate |
+| hinata  | 5     | 20     | 300   | ~375s (1thr) | **~1.25 s/game** — the gate tamed the multi-minute combo turns |
 
 ## The slivers heavy tail — read before sizing
 
@@ -37,13 +40,20 @@ is the least linear in game count.
 
 ## Budget accounting (measured / estimated)
 
-- **smoke** (seed 1001): **3m16s measured** — d0 1000g + small d3/d5 per deck.
-- **regression** (seeds 2002,3003): ~33 min — d0 1000g, slivers d3 400g/d5 300g,
-  burn & TH d3 500g/d5 300g. (The untrimmed 500g slivers version hit 52 min.)
-- **overnight** (seeds 4004,5005,6006,7007): est ~3–5 h at the current counts —
-  slivers d5 and TH d5 (1000g × 4 seeds) dominate, and a tail-heavy seed can add
-  an hour. Safely under 8 h, but re-check the total on first real run and trim if
-  a seed turns out pathological.
+Makespans below re-measured 2026-07-01 after (a) the max-mana backtracker gate
+(commit 9229b25, ~15x faster Hinata deep search) and (b) rebalancing Hinata's
+deep-search counts up now that it is affordable (smoke +d3 150/d5 75; regression
++d3 200×2/d5 100×2; overnight d3 40→400, d5 25→300 ×4).
 
-All three target under their limits (15 min / 45 min / 8 h) with headroom for
-added decks.
+- **smoke** (seed 1001): **51s measured** — d0 1000g/deck + small d3/d5 (Hinata's
+  d5 75g is the long pole at ~94s single-thread, absorbed by other threads).
+- **regression** (seeds 2002,3003): **3m7s measured** — the deep-search decks
+  parallelize well at these counts.
+- **overnight** (seeds 4004,5005,6006,7007): **30m8s measured** — the Hinata bump
+  added ~4.5 min over the pre-rebalance 25m35s. slivers d5 and TH d5 (1000g ×
+  4 seeds) still dominate the makespan; Hinata is now a real sample (~2800 deep
+  games) without dominating.
+
+All three sit far under their limits (15 min / 45 min / 8 h) — the gate opened up
+a lot of headroom. Re-check the total when adding decks; trim slivers first if a
+mode overruns (its tail is the least linear in game count).

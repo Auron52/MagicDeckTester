@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 2c98c88  date 2026-07-01
+# Regression ground truth -- commit 9229b25  date 2026-07-01
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -20,6 +20,8 @@ antilife_smoke_d0_s1001=807/5.68278
 antilife_smoke_d3_s1001=250/4.2
 antilife_smoke_d5_s1001=150/4.15333
 hinata_smoke_d0_s1001=507/6.84615
+hinata_smoke_d3_s1001=143/5.8042
+hinata_smoke_d5_s1001=71/5.88732
 
 # --- regression ---
 slivers_regression_d0_s2002=1000/4.771
@@ -48,6 +50,10 @@ antilife_regression_d3_s3003=299/4.19398
 antilife_regression_d5_s2002=250/4.188
 antilife_regression_d5_s3003=249/4.2008
 hinata_regression_d0_s2002=485/6.83505
+hinata_regression_d3_s2002=190/5.83158
+hinata_regression_d3_s3003=187/5.8877
+hinata_regression_d5_s2002=95/5.85263
+hinata_regression_d5_s3003=95/5.88421
 
 # --- overnight ---
 slivers_overnight_d0_s4004=1998/4.73574
@@ -114,11 +120,11 @@ hinata_overnight_d0_s4004=955/6.81675
 hinata_overnight_d0_s5005=972/6.7716
 hinata_overnight_d0_s6006=939/6.76677
 hinata_overnight_d0_s7007=944/6.78814
-hinata_overnight_d3_s4004=38/5.73684
-hinata_overnight_d3_s5005=38/5.92105
-hinata_overnight_d3_s6006=33/5.84848
-hinata_overnight_d3_s7007=39/6.20513
-hinata_overnight_d5_s4004=23/5.65217
-hinata_overnight_d5_s5005=23/5.82609
-hinata_overnight_d5_s6006=20/5.75
-hinata_overnight_d5_s7007=24/6.125
+hinata_overnight_d3_s4004=378/5.92328
+hinata_overnight_d3_s5005=377/5.74801
+hinata_overnight_d3_s6006=378/5.82011
+hinata_overnight_d3_s7007=379/6.01583
+hinata_overnight_d5_s4004=288/5.86458
+hinata_overnight_d5_s5005=281/5.70107
+hinata_overnight_d5_s6006=283/5.78445
+hinata_overnight_d5_s7007=288/5.95833
