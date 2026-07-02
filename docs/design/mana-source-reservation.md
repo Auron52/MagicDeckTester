@@ -86,6 +86,32 @@ run**. NOTE: for this deck the deliverable is the attack fix *itself* — Ignobl
 (flexible), which the reservation mask excludes, so dork *reservation* is a no-op here. Dork/{C}-manland
 reservation still pays off only on a deck with an **inflexible** 0-power dork + Exalted.
 
+#### SHIPPED (2026-07-02) — "hold your beater" attacker reservation
+
+Extends the `BatchPrepayMainCasts` leave-out-if-you-can hold (alongside depletion) to the controller's
+**greatest-power attacker WHEN it is a mana source** (dork/manland): don't tap it for mana if the turn
+pays without it, so it stays untapped to swing — and, since an own-creature pump lands on
+`FindBestOwnAttacker`'s pick, reserving that creature makes the pump target the one left up (the
+practical answer to "reserve the pumped creature" without needing the target chosen before payment).
+Restricted to mana-source creatures because a non-mana beater is never in the tap set (reserving it is
+inert). Gated `AttackerReserveEnabled()` (default ON, off-switch `MTG_NO_ATTACKER_RESERVE`).
+
+Net improvement, **0 turn-later regressions**: Anti-Lifegain d0 +1 win / faster d3, Hinata d3 +1 win
+(a no-win → win), and slivers/burn/treasure_hunt/knights **byte-identical** (no mana-source creatures,
+or none is the best attacker in a tapped spot). Note: every mana dork in the current card DB is
+0-power, so the benefit is the *downstream* effect of which 0-power dork stays up (pump target /
+exalted / deeper lines), not raw attack damage — no clean distinguishing scenario is constructible, so
+it's validated by the seed A/B; `test/scenarios/dork_pump_target.json` guards the pump coordination it
+supports. GT rebaselined smoke + regression; **overnight antilife/hinata GT rebaselined in the same
+overnight pass as the exalted change.**
+
+The pump-waste is otherwise a VIEWER-only gap (the AI's `FindBestOwnAttacker` is tap-aware: resolved
+after payment, `CanAttackFull` skips tapped, so it never wastes its own pump — see
+`docs/design/scenario-harness.md`). The precise per-target reservation (reserve exactly the human's
+chosen creature, tapping a different one) would need the pump-target decision moved BEFORE the turn's
+payment — a `--choices` reorder that breaks pump references — so it's deferred in favour of the
+greatest-power heuristic above, which covers the common case (you pump your best attacker).
+
 Everything below predates this update (the original per-payment design); keep for context.
 
 ## Background: what already shipped

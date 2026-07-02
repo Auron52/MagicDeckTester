@@ -1958,6 +1958,23 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (d && d->params.enters_tapped_with_depletion > 0) { reserved |= (1ull << i); }
         }
     }
+    // "Hold your beater": also reserve the controller's greatest-power attacker WHEN it's a mana
+    // source (dork/manland) -- otherwise it might tap for mana instead of swinging (and it's the
+    // creature an own-creature pump lands on, so reserving it makes the pump target the one left up).
+    // A non-mana beater is never in the tap set, so restrict to mana sources (else the all-or-nothing
+    // hold below carries an inert bit). Same leave-out-if-you-can fallback as depletion.
+    if (AttackerReserveEnabled() && n <= 64)
+    {
+        const int best = FindBestOwnAttacker(state, active);
+        if (best >= 0 && best < 64)
+        {
+            const Permanent& bp = state.battlefield[best];
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+            const bool mana_src = bd && !bp.tapped
+                && ((bd->tmpl == CardTemplate::ManaDork && bp.CanTap()) || bd->params.mana_rock);
+            if (mana_src) { reserved |= (1ull << best); }
+        }
+    }
 
     // Solve the combined cost. First try with the depletion lands HELD: if it pays wild-free their
     // counters are preserved for free. If holding them makes the turn unaffordable or forces a

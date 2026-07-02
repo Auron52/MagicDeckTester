@@ -1725,6 +1725,18 @@ inline bool DepletionReserveEnabled()
     return v;
 }
 
+// Whole-turn "hold your beater" reservation (BatchPrepayMainCasts): don't tap the controller's
+// GREATEST-power attacker for mana when the turn is payable without it, so it stays untapped to swing
+// (and is the creature a pump would land on -- reserving it makes an own-creature pump's target the
+// one left up, without needing the target chosen before payment). Only bites MANA-SOURCE creatures
+// (dorks/manlands); a non-mana beater is never in the tap set, so reserving it is inert. Default ON;
+// off-switch MTG_NO_ATTACKER_RESERVE for A/B. Same "leave out if you can" soundness as depletion.
+inline bool AttackerReserveEnabled()
+{
+    static const bool v = std::getenv("MTG_NO_ATTACKER_RESERVE") == nullptr;
+    return v;
+}
+
 // Adds one untapped source's mana contribution to an accounting ManaPool, consistent
 // with the floating-pool payment logic in TapForCost / TapForCostDirect:
 //   - depletion / high-yield lands contribute produces_amount of their colour,
