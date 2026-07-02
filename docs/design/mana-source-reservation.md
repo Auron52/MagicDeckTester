@@ -76,9 +76,14 @@ Requirements the user stated explicitly; treat as authoritative alongside the sc
   choice here is per-*mode*, not hold-vs-tap: don't use the tap-for-{2}-and-sacrifice mode unless the
   extra mana is actually needed, since it permanently loses the land. Default to the {1} mode; only
   branch into the sacrifice mode when the plan needs that extra mana this turn.
-- **Grove of the Burnwillows — handle separately/last.** In an anti-lifegain shell, tapping Grove can
-  make the *opponent lose* life (its "each opponent gains 1" flipped by a punisher), so it is a
-  reservable *damage* source too. The user flagged it as a distinct, later piece.
+- **Grove of the Burnwillows — deferred, and it's a different problem from reservation.** In an
+  anti-lifegain shell, tapping Grove makes the *opponent lose* life (its "each opponent gains 1"
+  flipped by a punisher), so it looks like a damage source. But it is deferred for a deeper reason:
+  making it work requires the engine to support **tapping a source for no reason — with nothing to
+  cast** (tap Grove purely for its mana-ability side effect, floating/wasting the mana). Today every
+  tap is driven by paying a spell's cost; there is no "activate a mana source for its side effect
+  with no spend" path. That missing capability — not a reserve-vs-tap branch — is the prerequisite,
+  which is why Grove is a distinct, later piece.
 - **Motivating repro:** Anti-Lifegain **Seed 12, Game 11** — the user believes a turn-5 win exists
   but the greedy taps mana dorks that should have attacked, so the win is unreachable. Validate the
   reservation branch recovers it.
