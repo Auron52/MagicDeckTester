@@ -71,9 +71,11 @@ Requirements the user stated explicitly; treat as authoritative alongside the sc
   matters — a lone attacker gets the exalted bonus, so keeping exactly one creature back can be the
   damage-maximizing choice.
 - **One-shot / mode-sacrifice sources generalize the "don't waste it" rule.** Besides depletion
-  lands, this includes **sac-lands / lands sacrificed only in a certain mode** (e.g. a fetch that is
-  cracked-and-sacrificed): don't consume them in the sacrificing mode unless the mana is actually
-  needed. "Reserve" = keep the source untapped/unspent.
+  lands, this includes **sac lands** — come-into-play-tapped lands with two tap modes: **tap for {1}**
+  (keeps the land) or **tap for {2} and sacrifice it**. These are NOT fetchlands. The reservation
+  choice here is per-*mode*, not hold-vs-tap: don't use the tap-for-{2}-and-sacrifice mode unless the
+  extra mana is actually needed, since it permanently loses the land. Default to the {1} mode; only
+  branch into the sacrifice mode when the plan needs that extra mana this turn.
 - **Grove of the Burnwillows — handle separately/last.** In an anti-lifegain shell, tapping Grove can
   make the *opponent lose* life (its "each opponent gains 1" flipped by a punisher), so it is a
   reservable *damage* source too. The user flagged it as a distinct, later piece.
