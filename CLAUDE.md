@@ -25,14 +25,16 @@ The application is in early development — no build system, test runner, or sou
   `scripts/analyze_deck.py decks/<name>.txt`); the regression harness's
   `DECK_FILE`/`DECK_PROF` maps in `test/regression_cases.sh` already point there.
 
-- **Deferred / cross-agent project state goes in `docs/design/`, not private
-  agent memory.** Any per-agent scratch/memory is NOT shared between agents or
-  machines, so anything another agent may need to pick up — a deferred project,
-  design spec, perf-lever catalogue, or work handoff — belongs in a self-contained
-  `docs/design/<name>.md` (see `mana-source-reservation.md` for the shape). Keep
-  such docs standalone (no references to any agent's private notes). Private memory
-  is fine only for a single agent's own continuity across compaction / a new
-  session; if it needs to survive to *another* agent, put it in git.
+- **Deferred work goes in `docs/design/`, not private agent memory.** If a
+  project, plan, or idea is *deferred* — i.e. not being worked on right now — write
+  it as a self-contained `docs/design/<name>.md` (see `mana-source-reservation.md`
+  for the shape). The deferral is the sole trigger: do NOT reason about whether
+  another agent will need it — a deferred item belongs in git and is available to
+  everyone by default, because per-agent memory is not shared between agents or
+  machines. Keep such docs standalone (no references to any agent's private notes).
+  Private memory is only for a single agent's own continuity across compaction / a
+  new session (personal working prefs, resume hooks), never for parking deferred
+  project state.
 
 ## MTG Rules Skill
 
