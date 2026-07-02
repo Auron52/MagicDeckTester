@@ -113,6 +113,8 @@ struct Row
     double kv;               // win turn if kept
     double thr;              // win turn if mulliganed (= value of mulliganing once more)
     int    game;             // sampling game index (for the deterministic train/test split)
+    int    m;                // mulligan level this row's kv/features were computed at
+    int    p;                // 1 = on the play, 0 = on the draw
 };
 
 // ---- the deck's colours (those appearing in any card's mana cost) --------------------
@@ -647,6 +649,8 @@ KeepModel BuildKeepModel(const Decklist& deck,
                 r.thr  = baseline[p][m + 1];                 // value of mulliganing once more
                 r.y    = (r.kv <= r.thr) ? 1 : 0;
                 r.game = g;
+                r.m    = m;
+                r.p    = p;
                 rows.push_back(r);
             }
         }
@@ -713,9 +717,32 @@ KeepModel BuildKeepModel(const Decklist& deck,
         }
         if (!test.empty()) { always_keep /= test.size(); always_mull /= test.size(); }
 
+        // Reference lines on the SAME held-out split (the "is there headroom?" diagnostic):
+        //   static = the SHIPPED keep (the profile's card-score/curve/land rules -- KeepHand with
+        //            keep_model stripped, i.e. ReferenceKeep). deep-tree < static => a learned tree
+        //            beats the static keep on these labels; deep-tree > static => it cannot even match
+        //            it (the class-mismatch we diagnosed). Meaningful only at MTG_KEEP_ROLLOUTS>1
+        //            (blind-averaged labels); at R=1 the regrets are dominated by single-rollout noise.
+        //   oracle = per-hand best action = 0 by construction; static-0 is the turns/hand a PERFECT
+        //            keep would recover over what we ship today (the headroom to chase).
+        // Diagnostic only: printed, never used in model selection -> the fitted model is unchanged.
+        double static_regret = 0.0;
+        {
+            AIEngine ref_ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            for (int i : test)
+            {
+                const Row& r = rows[i];
+                const bool sk = ref_ai.ReferenceKeep(data[r.game].hand, r.m, r.p == 1);
+                const double oracle = std::min(r.kv, r.thr);
+                static_regret += (sk ? r.kv : r.thr) - oracle;
+            }
+            if (!test.empty()) { static_regret /= test.size(); }
+        }
+
         std::cerr << "  keep-model" << tag << " accuracy bar (held-out mean regret, turns):\n"
                   << "    always-keep=" << always_keep << "  always-mull=" << always_mull
-                  << "  deep-tree=" << deep_regret << "\n";
+                  << "  deep-tree=" << deep_regret
+                  << "  static=" << static_regret << "  oracle=0\n";
 
         // Pick the SHALLOWEST depth whose held-out regret is within MARGIN of the deep baseline
         // (the readable form may not pay a meaningful win-turn cost). If none qualifies, fall back
