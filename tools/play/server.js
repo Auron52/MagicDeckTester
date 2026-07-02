@@ -179,6 +179,20 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/decks') {
       return sendJson(res, 200, { decks: listDecks(), binExists: fs.existsSync(BIN) });
     }
+    if (req.method === 'GET' && url.pathname === '/api/reference-exists') {
+      // Does a saved reference game already exist for this (deck, seed, game#)? The top bar shows a
+      // note so the user can skip replaying a game they've already saved (they can still play it).
+      try {
+        const { stem } = resolveDeck(url.searchParams.get('deck'));
+        const seed = intParam(url.searchParams.get('seed'), 1);
+        const gi = intParam(url.searchParams.get('gi'), 0);
+        const rel = path.join('references', safeStem(stem), `claude_s${seed}_gi${gi}.json`);
+        const exists = fs.existsSync(path.join(ROOT, rel));
+        return sendJson(res, 200, { exists, path: exists ? rel : null });
+      } catch (e) {
+        return sendJson(res, 200, { exists: false, path: null });
+      }
+    }
     if (req.method === 'POST' && url.pathname === '/api/step') {
       const p = await readBody(req);
       return sendJson(res, 200, runStep(p, null));

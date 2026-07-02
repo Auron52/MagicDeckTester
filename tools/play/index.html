@@ -80,6 +80,9 @@
   .zone.lands { opacity:.97; } .zone.gy { opacity:.6; } .zone.gy .thumb { width:46px; } .zone.gy .thumb em { display:none; }
   .zone.oppz h3 { color:var(--bad); border-color:rgba(230,105,90,.25); }
   .hint { color:var(--muted); font-size:12px; }
+  /* top-bar badge shown when this (deck,seed,game#) already has a saved reference game */
+  .refnote { font-size:12px; font-weight:600; color:#0c1116; background:var(--acc); border-radius:8px;
+             padding:2px 9px; white-space:nowrap; }
 
   .thumb { width:90px; text-align:center; position:relative; }
   .thumb.sm { width:62px; }
@@ -337,6 +340,7 @@
   <button id="newgame" class="primary">New game</button>
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
   <button id="undo" disabled>Undo</button>
+  <span id="refnote" class="refnote" style="display:none"></span>
   <span class="hint">no clairvoyance — your win-turn is a ground-truth bound</span>
 </header>
 
@@ -1360,7 +1364,7 @@ async function step() {
 }
 async function newGame() {
   S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
-  hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); await step();
+  hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed + Game# and start the next game — for playing several in a row.
 async function nextGame() {
@@ -1392,11 +1396,26 @@ async function saveRef() {
   const res=await post(route, cfg());
   $('saveinfo').innerHTML = res.savedAs ? `Saved:<br><b>${esc(res.savedAs)}</b><br>Open it in <code>tools/replay/</code>.`
     : `<span class="err">save failed: ${esc(res.error||'unknown')}</span>`;
+  if (res.savedAs) checkReference();   // clean save just created the reference -> light up the badge
+}
+// Top-bar badge: does this (deck, seed, game#) already have a saved reference game? Informational
+// only -- the user can still start it. Refreshed whenever the deck/seed/game# changes.
+async function checkReference() {
+  const el=$('refnote'); if(!el) return;
+  const deck=$('deck').value;
+  if(!deck){ el.style.display='none'; return; }
+  const seed=+$('seed').value||0, gi=+$('gi').value||0;
+  try {
+    const j=await (await fetch(`/api/reference-exists?deck=${encodeURIComponent(deck)}&seed=${seed}&gi=${gi}`)).json();
+    if (j && j.exists){ el.style.display=''; el.title=j.path||''; el.textContent=`✓ reference saved for seed ${seed} · game ${gi} — skip, or play again`; }
+    else { el.style.display='none'; el.textContent=''; el.title=''; }
+  } catch(e){ el.style.display='none'; }
 }
 async function loadDecks() {
   const j=await (await fetch('/api/decks')).json();
   $('deck').innerHTML=j.decks.map(d=>`<option value="${esc(d.deck)}"${d.hasProfile?'':' disabled'}>${esc(d.name)}${d.hasProfile?'':' (no profile)'}</option>`).join('');
   if(!j.binExists) showError('Simulator binary not found — build Release first:\n  cmake --build build --config Release');
+  checkReference();   // reflect the initial deck/seed/game# on load
 }
 
 // drag from hand onto YOUR FIELD (#playfield) — the area where cards get played — queues the card
@@ -1410,6 +1429,10 @@ async function loadDecks() {
 })();
 
 $('newgame').onclick=newGame; $('nextgame').onclick=nextGame; $('undo').onclick=undo; $('saveref').onclick=saveRef;
+// Refresh the reference badge whenever the game selector changes.
+$('deck').addEventListener('change', checkReference);
+$('seed').addEventListener('input', checkReference);
+$('gi').addEventListener('input', checkReference);
 
 // Scryfall hover popover
 const pop=document.createElement('div'); pop.id='pop'; pop.innerHTML='<img alt=""/>'; document.body.appendChild(pop);
