@@ -74,6 +74,12 @@ int EvalFeatureSpec(const FeatureSpec& spec, const std::vector<Card>& hand,
         case FeatureKind::Diff:    return at(spec.a) - at(spec.b);
         case FeatureKind::Min:     return std::min(at(spec.a), at(spec.b));
         case FeatureKind::Product: return at(spec.a) * at(spec.b);
+        case FeatureKind::CardCount:
+        {
+            int c = 0;
+            for (const Card& card : hand) { if (card.m_name == spec.s) { ++c; } }
+            return c;
+        }
     }
     return 0;
 }

@@ -229,6 +229,21 @@ std::vector<FeatureSpec> BuildCandidateSpecs(const Decklist& deck, const std::ve
     const std::string dom = DeckDominantSubtype(deck);
     if (!dom.empty()) { add(FeatureKind::SubtypeDensity, 0, -1, -1, dom, "subtype_" + dom); }
 
+    // Per-card COUNT features: one per DISTINCT card in the deck. This is the per-card identity the
+    // aggregate features lack -- and specifically the REDUNDANCY signal (a 2nd Aether Vial / 4th land
+    // shows as count_<card> >= 2), so the model can finally reject flooded/redundant hands the additive
+    // static keep wrongly keeps (its own learned "extra copy is bad" marginal is clamped away at
+    // runtime). The fit selects the few that matter; the rest cost only a candidate slot.
+    {
+        std::set<std::string> seen;
+        for (const Card& c : deck.mainboard)
+        {
+            const std::string nm = c.m_name;
+            if (seen.insert(nm).second)
+            { add(FeatureKind::CardCount, 0, -1, -1, nm, "count_" + nm); }
+        }
+    }
+
     // Composites over base features (stable indices).
     add(FeatureKind::Diff, 0, static_cast<int>(KeepFeature::NonlandCount),
         static_cast<int>(KeepFeature::PlayableStrict), "", "uncastable");      // cards stuck in hand

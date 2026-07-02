@@ -141,6 +141,11 @@ enum class FeatureKind : int
     Product,            // a,b = indices -> val[a] * val[b]  (lets a LINEAR score express a conjunction:
                         // e.g. key_piece_count x land_count is high only when BOTH hold -> "keep iff
                         // you have the engine piece AND the lands", the AND a pure additive sum can't do)
+    CardCount,          // s = card name: # copies of that exact card in hand. Gives the model per-card
+                        // IDENTITY -- and thus REDUNDANCY (a 2nd Aether Vial shows as card_count=2) --
+                        // which the aggregate features (key_piece_count, subtype density) cannot see.
+                        // This is the input needed to reject flooded/redundant hands the additive static
+                        // keep wrongly keeps (its learned redundancy penalty is clamped away at runtime).
 };
 
 inline const char* FeatureKindName(FeatureKind k)
@@ -157,12 +162,13 @@ inline const char* FeatureKindName(FeatureKind k)
         case FeatureKind::Diff:              return "diff";
         case FeatureKind::Min:               return "min";
         case FeatureKind::Product:           return "product";
+        case FeatureKind::CardCount:         return "card_count";
     }
     return "?";
 }
 inline int FeatureKindFromName(const std::string& s)
 {
-    for (int i = 0; i <= static_cast<int>(FeatureKind::Product); ++i)
+    for (int i = 0; i <= static_cast<int>(FeatureKind::CardCount); ++i)
     { if (s == FeatureKindName(static_cast<FeatureKind>(i))) { return i; } }
     return -1;
 }
