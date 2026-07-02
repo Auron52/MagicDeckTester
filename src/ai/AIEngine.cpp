@@ -1527,6 +1527,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
     }
+    // Whole-turn batch pre-payment -- mirror of ApplyPlanDirect (lockstep): tap for the combined
+    // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
+    // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
+    // logical point (after the land drop + Vial deploys) -> identical prepay. Declined -> greedy.
+    TurnSolver::BatchPrepayMainCasts(state, plan.actions);
     // Cast-ordering search (C): a committed plan with searched_order set carries an
     // EXPLICIT interleaving the search scored (e.g. enabler/destroy-all-payload rebuild);
     // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
@@ -2075,8 +2080,12 @@ ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
     return pool;
 }
 
-bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& available,
-                          bool for_creature)
+// Single payment attempt honouring `reserved_mask` (active-player battlefield indices HELD, never
+// tapped here). The public TapForCost wrapper runs this first with the reserved specials held, then
+// again with reserved_mask=0 on a miss. reserved_mask=0 is byte-identical to the pre-reservation
+// code. Mirrors TurnSolver::TapForCostDirectOnce byte-for-byte (lockstep).
+bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPool& available,
+                             bool for_creature, std::uint64_t reserved_mask)
 {
     Player&  ap     = state.ActivePlayer();
     int      active = state.active_player_index;
@@ -2090,6 +2099,11 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
 
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
+        if (reserved_mask)   // reservation audit: a held source is not tappable this attempt
+        {
+            const std::size_t idx = static_cast<std::size_t>(&p - state.battlefield.data());
+            if (idx < 64 && (reserved_mask & (1ull << idx))) { return false; }
+        }
         bool is_src = (def.tmpl == CardTemplate::BasicLand)
                    || (def.tmpl == CardTemplate::ManaDork && p.CanTap())
                    || def.params.mana_rock;
@@ -2386,12 +2400,43 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
     state.battlefield        = bf_pre;
     state.players[active].life = life_pre;
     ManaPool bt_leftover;
-    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover))
+    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
+                            /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
     { commit_leftover(bt_leftover); return true; }
     state.battlefield        = bf_greedy_fail;
     state.players[active].life = life_greedy_fail;
     state.floating_mana      = reserve_pre;   // payment failed -> return the reserve untouched
     return false;
+}
+
+// Public payment entry (mirrors TurnSolver::TapForCostDirect). Mana-source RESERVATION: FIRST try to
+// pay while HOLDING the special sources untapped; only fall through to the normal payment when the
+// cost cannot be met without them. Slack-only -> weakly dominant. Default ON; MTG_NO_RESERVE
+// -> mask 0 -> one normal attempt, byte-identical to the pre-reservation code.
+bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& available,
+                          bool for_creature)
+{
+    const std::uint64_t rmask = ReservableSpecialMask(state);
+    if (rmask != 0)
+    {
+        // Snapshot everything a payment can touch (incl. the `available` accounting pool) so a
+        // reserved MISS restores byte-identically before the normal attempt.
+        const int a = state.active_player_index;
+        const std::vector<Permanent> bf_snap  = state.battlefield;
+        const ManaPool               fm_snap  = state.floating_mana;
+        const ManaPool               av_snap  = available;
+        const int  la  = state.players[a].life;
+        const int  lo  = state.players[1 - a].life;
+        const bool oll = state.opponent_lost_life_this_turn;
+        if (TapForCostOnce(state, cost_in, available, for_creature, rmask)) { return true; }
+        state.battlefield                  = bf_snap;
+        state.floating_mana                = fm_snap;
+        available                          = av_snap;
+        state.players[a].life              = la;
+        state.players[1 - a].life          = lo;
+        state.opponent_lost_life_this_turn = oll;
+    }
+    return TapForCostOnce(state, cost_in, available, for_creature, /*reserved_mask=*/0);
 }
 
 // ---- Spell selection ----

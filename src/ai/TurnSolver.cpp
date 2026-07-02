@@ -1512,7 +1512,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 // Tap mana sources in-place to pay a cost. Returns false if mana is unavailable.
 // for_creature: if false, skip creature-only mana sources (e.g. Ancient Ziggurat)
 //               since non-creature spells cannot be paid with that mana.
-static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature = true)
+// Single payment attempt honouring `reserved_mask` (active-player battlefield indices to HOLD --
+// never tapped here). The public TapForCostDirect wrapper (below) runs this first with the reserved
+// specials held, then again with reserved_mask=0 if that missed. reserved_mask=0 is byte-identical
+// to the pre-reservation code.
+static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                 std::uint64_t reserved_mask)
 {
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed
@@ -1526,6 +1531,11 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
 
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
+        if (reserved_mask)   // reservation audit: a held source is not tappable this attempt
+        {
+            const std::size_t idx = static_cast<std::size_t>(&p - state.battlefield.data());
+            if (idx < 64 && (reserved_mask & (1ull << idx))) { return false; }
+        }
         bool is_src = (def.tmpl == CardTemplate::BasicLand)
                    || (def.tmpl == CardTemplate::ManaDork && p.CanTap())
                    || def.params.mana_rock;
@@ -1811,13 +1821,43 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
     state.battlefield        = bf_pre;
     state.players[active].life = life_pre;
     ManaPool bt_leftover;
-    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover))
+    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
+                            /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
     { commit_leftover(bt_leftover); return true; }
     // Total failure: restore the greedy's exact end-state to match prior behaviour.
     state.battlefield        = bf_greedy_fail;
     state.players[active].life = life_greedy_fail;
     state.floating_mana      = reserve_pre;   // payment failed -> return the reserve untouched
     return false;
+}
+
+// Public payment entry. Mana-source RESERVATION ("leaving sources up", see ReserveEnabled): FIRST
+// try to pay while HOLDING the special sources (dorks / {C}-manlands / depletion) untapped; only if
+// the cost cannot be met without them fall through to the normal payment. Slack-only, so it is
+// weakly dominant (a held source you did not need never hurts and keeps its attack / animate /
+// depletion-counter value). Default ON; MTG_NO_RESERVE -> mask 0 -> a single normal attempt, byte-
+// identical to the pre-reservation code. Mirrored byte-for-byte in AIEngine::TapForCost (lockstep).
+static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature)
+{
+    const std::uint64_t rmask = ReservableSpecialMask(state);
+    if (rmask != 0)
+    {
+        // Snapshot everything a payment can touch so a reserved MISS restores byte-identically
+        // before the normal attempt (which must reproduce the pre-reservation payment exactly).
+        const int a = state.active_player_index;
+        const std::vector<Permanent> bf_snap  = state.battlefield;
+        const ManaPool               fm_snap  = state.floating_mana;
+        const int  la  = state.players[a].life;
+        const int  lo  = state.players[1 - a].life;
+        const bool oll = state.opponent_lost_life_this_turn;
+        if (TapForCostDirectOnce(state, cost_in, for_creature, rmask)) { return true; }
+        state.battlefield                  = bf_snap;
+        state.floating_mana                = fm_snap;
+        state.players[a].life              = la;
+        state.players[1 - a].life          = lo;
+        state.opponent_lost_life_this_turn = oll;
+    }
+    return TapForCostDirectOnce(state, cost_in, for_creature, /*reserved_mask=*/0);
 }
 
 // Apply a plan to the game state sequentially (bypassing the stack).
@@ -1858,6 +1898,77 @@ static bool OrderingOpaque(const std::string& name)
         || d->params.retrace
         || d->params.expressive_iteration
         || d->params.draw > 0;
+}
+
+bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts)
+{
+    static const bool s_enabled = std::getenv("MTG_NO_BATCH_PAY") == nullptr;
+    if (!s_enabled) { return false; }
+    // A non-empty float (e.g. a ritual's output) would be clobbered by the pre-load; producer turns
+    // are declined below regardless, but guard here too so the reserve stays byte-identical there.
+    if (state.floating_mana.Total() != 0) { return false; }
+
+    const int active = state.active_player_index;
+    ManaCost combined;
+    int eligible = 0;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
+        if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { return false; } // producer breaks fungibility
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!d) { return false; }
+        // A fixed upfront combined is only valid when no cast's cost can shrink/grow dynamically:
+        // {X} spells and Hinata/Soulfire per-target discounts change the cost as the line resolves.
+        if (d->card.m_mana_cost.has_x && a.chosen_x > 0) { return false; }
+        if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return false; }
+        if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return false; }
+        ManaCost ec = EffectiveCost(*d, state);
+        combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
+        combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
+        combined.colorless += ec.colorless;
+        ++eligible;
+    }
+    // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
+    // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
+    if (eligible < 2 || combined.ManaValue() == 0) { return false; }
+
+    // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
+    const std::vector<Permanent> bf_snap = state.battlefield;
+    const ManaPool               fm_snap = state.floating_mana;
+    const int  la  = state.players[active].life;
+    const int  lo  = state.players[1 - active].life;
+    const bool oll = state.opponent_lost_life_this_turn;
+
+    ManaPool produced;
+    const bool ok = TapForCostBacktrack(state, combined, /*for_creature=*/false, ManaPool{},
+                                        /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
+                                        /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/0,
+                                        /*out_full_pool=*/&produced);
+    // Decline when the full batch is unaffordable (fall back to greedy, which casts what it can) or
+    // when the tap set makes "any colour" (wild) mana -- pinning colours to pips is then ambiguous.
+    if (!ok || produced.wild > 0)
+    {
+        state.battlefield                  = bf_snap;
+        state.floating_mana                = fm_snap;
+        state.players[active].life         = la;
+        state.players[1 - active].life     = lo;
+        state.opponent_lost_life_this_turn = oll;
+        return false;
+    }
+
+    // Pre-load floating as the combined cost: COLOURED/{C} pips pinned to their colours (produced
+    // covers them since it has no wild), the generic requirement + any over-production carried as
+    // `wild`. Total == produced.Total(), so no mana is lost even if the solve over-tapped. Each main
+    // cast drains this (generic pips take wild first -- see SpendFloatingTowardCost), so a colour is
+    // never spent on a generic pip a later cast needed.
+    ManaPool pool;
+    pool.white = combined.white; pool.blue = combined.blue; pool.black = combined.black;
+    pool.red   = combined.red;   pool.green = combined.green; pool.colorless = combined.colorless;
+    const int pinned = combined.white + combined.blue + combined.black
+                     + combined.red + combined.green + combined.colorless;
+    pool.wild = produced.Total() - pinned;
+    state.floating_mana = pool;
+    return true;
 }
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
@@ -2849,6 +2960,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
+
+    // Arm the greedy-stranding audit for this turn's main casts (see the audit_* declarations).
+    // Sum every mana-paying hand cast's cost into audit_combined and snapshot the pre-cast board.
+    // Skip entirely if any planned action PRODUCES mana (ritual/rock): those break the "all sources
+    // simultaneously available" assumption the combined-sum feasibility test relies on.
+    // Whole-turn batch pre-payment: tap for the combined cost of the main hand casts and pre-load
+    // floating (see BatchPrepayMainCasts). The main casts below then drain the pool -- scarce colours
+    // allocated jointly, filters fed, unneeded sources left up -- instead of the stranding per-cast
+    // greedy. Declined turns leave state untouched and fall through to the identical greedy path.
+    TurnSolver::BatchPrepayMainCasts(state, plan.actions);
 
     apply_plan_actions(plan.actions, plan.searched_order);
 

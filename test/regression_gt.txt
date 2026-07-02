@@ -1,59 +1,59 @@
-# Regression ground truth -- commit 9229b25  date 2026-07-01
+# Regression ground truth -- commit 490c3a8  date 2026-07-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-slivers_smoke_d0_s1001=998/4.74349
-slivers_smoke_d3_s1001=250/4.28
-slivers_smoke_d5_s1001=150/4.26
+slivers_smoke_d0_s1001=998/4.73848
+slivers_smoke_d3_s1001=250/4.276
+slivers_smoke_d5_s1001=150/4.25333
 burn_smoke_d0_s1001=979/4.64351
 burn_smoke_d3_s1001=298/4.30872
 burn_smoke_d5_s1001=249/4.32129
-th_smoke_d0_s1001=849/5.14841
-th_smoke_d3_s1001=150/4.12667
+th_smoke_d0_s1001=849/5.14488
+th_smoke_d3_s1001=150/4.13333
 th_smoke_d5_s1001=75/4.09333
 knights_smoke_d0_s1001=1000/4.646
 knights_smoke_d3_s1001=250/4.392
 knights_smoke_d5_s1001=150/4.36
-antilife_smoke_d0_s1001=807/5.68278
-antilife_smoke_d3_s1001=250/4.2
-antilife_smoke_d5_s1001=150/4.15333
-hinata_smoke_d0_s1001=507/6.84615
-hinata_smoke_d3_s1001=143/5.8042
-hinata_smoke_d5_s1001=71/5.88732
+antilife_smoke_d0_s1001=806/5.6799
+antilife_smoke_d3_s1001=250/4.208
+antilife_smoke_d5_s1001=150/4.14667
+hinata_smoke_d0_s1001=509/6.85658
+hinata_smoke_d3_s1001=144/5.78472
+hinata_smoke_d5_s1001=71/5.83099
 
 # --- regression ---
-slivers_regression_d0_s2002=1000/4.771
+slivers_regression_d0_s2002=1000/4.772
 slivers_regression_d3_s2002=400/4.255
-slivers_regression_d3_s3003=400/4.2575
+slivers_regression_d3_s3003=400/4.255
 slivers_regression_d5_s2002=300/4.25667
-slivers_regression_d5_s3003=300/4.24
+slivers_regression_d5_s3003=300/4.23667
 burn_regression_d0_s2002=983/4.65412
 burn_regression_d3_s2002=498/4.34137
 burn_regression_d3_s3003=498/4.27108
 burn_regression_d5_s2002=499/4.34269
 burn_regression_d5_s3003=499/4.27455
-th_regression_d0_s2002=839/5.16091
-th_regression_d3_s2002=498/4.19076
-th_regression_d3_s3003=500/4.076
-th_regression_d5_s2002=300/4.17333
-th_regression_d5_s3003=300/4.03
+th_regression_d0_s2002=839/5.1621
+th_regression_d3_s2002=498/4.18474
+th_regression_d3_s3003=500/4.07
+th_regression_d5_s2002=300/4.16333
+th_regression_d5_s3003=300/4.02
 knights_regression_d0_s2002=998/4.66232
 knights_regression_d3_s2002=300/4.33
 knights_regression_d3_s3003=300/4.32333
 knights_regression_d5_s2002=250/4.308
 knights_regression_d5_s3003=250/4.336
-antilife_regression_d0_s2002=796/5.71859
-antilife_regression_d3_s2002=300/4.18
-antilife_regression_d3_s3003=299/4.19398
-antilife_regression_d5_s2002=250/4.188
+antilife_regression_d0_s2002=797/5.71142
+antilife_regression_d3_s2002=300/4.17667
+antilife_regression_d3_s3003=299/4.19732
+antilife_regression_d5_s2002=250/4.184
 antilife_regression_d5_s3003=249/4.2008
-hinata_regression_d0_s2002=485/6.83505
-hinata_regression_d3_s2002=190/5.83158
-hinata_regression_d3_s3003=187/5.8877
-hinata_regression_d5_s2002=95/5.85263
-hinata_regression_d5_s3003=95/5.88421
+hinata_regression_d0_s2002=501/6.83832
+hinata_regression_d3_s2002=190/5.82105
+hinata_regression_d3_s3003=187/5.85561
+hinata_regression_d5_s2002=95/5.84211
+hinata_regression_d5_s3003=95/5.86316
 
 # --- overnight ---
 slivers_overnight_d0_s4004=1998/4.73574

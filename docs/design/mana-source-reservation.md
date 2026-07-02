@@ -3,6 +3,51 @@
 Handoff for the follow-on to the shipped **scarcity-first tap ordering**. Self-contained:
 everything needed is below or in the referenced code — no external notes required.
 
+## STATUS UPDATE (2026-07-02) — superseded by whole-turn batch payment
+
+The **per-payment** reservation scheme sketched later in this doc was built and **regressed**:
+holding a special source whenever *a single payment* didn't need it stranded a *later same-turn*
+cast (treasure_hunt seed 3044: reservation ON → T4 vs OFF → T3). Root cause: "payable without S"
+judged against one payment, not the whole turn. It is **disabled by default** (`ReserveEnabled` →
+`MTG_RESERVE` opt-in, inert = byte-identical off); the per-payment two-tier wrappers remain inert
+infra.
+
+That investigation generalized into a real correctness finding: the **per-cast greedy strands a
+jointly-castable line even with reservation off** (it won't feed a ramp-filter, and can spend a
+scarce colored source on a generic pip a later cast needs). The fix that **shipped** is
+**whole-turn batch payment** — `TurnSolver::BatchPrepayMainCasts`
+([`src/ai/TurnSolver.cpp`](../../src/ai/TurnSolver.cpp)): pay the turn's combined main-cast cost in
+ONE `TapForCostBacktrack` solve, pre-load `state.floating_mana` (colored pips pinned, generic as
+`wild`; generic drains `wild`-first — see `SpendFloatingTowardCost`), and let the casts drain it.
+Filters get fed, colors allocated jointly, and **unneeded sources stay untapped for free**. Default
+on (`MTG_NO_BATCH_PAY` off-switch); GT rebaselined 2026-07-02 (net-positive: hinata d0 +16 wins;
+th/hinata/antilife/slivers searched faster; burn/knights byte-identical; the tiny d3 slowdowns are
+budget churn — equal at unlimited budget). `out_full_pool` added to `TapForCostBacktrack` captures
+the produced pool.
+
+### The reservation follow-up, redefined (the correct shape)
+
+Batch-pay leaves *some* surplus source up, but does **not** specifically preserve the *valuable*
+ones (a depletion counter, a dork/manland kept up to attack) — the solver may tap those first. To
+capture that value, do **"leave out if you can"** *inside* batch-pay, driven by the **whole-turn**
+solve (sound — no stranding, unlike per-payment):
+
+- In `BatchPrepayMainCasts`, first solve the combined cost with `reserved_mask` covering the
+  reservable specials (`ReservableSpecialMask`: inflexible dorks, {C}-manlands, depletion lands).
+  Reuse the existing (inert) `reserved_mask` plumbing.
+- **Per-source, maximal set:** greedily exclude each special the turn still solves without, keeping
+  the largest leave-out set (multiple dorks/depletion → reserve as many as possible). All-or-nothing
+  is too coarse.
+- Sound + safe: "leave out" just means *don't pre-tap*; the source stays on the battlefield, so a
+  post-draw re-solve that genuinely needs it can still tap it (never stranded).
+- **Scoping:** depletion-land reservation is self-contained (counter preservation, no attack) and
+  can land alone. **Dork/{C}-manland reservation only pays off with the exalted-aware attack
+  declaration** (`AntiLifegainProvider::ShouldAttackWith`, built but opt-in `MTG_EXALTED_ATTACK`,
+  default off, uncommitted) — a reserved 0-power dork that then swings into breaking the lone-attacker
+  exalted bonus is worthless/worse. So dork/manland reservation should ride together with that fix.
+
+Everything below predates this update (the original per-payment design); keep for context.
+
 ## Background: what already shipped
 
 The greedy mana solver pays each pip from the **least-flexible qualifying source**, so

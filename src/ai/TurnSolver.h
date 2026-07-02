@@ -208,6 +208,20 @@ public:
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
 
+    // --- Whole-turn (batch) mana pre-payment ------------------------------------
+    // Pays the COMBINED mana cost of this turn's main hand casts in a SINGLE complete-solver call,
+    // then pre-loads state.floating_mana with that combined cost (coloured pips pinned to their
+    // colours, the generic portion as `wild`). Each main cast then drains the pool instead of
+    // tapping just-in-time, so scarce colours are allocated jointly and ramp-filters get fed --
+    // fixing the per-cast greedy that strands a later same-turn cast. Sources not needed stay
+    // untapped (mana-source reservation falls out for free). Returns true iff it prepaid; the
+    // caller then simply runs its cast loop (the casts pay from floating). Returns false with
+    // state UNTOUCHED when prepay does not apply (declined or the full batch is unaffordable), so
+    // the caller falls back to per-cast greedy -- byte-identical to the pre-batch behaviour.
+    // Called identically by the rollout (ApplyPlanDirect) and the executor (AIEngine::TakeTurn)
+    // so the two stay in lockstep. Off-switch: MTG_NO_BATCH_PAY.
+    static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts);
+
     // --- Human-play line reconciliation (tools/play GUI) ------------------------
     // A human assembles a free-form main-phase line by hand (play a land, cast some
     // spells) and commits it at the phase breakpoint. CheckLine reconciles that line

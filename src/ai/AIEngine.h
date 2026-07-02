@@ -274,6 +274,12 @@ private:
     bool TapForCost(GameState& state, const ManaCost& cost, ManaPool& available,
                     bool for_creature = true);
 
+    // One payment attempt with a set of special sources HELD (reserved_mask = active-player
+    // battlefield indices never tapped). TapForCost wraps this: reserved attempt first, then a
+    // normal (reserved_mask=0) attempt. See ReserveEnabled / ReservableSpecialMask.
+    bool TapForCostOnce(GameState& state, const ManaCost& cost, ManaPool& available,
+                        bool for_creature, std::uint64_t reserved_mask);
+
     // Remove a spell from hand, tap sources to pay, and push a StackEntry.
     // alt_lifegain > 0 casts via an alternative cost (Invigorate / Skyshroud Cutter / Reverent
     // Silence): pay no mana and instead make the opponent gain alt_lifegain life.

@@ -1687,6 +1687,32 @@ inline bool TapScarcityEnabled()
     return v;
 }
 
+// Mana-source RESERVATION (default ON; MTG_NO_RESERVE reverts to no-reservation = byte-identical A/B
+// baseline). "Leaving sources up": before paying a cost, the tap functions FIRST try to pay while
+// HOLDING back a few special sources ({C}-only manlands, DEPLETION lands, INFLEXIBLE dorks); only if
+// the cost cannot be paid WITHOUT them do they get tapped. Slack-only, so weakly dominant -- verified
+// strictly improvement-only on depletion decks (treasure_hunt: +wins, 0 games slower). For {C}-
+// manlands and inflexible dorks it is inert on the current decks (the scarcity-first tap order
+// already spends them last), but harmless (byte-identical) and correct if a future deck differs. The
+// real win is DEPLETION: conserving a counter when the plan does not need the extra mana lets the
+// land survive to ramp a later turn. It is NOT a search branch: tapping stays one committed choice,
+// realised identically by TurnSolver::TapForCostDirect (rollout) and AIEngine::TapForCost (executor)
+// so they stay in lockstep. Completeness is unaffected -- the reserved attempt is a first try; the
+// normal (reserved=0) payment, with the complete TapForCostBacktrack fallback, still runs when there
+// is no slack. NOTE: reserving a FLEXIBLE dork (dual/tri/rainbow) is NOT dominant -- it trades away
+// colour-fixing the turn's other casts may need (it regressed Anti-Lifegain) -- so
+// ReservableSpecialMask deliberately excludes those.
+// SUPERSEDED by whole-turn batch pre-payment (TurnSolver::BatchPrepayMainCasts): pre-loading the
+// turn's combined mana leaves every unneeded source untapped for free, so the per-payment reservation
+// two-tier is no longer the mechanism. Default OFF (inert -> ReservableSpecialMask returns 0 -> the
+// tap wrappers make a single normal attempt, byte-identical to the pre-reservation code). Opt back in
+// with MTG_RESERVE only for isolated A/B of the old per-payment scheme.
+inline bool ReserveEnabled()
+{
+    static const bool v = std::getenv("MTG_RESERVE") != nullptr;
+    return v;
+}
+
 // Adds one untapped source's mana contribution to an accounting ManaPool, consistent
 // with the floating-pool payment logic in TapForCost / TapForCostDirect:
 //   - depletion / high-yield lands contribute produces_amount of their colour,
@@ -1788,14 +1814,20 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost)
     drain(cost.black, reserve.wild);
     drain(cost.red,   reserve.wild);
     drain(cost.green, reserve.wild);
-    // 3) Generic pips: colourless, then each colour, then wild.
+    // 3) Generic pips: WILD first, then colourless, then each colour. Wild-first matters for the
+    //    whole-turn batch pre-payment (BatchPrepayMainCasts), which pre-loads floating as the turn's
+    //    combined cost with COLOURED pips pinned to their colours and the generic portion as `wild`:
+    //    draining generic from wild first keeps each colour reserved for its own coloured pip, so an
+    //    earlier cast's generic pip can never strand a later cast's coloured pip within the pool.
+    //    Inert for non-batch floats (ritual output is wild -> drained first either way; a pool with
+    //    no wild falls straight through to colourless/colours in the original order).
+    drain(cost.generic, reserve.wild);
     drain(cost.generic, reserve.colorless);
     drain(cost.generic, reserve.white);
     drain(cost.generic, reserve.blue);
     drain(cost.generic, reserve.black);
     drain(cost.generic, reserve.red);
     drain(cost.generic, reserve.green);
-    drain(cost.generic, reserve.wild);
 }
 
 // Decides whether a land enters tapped and applies any "as this land enters"
@@ -2711,13 +2743,67 @@ inline int SourceMaxNet(const CardDefinition& def)
     return ManaProducedPerTap(def);
 }
 
+// Reservation audit (see ReserveEnabled): the bitmask of the active player's untapped SPECIAL mana
+// sources worth "leaving up" -- ones whose non-mana value (attacking, or a preserved depletion
+// counter) is lost the moment they tap. The tap functions try to pay while holding these back and
+// only spend them when the cost cannot be met without them (slack-only -> weakly dominant). Scope
+// (matches the reservation handoff doc):
+//   * a mana DORK that can attack this turn (untapped, not summoning-sick -> CanTap()): held to attack
+//     (0-power dorks still matter -- an Invigorate pump target, or the lone attacker that switches on
+//     exalted). The exalted/attack-declaration side is the ShouldAttackWith hook, not this mask.
+//   * a {C}-only can_animate MANLAND that can attack once animated this turn (not entered this turn):
+//     held to animate + attack.
+//   * a DEPLETION land (enters_tapped_with_depletion): held so a counter is not wasted when unneeded.
+// Deliberately NOT reserved: coloured/dual manlands and coloured depletion-free lands (normal mana),
+// filters/rocks. Returns 0 when reservation is off or the battlefield exceeds 64 (bitmask limit,
+// matching the backtracker's memo cap), so those cases pay exactly as before (byte-identical).
+inline std::uint64_t ReservableSpecialMask(const GameState& state)
+{
+    if (!ReserveEnabled()) { return 0; }
+    const int active = state.active_player_index;
+    const int n      = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }
+    std::uint64_t mask = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        bool reserve = false;
+        if (d->tmpl == CardTemplate::ManaDork && p.CanTap())
+        {
+            // Only reserve a dork whose mana is INFLEXIBLE (<=1 colour): holding it costs no colour
+            // fixing. A flexible (dual/tri/rainbow) dork is deliberately NOT reserved -- holding it
+            // trades away fixing the turn's other casts may need, which is not a pure improvement
+            // (it regressed Anti-Lifegain game_6: reserving rainbow Birds / tri Ignoble).
+            const std::vector<Color>& mp = EffectiveProduces(state, active, *d);
+            if (mp.size() <= 1) { reserve = true; }
+        }
+        else if (d->params.can_animate && !p.entered_this_turn)
+        {
+            bool colored = false;                             // {C}-only manland (mirror ManaSourceRank 60)
+            for (Color c : EffectiveProduces(state, active, *d)) { if (c != Color::Colorless) { colored = true; break; } }
+            if (!colored) { reserve = true; }
+        }
+        else if (d->params.enters_tapped_with_depletion > 0)
+        {
+            reserve = true;                                   // depletion land -> conserve the counter
+        }
+        if (reserve) { mask |= (1ull << i); }
+    }
+    return mask;
+}
+
 inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors = nullptr,
                                 TapBacktrackMemo* fail_memo = nullptr,
                                 ManaPool* out_leftover = nullptr,
                                 std::uint64_t tapped_mask = 0,
-                                int untapped_max = -1)
+                                int untapped_max = -1,
+                                std::uint64_t reserved_mask = 0,
+                                ManaPool* out_full_pool = nullptr)
 {
     if (floating.CanPay(cost))
     {
@@ -2725,6 +2811,10 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         // caller can float it for the rest of the main phase. SpendFloatingTowardCost drains
         // exactly the cost (CanPay is true), leaving the leftover in `lo`. nullptr -> no-op.
         if (out_leftover) { ManaPool lo = floating; ManaCost c = cost; SpendFloatingTowardCost(lo, c); *out_leftover = lo; }
+        // Whole-turn batch pre-payment (BatchPrepayMainCasts) wants the FULL produced pool at the
+        // solution -- the concrete mana the chosen tap set makes -- so it can pre-load floating and
+        // pay every main cast from it. nullptr on every hot path -> byte-identical there.
+        if (out_full_pool) { *out_full_pool = floating; }
         return true;
     }
     const int active = state.active_player_index;
@@ -2790,6 +2880,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             {
                 const Permanent& p = state.battlefield[i];
                 if (p.controller_index != active || p.tapped) { continue; }
+                if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: held source unavailable
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
                 if (!d) { continue; }
                 const bool is_src = (d->tmpl == CardTemplate::BasicLand)
@@ -2824,6 +2915,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     {
         if (state.battlefield[i].controller_index != active || state.battlefield[i].tapped)
         { continue; }
+        if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: this source is held (not tappable)
         const CardDefinition* def =
             CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!def) { continue; }
@@ -2872,7 +2964,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
             if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
                                     tapped_mask | (1ull << i),
-                                    untapped_max < 0 ? -1 : untapped_max - SourceMaxNet(*def))) { return true; }
+                                    untapped_max < 0 ? -1 : untapped_max - SourceMaxNet(*def),
+                                    reserved_mask, out_full_pool)) { return true; }
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.players[active].life = life_snap;
