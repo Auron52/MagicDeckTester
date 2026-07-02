@@ -48,12 +48,15 @@ THREADS=${THREADS:-0}
 
 MODE=regression
 ACCEPT=0
+ACCEPT_ACK=""     # --accept-with-regressions=<ack>: acknowledge each searched win->loss so
+                  # --accept may proceed; the ack string is recorded in the GT provenance header.
 for arg in "$@"; do
   case "$arg" in
     --smoke)     MODE=smoke ;;
     --overnight) MODE=overnight ;;
     --fast)      MODE=smoke ;;      # back-compat alias
     --accept)    ACCEPT=1 ;;
+    --accept-with-regressions=*) ACCEPT=1; ACCEPT_ACK="${arg#*=}" ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
@@ -88,6 +91,25 @@ if [ "$ACCEPT" = 1 ]; then
     echo "ERROR: $RESULTS not found. Run 'bash test/regression.sh $MODEFLAG' first, inspect it, then --accept." >&2
     exit 1
   fi
+  # ---- pre-accept gate: the per-game audit must show no unexplained searched-depth
+  # win->loss. gt_logs still holds the PRE-accept baseline and $LOGDIR/wins holds the
+  # last run's per-game outcomes, so this is exactly the old-vs-new per-game diff. A
+  # searched-depth win->loss (audit exit != 0) hard-blocks promotion unless every one
+  # is acknowledged via --accept-with-regressions="gi<N>:<reason>; ...". Turn-later is
+  # surfaced but does not block (it must still be classified -- see the audit output).
+  if [ -f "$HERE/audit_changed_games.py" ] && command -v python3 >/dev/null 2>&1; then
+    echo "--- pre-accept per-game audit ($MODE) ---"
+    audit_out=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1); audit_rc=$?
+    printf '%s\n' "$audit_out"
+    if [ "$audit_rc" -ne 0 ] && [ -z "$ACCEPT_ACK" ]; then
+      echo "" >&2
+      echo "REFUSING TO ACCEPT: audit reports searched-depth win->loss (above)." >&2
+      echo "Root-cause each, then re-run with:" >&2
+      echo "  bash test/regression.sh $MODEFLAG --accept-with-regressions=\"gi<N>:<reason>; ...\"" >&2
+      exit 1
+    fi
+    [ -n "$ACCEPT_ACK" ] && echo "Proceeding with acknowledged regressions: $ACCEPT_ACK"
+  fi
   # shellcheck disable=SC1090
   [ -f "$GT" ] && source "$GT" 2>/dev/null || true   # existing values for all modes
   # shellcheck disable=SC1090
@@ -108,6 +130,7 @@ if [ "$ACCEPT" = 1 ]; then
   {
     echo "# Regression ground truth -- commit $(git rev-parse --short HEAD 2>/dev/null || echo unknown)  date $(date +%Y-%m-%d)"
     echo "# Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit."
+    [ -n "$ACCEPT_ACK" ] && echo "# accepted-with-regressions ($MODE, $(date +%Y-%m-%d)): $ACCEPT_ACK"
     echo "# Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>"
     echo "# Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint."
     emit_mode smoke      SMOKE_CASES
@@ -273,6 +296,26 @@ for spec in "${CASES[@]}"; do
     log "      >> no ground-truth log yet ($GTLOGS/${key}.wins) -- will be created on --accept"
   fi
 done
+
+# ---- per-game audit (split by depth) -- makes the pre-accept analysis unmissable ----------
+# The fingerprint compare above governs PASS/FAIL; this appends the per-game flip breakdown the
+# aggregate hides (win->loss / turn-later, split searched vs d0) plus the list of every searched
+# flip, so an ordinary run already surfaces exactly what a later --accept must have explained. The
+# same audit hard-gates --accept (see the ACCEPT block). See docs/design/auto-audit-integration.md.
+if [ -f "$HERE/audit_changed_games.py" ] && command -v python3 >/dev/null 2>&1; then
+  log ""
+  log "--- per-game audit (vs committed gt_logs) ---"
+  audit_out=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1); audit_rc=$?
+  printf '%s\n' "$audit_out" | while IFS= read -r al; do log "$al"; done
+  if [ "$audit_rc" -ne 0 ]; then
+    log "      >> searched-depth win->loss present -- --accept will be BLOCKED until each is"
+    log "         root-caused (then acknowledged via --accept-with-regressions=...)."
+  fi
+  # Offer the churn auto-classifier when there are searched turn-later games to explain.
+  if printf '%s\n' "$audit_out" | grep -q "SEARCHED-depth turn-later"; then
+    log "      >> classify searched turn-later automatically: bash test/classify_turn_later.sh $MODE"
+  fi
+fi
 
 log ""
 log "Result: $PASS passed, $FAIL failed, $NEW new   (batch makespan ${TOTAL}s = $((TOTAL/60))m$((TOTAL%60))s)"

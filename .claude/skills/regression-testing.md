@@ -7,19 +7,21 @@ rebaselining ground truth.
 
 > **The one rule that keeps getting skipped:** never `--accept` (or commit new
 > ground truth) on the basis of an aggregate fingerprint or a plausible
-> *explanation* of why it moved. **Run `python3 test/audit_changed_games.py <mode>`
-> and paste its output before you `--accept`** — it prints the per-game
-> win→loss / turn-later breakdown (split by depth) that the fingerprint hides, and
-> exits non-zero on a searched-depth win→loss. Review ALL searched-depth (d>0)
-> changes; a couple of d0 examples suffice. See **"MANDATORY before `--accept`"**
-> below. An explanation is not a measurement.
+> *explanation* of why it moved. This is now **enforced by the harness**, not just
+> policy: every ordinary `regression.sh <mode>` run auto-prints the per-game
+> audit at the end, and `--accept` **re-runs the audit and refuses to promote**
+> while any searched-depth win→loss is unacknowledged (see **"MANDATORY before
+> `--accept`"** below). Review ALL searched-depth (d>0) changes; a couple of d0
+> examples suffice. An explanation is not a measurement — and for turn-later games
+> the measurement is generated for you by `test/classify_turn_later.sh <mode>`.
 
 The harness lives in `test/`:
 
 | File | Role | Committed? |
 |------|------|-----------|
 | `regression.sh` | runs a mode, compares to ground truth, and (with `--accept`) promotes a run into ground truth | yes |
-| `audit_changed_games.py` | **the mandatory pre-`--accept` gate**: per-game win→loss / turn-later breakdown split by depth; exits non-zero on a searched-depth win→loss. Run it and read it before every accept. | yes |
+| `audit_changed_games.py` | **the mandatory pre-`--accept` gate**: per-game win→loss / turn-later breakdown split by depth; exits non-zero on a searched-depth win→loss. Auto-run by `regression.sh` on every run and again as a hard gate on `--accept`. | yes |
+| `classify_turn_later.sh` | auto-classifies each searched-depth turn-later game (`churn` = recovers at 4x/16x budget vs `PERSISTS` = variance/real), re-running that one game — the generated form of the mandatory turn-later classification | yes |
 | `regression_cases.sh` | the test matrix (deck × depth × seed × games × budget) + deck metadata — **single source of truth** | yes |
 | `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<won>/<avg_win_turn>` | yes |
 | `gt_logs/<key>.wins` | ground truth, **per-game** (the counterpart to the aggregate above): one `<game_index> <win_turn>` line per game, `-1` = loss. This is the committed old-side baseline for the per-game audit — `--accept` promotes it together with `regression_gt.txt`. | yes |
@@ -131,24 +133,38 @@ The per-game analysis comes **before** `--accept`, always.
 
 ### MANDATORY before `--accept`: analyze every changed game (a hard gate)
 
-This is the step that most often gets skipped — do not skip it. **You may not
-`--accept` (or commit new ground truth) until you have diffed the individual
-games that changed and explained each one.** A plausible-sounding *narrative* for
-an aggregate shift is NOT a substitute for measuring it per game.
+This is the step that most often gets skipped — so **the harness now enforces it
+for you.** You may not `--accept` (or commit new ground truth) until you have
+diffed the individual games that changed and explained each one. A plausible-sounding
+*narrative* for an aggregate shift is NOT a substitute for measuring it per game.
 
-**Run the audit script — do not eyeball the fingerprints.** There is one command
-whose output IS this gate; run it and paste the result into your response BEFORE
-you `--accept`:
+**The harness runs the audit automatically — you read and act on it.** Three pieces:
+
+1. **Every `regression.sh <mode>` run** prints the per-game audit at the end (the
+   split-by-depth breakdown + each searched-depth flip), so you see it without a
+   separate step.
+2. **`regression.sh <mode> --accept` re-runs the audit first and REFUSES to promote**
+   while any searched-depth `win→loss` exists. To accept over an explained one, pass
+   `--accept-with-regressions="gi<N>:<reason>; ..."` — the acknowledgement is recorded
+   in the ground-truth provenance header. (Turn-later does not block, but must still
+   be classified — see below.)
+3. **`test/classify_turn_later.sh <mode>` classifies every searched turn-later game
+   for you**, re-running each at 4x and 16x its case budget: `churn` (recovers →
+   benign search-truncation) vs `PERSISTS` (draw-divergence variance if the deck
+   shuffles/fetches, else a real same-draws slowdown — diff the two lines to decide).
+
+You can also run the raw audit directly (the same command the harness invokes):
 
 ```bash
 python3 test/audit_changed_games.py <mode>          # smoke | regression | overnight
 python3 test/audit_changed_games.py <mode> --old-git   # to re-check an accept that already happened
+bash   test/classify_turn_later.sh <mode>           # auto-classify searched turn-later games
 ```
 
 It diffs the committed per-game GT against this run and prints, **split by depth**,
 every `win→loss` / `loss→win` / `turn-later` / `turn-earlier`, listing each
 searched-depth flip individually. Exit non-zero ⇒ a searched-depth `win→loss`
-exists ⇒ you are blocked. A prose summary is not the gate; the script's output is.
+exists ⇒ `--accept` is blocked. A prose summary is not the gate; the script's output is.
 
 **Review bar differs by depth (this is the part that makes the audit tractable):**
 

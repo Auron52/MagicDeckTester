@@ -1,4 +1,27 @@
-# Deferred: auto-run the per-game audit from the regression harness
+# SHIPPED: auto-run the per-game audit from the regression harness
+
+Landed 2026-07-02 (user's idea). Steps 1, 2, and 3 are all implemented — see
+`test/regression.sh` (auto-audit block + the `--accept` gate) and
+`test/classify_turn_later.sh` (the churn auto-classifier). This doc is kept as the rationale
+record. What shipped:
+
+- **Step 1 — auto-run on every compare run.** After the fingerprint compare, `regression.sh`
+  runs `audit_changed_games.py <mode>` and logs the split-by-depth breakdown + the list of every
+  searched-depth flip. No separate step to remember.
+- **Step 2 — `--accept` hard-gate.** `--accept` re-runs the audit first and aborts if any
+  searched-depth win->loss exists, unless every one is acknowledged via
+  `--accept-with-regressions="gi<N>:<reason>; ..."`. The acknowledgement string is written into
+  the ground-truth provenance header (`# accepted-with-regressions (...)`).
+- **Step 3 — churn auto-classifier.** `test/classify_turn_later.sh <mode>` re-runs each
+  searched-depth turn-later game at 4x and 16x its case budget: recovers to the old turn -> `churn`
+  (benign search-truncation); persists -> `PERSISTS` (draw-divergence variance if the deck shuffles,
+  else a real same-draws slowdown — diff the two lines to decide). Validated on the overnight
+  rebaseline's three turn-later games: hinata gi234 and slivers gi638 classified `churn` (recover at
+  16x), th gi627 classified `PERSISTS` (Treasure-Hunt/Throes-cascade draw divergence — benign).
+
+Original plan below, kept for context.
+
+---
 
 Self-contained deferred task (2026-07-02, user's idea). **Do after the next compaction.**
 
