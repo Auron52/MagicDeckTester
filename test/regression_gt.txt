@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 329007b  date 2026-07-02
+# Regression ground truth -- commit f0020d9  date 2026-07-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -10,7 +10,7 @@ slivers_smoke_d5_s1001=150/4.25333
 burn_smoke_d0_s1001=979/4.64351
 burn_smoke_d3_s1001=298/4.30872
 burn_smoke_d5_s1001=249/4.32129
-th_smoke_d0_s1001=849/5.14488
+th_smoke_d0_s1001=851/5.10811
 th_smoke_d3_s1001=150/4.13333
 th_smoke_d5_s1001=75/4.09333
 knights_smoke_d0_s1001=1000/4.646
@@ -34,10 +34,10 @@ burn_regression_d3_s2002=498/4.34137
 burn_regression_d3_s3003=498/4.27108
 burn_regression_d5_s2002=499/4.34269
 burn_regression_d5_s3003=499/4.27455
-th_regression_d0_s2002=839/5.1621
-th_regression_d3_s2002=498/4.18474
+th_regression_d0_s2002=839/5.14303
+th_regression_d3_s2002=498/4.17871
 th_regression_d3_s3003=500/4.07
-th_regression_d5_s2002=300/4.16333
+th_regression_d5_s2002=300/4.15667
 th_regression_d5_s3003=300/4.02
 knights_regression_d0_s2002=998/4.66232
 knights_regression_d3_s2002=300/4.33

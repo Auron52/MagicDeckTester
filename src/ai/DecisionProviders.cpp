@@ -654,6 +654,28 @@ int TreasureHuntProvider::ExtraLethalDamage(const GameState& s,
             int active_rate = (lands_edge_rate > 0) ? lands_edge_rate : 0;
             if (active_rate > 0) { plan_le_dmg += th_lands_estimate * active_rate; }
         }
+        // Cascade payoff (Throes of Chaos): a cascade card can cascade INTO Land's Edge, putting it
+        // onto the battlefield for free, so the lands already in hand become lethal ammunition THIS
+        // turn. Credit it when the cascade's target -- the first nonland in the library with mana
+        // value < cascade_max_mv (cascade skips lands and higher-MV nonlands) -- is a Land's Edge.
+        // Clairvoyant, like th_lands_estimate above; only when no Land's Edge is already on board
+        // (else it is already counted in base_lands_edge_dmg). Simulation remains the win arbiter,
+        // so this optimistic projection only steers the search toward the line (it does not commit
+        // a phantom win). See docs/design/th-reliquary-defer-gi627.md.
+        static const bool s_cascade_lethal = std::getenv("MTG_NO_CASCADE_LETHAL") == nullptr;
+        if (s_cascade_lethal && lands_edge_rate == 0 && c->params.cascade_max_mv > 0)
+        {
+            for (const Card& lc : s.players[active].library)
+            {
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                const Card&           card = ld ? ld->card : lc;
+                if (card.IsLand()) { continue; }                                   // cascade skips lands
+                if (card.m_mana_cost.ManaValue() >= c->params.cascade_max_mv) { continue; } // too costly: skipped
+                if (ld && ld->params.discard_land_damage > 0)                       // target IS Land's Edge
+                { plan_le_dmg += lands_in_hand * ld->params.discard_land_damage; }
+                break;                                                             // first hittable nonland = target
+            }
+        }
     }
     // Second pass: TH + Land's Edge both cast this plan (none on board) -> add the TH bonus
     // lands at Land's Edge's rate (2). Mirrors the original Solve second pass exactly.
