@@ -56,6 +56,31 @@ Two drivers, treated differently:
    sequential-execution strand.
 2. **Hold-to-attack** — a combat-value judgment.
 
+## Direct user requirements (from the play-viewer sessions)
+
+Requirements the user stated explicitly; treat as authoritative alongside the scope above.
+
+- **Branch only when the special sources COMPETE.** If the current line can be paid while leaving
+  *all* special sources untapped, just leave them all up — emit no hold-vs-tap branch. A branch is
+  needed only when the plan genuinely needs some of them for mana (tap-for-mana vs reserve). "Ignore
+  cases where there is no conflict — just keep the source untapped." This keeps the branch count near
+  zero on most turns.
+- **Cheap branching via value ordering.** When forced to tap some-but-not-all, reserve the
+  *highest-value* creatures and tap the least-valuable first, so you don't enumerate all subsets.
+  For a dork that can deal combat damage, prefer keeping the **largest-power** one back; **exalted**
+  matters — a lone attacker gets the exalted bonus, so keeping exactly one creature back can be the
+  damage-maximizing choice.
+- **One-shot / mode-sacrifice sources generalize the "don't waste it" rule.** Besides depletion
+  lands, this includes **sac-lands / lands sacrificed only in a certain mode** (e.g. a fetch that is
+  cracked-and-sacrificed): don't consume them in the sacrificing mode unless the mana is actually
+  needed. "Reserve" = keep the source untapped/unspent.
+- **Grove of the Burnwillows — handle separately/last.** In an anti-lifegain shell, tapping Grove can
+  make the *opponent lose* life (its "each opponent gains 1" flipped by a punisher), so it is a
+  reservable *damage* source too. The user flagged it as a distinct, later piece.
+- **Motivating repro:** Anti-Lifegain **Seed 12, Game 11** — the user believes a turn-5 win exists
+  but the greedy taps mana dorks that should have attacked, so the win is unreachable. Validate the
+  reservation branch recovers it.
+
 ## Recommended plan (oracle-first)
 
 Add hold-vs-tap **branches under `MTG_UNPRUNED`** — 2^k over the k≈0–3 special sources on
