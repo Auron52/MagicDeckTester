@@ -259,7 +259,7 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         if (i) { os << ", "; }
         const Card* hc = hand[i];
         const CardDefinition* d = CardDatabase::Instance().Lookup(hc->m_name);
-        os << "{ \"name\": "; JsonStr(os, hc->m_name);
+        os << "{ \"num\": " << hc->m_number << ", \"name\": "; JsonStr(os, hc->m_name);
         os << ", \"cost\": "; JsonStr(os, d ? d->card.m_mana_cost.ToString() : std::string());
         os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0);
         os << ", \"kind\": \"" << HandKind(d) << "\"";
@@ -922,13 +922,36 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          uint64_t seed, int game_index, int max_turns,
                          int lookahead_depth, int timeout_ms, std::vector<int> choices,
                          int reveal_count, const std::filesystem::path& log_dir,
-                         const std::string& validate_line = "")
+                         const std::string& validate_line = "",
+                         const std::string& force_mulligan = "")
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
     GoldFishRunner::PopulateOpponentSpawns(state, game_index);
+    // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
+    // them so the emitted hand/decision JSON carries real "num"s and --force-mulligan can bottom a
+    // specific card by number (mulligan reproducibility). See docs/design/claude-play-mulligan-*.
+    GoldFishRunner::AssignCardNumbers(state, GoldFishRunner::BuildCardNumbering(deck));
 
     AIEngine ai(profile, lookahead_depth, timeout_ms);
+
+    // Mulligan reproducibility (--force-mulligan "<count>:<n1,n2,...>"): reconstruct a reference's
+    // exact opening hand by keeping at <count> mulligans and bottoming the listed card numbers,
+    // independent of the current keep/bottoming heuristics. See docs/design/claude-play-mulligan-*.
+    if (!force_mulligan.empty())
+    {
+        std::string spec = force_mulligan;
+        auto colon = spec.find(':');
+        int fcount = std::stoi(spec.substr(0, colon));
+        std::vector<int> fbottom;
+        if (colon != std::string::npos)
+        {
+            std::stringstream bs(spec.substr(colon + 1));
+            std::string tok;
+            while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fbottom.push_back(std::stoi(tok)); } }
+        }
+        ai.SetForcedMulligan(fcount, std::move(fbottom));
+    }
     size_t cursor = 0;
     int decisions_made = 0;
     std::vector<std::string> trace;   // one entry per RESOLVED decision (for --log-dir)
@@ -1401,6 +1424,16 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_draw_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
+    // Mulligan reproducibility: the actual (count, bottomed-card-numbers) this game used. Recorded
+    // into the reference so a later replay (--force-mulligan) reconstructs the exact opening hand
+    // regardless of how the keep/bottoming heuristics change. See docs/design/claude-play-mulligan-*.
+    std::ostringstream mull_ss;
+    mull_ss << "{ \"count\": " << ai.LastMulliganCount() << ", \"bottom\": [";
+    for (size_t i = 0; i < ai.LastBottomedNumbers().size(); ++i)
+    { mull_ss << (i ? ", " : "") << ai.LastBottomedNumbers()[i]; }
+    mull_ss << "] }";
+    const std::string mulligan_json = mull_ss.str();
+
     // Game completed (every decision was supplied). Write the per-game trace if asked.
     if (!log_dir.empty())
     {
@@ -1411,7 +1444,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         std::ofstream out(log_dir / fn.str());
         out << "{\n  \"seed\": " << seed << ", \"game_index\": " << game_index
             << ", \"win_turn\": " << (won ? win_turn : -1)
-            << ", \"won\": " << (won ? "true" : "false") << ",\n  \"decisions\": [\n";
+            << ", \"won\": " << (won ? "true" : "false")
+            << ",\n  \"mulligan\": " << mulligan_json << ",\n  \"decisions\": [\n";
         for (size_t i = 0; i < trace.size(); ++i)
         {
             out << "    " << trace[i] << (i + 1 < trace.size() ? ",\n" : "\n");
@@ -1437,6 +1471,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
               << ", \"decisions_made\": " << decisions_made
               << ", \"opponent_life\": " << state.players[1].life
               << ", \"player_life\": " << state.players[0].life
+              << ", \"mulligan\": " << mulligan_json
               << "\n}\n<<<END_RESULT>>>\n";
     return 0;
 }
@@ -1807,6 +1842,8 @@ int main(int argc, char* argv[])
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
     std::string validate_line;        // --validate-line "<spec>": human-play line to reconcile
                                        // at the first un-chosen main phase (tools/play GUI)
+    std::string force_mulligan;       // --force-mulligan "<count>:<n1,n2,...>": reconstruct a
+                                       // reference's opening hand (claude-play replay), see below
 
     for (int i = 2; i < argc; ++i)
     {
@@ -1854,6 +1891,13 @@ int main(int argc, char* argv[])
                 else if (flag == "--validate-line")
                 {
                     validate_line = argv[++i];
+                }
+                else if (flag == "--force-mulligan")
+                {
+                    // Mulligan reproducibility (claude-play replay): "<count>:<n1,n2,...>" forces
+                    // the engine to keep at <count> mulligans and bottom the listed card numbers,
+                    // reconstructing a reference's exact opening hand independent of the heuristics.
+                    force_mulligan = argv[++i];
                 }
                 else if (flag == "--depth")
                 {
@@ -1949,7 +1993,7 @@ int main(int argc, char* argv[])
             }
             return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
-                                 validate_line);
+                                 validate_line, force_mulligan);
         }
 
         GoldFishRunner runner;

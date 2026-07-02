@@ -36,6 +36,19 @@ public:
     // Returns the card names of the hand kept after the most recent HandleMulligan call.
     const std::vector<std::string>& GetKeptOpeningHand() const { return m_kept_opening_hand; }
 
+    // Mulligan reproducibility (see docs/design/claude-play-mulligan-reproducibility.md).
+    // The per-mulligan reshuffle is seeded by game_seed + mulligan_count, so the pre-bottom hand at
+    // each depth is fixed by the seed alone -- only the keep count and the bottomed cards are
+    // heuristic. Recording those two lets a replay reconstruct the exact opening hand + library on
+    // ANY engine version, independent of the keep model / bottoming heuristic.
+    //   * After HandleMulligan, these report what THIS game did (for recording into a reference).
+    int LastMulliganCount() const { return m_last_mulligan_count; }
+    const std::vector<int>& LastBottomedNumbers() const { return m_last_bottomed_numbers; }
+    //   * When a forced directive is set, HandleMulligan keeps at exactly `count` mulligans and
+    //     bottoms exactly `bottom_numbers` (by card m_number, in order), ignoring both heuristics.
+    void SetForcedMulligan(int count, std::vector<int> bottom_numbers)
+    { m_forced_mull_active = true; m_forced_mull_count = count; m_forced_bottom_numbers = std::move(bottom_numbers); }
+
     // Called each main phase. Plays lands, casts spells, activates abilities.
     //
     // resolve_stack: if supplied, called after EACH individual cast so the stack
@@ -146,6 +159,12 @@ private:
     bool                     m_search_post_combat  = false;
     bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts
     std::vector<std::string> m_kept_opening_hand;
+    // Mulligan reproducibility (see the public accessors above).
+    int                      m_last_mulligan_count = 0;
+    std::vector<int>         m_last_bottomed_numbers;
+    bool                     m_forced_mull_active  = false;
+    int                      m_forced_mull_count   = 0;
+    std::vector<int>         m_forced_bottom_numbers;
     GameLogger*              m_logger            = nullptr;
     ExternalChooser          m_external_chooser;          // unset => normal AI path
     ExternalVialChooser      m_external_vial_chooser;     // unset => heuristic charge

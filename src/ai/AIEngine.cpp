@@ -143,11 +143,16 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     m_fd_best_win  = max_turns + 1;
     m_fd_best_turn = 0;
 
+    m_last_bottomed_numbers.clear();
     int mulligan_count = 0;
     while (true)
     {
-        bool keep = static_cast<int>(ap.hand.size()) <= m_profile.stop_at
-                 || KeepHand(ap.hand, mulligan_count, state.on_the_play);
+        // Forced-mulligan replay (see SetForcedMulligan): keep at EXACTLY the recorded depth,
+        // ignoring the keep heuristic, so the reconstructed hand is engine-version-independent.
+        bool keep = m_forced_mull_active
+                  ? (mulligan_count >= m_forced_mull_count)
+                  : (static_cast<int>(ap.hand.size()) <= m_profile.stop_at
+                     || KeepHand(ap.hand, mulligan_count, state.on_the_play));
 
         if (m_logger)
         {
@@ -170,6 +175,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
         ap.library.DrawN(7, ap.hand);
     }
 
+    m_last_mulligan_count = mulligan_count;
     if (mulligan_count > 0) { BottomCards(state, mulligan_count, max_turns); }
 
     m_kept_opening_hand.clear();
@@ -697,12 +703,16 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     TranspositionTable* saved_tt = m_shared_tt;
     m_shared_tt = LookaheadBottoming() ? &shared_tt : saved_tt;
 
-    for (int i = 0; i < count && !ap.hand.empty(); ++i)
+    // When forced, bottom EXACTLY the listed cards (its size, not `count`): a full list (size ==
+    // count) is a faithful replay; an empty/short list is a deliberate probe that exposes the
+    // pre-bottom depth-N hand (used to derive the bottomed set when patching old references).
+    const int stop = m_forced_mull_active ? static_cast<int>(m_forced_bottom_numbers.size()) : count;
+    for (int i = 0; i < stop && !ap.hand.empty(); ++i)
     {
         int hand_size = static_cast<int>(ap.hand.size());
         std::vector<char> allowed(hand_size, 1);
 
-        if (LookaheadBottoming())
+        if (LookaheadBottoming() && !m_forced_mull_active)
         {
             // Clairvoyant greedy: roll out a full game for removing each candidate
             // card (it goes to the bottom of the library, so the draws the rollout
@@ -741,6 +751,19 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
         int pick = HeuristicBottomPick(ap.hand, allowed);
         if (pick < 0) { pick = 0; }
 
+        // Forced-mulligan replay: bottom exactly the recorded card (by m_number) at this step,
+        // overriding the heuristic pick, so the reconstructed hand matches regardless of how the
+        // bottoming heuristic has since changed. Falls back to the heuristic pick if the recorded
+        // number isn't present (shouldn't happen for a faithful reference).
+        if (m_forced_mull_active && i < static_cast<int>(m_forced_bottom_numbers.size()))
+        {
+            for (int j = 0; j < hand_size; ++j)
+            {
+                if (ap.hand[j].m_number == m_forced_bottom_numbers[i]) { pick = j; break; }
+            }
+        }
+
+        m_last_bottomed_numbers.push_back(ap.hand[pick].m_number);
         if (m_logger)
         {
             m_logger->LogBottomed(ap.hand[pick].m_number, ap.hand[pick].m_name);

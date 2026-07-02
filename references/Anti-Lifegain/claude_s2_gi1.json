@@ -1,5 +1,6 @@
 {
   "seed": 2, "game_index": 1, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
   "decisions": [
     { "chosen": 16, "decision": {
   "decision_index": 0,

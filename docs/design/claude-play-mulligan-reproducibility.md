@@ -1,6 +1,30 @@
 # Claude-play: player-controlled mulligan + reference reproducibility
 
-Deferred design. Self-contained.
+Self-contained.
+
+## STATUS (2026-07-02) — record + replay IMPLEMENTED; player-controlled mulligan still deferred
+
+The reproducibility half is shipped: the engine RECORDS the mulligan it made and can REPLAY a
+recorded one, so a saved reference reconstructs its exact opening hand on any engine version.
+
+- **Record:** `AIEngine::HandleMulligan`/`BottomCards` track `LastMulliganCount()` +
+  `LastBottomedNumbers()`; `RunClaudePlay` writes `"mulligan": { "count": N, "bottom": [card #s] }`
+  into the reference trace and the `CLAUDE_RESULT` block. Card numbers are now stamped in claude-play
+  (`AssignCardNumbers`, previously goldfish-`--log-dir`-only), and the decision hand JSON carries a
+  `"num"` per card.
+- **Replay:** `--force-mulligan "<count>:<n1,n2,...>"` makes `HandleMulligan` keep at exactly `count`
+  and `BottomCards` bottom exactly those numbers, ignoring the keep/bottoming heuristics. Inert when
+  unset (goldfish GT byte-identical, verified).
+- **Existing references patched** by `test/patch_reference_mulligans.py` (derives `count = (7 or 8) -
+  |hand|` accounting for the on-the-draw turn-1 draw, then searches the size-`count` bottom set that
+  reproduces the recorded hand). `test/viewer_protocol_check.py` now forces the recorded mulligan, so
+  the former `mull-drift` class is reproducible (test_deck s11 went mull-drift -> ok).
+
+Still deferred: **player-controlled** mulligan (the human/agent CHOOSING keep/mull + bottoming in the
+`--choices` stream, vs the engine deciding). The record/replay format above is the substrate for it.
+The remaining design below is that player-control layer.
+
+---
 
 ## Problem
 

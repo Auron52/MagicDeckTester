@@ -55,12 +55,24 @@ def flatten_choices(decisions):
     return out
 
 
-def replay(deck, prof, seed, gi, choices):
+def force_arg(ref):
+    """Build --force-mulligan "<count>:<n1,n2,...>" from a reference's recorded mulligan, so the
+    replay reconstructs the exact opening hand regardless of the current keep/bottoming heuristic.
+    None when the reference predates mulligan recording (then the engine's live mulligan is used)."""
+    m = ref.get("mulligan")
+    if m is None:
+        return None
+    return f'{m.get("count", 0)}:' + ",".join(str(n) for n in m.get("bottom", []))
+
+
+def replay(deck, prof, seed, gi, choices, force=None):
     """One stateless --claude-play invocation with the GUI's params (depth 0,
     no --reveal). Returns (exit_code, stdout)."""
     args = [MTG, deck, "--claude-play", "--seed", str(seed), "--game-index", str(gi),
             "--max-turns", "8", "--depth", "0", "--profile", prof,
             "--choices", ",".join(str(c) for c in choices)]
+    if force is not None:
+        args += ["--force-mulligan", force]
     p = subprocess.run(args, capture_output=True, text=True)
     return p.returncode, p.stdout + p.stderr
 
@@ -90,13 +102,14 @@ def check_reference(path):
     deck, prof = DECKS[deck_dir]
     seed, gi = ref["seed"], ref["game_index"]
     choices = flatten_choices(ref["decisions"])
+    force = force_arg(ref)   # reconstruct the recorded opening hand when the reference carries it
 
-    # Root cause first: does the engine still open the SAME hand? Mulligan is engine-
-    # decided (the player has no control), so a different opening hand means the whole
-    # game diverges at the root -- classify as mulligan-drift, not play-drift.
+    # Root cause first: does the engine still open the SAME hand? With a recorded mulligan we FORCE
+    # it (so the hand is reconstructed and this always matches); without one, a different opening
+    # hand means the mulligan heuristic diverged -> classify as mulligan-drift, not play-drift.
     ref_decs = ref.get("decisions", [])
     if ref_decs:
-        rc0, out0 = replay(deck, prof, seed, gi, [])
+        rc0, out0 = replay(deck, prof, seed, gi, [], force)
         if "Error:" in out0 or rc0 not in (0, 70):
             return False, "play", f"engine error at step 0 (rc={rc0}): {out0.strip()[-160:]}"
         m0 = DEC_RE.search(out0)
@@ -111,7 +124,7 @@ def check_reference(path):
     # (exit 70) or the terminal result (exit 0), and the next recorded pick must
     # be a valid index into the plans just offered.
     for k in range(len(choices) + 1):
-        rc, out = replay(deck, prof, seed, gi, choices[:k])
+        rc, out = replay(deck, prof, seed, gi, choices[:k], force)
         if "Error:" in out or rc not in (0, 70):
             return False, "play", f"engine error at step {k} (rc={rc}): {out.strip()[-160:]}"
         if rc == 0:  # terminal reached before consuming all recorded picks
