@@ -161,7 +161,12 @@ def check_reference(path):
 
 
 def main():
-    refs = sorted(glob.glob("references/*/claude_s*_gi*.json"))
+    # The one-level glob deliberately covers only the VERIFIED set, references/<deck>/claude_*.json.
+    # Aspirational "known-slow" games live one level deeper (references/suboptimal/<deck>/…, see that
+    # folder's README) and are excluded here: their win turn is knowingly beatable, so gating on them
+    # would report permanent drift. Guard against a future deeper glob too.
+    refs = sorted(p for p in glob.glob("references/*/claude_s*_gi*.json")
+                  if not p.startswith(("references/suboptimal/", "references/optimal/")))
     if not refs:
         print("no reference games found under references/")
         return 0
