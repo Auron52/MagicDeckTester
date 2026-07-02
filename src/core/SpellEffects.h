@@ -1713,6 +1713,18 @@ inline bool ReserveEnabled()
     return v;
 }
 
+// Whole-turn depletion reservation ("leave out if you can"), applied in
+// TurnSolver::BatchPrepayMainCasts: a depletion land's counter is spent the moment it taps, so hold
+// back every depletion land the turn's COMBINED main-cast cost can be paid without. Sound because it
+// is judged against the whole turn (not a single cast) and only LEAVES A SOURCE UNTAPPED -- never
+// stranded, since a post-draw re-solve can still tap it if genuinely needed. Default ON; off-switch
+// MTG_NO_DEPLETION_RESERVE for A/B. Distinct from the superseded per-payment ReserveEnabled scheme.
+inline bool DepletionReserveEnabled()
+{
+    static const bool v = std::getenv("MTG_NO_DEPLETION_RESERVE") == nullptr;
+    return v;
+}
+
 // Adds one untapped source's mana contribution to an accounting ManaPool, consistent
 // with the floating-pool payment logic in TapForCost / TapForCostDirect:
 //   - depletion / high-yield lands contribute produces_amount of their colour,

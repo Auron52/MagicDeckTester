@@ -35,9 +35,6 @@ solve (sound — no stranding, unlike per-payment):
 - In `BatchPrepayMainCasts`, first solve the combined cost with `reserved_mask` covering the
   reservable specials (`ReservableSpecialMask`: inflexible dorks, {C}-manlands, depletion lands).
   Reuse the existing (inert) `reserved_mask` plumbing.
-- **Per-source, maximal set:** greedily exclude each special the turn still solves without, keeping
-  the largest leave-out set (multiple dorks/depletion → reserve as many as possible). All-or-nothing
-  is too coarse.
 - Sound + safe: "leave out" just means *don't pre-tap*; the source stays on the battlefield, so a
   post-draw re-solve that genuinely needs it can still tap it (never stranded).
 - **Scoping:** depletion-land reservation is self-contained (counter preservation, no attack) and
@@ -45,6 +42,29 @@ solve (sound — no stranding, unlike per-payment):
   declaration** (`AntiLifegainProvider::ShouldAttackWith`, built but opt-in `MTG_EXALTED_ATTACK`,
   default off, uncommitted) — a reserved 0-power dork that then swings into breaking the lone-attacker
   exalted bonus is worthless/worse. So dork/manland reservation should ride together with that fix.
+
+#### SHIPPED (2026-07-02) — depletion-land reservation
+
+Landed the depletion slice in `BatchPrepayMainCasts` ([`src/ai/TurnSolver.cpp`](../../src/ai/TurnSolver.cpp)),
+gated `DepletionReserveEnabled()` ([`src/core/SpellEffects.h`](../../src/core/SpellEffects.h), default
+ON, off-switch `MTG_NO_DEPLETION_RESERVE`):
+
+- Cheap prescan builds `reserved` = every *untapped* depletion land (`enters_tapped_with_depletion>0`)
+  the active player controls. Non-depletion decks find none → `reserved=0` → the held attempt is
+  skipped entirely (byte-identical, no extra solve).
+- **All-or-nothing, not per-source-maximal.** The combined cost is solved once with *all* depletion
+  lands held; if it pays **wild-free**, their counters are preserved for free. If holding them makes
+  the turn unaffordable or forces a wild/ambiguous tap, restore and solve unrestricted (they are
+  needed this turn). Chose all-or-nothing over the maximal-subset the bullet above sketched: the
+  per-source greedy did *k* extra full backtrack solves per batch call (~80 % of which reject, since
+  the land was needed) → ~15 % slower on treasure_hunt; all-or-nothing is 1 solve in the common slack
+  case, ≤2 otherwise → **perf-neutral**. Still lossless (holds nothing when it can't hold all = the
+  original); only misses the rare partial save (hold 1 of 2), which is empirically nil here.
+- **Result: byte-identical across the whole smoke + regression + overnight-seed A/B on treasure_hunt
+  (the only depletion deck).** treasure_hunt wins ~turn 4, too fast for a preserved counter to change
+  any outcome. So this is correct, zero-regression, perf-neutral *latent* infrastructure — no numbers
+  move today, but it's the substrate the dork/{C}-manland reservation (next, with the exalted fix)
+  builds on, and it's a genuine improvement for any future grindy depletion deck.
 
 Everything below predates this update (the original per-payment design); keep for context.
 

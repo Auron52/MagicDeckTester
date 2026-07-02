@@ -1939,11 +1939,57 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     const int  lo  = state.players[1 - active].life;
     const bool oll = state.opponent_lost_life_this_turn;
 
+    // Whole-turn depletion reservation ("leave out if you can"): a depletion land's counter is spent
+    // the instant it taps, so try to HOLD every untapped depletion land whenever the turn's COMBINED
+    // cost can still be paid without them. Sound because judged against the whole turn -- a held land
+    // is simply left untapped, never stranded (a later post-draw re-solve can still tap it). Rollout
+    // (ApplyPlanDirect) and executor (AIEngine::TakeTurn) reach this through the same function, so the
+    // held set stays in lockstep. Cheap prescan: no untapped depletion land -> reserved=0 (every
+    // non-depletion deck skips the held attempt entirely -> byte-identical + no extra solve).
+    std::uint64_t reserved = 0;
+    const int n = static_cast<int>(state.battlefield.size());
+    if (DepletionReserveEnabled() && n <= 64)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.enters_tapped_with_depletion > 0) { reserved |= (1ull << i); }
+        }
+    }
+
+    // Solve the combined cost. First try with the depletion lands HELD: if it pays wild-free their
+    // counters are preserved for free. If holding them makes the turn unaffordable or forces a
+    // wild/ambiguous tap, restore and solve WITHOUT the hold -- they are genuinely needed this turn.
+    // (All-or-nothing rather than a per-source maximal subset: cheaper -- 1 solve in the common
+    // slack case, <=2 otherwise -- and empirically indistinguishable on the depletion decks.)
     ManaPool produced;
-    const bool ok = TapForCostBacktrack(state, combined, /*for_creature=*/false, ManaPool{},
-                                        /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
-                                        /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/0,
-                                        /*out_full_pool=*/&produced);
+    bool ok = false;
+    if (reserved)
+    {
+        ok = TapForCostBacktrack(state, combined, /*for_creature=*/false, ManaPool{},
+                                 /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
+                                 /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/reserved,
+                                 /*out_full_pool=*/&produced)
+             && produced.wild == 0;
+        if (!ok)   // held attempt infeasible/ambiguous -> the lands are needed; restore for the plain solve
+        {
+            state.battlefield                  = bf_snap;
+            state.floating_mana                = fm_snap;
+            state.players[active].life         = la;
+            state.players[1 - active].life     = lo;
+            state.opponent_lost_life_this_turn = oll;
+            produced = ManaPool{};
+        }
+    }
+    if (!ok)   // no depletion land to hold, or the held attempt failed: the original unrestricted solve
+    {
+        ok = TapForCostBacktrack(state, combined, /*for_creature=*/false, ManaPool{},
+                                 /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
+                                 /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/0,
+                                 /*out_full_pool=*/&produced);
+    }
     // Decline when the full batch is unaffordable (fall back to greedy, which casts what it can) or
     // when the tap set makes "any colour" (wild) mana -- pinning colours to pips is then ambiguous.
     if (!ok || produced.wild > 0)
