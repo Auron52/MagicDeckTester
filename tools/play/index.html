@@ -353,6 +353,7 @@
     <ul id="hist" class="hist"></ul>
     <div id="endcontrols" style="display:none; margin-top:14px;">
       <button id="saveref" class="primary">Save as reference</button>
+      <button id="saveref-sub" style="display:none;" title="You believe this game is winnable on an EARLIER turn — saved to references/suboptimal/ as a target, not the verified set.">Save as suboptimal (should be faster)</button>
       <div id="saveinfo"></div>
     </div>
   </aside>
@@ -1350,6 +1351,9 @@ function showResult(r) {
   $('endcontrols').style.display='';
   $('saveref').textContent = S.hadReject ? 'Save game log (had rejects)' : 'Save as reference (clean)';
   $('saveref').className = S.hadReject ? '' : 'primary';
+  // Suboptimal save: only offered on a CLEAN win — it means "I won, but this game should end
+  // sooner". No-win or reject games can't be a "should-be-faster" target.
+  $('saveref-sub').style.display = (!S.hadReject && r.won) ? '' : 'none';
   $('saveinfo').textContent = S.hadReject
     ? 'This game had rejected lines — saved to logs/play/, not the permanent reference set.' : '';
 }
@@ -1390,13 +1394,15 @@ async function undo() {
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null; hideDecPanel();
   renderHistory(); await step();
 }
-async function saveRef() {
+async function saveRef(suboptimal) {
   $('saveinfo').textContent='saving…';
-  const route = S.hadReject ? '/api/save' : '/api/save-reference';
-  const res=await post(route, cfg());
+  // A suboptimal save is a clean line flagged "should be faster" -> always the reference endpoint
+  // (with suboptimal:true), never the had-reject log path.
+  const route = (S.hadReject && !suboptimal) ? '/api/save' : '/api/save-reference';
+  const res=await post(route, suboptimal ? {...cfg(), suboptimal:true} : cfg());
   $('saveinfo').innerHTML = res.savedAs ? `Saved:<br><b>${esc(res.savedAs)}</b><br>Open it in <code>tools/replay/</code>.`
     : `<span class="err">save failed: ${esc(res.error||'unknown')}</span>`;
-  if (res.savedAs) checkReference();   // clean save just created the reference -> light up the badge
+  if (res.savedAs) checkReference();   // saving updates the badge (verified or suboptimal)
 }
 // Top-bar badge: does this (deck, seed, game#) already have a saved reference game? Informational
 // only -- the user can still start it. Refreshed whenever the deck/seed/game# changes.
@@ -1408,6 +1414,7 @@ async function checkReference() {
   try {
     const j=await (await fetch(`/api/reference-exists?deck=${encodeURIComponent(deck)}&seed=${seed}&gi=${gi}`)).json();
     if (j && j.exists){ el.style.display=''; el.title=j.path||''; el.textContent=`✓ reference saved for seed ${seed} · game ${gi} — skip, or play again`; }
+    else if (j && j.suboptimal){ el.style.display=''; el.title=j.suboptimalPath||''; el.textContent=`⚠ suboptimal target saved for seed ${seed} · game ${gi} — try to win it faster`; }
     else { el.style.display='none'; el.textContent=''; el.title=''; }
   } catch(e){ el.style.display='none'; }
 }
@@ -1428,7 +1435,8 @@ async function loadDecks() {
     const card=e.dataTransfer.getData('text/card'); if(card) queueCard(card, e.dataTransfer.getData('text/kind')||'permanent'); });
 })();
 
-$('newgame').onclick=newGame; $('nextgame').onclick=nextGame; $('undo').onclick=undo; $('saveref').onclick=saveRef;
+$('newgame').onclick=newGame; $('nextgame').onclick=nextGame; $('undo').onclick=undo;
+$('saveref').onclick=()=>saveRef(false); $('saveref-sub').onclick=()=>saveRef(true);
 // Refresh the reference badge whenever the game selector changes.
 $('deck').addEventListener('change', checkReference);
 $('seed').addEventListener('input', checkReference);

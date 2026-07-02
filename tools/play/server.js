@@ -188,7 +188,10 @@ const server = http.createServer(async (req, res) => {
         const gi = intParam(url.searchParams.get('gi'), 0);
         const rel = path.join('references', safeStem(stem), `claude_s${seed}_gi${gi}.json`);
         const exists = fs.existsSync(path.join(ROOT, rel));
-        return sendJson(res, 200, { exists, path: exists ? rel : null });
+        const relSub = path.join('references', 'suboptimal', safeStem(stem), `claude_s${seed}_gi${gi}.json`);
+        const suboptimal = fs.existsSync(path.join(ROOT, relSub));
+        return sendJson(res, 200, { exists, path: exists ? rel : null,
+                                    suboptimal, suboptimalPath: suboptimal ? relSub : null });
       } catch (e) {
         return sendJson(res, 200, { exists: false, path: null });
       }
@@ -233,11 +236,16 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { savedAs: path.relative(ROOT, full) });
     }
     if (req.method === 'POST' && url.pathname === '/api/save-reference') {
-      // Promote a CLEAN human-played game (no rejects) to the permanent, tracked references set.
-      // These are no-clairvoyance ground-truth games whose win-turn a good AI should match.
+      // Promote a CLEAN human-played game (no rejects) to the tracked references set. These are
+      // no-clairvoyance ground-truth games whose win-turn a good AI should match. With
+      // suboptimal:true the game goes to references/suboptimal/<deck>/ instead -- a "known-slow"
+      // target (you believe the win is reachable EARLIER), kept out of the verified benchmark the
+      // checker gates on (see references/suboptimal/README.md).
       const p = await readBody(req);
       const { stem } = resolveDeck(p.deck);
-      const dir = path.join(ROOT, 'references', safeStem(stem));
+      const dir = p.suboptimal
+        ? path.join(ROOT, 'references', 'suboptimal', safeStem(stem))
+        : path.join(ROOT, 'references', safeStem(stem));
       fs.mkdirSync(dir, { recursive: true });
       const r = runStep(p, dir);
       const seed = intParam(p.seed, 1), gi = intParam(p.gameIndex, 0);

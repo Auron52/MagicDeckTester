@@ -44,8 +44,13 @@ double-click or drag hand cards into **Casting this phase** to build a land drop
 sub-decision variant; on reject you get the classified verdict, the lines the model *would*
 play, and **Store as artifact**. **Undo** steps back (free — replayed from choices). Aether Vial
 upkeep charges are answered with Add/Hold. At game end, **Save as reference** writes the
-deterministic per-game trace — to `references/<deck>/` for a clean game, else `logs/play/`. The
-board uses Scryfall card art (hover any card for the full image).
+deterministic per-game trace — to `references/<deck>/` for a clean game, else `logs/play/`. On a
+clean **win** a second button, **Save as suboptimal (should be faster)**, writes the same trace to
+`references/suboptimal/<deck>/` instead — use it when you won but believe an earlier win exists, so
+the game is kept as a target without polluting the verified set (see
+`references/suboptimal/README.md`). The top-bar badge reports whether a verified (`✓`) or suboptimal
+(`⚠`) save already exists for the selected game. The board uses Scryfall card art (hover any card for
+the full image).
 
 ## How it works (and the architecture seam)
 
@@ -78,7 +83,9 @@ UI does not change.** That is why the GUI is built against the protocol, not the
   and steps; on **choose** it lists `variants` (each a `plan_index` + label) for the human to
   pick (the pick is just that index); otherwise it shows the classified reject.
 - `POST /api/reject-artifact` — persists a rejected line to `logs/play/rejections/<deck>_s<seed>_gi<gi>_t<turn>.json`.
-- `POST /api/save-reference` — clean game → tracked `references/<deck>/claude_s<seed>_gi<gi>.json`.
+- `POST /api/save-reference` — clean game → tracked `references/<deck>/claude_s<seed>_gi<gi>.json`;
+  with `suboptimal:true` → `references/suboptimal/<deck>/…` (a "should-be-faster" target).
+- `GET /api/reference-exists` — reports `{exists, path, suboptimal, suboptimalPath}` for a game.
 - `POST /api/save` — re-runs with `--log-dir logs/play` (used for a game that had rejects).
 
 ### The line-reconciliation seam (engine)
