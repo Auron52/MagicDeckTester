@@ -25,6 +25,15 @@ The application is in early development — no build system, test runner, or sou
   `scripts/analyze_deck.py decks/<name>.txt`); the regression harness's
   `DECK_FILE`/`DECK_PROF` maps in `test/regression_cases.sh` already point there.
 
+- **Deferred / cross-agent project state goes in `docs/design/`, not private
+  agent memory.** Any per-agent scratch/memory is NOT shared between agents or
+  machines, so anything another agent may need to pick up — a deferred project,
+  design spec, perf-lever catalogue, or work handoff — belongs in a self-contained
+  `docs/design/<name>.md` (see `mana-source-reservation.md` for the shape). Keep
+  such docs standalone (no references to any agent's private notes). Private memory
+  is fine only for a single agent's own continuity across compaction / a new
+  session; if it needs to survive to *another* agent, put it in git.
+
 ## MTG Rules Skill
 
 This project has a custom skill at `.claude/skills/mtg-rules.md` that **all agents working in this repository must use**. It is the authoritative reference for both MTG rules correctness and implementation patterns.
