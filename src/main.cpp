@@ -543,6 +543,22 @@ static void CollectDamageTargets(const GameState& s, int controller, bool player
     out.push_back({ 0, controller }); labels.push_back("You (face)");
 }
 
+// The controller's own creatures, in board order -- the legal targets for an own-creature pump
+// spell (Invigorate). kind==1 (permanent), index == battlefield index. No faces/opponent creatures.
+static void CollectOwnCreatureTargets(const GameState& s, int controller,
+                                      std::vector<ChosenTarget>& out, std::vector<std::string>& labels)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[i];
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->card.IsCreature()) { continue; }
+        out.push_back({ 1, i });
+        labels.push_back(p.card.m_name.str() + " (yours)");
+    }
+}
+
 // Enumerate legal target-set options for a uniform-damage spell: every nonempty subset of the
 // legal targets with 1..max_targets members. Bounded (capped) so a big board can't explode the menu.
 static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTarget>& legal,
@@ -603,13 +619,17 @@ static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const 
 static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
                                     const std::vector<ChosenTarget>& legal, const std::vector<std::string>& legal_labels,
                                     const std::vector<TargetOption>& options, int per_target,
-                                    int max_targets, int heuristic_default, int decision_index)
+                                    int max_targets, int heuristic_default, int decision_index,
+                                    const std::string& pump_desc = "")
 {
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
     os << "  \"type\": \"target\",\n";
     os << "  \"source\": "; JsonStr(os, source); os << ",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
+    // A non-empty pump_desc (e.g. "+4/+4") flags this as an own-creature pump rather than damage, so
+    // the viewer shows "gets +4/+4" and highlights your creatures instead of "N damage".
+    if (!pump_desc.empty()) { os << "  \"pump\": "; JsonStr(os, pump_desc); os << ",\n"; }
     os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets << ",\n";
     WriteBoardContext(os, s, 0);
     os << "  \"legal_targets\": [";
@@ -630,8 +650,12 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
         os << "] }";
     }
     os << "],\n";
-    os << "  \"note\": \"reply an option index. Each chosen target takes " << per_target
-       << " damage (up to " << max_targets << " target(s)). Default = the AI's pick (face).\"\n";
+    if (!pump_desc.empty())
+    { os << "  \"note\": \"reply an option index. The chosen creature gets " << pump_desc
+         << ". Default = the AI's pick (best attacker).\"\n"; }
+    else
+    { os << "  \"note\": \"reply an option index. Each chosen target takes " << per_target
+         << " damage (up to " << max_targets << " target(s)). Default = the AI's pick (face).\"\n"; }
     os << "}\n";
 }
 
@@ -1075,9 +1099,16 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         [&](const GameState& s, const CardDefinition& def, int controller, int max_targets,
             int per_target_damage, const std::vector<ChosenTarget>& heuristic) -> std::vector<ChosenTarget>
         {
+            // Own-creature pump (Invigorate): legal targets are the controller's creatures, not
+            // damage targets, and the dialog reads "+P/+T" rather than "N damage".
+            const bool own_pump = (def.tmpl == CardTemplate::PumpSpell) && def.params.target_own_creature;
+            const std::string pump_desc = own_pump
+                ? ("+" + std::to_string(def.params.power_bonus) + "/+" + std::to_string(def.params.tough_bonus))
+                : std::string();
             const bool players_only = (def.params.targeting == Targeting::Player);
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            CollectDamageTargets(s, controller, players_only, legal, legal_labels);
+            if (own_pump) { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
+            else          { CollectDamageTargets(s, controller, players_only, legal, legal_labels); }
 
             // Divided damage (Fiery Justice / Magma Opus): the player allocates `per_target_damage`
             // (the TOTAL here) among ANY number of the legal targets, each >= 1. The answer is ONE
@@ -1141,14 +1172,14 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);

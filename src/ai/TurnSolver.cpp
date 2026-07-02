@@ -2570,6 +2570,27 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             int ti = def.params.target_own_creature
                      ? FindBestOwnAttacker(state, state.active_player_index)
                      : -1;
+            // Human-play: let the player pick which of their creatures to pump (default = the best
+            // attacker). Only surface it when there's a genuine choice (>= 2 own creatures). The
+            // chooser is nulled by RevealLogPause for the search/rollout, so this stays byte-identical
+            // there (the heuristic best-attacker pick is used).
+            if (g_play_target_chooser && def.params.target_own_creature && ti >= 0)
+            {
+                int own_creatures = 0;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    const CardDefinition* dd = CardDatabase::Instance().LookupCached(p.card);
+                    if (dd && dd->card.IsCreature()) { ++own_creatures; }
+                }
+                if (own_creatures >= 2)
+                {
+                    std::vector<ChosenTarget> heur = { { 1, ti, 0 } };
+                    std::vector<ChosenTarget> picked =
+                        (*g_play_target_chooser)(state, def, state.active_player_index, 1, 0, heur);
+                    if (!picked.empty() && picked[0].kind == 1) { ti = picked[0].index; }
+                }
+            }
             if (ti >= 0)
             {
                 state.battlefield[ti].temp_power_bonus += def.params.power_bonus;

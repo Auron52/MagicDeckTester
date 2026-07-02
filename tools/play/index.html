@@ -1200,6 +1200,13 @@ function promptPanelHtml(d, dec){
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
   const max=d.max_targets||1, n=(S.boardSel||new Set()).size;
+  // Own-creature pump (Invigorate): d.pump carries "+P/+T" -- ask which of YOUR creatures to buff.
+  if (d.pump){
+    return `<h3>Which creature — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">Gets <b>${esc(d.pump)}</b> until end of turn · pick 1. Click one of your creatures on the board. The AI's pick (best attacker) is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
+      `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
+  }
   // "player or planeswalker" spells (Skullcrack) have no creature in their legal targets, so don't
   // offer creatures in the prompt; any-target burn (Lightning Bolt) does.
   const hasCreature=(d.legal_targets||[]).some(t=>t.kind==='permanent');
