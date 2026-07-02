@@ -169,6 +169,18 @@ log() { echo "$1"; echo "$1" >> "$OUT"; }
 log "=== REGRESSION ($MODE) $(date) ==="
 log "(threads=$THREADS; binary=$BIN; logs in $LOGDIR)"
 
+# Scenario sanity gate: hand-built board fixtures (test/scenarios/*.json) that assert a specific
+# interaction still plays correctly. Cheap (seconds) and deck-agnostic, so run them up front on the
+# freshly-built binary. A FAIL here is a hard regression -- abort before the (long) batch run.
+SCEN="$(dirname "$0")/scenarios.sh"
+if [ -f "$SCEN" ]; then
+  log "--- scenario sanity ---"
+  if MTG_BIN="$BIN" bash "$SCEN" | tee -a "$OUT"; then :; else
+    log "ABORT: scenario sanity failed (a hand-built fixture regressed) -- fix before running the batch."
+    exit 1
+  fi
+fi
+
 # Emit the whole case matrix as one batch manifest. `mtg.exe --batch` pools every
 # game of every case into a single atomic work queue, so the suite pays ONE
 # load-imbalance tail instead of one per case (the old per-case sweep stranded a

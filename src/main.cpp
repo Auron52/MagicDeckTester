@@ -21,6 +21,8 @@
 #include "core/HardwareConcurrency.h"
 #include "ai/MulliganProfileIO.h"
 #include "ai/Profiler.h"
+#include "ai/DecisionProviders.h"   // SelectDecisionProvider for --scenario
+#include <nlohmann/json.hpp>        // --scenario board spec
 
 static void PrintUsage(const char* prog)
 {
@@ -1752,12 +1754,147 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
     }
 }
 
+// Scenario mode: run ONE constructed board through the real AI turn engine and report the outcome.
+// Unlike seed-driven goldfish, this hand-builds the battlefield/hand so a specific interaction (e.g.
+// "tap a land, not the dork you want to pump and swing") can be reproduced deterministically and
+// used as a regression fixture. See docs/design/scenario-harness.md / test/scenarios/*.json.
+//
+//   mtg --scenario <scenario.json>
+//
+// The JSON:
+//   { "deck": "decks/X.cod",          // provider selection + profile auto-detect only (NOT shuffled in)
+//     "profile": "decks/X.profile.json",         // optional; auto-detected from deck if omitted
+//     "turn": 4, "on_the_play": true,            // turn to run; state runs THROUGH this turn
+//     "active_life": 20, "opponent_life": 5,
+//     "battlefield": [ { "name": "Birds of Paradise", "controller": 0, "tapped": false, "sick": false }, ... ],
+//     "hand": [ "Aria of Flame", "Invigorate" ],
+//     "library_filler": "Forest", "library_size": 40,   // so draws / rollouts don't run dry
+//     "depth": 5, "budget_ms": 100, "max_turns": 4,
+//     "expect_win_turn": 4,          // optional: nonzero exit if the actual win turn is later (a FAIL)
+//     "log_out": "logs/play/scenario.json" }            // optional: write the per-turn trace
+static int RunScenario(const std::filesystem::path& scenario_path)
+{
+    using json = nlohmann::json;
+    std::ifstream in(scenario_path);
+    if (!in) { std::cerr << "scenario: cannot open " << scenario_path << "\n"; return 2; }
+    json j;
+    try { in >> j; }
+    catch (const std::exception& e) { std::cerr << "scenario: bad JSON: " << e.what() << "\n"; return 2; }
+
+    const std::string cards_json = j.value("cards_json", std::string("src/cards/data/cards.json"));
+    if (std::filesystem::exists(cards_json)) { CardDatabase::Instance().LoadFromJson(cards_json); }
+    else { std::cerr << "scenario: cards.json not found at " << cards_json << "\n"; return 2; }
+
+    if (!j.contains("deck")) { std::cerr << "scenario: missing \"deck\"\n"; return 2; }
+    const std::filesystem::path deck_path = j.at("deck").get<std::string>();
+    Decklist deck = DeckLoader::LoadFromFile(deck_path);
+
+    std::filesystem::path profile_path = j.value("profile", std::string(""));
+    if (profile_path.empty())
+    { profile_path = deck_path.parent_path() / (deck_path.stem().string() + ".profile.json"); }
+    MulliganProfile profile;
+    if (std::filesystem::exists(profile_path)) { profile = LoadDeckProfile(profile_path); }
+
+    const int depth     = j.value("depth", 5);
+    const int budget_ms = j.value("budget_ms", 100);
+    const int turn      = j.value("turn", 4);
+    const int max_turns = j.value("max_turns", turn);
+
+    // Resolve a full Card (P/T, cost, types, keywords) from its name -- the definition's own card, the
+    // same object play/cast copies onto a Permanent. Placeholder-by-name would be 0/0 with no cost.
+    auto make_card = [](const std::string& name) -> Card {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        if (!d) { throw std::runtime_error("scenario: unknown card \"" + name + "\""); }
+        Card c = d->card; c.RehashName(); return c;
+    };
+
+    GameState state;
+    state.m_provider            = &SelectDecisionProvider(deck);
+    state.players[0].life       = j.value("active_life", 20);
+    state.players[1].life       = j.value("opponent_life", 20);
+    state.active_player_index   = 0;
+    state.priority_player_index = 0;
+    state.turn_number           = turn - 1;   // PlayOut steps INTO `turn`
+    state.on_the_play           = j.value("on_the_play", true);
+    state.game_seed             = j.value("seed", 1);
+
+    try
+    {
+        for (const auto& e : j.value("battlefield", json::array()))
+        {
+            Permanent p;
+            p.card              = make_card(e.at("name").get<std::string>());
+            p.controller_index  = e.value("controller", 0);
+            p.owner_index       = p.controller_index;
+            p.tapped            = e.value("tapped", false);
+            p.entered_this_turn = e.value("sick", false);   // false => can attack (not summoning sick)
+            state.battlefield.push_back(p);
+        }
+        for (const auto& hc : j.value("hand", json::array()))
+        { state.players[0].hand.push_back(make_card(hc.get<std::string>())); }
+
+        // Filler library so the draw step and lookahead rollouts have cards to draw. Lands by default
+        // => the drawn cards are inert and don't perturb the interaction under test.
+        const std::string filler = j.value("library_filler", std::string("Forest"));
+        const int lib = j.value("library_size", 40);
+        for (int i = 0; i < lib; ++i) { state.players[0].library.push_back(make_card(filler)); }
+    }
+    catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 2; }
+
+    const std::map<std::string, std::vector<int>> numbering = GoldFishRunner::BuildCardNumbering(deck);
+    GameLogger logger;
+    logger.StartGame("scenario", 0, deck_path.stem().string(), state.game_seed, numbering);
+    AIEngine   ai(profile, depth, budget_ms);
+    ai.SetLogger(&logger);
+    GameEngine engine(ai);
+    engine.SetLogger(&logger);
+
+    const int win_turn = engine.PlayOut(state, max_turns);
+    logger.EndGame(win_turn);
+
+    const std::string log_out = j.value("log_out", std::string(""));
+    if (!log_out.empty())
+    {
+        std::filesystem::create_directories(std::filesystem::path(log_out).parent_path());
+        logger.WriteToFile(log_out);
+    }
+
+    const bool won = (win_turn > 0 && win_turn <= max_turns);
+    std::cout << "scenario: win_turn=" << (won ? std::to_string(win_turn) : std::string("none"))
+              << " opponent_life=" << state.players[1].life
+              << " active_life="   << state.players[0].life
+              << (log_out.empty() ? "" : (" log=" + log_out)) << "\n";
+
+    // Optional assertion: fail (exit 1) if the win came later than expected (or not at all).
+    if (j.contains("expect_win_turn"))
+    {
+        const int exp = j.at("expect_win_turn").get<int>();
+        if (!won || win_turn > exp)
+        {
+            std::cout << "scenario: FAIL expected win by turn " << exp
+                      << ", got " << (won ? std::to_string(win_turn) : std::string("no win")) << "\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (win by turn " << exp << ")\n";
+    }
+    return 0;
+}
+
 int main(int argc, char* argv[])
 {
     if (argc < 2)
     {
         PrintUsage(argv[0]);
         return 1;
+    }
+
+    // Scenario mode: one hand-built board through the AI turn engine (see RunScenario).
+    //   mtg --scenario <scenario.json>
+    if (std::string(argv[1]) == "--scenario")
+    {
+        if (argc < 3) { std::cerr << "usage: " << argv[0] << " --scenario <scenario.json>\n"; return 2; }
+        try { return RunScenario(argv[2]); }
+        catch (const std::exception& e) { std::cerr << "scenario error: " << e.what() << "\n"; return 2; }
     }
 
     // Batch mode: pool every game from every job in a manifest into one work queue.
