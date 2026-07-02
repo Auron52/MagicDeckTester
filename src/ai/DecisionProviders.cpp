@@ -357,6 +357,85 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
     return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
 }
 
+// Effective ATTACKING power of a permanent, computed like the combat sites (PendingAttackDamage /
+// SimulateCombat / GameEngine): base + temp pump (Invigorate) + counters + lord anthem + animate +
+// dynamic. Used only to decide whether swinging a creature adds damage.
+static int AttackPowerOf(const GameState& s, const Permanent& p)
+{
+    const int active = s.active_player_index;
+    const bool animated = p.is_animated;
+    const std::pair<int,int> lb = ComputeLordBonus(p.card, s.battlefield, active, animated, &p);
+    int base = p.EffectivePower() + lb.first;
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d)
+    {
+        if (animated) { base += d->params.animate_power; }
+        base += DynamicBasePower(*d, s, active);
+    }
+    return base;
+}
+
+// Does declaring `p` as an attacker produce value BEYOND its raw power? (Attack-token creation, or
+// being a beneficiary of a controlled attack_trigger_life_loss source matching its subtypes.) These
+// creatures are worth attacking even at 0 power, so they are never held back.
+static bool AttackHasNonPowerValue(const GameState& s, const Permanent& p)
+{
+    const int active = s.active_player_index;
+    const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+    if (pd && pd->params.attack_creates_tokens > 0) { return true; }
+    for (const Permanent& src : s.battlefield)
+    {
+        if (src.controller_index != active) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (!sd || sd->params.attack_trigger_life_loss <= 0) { continue; }
+        for (const std::string& sub : sd->params.subtypes_affected)
+        {
+            if (p.is_animated) { return true; }
+            for (const std::string& cs : p.card.m_subtypes) { if (cs == sub) { return true; } }
+        }
+    }
+    return false;
+}
+
+// Exalted-aware attack declaration (see the header note). Honoured in lockstep by every combat site
+// (all gate on ShouldAttackWith): the projection, the rollout, and the real DeclareAttackers.
+bool AntiLifegainProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+{
+    // Default ON; off-switch MTG_NO_EXALTED_ATTACK reverts to generic attack-with-everything
+    // (byte-identical to the pre-fix baseline) for A/B. Net win: +2-3% d0 wins and faster searched
+    // avgs on Anti-Lifegain (the only exalted deck), 0 win<->loss. A handful of searched-depth games
+    // win a turn LATER, but that was shown to be fetch-shuffle DRAW VARIANCE, not a bug: the more
+    // accurate exalted valuation flips an early land tie-break, a fetchland reshuffles, and the game
+    // draws differently. Among 462 games with IDENTICAL draw sequences, ON never wins later (0
+    // regressions); every turn-later game has a divergent post-fetch draw. See the reservation design
+    // doc's exalted section.
+    static const bool enabled = std::getenv("MTG_NO_EXALTED_ATTACK") == nullptr;
+    if (!enabled) { return true; }
+
+    if (AttackPowerOf(s, p) > 0)        { return true; }   // deals damage (incl. an Invigorate-pumped dork)
+    if (AttackHasNonPowerValue(s, p))   { return true; }   // attack-trigger value
+
+    // p is a 0-power, no-trigger creature. Swinging it deals nothing and, worse, breaks the
+    // lone-attacker Exalted bonus. Hold it unless it is the ONLY eligible attacker -- then a single
+    // such creature swings to switch Exalted on. (Eligibility uses CanAttackFull, NOT ShouldAttackWith,
+    // to avoid recursion; the pick is deterministic -- lowest battlefield index -- so all three combat
+    // sites agree on which lone dork attacks.)
+    const int active = s.active_player_index;
+    const int n      = static_cast<int>(s.battlefield.size());
+    int lone_idx = -1, p_idx = -1;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& q = s.battlefield[i];
+        if (q.controller_index != active) { continue; }
+        if (&q == &p) { p_idx = i; }
+        if (!CanAttackFull(q, s.battlefield, active)) { continue; }
+        if (AttackPowerOf(s, q) > 0 || AttackHasNonPowerValue(s, q)) { return false; }  // real attacker exists -> hold p
+        if (lone_idx < 0) { lone_idx = i; }
+    }
+    if (CountExalted(s.battlefield, active) <= 0) { return false; }   // pointless swing, no Exalted to earn
+    return (p_idx == lone_idx);
+}
+
 // ---- TreasureHuntProvider ---------------------------------------------------
 
 bool TreasureHuntProvider::HasAnyDigSource (const GameState& s) const { return ::HasAnyDigSource(s); }

@@ -61,6 +61,12 @@ public:
     bool CastEnablerFirst(const GameState&, const std::string&) const override;
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // Exalted-aware attack declaration: a 0-power, no-attack-trigger dork must NOT swing alongside a
+    // real attacker (it deals nothing and breaks the lone-attacker Exalted bonus from Ignoble
+    // Hierarch); it attacks only as the sole eligible creature (to switch Exalted on / carry an
+    // Invigorate pump). Required for mana-source reservation to be lossless here (a HELD dork that
+    // then pointlessly attacked would forfeit Exalted).
+    bool ShouldAttackWith(const GameState&, const Permanent&) const override;
 };
 
 // Treasure Hunt + Land's Edge: dig-when-stuck, Land's Edge fire count, deck-aware

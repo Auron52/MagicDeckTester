@@ -66,6 +66,26 @@ ON, off-switch `MTG_NO_DEPLETION_RESERVE`):
   move today, but it's the substrate the dork/{C}-manland reservation (next, with the exalted fix)
   builds on, and it's a genuine improvement for any future grindy depletion deck.
 
+#### SHIPPED (2026-07-02) — exalted-aware attack declaration
+
+`AntiLifegainProvider::ShouldAttackWith` ([`src/ai/DecisionProviders.cpp`](../../src/ai/DecisionProviders.cpp))
+is now **default ON** (off-switch `MTG_NO_EXALTED_ATTACK`). It holds back a 0-power, no-attack-trigger
+creature (a mana dork) rather than swinging it alongside a real attacker — which deals nothing and
+breaks Ignoble Hierarch's *lone-attacker* Exalted bonus — and lets it attack only as the sole eligible
+creature (to switch Exalted on / carry an Invigorate pump). Honoured in lockstep by every combat site
+(`PendingAttackDamage` projection, the rollout's ApplyCombat, and the real DeclareAttackers).
+
+Net win on Anti-Lifegain (the only exalted deck): **+2–3 % d0 wins** and faster searched averages
+across smoke/regression/overnight seeds, **0 win↔loss**. A handful of searched-depth games win a turn
+**later**, but that was proven to be **fetch-shuffle draw variance, not a bug**: the more accurate
+exalted valuation flips an early *land* tie-break, a fetchland reshuffles, and the game draws
+differently from there. Among **462 games with identical draw sequences, ON never wins later** (0
+regressions); every turn-later game has a divergent post-fetch draw. GT rebaselined smoke + regression
+(`--accept`); **overnight antilife GT is still stale (exalted-OFF) — rebaseline on the next overnight
+run**. NOTE: for this deck the deliverable is the attack fix *itself* — Ignoble is tri-color
+(flexible), which the reservation mask excludes, so dork *reservation* is a no-op here. Dork/{C}-manland
+reservation still pays off only on a deck with an **inflexible** 0-power dork + Exalted.
+
 Everything below predates this update (the original per-payment design); keep for context.
 
 ## Background: what already shipped

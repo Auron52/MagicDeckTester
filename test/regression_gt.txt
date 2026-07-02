@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 490c3a8  date 2026-07-02
+# Regression ground truth -- commit 3dffcc2  date 2026-07-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -16,8 +16,8 @@ th_smoke_d5_s1001=75/4.09333
 knights_smoke_d0_s1001=1000/4.646
 knights_smoke_d3_s1001=250/4.392
 knights_smoke_d5_s1001=150/4.36
-antilife_smoke_d0_s1001=806/5.6799
-antilife_smoke_d3_s1001=250/4.208
+antilife_smoke_d0_s1001=829/5.6345
+antilife_smoke_d3_s1001=250/4.196
 antilife_smoke_d5_s1001=150/4.14667
 hinata_smoke_d0_s1001=509/6.85658
 hinata_smoke_d3_s1001=144/5.78472
@@ -44,11 +44,11 @@ knights_regression_d3_s2002=300/4.33
 knights_regression_d3_s3003=300/4.32333
 knights_regression_d5_s2002=250/4.308
 knights_regression_d5_s3003=250/4.336
-antilife_regression_d0_s2002=797/5.71142
-antilife_regression_d3_s2002=300/4.17667
-antilife_regression_d3_s3003=299/4.19732
-antilife_regression_d5_s2002=250/4.184
-antilife_regression_d5_s3003=249/4.2008
+antilife_regression_d0_s2002=826/5.68281
+antilife_regression_d3_s2002=300/4.17
+antilife_regression_d3_s3003=299/4.18395
+antilife_regression_d5_s2002=250/4.176
+antilife_regression_d5_s3003=249/4.19277
 hinata_regression_d0_s2002=501/6.83832
 hinata_regression_d3_s2002=190/5.82105
 hinata_regression_d3_s3003=187/5.85561
