@@ -7,15 +7,19 @@ rebaselining ground truth.
 
 > **The one rule that keeps getting skipped:** never `--accept` (or commit new
 > ground truth) on the basis of an aggregate fingerprint or a plausible
-> *explanation* of why it moved. Every changed game must be diffed and explained
-> **per game, before acceptance**, against the prior committed code — see the
-> **"MANDATORY before `--accept`"** section below. An explanation is not a measurement.
+> *explanation* of why it moved. **Run `python3 test/audit_changed_games.py <mode>`
+> and paste its output before you `--accept`** — it prints the per-game
+> win→loss / turn-later breakdown (split by depth) that the fingerprint hides, and
+> exits non-zero on a searched-depth win→loss. Review ALL searched-depth (d>0)
+> changes; a couple of d0 examples suffice. See **"MANDATORY before `--accept`"**
+> below. An explanation is not a measurement.
 
 The harness lives in `test/`:
 
 | File | Role | Committed? |
 |------|------|-----------|
 | `regression.sh` | runs a mode, compares to ground truth, and (with `--accept`) promotes a run into ground truth | yes |
+| `audit_changed_games.py` | **the mandatory pre-`--accept` gate**: per-game win→loss / turn-later breakdown split by depth; exits non-zero on a searched-depth win→loss. Run it and read it before every accept. | yes |
 | `regression_cases.sh` | the test matrix (deck × depth × seed × games × budget) + deck metadata — **single source of truth** | yes |
 | `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<won>/<avg_win_turn>` | yes |
 | `gt_logs/<key>.wins` | ground truth, **per-game** (the counterpart to the aggregate above): one `<game_index> <win_turn>` line per game, `-1` = loss. This is the committed old-side baseline for the per-game audit — `--accept` promotes it together with `regression_gt.txt`. | yes |
@@ -131,6 +135,36 @@ This is the step that most often gets skipped — do not skip it. **You may not
 `--accept` (or commit new ground truth) until you have diffed the individual
 games that changed and explained each one.** A plausible-sounding *narrative* for
 an aggregate shift is NOT a substitute for measuring it per game.
+
+**Run the audit script — do not eyeball the fingerprints.** There is one command
+whose output IS this gate; run it and paste the result into your response BEFORE
+you `--accept`:
+
+```bash
+python3 test/audit_changed_games.py <mode>          # smoke | regression | overnight
+python3 test/audit_changed_games.py <mode> --old-git   # to re-check an accept that already happened
+```
+
+It diffs the committed per-game GT against this run and prints, **split by depth**,
+every `win→loss` / `loss→win` / `turn-later` / `turn-earlier`, listing each
+searched-depth flip individually. Exit non-zero ⇒ a searched-depth `win→loss`
+exists ⇒ you are blocked. A prose summary is not the gate; the script's output is.
+
+**Review bar differs by depth (this is the part that makes the audit tractable):**
+
+- **Searched depth (d>0) — review ALL of them.** Every `win→loss` must be
+  individually root-caused; every `turn-later` must be classified as one of:
+  *fetch-shuffle variance* (confirm: the two lines' DRAWS diverge — an eval change
+  flipped an early land/fetch tie-break, reshuffling the game), or *budget churn*
+  (confirm: the game recovers when you re-run that ONE game at a higher budget —
+  a marginal deep line the new search just needs a hair more budget to find), or a
+  *real slowdown* (draws identical AND doesn't recover at higher budget → a bug,
+  blocks acceptance). This is where engine quality lives; do not sample it.
+- **Depth 0 (greedy, no search) — light touch.** d0 has no lookahead, so its swaps
+  are the greedy casting-more / attack-order heuristic churning; they are expected
+  and are **not** a quality bar. Spot-check a couple of examples for sanity (no
+  crash, the swap is a plausible greedy line) and move on — do **not** root-cause
+  every d0 flip. The script reports d0 separately and does not gate on it.
 
 When a run moves **hundreds or thousands** of games (a deliberate engine/horizon/
 baseline shift this mode never exercised — e.g. the overnight first seeing
