@@ -1,9 +1,12 @@
 # Exhaustive bucketed keep/bottom policy
 
-Status: **in active development, uncommitted** (as of 2026-07-03). Keep integration, aggregation
-raw-sidecar, **merge tool, bottoming phase 2, and the A/B harness are all built**; the R=20 validation
-run **passed** (results below). Remaining before R=100: A/B smoke → commit → pull the other agent's
-code → generate R=100 on the user's schedule. This is the successor to the learned-keep-model effort
+Status: **committed** (8b239cf core; c3dad35 bottoming flag + scorer), as of 2026-07-03. Keep
+integration, aggregation, merge tool, bottoming phase 2, A/B harness, the `bottoming_enabled` profile
+flag, and the `MTG_SCORE_COMPS` attribution scorer are all built + committed. **In-game A/B done on a
+real R=20 profile** (results below): keep adopts; bottoming ships off pending a high-R run.
+Operational guide: [`.claude/skills/mulligan-profile.md`](../../.claude/skills/mulligan-profile.md).
+Remaining: generate the definitive high-R profile (secondary machine), re-run the bottoming
+attribution, then decide `bottoming_enabled`. This is the successor to the learned-keep-model effort
 ([better-mulligan-model.md](better-mulligan-model.md),
 [keep-model-selection-by-runner.md](keep-model-selection-by-runner.md)) — it *replaces modeling with
 exhaustive evaluation* where the deck is compressible enough.
@@ -57,6 +60,36 @@ instead of fitting a model:
   2 Vial = KEEP** — Ziggurat makes creature-only mana so it can't cast the (artifact) Vials; the
   discovery kept Ziggurat a separate bucket (0.068 from rainbow lands) exactly for this, and it flows
   through even the noisy R=1 table.
+
+## In-game A/B + bottoming attribution (2026-07-03, real R=20 profile)
+
+Definitive in-game sweep on the real 10-bucket R=20 Slivers profile (Slivers, 16–24 seeds × depths
+0/3/5 × 1–2k games), via `test/keepmodel_exhaustive_ab.sh`:
+
+- **Keep (vs static): exhaustive wins −0.028t win-turn, 16/16 seeds every depth.** 100% win rate both
+  sides (pure speed metric). Clears the *trained* static baseline unanimously — the thing the learned
+  keep-models never did. **Keep adopts** (presence-gated default-on).
+- **Bottom (vs lookahead): a clean split.** d0 (vs the heuristic bottomer, since lookahead is off at
+  depth 0): exhaustive **wins** +0.024t, 24/24. d3/d5 (vs clairvoyant lookahead): exhaustive **loses**
+  0.045t, 0/24.
+
+**Attribution of the d3 loss (does it lose only to clairvoyance?).** Both runs share the same starting
+library per game index and the same keep decision, diverging only at bottoming. For the 50 losing d3
+games we logged both kept subhands and **re-scored each at R=400** (`MTG_SCORE_COMPS`) — a *non-circular*
+blind-EV comparison (average over 400 library orders), since the R=20 V that drove the bottoming is
+itself noisy. Result: **28 R-noise / 18 clairvoyance / 4 tie.** I.e. in a *majority* of losses,
+exhaustive kept a hand that is genuinely blind-*worse* (mean −0.11t) than lookahead's — the R=20 argmin
+mis-ranked near-tie subhands. (Correction to an earlier inference: the d0 blind-vs-blind win does *not*
+prove pure clairvoyance; it only shows the noisy bottoming beats the crude heuristic. Only the per-game
+re-score reveals the noise.)
+
+**Consequences (encoded in the workflow + `bottoming_enabled`):**
+- Low-R bottoming is worse than the free lookahead bottoming → **ships off** (`bottoming_enabled`
+  default false; low-R profiles are keep-only). Only a validated high-R run whose re-attribution shows
+  ties/beats-lookahead (or loses *only* to clairvoyance) sets it true.
+- Keep is robust at low R; bottoming specifically needs the high R only the slow-box grind buys.
+- Deck-life tiering (static skipped): defaults → low-R exhaustive keep (bottoming off) → high-R
+  exhaustive. See the skill.
 
 ## Feasibility (the generalization question)
 
@@ -129,23 +162,24 @@ best pointed at a *different/harder* deck than piling R onto one already done �
   representatives so `D_static` is approximate (static is inconsistent across equivalents — its flaw);
   the in-game A/B is the definitive static check.
 
-## Next steps (pre-R=100, per user)
+## Next steps
 
-1. **Merge tool** — `MTG_KEEP_MERGE` mode: read raw sidecars, reject fingerprint mismatch / overlapping
-   seed_base, sum, recompute policy → profile. (in progress)
-2. **Bottoming phase 2** — record the argmin (7-m)-subcomposition in `bottom_keep`, serialize; consult in
-   `AIEngine::BottomCards` (heuristic fallback); A/B vs clairvoyant lookahead.
-3. **A/B harness** — reuse `test/keepmodel_ab_widseeds.sh` against the exhaustive profile; keep vs static
-   (+ bottoming vs lookahead). MTG_DUMP_WINS writes `gi=N wt=M` to **stderr**.
-4. **Test + commit** everything, then **pull the other agent's code** (rebase; likely conflict = the
-   `KeepHand` edit in AIEngine.cpp), then generate **R=100 overnight** on the user's schedule (after pull,
-   so the shipped table matches shipped play logic).
+1. **High-R profile on the secondary machine** — generate the definitive table (pool via `MTG_KEEP_MERGE`).
+   Follow the handoff protocol in the skill (parity fingerprints + determinism handshake + distinct seeds).
+2. **Re-run the bottoming attribution** at high R (`MTG_SCORE_COMPS`): if the 28 R-noise losses collapse
+   and exhaustive bottoming ties/beats lookahead (or loses only to clairvoyance), set
+   `bottoming_enabled=true` (`MTG_KEEP_BOTTOMING=1` at gen/merge). Otherwise keep it off.
+3. **Pull the other agent's code** (rebase; likely conflict = the `KeepHand` edit in AIEngine.cpp) —
+   needs the source location from the user.
 
 ## Loose ends / notes
 
-- `decks/slivers_vial.keepmodel.exhaustive.profile.json` currently on disk is a **throwaway R=1** plumbing
-  artifact — do NOT commit or A/B it; regenerate at R=100.
-- R=20 experiment (`logs/equiv/slivers_exhaustive_R20.txt`) is diagnostics-only (pre-serialization
-  binary, no realization-sampling, no R-sweep) — validation gap/disagreement/noise; does NOT pool with R=100.
+- `decks/slivers_vial.keepmodel.exhaustive.{profile,raw}.json` on disk is the **real R=20** table (used
+  for the in-game A/B + attribution above); it is **not** committed and will be replaced by the high-R run.
+- `bottoming_enabled` (profile flag, default off) governs runtime use of exhaustive bottoming;
+  `MTG_EXHAUSTIVE_BOTTOM` is a 3-state A/B override (unset=follow flag, 0=off, 1=on). Set at gen/merge via
+  `MTG_KEEP_BOTTOMING`.
+- `MTG_SCORE_COMPS` (parallel) re-scores explicit subhand comps at high R — the non-circular
+  clairvoyance-vs-R-noise test.
 - Thread-safety: the evaluator's worker uses `vector<SizeTable>` (not map) + const `bof.find()` for
   lock-free concurrent reads/distinct writes (an earlier `map::operator[]` race was benign but fixed).
