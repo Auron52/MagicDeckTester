@@ -20,9 +20,19 @@ is byte-identical.
 
 Effect: gi627 T5→T4 (now holds the T2 Hunt to preserve Saprazzan's depletion charge → T4
 TH+Throes → cascade Land's Edge → lethal — a reasonable, non-clairvoyant line). Validated strictly
-positive: smoke d0 = 2 loss→win + 28 faster + 0 worse; regression = 5 searched faster + 16 d0 faster
-+ 0 worse / 0 lost; all other decks byte-identical; audit shows no searched win→loss or turn-later.
-Needs GT rebaseline (TH fingerprints improved) at smoke/regression/overnight.
+positive at the quality bar: smoke = 2 d0 loss→win + 28 d0 faster + 0 worse; regression = 5 searched
+faster + 16 d0 faster + 0 worse/lost; **overnight = 26 searched faster + 9 d0 loss→win + 192 d0
+faster, 0 searched regressions**; all other decks byte-identical. Smoke/regression/overnight GT
+rebaselined and committed.
+
+Known tradeoff (accepted): the optimistic cascade projection causes **8 overnight d0 games to slow
+5→6** (e.g. th d0 s4004 gi123). At d0 (greedy, no search) the win-now projection directly drives
+the play, so it occasionally casts Throes a turn early when the flood isn't yet truly lethal. At
+searched depth this cannot happen — simulation verifies the projection (0 searched regressions). The
+8 legal 1-turn slowdowns are far outweighed (d0 net +201) and are the expected greedy-churn class d0
+is the "lighter bar" for. Refining the projection to precise per-turn lethality (accounting for the
+cascade target actually being reachable that turn) would remove them but risks the searched-depth
+gains; deferred unless it proves worthwhile.
 
 The original diagnosis (below) framed the fix as "defer the T3 land for Reliquary"; the shipped
 win-model fix reaches T4 by a different (also-correct) line, so the land-defer / no-redundant-dig
