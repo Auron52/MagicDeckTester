@@ -327,6 +327,74 @@ inline nlohmann::json MulliganProfileToJsonObj(const MulliganProfile& profile)
     return m;
 }
 
+// ---- Exhaustive keep policy round-trip -------------------------------------
+inline nlohmann::json ExhaustiveKeepToJsonObj(const ExhaustiveKeepPolicy& ek)
+{
+    using json = nlohmann::json;
+    json e;
+    e["max_mull"]    = ek.max_mull;
+    e["effective_R"] = ek.effective_R;
+    if (!ek.commit.empty()) { e["commit"] = ek.commit; }
+    json buckets = json::array();
+    for (const std::vector<std::string>& b : ek.buckets)
+    {
+        json arr = json::array();
+        for (const std::string& n : b) { arr.push_back(n); }
+        buckets.push_back(arr);
+    }
+    e["buckets"] = buckets;
+    json entries = json::array();
+    for (const auto& [comp, flags] : ek.keep)
+    {
+        json je;
+        je["comp"] = comp;
+        je["keep"] = json::array();
+        for (char c : flags) { je["keep"].push_back(static_cast<int>(c)); }
+        auto bit = ek.bottom_keep.find(comp);
+        if (bit != ek.bottom_keep.end())
+        {
+            json bk = json::array();
+            for (const std::vector<int>& sub : bit->second) { bk.push_back(sub); }
+            je["bottom_keep"] = bk;
+        }
+        entries.push_back(je);
+    }
+    e["entries"] = entries;
+    return e;
+}
+
+inline ExhaustiveKeepPolicy ExhaustiveKeepFromJsonObj(const nlohmann::json& e)
+{
+    using json = nlohmann::json;
+    ExhaustiveKeepPolicy ek;
+    if (e.contains("max_mull"))    { ek.max_mull    = e["max_mull"].get<int>(); }
+    if (e.contains("effective_R")) { ek.effective_R = e["effective_R"].get<int>(); }
+    if (e.contains("commit"))      { ek.commit      = e["commit"].get<std::string>(); }
+    if (e.contains("buckets"))
+        for (const json& b : e["buckets"])
+        {
+            std::vector<std::string> names;
+            for (const json& n : b) { names.push_back(n.get<std::string>()); }
+            ek.buckets.push_back(std::move(names));
+        }
+    if (e.contains("entries"))
+        for (const json& je : e["entries"])
+        {
+            std::vector<int> comp = je["comp"].get<std::vector<int>>();
+            std::vector<char> flags;
+            for (const json& v : je["keep"]) { flags.push_back(static_cast<char>(v.get<int>())); }
+            ek.keep[comp] = std::move(flags);
+            if (je.contains("bottom_keep"))
+            {
+                std::vector<std::vector<int>> bk;
+                for (const json& sub : je["bottom_keep"]) { bk.push_back(sub.get<std::vector<int>>()); }
+                ek.bottom_keep[comp] = std::move(bk);
+            }
+        }
+    ek.Index();
+    return ek;
+}
+
 // ---- DeckProfile JSON document round-trip ----------------------------------
 //
 //   { "version": 1, "mulligan": { ... } }
@@ -354,6 +422,10 @@ inline std::string DeckProfileToJson(const MulliganProfile& profile)
     if (!profile.keep_model.empty())
     {
         root["keep_model"] = KeepModelToJsonObj(profile.keep_model);
+    }
+    if (!profile.exhaustive_keep.empty())
+    {
+        root["exhaustive_keep"] = ExhaustiveKeepToJsonObj(profile.exhaustive_keep);
     }
     return root.dump(2);
 }
@@ -426,6 +498,9 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
 
     if (root.contains("keep_model"))
         profile.keep_model = KeepModelFromJsonObj(root["keep_model"]);
+
+    if (root.contains("exhaustive_keep"))
+        profile.exhaustive_keep = ExhaustiveKeepFromJsonObj(root["exhaustive_keep"]);
 
     return profile;
 }

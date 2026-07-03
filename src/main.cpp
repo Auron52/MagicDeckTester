@@ -2110,6 +2110,15 @@ int main(int argc, char* argv[])
                                        // at the first un-chosen main phase (tools/play GUI)
     std::string force_mulligan;       // --force-mulligan "<count>:<n1,n2,...>": reconstruct a
                                        // reference's opening hand (claude-play replay), see below
+    // Keep-decision probe (--eval-hand "n1;n2;..."): run the EXACT runtime keep predicate
+    // (KeepHand, which consults the loaded profile's keep_model) on one constructed opening
+    // hand and print keep/mull. Names are ';'-separated (MTG names contain spaces/commas) and
+    // must appear in the deck. Used to A/B a keep-model vs static on specific marginal hands
+    // (e.g. the 2-lands + 4-Vials hand) without playing a game. --eval-mull/--eval-draw vary
+    // the mulligan count and play/draw the decision is asked under.
+    std::string eval_hand;
+    int         eval_mull    = 0;      // --eval-mull N (London mulligan count so far)
+    bool        eval_on_play = true;   // --eval-draw flips to on-the-draw
 
     for (int i = 2; i < argc; ++i)
     {
@@ -2117,6 +2126,7 @@ int main(int argc, char* argv[])
         if (flag == "--diag-depth")          { diag_depth = true; continue; }
         if (flag == "--trace")               { trace_t1 = true; continue; }
         if (flag == "--claude-play")         { claude_play = true; continue; }
+        if (flag == "--eval-draw")           { eval_on_play = false; continue; }
         try
         {
             if (i + 1 < argc)
@@ -2164,6 +2174,14 @@ int main(int argc, char* argv[])
                     // the engine to keep at <count> mulligans and bottom the listed card numbers,
                     // reconstructing a reference's exact opening hand independent of the heuristics.
                     force_mulligan = argv[++i];
+                }
+                else if (flag == "--eval-hand")
+                {
+                    eval_hand = argv[++i];
+                }
+                else if (flag == "--eval-mull")
+                {
+                    eval_mull = std::stoi(argv[++i]);
                 }
                 else if (flag == "--depth")
                 {
@@ -2225,6 +2243,48 @@ int main(int argc, char* argv[])
         {
             profile = LoadDeckProfile(profile_path);
             std::cerr << "Loaded profile from " << profile_path.string() << "\n";
+        }
+
+        // --eval-hand: one keep/mull decision on a constructed hand via the runtime predicate.
+        // Prints "KEEP"/"MULLIGAN" for the given (hand, mull, play/draw) so a keep-model can be
+        // A/B'd against static on specific marginal hands. Names must be in the deck (we reuse the
+        // real Card instances so all fields are populated exactly as in a real game).
+        if (!eval_hand.empty())
+        {
+            std::vector<Card> hand;
+            std::vector<std::string> missing;
+            std::stringstream hs(eval_hand);
+            std::string nm;
+            while (std::getline(hs, nm, ';'))
+            {
+                size_t b = nm.find_first_not_of(" \t");
+                size_t e = nm.find_last_not_of(" \t");
+                if (b == std::string::npos) { continue; }
+                nm = nm.substr(b, e - b + 1);
+                const Card* found = nullptr;
+                for (const Card& c : deck.mainboard) { if (c.m_name.str() == nm) { found = &c; break; } }
+                if (found) { hand.push_back(*found); }
+                else       { missing.push_back(nm); }
+            }
+            if (!missing.empty())
+            {
+                std::cerr << "Error: card(s) not in deck: ";
+                for (size_t i = 0; i < missing.size(); ++i) { std::cerr << (i ? ", " : "") << missing[i]; }
+                std::cerr << "\n";
+                return 1;
+            }
+            AIEngine ai(profile, lookahead_depth, timeout_ms);
+            bool keep = ai.ReferenceKeep(hand, eval_mull, eval_on_play);
+            std::vector<std::string> names;
+            for (const Card& c : hand) { names.push_back(c.m_name.str()); }
+            std::sort(names.begin(), names.end());
+            std::cout << (keep ? "KEEP" : "MULLIGAN")
+                      << "  mull=" << eval_mull
+                      << "  " << (eval_on_play ? "on-the-play" : "on-the-draw")
+                      << "  hand=[";
+            for (size_t i = 0; i < names.size(); ++i) { std::cout << (i ? ", " : "") << names[i]; }
+            std::cout << "]\n";
+            return 0;
         }
 
         if (diag_depth)

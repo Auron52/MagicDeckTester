@@ -5,6 +5,8 @@
 #include <random>
 #include "AnalyzerEngine.h"
 #include "KeepModelTrainer.h"
+#include "EquivalenceDiscovery.h"
+#include "ExhaustiveKeep.h"
 #include "../deck/DeckLoader.h"
 #include "../cards/CardDatabase.h"
 #include "../ai/MulliganProfileIO.h"
@@ -82,6 +84,106 @@ int main(int argc, char* argv[])
         }
 
         Decklist deck = DeckLoader::LoadFromFile(deck_path);
+
+        // Equivalence-discovery mode (MTG_EQUIV_DISCOVER): measure objective-relative card
+        // equivalence by CRN substitution in the goldfish engine and print the merged classes for
+        // review. Read-only -- writes no profile. Uses the deck's committed profile for rollout
+        // fidelity (vial target / play style), matching how the keep-model labels are measured.
+        //   MTG_EQUIV_PROBES (default 200), MTG_EQUIV_DEPTH (5), MTG_EQUIV_BUDGET (20).
+        if (const char* e = std::getenv("MTG_EQUIV_DISCOVER"); e && *e && std::string(e) != "0")
+        {
+            auto env_int = [](const char* k, int dflt, int lo)
+            { const char* s = std::getenv(k); return (s && *s) ? std::max(lo, std::atoi(s)) : dflt; };
+            const int probes    = env_int("MTG_EQUIV_PROBES", 200, 1);
+            const int depth      = env_int("MTG_EQUIV_DEPTH", 5, 0);
+            const int budget_ms  = env_int("MTG_EQUIV_BUDGET", 20, 0);
+            // Single-linkage merge distance (mean |Δ win-turn| per probe). Default 0.01 sits in the
+            // empirical gap between merge-worthy (~0.005) and distinct (~0.05) card pairs; set 0 for
+            // exact-match (fragments as probes grow). Parsed as a double.
+            const double threshold = []{ const char* s = std::getenv("MTG_EQUIV_THRESHOLD");
+                                         return (s && *s) ? std::max(0.0, std::atof(s)) : 0.01; }();
+
+            std::filesystem::path in_path =
+                deck_path.parent_path() / (deck_path.stem().string() + ".profile.json");
+            MulliganProfile profile = std::filesystem::exists(in_path)
+                                    ? LoadDeckProfile(in_path) : MulliganProfile::DefaultProfile();
+
+            std::cerr << "Equivalence discovery: " << probes << " probes, depth " << depth
+                      << ", threshold " << threshold << ", horizon " << max_turns << "\n";
+            EquivReport rep = DiscoverEquivalence(deck, profile, probes, depth, budget_ms,
+                                                  threshold, seed, max_turns);
+            PrintEquivReport(std::cout, rep);
+            return 0;
+        }
+
+        // Merge mode (MTG_KEEP_MERGE): pool the poolable raw sidecars from prior exhaustive runs (this
+        // machine + a second machine) into one policy at the combined R. Inputs come from
+        // MTG_MERGE_INPUTS (comma/space/newline-separated paths). Writes the same
+        // <stem>.keepmodel.exhaustive.profile.json + .raw.json (override via MTG_MERGE_OUT_PROFILE /
+        // MTG_MERGE_OUT_RAW; MTG_KEEP_NO_WRITE suppresses). No rollouts -- fast.
+        if (const char* e = std::getenv("MTG_KEEP_MERGE"); e && *e && std::string(e) != "0")
+        {
+            std::filesystem::path in_path =
+                deck_path.parent_path() / (deck_path.stem().string() + ".profile.json");
+            MulliganProfile profile = std::filesystem::exists(in_path)
+                                    ? LoadDeckProfile(in_path) : MulliganProfile::DefaultProfile();
+            std::vector<std::string> inputs;
+            if (const char* mi = std::getenv("MTG_MERGE_INPUTS"))
+            {
+                std::string cur;
+                for (const char* p = mi; *p; ++p)
+                {
+                    if (*p == ',' || *p == ' ' || *p == '\n' || *p == '\t' || *p == '\r')
+                    { if (!cur.empty()) { inputs.push_back(cur); cur.clear(); } }
+                    else { cur += *p; }
+                }
+                if (!cur.empty()) { inputs.push_back(cur); }
+            }
+            const std::string stem = (deck_path.parent_path() / deck_path.stem().string()).string();
+            std::string out_profile = stem + ".keepmodel.exhaustive.profile.json";
+            std::string out_raw     = stem + ".keepmodel.exhaustive.raw.json";
+            if (const char* p = std::getenv("MTG_MERGE_OUT_PROFILE")) { out_profile = p; }
+            if (const char* r = std::getenv("MTG_MERGE_OUT_RAW"))     { out_raw = r; }
+            if (std::getenv("MTG_KEEP_NO_WRITE") != nullptr) { out_profile.clear(); out_raw.clear(); }
+            RunKeepMerge(std::cout, deck, profile, inputs, out_profile, out_raw);
+            return 0;
+        }
+
+        // Exhaustive keep/bottom policy (MTG_KEEP_EXHAUSTIVE): bucket the deck, enumerate every
+        // distinct bucket-hand for sizes 7..7-max_mull, evaluate each with R reshuffled rollouts,
+        // and print the exact optimal keep+bottom policy value vs the static keep rule. Read-only.
+        //   MTG_EQUIV_PROBES/_THRESHOLD/_DEPTH (bucketing), MTG_KEEP_ROLLOUTS (R, default 100),
+        //   MTG_KEEP_MAXMULL (deepest mulligan, default 3).
+        if (const char* e = std::getenv("MTG_KEEP_EXHAUSTIVE"); e && *e && std::string(e) != "0")
+        {
+            auto env_int = [](const char* k, int dflt, int lo)
+            { const char* s = std::getenv(k); return (s && *s) ? std::max(lo, std::atoi(s)) : dflt; };
+            std::filesystem::path in_path =
+                deck_path.parent_path() / (deck_path.stem().string() + ".profile.json");
+            MulliganProfile profile = std::filesystem::exists(in_path)
+                                    ? LoadDeckProfile(in_path) : MulliganProfile::DefaultProfile();
+            ExhaustiveKeepConfig cfg;
+            cfg.probes    = env_int("MTG_EQUIV_PROBES", 400, 1);
+            cfg.threshold = []{ const char* s = std::getenv("MTG_EQUIV_THRESHOLD");
+                                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.01; }();
+            cfg.depth     = env_int("MTG_EQUIV_DEPTH", 5, 0);
+            cfg.rollouts  = env_int("MTG_KEEP_ROLLOUTS", 100, 1);
+            cfg.max_mull  = env_int("MTG_KEEP_MAXMULL", 3, 0);
+            cfg.seed      = seed;   // rollout seed base (the run id / seed_base)
+            cfg.equiv_seed = []{ const char* s = std::getenv("MTG_EQUIV_SEED");
+                                 return (s && *s) ? std::strtoull(s, nullptr, 10) : 20260701ULL; }();
+            cfg.max_turns = max_turns;
+            if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
+            // Write the serialized keep policy + poolable raw sidecar next to the deck unless suppressed.
+            if (std::getenv("MTG_KEEP_NO_WRITE") == nullptr)
+            {
+                const std::string stem = (deck_path.parent_path() / deck_path.stem().string()).string();
+                cfg.out_profile = stem + ".keepmodel.exhaustive.profile.json";
+                cfg.out_raw     = stem + ".keepmodel.exhaustive.raw.json";
+            }
+            RunExhaustiveKeep(std::cout, deck, profile, cfg);
+            return 0;
+        }
 
         // Keep-model-only mode (MTG_KEEP_MODEL_ONLY): skip the whole land/score grid; load the
         // deck's EXISTING committed profile and fit ONLY the interpretable keep model onto it,

@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/Card.h"
 #include "KeepModel.h"
+#include "ExhaustiveKeepPolicy.h"
 #include <map>
 #include <string>
 #include <vector>
@@ -76,6 +77,10 @@ struct MulliganProfile
     // keep path above (AIEngine::KeepHand); empty => legacy path (so existing decks are unchanged
     // until regenerated). Serialized in the profile JSON. See KeepModel.h / mulligan-model-direction.
     KeepModel keep_model;
+
+    // Exhaustive bucketed keep policy (optional). When present and a hand resolves to a tabled
+    // bucket composition, it OVERRIDES keep_model/static for the keep decision (see AIEngine::KeepHand).
+    ExhaustiveKeepPolicy exhaustive_keep;
 
     // Durable human-authored keep constraints, loaded from a SEPARATE sibling file
     // (<deck>.constraints.json) -- NOT part of the profile JSON, so regenerating the profile never

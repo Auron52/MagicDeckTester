@@ -198,6 +198,20 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count, bool 
     int effective_size = static_cast<int>(hand.size()) - mulligan_count;
     if (effective_size <= 1) { return true; }   // hard floor: a 1-card hand is always kept
 
+    // Exhaustive bucketed keep policy: when present and the hand resolves to a tabled bucket
+    // composition, it is the EXACT optimal keep decision for the objective and overrides everything
+    // below. A composition not in the table (or an unbucketed card) leaves present=false and falls
+    // through to the keep_model / static path, so decks without an exhaustive table are unaffected.
+    if (!m_profile.exhaustive_keep.empty())
+    {
+        std::vector<std::string> names;
+        names.reserve(hand.size());
+        for (const Card& c : hand) { names.push_back(c.m_name.str()); }
+        bool present = false;
+        bool keep = m_profile.exhaustive_keep.Decide(names, mulligan_count, on_the_play, present);
+        if (present) { return keep; }
+    }
+
     // Analyzer-generated keep model: when present it OWNS the keep/mulligan decision at EVERY level
     // above the size-1 floor -- there is NO separate stop_at short-circuit, because the model was
     // trained at every hand size (7..2) and learned where to stop mulliganing itself. It REPLACES the
@@ -701,6 +715,49 @@ int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_tu
 void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 {
     Player& ap = state.ActivePlayer();
+
+    // Blind exhaustive-policy bottoming: when the deck carries an exhaustive keep/bottom table and it
+    // covers this hand's bucket composition, bottom toward the table's optimal kept-subcomposition
+    // (expected over library continuations -- no clairvoyance), overriding the lookahead/heuristic.
+    // Falls through when the policy is absent, has no bottoming table, or doesn't cover the hand, so
+    // decks without an exhaustive policy are byte-identical. Consistent with KeepHand's Decide consult.
+    //
+    // OPT-IN via MTG_EXHAUSTIVE_BOTTOM (default OFF): shipping an exhaustive KEEP policy must not
+    // silently change bottoming, and the keep A/B needs bottoming held identical (lookahead on both
+    // sides). The bottoming A/B toggles this flag to compare blind-exhaustive vs clairvoyant lookahead.
+    static const bool exhaustive_bottom = []
+    { const char* e = std::getenv("MTG_EXHAUSTIVE_BOTTOM"); return e && *e && std::string(e) != "0"; }();
+    if (exhaustive_bottom && !m_profile.exhaustive_keep.empty())
+    {
+        std::vector<std::string> names;
+        names.reserve(ap.hand.size());
+        for (const Card& c : ap.hand) { names.push_back(c.m_name.str()); }
+        std::vector<int> target;
+        if (m_profile.exhaustive_keep.DecideBottom(names, count, state.on_the_play, target))
+        {
+            // Bottom `count` cards, each time removing one physical card from a bucket that is over
+            // its target count. Members of a bucket are equivalent by construction, so any over-target
+            // card is an equally-optimal removal; picking the first is deterministic.
+            const auto& n2b = m_profile.exhaustive_keep.name_to_bucket;
+            for (int i = 0; i < count && !ap.hand.empty(); ++i)
+            {
+                std::vector<int> comp(m_profile.exhaustive_keep.buckets.size(), 0);
+                for (const Card& c : ap.hand)
+                { auto it = n2b.find(c.m_name.str()); if (it != n2b.end()) { comp[it->second]++; } }
+                int pick = -1;
+                for (int j = 0; j < static_cast<int>(ap.hand.size()); ++j)
+                {
+                    auto it = n2b.find(ap.hand[j].m_name.str());
+                    if (it != n2b.end() && comp[it->second] > target[it->second]) { pick = j; break; }
+                }
+                if (pick < 0) { break; }   // already at target (shouldn't happen for a tabled hand)
+                if (m_logger) { m_logger->LogBottomed(ap.hand[pick].m_number, ap.hand[pick].m_name); }
+                ap.library.push_back(ap.hand[pick]);
+                ap.hand.erase(ap.hand.begin() + pick);
+            }
+            return;
+        }
+    }
 
     // One transposition table shared across every candidate rollout of this whole
     // bottoming pass: each RolloutWinTurn plays a full lookahead game over the same

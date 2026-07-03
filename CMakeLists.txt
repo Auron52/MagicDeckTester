@@ -95,5 +95,7 @@ add_executable(mtg-analyze
     src/analyzer/main.cpp
     src/analyzer/AnalyzerEngine.cpp
     src/analyzer/KeepModelTrainer.cpp
+    src/analyzer/EquivalenceDiscovery.cpp
+    src/analyzer/ExhaustiveKeep.cpp
 )
 target_link_libraries(mtg-analyze PRIVATE mtg-core)
