@@ -32,7 +32,15 @@ OLD_GIT = "--old-git" in sys.argv
 
 
 def read_wins(text):
-    return {int(l.split()[0]): int(l.split()[1]) for l in text.splitlines() if l.strip()}
+    # gi -> (win_turn, play_digest_or_None). The 3rd column (play digest) is optional so a
+    # legacy 2-column ground-truth log still parses (digest None -> not compared).
+    out = {}
+    for l in text.splitlines():
+        p = l.split()
+        if not p:
+            continue
+        out[int(p[0])] = (int(p[1]), p[2] if len(p) > 2 else None)
+    return out
 
 
 def base_seed(key):  # <deck>_<mode>_d<depth>_s<seed>
@@ -62,21 +70,36 @@ keys = sorted(os.path.basename(f)[:-5] for f in glob.glob(f"test/gt_logs/*_{MODE
 if not keys:
     print(f"no committed gt_logs for mode '{MODE}'"); sys.exit(2)
 
-# tallies split by searched vs d0
-tot = {s: dict(winloss=0, losswin=0, later=0, earlier=0) for s in ("searched", "d0")}
-searched_winloss, searched_later, d0_winloss, d0_later = [], [], [], []
+# tallies split by searched vs d0. `played` = play changed at the SAME win turn (only visible via
+# the per-game play digest -- the coarse won/avg fingerprint cannot see it).
+tot = {s: dict(winloss=0, losswin=0, later=0, earlier=0, played=0) for s in ("searched", "d0")}
+searched_winloss, searched_later, searched_played = [], [], []
+d0_winloss, d0_later, d0_played = [], [], []
 unchanged = missing = 0
+digest_baseline = False   # any case whose OLD side carries digests -> digest comparison is live
 for key in keys:
     old, new = old_side(key), new_side(key)
     if not new:
         missing += 1; continue
+    # The play-digest gate is live once the OLD side (committed GT) carries digests -- independent
+    # of whether this case changed (set here, not only in the changed-game loop below).
+    if not digest_baseline and any(dg is not None for (_, dg) in old.values()):
+        digest_baseline = True
     if old == new:
         unchanged += 1; continue
     bucket = "searched" if is_searched(key) else "d0"
     seed = base_seed(key)
-    for gi, n in new.items():
-        o = old.get(gi)
-        if o is None or o == n:
+    for gi, nv in new.items():
+        ov = old.get(gi)
+        if ov is None:
+            continue
+        o, od = ov          # old (win_turn, digest)
+        n, nd = nv          # new (win_turn, digest)
+        if o == n:
+            # same win turn: did the PLAY change? (needs both digests present)
+            if od is not None and nd is not None and od != nd:
+                tot[bucket]["played"] += 1
+                (searched_played if bucket == "searched" else d0_played).append((key, gi, o, n, seed))
             continue
         ow, nw = o > 0, n > 0
         if ow and nw:
@@ -98,7 +121,10 @@ print(f"  configs changed: {len(keys) - unchanged - missing}   unchanged: {uncha
 for b in ("searched", "d0"):
     t = tot[b]
     print(f"  [{b:8}] win->loss={t['winloss']}  loss->win={t['losswin']}  "
-          f"later={t['later']}  earlier={t['earlier']}")
+          f"later={t['later']}  earlier={t['earlier']}  play-changed={t['played']}")
+if not digest_baseline:
+    print("  (no play-digest baseline yet -- ground-truth logs are pre-digest; --accept records "
+          "digests so play-only changes are caught next run)")
 
 # Inline old-vs-new per-turn diff for every game that must be reviewed, so the analysis the
 # skill calls mandatory is in this output by default (no separate manual step). Best-effort:
@@ -140,21 +166,32 @@ if searched_later:
         print(f"    {key} gi{gi}: {o}->{n}")
         blk = _explain(key, gi)
         if blk: print(blk)
+if searched_played:
+    print(f"\n*** SEARCHED-depth PLAY-CHANGED at same win turn ({len(searched_played)}) — the play "
+          f"digest moved though the win turn did not; ANALYZE EACH (a deliberate line change, or a bug):")
+    for key, gi, o, n, seed in searched_played:
+        print(f"    {key} gi{gi}: win T{o} unchanged, play differs")
+        blk = _explain(key, gi)
+        if blk: print(blk)
 
-if d0_winloss or d0_later:
+if d0_winloss or d0_later or d0_played:
     print(f"\nd0 (greedy, lighter bar): win->loss={len(d0_winloss)} turn-later={len(d0_later)} "
-          f"— sanity-check a couple, e.g.:")
-    for key, gi, o, n, seed in (d0_winloss[:2] + d0_later[:2]):
-        tag = "->loss" if n <= 0 else f"->{n}"
+          f"play-changed={len(d0_played)} — sanity-check a couple, e.g.:")
+    for key, gi, o, n, seed in (d0_winloss[:2] + d0_later[:2] + d0_played[:1]):
+        tag = "->loss" if n <= 0 else (f"->{n}" if n != o else " play-changed")
         print(f"    {key} gi{gi}: {o}{tag}")
 
 print()
 if searched_winloss:
     print(f"GATE FAIL: {len(searched_winloss)} searched-depth win->loss — root-cause each before --accept.")
     sys.exit(1)
+notes = []
 if searched_later:
-    print(f"GATE: no searched win->loss, but {len(searched_later)} searched turn-later — "
-          f"you must still CLASSIFY each (variance/churn) before --accept.")
+    notes.append(f"{len(searched_later)} searched turn-later (CLASSIFY each: variance/churn)")
+if searched_played:
+    notes.append(f"{len(searched_played)} searched play-changed at same win turn (ANALYZE each)")
+if notes:
+    print("GATE: no searched win->loss, but " + "; ".join(notes) + " before --accept.")
 else:
-    print("GATE: no searched-depth flips or slowdowns.")
+    print("GATE: no searched-depth flips, slowdowns, or play changes.")
 sys.exit(0)

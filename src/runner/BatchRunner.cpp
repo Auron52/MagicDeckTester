@@ -1,6 +1,7 @@
 #include "BatchRunner.h"
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
+#include "../core/GameLogger.h"
 #include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
@@ -106,9 +107,11 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // Per-job, per-game results. Pre-sized so workers write to disjoint slots with
     // no synchronisation. games[j][gi] = win turn (<=0 means no win).
     std::vector<std::vector<int>> win_turns(jobs.size());
+    std::vector<std::vector<uint64_t>> digests(jobs.size());
     for (std::size_t j = 0; j < jobs.size(); ++j)
     {
         win_turns[j].assign(jobs[j].games, -1);
+        digests[j].assign(jobs[j].games, 0);
     }
 
     // Flatten every game of every job into one work list.
@@ -157,9 +160,19 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         r.name         = jobs[j].name;
         r.games_played = jobs[j].games;
         r.win_turns    = win_turns[j];
+        r.digests      = digests[j];
         long long sum = 0;
         for (int wt : win_turns[j]) { if (wt > 0) { ++r.games_won; sum += wt; } }
         if (r.games_won > 0) { r.average_win_turn = static_cast<double>(sum) / r.games_won; }
+        // Case digest: FNV-1a fold of the per-game digests in game (gi) order -- a single
+        // fingerprint of the whole case's play. Games in gi order (the vector index), so it is
+        // deterministic and order-stable regardless of the pool's execution interleave.
+        uint64_t cd = 1469598103934665603ULL;
+        for (uint64_t d : digests[j])
+        {
+            for (int b = 0; b < 8; ++b) { cd ^= static_cast<uint8_t>((d >> (b * 8)) & 0xff); cd *= 1099511628211ULL; }
+        }
+        r.case_digest = cd;
         return r;
     };
 
@@ -212,7 +225,16 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 state.vial_target_mv = job.profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(state, wi.game);
 
+                // Attach a DIGEST-ONLY logger for the play fingerprint (no structure built, no
+                // disk written -- cheap). It records only the real game's decisions (m_logger is
+                // nulled in the search rollouts), so it does not perturb play: win turns stay
+                // byte-identical to a no-logger run. Reset per game via StartGame.
+                GameLogger dlog(/*digest_only=*/true);
+                dlog.StartGame(std::string(), wi.game, job.name, job.seed + wi.game, {});
+                engine->SetLogger(&dlog);
                 win_turns[wi.job][wi.game] = engine->RunGame(state, job.max_turns);
+                engine->SetLogger(nullptr);
+                digests[wi.job][wi.game] = dlog.Digest();
 
                 // Stream this job the instant its last game lands.
                 if (on_job_done

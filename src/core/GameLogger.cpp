@@ -30,14 +30,17 @@ void GameLogger::StartGame(const std::string& run_id, int game_number,
     m_phases.clear();
     m_in_phase     = false;
     m_win_turn     = -1;
+    m_digest       = FNV_OFFSET;   // reset the running play digest for this game
 }
 
 void GameLogger::StartPhase(int turn, const std::string& phase)
 {
+    FoldStr("P"); FoldInt(turn); FoldStr(phase);
+    m_in_phase        = true;
+    if (m_digest_only) { return; }
     m_current         = PhaseEntry{};
     m_current.turn    = turn;
     m_current.phase   = phase;
-    m_in_phase        = true;
 }
 
 void GameLogger::LogMulliganAttempt(int attempt,
@@ -45,6 +48,10 @@ void GameLogger::LogMulliganAttempt(int attempt,
                                      const std::vector<std::string>& hand_names,
                                      bool kept)
 {
+    FoldStr("M"); FoldInt(attempt);
+    for (int n : hand_nums) { FoldInt(n); }
+    FoldInt(kept ? 1 : 0);
+    if (m_digest_only) { return; }
     MulliganAttempt ma;
     ma.attempt    = attempt;
     ma.hand_nums  = hand_nums;
@@ -55,6 +62,8 @@ void GameLogger::LogMulliganAttempt(int attempt,
 
 void GameLogger::LogBottomed(int card_num, const std::string& card_name)
 {
+    FoldStr("B"); FoldInt(card_num);
+    if (m_digest_only) { return; }
     if (m_mulligan_sequence.empty()) { return; }
     m_mulligan_sequence.back().bottomed_nums.push_back(card_num);
     m_mulligan_sequence.back().bottomed_names.push_back(card_name);
@@ -63,6 +72,8 @@ void GameLogger::LogBottomed(int card_num, const std::string& card_name)
 void GameLogger::LogOpeningHand(const std::vector<int>& card_nums,
                                  const std::vector<std::string>& card_names)
 {
+    FoldStr("O"); for (int n : card_nums) { FoldInt(n); }
+    if (m_digest_only) { return; }
     m_opening_hand_nums  = card_nums;
     m_opening_hand_names = card_names;
 }
@@ -70,6 +81,8 @@ void GameLogger::LogOpeningHand(const std::vector<int>& card_nums,
 void GameLogger::LogPlayLand(int card_num, const std::string& card_name)
 {
     if (!m_in_phase) { return; }
+    FoldStr("L"); FoldInt(card_num);
+    if (m_digest_only) { return; }
     Action a;
     a.type      = "PLAY_LAND";
     a.card_num  = card_num;
@@ -82,6 +95,9 @@ void GameLogger::LogCastSpell(int card_num, const std::string& card_name,
                                const std::vector<TargetDesc>& targets)
 {
     if (!m_in_phase) { return; }
+    FoldStr("C"); FoldInt(card_num); FoldStr(mana_paid); FoldInt(chosen_x);
+    for (const TargetDesc& t : targets) { FoldStr(t.kind); FoldStr(t.who); FoldStr(t.card_name); }
+    if (m_digest_only) { return; }
     Action a;
     a.type      = "CAST_SPELL";
     a.card_num  = card_num;
@@ -100,6 +116,10 @@ void GameLogger::LogReveal(const std::string& source_name,
                             const std::vector<std::string>& dispositions)
 {
     if (!m_in_phase) { return; }
+    FoldStr("R"); FoldStr(source_name);
+    for (const std::string& n : looked_at_names) { FoldStr(n); }
+    for (const std::string& n : dispositions)    { FoldStr(n); }
+    if (m_digest_only) { return; }
     Action a;
     a.type            = "REVEAL";
     a.card_name       = source_name;
@@ -115,6 +135,8 @@ void GameLogger::LogAbility(int source_card_num, const std::string& source_card_
                              const std::string& ability)
 {
     if (!m_in_phase) { return; }
+    FoldStr("A"); FoldInt(source_card_num); FoldStr(ability);
+    if (m_digest_only) { return; }
     Action a;
     a.type      = "ABILITY";
     a.card_num  = source_card_num;
@@ -126,6 +148,8 @@ void GameLogger::LogAbility(int source_card_num, const std::string& source_card_
 void GameLogger::LogDraw(int card_num, const std::string& card_name)
 {
     if (!m_in_phase) { return; }
+    FoldStr("D"); FoldInt(card_num);
+    if (m_digest_only) { return; }
     Action a;
     a.type      = "DRAW";
     a.card_num  = card_num;
@@ -136,6 +160,8 @@ void GameLogger::LogDraw(int card_num, const std::string& card_name)
 void GameLogger::LogDiscard(int card_num, const std::string& card_name)
 {
     if (!m_in_phase) { return; }
+    FoldStr("X"); FoldInt(card_num);
+    if (m_digest_only) { return; }
     Action a;
     a.type      = "DISCARD";
     a.card_num  = card_num;
@@ -146,6 +172,8 @@ void GameLogger::LogDiscard(int card_num, const std::string& card_name)
 void GameLogger::LogAttack(int damage, int opp_life_after)
 {
     if (!m_in_phase) { return; }
+    FoldStr("K"); FoldInt(damage); FoldInt(opp_life_after);
+    if (m_digest_only) { return; }
     Action a;
     a.type     = "ATTACK";
     a.damage   = damage;
@@ -161,6 +189,9 @@ void GameLogger::CommitPhase(int player_life, int opp_life,
                               const std::vector<int>& staged)
 {
     if (!m_in_phase) { return; }
+    // Board snapshots are derived state (fully determined by the decisions already folded), and
+    // costly to hash -- so they are NOT part of the digest. Just close the phase.
+    if (m_digest_only) { m_in_phase = false; return; }
     m_current.player_life     = player_life;
     m_current.opp_life        = opp_life;
     m_current.battlefield     = battlefield;

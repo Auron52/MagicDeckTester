@@ -1865,21 +1865,30 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
               << "   [total             (W44-W33): " << ((sum44 - sum33) / n) << "]\n";
 }
 
-// Per-game ground-truth log: one "<game_index> <win_turn>" line per game (win_turn
-// <= 0 means no win within max_turns). Written to <dir>/<name>.wins. These are the
-// committed regression ground truth at the per-game level, so a later run can diff
-// new logs against them to see EXACTLY which games changed -- without rebuilding the
-// old binary. The fingerprint (won/avg) is derivable from this, but the per-game log
-// is what makes "analyze every changed game before --accept" a cheap built-in diff.
+// Per-game ground-truth log: one "<game_index> <win_turn> <play_digest_hex>" line per game
+// (win_turn <= 0 means no win within max_turns; the digest is GameLogger::Digest, 16 hex chars,
+// a fingerprint of that game's exact decision stream). Written to <dir>/<name>.wins. These are the
+// committed regression ground truth at the per-game level, so a later run can diff new logs against
+// them to see EXACTLY which games changed -- in win TURN and/or in PLAY at the same win turn --
+// without rebuilding the old binary. Older 2-column logs (no digest) still parse: the digest column
+// is optional to every reader (regression.sh awk on $1/$2, audit read_wins on $1/$2).
 static void WriteGameLog(const std::filesystem::path& dir, const std::string& name,
-                         const std::vector<int>& win_turns)
+                         const std::vector<int>& win_turns,
+                         const std::vector<uint64_t>& digests)
 {
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     std::ofstream out(dir / (name + ".wins"));
+    char buf[17];
     for (int gi = 0; gi < static_cast<int>(win_turns.size()); ++gi)
     {
-        out << gi << ' ' << win_turns[gi] << '\n';
+        out << gi << ' ' << win_turns[gi];
+        if (gi < static_cast<int>(digests.size()))
+        {
+            std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(digests[gi]));
+            out << ' ' << buf;
+        }
+        out << '\n';
     }
 }
 
@@ -2063,12 +2072,16 @@ int main(int argc, char* argv[])
             {
                 double pct = r.games_played > 0
                              ? 100.0 * r.games_won / r.games_played : 0.0;
+                char dbuf[17];
+                std::snprintf(dbuf, sizeof(dbuf), "%016llx",
+                              static_cast<unsigned long long>(r.case_digest));
                 std::cout << r.name << ": played=" << r.games_played
                           << " won=" << r.games_won << " (" << pct << "%)"
-                          << " avg=" << r.average_win_turn << "\n" << std::flush;
+                          << " avg=" << r.average_win_turn
+                          << " digest=" << dbuf << "\n" << std::flush;
                 if (!game_log_dir.empty())
                 {
-                    WriteGameLog(game_log_dir, r.name, r.win_turns);
+                    WriteGameLog(game_log_dir, r.name, r.win_turns, r.digests);
                 }
             };
             std::vector<BatchJobResult> results =

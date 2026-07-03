@@ -13,7 +13,9 @@ struct BatchJobResult
     int    games_played     = 0;
     int    games_won        = 0;
     double average_win_turn = 0.0;
-    std::vector<int> win_turns;   // per-game; <=0 = no win within max_turns
+    std::vector<int>      win_turns;   // per-game; <=0 = no win within max_turns
+    std::vector<uint64_t> digests;     // per-game play digest (GameLogger::Digest), 0 if unavailable
+    uint64_t              case_digest = 0;  // fold of per-game digests in game order (a case fingerprint)
 };
 
 // Runs a whole manifest of goldfish jobs (different decks / seeds / depths /

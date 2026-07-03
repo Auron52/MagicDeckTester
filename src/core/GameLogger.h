@@ -121,7 +121,28 @@ public:
 
     void WriteToFile(const std::filesystem::path& path) const;
 
+    // Construct a DIGEST-ONLY logger: records nothing structurally (no WriteToFile output),
+    // it only folds each decision into a running play digest. Cheap enough to attach to every
+    // batch game so the regression suite can fingerprint a deck's exact play (see Digest()).
+    explicit GameLogger(bool digest_only) : m_digest_only(digest_only) {}
+    GameLogger() = default;
+
+    // FNV-1a 64-bit fingerprint of the ordered REAL decision stream (mulligan keeps/bottoms,
+    // opening hand, lands, casts + targets/mana/X, draws, discards, attacks, per-turn phase
+    // markers) -- the fields the search rollout does NOT touch (m_logger is nulled in rollouts),
+    // so it captures the actual game line. Excludes non-reproducible metadata (run id, wall
+    // clock, board snapshots) so it is byte-stable across runs/threads for a given (seed, gi).
+    // Two lines that reach the same win-turn via different plays get DIFFERENT digests -- the
+    // sensitivity the coarse won/avg fingerprint lacks. Valid after EndGame.
+    uint64_t Digest() const { return m_digest; }
+
 private:
+    static constexpr uint64_t FNV_OFFSET = 1469598103934665603ULL;
+    static constexpr uint64_t FNV_PRIME  = 1099511628211ULL;
+    void FoldByte(uint8_t b)            { m_digest ^= b; m_digest *= FNV_PRIME; }
+    void FoldStr(const std::string& s)  { for (char c : s) { FoldByte(static_cast<uint8_t>(c)); } FoldByte(0); }
+    void FoldInt(int64_t v)             { for (int i = 0; i < 8; ++i) { FoldByte(static_cast<uint8_t>(v & 0xff)); v >>= 8; } }
+
     struct MulliganAttempt
     {
         int                      attempt = 0;
@@ -178,6 +199,8 @@ private:
     PhaseEntry                              m_current;
     bool                                    m_in_phase    = false;
     int                                     m_win_turn    = -1;
+    bool                                    m_digest_only = false;
+    uint64_t                                m_digest      = FNV_OFFSET;
 };
 
 // Thread-local logger that captures scry/dig reveals during REAL resolution. It is set

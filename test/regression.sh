@@ -50,6 +50,7 @@ MODE=regression
 ACCEPT=0
 ACCEPT_ACK=""     # --accept-with-regressions=<ack>: acknowledge each searched win->loss so
                   # --accept may proceed; the ack string is recorded in the GT provenance header.
+DECK_ONLY=""      # --deck=<name>: restrict this run to one deck's cases (see regression_cases.sh)
 for arg in "$@"; do
   case "$arg" in
     --smoke)     MODE=smoke ;;
@@ -57,6 +58,7 @@ for arg in "$@"; do
     --fast)      MODE=smoke ;;      # back-compat alias
     --accept)    ACCEPT=1 ;;
     --accept-with-regressions=*) ACCEPT=1; ACCEPT_ACK="${arg#*=}" ;;
+    --deck=*)    DECK_ONLY="${arg#*=}" ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
@@ -81,6 +83,21 @@ case "$MODE" in
   regression) CASES=( "${REGRESSION_CASES[@]}" ) ;;
   overnight)  CASES=( "${OVERNIGHT_CASES[@]}" ) ;;
 esac
+
+# --deck=<name>: keep only that deck's cases (the run path -- manifest, compare, per-game diff,
+# and .wins promotion all iterate CASES). The aggregate-GT rebuild on --accept still iterates the
+# FULL mode arrays (sourcing existing GT first), so a per-deck accept updates only this deck's keys
+# and leaves every other deck's ground truth intact.
+if [ -n "$DECK_ONLY" ]; then
+  _filtered=()
+  for spec in "${CASES[@]}"; do
+    # shellcheck disable=SC2086
+    set -- $spec
+    [ "$1" = "$DECK_ONLY" ] && _filtered+=("$spec")
+  done
+  [ ${#_filtered[@]} -eq 0 ] && { echo "ERROR: --deck=$DECK_ONLY matched no $MODE cases" >&2; exit 2; }
+  CASES=( "${_filtered[@]}" )
+fi
 
 # ---- accept: promote the last run's results into ground truth -------------
 # Rebuilds regression_gt.txt in canonical matrix order, pulling each value from
@@ -131,7 +148,7 @@ if [ "$ACCEPT" = 1 ]; then
     echo "# Regression ground truth -- commit $(git rev-parse --short HEAD 2>/dev/null || echo unknown)  date $(date +%Y-%m-%d)"
     echo "# Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit."
     [ -n "$ACCEPT_ACK" ] && echo "# accepted-with-regressions ($MODE, $(date +%Y-%m-%d)): $ACCEPT_ACK"
-    echo "# Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>"
+    echo "# Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]"
     echo "# Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint."
     emit_mode smoke      SMOKE_CASES
     emit_mode regression REGRESSION_CASES
@@ -277,16 +294,23 @@ for spec in "${CASES[@]}"; do
   line=$(printf '%s\n' "$BATCH_OUT" | grep "^${key}: ")
   won=$(printf '%s\n' "$line" | sed -nE 's/.*won=([0-9]+).*/\1/p')
   awt=$(printf '%s\n' "$line" | sed -nE 's/.*avg=([0-9.]+).*/\1/p')
+  dg=$(printf '%s\n' "$line" | sed -nE 's/.*digest=([0-9a-f]+).*/\1/p')
   expected="${!key-}"
   if [ -z "$won" ] || [ -z "$awt" ]; then
     status="FAIL"; got="(no output)"; FAIL=$((FAIL+1))
   else
-    got="${won}/${awt}"
+    # Fingerprint = won/avg/play-digest. The digest makes a play change that keeps the same
+    # win counts/turns still FAIL (the coarse won/avg cannot see it). Backward-compat: a legacy
+    # 2-field GT (no digest baselined yet) matches on won/avg alone -- PASS, and --accept records
+    # the digest so subsequent runs gate on it too.
+    got="${won}/${awt}${dg:+/$dg}"
     echo "$key=$got" >> "$RESULTS"           # record for a later --accept
     if [ -z "$expected" ]; then
       status="NEW "; expected="<none>"; NEW=$((NEW+1))
     elif [ "$expected" = "$got" ]; then
       status="PASS"; PASS=$((PASS+1))
+    elif [ "$expected" = "${won}/${awt}" ]; then
+      status="PASS"; PASS=$((PASS+1))        # legacy GT without a digest: won/avg match
     else
       status="FAIL"; FAIL=$((FAIL+1))
     fi

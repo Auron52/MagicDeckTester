@@ -19,13 +19,14 @@ The harness lives in `test/`:
 
 | File | Role | Committed? |
 |------|------|-----------|
-| `regression.sh` | runs a mode, compares to ground truth, and (with `--accept`) promotes a run into ground truth | yes |
+| `regression.sh` | runs a mode, compares to ground truth, and (with `--accept`) promotes a run into ground truth. `--deck=<name>` restricts the run to one deck's cases (safe with `--accept` — updates only that deck's GT). | yes |
+| `regression_deck.sh` | runs ONE deck across modes (`regression_deck.sh <deck> [smoke regression overnight]`) — the per-deck counterpart; each mode still prints its audit and is accepted separately | yes |
 | `audit_changed_games.py` | **the mandatory pre-`--accept` gate**: per-game win→loss / turn-later breakdown split by depth; exits non-zero on a searched-depth win→loss. Auto-run by `regression.sh` on every run and again as a hard gate on `--accept`. | yes |
 | `classify_turn_later.sh` | auto-classifies each searched-depth turn-later game (`churn` = recovers at 4x/16x budget vs `PERSISTS` = variance/real), re-running that one game — the generated form of the mandatory turn-later classification | yes |
 | `explain_game.py` | old-vs-new **per-turn diff** of ONE changed game (kept-hand/draw divergence + aligned lines + classification hint). Called inline by `audit_changed_games.py` for every searched win→loss / turn-later game; also runnable standalone. Baseline = `logs/snapshots/<mode>-baseline` (saved by `--accept`) or `--old-bin`. | yes |
 | `regression_cases.sh` | the test matrix (deck × depth × seed × games × budget) + deck metadata — **single source of truth** | yes |
-| `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<won>/<avg_win_turn>` | yes |
-| `gt_logs/<key>.wins` | ground truth, **per-game** (the counterpart to the aggregate above): one `<game_index> <win_turn>` line per game, `-1` = loss. This is the committed old-side baseline for the per-game audit — `--accept` promotes it together with `regression_gt.txt`. | yes |
+| `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<won>/<avg_win_turn>/<play_digest>`. The **play digest** (a per-case fold of per-game decision-stream hashes) makes a play change that keeps the same win counts/turns still FAIL — the coarse won/avg cannot see it. Legacy 2-field entries (no digest) match on won/avg alone until re-accepted. | yes |
+| `gt_logs/<key>.wins` | ground truth, **per-game**: one `<game_index> <win_turn> <play_digest>` line per game (`-1` = loss; digest = 16 hex chars). Committed old-side baseline for the per-game audit — `--accept` promotes it with `regression_gt.txt`. The digest column is optional to every reader, so pre-digest logs still parse. | yes |
 | `TIMINGS.md` | measured per-case wall times; sizing reference for the matrix | yes |
 | `results/<mode>.env` | last run's fingerprints (what `--accept` promotes) | no (gitignored) |
 | `logs/<mode>/<key>.log` (+ `.err`) | full binary output per case | no (gitignored) |
@@ -176,9 +177,12 @@ python3 test/explain_game.py <mode> <key> <gi>      # old-vs-new per-turn diff o
 ```
 
 It diffs the committed per-game GT against this run and prints, **split by depth**,
-every `win→loss` / `loss→win` / `turn-later` / `turn-earlier`, listing each
-searched-depth flip individually. Exit non-zero ⇒ a searched-depth `win→loss`
-exists ⇒ `--accept` is blocked. A prose summary is not the gate; the script's output is.
+every `win→loss` / `loss→win` / `turn-later` / `turn-earlier` / `play-changed`, listing each
+searched-depth flip individually. `play-changed` = the per-game **play digest** moved while the
+win turn did NOT — a line change (deliberate or a bug) that the win-turn diff alone cannot see;
+the audit prints an inline `explain_game` diff for each so you can tell which. Exit non-zero ⇒ a
+searched-depth `win→loss` exists ⇒ `--accept` is blocked. A prose summary is not the gate; the
+script's output is. (Play-changed games do not hard-block, but must be analyzed before `--accept`.)
 
 **Review bar differs by depth (this is the part that makes the audit tractable):**
 
