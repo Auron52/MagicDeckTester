@@ -647,6 +647,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         {
             continue;
         }
+        // Goldfishing gate (Swords to Plowshares): its controller-lifegain rider only HELPS us with a
+        // lifegain->loss enabler in play (else it just gives the passive opponent life). Don't offer the
+        // cast without an enabler on board + an opponent creature to exile -- FindLifegainRemovalTarget
+        // returns -1 for either miss. Gating on "enabler in play" (not merely in hand) keeps the greedy
+        // d0 path healthy; the cost is the same-turn "Tainted Remedy, then Swords" combo, which this
+        // forgoes (deferred -- see docs/design/antilifegain-swords-targeting.md). Goldfishing assumption.
+        if (def.params.controller_lifegain_equals_power
+            && FindLifegainRemovalTarget(state, state.active_player_index) < 0)
+        {
+            continue;
+        }
 
         // {X} spells: enumerate candidate X values (provider XCandidates narrows the range,
         // the search picks among the variants -- they share hand_index, so they are mutually
@@ -2695,16 +2706,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (def.tmpl == CardTemplate::Removal)
         {
-            // Removal (Swords to Plowshares): exile/destroy the first opponent creature and
-            // apply the controller-lifegain rider (-> damage with Tainted Remedy). Mirrors
-            // EffectHandler::ResolveRemoval. CollectActions only offers this with a legal
-            // opponent creature target present.
+            // Removal (Swords to Plowshares): exile the opponent's LARGEST creature (max life loss via
+            // the controller-lifegain rider + a Tainted Remedy / Plague Drone). Enumeration only offers
+            // this with an enabler in play, so FindLifegainRemovalTarget picks a target here; a non-
+            // lifegain removal (none today) falls back to the first opponent creature. Mirrors
+            // EffectHandler::ResolveRemoval + AIEngine::CastSpellFromHand in lockstep.
             int ci = -1;
-            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            if (def.params.controller_lifegain_equals_power)
             {
-                const Permanent& bp = state.battlefield[bi];
-                if (bp.controller_index != state.active_player_index && bp.card.IsCreature())
-                { ci = bi; break; }
+                ci = FindLifegainRemovalTarget(state, state.active_player_index);
+            }
+            else
+            {
+                for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                {
+                    const Permanent& bp = state.battlefield[bi];
+                    if (bp.controller_index != state.active_player_index && bp.card.IsCreature())
+                    { ci = bi; break; }
+                }
             }
             if (ci >= 0)
             {

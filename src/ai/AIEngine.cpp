@@ -2580,11 +2580,15 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         }
         case Targeting::Creature:
         {
-            // Own-creature pump (Invigorate) targets the controller's best attacker; other
-            // creature-targeting spells (removal/burn) target an opponent creature.
+            // Own-creature pump (Invigorate) targets the controller's best attacker; Swords (the
+            // controller-lifegain removal) targets the opponent's LARGEST creature ONLY with an enabler
+            // in play (else -1 -> not cast; see FindLifegainRemovalTarget); other creature-targeting
+            // spells (burn) target an opponent creature. Lockstep with the enumeration gate + rollout.
             int idx = def->params.target_own_creature
                       ? FindBestOwnAttacker(state, state.active_player_index)
-                      : FindOpponentCreature(state);
+                      : def->params.controller_lifegain_equals_power
+                        ? FindLifegainRemovalTarget(state, state.active_player_index)
+                        : FindOpponentCreature(state);
             if (idx < 0) { return; }
             Target t;
             t.type            = Target::Type::Permanent;

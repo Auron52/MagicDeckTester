@@ -491,6 +491,31 @@ inline int FindBestOwnAttacker(const GameState& state, int controller_index)
     return best;
 }
 
+// Target selection for the controller-lifegain removal (Swords to Plowshares). Its rider makes the
+// EXILED creature's controller gain life equal to its power, which a Tainted Remedy / Plague Drone
+// (RemedyActive) turns into that much life LOSS on the opponent. So against a PASSIVE goldfish opponent
+// the spell is worth casting ONLY while such an enabler is in play, and then it should hit the
+// opponent's LARGEST-power creature (max life loss). Returns that creature's battlefield index, or -1 =
+// "do not cast" (no enabler in play, or no opponent creature). Used in lockstep by the enumeration gate,
+// the search rollout, and the real executor so all three agree on the target.
+//
+// NB this is a GOLDFISHING heuristic: against a real opponent a creature is worth exiling on its own
+// even without an enabler (and you might prefer a specific threat over the largest) -- revisit for
+// Phase 2. Only Swords carries controller_lifegain_equals_power, so every other deck is untouched.
+inline int FindLifegainRemovalTarget(const GameState& state, int active)
+{
+    if (!RemedyActive(state, active)) { return -1; }
+    int best = -1, best_pw = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == active || !p.card.IsCreature()) { continue; }
+        int pw = p.EffectivePower();
+        if (pw > best_pw) { best_pw = pw; best = i; }
+    }
+    return best;
+}
+
 // True if a free alt-cost payload `def` in `controller_index`'s hand should be AUTO-FIRED now:
 // it has an alt lifegain cost, is SAFE (not Reverent's destroy-all-enchantments, which stays a
 // search decision), a Remedy is active so the opponent's "gain" becomes damage, the alt-cost
