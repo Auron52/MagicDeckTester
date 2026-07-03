@@ -279,6 +279,12 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
             && t.permanent_index >= 0
             && t.permanent_index < static_cast<int>(state.battlefield.size()))
         {
+            // Pump-then-Swords: redirect a free-alt Invigorate onto this creature before
+            // capturing its power, so the exile life-loss is +power_bonus larger (autonomous AI
+            // only). Shared with the rollout's Removal branch (TurnSolver) for lockstep. Called
+            // before taking the `target` reference: FireOnCastTriggers may reallocate the
+            // battlefield vector (appending tokens), which would dangle a held reference.
+            TryPumpThenSwordsRedirect(state, entry.controller_index, t.permanent_index, def);
             Permanent& target = state.battlefield[t.permanent_index];
             // Rider (Swords to Plowshares): the exiled creature's controller gains life equal
             // to its power. Via OpponentGainsLife so a Tainted Remedy turns the opponent's

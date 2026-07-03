@@ -77,7 +77,32 @@ on its own even without an enabler (it removes a blocker/attacker), and you migh
 specific threat over the largest. When a real opponent is added (Phase 2), gate these behind the
 goldfish assumption / make them opponent-model-aware rather than unconditional.
 
-## Deferred: pump-then-Swords via Invigorate's FREE alt cost (corrected model)
+## Shipped (2026-07-03): pump-then-Swords via Invigorate's FREE alt cost
+
+Shipped as a **targeting redirect** in one shared helper, `TryPumpThenSwordsRedirect` (SpellEffects.h),
+called from both Swords apply sites in lockstep: the rollout (`ApplyPlanDirect` Removal branch,
+TurnSolver.cpp) and the executor (`EffectHandler::ResolveRemoval`). Just before Swords exiles the
+opponent creature at `FindLifegainRemovalTarget`, it fires a full alt-cost Invigorate cast (alt
+lifegain + on-cast triggers **incl. Aria of Flame verse** + prowess + the +N/+M) with the pump
+**targeted at that creature** instead of an own attacker, then reads the now-boosted power for the
+exile life-loss. Consuming the pump from hand also removes it from the later safe-alt auto-fire pass,
+so it is never double-fired. Gated on `!DecisionUnpruned()` (the same condition as that pass): fires
+for autonomous search + the engine's AI-hint rollout, suppressed for the play viewer / unpruned A/B
+where the pump is a real enumerated decision.
+
+**Verification (all decks byte-identical except antilife; the run was accepted into GT):**
+- smoke + regression: non-antilife (knights, hinata) unchanged; antilife **searched depth
+  win->loss=0, turn-later=0, 12 games earlier** (e.g. d3 s3003 gi36/gi112 4->3). Exactly the
+  zero-searched-regression + strict improvement the model predicted.
+- d0 greedy (lighter bar): net strongly positive (loss->win, 9+ earlier) with 2 tangled-line
+  turn-later churn games (gi335, gi958) — benign greedy myopia (double Aria / Reverent Silence
+  self-wipe lines), same category the shipped Swords change produced.
+- Behavioural: seed 1023 gi22 wins **T4 (was T6)** — T3 Remedy, T4 Aria (opp 20->10), Swords cast
+  fires the redirect (Invigorate alt -3, its Aria verse -2, pump the target 1/1 -> 5/5), exile the
+  5/5 for -5 -> opp to -1. With no own creature the Invigorate was otherwise stuck uncastable, so
+  the redirect turned a wasted 7 into the kill (the "can't afford an attacker" win).
+
+## (Historical) deferred plan: pump-then-Swords via Invigorate's FREE alt cost (corrected model)
 
 **IMPORTANT — the value comes from the alt cost, not a {2}{G} hard cast.** Invigorate reads: "If you
 control a Forest, rather than pay {2}{G}, you may have an opponent gain 3 life. Target creature gets

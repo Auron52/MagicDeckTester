@@ -2727,6 +2727,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             if (ci >= 0)
             {
+                // Pump-then-Swords: redirect a free-alt Invigorate onto this creature before
+                // capturing its power, so the exile life-loss is +power_bonus larger (autonomous
+                // AI only; consumes the pump so the safe-alt pass below never double-fires it).
+                // Shared with EffectHandler::ResolveRemoval for lockstep.
+                TryPumpThenSwordsRedirect(state, state.active_player_index, ci, def);
                 int tgt_controller = state.battlefield[ci].controller_index;
                 int tgt_power      = state.battlefield[ci].EffectivePower();
                 if (def.params.damage > 0) { state.exile.push_back(state.battlefield[ci].card); }

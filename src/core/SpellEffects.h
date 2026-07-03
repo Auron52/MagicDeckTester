@@ -3113,3 +3113,63 @@ inline void FireProwess(GameState& state, const CardDefinition& def)
         ++p.temp_tough_bonus;
     }
 }
+
+// Pump-then-Swords redirect (Anti-Lifegain combo). Just before Swords to Plowshares
+// (`removal_def`, controller_lifegain_equals_power) exiles the opponent creature at battlefield
+// index `target_bi`, redirect a FREE-alt Invigorate-style pump from `active`'s hand onto THAT
+// creature instead of an own attacker. Invigorate's alt cost ("rather than pay {2}{G}, an
+// opponent gains 3 life") is free (the enabler turns the 3 gain into 3 loss) and STILL grants
+// the +N/+M, so the pump costs no mana. Pumping the Swords target makes the exile life-loss
+// `power_bonus` larger, for `power + pump + alt_lifegain` total opponent loss.
+//
+// Value vs the default (pump an own attacker): EQUAL when the own creature could actually swing
+// this turn (both +power_bonus opponent life loss -- combat vs a bigger exile), and STRICTLY
+// BETTER whenever it cannot -- no own creature (Invigorate would be stuck uncastable, losing all
+// of it), the only creature is a mana dork tapped for mana, or it is summoning-sick. So this is
+// >= the current behaviour on every board. Free (no mana), so no search-budget change. See
+// docs/design/antilifegain-swords-targeting.md.
+//
+// Fires a FULL alt-cost Invigorate cast (alt lifegain + on-cast triggers [Aria of Flame verse] +
+// prowess + the pump), so it is value-identical to the normal safe-alt auto-fire -- only the pump
+// TARGET differs. Consuming the pump here also removes it from the later safe-alt auto-fire pass
+// (ApplyPlanDirect / AIEngine), so it is never double-fired. Gated on !DecisionUnpruned() (the
+// same condition as that pass): fires for autonomous search and the engine's AI-hint rollout,
+// suppressed for the play viewer / unpruned A/B where the pump is an enumerated decision the
+// human/search owns. Shared by ResolveRemoval (executor) and the ApplyPlanDirect Removal branch
+// (rollout) so both realise the identical combo.
+inline void TryPumpThenSwordsRedirect(GameState& state, int active, int target_bi,
+                                      const CardDefinition& removal_def)
+{
+    if (!removal_def.params.controller_lifegain_equals_power) { return; }
+    if (DecisionUnpruned())                                   { return; }
+    if (target_bi < 0 || target_bi >= static_cast<int>(state.battlefield.size())) { return; }
+    if (state.battlefield[target_bi].controller_index == active) { return; }  // opponent creatures only
+    if (!RemedyActive(state, active))                         { return; }     // enabler in play
+
+    Player& ap = state.players[active];
+    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (!d) { continue; }
+        const CardParams& pp = d->params;
+        if (pp.alt_lifegain_cost <= 0)    { continue; }   // needs the free alt cost
+        if (pp.destroy_all_enchantments)  { continue; }   // Reverent Silence: not a creature pump
+        if (!pp.target_own_creature)      { continue; }   // Invigorate-style +N/+M on a creature
+        if (pp.power_bonus <= 0)          { continue; }
+        if (!ControlsSubtype(state, active, pp.alt_cost_requires_subtype)) { continue; }  // a Forest
+
+        // Fire the pump onto the Swords target, mirroring a normal alt-cost Invigorate cast:
+        // pull it from hand, pay the alt lifegain, fire on-cast triggers (Aria verse) + prowess,
+        // apply +N/+M to the target, then send the spell to the graveyard. FireOnCastTriggers may
+        // append tokens to the battlefield (never erase), so target_bi stays valid.
+        Card inv = ap.hand[i];
+        ap.hand.erase(ap.hand.begin() + i);
+        OpponentGainsLife(state, active, pp.alt_lifegain_cost);
+        FireOnCastTriggers(state, *d);
+        FireProwess(state, *d);
+        state.battlefield[target_bi].temp_power_bonus += pp.power_bonus;
+        state.battlefield[target_bi].temp_tough_bonus += pp.tough_bonus;
+        ap.graveyard.push_back(inv);
+        return;   // one redirect per Swords cast
+    }
+}
