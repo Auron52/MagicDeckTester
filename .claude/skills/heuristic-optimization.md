@@ -109,15 +109,30 @@ deck the mana sources rank Forest 10 < duals 20 < **Grove** < Ignoble Hierarch 3
 won/avg/digest on every case). The shipped nudge *already is* "after lands, before
 creatures" — `+1` lands Grove at 21, one slot past the duals and ahead of both dorks.
 
-**Two lessons this skill exists to enforce:**
+**Attempt 3 — is the state-condition needed at all?** Once the variant is correctly
+specified (before creatures), the `-1` eager-tap-under-Remedy can be dropped entirely: a
+fully STATIC rank (drip land = base `+1`, no enabler check) measured **outcome-identical
+at searched depth** across the disjoint regression seeds (0 games change win turn; two of
+four cases byte-identical) and negligibly different at d0 (2–3 games a turn later). The
+drip still fires under an enabler — guaranteed by `DripLandAnyPipColor`'s Remedy gate +
+the sweep, not the ranking. So the ranking became **enabler-agnostic**, which also made it
+**generic**: it moved from `AntiLifegainProvider` into the root `GenericProvider` (gated on
+`tap_opponent_lifegain > 0`, inert for every deck without a drip land), and the archetype
+override was deleted. A knob that started combo-specific ended up a default-provider rule.
+
+**Lessons this skill exists to enforce:**
 1. **A variant only tests what you actually coded.** The rank-55 run looked like it
    refuted "rank Grove late," but it had quietly changed "late among lands" into "late
-   among *everything*." Pin down the intended ordering (which sources, in what order)
-   before trusting a delta — a mis-specified variant yields a misleading measurement.
-2. **The enabler-drip guarantee needs the inference, not the order.** Whichever way Grove
-   is ranked, it drips under a Remedy via `DripLandAnyPipColor`'s gate + the sweep; the
-   *ranking's* job is only the no-enabler sparing, and the `-1` eager-tap earns its keep by
-   preserving dorks on combo turns. Order and state-inference are separate levers.
+   among *everything*." Pin down the intended ordering before trusting a delta.
+2. **Order and state-inference are separate levers.** The drip-under-enabler guarantee
+   lives in the `{C}`-mode gate + sweep; the *ranking's* only job is the no-enabler
+   sparing. Proving they're separable let the rank drop its state-condition and generalize.
+3. **A static heuristic optimizes the AVERAGE and loses situational edges — knowingly.**
+   Ranking the drip land before the creatures ("keep the dork up") is net-positive because
+   a mana dork is usually worth more kept up (pump target, lone-Exalted attacker,
+   repeatable fixing) than one avoided life-gift — but in specific spots (an idle dork)
+   tapping it first to spare the drip land *is* locally better. A static rank can't see
+   that; capturing it needs in-play search of the tap choice. Record the loss, don't hide it.
 
 ## Secondary example — sweeping the generic tiers
 

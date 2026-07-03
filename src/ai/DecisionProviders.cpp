@@ -256,7 +256,22 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
     const int amt = ManaProducedPerTap(def);
     if (amt > 1 && static_cast<int>(prod.size()) > 1) { return 10; }  // bounce/fixed-multi: no choice
     const int ncol = static_cast<int>(prod.size());
-    return ncol <= 1 ? 10 : ncol * 10;                                // mono=10 dual=20 tri=30 rainbow=50
+    int rank = ncol <= 1 ? 10 : ncol * 10;                            // mono=10 dual=20 tri=30 rainbow=50
+    // Drip land (Grove of the Burnwillows, tap_opponent_lifegain > 0): its coloured tap gifts the
+    // opponent 1 life, so among LANDS spend a painless source first and spare it (+1 -> one slot past its
+    // own flexibility tier, i.e. last of a mono/dual land base). It stays AHEAD of the CREATURES (dorks,
+    // 30+): a mana creature is usually worth more kept up (Invigorate pump target, lone-Exalted attacker,
+    // repeatable fixing) than one avoided pre-enabler life gift, so on average we tap Grove before a dork
+    // rather than burn the dork. Static / enabler-agnostic on purpose: with a lifegain->loss enabler the
+    // drip becomes 1 damage that MUST fire, but that is guaranteed separately by DripLandAnyPipColor's
+    // Remedy gate (taps COLOURED, never {C}) + the TapDripLandsForRemedy sweep -- NOT by tap order.
+    // (Measured outcome-identical at searched depth to the old enabler-conditional nudge; ranking the
+    // drip land AFTER the dorks instead was net-negative -- see the heuristic-optimization skill.) This
+    // is the net-positive AVERAGE; the drip-land-vs-dork call is genuinely situational (an idle dork is
+    // sometimes better tapped first), which a static rank can't capture -- left to future search.
+    // Inert for every deck without a drip land.
+    if (def.params.tap_opponent_lifegain > 0) { rank += 1; }
+    return rank;
 }
 
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
@@ -363,21 +378,6 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
 
     // (b) lethal in combination with this turn's attackers
     return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
-}
-
-int AntiLifegainProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
-{
-    int rank = GenericProvider::ManaSourceRank(s, def);
-    // Grove of the Burnwillows-style drip land (tap_opponent_lifegain > 0): its coloured tap gifts the
-    // opponent 1 life. The scarcity path only lands a drip land here for a COLOURED pip -- generic pips
-    // take its painless {C} mode (see DripLandAnyPipColor) -- so this nudge only bites when the tap
-    // would actually drip. Absent a Remedy the gift costs us: break ties AGAINST it (+1) so an equally-
-    // flexible painless source (e.g. Stomping Ground for a red pip) is spent first and the drip land is
-    // spared. With a Remedy the "gain 1" is reversed into 1 DAMAGE, so we WANT to tap it: break ties FOR
-    // it (-1). Archetype logic -- deliberately kept out of the root GenericProvider::ManaSourceRank.
-    if (def.params.tap_opponent_lifegain > 0)
-    { rank += ::RemedyActive(s, s.active_player_index) ? -1 : 1; }
-    return rank;
 }
 
 // Effective ATTACKING power of a permanent, computed like the combat sites (PendingAttackDamage /
