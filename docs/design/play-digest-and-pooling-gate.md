@@ -1,7 +1,7 @@
 # Per-deck play digest: regression tripwire + mulligan-pooling gate
 
-**Status (updated 2026-07-03):** the **regression-tripwire half is BUILT**; the
-**mulligan-pooling-gate half is still deferred**. See "Implementation status" below.
+**Status (updated 2026-07-03):** BOTH halves are **BUILT** — the regression tripwire and the
+mulligan-pooling gate. See "Implementation status" below.
 
 ## Implementation status
 
@@ -25,12 +25,25 @@
   play moved at the SAME win turn — and prints an inline `explain_game` per-turn diff for each.
   Not a hard gate, but flagged "ANALYZE each" before `--accept`.
 
-**Still deferred (mulligan-pooling gate):** the `ExhaustiveKeep` soft-gate merge, the
-rollout-config digest **battery** (depth 5 / budget 20 emittable "mode" for the single-deck
-runner), the `meta.play_digest` field + merge-acceptance change in `src/analyzer/ExhaustiveKeep.*`
-and `src/ai/MulliganProfileIO.h`. The engine digest built above is the prerequisite those reuse.
-The "Config scoping", "Soft-gate merge procedure", and "Sidecar / merge code touch points"
-sections below specify that remaining work.
+**Built (mulligan-pooling gate):**
+- **Rollout-config play digest.** `RolloutConfigDigest` (`ExhaustiveKeep.cpp`) folds a FIXED
+  64-game goldfish battery at the keep config (depth 5 / budget 20) using the digest-only
+  `GameLogger` — deterministic and machine-independent, so it moves IFF the deck's play at that
+  config moves. Stamped into the raw sidecar `meta.play_digest` and the runtime policy
+  (`ExhaustiveKeepPolicy::play_digest`, serialized via `MulliganProfileIO.h`).
+- **Soft merge gate.** `RunKeepMerge` now gates pooling on `play_digest` (bucket_fp/deck_fp/
+  equiv_seed/K/max_mull still required; seed_bases still must be disjoint). `commit` is demoted to
+  advisory: the merged sidecar records the equivalence class of pooled commits in
+  `meta.pooled_commits`. Legacy sidecars with no `play_digest` fall back to the old commit-match,
+  so nothing pre-digest silently over-pools.
+- **Verified:** same play_digest + different commit → POOLS (the false-invalidation this design
+  removes); different play_digest → REJECTS; legacy no-digest + different commit → REJECTS via
+  the commit fallback.
+
+**Remaining polish (optional):** an *emittable* rollout-config digest "mode" on the single-deck
+runner (today the digest is computed inline during `RunExhaustiveKeep`, which is what the gate
+needs); and wiring the soft-gate *procedure* (regression `--deck` + battery re-verify) into a
+one-command helper. The core gate is functional without these.
 
 ---
 

@@ -30,7 +30,10 @@ struct ExhaustiveKeepPolicy
     // and independent of this flag.
     bool        bottoming_enabled = false;
     // Provenance (audit/merge only; unused at decision time).
-    std::string commit;
+    std::string commit;         // source revision the sidecar was built at (advisory once play_digest exists)
+    std::string play_digest;    // rollout-config play fingerprint (depth 5 / budget 20) -- the real
+                                // pooling identity: a doc/other-deck/GUI commit leaves it unchanged, so
+                                // sidecars from those commits stay poolable (see RunKeepMerge).
     int         effective_R = 0;
 
     // name -> bucket index; rebuilt by Index() after buckets are populated (loader/analyzer call it).

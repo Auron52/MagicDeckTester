@@ -14,8 +14,11 @@
 #include "EquivalenceDiscovery.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfileIO.h"
+#include "../core/GameEngine.h"
+#include "../core/GameLogger.h"
 #include "../core/HardwareConcurrency.h"
 #include "../runner/GoldFishRunner.h"
+#include <cstdio>
 
 namespace
 {
@@ -147,6 +150,42 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
     ek.Index();
     if (Dopt_out) { *Dopt_out = Dopt_pd; }
     return ek;
+}
+
+// Rollout-config PLAY DIGEST: a deterministic fingerprint of how this deck PLAYS under the keep
+// rollouts' continuation config (depth / budget from ExhaustiveKeepConfig -- 5 / 20). A FIXED
+// battery of goldfish games (fixed seed base, single-threaded, fixed fold order) so the result is
+// byte-identical across machines/runs for a given play-logic, and moves IFF this deck's play at
+// that config moves. This is the real POOLING identity: unlike the commit hash (which over-
+// approximates -- a doc-only / other-deck / GUI-only commit bumps it yet leaves this deck's play
+// byte-identical), the digest lets those sidecars still pool. Reuses the digest-only GameLogger
+// that the batch regression path already validated as behaviour-neutral.
+static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfile& profile,
+                                       int depth, int budget_ms, int max_turns)
+{
+    constexpr int      kGames    = 64;                    // coverage vs cost (negligible beside R rollouts)
+    constexpr uint64_t kSeedBase = 0x9E3779B97F4A7C15ULL; // FIXED -> the battery is machine-independent
+    AIEngine   ai(profile, depth, budget_ms);
+    ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
+    GameEngine engine(ai);
+    uint64_t   fold = 1469598103934665603ULL;             // FNV-1a over per-game digests, in game order
+    for (int gi = 0; gi < kGames; ++gi)
+    {
+        GameState state = GoldFishRunner::SetupGame(deck, kSeedBase + static_cast<uint64_t>(gi));
+        state.vial_target_mv = profile.vial_target_mv;
+        GoldFishRunner::PopulateOpponentSpawns(state, gi);
+        GameLogger dlog(/*digest_only=*/true);
+        dlog.StartGame(std::string(), gi, "d", kSeedBase + static_cast<uint64_t>(gi), {});
+        engine.SetLogger(&dlog);
+        engine.RunGame(state, max_turns);
+        engine.SetLogger(nullptr);
+        uint64_t d = dlog.Digest();
+        for (int b = 0; b < 8; ++b)
+        { fold ^= static_cast<uint8_t>((d >> (b * 8)) & 0xff); fold *= 1099511628211ULL; }
+    }
+    char buf[17];
+    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(fold));
+    return std::string(buf);
 }
 }  // namespace
 
@@ -474,6 +513,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         os << "\n";
     }
 
+    // Rollout-config play digest -- the pooling identity stamped into both the runtime policy and the
+    // raw sidecar below. Computed once (a fixed 64-game d5/b20 battery); skip if writing neither.
+    std::string play_digest;
+    if (!cfg.out_profile.empty() || !cfg.out_raw.empty())
+    {
+        play_digest = RolloutConfigDigest(deck, profile, cfg.depth, cfg.budget_ms, cfg.max_turns);
+        os << "rollout-config play digest (d" << cfg.depth << "/b" << cfg.budget_ms
+           << ", 64-game battery): " << play_digest << "\n";
+    }
+
     // ---- 6. Serialize the keep policy (bucket map + per-composition keep decisions) --------------
     // Built via the shared BuildPolicyFromTables so the in-run policy is byte-identical to what the
     // offline merge tool (RunKeepMerge) produces from the same pooled V's.
@@ -484,7 +533,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
             tables, count, bmembers, static_cast<int>(deck.mainboard.size()),
             cfg.max_mull, cfg.rollouts, cfg.bottoming_enabled);
-        ek.commit = cfg.commit;
+        ek.commit      = cfg.commit;
+        ek.play_digest = play_digest;
         MulliganProfile out = profile;
         out.exhaustive_keep = std::move(ek);
         if (SaveDeckProfile(cfg.out_profile, out))
@@ -511,7 +561,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
         json root;
         root["meta"] = {
-            { "commit", cfg.commit }, { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
+            { "commit", cfg.commit }, { "play_digest", play_digest },
+            { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
             { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
@@ -567,7 +618,9 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     struct Acc { double sum[2] = { 0, 0 }; long long cnt[2] = { 0, 0 }; };
     std::map<int, std::map<std::vector<int>, Acc>> pooled;   // H -> comp -> summed sum/count
     std::vector<std::vector<std::string>> buckets;
-    std::string commit;
+    std::string commit;                                     // advisory once play_digest is present
+    std::string play_digest;                                // the pooling identity (rollout-config play)
+    std::set<std::string> commits;                          // equivalence class of commits pooled together
     uint64_t bucket_fp = 0, deck_fp = 0, equiv_seed = 0;
     int K = -1, max_mull = -1;
     std::set<uint64_t> seed_bases;                           // every base already folded in (overlap guard)
@@ -585,6 +638,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         if (!root.contains("meta") || !root.contains("sizes")) { os << "  SKIP (not a raw sidecar): " << path << "\n"; continue; }
         const json& m = root["meta"];
         const std::string c   = m.value("commit", std::string());
+        const std::string pd  = m.value("play_digest", std::string());
         const uint64_t bfp = m.value("bucket_fp", 0ULL);
         const uint64_t dfp = m.value("deck_fp", 0ULL);
         const uint64_t es  = m.value("equiv_seed", 0ULL);
@@ -594,18 +648,33 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         std::vector<uint64_t> file_bases;
         if (m.contains("pooled_seed_bases")) { file_bases = m["pooled_seed_bases"].get<std::vector<uint64_t>>(); }
         else { file_bases.push_back(m.value("seed_base", 0ULL)); }
+        // Collect this file's pooled commits (an already-merged sidecar lists them; a raw run has one).
+        std::vector<std::string> file_commits;
+        if (m.contains("pooled_commits")) { file_commits = m["pooled_commits"].get<std::vector<std::string>>(); }
+        else if (!c.empty()) { file_commits.push_back(c); }
+
+        // Play-logic identity: PREFER the rollout-config play_digest -- a doc-only / other-deck /
+        // GUI-only commit bumps `commit` but leaves this deck's play (hence the digest) unchanged, so
+        // those sidecars are genuinely poolable. Fall back to the commit hash only when a side predates
+        // the digest (legacy sidecar with no play_digest). commit is otherwise advisory.
+        auto play_compatible = [&]() -> bool {
+            if (!pd.empty() && !play_digest.empty()) { return pd == play_digest; }
+            return c == commit;   // legacy fallback: at least one side lacks a play_digest
+        };
 
         if (first)
         {
-            commit = c; bucket_fp = bfp; deck_fp = dfp; equiv_seed = es; K = k; max_mull = mm;
+            commit = c; play_digest = pd; bucket_fp = bfp; deck_fp = dfp; equiv_seed = es; K = k; max_mull = mm;
             buckets = root["buckets"].get<std::vector<std::vector<std::string>>>();
             first = false;
         }
-        else if (c != commit || bfp != bucket_fp || dfp != deck_fp || es != equiv_seed
+        else if (!play_compatible() || bfp != bucket_fp || dfp != deck_fp || es != equiv_seed
                  || k != K || mm != max_mull)
         {
             os << "  REJECT (fingerprint mismatch): " << path << "\n"
-               << "    commit "     << c   << " vs " << commit
+               << "    play_digest " << (pd.empty() ? "<none>" : pd)
+               << " vs " << (play_digest.empty() ? "<none>" : play_digest)
+               << " | commit "     << c   << " vs " << commit
                << " | bucket_fp "   << bfp << " vs " << bucket_fp
                << " | deck_fp "     << dfp << " vs " << deck_fp
                << " | equiv_seed "  << es  << " vs " << equiv_seed
@@ -617,6 +686,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         if (overlap)
         { os << "  REJECT (seed_base overlap -> would double-count): " << path << "\n"; continue; }
         for (uint64_t b : file_bases) { seed_bases.insert(b); }
+        for (const std::string& fc : file_commits) { commits.insert(fc); }   // equivalence class
 
         for (const json& sz : root["sizes"])
         {
@@ -712,9 +782,12 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     if (!out_raw.empty())
     {
         std::vector<uint64_t> bases(seed_bases.begin(), seed_bases.end());
+        std::vector<std::string> commit_list(commits.begin(), commits.end());
         json root;
         root["meta"] = {
-            { "commit", commit }, { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
+            { "commit", commit }, { "play_digest", play_digest },
+            { "pooled_commits", commit_list },   // the equivalence class of commits pooled here
+            { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
             { "seed_base", bases.empty() ? 0ULL : bases.front() },
             { "pooled_seed_bases", bases }, { "pooled_files", files_ok },
             { "R", effective_R }, { "max_mull", max_mull }, { "K", K }, { "equiv_seed", equiv_seed }

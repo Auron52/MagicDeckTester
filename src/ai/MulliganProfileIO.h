@@ -335,7 +335,8 @@ inline nlohmann::json ExhaustiveKeepToJsonObj(const ExhaustiveKeepPolicy& ek)
     e["max_mull"]          = ek.max_mull;
     e["effective_R"]       = ek.effective_R;
     e["bottoming_enabled"] = ek.bottoming_enabled;
-    if (!ek.commit.empty()) { e["commit"] = ek.commit; }
+    if (!ek.commit.empty())      { e["commit"]      = ek.commit; }
+    if (!ek.play_digest.empty()) { e["play_digest"] = ek.play_digest; }
     json buckets = json::array();
     for (const std::vector<std::string>& b : ek.buckets)
     {
@@ -372,6 +373,7 @@ inline ExhaustiveKeepPolicy ExhaustiveKeepFromJsonObj(const nlohmann::json& e)
     if (e.contains("effective_R"))       { ek.effective_R       = e["effective_R"].get<int>(); }
     if (e.contains("bottoming_enabled")) { ek.bottoming_enabled = e["bottoming_enabled"].get<bool>(); }
     if (e.contains("commit"))            { ek.commit            = e["commit"].get<std::string>(); }
+    if (e.contains("play_digest"))       { ek.play_digest       = e["play_digest"].get<std::string>(); }
     if (e.contains("buckets"))
         for (const json& b : e["buckets"])
         {
