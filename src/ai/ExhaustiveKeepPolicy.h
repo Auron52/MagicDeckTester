@@ -22,6 +22,13 @@ struct ExhaustiveKeepPolicy
     // subcomposition to KEEP after bottoming `mull` cards (sum = 7-mull). Empty => no bottoming table
     // (fall back to the heuristic). Populated only for mull >= 1.
     std::map<std::vector<int>, std::vector<std::vector<int>>> bottom_keep;
+    // Whether this profile's blind exhaustive bottoming should be USED at runtime (vs. falling through
+    // to lookahead/heuristic bottoming). Baked into the artifact: default OFF, because low-R bottoming
+    // is noise-limited (the argmin mis-ranks near-tie subhands) and loses to lookahead -- only a
+    // validated high-R profile sets this true. Overridable at play time by MTG_EXHAUSTIVE_BOTTOM
+    // (unset = follow this flag; 0 = force off; 1 = force on) for A/B. Keep is always presence-gated
+    // and independent of this flag.
+    bool        bottoming_enabled = false;
     // Provenance (audit/merge only; unused at decision time).
     std::string commit;
     int         effective_R = 0;

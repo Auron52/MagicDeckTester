@@ -7,6 +7,13 @@
 #include "KeepModelTrainer.h"
 #include "EquivalenceDiscovery.h"
 #include "ExhaustiveKeep.h"
+#include "../ai/AIEngine.h"
+#include "../runner/GoldFishRunner.h"
+#include "../core/HardwareConcurrency.h"
+#include <fstream>
+#include <atomic>
+#include <thread>
+#include <array>
 #include "../deck/DeckLoader.h"
 #include "../cards/CardDatabase.h"
 #include "../ai/MulliganProfileIO.h"
@@ -145,7 +152,103 @@ int main(int argc, char* argv[])
             if (const char* p = std::getenv("MTG_MERGE_OUT_PROFILE")) { out_profile = p; }
             if (const char* r = std::getenv("MTG_MERGE_OUT_RAW"))     { out_raw = r; }
             if (std::getenv("MTG_KEEP_NO_WRITE") != nullptr) { out_profile.clear(); out_raw.clear(); }
-            RunKeepMerge(std::cout, deck, profile, inputs, out_profile, out_raw);
+            const bool bottoming_enabled = []{ const char* s = std::getenv("MTG_KEEP_BOTTOMING");
+                                               return s && *s && std::string(s) != "0"; }();
+            RunKeepMerge(std::cout, deck, profile, inputs, out_profile, out_raw, bottoming_enabled);
+            return 0;
+        }
+
+        // Targeted comp-scorer (MTG_SCORE_COMPS): re-evaluate specific bucket compositions at high R
+        // to non-circularly check bottoming decisions (is the kept subhand truly blind-better?). Reads
+        // MTG_SCORE_FILE lines "H:c0,c1,...,cK-1" (hand size + per-bucket counts, bucket order = the
+        // profile's exhaustive_keep.buckets); prints "H:comp  draw_mean draw_se  play_mean play_se".
+        // Uses the deck's committed exhaustive profile for the bucket map. MTG_SCORE_R (default 400).
+        if (const char* e = std::getenv("MTG_SCORE_COMPS"); e && *e && std::string(e) != "0")
+        {
+            std::filesystem::path in_path =
+                deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
+            MulliganProfile profile = LoadDeckProfile(in_path);
+            const auto& buckets = profile.exhaustive_keep.buckets;
+            const int K = static_cast<int>(buckets.size());
+            std::map<std::string,int> bof;
+            for (int b = 0; b < K; ++b) { for (const std::string& n : buckets[b]) { bof[n] = b; } }
+            const int R = []{ const char* s = std::getenv("MTG_SCORE_R");
+                              return (s && *s) ? std::max(1, std::atoi(s)) : 400; }();
+            const int depth = []{ const char* s = std::getenv("MTG_EQUIV_DEPTH");
+                                  return (s && *s) ? std::max(0, std::atoi(s)) : 5; }();
+            const char* fp = std::getenv("MTG_SCORE_FILE");
+            std::ifstream fin(fp ? fp : "");
+            if (!fin) { std::cerr << "MTG_SCORE_FILE not readable\n"; return 1; }
+            MulliganProfile rp = profile; rp.keep_model = KeepModel{};
+            const bool second_main = GoldFishRunner::DeckUsesSecondMain(deck);
+
+            // Parse all comps up front so the (independent) per-comp evaluations can be threaded.
+            struct Item { std::string line; std::vector<int> comp; };
+            std::vector<Item> items;
+            std::string line;
+            while (std::getline(fin, line))
+            {
+                if (line.empty()) { continue; }
+                auto colon = line.find(':');
+                std::vector<int> comp; std::string rest = line.substr(colon + 1); std::size_t p = 0;
+                while (p < rest.size()) { std::size_t c = rest.find(',', p);
+                    comp.push_back(std::stoi(rest.substr(p, c - p)));
+                    if (c == std::string::npos) { break; } p = c + 1; }
+                comp.resize(K, 0);
+                items.push_back({ line, std::move(comp) });
+            }
+            std::vector<std::array<double, 4>> out(items.size(), { 0, 0, 0, 0 });  // dmean,dse,pmean,pse
+
+            std::atomic<int> next{0};
+            const std::map<std::string, int>& bofref = bof;   // const ref -> concurrent-safe find()
+            auto worker = [&]()
+            {
+                AIEngine ai(rp, depth, 20); ai.SetSearchPostCombat(second_main);
+                for (;;)
+                {
+                    int w = next.fetch_add(1);
+                    if (w >= static_cast<int>(items.size())) { break; }
+                    const std::vector<int>& comp = items[w].comp;
+                    for (int pd = 0; pd < 2; ++pd)
+                    {
+                        double sum = 0, sumsq = 0;
+                        for (int r = 0; r < R; ++r)
+                        {
+                            const uint64_t rs = 777'000'000ULL + 0x9E3779B97F4A7C15ULL * (r + 1)
+                                              + 100003ULL * static_cast<uint64_t>(pd);
+                            GameState s = GoldFishRunner::SetupGame(deck, rs);
+                            s.m_required_pieces = &rp.required_pieces;
+                            s.vial_target_mv    = rp.vial_target_mv;
+                            s.on_the_play       = (pd == 1);
+                            Player& ap = s.ActivePlayer(); ap.hand.clear();
+                            for (int b = 0; b < K; ++b) { int need = comp[b];
+                                for (std::size_t k = 0; k < ap.library.size() && need > 0; ) {
+                                    auto bit = bofref.find(ap.library[k].m_name.str());
+                                    if (bit != bofref.end() && bit->second == b)
+                                    { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin()+k); --need; }
+                                    else { ++k; } } }
+                            double wt = ai.RolloutKeepWinTurn(s, 0, max_turns);
+                            sum += wt; sumsq += wt*wt;
+                        }
+                        double mean = sum / R;
+                        double var  = R > 1 ? std::max(0.0, sumsq/R - mean*mean) : 0.0;
+                        out[w][pd * 2]     = mean;
+                        out[w][pd * 2 + 1] = R > 1 ? std::sqrt(var / R) : 0.0;
+                    }
+                }
+            };
+            int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
+                                                static_cast<int>(items.size())));
+            std::vector<std::thread> pool;
+            for (int t = 0; t < nthreads; ++t) { pool.emplace_back(worker); }
+            for (std::thread& th : pool) { th.join(); }
+
+            for (std::size_t i = 0; i < items.size(); ++i)
+            {
+                std::cout << items[i].line << "\t" << out[i][0] << " " << out[i][1] << "\t"
+                          << out[i][2] << " " << out[i][3] << "\n";
+            }
+            std::cout << std::flush;
             return 0;
         }
 
@@ -173,6 +276,8 @@ int main(int argc, char* argv[])
             cfg.equiv_seed = []{ const char* s = std::getenv("MTG_EQUIV_SEED");
                                  return (s && *s) ? std::strtoull(s, nullptr, 10) : 20260701ULL; }();
             cfg.max_turns = max_turns;
+            cfg.bottoming_enabled = []{ const char* s = std::getenv("MTG_KEEP_BOTTOMING");
+                                        return s && *s && std::string(s) != "0"; }();
             if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
             // Write the serialized keep policy + poolable raw sidecar next to the deck unless suppressed.
             if (std::getenv("MTG_KEEP_NO_WRITE") == nullptr)

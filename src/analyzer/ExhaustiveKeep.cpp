@@ -69,7 +69,8 @@ struct SizeTable
 ExhaustiveKeepPolicy BuildPolicyFromTables(
     const std::vector<SizeTable>& tables, const std::vector<int>& count,
     const std::vector<std::vector<std::string>>& bucket_members, int deck_size, int max_mull,
-    int effective_R, std::array<std::vector<double>, 2>* Dopt_out = nullptr)
+    int effective_R, bool bottoming_enabled = false,
+    std::array<std::vector<double>, 2>* Dopt_out = nullptr)
 {
     const int K = static_cast<int>(count.size());
     auto keep_val = [&](const std::vector<int>& h, int m, int pd) -> double
@@ -125,9 +126,10 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
     };
 
     ExhaustiveKeepPolicy ek;
-    ek.max_mull    = max_mull;
-    ek.effective_R = effective_R;
-    ek.buckets     = bucket_members;
+    ek.max_mull          = max_mull;
+    ek.effective_R       = effective_R;
+    ek.bottoming_enabled = bottoming_enabled;
+    ek.buckets           = bucket_members;
     for (std::size_t i = 0; i < H7.comps.size(); ++i)
     {
         std::vector<char> flags((max_mull + 1) * 2, 1);
@@ -481,7 +483,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (int b = 0; b < K; ++b) { bmembers.push_back(eq.classes[b].members); }
         ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
             tables, count, bmembers, static_cast<int>(deck.mainboard.size()),
-            cfg.max_mull, cfg.rollouts);
+            cfg.max_mull, cfg.rollouts, cfg.bottoming_enabled);
         ek.commit = cfg.commit;
         MulliganProfile out = profile;
         out.exhaustive_keep = std::move(ek);
@@ -556,7 +558,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 // BuildPolicyFromTables used in-run -> an identical serialized policy at the pooled R.
 void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                   const std::vector<std::string>& raw_paths,
-                  const std::string& out_profile, const std::string& out_raw)
+                  const std::string& out_profile, const std::string& out_raw,
+                  bool bottoming_enabled)
 {
     using json = nlohmann::json;
     if (raw_paths.empty()) { os << "merge: no raw sidecars given (set MTG_MERGE_INPUTS)\n"; return; }
@@ -690,7 +693,8 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
 
     std::array<std::vector<double>, 2> Dopt;
     ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
-        tables, count, buckets, static_cast<int>(deck.mainboard.size()), max_mull, effective_R, &Dopt);
+        tables, count, buckets, static_cast<int>(deck.mainboard.size()), max_mull, effective_R,
+        bottoming_enabled, &Dopt);
     ek.commit = commit;
     os << "merged policy: D_opt(draw)=" << Dopt[0][0] << "  D_opt(play)=" << Dopt[1][0]
        << "  (expected win-turn, optimal keep)\n";

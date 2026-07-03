@@ -722,11 +722,15 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     // Falls through when the policy is absent, has no bottoming table, or doesn't cover the hand, so
     // decks without an exhaustive policy are byte-identical. Consistent with KeepHand's Decide consult.
     //
-    // OPT-IN via MTG_EXHAUSTIVE_BOTTOM (default OFF): shipping an exhaustive KEEP policy must not
-    // silently change bottoming, and the keep A/B needs bottoming held identical (lookahead on both
-    // sides). The bottoming A/B toggles this flag to compare blind-exhaustive vs clairvoyant lookahead.
-    static const bool exhaustive_bottom = []
-    { const char* e = std::getenv("MTG_EXHAUSTIVE_BOTTOM"); return e && *e && std::string(e) != "0"; }();
+    // Whether to use it is driven by the PROFILE's bottoming_enabled flag (baked in at generation:
+    // off for low-R/noise-limited profiles, on for validated high-R ones). MTG_EXHAUSTIVE_BOTTOM is a
+    // 3-state A/B override: unset => follow the profile flag; "0" => force off; else => force on. Keep
+    // is presence-gated and independent of this, so a profile with bottoming off still uses its keep.
+    static const int bottom_override = []
+    { const char* e = std::getenv("MTG_EXHAUSTIVE_BOTTOM");
+      if (!e || !*e) { return -1; } return std::string(e) == "0" ? 0 : 1; }();
+    const bool exhaustive_bottom = (bottom_override >= 0) ? (bottom_override == 1)
+                                                          : m_profile.exhaustive_keep.bottoming_enabled;
     if (exhaustive_bottom && !m_profile.exhaustive_keep.empty())
     {
         std::vector<std::string> names;

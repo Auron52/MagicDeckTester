@@ -33,6 +33,10 @@ struct ExhaustiveKeepConfig
                                         // clustering is byte-identical everywhere (decoupled from the
                                         // rollout seed, so pooled runs share buckets but not rollouts).
     int      max_turns = 8;
+    bool     bottoming_enabled = false;  // bake into the written profile: use blind exhaustive bottoming
+                                         // at runtime? default OFF (low-R bottoming is noise-limited and
+                                         // loses to lookahead) -- set true only for a validated high-R
+                                         // profile. From MTG_KEEP_BOTTOMING. Keep is always on regardless.
     std::string out_profile;    // if set, write the serialized keep policy (base profile + table) here
     std::string out_raw;        // if set, write the poolable raw sum+count sidecar (for cross-machine merge)
     std::string commit;         // play-logic identity stamped into the raw sidecar (from MTG_COMMIT)
@@ -52,4 +56,5 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 // combining a second machine's rollouts with this one's. Driven by MTG_KEEP_MERGE / MTG_MERGE_INPUTS.
 void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                   const std::vector<std::string>& raw_paths,
-                  const std::string& out_profile, const std::string& out_raw);
+                  const std::string& out_profile, const std::string& out_raw,
+                  bool bottoming_enabled = false);
