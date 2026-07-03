@@ -905,7 +905,7 @@
             ],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}: Add {C}.\n{T}: Add {R} or {G}. Each opponent gains 1 life. [Modelled as an R/G dual whose every (coloured) tap makes the opponent gain 1 -> a 1-damage drip with Tainted Remedy out. The colourless-only {C} mode (no lifegain) is not modelled; the engine always taps it for R/G, so the drip applies to every tap (a slight overcount of the drip, only relevant under Remedy).]",
+            "oracle_text": "{T}: Add {C}.\n{T}: Add {R} or {G}. Each opponent gains 1 life. [Both modes modelled. A COLOURED tap ({R}/{G}, needed for a coloured pip) makes the opponent gain 1 -> a 1-damage drip with Tainted Remedy out. A GENERIC pip uses the painless {C} mode (no lifegain) unless a Remedy is active, in which case the drip is beneficial (1 damage) so the coloured mode is taken. Leftover untapped drip lands are still swept each turn under a Remedy (TapDripLandsForRemedy). The rare true {C} pip is not paid by Grove (it counts only as R/G in the pool), a minor gap.]",
             "template": "basic_land",
             "parameters": {
                 "produces": [

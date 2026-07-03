@@ -2234,9 +2234,10 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
         p.tapped = true;
         DecrementDepletionOnTap(p);
         if (def.params.tap_self_damage > 0) { ap.life -= def.params.tap_self_damage; }
-        // Grove of the Burnwillows: each coloured tap makes the opponent gain 1 (-> 1 damage
-        // with Tainted Remedy out). Mirrors TurnSolver's tap_source.
-        if (def.params.tap_opponent_lifegain > 0)
+        // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
+        // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
+        // no drip (see DripLandAnyPipColor). Mirrors TurnSolver's tap_source.
+        if (def.params.tap_opponent_lifegain > 0 && col != Color::Colorless)
         { OpponentGainsLife(state, state.active_player_index, def.params.tap_opponent_lifegain); }
         // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
         // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
@@ -2313,7 +2314,7 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
             if (best_kind == 1)
             {
                 const std::vector<Color>& prod = EffectiveProduces(state, active, *bdef);
-                tap_source(bp, *bdef, any ? prod[0] : needed);
+                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, prod[0]) : needed);
                 return true;
             }
             if (best_kind == 3)
@@ -2367,7 +2368,7 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
             if (any)
             {
                 if (prod.empty()) { continue; }
-                col = prod[0];
+                col = DripLandAnyPipColor(state, active, *def, prod[0]);  // Grove {C} mode for generic
             }
             else
             {

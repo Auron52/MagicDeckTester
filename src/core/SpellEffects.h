@@ -214,6 +214,24 @@ inline void TapDripLandsForRemedy(GameState& state, int controller_index)
     }
 }
 
+// Colour a Grove-of-the-Burnwillows-style drip land (tap_opponent_lifegain > 0) should produce
+// when tapped for a GENERIC (any-colour) pip. Grove has two abilities: "{T}: Add {C}" (painless)
+// and "{T}: Add {R} or {G}. Each opponent gains 1 life." A generic pip only needs {C}, so absent a
+// Remedy we tap the painless {C} mode -- Colorless signals "no drip" to tap_source. When a Remedy
+// is active the opponent's "gain 1" is reversed into 1 DAMAGE (see OpponentGainsLife), so the drip
+// is BENEFICIAL and we keep tapping the coloured mode (`colored_pick`) to fire it. A non-drip land
+// (every source in every other deck) always returns `colored_pick`, so this is inert outside
+// Anti-Lifegain. Specific coloured pips (R/G) never route through here -- they always tap coloured
+// and drip (the real, unavoidable cost of that colour). Shared by both tap_source lambdas
+// (TurnSolver + AIEngine) so the rollout and executor pick identical colours (lockstep).
+inline Color DripLandAnyPipColor(const GameState& state, int active,
+                                 const CardDefinition& def, Color colored_pick)
+{
+    if (def.params.tap_opponent_lifegain > 0 && !RemedyActive(state, active))
+    { return Color::Colorless; }
+    return colored_pick;
+}
+
 // True if `controller_index` controls a permanent with the given subtype (e.g. "Forest").
 // Backs the alt-cost condition "If you control a Forest, rather than pay this spell's mana
 // cost ...". Land subtypes (Forest/Plains/...) are stored in the card's m_subtypes.
@@ -3000,8 +3018,10 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         const int opp_life_snap = state.players[1 - active].life;   // for tap_opponent_lifegain undo
         const bool oll_snap = state.opponent_lost_life_this_turn;
 
-        // Physically tap source i, recurse with `next` floating, undo on failure.
-        auto activate = [&](const ManaPool& next) -> bool
+        // Physically tap source i, recurse with `next` floating, undo on failure. `drip_ok` is
+        // false for a Grove-style drip land's painless "{T}: Add {C}" branch (a generic pip absent
+        // a Remedy) so it does not pay the opponent life; its {R}/{G} branches leave it true.
+        auto activate = [&](const ManaPool& next, bool drip_ok = true) -> bool
         {
             state.battlefield[i].tapped = true;
             DecrementDepletionOnTap(state.battlefield[i]);
@@ -3009,7 +3029,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             { state.players[active].life -= def->params.tap_self_damage; }
             // Grove of the Burnwillows drip (opponent gains -> loses with Remedy). Restored
             // below on failure alongside the active player's life.
-            if (def->params.tap_opponent_lifegain > 0)
+            if (drip_ok && def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
             if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
                                     tapped_mask | (1ull << i),
@@ -3062,6 +3082,13 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             }
             else
             {
+                // Grove-style drip land: try the painless "{T}: Add {C}" mode FIRST (no drip) so a
+                // GENERIC pip never pays the opponent life. A coloured pip falls through to the
+                // {R}/{G} branches below (which drip -- the real cost of that colour). Under a Remedy
+                // the drip is +1 damage, so skip {C} mode and keep only the coloured branches (matches
+                // the end-of-main TapDripLandsForRemedy sweep). Inert for every non-drip land.
+                if (def->params.tap_opponent_lifegain > 0 && !RemedyActive(state, active))
+                { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f, /*drip_ok=*/false)) { return true; } }
                 for (Color c : produces)
                 { ManaPool f = floating; f.Add(c, amt); if (activate(f)) { return true; } }
             }

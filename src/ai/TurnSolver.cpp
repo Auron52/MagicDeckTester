@@ -1619,9 +1619,11 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
         p.tapped = true;
         DecrementDepletionOnTap(p);
         if (def.params.tap_self_damage > 0) { state.players[active].life -= def.params.tap_self_damage; }
-        // Grove of the Burnwillows: each coloured tap makes the opponent gain 1 (-> 1 damage
-        // with Tainted Remedy out). Mirrored in AIEngine::TapForCost and TapForCostBacktrack.
-        if (def.params.tap_opponent_lifegain > 0)
+        // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
+        // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
+        // no drip (see DripLandAnyPipColor: a generic pip absent a Remedy routes here as Colorless).
+        // Mirrored in AIEngine::TapForCost and TapForCostBacktrack.
+        if (def.params.tap_opponent_lifegain > 0 && col != Color::Colorless)
         { OpponentGainsLife(state, active, def.params.tap_opponent_lifegain); }
         // A Karoo bounce land (Izzet Boilerworks) makes TWO mana of DIFFERENT colours from one tap
         // ({U}{R}). Crediting `amt` of the single matched colour loses the second colour, so a lone
@@ -1697,7 +1699,7 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
             if (best_kind == 1)
             {
                 const std::vector<Color>& prod = EffectiveProduces(state, active, *bdef);
-                tap_source(bp, *bdef, any ? prod[0] : needed);
+                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, prod[0]) : needed);
                 return true;
             }
             if (best_kind == 3)
@@ -1748,7 +1750,7 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
             if (any)
             {
                 if (prod.empty()) { continue; }
-                col = prod[0];
+                col = DripLandAnyPipColor(state, active, *def, prod[0]);  // Grove {C} mode for generic
             }
             else
             {
