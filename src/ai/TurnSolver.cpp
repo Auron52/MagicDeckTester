@@ -829,8 +829,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // opponent life), so the search-primary A/B (and human play) must be able to weigh
             // not-firing it. When opened here, the auto-fire pass is suppressed (gated on the same
             // DecisionUnpruned), so the choice is made exactly once, by the search/human.
-            if (ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def)
-                || DecisionUnpruned())
+            // A targeted alt-payload (Invigorate: "target creature") is uncastable with no legal
+            // target (CR 601.2c) -- gate the emission on a target existing, but still `continue`
+            // below so a Forest-controlled payload is never re-emitted as a hard-cast.
+            if ((ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def)
+                 || DecisionUnpruned())
+                && AltPayloadTargetLegal(state, def))
             {
                 constexpr int DMG = 100;
                 Action a;

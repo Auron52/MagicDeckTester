@@ -533,6 +533,24 @@ inline int FindLifegainRemovalTarget(const GameState& state, int active)
     return best;
 }
 
+// A spell that requires a target is UNCASTABLE with no legal target (CR 601.2c: choosing
+// targets is part of casting; a spell with no legal target cannot be put on the stack). This
+// gates every alt-cost payload's cast so we never emit a targetless line. Keyed on the spell's
+// targeting mode, not on a card name, so it is generic: among the current alt-cost payloads only
+// creature-targeted ones (Invigorate, "target creature") need a target -- Skyshroud Cutter (a
+// creature that just enters) and Reverent Silence (destroy-all) take none, so they pass trivially.
+// "Target creature" is any creature on the battlefield (own OR opponent); the model's
+// target_own_creature is a RESOLUTION heuristic (which creature to pump), not a legality bound.
+inline bool AltPayloadTargetLegal(const GameState& state, const CardDefinition& def)
+{
+    if (def.params.targeting != Targeting::Creature) { return true; }   // no target to satisfy
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.IsCreature()) { return true; }
+    }
+    return false;
+}
+
 // True if a free alt-cost payload `def` in `controller_index`'s hand should be AUTO-FIRED now:
 // it has an alt lifegain cost, is SAFE (not Reverent's destroy-all-enchantments, which stays a
 // search decision), a Remedy is active so the opponent's "gain" becomes damage, the alt-cost
@@ -548,6 +566,7 @@ inline bool CanAutoFireAltPayload(const GameState& state, int controller_index,
     if (def.params.destroy_all_enchantments)      { return false; }   // risky -> searched
     if (!RemedyActive(state, controller_index))   { return false; }
     if (!ControlsSubtype(state, controller_index, def.params.alt_cost_requires_subtype)) { return false; }
+    if (!AltPayloadTargetLegal(state, def)) { return false; }   // uncastable with no legal target
     if (def.params.target_own_creature && FindBestOwnAttacker(state, controller_index) < 0) { return false; }
     return true;
 }
