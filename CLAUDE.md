@@ -118,6 +118,16 @@ Read `.claude/skills/regression-testing.md` and [run / accept / A/B / extend] ..
 
 Key points it covers: the three modes (smoke < 15 min, regression < 45 min, overnight < 8 h) with disjoint seeds; reading the `<games_won>/<avg_win_turn>` fingerprint and per-case logs/timings; the **accept flow** (`regression.sh <mode> --accept` promotes an inspected run into ground truth — never hand-edit or re-run to regenerate); using the suite itself as the A/B harness; and how to add a deck within the shared per-mode time budgets.
 
+## Heuristic Optimization Skill
+
+When the user asks to **optimize / tune / improve a decision heuristic**, **try different orderings or weights**, or **make a decision empirically "searched"** (offline variant testing, not in-play search), read `.claude/skills/heuristic-optimization.md` first. It is the authoritative guide for AI-driven, empirically-measured optimization of the engine's judgment heuristics — the choices the in-play search can't cover (mana-source tap order, cast order, attack/block shortcuts).
+
+```
+Read `.claude/skills/heuristic-optimization.md` and [propose variants / sweep / adopt] ...
+```
+
+**Rule 0 it enforces:** this is for HEURISTIC judgment (no correct answer, only measurably-better), NOT correctness/modeling bugs — if the engine models a card or rule wrong, that is a bug to fix against the MTG Rules skill, not a heuristic to tune. The skill drives the loop: AI authors motivated variants, exposes them behind a temporary runtime selector, sweeps the regression suite (train seeds) for win%/avg-win-turn, validates the winner on held-out (overnight) seeds, **reports the decision to the user**, and adopts only on approval — in the archetype provider, never the root. The value proposition: the alternative is a human inventing every ordering/constant; here AI proposes and the harness decides. Its worked example (measurement refuting an intuitive "rank Grove last" simplification) shows why you measure instead of assume.
+
 ## Mulligan Profile Generation Skill
 
 When the user asks to **generate / regenerate / pool / A-B / adopt a mulligan (keep or bottom) profile**, or to **hand profile generation to the secondary machine**, read `.claude/skills/mulligan-profile.md` first. It is the authoritative guide for the **exhaustive bucketed mulligan profile** — the separate, expensive, hand-off-able mulligan stage (distinct from `analyze-deck`, which does cards/coverage/play).
