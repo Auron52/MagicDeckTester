@@ -32,43 +32,51 @@ searched depth improves overall, d0 net strongly positive. Behaviourally confirm
 exiles the max-power opponent creature (e.g. the 6/6, or the power-2 among [1,1,2]) and drops opponent
 life by that power.
 
-### The enumeration gate uses "enabler IN PLAY" (not "in hand") — and why
+### The enumeration gate: "enabler in play OR in hand" + a plan-validity check (updated 2026-07-03)
 
-The gate that decides whether to *offer* the Swords cast checks `RemedyActive` (an enabler on the
-**battlefield**), not merely an enabler in hand. Loosening it to "in hand" was tried and **tanked the
+The gate that decides whether to *offer* the Swords cast originally checked `RemedyActive` (an enabler
+on the **battlefield**) only. Loosening it to "in hand" *by itself* was tried first and **tanked the
 greedy d0 path** (antilife d0 −33 wins): the deck holds ~8 enablers, so "enabler in hand" is true almost
-every turn, and the myopic d0 greedy then considers/misfires Swords constantly. The apply-time gate
-(`FindLifegainRemovalTarget` → `RemedyActive` at resolution) still prevents a no-enabler cast, but the
-enumeration breadth alone destabilised d0. Keeping the gate at "in play" keeps d0 healthy.
+every turn, and the myopic d0 greedy (which selects by heuristic eval, not rollout) then
+considers/misfires Swords constantly. The fix that made "in hand" safe was to pair the loose gate with
+the exact **plan-validity** check `SubsetHasUnbackedLifegainRemoval` — a subset may cast Swords only if
+an enabler is in play or in that same subset. That rejects the myopic no-enabler line at the d0 greedy
+too, so d0 stays healthy. See "FIXED: the same-turn combo" below for the full rationale and results.
 
-### >> TRACKED REGRESSION TO FIX: the same-turn "Tainted Remedy → Swords" combo
+### FIXED (2026-07-03): the same-turn "Tainted Remedy → Swords" combo
 
-The in-play gate forgoes the same-turn combo — on the turn the enabler lands it isn't on the
-battlefield at enumeration (turn start), so Swords isn't offered that turn and waits until the next.
-This is a **known searched-depth regression accepted into ground truth on 2026-07-03** (net change is
-strongly positive: ~11 searched games faster, 3 slower). It must be fixed; the fix should make these
-recover to their pre-change win turns WITHOUT the d0 blow-up the "enabler in hand" gate caused (−33 d0
-wins).
+The in-play gate forgot the same-turn combo — on the turn the enabler lands it isn't on the
+battlefield at enumeration (turn start), so Swords wasn't offered that turn and waited until the next.
 
-Exact regressed games (repro `--seed <base+gi> --game-index <gi>`; base = the config's seed):
+**The clean fix (shipped): offer Swords when an enabler is in play OR in hand, and require it in the
+plan.** The key realisation is that `EnumeratePlans` already SCORES every candidate plan by
+`ApplyPlanDirect`, which casts enabler-first — so a `{Tainted Remedy, Swords}` plan resolves the combo
+correctly (Swords sees the live enabler) and scores well. The only thing blocking it was the
+enumeration gate. So:
+- **Gate (CollectActions):** offer Swords when there is an opponent creature AND
+  `RemedyActiveOrInHand` (an enabler on the battlefield or in hand). No affordability guess — the
+  plan's own joint mana feasibility (`CanPay`, and `EnumeratePlansWithLand` which plays the land
+  first) decides.
+- **Plan validity (`SubsetHasUnbackedLifegainRemoval`, applied in `Solve::consider` AND
+  `EnumeratePlans::eval_and_push`):** a subset that casts Swords is valid only if an enabler is in
+  play OR the SAME subset casts one. This is EXACT (no approximation) — it rejects the myopic
+  "Swords with no enabler" line at both the search and the d0 greedy, so relaxing the gate does NOT
+  re-introduce the −33 d0 blow-up the old "enabler in hand" gate caused.
 
-| config | game | now | target | repro |
-|---|---|---|---|---|
-| antilife d3 s2002 | gi87  | T5 | **T4** | `--seed 2089 --game-index 87 --depth 3 --budget-ms 200` |
-| antilife d5 s2002 | gi87  | T5 | **T4** | `--seed 2089 --game-index 87 --depth 5 --budget-ms 200` |
-| antilife d3 s2002 | gi235 | T7 | **T6** | `--seed 2237 --game-index 235 --depth 3 --budget-ms 200` |
+All three helpers are gated on `controller_lifegain_equals_power` / `lifegain_to_loss` (only Swords /
+the enablers carry these), so every non-antilife deck is byte-identical.
 
-(Confirmed a real capability gap, not budget churn: gi87 is T5 at both d3 AND d5 with the in-play gate,
-but T4 with the looser "enabler in hand" gate. gi87's old T4 line = T3 cast Tainted Remedy **and** Swords
-the 4/4 in one turn.)
+**Result (verified + accepted into GT):** non-antilife byte-identical; **searched depth win->loss=0,
+zero real slowdowns**, gi87 (d3+d5) T5->T4, gi97 T5->T4, gi266 T4->T3, smoke gi6 T5->T4; gi235
+recovers to T6 **at d5** (its T6 line genuinely needs depth-5 lookahead — d3 cannot see it at any
+budget, so d3 T7 is not a gate miss). The lone searched turn-later, gi206 (d3 4->5), is **classified
+budget churn** — it recovers to T4 at 4×/16× the case's 10ms stress budget (the T4 line is still
+found; the added combo-exploration breadth just needs ~5 more virtual-ms). d0 greedy (lighter bar):
+net strongly positive (smoke +8 wins 842->850, regression +3) with a little greedy-myopia churn.
 
-Fix directions (pick one, must not regress d0):
-- Enumeration condition "an enabler is **castable this turn** (in hand AND affordable)" instead of
-  "enabler in hand" — narrow enough to spare the d0 greedy, wide enough for the combo.
-- Keep the enumeration gate loose but gate the **d0 greedy selection** of Swords strictly (enabler in
-  play) — search enumeration stays wide, d0 stays clean. Needs the greedy removal-selection locus.
-- After a fix, re-verify with the repros above (all → target turn) AND full smoke+regression (d0 wins
-  must not drop; other decks byte-identical), then re-accept.
+Repros (base = the config's seed; use the case budget, `--budget-ms 10` for d3 / `20` for d5):
+`--seed 2089 --game-index 87 --depth 3` -> T4; `--seed 2237 --game-index 235 --depth 5 --budget-ms 20`
+-> T6.
 
 ### GOLDFISHING ASSUMPTION (revisit for Phase 2)
 

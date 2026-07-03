@@ -586,6 +586,58 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
     return DMG;  // fallback for other spell types
 }
 
+// True if the active player controls no opponent creature to exile (used by the Swords gate).
+static bool HasOpponentCreature(const GameState& state, int active)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active && p.card.IsCreature()) { return true; }
+    }
+    return false;
+}
+
+// True if a lifegain->loss enabler (Tainted Remedy / Plague Drone) is on the battlefield OR in the
+// active player's hand. The Swords-to-Plowshares enumeration gate uses this so it also OFFERS the
+// same-turn "enabler -> Swords" combo: on the turn the enabler lands it is not yet on the
+// battlefield at enumeration (turn start), so the strict RemedyActive gate would defer Swords a
+// turn. Emitting it here is safe because plan validity (SubsetHasUnbackedLifegainRemoval) still
+// requires the enabler to actually be in the plan, and the rollout casts it enabler-first, so
+// Swords never resolves without a live enabler (which would just hand the passive opponent life).
+static bool RemedyActiveOrInHand(const GameState& state, int active)
+{
+    if (RemedyActive(state, active)) { return true; }
+    for (const Card& c : state.players[active].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.lifegain_to_loss) { return true; }
+    }
+    return false;
+}
+
+// Plan-validity gate for Swords to Plowshares (controller_lifegain_equals_power): its exile-
+// lifegain rider only helps once a lifegain->loss enabler is live when it resolves. A subset that
+// casts Swords is valid ONLY if an enabler is already in play OR the SAME subset casts one
+// (enabler-first ordering resolves it before Swords). This rejects the myopic "Swords with no
+// enabler" line (which would hand a passive opponent life) at BOTH the d0 greedy (Solve::consider)
+// and the search (EnumeratePlans), so the enumeration gate can offer the same-turn combo without
+// the enabler being on the battlefield at turn start. Inert for every deck without Swords.
+static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
+                                             const std::vector<Action>& cands,
+                                             const std::vector<int>& sel)
+{
+    bool has_removal = false, has_enabler = false;
+    for (int j : sel)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (!d) { continue; }
+        if (d->params.controller_lifegain_equals_power) { has_removal = true; }
+        if (d->params.lifegain_to_loss)                 { has_enabler = true; }
+    }
+    if (!has_removal)                                   { return false; }
+    if (RemedyActive(state, state.active_player_index)) { return false; }
+    return !has_enabler;   // removal present, no enabler live and none cast this turn -> unbacked
+}
+
 // ---- CollectActions ------------------------------------------------------
 //
 // The single enumeration of action SOURCES, shared by Solve and EnumeratePlans.
@@ -648,13 +700,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             continue;
         }
         // Goldfishing gate (Swords to Plowshares): its controller-lifegain rider only HELPS us with a
-        // lifegain->loss enabler in play (else it just gives the passive opponent life). Don't offer the
-        // cast without an enabler on board + an opponent creature to exile -- FindLifegainRemovalTarget
-        // returns -1 for either miss. Gating on "enabler in play" (not merely in hand) keeps the greedy
-        // d0 path healthy; the cost is the same-turn "Tainted Remedy, then Swords" combo, which this
-        // forgoes (deferred -- see docs/design/antilifegain-swords-targeting.md). Goldfishing assumption.
+        // lifegain->loss enabler live when it resolves (else it just gives the passive opponent life).
+        // Offer the cast when there is an opponent creature to exile AND an enabler is available this
+        // turn -- in play, OR in hand (cast enabler-first, so it resolves before Swords). Emitting the
+        // in-hand case lets the search find the same-turn "Tainted Remedy, then Swords" combo (a
+        // strictly-faster line the old "enabler in play at turn start" gate forwent). Plan validity
+        // (SubsetHasUnbackedLifegainRemoval, applied in Solve::consider + EnumeratePlans) still requires
+        // the enabler to be in the plan, and ApplyPlanDirect casts it first, so Swords never resolves
+        // for the passive opponent's benefit -- protecting the greedy d0 path too. Goldfishing assumption.
         if (def.params.controller_lifegain_equals_power
-            && FindLifegainRemovalTarget(state, state.active_player_index) < 0)
+            && (!HasOpponentCreature(state, state.active_player_index)
+                || !RemedyActiveOrInHand(state, state.active_player_index)))
         {
             continue;
         }
@@ -1149,6 +1205,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     auto consider = [&](std::vector<int> sel)
     {
         std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
+        // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
+        // for every deck without controller_lifegain_equals_power.
+        if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
 
@@ -3875,6 +3934,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
     {
+        // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
+        // for every deck without controller_lifegain_equals_power.
+        if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
         for (int j : sel)
         {
