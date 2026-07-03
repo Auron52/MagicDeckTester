@@ -61,6 +61,11 @@ public:
     bool CastEnablerFirst(const GameState&, const std::string&) const override;
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // Remedy-aware ordering of Grove-of-the-Burnwillows-style drip lands (tap_opponent_lifegain > 0):
+    // its coloured tap gifts the opponent 1 life -- a cost without a Remedy (tap it LAST among equals so
+    // a painless source is spent first), a benefit with one (1 damage -> tap it FIRST). Base rank from
+    // GenericProvider; the nudge is archetype logic, kept out of the root ManaSourceRank.
+    int  ManaSourceRank(const GameState&, const CardDefinition&) const override;
     // Exalted-aware attack declaration: a 0-power, no-attack-trigger dork must NOT swing alongside a
     // real attacker (it deals nothing and breaks the lone-attacker Exalted bonus from Ignoble
     // Hierarch); it attacks only as the sole eligible creature (to switch Exalted on / carry an

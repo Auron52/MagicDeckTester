@@ -365,6 +365,21 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
     return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
 }
 
+int AntiLifegainProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    int rank = GenericProvider::ManaSourceRank(s, def);
+    // Grove of the Burnwillows-style drip land (tap_opponent_lifegain > 0): its coloured tap gifts the
+    // opponent 1 life. The scarcity path only lands a drip land here for a COLOURED pip -- generic pips
+    // take its painless {C} mode (see DripLandAnyPipColor) -- so this nudge only bites when the tap
+    // would actually drip. Absent a Remedy the gift costs us: break ties AGAINST it (+1) so an equally-
+    // flexible painless source (e.g. Stomping Ground for a red pip) is spent first and the drip land is
+    // spared. With a Remedy the "gain 1" is reversed into 1 DAMAGE, so we WANT to tap it: break ties FOR
+    // it (-1). Archetype logic -- deliberately kept out of the root GenericProvider::ManaSourceRank.
+    if (def.params.tap_opponent_lifegain > 0)
+    { rank += ::RemedyActive(s, s.active_player_index) ? -1 : 1; }
+    return rank;
+}
+
 // Effective ATTACKING power of a permanent, computed like the combat sites (PendingAttackDamage /
 // SimulateCombat / GameEngine): base + temp pump (Invigorate) + counters + lord anthem + animate +
 // dynamic. Used only to decide whether swinging a creature adds damage.

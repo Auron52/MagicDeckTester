@@ -2262,11 +2262,12 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
         { ManaPool probe = floating;
           if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed)) { return true; } }
 
-        // Scarcity-first source selection (MTG_TAP_SCARCITY): pick the LEAST-flexible qualifying
-        // source for this pip so rainbow sources stay up; filters rank between duals and tri and are
-        // candidates only when feedable now. Default off -> the battlefield-order 4-step path below
-        // runs and the suite is byte-identical. Ramp filters (rare) are left to the default path /
-        // backtracker, which stays the complete fallback either way. Mirror in TurnSolver::TapForCostDirect.
+        // Scarcity-first source selection (default ON; MTG_TAP_LEGACY opts OUT to the battlefield-order
+        // 4-step path below, a byte-identical A/B baseline): pick the LEAST-flexible qualifying source
+        // for this pip (via ManaSourceRank, lower = earlier) so rainbow sources stay up; filters rank
+        // between duals and tri and are candidates only when feedable now. Ramp filters (rare) are left
+        // to the legacy path / backtracker, the complete fallback either way. Mirror in
+        // TurnSolver::TapForCostDirect.
         if (TapScarcityEnabled())
         {
             const int bn = static_cast<int>(state.battlefield.size());

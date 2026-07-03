@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 08da631  date 2026-07-03
+# Regression ground truth -- commit 557c965  date 2026-07-03
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -16,9 +16,9 @@ th_smoke_d5_s1001=75/4.09333/e8842613eefbdfd1
 knights_smoke_d0_s1001=1000/4.646/4360865c11b9257f
 knights_smoke_d3_s1001=250/4.392/5fd8d96da60bf042
 knights_smoke_d5_s1001=150/4.36/2c6fece4acf412f3
-antilife_smoke_d0_s1001=854/5.5726/32feb589216f4a22
-antilife_smoke_d3_s1001=250/4.156/9c91a687a4634b04
-antilife_smoke_d5_s1001=150/4.10667/2ee969493a5d302c
+antilife_smoke_d0_s1001=854/5.56792/2630c56e8902b63d
+antilife_smoke_d3_s1001=250/4.152/2e3f1eca3a5a647b
+antilife_smoke_d5_s1001=150/4.1/e0c468d53be91f9b
 hinata_smoke_d0_s1001=509/6.85658/5baf0be5c6d73b25
 hinata_smoke_d3_s1001=145/5.7931/936954439336d180
 hinata_smoke_d5_s1001=71/5.83099/a6285100273243dd
@@ -44,11 +44,11 @@ knights_regression_d3_s2002=300/4.33/d00d7fca29ebb5ff
 knights_regression_d3_s3003=300/4.32333/b233fe7e2db1e8ee
 knights_regression_d5_s2002=250/4.308/8edb21408e3a1951
 knights_regression_d5_s3003=250/4.336/fd08d976159eaaf2
-antilife_regression_d0_s2002=854/5.62763/50ba56d31ff044ef
-antilife_regression_d3_s2002=300/4.14667/f693c2b144988854
-antilife_regression_d3_s3003=299/4.14381/5c17ab9c137c2170
-antilife_regression_d5_s2002=250/4.148/d49784ca5d3ac582
-antilife_regression_d5_s3003=249/4.15663/a2bd094a28667808
+antilife_regression_d0_s2002=855/5.62339/3ac27adf1df8b87d
+antilife_regression_d3_s2002=300/4.14667/ed7a3948060ba847
+antilife_regression_d3_s3003=299/4.14381/a7aa61faad191c5b
+antilife_regression_d5_s2002=250/4.148/f2d7c8bd8b4ceb15
+antilife_regression_d5_s3003=249/4.15663/8fc7c09158a78919
 hinata_regression_d0_s2002=501/6.83832/444e5ae0c04ce0fc
 hinata_regression_d3_s2002=190/5.82105/9d7fb94ebb716db3
 hinata_regression_d3_s3003=187/5.85561/5efb6fe1ae635eef
