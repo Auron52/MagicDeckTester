@@ -731,7 +731,12 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
       if (!e || !*e) { return -1; } return std::string(e) == "0" ? 0 : 1; }();
     const bool exhaustive_bottom = (bottom_override >= 0) ? (bottom_override == 1)
                                                           : m_profile.exhaustive_keep.bottoming_enabled;
-    if (exhaustive_bottom && !m_profile.exhaustive_keep.empty())
+    // Defer to a forced-mulligan replay (must bottom the EXACT recorded cards) and to an external
+    // bottom chooser (claude-play / human-play drives the pick) -- the exhaustive table is an
+    // AUTONOMOUS bottomer, so it stands down whenever a replay or a human is in control, exactly as the
+    // lookahead/heuristic path below guards itself with !m_forced_mull_active.
+    if (exhaustive_bottom && !m_profile.exhaustive_keep.empty()
+        && !m_forced_mull_active && !m_external_bottom_chooser)
     {
         std::vector<std::string> names;
         names.reserve(ap.hand.size());
