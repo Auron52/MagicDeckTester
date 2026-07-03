@@ -134,6 +134,19 @@ override was deleted. A knob that started combo-specific ended up a default-prov
    tapping it first to spare the drip land *is* locally better. A static rank can't see
    that; capturing it needs in-play search of the tap choice. Record the loss, don't hide it.
 
+**Attempt 4 — the situational rule, built and measured, then discarded.** A conservative
+`HasIdleManaCreature` signal (0-power dork, *no* pump in hand, *no* Exalted) gated the
+spare-the-drip-land flip behind `!OpponentLifegainUseful`. A/B: **safe but sub-noise** —
+zero regressions, 0 searched-depth turn changes across both seed sets, one d0 game a turn
+faster. It fires too rarely to matter: Anti-Lifegain's action turns almost always have a
+pump or Exalted online, so the dork isn't "idle," and when it *is* the turn is low-stakes.
+**Decision: discarded** (below the noise floor + added complexity; the static rule already
+captures essentially all of it). Two takeaways: (a) a measured-safe-but-marginal result is
+a *reject*, not a ship — complexity has to earn its place; and (b) **spend effort where the
+value is** — the high-value mechanic for this deck isn't the tap-order micro-optimization,
+it's the recurring drip itself (`TapDripLandsIfUseful`: 1 damage per drip land per turn
+under an enabler), which is the win condition and already in place.
+
 ## Secondary example — sweeping the generic tiers
 
 Reordering `GenericProvider`'s tiers themselves (V1 dual-before-mono, V2 flat colored, V3
