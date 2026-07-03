@@ -84,3 +84,7 @@ test/regression_result_*.txt
 test/logs/
 test/results/
 test/ab_scratch/
+
+# Python bytecode cache
+__pycache__/
+*.pyc

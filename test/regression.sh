@@ -151,6 +151,19 @@ if [ "$ACCEPT" = 1 ]; then
       cp "$LOGDIR/wins/${key}.wins" "test/gt_logs/${key}.wins"; promoted=$((promoted+1))
     fi
   done
+  # Save the binary that produced these accepted results as the per-mode BASELINE, so the next
+  # run's audit can diff current-vs-baseline per game (explain_game.py) with no rebuild. The run
+  # snapshotted its exact binary to $LOGDIR/mtg.run (dirty-state-safe); it now IS the baseline.
+  # Under logs/snapshots/ (gitignored): a fresh clone lacks it and explain_game falls back to the
+  # NEW-line-only view until the first local --accept re-creates it.
+  if [ -f "$LOGDIR/mtg.run" ]; then
+    mkdir -p logs/snapshots
+    cp -f "$LOGDIR/mtg.run" "logs/snapshots/${MODE}-baseline"
+    [ -f "$LOGDIR/mtg.run.meta" ] && cp -f "$LOGDIR/mtg.run.meta" "logs/snapshots/${MODE}-baseline.meta"
+    [ -f "$LOGDIR/mtg.run.diff" ] && cp -f "$LOGDIR/mtg.run.diff" "logs/snapshots/${MODE}-baseline.diff"
+    echo "Saved baseline binary -> logs/snapshots/${MODE}-baseline (for next run's per-game diff)."
+  fi
+
   echo "Accepted $MODE results into $GT (and $promoted per-game log(s) into test/gt_logs/)."
   exit 0
 fi

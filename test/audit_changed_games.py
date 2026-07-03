@@ -100,15 +100,46 @@ for b in ("searched", "d0"):
     print(f"  [{b:8}] win->loss={t['winloss']}  loss->win={t['losswin']}  "
           f"later={t['later']}  earlier={t['earlier']}")
 
+# Inline old-vs-new per-turn diff for every game that must be reviewed, so the analysis the
+# skill calls mandatory is in this output by default (no separate manual step). Best-effort:
+# needs the baseline binary saved by `regression.sh --accept` (logs/snapshots/<mode>-baseline);
+# without it each block still prints the NEW line + how to get a baseline. OLD_GIT re-checks a
+# past accept from win-turn logs only, so skip the binary diff there.
+_EXPLAIN_CAP = 20            # bound the inline re-runs so a pathological run cannot make the audit crawl
+_explained = [0]
+
+
+def _explain(key, gi):
+    if OLD_GIT:
+        return None
+    if _explained[0] >= _EXPLAIN_CAP:
+        return (f"    [explain capped at {_EXPLAIN_CAP}; diff the rest manually: "
+                f"python3 test/explain_game.py {MODE} {key} {gi}]")
+    try:
+        from explain_game import diff_game
+    except Exception:
+        return None
+    try:
+        blk = diff_game(MODE, key, gi)
+        _explained[0] += 1
+        return blk
+    except Exception as ex:
+        return f"    [explain: {ex}]"
+
+
 if searched_winloss:
     print(f"\n*** SEARCHED-depth win->loss ({len(searched_winloss)}) — ROOT-CAUSE EACH (hard gate):")
     for key, gi, o, n, seed in searched_winloss:
-        print(f"    {key} gi{gi}: {o}->loss   repro: --seed {seed} --games {gi+1} <deck> (game {gi})")
+        print(f"    {key} gi{gi}: {o}->loss")
+        blk = _explain(key, gi)
+        if blk: print(blk)
 if searched_later:
     print(f"\n*** SEARCHED-depth turn-later ({len(searched_later)}) — CLASSIFY EACH "
           f"(variance: draws diverge? / churn: recovers at higher budget?):")
     for key, gi, o, n, seed in searched_later:
         print(f"    {key} gi{gi}: {o}->{n}")
+        blk = _explain(key, gi)
+        if blk: print(blk)
 
 if d0_winloss or d0_later:
     print(f"\nd0 (greedy, lighter bar): win->loss={len(d0_winloss)} turn-later={len(d0_later)} "

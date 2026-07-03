@@ -22,6 +22,7 @@ The harness lives in `test/`:
 | `regression.sh` | runs a mode, compares to ground truth, and (with `--accept`) promotes a run into ground truth | yes |
 | `audit_changed_games.py` | **the mandatory pre-`--accept` gate**: per-game win→loss / turn-later breakdown split by depth; exits non-zero on a searched-depth win→loss. Auto-run by `regression.sh` on every run and again as a hard gate on `--accept`. | yes |
 | `classify_turn_later.sh` | auto-classifies each searched-depth turn-later game (`churn` = recovers at 4x/16x budget vs `PERSISTS` = variance/real), re-running that one game — the generated form of the mandatory turn-later classification | yes |
+| `explain_game.py` | old-vs-new **per-turn diff** of ONE changed game (kept-hand/draw divergence + aligned lines + classification hint). Called inline by `audit_changed_games.py` for every searched win→loss / turn-later game; also runnable standalone. Baseline = `logs/snapshots/<mode>-baseline` (saved by `--accept`) or `--old-bin`. | yes |
 | `regression_cases.sh` | the test matrix (deck × depth × seed × games × budget) + deck metadata — **single source of truth** | yes |
 | `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<won>/<avg_win_turn>` | yes |
 | `gt_logs/<key>.wins` | ground truth, **per-game** (the counterpart to the aggregate above): one `<game_index> <win_turn>` line per game, `-1` = loss. This is the committed old-side baseline for the per-game audit — `--accept` promotes it together with `regression_gt.txt`. | yes |
@@ -138,27 +139,40 @@ for you.** You may not `--accept` (or commit new ground truth) until you have
 diffed the individual games that changed and explained each one. A plausible-sounding
 *narrative* for an aggregate shift is NOT a substitute for measuring it per game.
 
-**The harness runs the audit automatically — you read and act on it.** Three pieces:
+**The harness runs the audit automatically — you read and act on it.** Four pieces:
 
 1. **Every `regression.sh <mode>` run** prints the per-game audit at the end (the
    split-by-depth breakdown + each searched-depth flip), so you see it without a
    separate step.
-2. **`regression.sh <mode> --accept` re-runs the audit first and REFUSES to promote**
+2. **The audit prints an inline old-vs-new per-turn DIFF for every searched
+   `win→loss` and `turn-later` game** — the exact thing you must inspect, already at
+   your fingertips (no separate `--log-dir` step). Each block shows: the win-turn
+   change; whether the **kept hand** or the **draws diverged** (→ a physically
+   different game, not like-for-like); the aligned per-turn line (lands / spells +
+   targets / attacks / opponent life); and the classification hint. It needs the
+   baseline binary saved by the last `--accept` (`logs/snapshots/<mode>-baseline`);
+   without it the block shows the NEW line only + how to get a baseline.
+3. **`regression.sh <mode> --accept` re-runs the audit first and REFUSES to promote**
    while any searched-depth `win→loss` exists. To accept over an explained one, pass
    `--accept-with-regressions="gi<N>:<reason>; ..."` — the acknowledgement is recorded
-   in the ground-truth provenance header. (Turn-later does not block, but must still
-   be classified — see below.)
-3. **`test/classify_turn_later.sh <mode>` classifies every searched turn-later game
+   in the ground-truth provenance header. `--accept` also snapshots the accepted binary
+   to `logs/snapshots/<mode>-baseline` so the NEXT run's audit can diff against it.
+   (Turn-later does not block, but must still be classified — see below.)
+4. **`test/classify_turn_later.sh <mode>` classifies every searched turn-later game
    for you**, re-running each at 4x and 16x its case budget: `churn` (recovers →
    benign search-truncation) vs `PERSISTS` (draw-divergence variance if the deck
-   shuffles/fetches, else a real same-draws slowdown — diff the two lines to decide).
+   shuffles/fetches, else a real same-draws slowdown).
 
-You can also run the raw audit directly (the same command the harness invokes):
+You can also run the raw audit / a single-game diff directly (what the harness invokes):
 
 ```bash
 python3 test/audit_changed_games.py <mode>          # smoke | regression | overnight
 python3 test/audit_changed_games.py <mode> --old-git   # to re-check an accept that already happened
 bash   test/classify_turn_later.sh <mode>           # auto-classify searched turn-later games
+python3 test/explain_game.py <mode> <key> <gi>      # old-vs-new per-turn diff of ONE game
+        # e.g.  python3 test/explain_game.py regression antilife_regression_d3_s2002 206
+        # baseline = logs/snapshots/<mode>-baseline (from the last --accept); or pass
+        # --old-bin <snapshot> (see test/snapshot_bin.sh) to diff against any build.
 ```
 
 It diffs the committed per-game GT against this run and prints, **split by depth**,
