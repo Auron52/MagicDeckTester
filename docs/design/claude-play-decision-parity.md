@@ -1,8 +1,10 @@
-# Deferred: claude-play decision parity (mulligan/bottoming + show-the-AI's-choice)
+# claude-play decision parity (mulligan/bottoming + show-the-AI's-choice)
 
-Self-contained deferred ideas (2026-07-02, user's). Improvements to the `--claude-play` oracle so a
+Self-contained ideas (2026-07-02, user's). Improvements to the `--claude-play` oracle so a
 human-driven game matches the game the search actually plays, and so the human can compare each of
-their choices to what the AI would do. Do when convenient.
+their choices to what the AI would do.
+
+**Item 1 SHIPPED 2026-07-03** (see "Item 1 fix" below). Items 2–3 remain deferred.
 
 ## Motivation / bug found
 
@@ -18,17 +20,51 @@ that rollout (verified: each flag alone flips the keep; `MTG_PONDER_SEARCH` does
   human-play apply-semantics flag — the bottoming rollout should null `s_human_play` the way search
   already nulls the external chooser / draw log (`RevealLogPause`).
 
-Workaround today: `--force-mulligan "<count>:<n1,n2,...>"` reconstructs a reference's exact opening
-hand (e.g. `3:8,28,38` reproduces gi627's base hand). But it should not be necessary for parity.
+Workaround (no longer needed for parity): `--force-mulligan "<count>:<n1,n2,...>"` reconstructs a
+reference's exact opening hand (e.g. `3:8,28,38` reproduces gi627's base hand). Still useful to pin a
+hand across heuristic changes, but item 1's fix makes the DEFAULT bottoming faithful.
+
+## Item 1 fix (SHIPPED 2026-07-03)
+
+The initial diagnosis (flag leak) was correct but INCOMPLETE. Root cause is broader: `--claude-play`
+sets `MTG_HUMAN_PLAY` + `MTG_UNPRUNED` process-wide AND installs external choosers on the engine, and
+ALL of these leak into the engine's clairvoyant **bottoming/keep rollout** (`AIEngine::RolloutWinTurn`
+→ `GameEngine::PlayOut`), which must play autonomously so the kept hand reproduces the real search's
+game. Three distinct leaks, all fixed by "play autonomously inside a rollout":
+
+1. **Env-flag leak** (`MTG_HUMAN_PLAY`, `MTG_UNPRUNED`). The scattered `getenv("MTG_HUMAN_PLAY")`
+   statics are replaced by `HumanPlayActive()` (in `GameLogger.h`), which returns the env value
+   EXCEPT while a `HumanPlaySuppress` guard is live. `RolloutWinTurn` installs that guard (next to its
+   existing `RevealLogPause`). `DecisionUnpruned()` likewise returns false inside the guard **when
+   human-play is also set** (so a pure autonomous `MTG_UNPRUNED` A/B keeps its bottoming unpruned —
+   byte-identical for that use). Non-human-play runs are byte-identical (env is false either way).
+2. **Main-phase external chooser leak** (the big one). `TakeTurn`'s external-controller intercept had
+   NO `m_in_rollout` guard, so the bottoming rollout's `PlayOut` fired the human chooser and
+   `exit(70)`ed — the "first decision" a claude-play game emitted at depth>0 was actually a garbage
+   rollout-trial state (a 6-card hand = 7 minus the one candidate being bottom-tested). Dormant at the
+   default depth 0 (no rollout) and hidden by `--force-mulligan` (skips the lookahead-bottoming
+   branch), which is why it went unnoticed. Fixed: `use_external = m_external_chooser && !m_in_rollout`.
+3. **Vial charge external chooser leak** (same class, Vial decks only). `DecideVialCharge` now gates
+   its `m_external_vial_chooser` on `!m_in_rollout`.
+
+Verification: at depth 0 AND depth 3, `--claude-play` now opens with the byte-identical hand the
+autonomous goldfish keeps at the same depth (th gi627: both keep `{Treasure Hunt, Treasure Hunt,
+Sandstone Needle, Saprazzan Skerry}` at d3; slivers gi627 parity too). Autonomous engine is
+byte-identical (smoke 18/18 PASS, audit 0 changes; regression clean) — the external choosers are null
+in autonomous play and the env flags are unset, so every guard is inert there.
+
+**Depth note:** claude-play bottoms at the `--depth` it is given (default 0). To reproduce a specific
+reference game's opening hand, run claude-play at the SAME `--depth` that reference used (e.g. `--depth
+3` for the th regression game). The fix guarantees parity at whatever depth is chosen; it does not
+auto-pick the depth.
 
 ## Three items
 
-1. **Make claude-play bottoming match the real search (d5).** Run the mulligan-bottoming rollout
-   with the SAME behavior the autonomous d5 game uses — at minimum null `MTG_HUMAN_PLAY` inside the
-   bottoming rollout so human-play doesn't perturb it. Decide whether `MTG_UNPRUNED` should also be
-   excluded from bottoming (probably yes — the human isn't choosing the bottom, the engine is, so it
-   should use the engine's normal gated rollout). Goal: a claude-play game opens with the same hand
-   the search would keep, so it's the SAME game.
+1. **[DONE 2026-07-03] Make claude-play bottoming match the real search.** See "Item 1 fix" above.
+   Shipped all three: null `MTG_HUMAN_PLAY` in the rollout, exclude `MTG_UNPRUNED` from the rollout
+   (only in a human-play session), and — the actual dominant bug — stop the external main/vial
+   choosers from firing inside the rollout. A claude-play game now opens with the same hand the search
+   would keep at the same `--depth`.
 2. **Let the human choose mulligans and bottoming.** Surface mulligan keep/mulligan and London
    bottoming as claude-play decision points (new decision `type`s in the stateless-replay protocol,
    sharing the `--choices` stream), so the oracle covers those decisions too instead of deferring
@@ -43,8 +79,10 @@ hand (e.g. `3:8,28,38` reproduces gi627's base hand). But it should not be neces
 
 ## Touch points
 
-- Mulligan/bottoming: `AIEngine::HandleMulligan` + the bottoming rollout it calls; the `s_human_play`
-  static in `TurnSolver.cpp` (null it for the bottoming rollout).
-- Protocol / decision emission: `RunClaudePlay` and `WriteDecisionJson` in `src/main.cpp`
+- Rollout autonomy (item 1, DONE): `AIEngine::RolloutWinTurn` installs `HumanPlaySuppress`;
+  `HumanPlayActive()` / `HumanPlaySuppress` / `g_human_play_suppressed` live in `GameLogger.h`+`.cpp`;
+  `DecisionUnpruned()` in `DecisionProviders.cpp`; the `!m_in_rollout` guard on the external chooser
+  in `AIEngine::TakeTurn` and on `m_external_vial_chooser` in `AIEngine::DecideVialCharge`.
+- Protocol / decision emission (items 2–3): `RunClaudePlay` and `WriteDecisionJson` in `src/main.cpp`
   (the `<<<CLAUDE_DECISION>>>` blocks, `--choices`/`--force-mulligan` plumbing).
 - See `.claude/skills/claude-play.md` (stateless-replay protocol, `--force-mulligan`).

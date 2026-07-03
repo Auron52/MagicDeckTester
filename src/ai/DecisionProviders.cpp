@@ -24,7 +24,15 @@
 bool DecisionUnpruned()
 {
     static const bool v = std::getenv("MTG_UNPRUNED") != nullptr;
-    return v;
+    if (!v) { return false; }
+    // In a --claude-play session (MTG_HUMAN_PLAY also set), un-pruning is a human-play side effect,
+    // not an autonomous audit knob. The engine's clairvoyant bottoming/keep rollout is an ENGINE
+    // decision the human never makes, so suppress un-pruning there too (a HumanPlaySuppress guard is
+    // live) -> the kept hand reproduces the real gated d5 game. A pure autonomous MTG_UNPRUNED A/B
+    // (no human-play) is unaffected: its bottoming rollout stays unpruned as before.
+    static const bool hp = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    if (hp && g_human_play_suppressed) { return false; }
+    return true;
 }
 
 // Stage 6: the search tree calls the provider for every deck decision; here the GENERIC

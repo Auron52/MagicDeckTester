@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -351,4 +352,37 @@ struct RevealLogPause
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
+};
+
+// ---- Human-play suppression inside the engine's clairvoyant rollouts -----------------------
+// --claude-play sets MTG_HUMAN_PLAY (and MTG_UNPRUNED) for the whole process, so every place that
+// reads those env vars diverges from an autonomous run. That is correct for the REAL turn (the
+// human is driving, the search offers extra human-only lines), but WRONG inside the engine's own
+// clairvoyant rollouts (mulligan bottoming / keep evaluation): bottoming is an ENGINE decision the
+// human never makes, so it must reproduce exactly what the autonomous d5 game would keep. Without
+// this the human-play apply-semantics leaked into the bottoming rollout and it kept a different
+// hand than the real search -- so the "same game" wasn't the same game.
+//
+// HumanPlayActive() replaces the scattered `getenv("MTG_HUMAN_PLAY")` statics: it returns the env
+// value EXCEPT while a HumanPlaySuppress guard is live (set only at the top of RolloutWinTurn),
+// where it returns false so the rollout plays autonomously. Non-human-play runs are byte-identical
+// (env is false either way). thread_local so parallel keep-model rollouts don't race.
+extern thread_local bool g_human_play_suppressed;
+
+inline bool HumanPlayActive()
+{
+    static const bool s_env = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    return s_env && !g_human_play_suppressed;
+}
+
+// RAII: suppress human-play (and, in a claude-play session, unpruned) semantics for the current
+// scope. Placed at the top of RolloutWinTurn so the engine's clairvoyant playouts match the
+// autonomous game. Restores on exit so nested scopes compose.
+struct HumanPlaySuppress
+{
+    bool saved;
+    HumanPlaySuppress() : saved(g_human_play_suppressed) { g_human_play_suppressed = true; }
+    ~HumanPlaySuppress() { g_human_play_suppressed = saved; }
+    HumanPlaySuppress(const HumanPlaySuppress&)            = delete;
+    HumanPlaySuppress& operator=(const HumanPlaySuppress&) = delete;
 };

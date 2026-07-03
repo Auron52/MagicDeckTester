@@ -983,7 +983,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 // graveyard when the resulting draw has a payoff this turn. In human play the
                 // player owns that call, so the gate is bypassed and the retrace line is always
                 // offered (MTG_HUMAN_PLAY); autonomous search keeps the gate (byte-identical).
-                static const bool s_human_play_retrace = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+                const bool s_human_play_retrace = HumanPlayActive();
                 if (!s_human_play_retrace &&
                     !ResolveProvider(state).ShouldCastDrawEngine(state, state.active_player_index, *gdef))
                 {
@@ -2084,9 +2084,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // auto-heuristic that would play cards the human didn't choose (draw-breakpoint re-solve,
     // auto-dig, auto Land's Edge). After a draw the AIEngine chooser re-fires so the human
     // re-decides with the revealed cards. Set ONLY under --claude-play, so normal search /
-    // goldfish runs are byte-identical (the flag is never set there). Function-local static so
-    // it reads the env AFTER main's setenv (file-scope statics init too early).
-    static const bool s_human_play = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    // goldfish runs are byte-identical (the flag is never set there). HumanPlayActive() reads the
+    // env in a function-local static (AFTER main's setenv) and returns false inside the engine's
+    // clairvoyant rollouts, so bottoming/keep playouts sequence plays like the autonomous game.
+    const bool s_human_play = HumanPlayActive();
 
     // Land drop first, so the land's mana is available to the spells that follow.
     // A searched plan (land_decided) plays exactly its chosen land ("" == a deliberate
@@ -3508,8 +3509,9 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     // byte-identical). Human play (claude-play): when a land of this name exists BOTH as an
     // exiled/staged copy (Light Up the Stage -- playable only until end of next turn) AND a regular
     // hand copy, play the STAGED one. The permanent hand copy keeps for a later turn, so playing it
-    // here would waste the exiled copy (it expires unplayed). Gated on s_human_play.
-    static const bool s_human_play = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    // here would waste the exiled copy (it expires unplayed). Gated on s_human_play (false in the
+    // engine's clairvoyant rollouts, so they pick the autonomous default copy).
+    const bool s_human_play = HumanPlayActive();
     auto pick = ap.hand.end();
     for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
     {
@@ -4125,8 +4127,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // simply wrong -- the human IS the decision-maker -- so we keep every variant. Gated on
     // MTG_HUMAN_PLAY: the autonomous search and the MTG_UNPRUNED A/B stay byte-identical (the
     // shortcut, warts and all, is unchanged there -- widening the search is a separate question).
-    static const bool s_human_play_sig = std::getenv("MTG_HUMAN_PLAY") != nullptr;
-    auto plan_signature = [](const TurnSolver::Plan& p) -> std::string
+    const bool s_human_play_sig = HumanPlayActive();
+    auto plan_signature = [s_human_play_sig](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l;
         for (const Action& act : p.actions)
@@ -4285,7 +4287,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 // autonomous goldfish/search run. Applied on BOTH EnumeratePlansWithLand return paths.
 static void AppendHumanPlayLandsEdgePlans(const GameState& state, std::vector<TurnSolver::Plan>& all)
 {
-    static const bool s_human_play_enum = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    const bool s_human_play_enum = HumanPlayActive();
     if (!s_human_play_enum) { return; }
 
     const Player& ap = state.ActivePlayer();
@@ -4344,7 +4346,7 @@ static void AppendHumanPlayLandsEdgePlans(const GameState& state, std::vector<Tu
 // Gated on MTG_HUMAN_PLAY: a no-op (byte-identical) for every autonomous goldfish/search run.
 static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolver::Plan>& all)
 {
-    static const bool s_human_play_enum = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    const bool s_human_play_enum = HumanPlayActive();
     if (!s_human_play_enum) { return; }
     const Player& ap = state.ActivePlayer();
 
@@ -4406,7 +4408,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // game can pass the drop pre-combat, cast a Spectacle dig (Light Up the Stage) post-combat, then
     // play a land it revealed as the turn's drop. The autonomous search only drops pre-combat (its
     // second main is cast-only), so this is gated on MTG_HUMAN_PLAY -> byte-identical for the search.
-    static const bool s_human_play_drop = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    const bool s_human_play_drop = HumanPlayActive();
     bool drop_available = (is_pre_combat || s_human_play_drop)
                        && ap.lands_played_this_turn < ap.LandDropsAvailable();
 
@@ -4456,7 +4458,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // signature-equivalent representative), and a different-but-equivalent land must never read as
     // a reject. Gated on MTG_HUMAN_PLAY -> byte-identical for every autonomous goldfish/search run,
     // which keeps deduping by signature for enumeration economy.
-    static const bool s_human_play_lands = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    const bool s_human_play_lands = HumanPlayActive();
     std::vector<std::string>        land_names;   // representatives, in hand order
     std::unordered_set<std::string> seen_key;
     for (const Card& c : ap.hand)

@@ -660,6 +660,7 @@ void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan
 int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
 {
     RevealLogPause _rlp;  // rollout: suppress scry/dig reveal logging (real play only)
+    HumanPlaySuppress _hps;  // rollout: play autonomously even under --claude-play (bottoming/keep parity)
     GameLogger* saved = m_logger;
     m_logger          = nullptr;
     m_in_rollout      = true;
@@ -786,8 +787,11 @@ bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial) c
     // (up to Haytham's MV 4), else pre-charge toward the deck's dominant MV. See
     // WantVialCharge.
     bool heuristic = ResolveProvider(state).WantVialCharge(state, vial);
-    // An external controller (claude-play / human-play) may decide differently.
-    if (m_external_vial_chooser) { return m_external_vial_chooser(state, vial, heuristic); }
+    // An external controller (claude-play / human-play) may decide differently -- but NOT inside the
+    // engine's clairvoyant rollouts (bottoming / keep eval), which must play autonomously so the kept
+    // hand reproduces the real search's game. Without the m_in_rollout guard the external chooser
+    // would fire (exit 70 / consume a --choices token) from within a bottoming rollout for a Vial deck.
+    if (m_external_vial_chooser && !m_in_rollout) { return m_external_vial_chooser(state, vial, heuristic); }
     return heuristic;
 }
 
@@ -866,8 +870,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // only after combat damage set opponent_lost_life_this_turn. The empty-second-main is skipped
     // below (only prompted when a cast is actually available), so this is not per-turn decision
     // spam. m_external_chooser is null for the autonomous search -> play_this_phase unchanged there.
+    // The external chooser is a HUMAN decision point, so it must NOT fire inside the engine's own
+    // clairvoyant rollouts (bottoming / keep evaluation): those must play autonomously so the kept
+    // hand reproduces the real search's game. m_in_rollout gates it off there (the rollout then
+    // follows the normal autonomous search path, exactly like a goldfish rollout).
+    const bool use_external = m_external_chooser != nullptr && !m_in_rollout;
     const bool play_this_phase =
-        is_pre_combat_main || m_search_post_combat || (m_external_chooser != nullptr);
+        is_pre_combat_main || m_search_post_combat || use_external;
 
     // External-controller intercept (Claude-play / human-play prototype, opt-in via
     // SetExternalChooser; inert otherwise so the normal autonomous AI path is
@@ -877,7 +886,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the same on-cast triggers that decide win/loss, so win-turn outcomes are faithful
     // (log fidelity is lower than the stack-based real path, fine for a flag-generating
     // sweep). Combat and cleanup discard stay on the engine heuristics.
-    if (m_external_chooser && play_this_phase)
+    if (use_external && play_this_phase)
     {
         // Segment loop for DRAW BREAKPOINTS (human play): execute one committed plan, and if it
         // DREW cards (a Treasure Hunt / dig / cantrip resolved -> library shrank), re-enumerate
@@ -2773,7 +2782,9 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     // matching !s_human_play guard in TurnSolver::ApplyPlanDirect) so the engine never
     // burns the lands the human just drew -- which would silently win the turn for them.
     // MTG_HUMAN_PLAY is set only by --claude-play, so every search/goldfish run is unchanged.
-    static const bool s_human_play = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    // HumanPlayActive() is false inside the engine's clairvoyant rollouts, so bottoming/keep
+    // rollouts DO auto-fire Land's Edge (matching the autonomous game they must reproduce).
+    const bool s_human_play = HumanPlayActive();
     if (s_human_play) { return; }
 
     // Find the highest discard_land_damage rate among Land's Edge permanents we control.

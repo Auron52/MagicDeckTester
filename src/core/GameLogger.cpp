@@ -15,6 +15,7 @@ thread_local EIChooser*      g_play_ei_chooser      = nullptr;
 thread_local RetraceDiscardChooser* g_play_retrace_chooser = nullptr;
 thread_local SoulfireTargetChooser* g_play_soulfire_chooser = nullptr;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;
+thread_local bool g_human_play_suppressed = false;
 
 void GameLogger::StartGame(const std::string& run_id, int game_number,
                             const std::string& deck_id, uint64_t seed,
