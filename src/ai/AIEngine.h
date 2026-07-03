@@ -130,6 +130,27 @@ public:
         std::function<bool(const GameState&, const Permanent&, bool)>;
     void SetExternalVialChooser(ExternalVialChooser c) { m_external_vial_chooser = std::move(c); }
 
+    // Mulligan keep/mulligan decision (claude-play / human-play). The DEFAULT is the engine's own
+    // KeepHand (so autonomous play and its ground truth are unchanged). When set, the external
+    // controller decides instead, per London-mulligan attempt. Args: (current 7-card hand,
+    // mulligan_count so far, on_the_play, ai_keep) where ai_keep is what the engine would do;
+    // returns true to KEEP this hand, false to mulligan again. Never consulted during --force-mulligan
+    // replay (that reconstructs an exact recorded hand). Inert when unset.
+    using ExternalMulliganChooser =
+        std::function<bool(const std::vector<Card>&, int, bool, bool)>;
+    void SetExternalMulliganChooser(ExternalMulliganChooser c) { m_external_mulligan_chooser = std::move(c); }
+
+    // London bottoming decision (claude-play / human-play). The DEFAULT is the engine's own bottom
+    // pick (HeuristicBottomPick over the lookahead-win-optimal removals). When set, the external
+    // controller picks which card to put on the bottom, one card per step. Args: (current hand,
+    // ai_pick = the hand index the engine would bottom, win_optimal = per-index flags marking the
+    // removals that preserve the earliest clairvoyant win — all-1 at depth 0, step = 0-based bottom
+    // step, total = cards to bottom this mulligan); returns the chosen hand index. Never consulted
+    // during --force-mulligan replay. Inert when unset.
+    using ExternalBottomChooser =
+        std::function<int(const std::vector<Card>&, int, const std::vector<char>&, int, int)>;
+    void SetExternalBottomChooser(ExternalBottomChooser c) { m_external_bottom_chooser = std::move(c); }
+
     // True if a charge counter should be added to `vial` this upkeep (called by
     // GameEngine). Defaults to the heuristic; consults the external vial chooser if set.
     bool DecideVialCharge(const GameState& state, const Permanent& vial) const;
@@ -168,6 +189,8 @@ private:
     GameLogger*              m_logger            = nullptr;
     ExternalChooser          m_external_chooser;          // unset => normal AI path
     ExternalVialChooser      m_external_vial_chooser;     // unset => heuristic charge
+    ExternalMulliganChooser  m_external_mulligan_chooser; // unset => engine KeepHand
+    ExternalBottomChooser    m_external_bottom_chooser;   // unset => engine bottom pick
 
     // Shared transposition table for the clairvoyant bottoming loop (BottomCards).
     // Non-null only for the duration of that loop; nullptr during the real game and

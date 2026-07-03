@@ -4,7 +4,9 @@ Self-contained ideas (2026-07-02, user's). Improvements to the `--claude-play` o
 human-driven game matches the game the search actually plays, and so the human can compare each of
 their choices to what the AI would do.
 
-**Item 1 SHIPPED 2026-07-03** (see "Item 1 fix" below). Items 2–3 remain deferred.
+**Items 1–3 SHIPPED 2026-07-03** for the mulligan/bottom scope (see the "fix" sections below). The
+only remaining piece is a future step: showing the AI's pick on the OTHER (non-mulligan) decisions,
+computed in the background — see "Deferred" below.
 
 ## Motivation / bug found
 
@@ -65,17 +67,43 @@ auto-pick the depth.
    (only in a human-play session), and — the actual dominant bug — stop the external main/vial
    choosers from firing inside the rollout. A claude-play game now opens with the same hand the search
    would keep at the same `--depth`.
-2. **Let the human choose mulligans and bottoming.** Surface mulligan keep/mulligan and London
-   bottoming as claude-play decision points (new decision `type`s in the stateless-replay protocol,
-   sharing the `--choices` stream), so the oracle covers those decisions too instead of deferring
-   them to the engine. Complements #1: #1 makes the DEFAULT faithful; this lets the human override.
-3. **Show what the AI (d5) would do at each choice — including bottoming and mulligans.** For every
-   emitted decision, also report the engine's own pick (the search's chosen plan index / keep /
-   bottom) alongside the legal options, so the human sees "AI would do X" next to their choice. Makes
-   claude-play a direct A/B-against-the-search viewer, not just a driver. The decision JSON already
-   carries a per-type `heuristic_default` for vial_charge; generalize that to a `search_choice`
-   (or `ai_default`) field on every decision, computed by running the normal engine decision for the
-   replayed state before overlaying the human's `--choices`.
+2. **[DONE 2026-07-03] Let the human choose mulligans and bottoming.** Two new claude-play decision
+   `type`s — `mulligan` (keep/mulligan, one per London attempt) and `bottom` (one per card to bottom) —
+   share the `--choices` stream and fire FIRST, before any turn decision. Wired end-to-end through the
+   tools/play viewer (image-based modals). See "Items 2–3 fix" below.
+3. **[DONE for mulligan/bottom, 2026-07-03] Show what the AI would do at each choice.** Both new
+   decisions carry an `ai_choice` field (mulligan: 1 keep / 0 mulligan from `KeepHand`; bottom: the
+   hand index the engine would bottom, plus `win_optimal` flags per card at depth>0). Following the AI
+   pick at every mulligan/bottom step reproduces the autonomous kept hand exactly. Extending this to
+   the OTHER decision types (main-phase plan, etc.) is a **future step** — see "Deferred" below; most
+   other decisions already surface a `heuristic_default`, so cast-order is the main gap.
+
+## Items 2–3 fix (SHIPPED 2026-07-03)
+
+C++ (protocol): two external choosers on `AIEngine` — `m_external_mulligan_chooser` (consulted in
+`HandleMulligan`'s keep loop, sees the engine's `KeepHand` result as the AI hint) and
+`m_external_bottom_chooser` (consulted in `BottomCards`, sees the engine's bottom pick + the
+lookahead win-optimal mask). Both null in autonomous play → byte-identical (smoke 18/18 + regression
+30/30 PASS, audit 0 changes), and both skipped under `--force-mulligan`. `RunClaudePlay` installs them
+sharing the one `--choices` cursor, and `WriteMulliganDecisionJson`/`WriteBottomDecisionJson` emit the
+`<<<CLAUDE_DECISION>>>` blocks (with a minimal life-20/empty board so the viewer renders cleanly
+behind the modal). Verified: following `ai_choice` at every step reproduces the goldfish d3 kept hand.
+
+Viewer (tools/play/index.html): `mulligan` and `bottom` added to `SUBDECISIONS`, to the modal set, and
+to the render/wire/commit dispatch; new `mulliganPanelHtml` (Keep/Mulligan buttons + AI hint, hand as
+art) and `bottomPanelHtml` (click-a-card, mirrors the discard modal, tags the AI pick and ✓-marks the
+win-optimal removals when discriminating).
+
+## Deferred (future step): show the AI's pick on the OTHER decisions, computed in the background
+
+The AI's suggested move is NEVER required for the human to make their own choice, so for the expensive
+decisions (a main-phase plan needs a full `SolveWithLookahead` at the play depth) it should be computed
+**asynchronously, in parallel, and must never block the UI**: kick off the search when the decision is
+shown and fill in the "AI would play X" hint whenever it returns (the human may well have already
+moved). This also enables "figure out the AI's next move while the user is still thinking." Compute via
+`TurnSolver::SolveWithLookahead` on a copy of the replayed state (under a `HumanPlaySuppress` guard for
+the autonomous pick) and match the chosen plan to a shown plan index. Cast-order is the one decision
+with no heuristic surfaced today, so it's the highest-value target after the plan index itself.
 
 ## Touch points
 
@@ -83,6 +111,10 @@ auto-pick the depth.
   `HumanPlayActive()` / `HumanPlaySuppress` / `g_human_play_suppressed` live in `GameLogger.h`+`.cpp`;
   `DecisionUnpruned()` in `DecisionProviders.cpp`; the `!m_in_rollout` guard on the external chooser
   in `AIEngine::TakeTurn` and on `m_external_vial_chooser` in `AIEngine::DecideVialCharge`.
-- Protocol / decision emission (items 2–3): `RunClaudePlay` and `WriteDecisionJson` in `src/main.cpp`
-  (the `<<<CLAUDE_DECISION>>>` blocks, `--choices`/`--force-mulligan` plumbing).
+- Protocol / decision emission (items 2–3, mulligan/bottom DONE): the two choosers on `AIEngine`
+  (`SetExternalMulliganChooser`/`SetExternalBottomChooser`, consulted in `HandleMulligan`/`BottomCards`);
+  `WriteMulliganDecisionJson`/`WriteBottomDecisionJson` + the chooser lambdas in `RunClaudePlay`
+  (`src/main.cpp`). Viewer: `mulligan`/`bottom` in `tools/play/index.html` (SUBDECISIONS, render/wire/
+  commit dispatch, `mulliganPanelHtml`/`bottomPanelHtml`).
+- Deferred (main-phase AI pick, background): `TurnSolver::SolveWithLookahead` for the search pick.
 - See `.claude/skills/claude-play.md` (stateless-replay protocol, `--force-mulligan`).

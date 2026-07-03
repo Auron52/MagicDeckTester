@@ -38,7 +38,11 @@ node tools/play/server.js                 # then open http://localhost:8080
 No dependencies — `server.js` uses only Node built-ins. Env: `PORT` (default 8080),
 `MTG_BIN` (default `./build/Release/mtg`).
 
-Pick a profiled deck, set seed / game # / max-turns, hit **New game**. Each main phase:
+Pick a profiled deck, set seed / game # / max-turns, hit **New game**. First you drive the
+**mulligan**: each London attempt shows the 7-card hand as art with **Keep** / **Mulligan** buttons,
+and on a keep you click which card(s) to put on the **bottom** — one modal per card. Both tag what the
+engine's own AI would do (keep/mulligan, and which card to bottom; at depth > 0 the win-optimal bottoms
+are ✓-marked), so following the AI reproduces the search's exact opening hand. Then each main phase:
 double-click or drag hand cards into **Casting this phase** to build a land drop + casts, then
 **Commit phase** (empty = **Pass**). On accept the board advances; on **choose** you pick the
 sub-decision variant; on reject you get the classified verdict, the lines the model *would*

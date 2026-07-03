@@ -120,8 +120,16 @@ decision and exits:
   above). `"vial_charge"` — an Aether Vial upkeep charge decision: reply **1** to add a
   charge counter this upkeep or **0** to hold (the Vial deploys a creature whose mana
   value EQUALS its counters; the JSON gives `current_counters` and the AI's
-  `heuristic_default`). Both decision types share the one `--choices` stream in the
-  order they occur (a turn's vial_charge comes before its main_phase).
+  `heuristic_default`). `"mulligan"` — a London keep/mulligan decision (one per attempt,
+  emitted FIRST, before any turn): reply **1** to keep this `hand` or **0** to mulligan
+  again; `ai_choice` is what the engine's KeepHand would do. `"bottom"` — after a keep,
+  put one card on the bottom (fires `mulligan_count` times): reply the 0-based `hand`
+  INDEX to bottom; `ai_choice.index` is the engine's pick and each hand card carries a
+  `win_optimal` flag (depth > 0). Following `ai_choice` at every mulligan/bottom step
+  reproduces the autonomous search's exact opening hand. All decision types share the one
+  `--choices` stream in the order they occur (mulligan/bottom first, then per turn a
+  vial_charge before its main_phase). Not emitted under `--force-mulligan` (that
+  reconstructs a fixed hand on the engine).
 - `--reveal N` exposes the top N upcoming draws (partial clairvoyance). The search is
   fully clairvoyant; reveal gives the player a fair-ish, limited foresight.
 

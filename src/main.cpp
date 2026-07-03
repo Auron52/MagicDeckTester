@@ -450,6 +450,79 @@ static void WriteVialDecisionJson(std::ostream& os, const GameState& s,
     os << "}\n";
 }
 
+// Mulligan keep/mulligan decision (claude-play). One per London-mulligan attempt, emitted BEFORE the
+// first main-phase decision. The reply is 1 (keep this hand) or 0 (mulligan again). `ai_keep` is what
+// the engine's KeepHand would do -- surfaced as the "AI would X" hint. `mulligan_count` is how many
+// mulligans have been taken so far; keeping now means bottoming that many cards next.
+static void WriteMulliganDecisionJson(std::ostream& os, const std::vector<Card>& hand,
+                                      int mulligan_count, bool on_the_play, bool ai_keep,
+                                      int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"mulligan\",\n";
+    os << "  \"turn\": 0,\n";
+    // Minimal pre-game board so the viewer renders a clean empty board behind the modal (no permanents,
+    // both players at 20) rather than an undefined one -- the real state has no battlefield yet.
+    os << "  \"me\": { \"life\": 20, \"battlefield\": [] },\n";
+    os << "  \"opponent\": { \"life\": 20, \"battlefield\": [] },\n";
+    os << "  \"mulligan_count\": " << mulligan_count << ",\n";
+    os << "  \"on_the_play\": " << (on_the_play ? "true" : "false") << ",\n";
+    os << "  \"to_bottom\": " << mulligan_count << ",\n";   // London: keep at count K => bottom K cards
+    os << "  \"hand\": [";
+    for (size_t i = 0; i < hand.size(); ++i)
+    {
+        if (i) { os << ", "; }
+        os << "{ \"num\": " << hand[i].m_number << ", \"name\": ";
+        JsonStr(os, hand[i].m_name);
+        os << " }";
+    }
+    os << "],\n";
+    os << "  \"ai_choice\": " << (ai_keep ? 1 : 0) << ",\n";
+    os << "  \"note\": \"reply 1 to KEEP this hand (then bottom " << mulligan_count
+       << " card(s)), or 0 to mulligan again\"\n";
+    os << "}\n";
+}
+
+// London bottoming decision (claude-play). After keeping at mulligan_count K, the player bottoms K
+// cards one at a time; this fires once per card. The reply is the hand INDEX (0-based) of the card to
+// put on the bottom. `ai_pick` is the hand index the engine would bottom (the "AI would X" hint); each
+// hand card carries `win_optimal` (depth>0: does bottoming it preserve the earliest clairvoyant win?).
+static void WriteBottomDecisionJson(std::ostream& os, const std::vector<Card>& hand,
+                                    int ai_pick, const std::vector<char>& win_optimal,
+                                    int step, int total, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"bottom\",\n";
+    os << "  \"turn\": 0,\n";
+    os << "  \"me\": { \"life\": 20, \"battlefield\": [] },\n";
+    os << "  \"opponent\": { \"life\": 20, \"battlefield\": [] },\n";
+    os << "  \"bottom_step\": " << step << ",\n";
+    os << "  \"bottom_total\": " << total << ",\n";
+    os << "  \"hand\": [";
+    for (size_t i = 0; i < hand.size(); ++i)
+    {
+        if (i) { os << ", "; }
+        os << "{ \"num\": " << hand[i].m_number << ", \"name\": ";
+        JsonStr(os, hand[i].m_name);
+        if (i < win_optimal.size())
+        { os << ", \"win_optimal\": " << (win_optimal[i] ? "true" : "false"); }
+        os << " }";
+    }
+    os << "],\n";
+    os << "  \"ai_choice\": { \"index\": " << ai_pick;
+    if (ai_pick >= 0 && ai_pick < static_cast<int>(hand.size()))
+    {
+        os << ", \"num\": " << hand[ai_pick].m_number << ", \"name\": ";
+        JsonStr(os, hand[ai_pick].m_name);
+    }
+    os << " },\n";
+    os << "  \"note\": \"reply the hand INDEX (0-based) of the card to put on the bottom (step "
+       << (step + 1) << " of " << total << ")\"\n";
+    os << "}\n";
+}
+
 // Emit a resolution-time "look at the top N" decision (Scry / Surveil / Ponder-reorder). The
 // player replies an option INDEX into `opts` (the legal dispositions). Mirrors the vial decision:
 // shares the one --choices stream, consumed in resolution order. The GUI renders `looked`
@@ -1073,6 +1146,62 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
             WriteVialDecisionJson(std::cout, s, vial, di, heuristic);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        });
+
+    // Mulligan keep/mulligan (claude-play): the human drives each London-mulligan attempt, sharing
+    // the one --choices stream (these fire FIRST, before any turn decision). Reply 1 keep / 0 mulligan.
+    // Skipped entirely under --force-mulligan (that reconstructs an exact recorded hand on the engine).
+    ai.SetExternalMulliganChooser(
+        [&](const std::vector<Card>& hand, int mull_count, bool on_play, bool ai_keep) -> bool
+        {
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteMulliganDecisionJson(ss, hand, mull_count, on_play, ai_keep, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen != 0;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteMulliganDecisionJson(std::cout, hand, mull_count, on_play, ai_keep, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        });
+
+    // London bottoming (claude-play): after the kept hand, the human bottoms one card at a time.
+    // Reply the hand INDEX to bottom. Shares the --choices stream, consumed right after the keep.
+    ai.SetExternalBottomChooser(
+        [&](const std::vector<Card>& hand, int ai_pick, const std::vector<char>& win_opt,
+            int step, int total) -> int
+        {
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteBottomDecisionJson(ss, hand, ai_pick, win_opt, step, total, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteBottomDecisionJson(std::cout, hand, ai_pick, win_opt, step, total, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);

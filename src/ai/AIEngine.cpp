@@ -154,6 +154,14 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
                   : (static_cast<int>(ap.hand.size()) <= m_profile.stop_at
                      || KeepHand(ap.hand, mulligan_count, state.on_the_play));
 
+        // External controller (claude-play / human-play) may keep/mulligan differently. It sees the
+        // engine's own decision (`keep`) as the AI hint and returns its own keep/mulligan. Never
+        // consulted during forced replay. Inert (engine decision unchanged) when no chooser is set.
+        if (m_external_mulligan_chooser && !m_forced_mull_active)
+        {
+            keep = m_external_mulligan_chooser(ap.hand, mulligan_count, state.on_the_play, keep);
+        }
+
         if (m_logger)
         {
             std::vector<int>         nums;
@@ -751,6 +759,15 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 
         int pick = HeuristicBottomPick(ap.hand, allowed);
         if (pick < 0) { pick = 0; }
+
+        // External controller (claude-play / human-play) picks which card to bottom; it sees the
+        // engine's pick as the AI hint and the win-optimal removal flags. Never during forced replay.
+        // Inert (engine pick unchanged) when no chooser is set -> autonomous bottoming byte-identical.
+        if (m_external_bottom_chooser && !m_forced_mull_active)
+        {
+            int human = m_external_bottom_chooser(ap.hand, pick, allowed, i, stop);
+            if (human >= 0 && human < hand_size) { pick = human; }
+        }
 
         // Forced-mulligan replay: bottom exactly the recorded card (by m_number) at this step,
         // overriding the heuristic pick, so the reconstructed hand matches regardless of how the
