@@ -77,18 +77,40 @@ on its own even without an enabler (it removes a blocker/attacker), and you migh
 specific threat over the largest. When a real opponent is added (Phase 2), gate these behind the
 goldfish assumption / make them opponent-model-aware rather than unconditional.
 
-## Deferred: pump-then-Swords (grow their creature, then exile it)
+## Deferred: pump-then-Swords via Invigorate's FREE alt cost (corrected model)
 
-Because the life-loss equals the exiled creature's power, you can **pump the opponent's creature** and
-then Swords it for more loss. Invigorate ({2}{G}, +4/+4) hard-cast on an opponent creature, then Swords
-it, turns +4 power into +4 life loss. `FindLifegainRemovalTarget` already targets by `EffectivePower()`,
-so the *Swords* half needs nothing — the missing piece is **enumeration**: Invigorate is
-`target_own_creature: true` (its pump only ever targets our own attacker), so the search never considers
-casting a pump on an *opponent* creature. Supporting the full combo means enumerating that unusual line
-(offer Invigorate-on-opponent-creature when a Swords + enabler are also available this turn) and letting
-the existing simulation value it. It's niche (spends a pump + a Swords to convert +4 into +4 damage,
-only worth it with an enabler out), so it's deferred until it proves worthwhile.
+**IMPORTANT — the value comes from the alt cost, not a {2}{G} hard cast.** Invigorate reads: "If you
+control a Forest, rather than pay {2}{G}, you may have an opponent gain 3 life. Target creature gets
++4/+4 until end of turn." So the alt cost is a *free* payment (opponent gains 3 → **loses 3** with our
+enabler) that STILL grants the +4/+4. So the pump is FREE — no mana. (My earlier note here wrongly framed
+it as a {2}{G} hard cast needing surplus mana; ignore that.)
 
-Touch points: `Invigorate` `target_own_creature` handling in the Creature-targeting enumeration
-(`TurnSolver::CollectActions`) and cast (`AIEngine::CastSpellFromHand` / `ApplyPlanDirect`); the pump
-target would be the same `FindLifegainRemovalTarget` creature so pump and Swords agree.
+The change is a **targeting redirect**: point Invigorate's alt-fire +4/+4 at the OPPONENT creature that
+Swords will exile (the `FindLifegainRemovalTarget` creature), instead of an own attacker. Then Swords
+exiles a +4-bigger creature → +4 more life loss, on top of the alt cost's 3. Total from the pair =
+`power + 7` opponent life loss, for free.
+
+**Why it's ~zero-regression and high-value (per the user):**
+- Redirecting to the Swords target is `>=` pumping an own attacker: equal when the own attacker could
+  actually swing this turn (both are +4 opponent life loss this turn — combat vs a bigger Swords), and
+  **strictly better when we have NO own creature to pump** — today Invigorate is stuck *uncastable* (no
+  legal creature target), so its 3 (alt) + 4 (pump) = 7 is lost entirely. That "can't afford an
+  attacker" case is the biggest win.
+- No mana, so no search-budget increase and no churn (unlike the same-turn-Remedy gate above). It rides
+  the Swords decision the search already makes.
+
+**Implementation sketch (do after compaction):**
+- Deterministic, slaved to the Swords cast: when Swords is applied on opponent X (enabler in play, X =
+  `FindLifegainRemovalTarget`), if an Invigorate is in hand and we're not under human-play, alt-fire the
+  Invigorate targeting X FIRST (apply `X.temp_power_bonus += power_bonus` and the alt lifegain via
+  `OpponentGainsLife(alt_lifegain)`), consume it, THEN read X's (now +4) power for the exile life loss.
+- **Coordinate with the safe-alt auto-fire** so the same Invigorate isn't ALSO fired on an own attacker
+  (double-fire). Touch points: `AntiLifegainProvider::CanAutoFireAltPayload` (DecisionProviders.cpp:306),
+  the safe-alt-payload target selection + its pass ordering vs Swords, and the Swords apply sites in
+  **lockstep**: rollout `ApplyPlanDirect` Removal branch (TurnSolver.cpp) + executor
+  (`AIEngine::CastSpellFromHand` / the FireSafeAltPayloads mirror at AIEngine.cpp:1687).
+- **Suppress under human-play** (`HumanPlayActive()`): the play viewer keeps full control of Invigorate's
+  mode/target; the pump is an autonomous-AI heuristic only.
+- Verify: a game with Swords + Invigorate + an opponent creature but NO own creature should fire the
+  redirect (opp life drops by power+7 on the combo turn); full smoke+regression must show zero
+  regressions (other decks byte-identical, d0 not worse).
