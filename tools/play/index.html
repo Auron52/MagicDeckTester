@@ -1071,6 +1071,9 @@ function renderDecisionPanel(d, dec){
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
+  // The bottom decision's AI pick is the DEEP-search pick, fetched async so the modal never blocks on
+  // the clairvoyant rollout. Kick it off once per decision (guarded so the repaint-on-arrival doesn't loop).
+  if (dec==='bottom' && d._aiHint===undefined && !d._aiHintPending) fetchBottomHint(d);
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
 
@@ -1169,24 +1172,43 @@ function mulliganPanelHtml(d){
   return h;
 }
 // Bottom panel: IMAGE-based central modal (mirrors the cleanup-discard panel), shown once per card to
-// bottom after a London keep. Click a card to put it on the bottom. The AI's own pick is tagged; when
-// the clairvoyant search (depth>0) makes it discriminating, cards whose removal preserves the earliest
-// win are marked ✓ so the human can see which bottoms are "safe".
+// bottom after a London keep. Click a card to put it on the bottom. The AI's pick is the DEEP-search
+// (depth HINT) pick, fetched ASYNCHRONOUSLY (fetchBottomHint) so the modal appears instantly and never
+// waits on the clairvoyant bottoming rollout: it shows "AI thinking…" until the hint lands, then tags
+// the AI's pick and ✓-marks the removals that preserve the earliest win. The shallow depth-0 pick from
+// the primary step is deliberately ignored (we want the deep pick, not the greedy one).
 function bottomPanelHtml(d){
-  const hand=d.hand||[], ai=(d.ai_choice||{}).index;
-  const flagged=hand.filter(c=>c.win_optimal!==undefined);
-  const someOpt = flagged.length && flagged.some(c=>c.win_optimal) && flagged.some(c=>!c.win_optimal);
+  const hand=d.hand||[];
+  const hint=d._aiHint;                         // deep hint: undefined = pending, null = unavailable
+  const ai = (hint && hint.ai_choice) ? hint.ai_choice.index : undefined;
+  const wo = (hint && hint.win_optimal) ? hint.win_optimal : [];
+  const someOpt = wo.length && wo.some(x=>x===true) && wo.some(x=>x===false);
+  const hintTxt = hint===undefined ? `<span class="hint">AI thinking…</span>`
+                : (ai!=null && hand[ai]) ? `AI would bottom <b>${esc(hand[ai].name)}</b> (depth ${hint.depth})`
+                : `AI pick unavailable`;
   let h=`<h3>Bottom a card — step ${(d.bottom_step||0)+1} of ${d.bottom_total||1}</h3>`;
   h+=`<div class="sub">London mulligan: put ${d.bottom_total} card${d.bottom_total===1?'':'s'} on the bottom of your library. `+
-     `Click a card to bottom it${someOpt?' (✓ keeps the earliest win)':''}. AI would bottom <b>${(ai>=0&&hand[ai])?esc(hand[ai].name):'—'}</b>.</div>`;
+     `Click a card to bottom it${someOpt?' (✓ keeps the earliest win)':''}. ${hintTxt}.</div>`;
   h+=`<div class="tutgrid">`;
   hand.forEach((c,i)=>{
-    const def=i===ai, safe=someOpt&&c.win_optimal;
+    const def=(i===ai), safe=someOpt&&wo[i]===true;
     h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${i}" data-name="${esc(c.name)}" title="${esc(c.name)}${safe?' — keeps the earliest win':''}">`+
        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
        (def?`<span class="deftag">AI pick</span>`:safe?`<span class="deftag" style="background:#2a7a4a">✓</span>`:``)+`</span>`;
   });
   return h+`</div>`;
+}
+// Fetch the deep-search bottom hint in the background (see /api/ai-hint). Fired when a bottom decision
+// is first shown; patches the modal in place when it returns. Never blocks the human — they can bottom
+// any card immediately, in which case the stale hint is dropped (decision_index no longer matches).
+function fetchBottomHint(d){
+  d._aiHintPending = true;
+  const captured = d.decision_index;
+  post('/api/ai-hint', cfg({ hintDepth: 5 })).then(h=>{
+    d._aiHintPending = false;
+    d._aiHint = (h && h.kind==='hint' && h.type==='bottom' && h.decision_index===captured) ? h : null;
+    if (S.decision===d) renderBoard();          // still on this decision -> repaint with the hint
+  }).catch(()=>{ d._aiHintPending=false; d._aiHint=null; if (S.decision===d) renderBoard(); });
 }
 // Expressive Iteration panel: look at the top cards; choose one for HAND (banked), one for EXILE
 // (playable this turn), the last -> BOTTOM. The looked cards are shown as art for context; each

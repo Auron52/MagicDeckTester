@@ -4,9 +4,10 @@ Self-contained ideas (2026-07-02, user's). Improvements to the `--claude-play` o
 human-driven game matches the game the search actually plays, and so the human can compare each of
 their choices to what the AI would do.
 
-**Items 1–3 SHIPPED 2026-07-03** for the mulligan/bottom scope (see the "fix" sections below). The
-only remaining piece is a future step: showing the AI's pick on the OTHER (non-mulligan) decisions,
-computed in the background — see "Deferred" below.
+**Items 1–3 SHIPPED 2026-07-03** for the mulligan/bottom scope, plus the **async deep-search bottoming
+hint** (see the "fix"/async sections below). The only remaining piece is a future step: the same async
+AI-pick treatment for the OTHER (main-phase / cast-order) decisions — see "Async deep-search AI hint"
+below.
 
 ## Motivation / bug found
 
@@ -94,16 +95,31 @@ to the render/wire/commit dispatch; new `mulliganPanelHtml` (Keep/Mulligan butto
 art) and `bottomPanelHtml` (click-a-card, mirrors the discard modal, tags the AI pick and ✓-marks the
 win-optimal removals when discriminating).
 
-## Deferred (future step): show the AI's pick on the OTHER decisions, computed in the background
+## Async deep-search AI hint (bottoming DONE 2026-07-03; main-phase deferred)
 
-The AI's suggested move is NEVER required for the human to make their own choice, so for the expensive
-decisions (a main-phase plan needs a full `SolveWithLookahead` at the play depth) it should be computed
-**asynchronously, in parallel, and must never block the UI**: kick off the search when the decision is
-shown and fill in the "AI would play X" hint whenever it returns (the human may well have already
-moved). This also enables "figure out the AI's next move while the user is still thinking." Compute via
-`TurnSolver::SolveWithLookahead` on a copy of the replayed state (under a `HumanPlaySuppress` guard for
-the autonomous pick) and match the chosen plan to a shown plan index. Cast-order is the one decision
-with no heuristic surfaced today, so it's the highest-value target after the plan index itself.
+The AI's suggested move is NEVER required for the human to make their own choice, so an expensive AI
+pick is computed **asynchronously, in parallel, and must never block the UI**: show the decision
+instantly, kick off the deep search, and fill the "AI would do X" hint in when it returns (the human
+may well have already moved). This also enables "figure out the AI's next move while the user is still
+thinking."
+
+**Bottoming — SHIPPED.** The primary `/api/step` runs at the play depth (0, fast: the depth-0 heuristic
+bottom pick, non-discriminating). The `bottom` modal appears immediately showing "AI thinking…", and
+the browser fires a PARALLEL `POST /api/ai-hint` that re-runs the same `(deck,seed,gi,choices)` at
+`HINT_DEPTH` (default 5) — bottoming happens before turn 1, so that invocation only pays the clairvoyant
+bottoming rollout (~1.4 s). It returns the deep `ai_choice` + per-card `win_optimal`; the browser patches
+the modal in place (tags the deep pick, ✓-marks the win-optimal removals), or drops the result if the
+human already moved on (`decision_index` no longer matches). The shallow depth-0 pick is deliberately
+ignored — we want the deep pick. No C++ change was needed: claude-play at `--depth 5` already emits the
+deep bottoming `ai_choice`. Touch points: `runAiHint` + `/api/ai-hint` in `tools/play/server.js`;
+`fetchBottomHint` + the async-aware `bottomPanelHtml` in `tools/play/index.html`. Mulligan needs no
+async hint — `KeepHand` is depth-independent, so its keep pick is already correct at the play depth.
+
+**Main-phase / cast-order — DEFERRED.** Same pattern, but the pick needs a full `SolveWithLookahead` at
+the play depth on a copy of the replayed state (under a `HumanPlaySuppress` guard), matched to a shown
+plan index — and unlike bottoming, a depth-5 invocation there runs the whole game's play search, not
+just a pre-turn rollout, so it is genuinely expensive and wants the async treatment most. Cast-order is
+the one decision with no heuristic surfaced today, so it's the highest-value target after the plan index.
 
 ## Touch points
 
@@ -116,5 +132,7 @@ with no heuristic surfaced today, so it's the highest-value target after the pla
   `WriteMulliganDecisionJson`/`WriteBottomDecisionJson` + the chooser lambdas in `RunClaudePlay`
   (`src/main.cpp`). Viewer: `mulligan`/`bottom` in `tools/play/index.html` (SUBDECISIONS, render/wire/
   commit dispatch, `mulliganPanelHtml`/`bottomPanelHtml`).
+- Async AI hint (bottoming DONE): `runAiHint` + `POST /api/ai-hint` (`tools/play/server.js`, runs at
+  `HINT_DEPTH`); `fetchBottomHint` + async-aware `bottomPanelHtml` (`tools/play/index.html`).
 - Deferred (main-phase AI pick, background): `TurnSolver::SolveWithLookahead` for the search pick.
 - See `.claude/skills/claude-play.md` (stateless-replay protocol, `--force-mulligan`).

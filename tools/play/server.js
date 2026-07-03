@@ -29,6 +29,7 @@ const CARDS_JSON = path.join(ROOT, 'src', 'cards', 'data', 'cards.json');
 const BIN = process.env.MTG_BIN || path.join(ROOT, 'build', 'Release', 'mtg');
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const STEP_TIMEOUT_MS = 120000;   // generous: late-turn replays + opponent AI
+const HINT_DEPTH = parseInt(process.env.HINT_DEPTH || '5', 10);   // deep-search depth for async AI hints
 
 // ---- helpers ---------------------------------------------------------------------
 
@@ -117,6 +118,29 @@ function runStep(p, logDir) {
   return { kind: 'error', error: 'no decision/result markers in output', raw: out.slice(0, 4000), code: r.status };
 }
 
+// Compute the DEEP-search AI hint for the current pending decision, run at HINT_DEPTH (default 5) on a
+// SEPARATE binary invocation so the primary /api/step stays fast (depth 0, no lookahead-bottoming
+// rollout). The browser fires this in PARALLEL after showing a decision and fills the "AI would do X"
+// hint in when it returns -- it never blocks the human's own choice (the AI pick is never required to
+// make it). Only the `bottom` decision needs it: its AI pick is depth-dependent (the clairvoyant
+// win-optimal removal), whereas the mulligan keep and other decisions are already correct at the play
+// depth. Returns the pending decision's ai_choice + per-card win_optimal so the browser can patch the
+// modal in place. Bottoming happens before turn 1, so this invocation only pays the bottoming rollout.
+function runAiHint(p) {
+  const depth = intParam(p.hintDepth, HINT_DEPTH);
+  const r = runStep({ ...p, depth }, null);
+  if (r.kind !== 'decision') return { kind: 'hint-error', error: r.error || ('unexpected ' + r.kind) };
+  const d = r.decision;
+  return {
+    kind: 'hint',
+    decision_index: d.decision_index,
+    type: d.type,
+    depth,
+    ai_choice: (d.ai_choice != null ? d.ai_choice : null),
+    win_optimal: Array.isArray(d.hand) ? d.hand.map(c => (c.win_optimal === undefined ? null : c.win_optimal)) : null,
+  };
+}
+
 // Reconcile a hand-assembled line against the model at the first un-chosen main phase.
 // Returns { kind:'validation', verdict, ... } for a verdict, or — if the first un-chosen
 // decision is NOT a main phase (e.g. an Aether Vial charge) — the normal decision/result so
@@ -199,6 +223,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/step') {
       const p = await readBody(req);
       return sendJson(res, 200, runStep(p, null));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/ai-hint') {
+      // Async deep-search hint for the current decision (see runAiHint). Non-blocking: the browser
+      // has already shown the decision; this fills in what the depth-HINT_DEPTH search would do.
+      const p = await readBody(req);
+      return sendJson(res, 200, runAiHint(p));
     }
     if (req.method === 'POST' && url.pathname === '/api/validate') {
       // Reconcile the hand-assembled line (p.line, an encoded "land=X;cast=Y;..." string)

@@ -39,10 +39,13 @@ No dependencies — `server.js` uses only Node built-ins. Env: `PORT` (default 8
 `MTG_BIN` (default `./build/Release/mtg`).
 
 Pick a profiled deck, set seed / game # / max-turns, hit **New game**. First you drive the
-**mulligan**: each London attempt shows the 7-card hand as art with **Keep** / **Mulligan** buttons,
-and on a keep you click which card(s) to put on the **bottom** — one modal per card. Both tag what the
-engine's own AI would do (keep/mulligan, and which card to bottom; at depth > 0 the win-optimal bottoms
-are ✓-marked), so following the AI reproduces the search's exact opening hand. Then each main phase:
+**mulligan**: each London attempt shows the 7-card hand as art with **Keep** / **Mulligan** buttons
+(tagging what the engine's `KeepHand` would do), and on a keep you click which card(s) to put on the
+**bottom** — one modal per card. The bottom modal appears instantly showing *AI thinking…* and, in the
+background, asks the **depth-5 search** what it would bottom (via `/api/ai-hint`, `HINT_DEPTH` env);
+when that returns it tags the deep pick and ✓-marks the removals that keep the earliest win — never
+blocking your own choice. Following those picks reproduces the search's exact opening hand. Then each
+main phase:
 double-click or drag hand cards into **Casting this phase** to build a land drop + casts, then
 **Commit phase** (empty = **Pass**). On accept the board advances; on **choose** you pick the
 sub-decision variant; on reject you get the classified verdict, the lines the model *would*
