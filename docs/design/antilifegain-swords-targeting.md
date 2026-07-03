@@ -91,11 +91,15 @@ exiles a +4-bigger creature → +4 more life loss, on top of the alt cost's 3. T
 `power + 7` opponent life loss, for free.
 
 **Why it's ~zero-regression and high-value (per the user):**
-- Redirecting to the Swords target is `>=` pumping an own attacker: equal when the own attacker could
+- Redirecting to the Swords target is `>=` pumping an own creature: equal when the own creature could
   actually swing this turn (both are +4 opponent life loss this turn — combat vs a bigger Swords), and
-  **strictly better when we have NO own creature to pump** — today Invigorate is stuck *uncastable* (no
-  legal creature target), so its 3 (alt) + 4 (pump) = 7 is lost entirely. That "can't afford an
-  attacker" case is the biggest win.
+  **strictly better whenever the own creature can't convert the pump to damage this turn**:
+  1. we have NO own creature — today Invigorate is stuck *uncastable* (no legal target), so its 3 (alt)
+     + 4 (pump) = 7 is lost entirely (the biggest win, the "can't afford an attacker" case);
+  2. the only own creature is a mana **dork tapped for mana** (Birds / Ignoble Hierarch used to cast) —
+     it can't attack, so pumping it is wasted;
+  3. the own creature is **summoning-sick** — can't swing either.
+  In all three the redirect turns a wasted (or impossible) pump into +4 Swords damage.
 - No mana, so no search-budget increase and no churn (unlike the same-turn-Remedy gate above). It rides
   the Swords decision the search already makes.
 
