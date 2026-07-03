@@ -253,4 +253,15 @@ public:
     // pure-virtual-defaulted here because the ranking needs SpellEffects helpers unavailable in this
     // header; GenericProvider implements it and every archetype inherits that.
     virtual int ManaSourceRank(const GameState& s, const CardDefinition& def) const = 0;
+
+    // Hook 25 -- is making the OPPONENT gain life USEFUL to us right now? A Grove-of-the-Burnwillows-
+    // style drip land (tap_opponent_lifegain) normally GIFTS the opponent life -- a downside -- so the
+    // engine dodges the drip: a generic pip uses Grove's painless {C} mode and leftover drip lands are
+    // NOT swept at end of main. A deck whose combo turns that gift into value flips this true, and the
+    // two drip rules invert: Grove taps COLOURED (drips) even for a generic pip, and the sweep fires.
+    // Anti-Lifegain returns true when a Tainted Remedy / Plague Drone is active (the gain is reversed
+    // into 1 damage); a Grove + Punishing Fire deck would return true too (the gain buys the Fire back).
+    // Default false. NOTE: the rules-level lifegain->loss reversal in OpponentGainsLife stays keyed on
+    // RemedyActive -- that is a FACT about the board, not a decision, so it is not routed through here.
+    virtual bool OpponentLifegainUseful(const GameState& /*s*/, int /*controller*/) const { return false; }
 };

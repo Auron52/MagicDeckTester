@@ -264,7 +264,7 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
     // repeatable fixing) than one avoided pre-enabler life gift, so on average we tap Grove before a dork
     // rather than burn the dork. Static / enabler-agnostic on purpose: with a lifegain->loss enabler the
     // drip becomes 1 damage that MUST fire, but that is guaranteed separately by DripLandAnyPipColor's
-    // Remedy gate (taps COLOURED, never {C}) + the TapDripLandsForRemedy sweep -- NOT by tap order.
+    // Remedy gate (taps COLOURED, never {C}) + the TapDripLandsIfUseful sweep -- NOT by tap order.
     // (Measured outcome-identical at searched depth to the old enabler-conditional nudge; ranking the
     // drip land AFTER the dorks instead was net-negative -- see the heuristic-optimization skill.) This
     // is the net-positive AVERAGE; the drip-land-vs-dork call is genuinely situational (an idle dork is
@@ -378,6 +378,15 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
 
     // (b) lethal in combination with this turn's attackers
     return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
+}
+
+bool AntiLifegainProvider::OpponentLifegainUseful(const GameState& s, int controller) const
+{
+    // A lifegain->loss enabler (Tainted Remedy / Plague Drone) reverses the opponent's "gain 1" into
+    // 1 DAMAGE, so seeking the Grove drip is useful exactly when one is active. (Future refinement: also
+    // true when an enabler WILL be active by the time the drip resolves -- e.g. one is being cast this
+    // turn -- so an early coloured Grove tap that turn is worth the gift.)
+    return ::RemedyActive(s, controller);
 }
 
 // Effective ATTACKING power of a permanent, computed like the combat sites (PendingAttackDamage /

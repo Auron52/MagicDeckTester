@@ -1802,7 +1802,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // searched/committed line. After the cast loop so a spell that needed Grove's mana tapped it
     // first. Inert without a Remedy active + an untapped tap_opponent_lifegain land (every deck but
     // Anti-Lifegain).
-    if (is_pre_combat_main) { TapDripLandsForRemedy(state, state.active_player_index); }
+    if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
 
     // Animate lands and activate tap-token abilities with mana remaining after spells.
     // Only in pre-combat main so any resulting creatures can attack this turn.

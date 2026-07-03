@@ -3283,10 +3283,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
 
     // Grove of the Burnwillows drip: once a Remedy is live, tap any still-untapped Grove for its
-    // free 1-damage ping even with nothing to cast (see TapDripLandsForRemedy). After all casts so
+    // free 1-damage ping even with nothing to cast (see TapDripLandsIfUseful). After all casts so
     // a spell that needed Grove's mana tapped it first; once per turn (pre-combat main only). The
     // real executor (AIEngine::TakeTurn) calls the same helper at the same point -> lockstep.
-    if (is_pre_combat) { TapDripLandsForRemedy(state, state.active_player_index); }
+    if (is_pre_combat) { TapDripLandsIfUseful(state, state.active_player_index); }
 
     // Sacrifice depletion lands (e.g. Saprazzan Skerry) exhausted by this turn's taps.
     SacrificeDepletedLands(state);

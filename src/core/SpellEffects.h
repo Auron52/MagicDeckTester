@@ -188,21 +188,20 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
     }
 }
 
-// Grove of the Burnwillows drip when a Remedy is active: Grove's coloured tap makes "each
-// opponent gain 1", which a Tainted Remedy / Plague Drone reverses into 1 DAMAGE. Once the
-// reversal is live the player should tap such a land EVERY turn for the free ping even with
-// nothing to cast -- but the normal mana path only taps it when a spell needs the mana, so a
-// turn with no cast wasted the drip. Tap every still-UNTAPPED tap_opponent_lifegain land the
-// player controls and apply the drip (already reversed by OpponentGainsLife). No-op without a
-// Remedy active (the gain would HELP the opponent -- the clairvoyant search avoids that) or
-// without an untapped drip land. Deterministic end-of-pre-combat-main action (NOT a search
-// choice), so the rollout (ApplyPlanDirect) and the real executor (AIEngine::TakeTurn) both call
-// it once per turn at the same point and stay in lockstep. Tapping untapped lands only makes it
-// idempotent within a turn (a multi-segment claude-play main never double-drips). Inert for every
-// deck without both a tap_opponent_lifegain land and a Remedy effect (only Anti-Lifegain has them).
-inline void TapDripLandsForRemedy(GameState& state, int controller_index)
+// Grove of the Burnwillows drip when the gift is USEFUL (OpponentLifegainUseful): Grove's coloured
+// tap makes "each opponent gain 1", which e.g. a Tainted Remedy / Plague Drone reverses into 1 DAMAGE.
+// Once that is live the player should tap such a land EVERY turn for the free ping even with nothing
+// to cast -- but the normal mana path only taps it when a spell needs the mana, so a turn with no cast
+// wasted the drip. Tap every still-UNTAPPED tap_opponent_lifegain land the player controls and apply
+// the drip. No-op when the provider says the gift is NOT useful (it would HELP the opponent -- the
+// default, and the clairvoyant search avoids that) or without an untapped drip land. Deterministic
+// end-of-pre-combat-main action (NOT a search choice), so the rollout (ApplyPlanDirect) and the real
+// executor (AIEngine::TakeTurn) both call it once per turn at the same point and stay in lockstep.
+// Tapping untapped lands only makes it idempotent within a turn (a multi-segment claude-play main never
+// double-drips). Inert for every deck without a tap_opponent_lifegain land + a useful-lifegain combo.
+inline void TapDripLandsIfUseful(GameState& state, int controller_index)
 {
-    if (!RemedyActive(state, controller_index)) { return; }
+    if (!ResolveProvider(state).OpponentLifegainUseful(state, controller_index)) { return; }
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller_index || p.tapped) { continue; }
@@ -216,18 +215,18 @@ inline void TapDripLandsForRemedy(GameState& state, int controller_index)
 
 // Colour a Grove-of-the-Burnwillows-style drip land (tap_opponent_lifegain > 0) should produce
 // when tapped for a GENERIC (any-colour) pip. Grove has two abilities: "{T}: Add {C}" (painless)
-// and "{T}: Add {R} or {G}. Each opponent gains 1 life." A generic pip only needs {C}, so absent a
-// Remedy we tap the painless {C} mode -- Colorless signals "no drip" to tap_source. When a Remedy
-// is active the opponent's "gain 1" is reversed into 1 DAMAGE (see OpponentGainsLife), so the drip
-// is BENEFICIAL and we keep tapping the coloured mode (`colored_pick`) to fire it. A non-drip land
-// (every source in every other deck) always returns `colored_pick`, so this is inert outside
-// Anti-Lifegain. Specific coloured pips (R/G) never route through here -- they always tap coloured
-// and drip (the real, unavoidable cost of that colour). Shared by both tap_source lambdas
-// (TurnSolver + AIEngine) so the rollout and executor pick identical colours (lockstep).
+// and "{T}: Add {R} or {G}. Each opponent gains 1 life." A generic pip only needs {C}, so when the
+// gift is NOT useful (the default -- OpponentLifegainUseful false) we tap the painless {C} mode --
+// Colorless signals "no drip" to tap_source. When the provider says the gift IS useful (e.g. a Remedy
+// reverses "gain 1" into 1 DAMAGE) the drip is BENEFICIAL, so we keep tapping the coloured mode
+// (`colored_pick`) to fire it. A non-drip land (every source in every other deck) always returns
+// `colored_pick`, so this is inert outside a drip-land deck. Specific coloured pips (R/G) never route
+// through here -- they always tap coloured and drip (the real, unavoidable cost of that colour).
+// Shared by both tap_source lambdas (TurnSolver + AIEngine) so rollout and executor agree (lockstep).
 inline Color DripLandAnyPipColor(const GameState& state, int active,
                                  const CardDefinition& def, Color colored_pick)
 {
-    if (def.params.tap_opponent_lifegain > 0 && !RemedyActive(state, active))
+    if (def.params.tap_opponent_lifegain > 0 && !ResolveProvider(state).OpponentLifegainUseful(state, active))
     { return Color::Colorless; }
     return colored_pick;
 }
@@ -3084,10 +3083,10 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             {
                 // Grove-style drip land: try the painless "{T}: Add {C}" mode FIRST (no drip) so a
                 // GENERIC pip never pays the opponent life. A coloured pip falls through to the
-                // {R}/{G} branches below (which drip -- the real cost of that colour). Under a Remedy
-                // the drip is +1 damage, so skip {C} mode and keep only the coloured branches (matches
-                // the end-of-main TapDripLandsForRemedy sweep). Inert for every non-drip land.
-                if (def->params.tap_opponent_lifegain > 0 && !RemedyActive(state, active))
+                // {R}/{G} branches below (which drip -- the real cost of that colour). When the gift is
+                // useful (OpponentLifegainUseful) the drip is +1 value, so skip {C} mode and keep only
+                // the coloured branches (matches the TapDripLandsIfUseful sweep). Inert for non-drip lands.
+                if (def->params.tap_opponent_lifegain > 0 && !ResolveProvider(state).OpponentLifegainUseful(state, active))
                 { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f, /*drip_ok=*/false)) { return true; } }
                 for (Color c : produces)
                 { ManaPool f = floating; f.Add(c, amt); if (activate(f)) { return true; } }

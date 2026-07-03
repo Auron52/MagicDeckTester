@@ -61,6 +61,10 @@ public:
     bool CastEnablerFirst(const GameState&, const std::string&) const override;
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // Seeking the Grove drip is useful exactly when a lifegain->loss enabler (Tainted Remedy / Plague
+    // Drone) is active -- it reverses the opponent's "gain 1" into 1 damage. Drives the two drip rules
+    // (colours-not-{C}, and the end-of-main sweep); default false in the base provider.
+    bool OpponentLifegainUseful(const GameState&, int) const override;
     // Exalted-aware attack declaration: a 0-power, no-attack-trigger dork must NOT swing alongside a
     // real attacker (it deals nothing and breaks the lone-attacker Exalted bonus from Ignoble
     // Hierarch); it attacks only as the sole eligible creature (to switch Exalted on / carry an
