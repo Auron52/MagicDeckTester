@@ -84,36 +84,40 @@ override (e.g. `AntiLifegainProvider::ManaSourceRank`), never the root
 8. **Adopt + rebaseline** only on approval: move the winner into the archetype
    provider, delete the scaffolding, and `--accept` the GT like any change.
 
-## Worked example — a simplification, refuted by measurement
+## Worked example — specify the variant faithfully, then measure
 
 The `AntiLifegainProvider::ManaSourceRank` drip nudge is state-conditional: `+1` (tap
 Grove LATER) with no Remedy so a painless source is spent first, `-1` (tap it EARLIER)
-under a Remedy since its drip is then 1 damage. A tempting simplification: **drop the
-condition and just rank the drip land LAST** (past every real source), relying on the
-end-of-main drip sweep (`TapDripLandsForRemedy`) to still deal the damage when an
-enabler is out. Purely a list reorder, no state inference — is it as good?
+under a Remedy since its drip is then 1 damage. Tempting simplification: **drop the
+condition and just rank the drip land "last"**, relying on the end-of-main drip sweep
+(`TapDripLandsForRemedy`) to still deal the damage under an enabler.
 
-**A/B (`MTG_GROVE_LAST` toggle) — current `±1` nudge vs. Grove-ranked-last:**
+**Attempt 1 — the mis-specified variant (a cautionary tale).** "Last" was first coded as
+rank 55 — *past every source including the mana creatures* (Birds of Paradise, a rainbow
+dork, ranks 50). Measured on Anti-Lifegain it was clearly **worse**: at searched depth,
+12–14 games win *later* across disjoint seed sets (vs. 1–3 earlier), every d3/d5 avg win
+turn regressed; d0 greedy was a noisy wash. **Why:** past the creatures, under a Remedy
+Grove is left for the sweep while the *flexible dork* pays the pip — burning fixing on the
+combo turn. But this refutes the *variant as coded*, not the idea — "last" was specified
+wrong.
 
-| case | `±1` nudge (committed) | Grove-last | |
-|------|------------------------|------------|--|
-| smoke d0     | 854/5.568 | 851/5.570 | worse |
-| smoke d3 / d5| 250/**4.152** · 150/**4.100** | 250/4.168 · 150/4.127 | worse |
-| reg d3 (×2)  | **4.147 · 4.144** | 4.150 · 4.157 | worse |
-| reg d5 (×2)  | **4.148 · 4.157** | 4.156 · 4.173 | worse |
+**Attempt 2 — the faithful variant.** "After the other **lands**, but before the
+**creatures**" (dorks have combat/Exalted value and are the sources to keep up). In this
+deck the mana sources rank Forest 10 < duals 20 < **Grove** < Ignoble Hierarch 30 < Birds
+50, so "after lands, before creatures" is any rank in (20, 30). Coded as 25 (no Remedy) /
+19 (Remedy) and measured: **byte-identical to the committed `+1/-1` nudge** (same
+won/avg/digest on every case). The shipped nudge *already is* "after lands, before
+creatures" — `+1` lands Grove at 21, one slot past the duals and ahead of both dorks.
 
-At **searched depth the signal is decisive and consistent** across disjoint seed sets:
-12–14 games win *later* under Grove-last vs. 1–3 earlier; every d3/d5 avg win turn
-regresses. (d0 greedy is a noisy wash — which is why the searched depths are the
-quality check.) **Why:** ranking Grove last means that under a Remedy it is left for the
-sweep while a *flexible* source (a rainbow dork like Birds of Paradise) pays the pip —
-burning fixing the combo turn needed. The `-1` taps Grove eagerly instead: it drips AND
-pays, sparing the dork. **Decision: keep the committed nudge; reject the simplification.**
-
-The lesson this skill exists to enforce: the "obvious" simpler heuristic was *worse*, and
-only measurement showed it. The drip-under-enabler guarantee genuinely "needs the
-inference" (the Remedy-conditional rank), exactly as suspected — a static reorder can't
-replace it.
+**Two lessons this skill exists to enforce:**
+1. **A variant only tests what you actually coded.** The rank-55 run looked like it
+   refuted "rank Grove late," but it had quietly changed "late among lands" into "late
+   among *everything*." Pin down the intended ordering (which sources, in what order)
+   before trusting a delta — a mis-specified variant yields a misleading measurement.
+2. **The enabler-drip guarantee needs the inference, not the order.** Whichever way Grove
+   is ranked, it drips under a Remedy via `DripLandAnyPipColor`'s gate + the sweep; the
+   *ranking's* job is only the no-enabler sparing, and the `-1` eager-tap earns its keep by
+   preserving dorks on combo turns. Order and state-inference are separate levers.
 
 ## Secondary example — sweeping the generic tiers
 
