@@ -72,6 +72,35 @@ whole next table via backward induction. So "is hand X confident?" is measured a
 threshold that itself has uncertainty. Use a provisional threshold from the low-R pass and one
 cheap refinement once the table settles; hands near a *still-moving* threshold get more samples.
 
+### Status: results-driven tiering BUILT (`MTG_KEEP_R_FLOOR`), with a losslessness caveat
+
+The **results-driven** half (confidence early-stop — tiers 3–4 above; user-rule tiers 1–2 remain
+future work) is implemented in `ExhaustiveKeep.cpp`. Knobs: `MTG_KEEP_R_FLOOR` (R₀; 0/≥cap ⇒ uniform
+= byte-identical), `MTG_KEEP_ROLLOUTS` (the cap R_max), `MTG_KEEP_FLIP_EPS` (ε, default 0.02),
+`MTG_KEEP_R_BATCH` (per-wave add). Every cell starts at R₀; a wave then tops up only the cells whose
+`½·erfc(|V−thr|/(se√2)) > ε`, recomputing the threshold each wave, until none exceed ε or all hit the
+cap.
+
+**Critical caveat found by measurement — the floor applies to the SIZE-7 table only; sub-tables stay
+at the cap.** A first cut applied the low floor to *every* table and was **not lossless**: it flipped
+~26% of keep decisions, all toward *over-mulligan*, and pulled D_opt down. Root cause is the
+**optimizer's / winner's curse**: `keep_val(h,m>0)` and the mull threshold `Dopt` are a `min` over
+sub-composition V's, and the **min of Monte-Carlo means is biased low**, with a bias that *grows as R
+shrinks*. Under-sampling the sub-tables therefore lowers the mull bar and silently over-mulligans —
+the same curse that once afflicted the learned baseline ([[keepmodel-over-mulligan-optimizer-curse]]),
+here re-introduced by low R. Since `keep_val(h,0) = V[7][h]` is a *plain mean* (no bottoming, no min),
+only the mull-0 size-7 decision is safe to tier; the sub-tables must stay near the cap so their mins —
+and thus the threshold and every bottoming argmin — stay unbiased. This is exactly the doc's earlier
+"biggest win = size-7 mull-0 pure threshold" / "near-full R on the sub-tables" split, now forced by a
+measured bias rather than argued.
+
+**Measured (test_deck, K=9, ~10.3k hands, d1, R_floor=8 / cap=40, paired seed):** vs uniform R=40,
+bottoming and every m≥1 keep flag are **byte-identical** (0 diffs); m=0 differs on **0.17%** of slots —
+all genuine near-ties (`flip-prob<ε`, ~zero EV cost) — at **~32% fewer rollouts**. Uniform off-path is
+byte-identical to the pre-change binary. Savings scale *up* with K (the size-7 table dominates the cell
+count on high-bucket decks), so this is the lever for Anti-Lifegain / Hinata. Tightening ε trades more
+refinement for fewer near-tie flips.
+
 Everything is indexed per **(mull-level × play/draw)** cell — the two axes are real and large.
 Mull: the keep bar drops as m rises (a 1-land hand is mostly-mulligan at size 7, mostly-keep by
 size 5). Mode: play/draw carry ~0.5 turn of signal and R is sampled per-mode (R=100 = 100

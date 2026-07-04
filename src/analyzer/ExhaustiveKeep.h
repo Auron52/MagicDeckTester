@@ -25,7 +25,16 @@ struct ExhaustiveKeepConfig
     double   threshold = 0.01;  // equivalence single-linkage merge distance
     int      depth     = 5;     // rollout search depth (match keep-model labels)
     int      budget_ms = 20;
-    int      rollouts  = 100;   // R: library continuations averaged per hand (label precision)
+    int      rollouts  = 100;   // R_max: the per-cell rollout CAP (label precision ceiling)
+    // Adaptive (confidence-driven) sampling. When r_floor < rollouts the generator samples every cell
+    // at r_floor first, then adds rollouts ONLY to cells whose argmin value could still flip a keep
+    // decision (flip-prob > flip_eps against the provisional threshold), up to `rollouts`. Lossless by
+    // construction (a cell stops only once its decision can't flip); r_floor==rollouts => uniform R =
+    // byte-identical to the pre-adaptive path (the free unpruned A/B). Per-cell actual counts are
+    // stored in the raw sidecar, so pooling (which reads counts per-entry) is unaffected.
+    int      r_floor   = 0;     // R_0: initial rollouts for every cell (0 => = rollouts, i.e. uniform)
+    int      r_batch   = 16;    // rollouts added per refine wave to a still-ambiguous cell
+    double   flip_eps  = 0.02;  // stop refining a cell once P(decision flips vs threshold) < this
     int      max_mull  = 3;     // deepest mulligan (sizes 7 .. 7-max_mull evaluated)
     uint64_t seed      = 0;     // ROLLOUT seed base (the "run id"); vary per run/machine for disjoint
                                // continuation streams that pool cleanly.

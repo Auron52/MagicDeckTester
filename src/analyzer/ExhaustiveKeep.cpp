@@ -60,6 +60,11 @@ struct SizeTable
     std::map<std::vector<int>, int>    index;
     std::vector<std::array<double, 2>> V;    // [comp][on_the_draw=0, on_the_play=1] mean win-turn
     std::vector<std::array<double, 2>> se;   // stderr of the mean (label-noise diagnostic)
+    // Raw rollout accumulators (adaptive sampling adds rollouts per-cell, so count varies by cell). V
+    // and se are derived from these; the raw sidecar records `cnt` per entry so pooling stays exact.
+    std::vector<std::array<double, 2>>    sum;
+    std::vector<std::array<double, 2>>    sumsq;
+    std::vector<std::array<long long, 2>> cnt;
 };
 
 // Optimal keep policy from fully-populated V tables. A PURE function of (tables, deck bucket counts):
@@ -231,6 +236,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (int i = 0; i < static_cast<int>(t.comps.size()); ++i) { t.index[t.comps[i]] = i; }
         t.V.assign(t.comps.size(), { 0.0, 0.0 });
         t.se.assign(t.comps.size(), { 0.0, 0.0 });
+        t.sum.assign(t.comps.size(), { 0.0, 0.0 });
+        t.sumsq.assign(t.comps.size(), { 0.0, 0.0 });
+        t.cnt.assign(t.comps.size(), { 0, 0 });
         TB(H) = std::move(t);
     }
 
@@ -251,73 +259,121 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     struct Work { int H; int idx; };
     std::vector<Work> work;
+    // work_idx[HAND-H][idx] = w -- reverse map so refinement can find a cell's work index (and thus its
+    // rollout seed stream) from (H,idx). The seed uses w, so this map keeps adaptive rollouts on the
+    // SAME seed stream a uniform run would use => r_floor==rollouts is byte-identical.
+    std::vector<std::vector<int>> work_idx(tables.size());
     for (int H = HAND; H >= min_size; --H)
-        for (int i = 0; i < static_cast<int>(TB(H).comps.size()); ++i) { work.push_back({ H, i }); }
-
-    std::atomic<int> next{0};
-    const std::map<std::string, int>& bof = bucket_of;   // const ref -> concurrent-safe find()
-    auto worker = [&]()
     {
-        AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
-        ai.SetSearchPostCombat(second_main);
-        for (;;)
-        {
-            int w = next.fetch_add(1);
-            if (w >= static_cast<int>(work.size())) { break; }
-            const int H = work[w].H, idx = work[w].idx;
-            const std::vector<int>& comp = tables[HAND - H].comps[idx];
+        work_idx[HAND - H].assign(TB(H).comps.size(), -1);
+        for (int i = 0; i < static_cast<int>(TB(H).comps.size()); ++i)
+        { work_idx[HAND - H][i] = static_cast<int>(work.size()); work.push_back({ H, i }); }
+    }
 
-            for (int pd = 0; pd < 2; ++pd)
+    const std::map<std::string, int>& bof = bucket_of;   // const ref -> concurrent-safe find()
+
+    // Append rollouts [r0,r1) to cell `w`, mode `pd`, folding into its sum/sumsq/cnt accumulators.
+    // Each (w,pd) is scheduled at most once per wave, so the direct writes are race-free. The seed is a
+    // pure function of (seed_base, r, w, pd) -- extending r for a later batch never reuses a draw.
+    auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
+    {
+        const int H = work[w].H, idx = work[w].idx;
+        const std::vector<int>& comp = tables[HAND - H].comps[idx];
+        double sum = 0.0, sumsq = 0.0;
+        for (long long r = r0; r < r1; ++r)
+        {
+            // Fresh shuffle per rollout: pulling the top comp[b] cards of each bucket samples WHICH
+            // specific members fill the slots (proportional to their deck counts) AND the library
+            // continuation -- both in one draw.
+            const uint64_t rs = cfg.seed + 21'000'000ULL
+                              + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
+                              + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
+            GameState s = GoldFishRunner::SetupGame(deck, rs);
+            s.m_required_pieces = &rollout_profile.required_pieces;
+            s.vial_target_mv    = rollout_profile.vial_target_mv;
+            s.on_the_play       = (pd == 1);
+            Player& ap = s.ActivePlayer();
+            ap.hand.clear();
+            for (int b = 0; b < K; ++b)
             {
-                double sum = 0.0, sumsq = 0.0;
-                for (int r = 0; r < cfg.rollouts; ++r)
+                int need = comp[b];
+                for (std::size_t k = 0; k < ap.library.size() && need > 0; )
                 {
-                    // Fresh shuffle per rollout: pulling the top comp[b] cards of each bucket samples
-                    // WHICH specific members fill the slots (proportional to their deck counts, so
-                    // slightly-unequal merged cards are averaged rather than pinned to one
-                    // representative) AND the library continuation -- both in one draw.
-                    const uint64_t rs = cfg.seed + 21'000'000ULL
-                                      + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
-                                      + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
-                    GameState s = GoldFishRunner::SetupGame(deck, rs);
-                    s.m_required_pieces = &rollout_profile.required_pieces;
-                    s.vial_target_mv    = rollout_profile.vial_target_mv;
-                    s.on_the_play       = (pd == 1);
-                    Player& ap = s.ActivePlayer();
-                    ap.hand.clear();
-                    for (int b = 0; b < K; ++b)
-                    {
-                        int need = comp[b];
-                        for (std::size_t k = 0; k < ap.library.size() && need > 0; )
-                        {
-                            auto bit = bof.find(ap.library[k].m_name.str());
-                            if (bit != bof.end() && bit->second == b)
-                            { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin() + k); --need; }
-                            else { ++k; }
-                        }
-                    }
-                    double wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
-                    sum += wt; sumsq += wt * wt;
+                    auto bit = bof.find(ap.library[k].m_name.str());
+                    if (bit != bof.end() && bit->second == b)
+                    { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin() + k); --need; }
+                    else { ++k; }
                 }
-                const int R = cfg.rollouts;
-                double mean = sum / R;
-                double var  = R > 1 ? std::max(0.0, sumsq / R - mean * mean) : 0.0;
-                tables[HAND - H].V[idx][pd]  = mean;
-                tables[HAND - H].se[idx][pd] = R > 1 ? std::sqrt(var / R) : 0.0;  // stderr of the mean
             }
+            double wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
+            sum += wt; sumsq += wt * wt;
+        }
+        SizeTable& t = tables[HAND - H];
+        t.sum[idx][pd]   += sum;
+        t.sumsq[idx][pd] += sumsq;
+        t.cnt[idx][pd]   += (r1 - r0);
+    };
+
+    const int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
+                                              static_cast<int>(work.size())));
+    // Run a wave of (w,pd,r0,r1) rollout tasks in parallel; each worker owns one AIEngine.
+    struct Task { int w; int pd; long long r0; long long r1; };
+    auto process_tasks = [&](const std::vector<Task>& tasks)
+    {
+        if (tasks.empty()) { return; }
+        std::atomic<std::size_t> tc{0};
+        auto th_worker = [&]()
+        {
+            AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            ai.SetSearchPostCombat(second_main);
+            for (;;)
+            {
+                std::size_t k = tc.fetch_add(1);
+                if (k >= tasks.size()) { break; }
+                const Task& t = tasks[k];
+                run_batch(ai, t.w, t.pd, t.r0, t.r1);
+            }
+        };
+        std::vector<std::thread> pool;
+        const int nt = std::max(1, std::min(nthreads, static_cast<int>(tasks.size())));
+        for (int t = 0; t < nt; ++t) { pool.emplace_back(th_worker); }
+        for (std::thread& th : pool) { th.join(); }
+    };
+    // Recompute V (mean) and se (stderr of the mean) for every cell from its accumulators.
+    auto recompute = [&]()
+    {
+        for (int H = HAND; H >= min_size; --H)
+        {
+            SizeTable& t = tables[HAND - H];
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+                for (int pd = 0; pd < 2; ++pd)
+                {
+                    const long long c = t.cnt[i][pd];
+                    if (c <= 0) { continue; }
+                    const double mean = t.sum[i][pd] / c;
+                    const double var  = c > 1 ? std::max(0.0, t.sumsq[i][pd] / c - mean * mean) : 0.0;
+                    t.V[i][pd]  = mean;
+                    t.se[i][pd] = c > 1 ? std::sqrt(var / c) : 0.0;
+                }
         }
     };
-    int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
-                                        static_cast<int>(work.size())));
-    std::vector<std::thread> pool;
-    for (int t = 0; t < nthreads; ++t) { pool.emplace_back(worker); }
-    for (std::thread& th : pool) { th.join(); }
 
-    // ---- 4. KeepVal(hand, m, pd) = best (HAND-m)-subcomposition (optimal bottoming) --------------
+    // Hypergeometric hand weights P and the keep/bottoming machinery (shared by the adaptive refine loop
+    // below and the reporting in Sections 4-5). keep_val = best (HAND-m)-subcomposition value; argmin_sub
+    // = the index of that best subcomposition in tables[m] (the cell whose noise drives the decision).
+    const long long denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
+    const SizeTable& H7 = tables[0];
+    std::vector<double> P(H7.comps.size());
+    for (std::size_t i = 0; i < H7.comps.size(); ++i)
+    {
+        long long num = 1;
+        for (int b = 0; b < K; ++b) { num *= Comb(count[b], H7.comps[i][b]); }
+        P[i] = static_cast<double>(num) / static_cast<double>(denom);
+    }
     auto keep_val = [&](const std::vector<int>& h, int m, int pd) -> double
     {
         const int target = HAND - m;
-        std::vector<std::vector<int>> subs, empty;
+        std::vector<std::vector<int>> subs;
         std::vector<int> cur(K, 0);
         EnumComps(0, target, cur, h, subs);   // subcompositions bounded by the hand
         double best = 1e9;
@@ -329,19 +385,92 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         return best;
     };
-
-    // ---- 5. Backward-induction mulligan value: optimal keep vs the static keep rule --------------
-    // Weights: multivariate-hypergeometric P(draw this 7-card composition).
-    const long long denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
-    const SizeTable& H7 = tables[0];
-    std::vector<double> P(H7.comps.size());
-    for (std::size_t i = 0; i < H7.comps.size(); ++i)
+    auto compute_Dopt = [&](int pd) -> std::vector<double>
     {
-        long long num = 1;
-        for (int b = 0; b < K; ++b) { num *= Comb(count[b], H7.comps[i][b]); }
-        P[i] = static_cast<double>(num) / static_cast<double>(denom);
+        const int M = cfg.max_mull;
+        std::vector<double> Dopt(M + 1, 0.0);
+        for (std::size_t i = 0; i < H7.comps.size(); ++i) { Dopt[M] += P[i] * keep_val(H7.comps[i], M, pd); }
+        for (int m = M - 1; m >= 0; --m)
+            for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            { Dopt[m] += P[i] * std::min(keep_val(H7.comps[i], m, pd), Dopt[m + 1]); }
+        return Dopt;
+    };
+
+    // Adaptive schedule: r_floor for every SIZE-7 cell, then add rollouts only where the mull-0 keep
+    // decision is still flippable. r_floor<=0 or >=rollouts => uniform R (== old behaviour, byte-ident).
+    //
+    // The floor is applied ONLY to the size-7 table. The mull-0 keep_val is V[7][h] -- a plain mean, so
+    // under-sampling a confident size-7 hand is safe (unbiased, just noisier, and near-threshold hands
+    // are refined to the cap). The SUB-tables (size 6/5/4) stay at the full cap because the bottoming
+    // keep_val there is a MIN over subcompositions, and the min of Monte-Carlo means is biased LOW at
+    // low R (the optimizer's/winner's curse) -- under-sampling them would lower the mull threshold and
+    // silently over-mulligan. This matches the design (docs/design/mulligan-profile-scaling-and-pruning
+    // "biggest win -- size-7, mull-0, a pure threshold" vs "near-full R on the sub-tables").
+    const long long r_max = cfg.rollouts;
+    const long long r0    = (cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts) ? cfg.r_floor : r_max;
+    const bool adaptive   = r0 < r_max;
+
+    {   // Pass A: size-7 cells to the floor; every sub-table cell straight to the cap.
+        std::vector<Task> tasks;
+        tasks.reserve(work.size() * 2);
+        for (int w = 0; w < static_cast<int>(work.size()); ++w)
+        {
+            const long long init = (work[w].H == HAND) ? r0 : r_max;
+            for (int pd = 0; pd < 2; ++pd) { tasks.push_back({ w, pd, 0, init }); }
+        }
+        process_tasks(tasks);
+        recompute();
     }
 
+    int refine_waves = 0;
+    long long refined_rollouts = 0;
+    if (adaptive)
+    {
+        const double SQRT2 = 1.4142135623730951;
+        // Only the SIZE-7 mull-0 decision reads an adaptive value: keep_val(h,0)=V[7][h] (no bottoming),
+        // compared to the mull threshold Dopt[1]. All sub-tables are at the cap, so the m>=1 keep flags
+        // and every bottoming argmin are already exact. So refinement tops up only size-7 cells whose
+        // V[7][h] is still close enough to the (settling) threshold that R's noise could flip the keep.
+        for (;;)
+        {
+            const std::array<std::vector<double>, 2> Dopt = { compute_Dopt(0), compute_Dopt(1) };
+            std::vector<Task> tasks;
+            for (int pd = 0; pd < 2; ++pd)
+                for (std::size_t i = 0; i < H7.comps.size(); ++i)
+                {
+                    if (H7.cnt[i][pd] >= r_max) { continue; }
+                    const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
+                    const double se = H7.se[i][pd];
+                    const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * SQRT2)) : (d == 0 ? 0.5 : 0.0);
+                    if (flip <= cfg.flip_eps) { continue; }
+                    const long long c   = H7.cnt[i][pd];
+                    const long long add = std::min<long long>(cfg.r_batch, r_max - c);
+                    if (add <= 0) { continue; }
+                    tasks.push_back({ work_idx[0][static_cast<int>(i)], pd, c, c + add });
+                    refined_rollouts += add;
+                }
+            if (tasks.empty()) { break; }
+            process_tasks(tasks);
+            recompute();
+            ++refine_waves;
+        }
+    }
+
+    if (adaptive)
+    {
+        // Realized rollout distribution over the size-7 table (the biggest, and the keep threshold).
+        long long cmin = r_max, cmax = 0, csum = 0; std::size_t ncell = 0;
+        for (std::size_t i = 0; i < H7.comps.size(); ++i)
+        { long long c = H7.cnt[i][1]; cmin = std::min(cmin, c); cmax = std::max(cmax, c); csum += c; ++ncell; }
+        os << "adaptive sampling: floor R=" << r0 << " cap R=" << r_max << " (flip_eps=" << cfg.flip_eps
+           << ", batch=" << cfg.r_batch << ") -> " << refine_waves << " refine waves, "
+           << refined_rollouts << " extra rollouts; size-7 R (play) min=" << cmin << " max=" << cmax
+           << " mean=" << (ncell ? static_cast<double>(csum) / ncell : 0.0) << "\n" << std::flush;
+    }
+
+    // ---- 4/5. Backward-induction mulligan value: optimal keep vs the static keep rule ------------
+    // keep_val / P / denom / H7 were hoisted above (shared with the adaptive refine loop). Weights P
+    // are the multivariate-hypergeometric P(draw this 7-card composition).
     AIEngine ref_ai(profile, cfg.depth, cfg.budget_ms);   // static keep rule (ReferenceKeep = KeepHand)
     auto hand_cards = [&](const std::vector<int>& h)
     {
@@ -578,8 +707,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             {
                 json je;
                 je["comp"]  = t.comps[i];
-                je["sum"]   = { t.V[i][0] * cfg.rollouts, t.V[i][1] * cfg.rollouts };
-                je["count"] = { cfg.rollouts, cfg.rollouts };
+                // Actual per-cell rollout sums + counts (adaptive sampling varies count by cell). The
+                // merge path reads counts per-entry and rebuilds V=sum/count, so pooling is exact even
+                // when two runs sampled a cell to different depths.
+                je["sum"]   = { t.sum[i][0], t.sum[i][1] };
+                je["count"] = { t.cnt[i][0], t.cnt[i][1] };
                 entries.push_back(je);
             }
             sizes.push_back({ { "H", H }, { "entries", entries } });

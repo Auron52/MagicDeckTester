@@ -271,6 +271,12 @@ int main(int argc, char* argv[])
                                 return (s && *s) ? std::max(0.0, std::atof(s)) : 0.01; }();
             cfg.depth     = env_int("MTG_EQUIV_DEPTH", 5, 0);
             cfg.rollouts  = env_int("MTG_KEEP_ROLLOUTS", 100, 1);
+            // Adaptive sampling: R_FLOOR<ROLLOUTS engages confidence-driven refinement (default off =>
+            // uniform R => byte-identical). FLIP_EPS is the stop threshold; R_BATCH the per-wave add.
+            cfg.r_floor   = env_int("MTG_KEEP_R_FLOOR", 0, 1);   // 0 => uniform (= rollouts)
+            cfg.r_batch   = env_int("MTG_KEEP_R_BATCH", 16, 1);
+            cfg.flip_eps  = []{ const char* s = std::getenv("MTG_KEEP_FLIP_EPS");
+                                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
             cfg.max_mull  = env_int("MTG_KEEP_MAXMULL", 3, 0);
             cfg.seed      = seed;   // rollout seed base (the run id / seed_base)
             cfg.equiv_seed = []{ const char* s = std::getenv("MTG_EQUIV_SEED");
