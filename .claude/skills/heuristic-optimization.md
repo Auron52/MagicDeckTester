@@ -198,6 +198,53 @@ before adopting. Contrast the Invigorate *lethal-closer* fix from the same audit
 turn" is deterministic from the current board (no clairvoyance), so it shipped (a completeness fix,
 strictly better/neutral) — while the tempo line was correctly set aside.
 
+### Sweeping a deck end-to-end — the protocol the Anti-Lifegain sweep settled on
+
+A full per-deck audit (every live gate, is anything costing lines?) converged on this recipe:
+
+1. **Probe first, skip dead gates.** `--batch --gate-probe` runs the deck once and reports which
+   gates have a *reachable* callsite (live) vs none (dead). For Anti-Lifegain 5 of 11 gates
+   (dig/xspell/ponder/comboline/drawengine) are dead — sweeping them is pure waste. Self-maintaining
+   (measures real callsites; can't drift from a hand-kept table).
+2. **Partition the live gates by kind:**
+   - **Enabling** (altpayload, groupcap, searchorder, xspell, dig, drawengine, ponder): opening gives
+     the search MORE options. A faster win *might* be a real gap.
+   - **Disabling** (redirect, comboline): opening turns a heuristic OFF and makes the search re-derive
+     it. These test *necessity*, not gaps — if opening one makes games win LATER, the heuristic earns
+     its keep. Keep them OUT of a "find faster wins" run (they only add regression noise).
+   - **Shuffle-gaming** (fetch, tutor): they *search the library* → reshuffle. Every win is
+     clairvoyance (choosing the target that reshuffles into better draws). They also explode the tree.
+     Handle separately/skeptically; don't chase their win counts.
+3. **Run the cheap enabling gates TOGETHER, UNBOUNDED** (`--budget-ms 0`), vs a same-budget baseline,
+   with `--game-trace-dir`. One run, catches interactions among the gates that matter, and — crucially
+   — **UNBOUNDED, not budgeted.** Attribute hits from traces; single-gate re-runs (on the full
+   manifest, so `game_index`==spawn index stays faithful) only for the few flagged games.
+4. **Classify every faster win before believing it:** real deterministic gap vs. clairvoyance.
+
+**Why unbounded is non-negotiable (budgets interfere both ways).** On 1000 Anti-Lifegain games at
+`budget_ms 500`, opening the cheap gates showed 31 faster / 59 later. Both were mostly *budget*
+effects: the "later" games came from *dilution* (more branches → shallower search at fixed budget) and
+from a disabling gate; the "faster" games were *budget artifacts* — 3 residuals that **vanished at
+unbounded** (baseline reached the same turn on its own). A win-turn delta that doesn't survive
+unbounded is not a heuristic gap. Bounding the search to save wall-clock silently manufactures signal;
+run unbounded (overnight if needed) — see [[regression-cadence]].
+
+**Shuffle-clairvoyance permeates anything upstream of a fetch/tutor.** Even a plan-breadth gate
+(`groupcap`) produced an unbounded "faster win" — by letting the search play a *dual* T1 instead of a
+*fetchland*, changing the shuffle timing and thus the draws. If a gate lets the search vary any
+decision that precedes a library search, it can win by manipulating draws it can see and a blind rule
+can't. Trace to the *cause*: if the win rides on diverged draws, it's clairvoyance, reject.
+
+**A net-neutral gate is a tuned heuristic, not a gap.** Over 582 unbounded games `searchorder+groupcap`
+was 1 faster / 1 later — the reorder finds an occasional better line and an occasional worse one, the
+signature of an already-good heuristic (mirrors the tier-sweep result below). Don't adopt an expensive
+search to chase a net-zero.
+
+**Net for Anti-Lifegain:** exactly ONE real, adoptable gap (Invigorate lethal-closer, shipped); every
+other faster win, at every gate and unbounded, was shuffle/tempo clairvoyance the narrowing heuristics
+correctly avoid, or a net-neutral tuned heuristic. A deck can come back "clean" — record that and move
+on rather than inventing a fix.
+
 ## Pitfalls
 
 - **Clairvoyance artifacts** — the search sees the seeded future within its depth; a measured win
