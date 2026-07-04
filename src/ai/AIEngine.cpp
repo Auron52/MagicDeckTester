@@ -178,7 +178,8 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
 
         for (Card& c : ap.hand) { ap.library.push_back(c); }
         ap.hand.clear();
-        ap.library.Shuffle(state.game_seed + static_cast<uint64_t>(mulligan_count));
+        ap.library.Shuffle(SaltSeed(state.game_seed + static_cast<uint64_t>(mulligan_count),
+                                    state.shuffle_salt_opening));
         ++mulligan_count;
         ap.library.DrawN(7, ap.hand);
     }

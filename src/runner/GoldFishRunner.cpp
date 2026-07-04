@@ -323,8 +323,17 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     state.players[0].life = 20;
     state.players[1].life = 20;
 
+    // Shuffle-variance instrument (see GameState::shuffle_salt): an independent salt lets the SAME
+    // game_seed be replayed with different shuffle realisations. Default 0 -> SaltSeed identity ->
+    // byte-identical. shuffle_salt salts mid-game shuffles only (fixed opening); the _OPENING salt
+    // also varies the initial deck shuffle + mulligan reshuffles.
+    static const uint64_t s_shuffle_salt         = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT");         return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
+    static const uint64_t s_shuffle_salt_opening = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT_OPENING"); return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
+    state.shuffle_salt         = s_shuffle_salt;
+    state.shuffle_salt_opening = s_shuffle_salt_opening;
+
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
-    state.players[0].library.Shuffle(seed);
+    state.players[0].library.Shuffle(SaltSeed(seed, state.shuffle_salt_opening));
 
     state.active_player_index   = 0;
     state.priority_player_index = 0;

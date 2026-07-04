@@ -5,6 +5,23 @@
 #include <array>
 #include <vector>
 #include <optional>
+#include <cstdint>
+
+// Shuffle-variance instrument: fold an independent `salt` into a base shuffle seed. salt==0 is the
+// IDENTITY (returns base unchanged) so every default (un-instrumented) shuffle is byte-identical;
+// a nonzero salt produces an independent, deterministic reshuffle of the same library. splitmix64
+// finaliser over (base XOR salt*golden) so distinct salts decorrelate. Lives here (not SpellEffects)
+// so the game-setup path (GoldFishRunner) and the mulligan reshuffle (AIEngine) can reach it too.
+// See GameState::shuffle_salt.
+inline uint64_t SaltSeed(uint64_t base, uint64_t salt)
+{
+    if (salt == 0) { return base; }
+    uint64_t x = base ^ (salt * 0x9E3779B97F4A7C15ull);
+    x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ull;
+    x ^= x >> 27; x *= 0x94D049BB133111EBull;
+    x ^= x >> 31;
+    return x;
+}
 
 // A passive creature that enters the opponent's battlefield at a scheduled turn.
 // Used to provide creature targets for spells like Searing Blood in goldfishing.
@@ -82,6 +99,16 @@ struct GameState
                                                           // Copied with state so the search rollout reproduces the
                                                           // same shuffle the executor will -> lockstep. Inert (always
                                                           // 0) unless MTG_SEARCH_SHUFFLE is set.
+    // Shuffle-variance instrument (SaltSeed): an INDEPENDENT salt folded into the deterministic
+    // shuffle seeds so the SAME game (fixed game_seed / decisions) can be replayed with different
+    // shuffle REALISATIONS. shuffle_salt salts MID-GAME shuffles only (SearchShuffleSeed / Gamble),
+    // holding the opening fixed; shuffle_salt_opening additionally salts the initial deck shuffle +
+    // mulligan reshuffles (vary the opening too). Both DEFAULT 0 -> SaltSeed is the identity ->
+    // byte-identical to the un-instrumented engine. Copied with state so rollout+executor use the
+    // same salt -> lockstep/commit-the-line preserved WITHIN each realisation (each salt is an
+    // ordinary deterministic-seeded game). Set once per game from MTG_SHUFFLE_SALT[_OPENING].
+    uint64_t                 shuffle_salt          = 0;
+    uint64_t                 shuffle_salt_opening  = 0;
     // Non-owning pointer to this game's passive opponent-spawn schedule (creatures to place on
     // the opp side at scheduled turns). Read-only after setup but copied into every search node;
     // a pointer (like m_provider) drops the per-node vector copy. Owner is the program-lifetime

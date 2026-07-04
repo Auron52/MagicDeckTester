@@ -397,7 +397,7 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
 {
     if (!SearchShuffleEnabled()) { return; }
     state.players[controller_index].library.Shuffle(
-        SearchShuffleSeed(state.game_seed, state.search_count));
+        SaltSeed(SearchShuffleSeed(state.game_seed, state.search_count), state.shuffle_salt));
     ++state.search_count;
 }
 
@@ -459,6 +459,7 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         mix ^= mix >> 30; mix *= 0xBF58476D1CE4E5B9ull;
         mix ^= mix >> 27; mix *= 0x94D049BB133111EBull;
         mix ^= mix >> 31;
+        mix = SaltSeed(mix, state.shuffle_salt);   // shuffle-variance: a mid-game random event
         int victim = static_cast<int>(mix % ap.hand.size());
         const int         victim_num  = ap.hand[victim].m_number;
         const std::string victim_name = ap.hand[victim].m_name;
