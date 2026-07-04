@@ -69,3 +69,37 @@ different game. So the bottoming rollout is a clairvoyance vector for EVERY deck
 faster-win is only a real gap if the kept hand AND the draws are identical — which never occurred.
 searchorder remains a net-neutral tuned heuristic and is load-bearing for tractability (slivers/th
 had ordering-explosion stragglers that never finish unbounded). Nothing authored/adopted.
+
+---
+
+## Blind-heuristic quality of the ponder/dig decisions (2026-07-04, follow-up)
+
+The gate sweep only rules out CLAIRVOYANT gaps ("does unpruning find a line the heuristic costs the
+search?"). It cannot tell whether the *closed* ponder/dig heuristic makes good BLIND decisions — the
+unprune compares "heuristic" vs "clairvoyant search," never "heuristic" vs "a better blind rule."
+So the ponder heuristic was decomposed into its three sub-decisions and each measured on its own terms:
+
+| Sub-decision | Type | How measured | Result |
+|---|---|---|---|
+| Reorder ORDER of kept cards | deterministic | reverse the rank order, A/B at d5 budget 20 (fair: no extra branches) | **−0.67pp / +0.03t** (worst case) |
+| Keep-SET selection (EI hand/exile/bottom, Preordain keep/bottom) | deterministic | reverse the selection, same A/B | **−1.67pp / +0.10t** (worst case) |
+| Keep-vs-SHUFFLE (Ponder shuffle branch) | STOCHASTIC (new library) | needs fork-and-vary Monte-Carlo (unbuilt) | unmeasured |
+
+**Why the deterministic A/B is valid and cheap here:** an ordering/selection POLICY is blind by
+construction (a pure function of board state) and swapping one blind policy for another adds NO search
+branches — it changes the OUTCOME of one deterministic sub-decision, not the tree breadth. So (a) no
+reshuffle => no clairvoyance confound; (b) budget is fair at any level (both arms search identically),
+unlike unpruning which dilutes; (c) the winner is directly adoptable. Baseline (both flags unset) is
+byte-identical (digest 7d9abd70.../502182002... on s2002/s3003, 570/600 wins, avg 5.837).
+
+**Reading:** reversing is the WORST possible blind policy, so each row is an UPPER BOUND on that
+lever. The current rank comfortably beats reverse on both, so it sits in the good part of its band;
+the current-vs-optimal gap is strictly smaller than current-vs-reverse. The entire deterministic
+ponder/dig selection+ordering surface is worth **≤ ~2pp**, realistically a fraction of that. The
+heuristic is NOT silently losing meaningful games on its deterministic decisions.
+
+**Remaining unknown:** only the stochastic keep-vs-shuffle decision, which needs the (expensive)
+fork-and-vary Monte-Carlo instrument — fork at the shuffle point, draw N reshuffled libraries,
+play each out with clairvoyance preserved WITHIN each sample, and compare E[shuffle] vs keep. Given
+both deterministic siblings are <2pp worst-case, the prior is the shuffle lever is similarly bounded,
+but that is a prior, not a measurement. Not built. Nothing authored/adopted; all scaffolding reverted.
