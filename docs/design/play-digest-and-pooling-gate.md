@@ -1,55 +1,6 @@
 # Per-deck play digest: regression tripwire + mulligan-pooling gate
 
-**Status (updated 2026-07-03):** BOTH halves are **BUILT** — the regression tripwire and the
-mulligan-pooling gate. See "Implementation status" below.
-
-## Implementation status
-
-**Built (regression tripwire + per-deck runner + analysis integration):**
-- **Play digest, engine-side.** `GameLogger` maintains an FNV-1a fold of the ordered REAL
-  decision stream (mulligan keeps/bottoms, opening hand, lands, casts + targets/mana/X, draws,
-  discards, attacks, per-turn phase markers) — `GameLogger::Digest()`, and a cheap `digest_only`
-  ctor that folds without building structures or writing logs. `BatchRunner` attaches a
-  digest-only logger to every game (behaviour-neutral: `m_logger` is nulled in search rollouts,
-  so win turns stay byte-identical — verified across all decks), collects a per-game digest, and
-  folds a per-case digest (`BatchJobResult::digests` / `case_digest`).
-- **Storage.** `.wins` gained a 3rd column `<gi> <win_turn> <play_digest>` (optional to every
-  reader); `regression_gt.txt` fingerprints became `won/avg/play_digest`. Both promoted by
-  `--accept` (legacy 2-field entries match on won/avg until re-accepted). Full logs are still
-  never routinely stored — the digest is a few KB/case.
-- **Per-deck runner.** `regression.sh --deck=<name>` filters to one deck (safe with `--accept`;
-  the aggregate-GT rebuild sources existing GT first, so only that deck's keys change).
-  `test/regression_deck.sh <deck> [modes...]` runs one deck across modes.
-- **Analysis integration** (ties into `audit_changed_games.py` + `explain_game.py`): the audit
-  now diffs the per-game digest column and reports a **`play-changed`** category — games whose
-  play moved at the SAME win turn — and prints an inline `explain_game` per-turn diff for each.
-  Not a hard gate, but flagged "ANALYZE each" before `--accept`.
-
-**Built (mulligan-pooling gate):**
-- **Rollout-config play digest.** `RolloutConfigDigest` (`ExhaustiveKeep.cpp`) folds a FIXED
-  64-game goldfish battery at the keep config (depth 5 / budget 20) using the digest-only
-  `GameLogger` — deterministic and machine-independent, so it moves IFF the deck's play at that
-  config moves. Stamped into the raw sidecar `meta.play_digest` and the runtime policy
-  (`ExhaustiveKeepPolicy::play_digest`, serialized via `MulliganProfileIO.h`).
-- **Soft merge gate.** `RunKeepMerge` now gates pooling on `play_digest` (bucket_fp/deck_fp/
-  equiv_seed/K/max_mull still required; seed_bases still must be disjoint). `commit` is demoted to
-  advisory: the merged sidecar records the equivalence class of pooled commits in
-  `meta.pooled_commits`. Legacy sidecars with no `play_digest` fall back to the old commit-match,
-  so nothing pre-digest silently over-pools.
-- **Verified:** same play_digest + different commit → POOLS (the false-invalidation this design
-  removes); different play_digest → REJECTS; legacy no-digest + different commit → REJECTS via
-  the commit fallback.
-
-**Remaining polish (optional):** an *emittable* rollout-config digest "mode" on the single-deck
-runner (today the digest is computed inline during `RunExhaustiveKeep`, which is what the gate
-needs); and wiring the soft-gate *procedure* (regression `--deck` + battery re-verify) into a
-one-command helper. The core gate is functional without these.
-
----
-
-**Original design follows (self-contained).**
-
-Deferred until the in-flight Slivers R=100 mulligan
+**Status:** design, not yet built. Deferred until the in-flight Slivers R=100 mulligan
 profile is pooled (that repo copy is frozen — see the "Freeze interaction" note at the
 bottom). This doc is self-contained; an implementing agent can build from it directly.
 
