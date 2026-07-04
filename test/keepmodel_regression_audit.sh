@@ -4,7 +4,7 @@
 # the SAME --batch path the harness uses, then diffs per-game vs the committed static baseline in
 # test/gt_logs/. Classifies every flip (won<->loss, faster, slower). Read-only; promotes nothing.
 #
-# Usage: DECK=burn PROF=logs/.../test_deck.keepmodel.profile.json bash test/keepmodel_regression_audit.sh
+# Usage: DECK=burn PROF=logs/.../burn.keepmodel.profile.json bash test/keepmodel_regression_audit.sh
 #        (optional) BASELINE=1 also runs the STATIC profile fresh to prove it reproduces gt_logs (rule 6).
 set -uo pipefail
 cd "$(dirname "$0")/.."

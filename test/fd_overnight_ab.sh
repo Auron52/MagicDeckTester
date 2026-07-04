@@ -14,7 +14,7 @@ SEEDS="4004 5005 6006 7007"
 # deck=file=profile
 DECKS=(
   "slivers=decks/slivers_vial.txt=decks/slivers_vial.profile.json"
-  "burn=decks/test_deck.txt=decks/test_deck.profile.json"
+  "burn=decks/burn.txt=decks/burn.profile.json"
   "th=decks/treasure_hunt.txt=decks/treasure_hunt.profile.json"
 )
 # depth=games=budget  (d0 omitted: full-depth==baseline at depth 0)

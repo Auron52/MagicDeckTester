@@ -18,10 +18,10 @@ DECKS=${DECKS:-"burn antilife knights slivers th hinata"}
 BIN=./build/Release/mtg; ANALYZE=./build/Release/mtg-analyze
 
 declare -A DECK_FILE=(
-  [burn]=decks/test_deck.txt   [antilife]=decks/Anti-Lifegain.cod [knights]=decks/Knights.cod
+  [burn]=decks/burn.txt   [antilife]=decks/Anti-Lifegain.cod [knights]=decks/Knights.cod
   [slivers]=decks/slivers_vial.txt [th]=decks/treasure_hunt.txt   [hinata]=decks/Hinata2.cod)
 declare -A DECK_PROF=(
-  [burn]=decks/test_deck.profile.json [antilife]=decks/Anti-Lifegain.profile.json
+  [burn]=decks/burn.profile.json [antilife]=decks/Anti-Lifegain.profile.json
   [knights]=decks/Knights.profile.json [slivers]=decks/slivers_vial.profile.json
   [th]=decks/treasure_hunt.profile.json [hinata]=decks/Hinata2.profile.json)
 

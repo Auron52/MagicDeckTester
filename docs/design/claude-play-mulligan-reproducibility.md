@@ -18,7 +18,7 @@ recorded one, so a saved reference reconstructs its exact opening hand on any en
 - **Existing references patched** by `test/patch_reference_mulligans.py` (derives `count = (7 or 8) -
   |hand|` accounting for the on-the-draw turn-1 draw, then searches the size-`count` bottom set that
   reproduces the recorded hand). `test/viewer_protocol_check.py` now forces the recorded mulligan, so
-  the former `mull-drift` class is reproducible (test_deck s11 went mull-drift -> ok).
+  the former `mull-drift` class is reproducible (burn s11 went mull-drift -> ok).
 
 Still deferred: **player-controlled** mulligan (the human/agent CHOOSING keep/mull + bottoming in the
 `--choices` stream, vs the engine deciding). The record/replay format above is the substrate for it.

@@ -18,10 +18,10 @@ cd "$HERE"
 OUT="$HERE/logs/mulligan_qa"; mkdir -p "$OUT"
 
 declare -A DECK_FILE=(
-  [burn]=decks/test_deck.txt [slivers]=decks/slivers_vial.txt
+  [burn]=decks/burn.txt [slivers]=decks/slivers_vial.txt
   [th]=decks/treasure_hunt.txt [knights]=decks/Knights.cod [antilife]=decks/Anti-Lifegain.cod)
 declare -A DECK_PROF=(
-  [burn]=decks/test_deck.profile.json [slivers]=decks/slivers_vial.profile.json
+  [burn]=decks/burn.profile.json [slivers]=decks/slivers_vial.profile.json
   [th]=decks/treasure_hunt.profile.json [knights]=decks/Knights.profile.json
   [antilife]=decks/Anti-Lifegain.profile.json)
 

@@ -16,7 +16,7 @@
 
 declare -A DECK_FILE=(
   [slivers]=decks/slivers_vial.txt
-  [burn]=decks/test_deck.txt
+  [burn]=decks/burn.txt
   [th]=decks/treasure_hunt.txt
   [knights]=decks/Knights.cod
   [antilife]=decks/Anti-Lifegain.cod
@@ -24,7 +24,7 @@ declare -A DECK_FILE=(
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial.profile.json
-  [burn]=decks/test_deck.profile.json
+  [burn]=decks/burn.profile.json
   [th]=decks/treasure_hunt.profile.json
   [knights]=decks/Knights.profile.json
   [antilife]=decks/Anti-Lifegain.profile.json

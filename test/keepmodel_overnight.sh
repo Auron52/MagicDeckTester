@@ -21,7 +21,7 @@
 # so they can be compared directly:
 #     bash test/keepmodel_overnight.sh                  # ~4h -> logs/keepmodel_overnight/slivers_vial/h12000_d5/
 #     KM_HANDS=25000 bash test/keepmodel_overnight.sh   # ~8h -> logs/keepmodel_overnight/slivers_vial/h25000_d5/
-#     KM_DECK=decks/test_deck.txt bash ...              # another deck (must have a committed profile)
+#     KM_DECK=decks/burn.txt bash ...              # another deck (must have a committed profile)
 #     KM_TAG=myrun   bash test/keepmodel_overnight.sh   # custom output subdir name
 # Each run re-fits the keep model + re-A/Bs committed in its own dir; diff the two REPORT.txt to see
 # whether 2x the hands meaningfully moves the policy/A/B (i.e. whether 4h was already enough).

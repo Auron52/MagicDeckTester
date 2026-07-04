@@ -15,7 +15,7 @@ rm -rf "$OUT" && mkdir -p "$OUT/fd" "$OUT/base"
 SEEDS="5005 6006"
 DECKS=(
   "slivers=decks/slivers_vial.txt=decks/slivers_vial.profile.json"
-  "burn=decks/test_deck.txt=decks/test_deck.profile.json"
+  "burn=decks/burn.txt=decks/burn.profile.json"
   "th=decks/treasure_hunt.txt=decks/treasure_hunt.profile.json"
 )
 # depth=games=budget

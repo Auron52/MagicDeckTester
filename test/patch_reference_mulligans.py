@@ -27,7 +27,7 @@ DECKS = {
     "Hinata2":       ("decks/Hinata2.cod",       "decks/Hinata2.profile.json"),
     "Knights":       ("decks/Knights.cod",       "decks/Knights.profile.json"),
     "slivers_vial":  ("decks/slivers_vial.txt",  "decks/slivers_vial.profile.json"),
-    "test_deck":     ("decks/test_deck.txt",     "decks/test_deck.profile.json"),
+    "burn":          ("decks/burn.txt",     "decks/burn.profile.json"),
     "treasure_hunt": ("decks/treasure_hunt.txt", "decks/treasure_hunt.profile.json"),
 }
 DEC = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)
