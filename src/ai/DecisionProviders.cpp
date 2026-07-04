@@ -906,7 +906,7 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
     // the face instead of 1). This only flips the EQUAL-VALUE land tiebreak (a flooded turn where
     // playing vs holding a land is indifferent), never a value decision -- the turn we actually
     // cast Blaze, playing the land raises the plan's value (landfall), so it still develops.
-    constexpr int kBankThreshold = 4;
+    constexpr int kBankThreshold = 3;
     int lands = 0;
     for (const Permanent& p : s.battlefield)
     {
