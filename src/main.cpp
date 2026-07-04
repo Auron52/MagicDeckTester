@@ -1932,6 +1932,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     { profile_path = deck_path.parent_path() / (deck_path.stem().string() + ".profile.json"); }
     MulliganProfile profile;
     if (std::filesystem::exists(profile_path)) { profile = LoadDeckProfile(profile_path); }
+    AttachExhaustiveSidecar(profile, profile_path);  // play uses the deck's exhaustive sidecar if present
 
     const int depth     = j.value("depth", 5);
     const int budget_ms = j.value("budget_ms", 100);
@@ -2257,6 +2258,7 @@ int main(int argc, char* argv[])
             profile = LoadDeckProfile(profile_path);
             std::cerr << "Loaded profile from " << profile_path.string() << "\n";
         }
+        AttachExhaustiveSidecar(profile, profile_path);  // play uses the deck's exhaustive sidecar if present
 
         // --eval-hand: one keep/mull decision on a constructed hand via the runtime predicate.
         // Prints "KEEP"/"MULLIGAN" for the given (hand, mull, play/draw) so a keep-model can be

@@ -565,3 +565,32 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
     file << DeckProfileToJson(profile);
     return file.good();
 }
+
+// For PLAY only: after loading a deck's base profile, pull in its exhaustive keep/bottom sidecar if
+// one ships alongside -- `<deck>.profile.json` -> `<deck>.keepmodel.exhaustive.profile.json[.gz]`.
+// The engine is presence-gated: keep always uses `exhaustive_keep` when present, and bottoming uses
+// it iff the sidecar's `bottoming_enabled` is set -- so attaching the block is the whole wiring.
+// Only the exhaustive_keep block is taken (base fields stay from the static profile). No-op if the
+// loaded profile already has an exhaustive block (i.e. --profile pointed straight at it) or the path
+// isn't a `<name>.profile.json`. NOT called by the analyzer's rollout-profile loads (that would be
+// circular during generation) -- only from the game-play entry points.
+inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
+{
+    if (!profile.exhaustive_keep.empty()) { return; }
+    const std::string fn = profile_path.filename().string();
+    const std::string suffix = ".profile.json";
+    if (fn.size() <= suffix.size() || fn.compare(fn.size() - suffix.size(), suffix.size(), suffix) != 0)
+    { return; }
+    const std::string stem = fn.substr(0, fn.size() - suffix.size());
+    const std::filesystem::path dir = profile_path.parent_path();
+    for (const char* ext : { ".keepmodel.exhaustive.profile.json.gz", ".keepmodel.exhaustive.profile.json" })
+    {
+        const std::filesystem::path cand = dir / (stem + ext);
+        if (std::filesystem::exists(cand))
+        {
+            MulliganProfile exh = LoadDeckProfile(cand);
+            if (!exh.exhaustive_keep.empty()) { profile.exhaustive_keep = std::move(exh.exhaustive_keep); }
+            return;
+        }
+    }
+}
