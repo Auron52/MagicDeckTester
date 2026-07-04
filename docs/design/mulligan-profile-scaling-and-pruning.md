@@ -94,12 +94,27 @@ and thus the threshold and every bottoming argmin — stay unbiased. This is exa
 "biggest win = size-7 mull-0 pure threshold" / "near-full R on the sub-tables" split, now forced by a
 measured bias rather than argued.
 
+**Conservative se in the stop gate (`MTG_KEEP_SE_PRIOR`, default 8).** The mull-0 threshold `Dopt[1]`
+is computed purely from the full-R sub-tables, so it is *identical* between uniform and adaptive — the
+only m=0 difference is the low-R `V[7][h]`. A first measurement found the residual flips were
+**systematically toward keep** (49 over-keep vs 13 over-mull), because win-turn is right-skewed: a
+low-R sample that misses its long tail looks *both* better (lower mean) *and* tighter (smaller sample
+variance) → it clears the confidence gate spuriously → over-keep. Fix: in the stop gate only, shrink a
+cell's sample variance toward the pooled size-7 variance with `se_prior` pseudo-observations
+(`var = (c·var_cell + κ·var_global)/(c+κ)`), so an unlucky-small sample variance can't fake confidence.
+Shrinkage fades as R grows and never touches the stored V/counts/policy.
+
 **Measured (test_deck, K=9, ~10.3k hands, d1, R_floor=8 / cap=40, paired seed):** vs uniform R=40,
-bottoming and every m≥1 keep flag are **byte-identical** (0 diffs); m=0 differs on **0.17%** of slots —
-all genuine near-ties (`flip-prob<ε`, ~zero EV cost) — at **~32% fewer rollouts**. Uniform off-path is
-byte-identical to the pre-change binary. Savings scale *up* with K (the size-7 table dominates the cell
-count on high-bucket decks), so this is the lever for Anti-Lifegain / Hinata. Tightening ε trades more
-refinement for fewer near-tie flips.
+bottoming and every m≥1 keep flag are **byte-identical** (0 diffs). m=0 residual: **0.17%** of slots
+(49−13 over-keep) *without* the se prior → **0.06%** (18−4) *with* κ=8, at ~30% fewer rollouts (12%
+more than without the prior). All residual flips are near-ties (`flip-prob<ε`, ~zero EV). Uniform
+off-path is byte-identical to the pre-change binary. Savings scale *up* with K (the size-7 table
+dominates the cell count on high-bucket decks), so this is the lever for Anti-Lifegain / Hinata.
+Levers on the residual: raise the floor, raise κ, or tighten ε (all trade rollouts for fewer flips).
+
+**Not yet done:** an in-game A/B (regression suite) of an adaptive-generated profile vs the
+uniform-generated one — the project's ship gate. Generator-table equivalence strongly implies it but is
+not the same measurement; validate on a real deck at the intended floor/cap before shipping a profile.
 
 Everything is indexed per **(mull-level × play/draw)** cell — the two axes are real and large.
 Mull: the keep bar drops as m rises (a 1-land hand is mostly-mulligan at size 7, mostly-keep by

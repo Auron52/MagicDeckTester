@@ -35,6 +35,12 @@ struct ExhaustiveKeepConfig
     int      r_floor   = 0;     // R_0: initial rollouts for every cell (0 => = rollouts, i.e. uniform)
     int      r_batch   = 16;    // rollouts added per refine wave to a still-ambiguous cell
     double   flip_eps  = 0.02;  // stop refining a cell once P(decision flips vs threshold) < this
+    double   se_prior  = 8.0;   // pseudo-count for shrinking a cell's sample variance toward the global
+                               // (pooled) variance in the STOP gate only. Guards against a low-R cell's
+                               // sample variance being spuriously small (win-turn is right-skewed, so a
+                               // sample that misses the tail looks both better AND tighter -> fake
+                               // confidence -> over-keep). Shrinkage vanishes as R grows and never
+                               // touches the stored V/counts/policy. 0 disables (raw se).
     int      max_mull  = 3;     // deepest mulligan (sizes 7 .. 7-max_mull evaluated)
     uint64_t seed      = 0;     // ROLLOUT seed base (the "run id"); vary per run/machine for disjoint
                                // continuation streams that pool cleanly.

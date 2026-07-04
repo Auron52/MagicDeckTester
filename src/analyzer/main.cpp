@@ -277,6 +277,8 @@ int main(int argc, char* argv[])
             cfg.r_batch   = env_int("MTG_KEEP_R_BATCH", 16, 1);
             cfg.flip_eps  = []{ const char* s = std::getenv("MTG_KEEP_FLIP_EPS");
                                 return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+            cfg.se_prior  = []{ const char* s = std::getenv("MTG_KEEP_SE_PRIOR");
+                                return (s && *s) ? std::max(0.0, std::atof(s)) : 8.0; }();
             cfg.max_mull  = env_int("MTG_KEEP_MAXMULL", 3, 0);
             cfg.seed      = seed;   // rollout seed base (the run id / seed_base)
             cfg.equiv_seed = []{ const char* s = std::getenv("MTG_EQUIV_SEED");

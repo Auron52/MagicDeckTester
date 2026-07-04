@@ -434,16 +434,41 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (;;)
         {
             const std::array<std::vector<double>, 2> Dopt = { compute_Dopt(0), compute_Dopt(1) };
+            // Global (pooled) win-turn variance over the size-7 table, per pd -- the shrink target for the
+            // stop gate. Win-turn variance is fairly homogeneous across hands, so this is a good prior;
+            // shrinking a cell's own (noisy at low R) sample variance toward it stops an unlucky-small
+            // sample variance from faking confidence (the skew-driven over-keep). Recomputed each wave
+            // from current accumulators (cheap vs the rollouts).
+            std::array<double, 2> var_global = { 0.0, 0.0 };
+            {
+                std::array<long long, 2> ng = { 0, 0 };
+                for (std::size_t i = 0; i < H7.comps.size(); ++i)
+                    for (int pd = 0; pd < 2; ++pd)
+                    {
+                        const long long c = H7.cnt[i][pd];
+                        if (c > 1)
+                        { const double mean = H7.V[i][pd];
+                          var_global[pd] += std::max(0.0, H7.sumsq[i][pd] / c - mean * mean); ++ng[pd]; }
+                    }
+                for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { var_global[pd] /= ng[pd]; } }
+            }
             std::vector<Task> tasks;
             for (int pd = 0; pd < 2; ++pd)
                 for (std::size_t i = 0; i < H7.comps.size(); ++i)
                 {
-                    if (H7.cnt[i][pd] >= r_max) { continue; }
-                    const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
-                    const double se = H7.se[i][pd];
+                    const long long c = H7.cnt[i][pd];
+                    if (c >= r_max) { continue; }
+                    const double mean     = H7.V[i][pd];
+                    const double var_cell = c > 1 ? std::max(0.0, H7.sumsq[i][pd] / c - mean * mean)
+                                                  : var_global[pd];
+                    // Shrink toward the global variance with `se_prior` pseudo-observations, then se of
+                    // the mean. As c grows the prior fades -> converges to the raw se at the cap.
+                    const double var_shr = (c * var_cell + cfg.se_prior * var_global[pd])
+                                         / (c + cfg.se_prior);
+                    const double se = std::sqrt(var_shr / c);
+                    const double d  = std::abs(mean - Dopt[pd][1]);
                     const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * SQRT2)) : (d == 0 ? 0.5 : 0.0);
                     if (flip <= cfg.flip_eps) { continue; }
-                    const long long c   = H7.cnt[i][pd];
                     const long long add = std::min<long long>(cfg.r_batch, r_max - c);
                     if (add <= 0) { continue; }
                     tasks.push_back({ work_idx[0][static_cast<int>(i)], pd, c, c + add });
