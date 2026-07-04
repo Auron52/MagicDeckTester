@@ -186,6 +186,22 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     m_last_mulligan_count = mulligan_count;
     if (mulligan_count > 0) { BottomCards(state, mulligan_count, max_turns); }
 
+    // Confounded-bottoming A/B (MTG_CONFOUND_BOTTOM): after the bottoming DECISION is made, reshuffle the
+    // remaining library with a seed DECORRELATED from the per-mulligan order the clairvoyant lookahead
+    // bottoming peeked at (line above uses game_seed + mulligan_count). The playout then draws a fresh
+    // sequence that no longer matches what lookahead optimized the removal against, so the peek is
+    // worthless -- isolating bottoming DECISION quality from the value of seeing the exact library. The
+    // blind exhaustive table (chosen as the argmin over reshuffled continuations -- exactly this
+    // distribution) is unaffected; a clairvoyant pick becomes miscalibrated. Reshuffling the whole
+    // remaining library mirrors how the exhaustive V labels were built (fresh continuations). OFF (unset
+    // or "0") => no reshuffle => byte-identical to the normal path. Only meaningful when mulligan>0.
+    static const bool confound_bottom = []
+    { const char* e = std::getenv("MTG_CONFOUND_BOTTOM"); return e && *e && std::string(e) != "0"; }();
+    if (confound_bottom && mulligan_count > 0)
+    {
+        ap.library.Shuffle(state.game_seed + 0x9E3779B97F4A7C15ULL);
+    }
+
     m_kept_opening_hand.clear();
     for (const Card& c : ap.hand)
     {
