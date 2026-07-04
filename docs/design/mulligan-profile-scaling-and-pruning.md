@@ -112,9 +112,38 @@ off-path is byte-identical to the pre-change binary. Savings scale *up* with K (
 dominates the cell count on high-bucket decks), so this is the lever for Anti-Lifegain / Hinata.
 Levers on the residual: raise the floor, raise κ, or tighten ε (all trade rollouts for fewer flips).
 
-**Not yet done:** an in-game A/B (regression suite) of an adaptive-generated profile vs the
-uniform-generated one — the project's ship gate. Generator-table equivalence strongly implies it but is
-not the same measurement; validate on a real deck at the intended floor/cap before shipping a profile.
+**Sub-table savings — the confident-mulligan skip (the bigger lever).** The size-7-only floor leaves the
+sub-tables (size 6/5/4) at full R, and those are ~80% of the R=100 cost. But a sub-cell's value is only
+ever *read* through `min(keep_val(h,m), Dopt[m+1])`: for a hand you **confidently mulligan** the `min`
+takes the mull branch, so the sub-cell is never read and can stay at the floor. Measured skippable
+fraction (test_deck/burn size-6, m=1, uniform R=40): **50–60%** across confidence margins 0.30→0.05t —
+robust. The safe boundary is *confident-mulligan* only: a **confident-keep** hand's `keep_val` *does*
+feed the threshold, so its argmin sub-cell needs full R (this is exactly what the naive all-tables floor
+got wrong). And it is **curse-safe by construction**: the min-bias is downward, so an under-sampled cell
+reads lower → looks *more* keepable → gets classified needed and refined; it can never make a keep/near
+hand masquerade as a confident mulligan.
+
+Implemented as an influence-driven wave: floor every cell, then top up (a) size-7 cells whose mull-0 flip
+prob > ε, and (b) sub-cells that are the argmin for any hand that is **not** a confident mulligan (or the
+terminal forced-keep level). **Gated on bottoming:** with `bottoming_enabled` the sub-table also serves
+the argmin (which subhand to keep), which needs the whole table accurate, so bottoming forces sub-tables
+to the cap up front (= the size-7-only scheme).
+
+**Measured (test_deck/burn, d1, R_floor=8/cap=40, paired seed vs uniform R=40):**
+- keep-only: **40.7% fewer rollouts**; keep-flag residual **0.39%** (m=0 only 8 flips — threshold held, no
+  drift; the rest are m=1 near-ties, mild over-mull from the heterogeneous-R min). Bottoming argmins move
+  38% (noisy sub-cells) but are **inert** when bottoming ships off.
+- bottoming on: 30.4% fewer, residual **0.06%**, bottom targets exact (0 diffs) — reproduces size-7-only.
+- Uniform off-path byte-identical to the pre-change binary.
+
+**Cost impact (burn = test_deck, d5 measured at 54 games/s):** uniform R=100 ≈ 11 h; size-7-only ≈ 6 h;
+**confident-mulligan skip ≈ ~4 h** — the lever that gets R=100 into "a few hours." Known limitation: the
+keep-only m=1 residual comes from the heterogeneous-R `min` missing a true-argmin cell stuck at the floor;
+a future refinement marks near-min *candidate* cells (best-arm identification), not just the current argmin.
+
+**Not yet done:** the in-game A/B (regression suite) of an adaptive-generated profile vs the
+uniform-generated one AND vs the static profile — the ship gate. Generator-table equivalence strongly
+implies it but is not the same measurement; validate on burn at the intended floor/cap before shipping.
 
 Everything is indexed per **(mull-level × play/draw)** cell — the two axes are real and large.
 Mull: the keep bar drops as m rises (a 1-land hand is mostly-mulligan at size 7, mostly-keep by

@@ -385,6 +385,35 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         return best;
     };
+    // The (7-m)-subcomposition that ATTAINS keep_val(h,m,pd) -- i.e. the argmin cell in tables[m]. Its
+    // noise is what drives hand h's mull-m keep decision (and its bottoming). Returns -1 if none.
+    auto argmin_sub = [&](const std::vector<int>& h, int m, int pd) -> int
+    {
+        const int target = HAND - m;
+        std::vector<std::vector<int>> subs;
+        std::vector<int> cur(K, 0);
+        EnumComps(0, target, cur, h, subs);
+        double best = 1e9; int arg = -1;
+        const SizeTable& t = tables[HAND - target];   // == tables[m]
+        for (const std::vector<int>& s : subs)
+        {
+            auto it = t.index.find(s);
+            if (it != t.index.end() && t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; }
+        }
+        return arg;
+    };
+    // Shrunk stderr of the mean for the STOP gate: pull the cell's sample variance toward the table's
+    // pooled variance `vg` with se_prior pseudo-observations, so a low-R cell's spuriously-small sample
+    // variance can't fake confidence (see MTG_KEEP_SE_PRIOR).
+    auto gate_se = [&](const SizeTable& t, int i, int pd, double vg) -> double
+    {
+        const long long c = t.cnt[i][pd];
+        if (c < 1) { return 0.0; }
+        const double mean = t.V[i][pd];
+        const double vc   = c > 1 ? std::max(0.0, t.sumsq[i][pd] / c - mean * mean) : vg;
+        const double vs   = (c * vc + cfg.se_prior * vg) / (c + cfg.se_prior);
+        return std::sqrt(vs / c);
+    };
     auto compute_Dopt = [&](int pd) -> std::vector<double>
     {
         const int M = cfg.max_mull;
@@ -396,26 +425,36 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         return Dopt;
     };
 
-    // Adaptive schedule: r_floor for every SIZE-7 cell, then add rollouts only where the mull-0 keep
-    // decision is still flippable. r_floor<=0 or >=rollouts => uniform R (== old behaviour, byte-ident).
+    // Adaptive schedule (influence-driven). Sample EVERY cell to the floor r0, then in waves add
+    // rollouts only to cells that could still change a keep decision or bias the threshold, until none
+    // qualify or all hit the cap. r_floor<=0 or >=rollouts => uniform R (byte-identical to the old path).
     //
-    // The floor is applied ONLY to the size-7 table. The mull-0 keep_val is V[7][h] -- a plain mean, so
-    // under-sampling a confident size-7 hand is safe (unbiased, just noisier, and near-threshold hands
-    // are refined to the cap). The SUB-tables (size 6/5/4) stay at the full cap because the bottoming
-    // keep_val there is a MIN over subcompositions, and the min of Monte-Carlo means is biased LOW at
-    // low R (the optimizer's/winner's curse) -- under-sampling them would lower the mull threshold and
-    // silently over-mulligan. This matches the design (docs/design/mulligan-profile-scaling-and-pruning
-    // "biggest win -- size-7, mull-0, a pure threshold" vs "near-full R on the sub-tables").
+    // Two cell roles:
+    //  * size-7 cell (mull-0): keep_val(h,0)=V[7][h], a plain mean. Refine while the mull-0 flip prob vs
+    //    the threshold exceeds eps (a genuine near-tie); confident hands stay at the floor.
+    //  * sub-cell (size 7-m, m>=1): sets keep_val(h,m)=min over subcomps. It is needed IFF it is the
+    //    argmin for a hand that is NOT a confident mulligan -- i.e. a confident KEEP (its keep_val feeds
+    //    the threshold, which must stay unbiased) or a near-tie (its own decision), or the terminal
+    //    forced-keep level. Needed sub-cells go to the cap; sub-cells that are the argmin ONLY for
+    //    confident-mulligan hands stay at the floor (their value enters every use through min(...,Dopt)
+    //    on the mull branch, so it is never read). This is curse-SAFE by construction: the min-bias is
+    //    downward, so an under-sampled cell reads LOWER -> looks MORE keepable -> gets classified needed
+    //    and refined; it can never make a keep/near hand masquerade as a confident mulligan.
     const long long r_max = cfg.rollouts;
     const long long r0    = (cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts) ? cfg.r_floor : r_max;
     const bool adaptive   = r0 < r_max;
 
-    {   // Pass A: size-7 cells to the floor; every sub-table cell straight to the cap.
+    // Sub-tables may start at the floor ONLY for adaptive keep-only profiles. With bottoming enabled the
+    // argmin (which subhand to keep) needs the WHOLE sub-table accurate -- and a cell that is the true
+    // argmin but noisily-high at the floor would never be marked -- so bottoming forces sub-tables to the
+    // cap up front (i.e. the size-7-only scheme). Size-7 always starts at the floor.
+    const bool sub_floor = adaptive && !cfg.bottoming_enabled;
+    {   // Pass A: size-7 to the floor; sub-tables to the floor (keep-only) or straight to the cap.
         std::vector<Task> tasks;
         tasks.reserve(work.size() * 2);
         for (int w = 0; w < static_cast<int>(work.size()); ++w)
         {
-            const long long init = (work[w].H == HAND) ? r0 : r_max;
+            const long long init = (work[w].H == HAND || sub_floor) ? r0 : r_max;
             for (int pd = 0; pd < 2; ++pd) { tasks.push_back({ w, pd, 0, init }); }
         }
         process_tasks(tasks);
@@ -427,53 +466,70 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     if (adaptive)
     {
         const double SQRT2 = 1.4142135623730951;
-        // Only the SIZE-7 mull-0 decision reads an adaptive value: keep_val(h,0)=V[7][h] (no bottoming),
-        // compared to the mull threshold Dopt[1]. All sub-tables are at the cap, so the m>=1 keep flags
-        // and every bottoming argmin are already exact. So refinement tops up only size-7 cells whose
-        // V[7][h] is still close enough to the (settling) threshold that R's noise could flip the keep.
         for (;;)
         {
             const std::array<std::vector<double>, 2> Dopt = { compute_Dopt(0), compute_Dopt(1) };
-            // Global (pooled) win-turn variance over the size-7 table, per pd -- the shrink target for the
-            // stop gate. Win-turn variance is fairly homogeneous across hands, so this is a good prior;
-            // shrinking a cell's own (noisy at low R) sample variance toward it stops an unlucky-small
-            // sample variance from faking confidence (the skew-driven over-keep). Recomputed each wave
-            // from current accumulators (cheap vs the rollouts).
-            std::array<double, 2> var_global = { 0.0, 0.0 };
+            // Pooled win-turn variance per table per pd -- the shrink target for the stop gate (variance
+            // scales with hand size, so it is per-table). Recomputed each wave; cheap vs the rollouts.
+            std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });
+            for (int H = HAND; H >= min_size; --H)
             {
-                std::array<long long, 2> ng = { 0, 0 };
-                for (std::size_t i = 0; i < H7.comps.size(); ++i)
+                const SizeTable& t = tables[HAND - H]; std::array<long long, 2> ng = { 0, 0 };
+                for (std::size_t i = 0; i < t.comps.size(); ++i)
                     for (int pd = 0; pd < 2; ++pd)
-                    {
-                        const long long c = H7.cnt[i][pd];
-                        if (c > 1)
-                        { const double mean = H7.V[i][pd];
-                          var_global[pd] += std::max(0.0, H7.sumsq[i][pd] / c - mean * mean); ++ng[pd]; }
-                    }
-                for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { var_global[pd] /= ng[pd]; } }
+                    { const long long c = t.cnt[i][pd];
+                      if (c > 1) { const double mn = t.V[i][pd];
+                                   vg[HAND - H][pd] += std::max(0.0, t.sumsq[i][pd] / c - mn * mn); ++ng[pd]; } }
+                for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[HAND - H][pd] /= ng[pd]; } }
             }
-            std::vector<Task> tasks;
+            // Mark cells to top up this wave, keyed (tableIdx = HAND-H, cellIdx, pd) so a sub-cell that is
+            // the argmin for several hands is marked once.
+            std::set<std::array<int, 3>> mark;
             for (int pd = 0; pd < 2; ++pd)
                 for (std::size_t i = 0; i < H7.comps.size(); ++i)
                 {
-                    const long long c = H7.cnt[i][pd];
-                    if (c >= r_max) { continue; }
-                    const double mean     = H7.V[i][pd];
-                    const double var_cell = c > 1 ? std::max(0.0, H7.sumsq[i][pd] / c - mean * mean)
-                                                  : var_global[pd];
-                    // Shrink toward the global variance with `se_prior` pseudo-observations, then se of
-                    // the mean. As c grows the prior fades -> converges to the raw se at the cap.
-                    const double var_shr = (c * var_cell + cfg.se_prior * var_global[pd])
-                                         / (c + cfg.se_prior);
-                    const double se = std::sqrt(var_shr / c);
-                    const double d  = std::abs(mean - Dopt[pd][1]);
-                    const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * SQRT2)) : (d == 0 ? 0.5 : 0.0);
-                    if (flip <= cfg.flip_eps) { continue; }
-                    const long long add = std::min<long long>(cfg.r_batch, r_max - c);
-                    if (add <= 0) { continue; }
-                    tasks.push_back({ work_idx[0][static_cast<int>(i)], pd, c, c + add });
-                    refined_rollouts += add;
+                    // m=0: size-7 flip gate.
+                    if (H7.cnt[i][pd] < r_max)
+                    {
+                        const double se = gate_se(H7, static_cast<int>(i), pd, vg[0][pd]);
+                        const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
+                        const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * SQRT2)) : (d == 0 ? 0.5 : 0.0);
+                        if (flip > cfg.flip_eps) { mark.insert({ 0, static_cast<int>(i), pd }); }
+                    }
+                    // m>=1: the argmin sub-cell is needed unless h is a confident mulligan at m.
+                    for (int m = 1; m <= cfg.max_mull; ++m)
+                    {
+                        const int arg = argmin_sub(H7.comps[i], m, pd);
+                        if (arg < 0) { continue; }
+                        const SizeTable& t = tables[m];               // size-(7-m) table
+                        if (t.cnt[arg][pd] >= r_max) { continue; }
+                        if (m == cfg.max_mull) { mark.insert({ m, arg, pd }); continue; }   // terminal: always
+                        // With bottoming enabled the sub-table also serves the argmin (which subhand to
+                        // keep), which needs the full sub-table accurate -- so skip the confident-mull
+                        // shortcut and drive every sub-cell to the cap. Keep-only (bottoming off) profiles
+                        // may skip confident-mulligan sub-cells (their value is never read via min).
+                        const double kv  = t.V[arg][pd];              // = keep_val(h,m)
+                        const double thr = Dopt[pd][m + 1];
+                        const double se  = gate_se(t, arg, pd, vg[m][pd]);
+                        const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
+                                                     : (kv == thr ? 0.5 : 0.0);
+                        const bool confident_mull = !cfg.bottoming_enabled
+                                                  && (kv - thr > 0.0) && (flip <= cfg.flip_eps);
+                        if (!confident_mull) { mark.insert({ m, arg, pd }); }
+                    }
                 }
+            if (mark.empty()) { break; }
+            std::vector<Task> tasks;
+            tasks.reserve(mark.size());
+            for (const std::array<int, 3>& mk : mark)
+            {
+                const int H_idx = mk[0], arg = mk[1], pd = mk[2];
+                const long long c   = tables[H_idx].cnt[arg][pd];
+                const long long add = std::min<long long>(cfg.r_batch, r_max - c);
+                if (add <= 0) { continue; }
+                tasks.push_back({ work_idx[H_idx][arg], pd, c, c + add });
+                refined_rollouts += add;
+            }
             if (tasks.empty()) { break; }
             process_tasks(tasks);
             recompute();
@@ -483,14 +539,29 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     if (adaptive)
     {
-        // Realized rollout distribution over the size-7 table (the biggest, and the keep threshold).
-        long long cmin = r_max, cmax = 0, csum = 0; std::size_t ncell = 0;
-        for (std::size_t i = 0; i < H7.comps.size(); ++i)
-        { long long c = H7.cnt[i][1]; cmin = std::min(cmin, c); cmax = std::max(cmax, c); csum += c; ++ncell; }
         os << "adaptive sampling: floor R=" << r0 << " cap R=" << r_max << " (flip_eps=" << cfg.flip_eps
-           << ", batch=" << cfg.r_batch << ") -> " << refine_waves << " refine waves, "
-           << refined_rollouts << " extra rollouts; size-7 R (play) min=" << cmin << " max=" << cmax
-           << " mean=" << (ncell ? static_cast<double>(csum) / ncell : 0.0) << "\n" << std::flush;
+           << ", se_prior=" << cfg.se_prior << ", batch=" << cfg.r_batch << ") -> " << refine_waves
+           << " waves, " << refined_rollouts << " extra rollouts\n";
+        // Per-table realized R (both pd) vs the uniform cap -> the savings by hand size.
+        long long uniform_total = 0, actual_total = 0;
+        for (int H = HAND; H >= min_size; --H)
+        {
+            const SizeTable& t = tables[HAND - H];
+            long long cmin = r_max, cmax = 0, csum = 0, ncell = 0;
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+                for (int pd = 0; pd < 2; ++pd)
+                { long long c = t.cnt[i][pd]; cmin = std::min(cmin, c); cmax = std::max(cmax, c);
+                  csum += c; ++ncell; }
+            uniform_total += static_cast<long long>(t.comps.size()) * 2 * r_max;
+            actual_total  += csum;
+            os << "  size-" << H << ": R min=" << cmin << " max=" << cmax
+               << " mean=" << (ncell ? static_cast<double>(csum) / ncell : 0.0)
+               << "  (" << t.comps.size() << " cells)\n";
+        }
+        os << "  total rollouts " << actual_total << " vs uniform " << uniform_total << " = "
+           << (uniform_total ? 100.0 * actual_total / uniform_total : 0.0) << "% ("
+           << (uniform_total ? 100.0 * (1.0 - static_cast<double>(actual_total) / uniform_total) : 0.0)
+           << "% saved)\n" << std::flush;
     }
 
     // ---- 4/5. Backward-induction mulligan value: optimal keep vs the static keep rule ------------
