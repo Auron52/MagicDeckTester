@@ -1,12 +1,13 @@
-# Regression ground truth -- commit ec2ec2f  date 2026-07-03
+# Regression ground truth -- commit ada51f9  date 2026-07-04
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (regression, 2026-07-04): gi185/s3003 (d3+d5): validated +EV R=100 keep of 1-land 6 (Ancient Ziggurat + 5 slivers) mana-screwed on this seed -- stuck on 1 land through T6, land#2 (Unclaimed Territory) only T7, no win by T8; static mulliganed further to a 5-card 1-lander that curved T5. Not misplay/rules/starvation (loss persists at 64x budget). Decision-driven draw variance on a keep validated better in expectation (R=100 beats R=20+static, 16/16 fresh seeds). 314 play-changed + 104 turn-later = hand-driven variance (non-slivers digests all byte-identical => code play-neutral; sampled opening hands all differ). d0 gi875 win->loss non-gating. Values byte-identical to pre-integration audited run 90ea9bf.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-slivers_smoke_d0_s1001=998/4.73848/82391840b6bdb7dc
-slivers_smoke_d3_s1001=250/4.276/0dadcd198ffb53aa
-slivers_smoke_d5_s1001=150/4.25333/516efb984a408ad3
+slivers_smoke_d0_s1001=999/4.66266/1cef9308489d08a1
+slivers_smoke_d3_s1001=250/4.292/e02388f36897f9a5
+slivers_smoke_d5_s1001=150/4.22/132bbde39d40eb3c
 burn_smoke_d0_s1001=979/4.64351/74ac5530d69a198a
 burn_smoke_d3_s1001=298/4.30872/28512f494164f2c6
 burn_smoke_d5_s1001=249/4.32129/8e57800987d06654
@@ -24,11 +25,11 @@ hinata_smoke_d3_s1001=145/5.7931/936954439336d180
 hinata_smoke_d5_s1001=71/5.83099/a6285100273243dd
 
 # --- regression ---
-slivers_regression_d0_s2002=1000/4.772/f3510497b7c03626
-slivers_regression_d3_s2002=400/4.255/dafe6d8ec54cb4a3
-slivers_regression_d3_s3003=400/4.255/e46e0e81fd7ca71b
-slivers_regression_d5_s2002=300/4.25667/e5e08e63f78a7845
-slivers_regression_d5_s3003=300/4.23667/12d2c6c628207acc
+slivers_regression_d0_s2002=999/4.7007/da946ecd33614760
+slivers_regression_d3_s2002=400/4.265/0149480e416863f1
+slivers_regression_d3_s3003=399/4.25815/69d7776c8689e159
+slivers_regression_d5_s2002=300/4.28/5a317e333509b231
+slivers_regression_d5_s3003=299/4.25084/6317ec6284060a44
 burn_regression_d0_s2002=983/4.65412/5370ec9e50fde6c5
 burn_regression_d3_s2002=498/4.34137/b3b15c155d5867d2
 burn_regression_d3_s3003=498/4.27108/1f8c1ac7c4b410a8
