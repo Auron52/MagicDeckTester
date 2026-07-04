@@ -92,3 +92,27 @@ Magnitude is small (~0.077 turns / +0.31pp) but consistent and never-regressing.
 approval (it shifts Hinata play -> GT rebaseline). Clean adoption path: change the missing-Hinata branch
 to `return false`, re-confirm the SHIPPED change (heuristic vs new, no force flag) reproduces the edge,
 then --accept the Hinata GT across modes. Scaffolding (`MTG_PONDER_FORCE`) reverted.
+
+### CORRECTION — primary objective is avg win turn (losses = max_turns+1), NOT win%
+
+The primary optimization objective is **average win turn with a loss counted as `max_turns+1`** (=9 at
+the default horizon 8) — a single unified metric where fast wins are good and losses are penalised.
+It is NOT "win% primary, avg-win-turn tiebreak" (an earlier mis-statement, incl. in the heuristic-
+optimization skill, which should be corrected). Re-scoring the three arms on this metric (pooled over
+seeds 2002/4004/5005, ensemble, losses=9):
+
+| policy | avg turn (losses=9) | vs heuristic |
+|---|---|---|
+| original heuristic         | 5.9597 | —      |
+| SANE (keep-Hinata-else-shuffle, COMMITTED) | 5.9247 | -0.035 |
+| ALWAYS-SHUFFLE (shuffle every Ponder)      | 5.8692 | **-0.091** |
+
+**Always-shuffle beats sane on every seed (-0.056 pooled).** So on the correct objective the ranking is
+always-shuffle < sane < heuristic. The committed SANE change is still a real improvement over the
+original (-0.035), but always-shuffle is the metric-optimal policy. Why always-shuffle wins even though
+it shuffles Hinata away: Ponder keeps ALL 3 on top, so keeping a top containing Hinata also locks in the
+2 junk cards beside her; the clairvoyant engine shuffles, dodges the junk, and re-finds Hinata later --
+net faster, and the small win% cost of delaying her (captured by the loss penalty) is outweighed. The
+"insane" intuition applies to a BLIND player; for the clairvoyant engine optimising avg-turn it is
+coherent. ADOPTION OF ALWAYS-SHUFFLE pending user decision (bigger behaviour change; user had flagged
+it as counterintuitive). If adopted: missing-Hinata AND Hinata-online branches -> shuffle; re-validate; rebaseline.
