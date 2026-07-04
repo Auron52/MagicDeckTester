@@ -1,6 +1,8 @@
 #include <cstdlib>
 #include <cctype>
 #include <utility>
+#include <atomic>
+#include <cstdint>
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
@@ -34,6 +36,35 @@ static bool UnpruneHumanSuppressed()
     return hp && g_human_play_suppressed;
 }
 
+// Canonical gate name <-> enum table, shared by the MTG_UNPRUNE parser and the gate-probe report.
+static const std::pair<const char*, UnprunedGate> kGateNames[] = {
+    {"altpayload", UnprunedGate::AltPayload}, {"tutor",     UnprunedGate::Tutor},
+    {"fetch",      UnprunedGate::Fetch},      {"dig",       UnprunedGate::Dig},
+    {"xspell",     UnprunedGate::XSpell},     {"ponder",    UnprunedGate::Ponder},
+    {"groupcap",   UnprunedGate::GroupCap},   {"comboline", UnprunedGate::ComboLine},
+    {"searchorder",UnprunedGate::SearchOrder},{"redirect",  UnprunedGate::Redirect},
+    {"drawengine", UnprunedGate::DrawEngine},
+};
+
+const char* GateName(UnprunedGate g)
+{
+    for (const auto& n : kGateNames) { if (n.second == g) { return n.first; } }
+    return "?";
+}
+
+// Gate PROBE: skip sweeping gates that have no live decision point for a deck. When enabled, every
+// DecisionUnpruned(gate) callsite that actually EXECUTES ORs its gate into a global mask (across all
+// threads/games of a run). A gate never queried has no reachable callsite for this deck (no matching
+// cards / no rituals / no dig source / ...), so opening it provably changes nothing -- skip it. A gate
+// that IS queried may still be neutral, but can only be cleared by actually sweeping it. The `&&`/`||`
+// short-circuits at the callsites mean the query only fires when the gate's guard condition holds
+// (e.g. Ponder only when a cast_reorder card exists), so "queried" is a faithful "live for this deck".
+static std::atomic<bool>     g_gate_probe{false};
+static std::atomic<uint32_t> g_gates_queried{0};
+
+void     SetGateProbe(bool on) { g_gate_probe.store(on); if (on) { g_gates_queried.store(0); } }
+uint32_t QueriedGatesMask()    { return g_gates_queried.load(); }
+
 // Parse MTG_UNPRUNE=<comma/space/;/| separated gate names> once into a bitmask over UnprunedGate.
 // "all" (or the legacy MTG_UNPRUNED) sets every bit. Unknown tokens are ignored. Case-insensitive.
 static uint32_t ParseUnpruneMask()
@@ -44,14 +75,6 @@ static uint32_t ParseUnpruneMask()
     for (char& c : s) { c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
                         if (c == ',' || c == ';' || c == '|') { c = ' '; } }
     auto bit = [](UnprunedGate g) { return 1u << static_cast<int>(g); };
-    const std::pair<const char*, UnprunedGate> names[] = {
-        {"altpayload", UnprunedGate::AltPayload}, {"tutor",     UnprunedGate::Tutor},
-        {"fetch",      UnprunedGate::Fetch},      {"dig",       UnprunedGate::Dig},
-        {"xspell",     UnprunedGate::XSpell},     {"ponder",    UnprunedGate::Ponder},
-        {"groupcap",   UnprunedGate::GroupCap},   {"comboline", UnprunedGate::ComboLine},
-        {"searchorder",UnprunedGate::SearchOrder},{"redirect",  UnprunedGate::Redirect},
-        {"drawengine", UnprunedGate::DrawEngine},
-    };
     uint32_t mask = 0;
     std::size_t pos = 0;
     while (pos < s.size())
@@ -63,7 +86,7 @@ static uint32_t ParseUnpruneMask()
         pos = end;
         if (tok.empty()) { continue; }
         if (tok == "all") { mask = (1u << static_cast<int>(UnprunedGate::_Count)) - 1u; continue; }
-        for (const auto& n : names) { if (tok == n.first) { mask |= bit(n.second); break; } }
+        for (const auto& n : kGateNames) { if (tok == n.first) { mask |= bit(n.second); break; } }
     }
     return mask;
 }
@@ -84,6 +107,10 @@ bool DecisionUnpruned()
 
 bool DecisionUnpruned(UnprunedGate g)
 {
+    // Gate probe: record that this gate has a REACHABLE callsite for the current deck (see the probe
+    // comment above). Cheap relaxed OR, only when probing; normal runs pay one predictable branch.
+    if (g_gate_probe.load(std::memory_order_relaxed))
+    { g_gates_queried.fetch_or(1u << static_cast<int>(g), std::memory_order_relaxed); }
     if (DecisionUnpruned()) { return true; }         // global MTG_UNPRUNED opens every gate
     if (UnpruneHumanSuppressed()) { return false; }  // selective mode honours the same suppression
     return (UnpruneMask() >> static_cast<int>(g)) & 1u;

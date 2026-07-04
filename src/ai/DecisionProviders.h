@@ -56,6 +56,14 @@ enum class UnprunedGate
 // form. Default (neither env) => false.
 bool DecisionUnpruned(UnprunedGate g);
 
+// Gate probe: run a deck once with the probe ON, then read QueriedGatesMask() to learn which gates
+// have a live decision point for that deck. A gate NOT in the mask has no reachable callsite (no
+// matching cards / rituals / dig source), so opening it provably changes nothing -- skip sweeping it.
+// The mask accumulates across all threads/games since SetGateProbe(true). GateName maps enum->name.
+void        SetGateProbe(bool on);
+uint32_t    QueriedGatesMask();
+const char* GateName(UnprunedGate g);
+
 class GenericProvider : public DecisionProvider
 {
 public:

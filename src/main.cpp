@@ -2058,6 +2058,7 @@ int main(int argc, char* argv[])
         std::filesystem::path cards_json  = "src/cards/data/cards.json";
         std::filesystem::path game_log_dir;
         std::filesystem::path game_trace_dir;
+        bool                  gate_probe = false;
         int                   num_threads = 0;
         for (int i = 2; i < argc; ++i)
         {
@@ -2066,8 +2067,10 @@ int main(int argc, char* argv[])
             else if (flag == "--cards-json" && i + 1 < argc) { cards_json = argv[++i]; }
             else if (flag == "--game-log-dir" && i + 1 < argc) { game_log_dir = argv[++i]; }
             else if (flag == "--game-trace-dir" && i + 1 < argc) { game_trace_dir = argv[++i]; }
+            else if (flag == "--gate-probe")            { gate_probe = true; }
             else if (manifest.empty())                  { manifest = flag; }
         }
+        if (gate_probe) { SetGateProbe(true); }
         if (manifest.empty())
         {
             std::cerr << "Usage: " << argv[0]
@@ -2108,6 +2111,18 @@ int main(int argc, char* argv[])
             for (const BatchJobResult& r : results) { total_games += r.games_played; }
             std::cout << "=== BATCH done (" << results.size() << " jobs, "
                       << total_games << " games) ===\n" << std::flush;
+            if (gate_probe)
+            {
+                const uint32_t live = QueriedGatesMask();
+                std::string live_s, dead_s;
+                for (int i = 0; i < static_cast<int>(UnprunedGate::_Count); ++i)
+                {
+                    const char* nm = GateName(static_cast<UnprunedGate>(i));
+                    ((live >> i) & 1u ? live_s : dead_s).append(nm).append(" ");
+                }
+                std::cout << "=== GATE PROBE ===\n  live (sweep these): " << live_s
+                          << "\n  dead (skip these):  " << dead_s << "\n" << std::flush;
+            }
         }
         catch (const std::exception& e)
         {
