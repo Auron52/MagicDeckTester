@@ -1150,48 +1150,21 @@ bool HinataProvider::KeepReorderTop(const GameState& s, const std::vector<Card>&
         return false;
     }
 
-    // --- Missing Hinata: she is in a class of her own -- without her the combo and even an
-    // affordable Soulfire are unreachable, so a top set is only worth keeping if it advances toward
-    // her: it contains Hinata herself, OR a dig/tutor toward her PLUS at least one other useful card
-    // (a land/rock we still need for mana, or a holdable combo piece). A lone dig amid dead cards is
-    // NOT enough -- shuffle and dig fresh for her. ---
-
-    // Mana sources in play + this turn's land-drop need (mirrors SituationalCardRank).
-    int sources = 0;
-    for (const Permanent& p : s.battlefield)
-    {
-        if (p.controller_index != active) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && (p.card.IsLand() || d->params.mana_rock)) { ++sources; }
-    }
-    const int  source_target  = 4;   // enough to cast Hinata ({1}{U}{R}{W})
-    const bool land_drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
-    const bool need_land      = land_drop_open && sources < source_target;
-
-    bool has_hinata = false;
-    int  dig = 0, other_useful = 0;
+    // --- Missing Hinata: she is in a class of her own -- without her the combo (and even an
+    // affordable Soulfire) is unreachable, so KEEP the top only if Hinata herself is in it; otherwise
+    // SHUFFLE and dig fresh for her. Previously the top was also kept when it held a dig/tutor + a
+    // useful card, but the shuffle-variance instrument (docs/design/shuffle-variance-instrument.md)
+    // showed that keeping-for-dig-cards is marginally WORSE than re-digging: Ponder keeps all 3 on top
+    // (it cannot bottom the junk 3rd card), so locking in a merely-useful top costs the fresh look.
+    // A/B (heuristic vs this) over 3 seeds incl. 2 held-out: +0.39pp win% and -0.030 avg win turn,
+    // never regressing. Keeping Hinata when she is in the top-3 recovers the win% a blind always-shuffle
+    // would give up. This also matches how the deck is played by hand (you don't keep cantrips on top). ---
     for (const Card& c : top)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (!d) { continue; }
-        const CardParams& p = d->params;
-        if (p.hinata_cost_reducer) { has_hinata = true; continue; }
-        const bool is_dig = p.cast_scry > 0 || p.cast_reorder > 0 || p.expressive_iteration
-                          || p.tutor_to_hand || p.tutor_to_top;
-        if (is_dig) { ++dig; continue; }
-        // A non-dig card is "useful other" if it helps reach or execute the combo: a land/rock we
-        // still need for mana, or a combo piece (Crackle / Soulfire / Magma / a mana ritual) worth
-        // holding for after she lands. Surplus lands and goldfish-inert cards are dead weight here.
-        const bool is_land  = d->card.IsLand();
-        const bool is_rock  = p.mana_rock;
-        const bool is_piece = (p.x_damage_multiplier > 1) || p.damage_equals_top_mv
-                            || p.cast_draw > 0 || IsManaRitual(*d);
-        if (is_land || is_rock) { if (need_land || sources < source_target) { ++other_useful; } }
-        else if (is_piece)      { ++other_useful; }
+        if (d && d->params.hinata_cost_reducer) { return true; }   // Hinata in the top-3 -> keep her
     }
-    if (has_hinata) { return true; }
-    // dig + (a second dig OR a useful other) -> keep; a lone dig or no dig at all -> shuffle.
-    return dig >= 1 && (dig + other_useful) >= 2;
+    return false;   // no Hinata on top -> shuffle and dig fresh for her
 }
 
 // ---- instances + selection --------------------------------------------------
