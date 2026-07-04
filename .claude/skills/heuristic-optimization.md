@@ -157,8 +157,51 @@ inside single-seed noise. Takeaways: reordering rarely beats an already hand-tun
 baseline, and **per-deck optima diverge**, reinforcing that tuned ordering belongs in the
 archetype provider, not the root.
 
+## Detecting which heuristic costs a line — granular un-pruning
+
+`MTG_UNPRUNED` opens EVERY branch-narrowing gate at once to ask "are our heuristics costing the
+search lines?" — but the global knob has two problems the tooling now addresses:
+
+- **It explodes.** A fully-unbound (`--budget-ms 0`) d5 audit does NOT finish a 100-game
+  Anti-Lifegain set — even *pruned* unbound d5 has multi-minute tail games, and global-unpruned
+  stalls (~29/100 in ~30 min, 24 threads all stuck on pathological trees). A few gates
+  (tutor/fetch full enumeration, dig, search-ordering) each multiply the tree.
+- **It can't attribute.** A faster win under global unpruning could come from any opened gate.
+
+Use **`MTG_UNPRUNE=<comma/space list of gate names>`** (built in `DecisionUnpruned(UnprunedGate)`)
+to open ONE gate at a time: `altpayload, tutor, fetch, dig, xspell, ponder, groupcap, comboline,
+searchorder, redirect, drawengine` (or `all`). Opening a single cheap gate keeps the tree tractable
+(the `altpayload`-only audit *finishes*) and isolates the responsible heuristic. Byte-identical by
+construction — `MTG_UNPRUNED` still forces every gate, neither env still forces none. The A/B is the
+same as the global one: run pruned vs `MTG_UNPRUNE=<gate>`, diff per-game win turns/digests.
+
+**Always log unpruned runs.** Pass `--game-trace-dir <dir>` to `--batch` so each game writes a full
+decision-log JSON (digest-neutral — win turns/digests are unchanged). The whole value of an unpruned
+run is the *better line* it found; re-running to see it is exactly what's expensive (the deep-tail
+games you never want to recompute). Trace once, inspect the JSON.
+
+### Worked example — a measured win that was a clairvoyance artifact (rejected)
+
+`MTG_UNPRUNE=altpayload` on 100 Anti-Lifegain games surfaced two turn-faster wins. Tracing one:
+the search cast **Skyshroud Cutter's free alt on turn 1** — gifting the opponent +5 life — for a
+2/2 body that attacked early and closed a turn sooner. Tempting to adopt as "cast the free body
+early for tempo." **Don't.** Playing the free alt EARLY (no enabler) is opp **+5**; LATE under a
+Tainted Remedy it is opp **−5** — a **10-point swing** hinging purely on timing. The early body
+only claws that back with enough attack turns, and in the games where you **never draw an enabler
+at all** it is a pure 5-life gift. The d5 search wins because it is **clairvoyant within its
+horizon** — it already knows which games have the enabler and the attack turns to pay it back, so
+it cherry-picks the early cast only where it works. A blind heuristic can't tell those apart and
+would gift 5 on spec in the games that never pay off; it also wouldn't transfer to a non-passive
+opponent. **Lesson:** a win-turn delta from an unpruned run is only adoptable if it's *robust to
+not knowing the future*. Attribute the edge — clairvoyance vs. a genuinely better blind rule —
+before adopting. Contrast the Invigorate *lethal-closer* fix from the same audit: "lethal THIS
+turn" is deterministic from the current board (no clairvoyance), so it shipped (a completeness fix,
+strictly better/neutral) — while the tempo line was correctly set aside.
+
 ## Pitfalls
 
+- **Clairvoyance artifacts** — the search sees the seeded future within its depth; a measured win
+  can hinge on knowing draws a blind heuristic can't. Adopt only edges robust to not-knowing.
 - **Single-seed noise** — never adopt a small delta seen on one seed; escalate seeds.
 - **win% vs speed** — a variant can win more games but end later; be explicit about
   the objective and surface the trade in the report.
