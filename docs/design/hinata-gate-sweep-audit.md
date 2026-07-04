@@ -45,3 +45,27 @@ through clairvoyant library sculpting the search already exploits within its hor
 games vs baseline ~10 min for 99 (cast-order permutation explosion — same pathology as slivers g4).
 
 Traces: `logs/audit/traces/hinata_<gate>/` (gitignored scratch). Nothing authored/adopted.
+
+---
+
+## Aggro / Treasure-Hunt searchorder double-check (300 games, same protocol)
+
+Scaling the prior 50-game aggro sweep (see the `aggro-decks-gate-sweep` memory) to **300 games
+unbounded d5, seed 8008**, searchorder (the one live gate that ever showed activity; altpayload/
+groupcap were inert at 50g):
+
+| Deck | intersection | faster | later | win↔loss | verdict |
+|------|-------------:|-------:|------:|---------:|---------|
+| burn    | 297 | 1 | 1 | 0 | net-neutral; both changed games = **lookahead-bottoming divergence** (gi=14 kept a different hand, gi=216 reshuffled draws), NOT a cast-order gap |
+| slivers | 297 | 0 | 0 | 0 | clean (3 ordering-explosion stragglers excluded) |
+| knights | 300 | 0 | 0 | 0 | clean |
+| th      | 297 | 0 | 0 | 0 | clean |
+
+**No real cast-order gap on any deck.** Key finding: even burn — which has NO in-game library
+manipulation (tutor/dig/fetch/ponder all dead) — produced its two changed games via the
+**lookahead-bottoming rollout** (a clairvoyant full-game rollout that decides which cards to bottom).
+Opening searchorder perturbs that rollout → a different kept hand / reshuffle → a physically
+different game. So the bottoming rollout is a clairvoyance vector for EVERY deck; a searchorder
+faster-win is only a real gap if the kept hand AND the draws are identical — which never occurred.
+searchorder remains a net-neutral tuned heuristic and is load-bearing for tractability (slivers/th
+had ordering-explosion stragglers that never finish unbounded). Nothing authored/adopted.
