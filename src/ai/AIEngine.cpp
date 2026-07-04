@@ -2656,7 +2656,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                       ? FindBestOwnAttacker(state, state.active_player_index)
                       : def->params.controller_lifegain_equals_power
                         ? FindLifegainRemovalTarget(state, state.active_player_index)
-                        : FindOpponentCreature(state);
+                        // Searing Blood: prefer a creature we KILL so the "when it dies" 3-to-face
+                        // rider fires (else it's an arbitrary 2-damage bruise). Lockstep with the
+                        // rollout apply and the value-model reach estimate (all use FindBurnKillTarget).
+                        : def->params.death_trigger_damage > 0
+                          ? FindBurnKillTarget(state, state.active_player_index, def->params.damage)
+                          : FindOpponentCreature(state);
             if (idx < 0)
             {
                 // Invigorate-type free alt-cast with no preferred (own-attacker) target: the pump is

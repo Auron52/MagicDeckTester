@@ -896,6 +896,25 @@ bool VialProvider::WantVialCharge(const GameState& s, const Permanent& vial) con
     return ::WantVialCharge(s, vial);
 }
 
+// ---- BurnProvider -----------------------------------------------------------
+
+bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
+{
+    // Burn's curve tops out at mana value 2, so ~2-3 lands cast the whole deck; a further land in
+    // play adds no castable value. Once we control this many lands, BANK the next land in hand
+    // instead of developing it, so a future topdecked Searing Blaze can play it for landfall (3 to
+    // the face instead of 1). This only flips the EQUAL-VALUE land tiebreak (a flooded turn where
+    // playing vs holding a land is indifferent), never a value decision -- the turn we actually
+    // cast Blaze, playing the land raises the plan's value (landfall), so it still develops.
+    constexpr int kBankThreshold = 4;
+    int lands = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsLand()) { ++lands; }
+    }
+    return lands >= kBankThreshold;
+}
+
 // ---- HinataProvider ---------------------------------------------------------
 
 std::vector<std::string>
@@ -1186,6 +1205,7 @@ namespace
     const TreasureHuntProvider g_treasure;
     const VialProvider         g_vial;
     const HinataProvider       g_hinata;
+    const BurnProvider         g_burn;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -1197,7 +1217,7 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 {
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
-    bool anti = false, th = false, vial = false, hinata = false;
+    bool anti = false, th = false, vial = false, hinata = false, burn = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -1206,6 +1226,10 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 
         // Hinata, Dawn-Crowned's cost-reduction static is the deck's defining signature.
         if (p.hinata_cost_reducer) { hinata = true; }
+
+        // Mono-red Burn: Searing Blaze's landfall damage is unique to this deck; it drives the
+        // land-banking heuristic (bank spare lands for a future Blaze's landfall).
+        if (p.landfall_damage > 0) { burn = true; }
 
         if (p.lifegain_to_loss || p.verse_damage || p.alt_lifegain_cost > 0
             || p.tutor_to_hand || p.tutor_to_top || !p.fetch_land_types.empty())
@@ -1225,5 +1249,6 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }
+    if (burn) { return g_burn; }
     return g_generic;
 }

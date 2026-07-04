@@ -533,6 +533,29 @@ inline int FindLifegainRemovalTarget(const GameState& state, int active)
     return best;
 }
 
+// Target selection for a creature-targeting burn that carries a "when that creature dies" rider
+// (Searing Blood: 2 to a creature, then 3 to its controller if it dies this turn). The 3-to-face
+// only lands if the target actually DIES, so among the opponent's creatures we prefer one this
+// spell KILLS -- EffectiveToughness() <= `damage` -- over an arbitrary first creature it would only
+// bruise. Falls back to the first opponent creature when none is killable (still a legal target;
+// the spell deals its `damage` but the death rider does not fire), and returns -1 when the opponent
+// controls no creature at all (uncastable). Used in lockstep by the value model's reach estimate,
+// the search rollout's damage apply, and the real executor so all three agree on the target AND on
+// whether the death rider fires. Goldfishing scope: the passive opponent never blocks/attacks, so
+// which creature dies is irrelevant beyond enabling this rider (revisit for a real opponent).
+inline int FindBurnKillTarget(const GameState& state, int active, int damage)
+{
+    int first = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == active || !p.card.IsCreature()) { continue; }
+        if (first < 0) { first = i; }
+        if (p.EffectiveToughness() <= damage) { return i; }   // killable -> the rider fires
+    }
+    return first;   // none killable (or -1 = no opponent creature)
+}
+
 // A spell that requires a target is UNCASTABLE with no legal target (CR 601.2c: choosing
 // targets is part of casting; a spell with no legal target cannot be put on the stack). This
 // gates every alt-cost payload's cast so we never emit a targetless line. Keyed on the spell's

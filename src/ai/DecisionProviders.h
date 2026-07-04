@@ -140,6 +140,16 @@ public:
     bool WantVialCharge(const GameState&, const Permanent&) const override;
 };
 
+// Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
+// lands in play (its curve tops at mana value 2), it BANKS further land drops so a future
+// topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1). Inherits
+// Generic for everything else; the only override is the equal-value land-drop tiebreak.
+class BurnProvider : public GenericProvider
+{
+public:
+    bool PreferHoldLandDrop(const GameState&, int) const override;
+};
+
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by
 // Hinata's "{1} less per target", which the deck maximises by targeting extra/own/opponent
 // permanents -- so its goldfish opponent must present real targets. Layer 2 grows this provider

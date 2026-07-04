@@ -916,9 +916,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             continue;
         }
 
-        // Only count damage that actually reaches the opponent's life total.
-        // Creature-only targeting (e.g. Searing Blood) deals damage to a permanent,
-        // not to the player, so it doesn't contribute to face-lethal calculations.
+        // Count damage that actually reaches the opponent's life total. A player/multi-target burn
+        // deals its face damage directly (Searing Blaze: 1, or landfall 3). A creature-only burn
+        // deals damage to a permanent -- EXCEPT Searing Blood, whose "when that creature dies" rider
+        // deals death_trigger_damage (3) to the controller IFF the target dies. Credit that reach
+        // when a killable opponent creature exists (EffectiveToughness <= the burn's damage), lockstep
+        // with the rollout apply / executor which fire the same rider on the same FindBurnKillTarget
+        // pick. Without this the search valued Blood at 0 face and never recognised a Blood-closes-it
+        // lethal / under-ranked it as reach.
         int direct = 0;
         if (def.tmpl == CardTemplate::DirectDamage
             && def.params.targeting != Targeting::Creature)
@@ -927,6 +932,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             if (def.params.landfall_damage > 0 && ap.lands_played_this_turn > 0)
             {
                 direct = def.params.landfall_damage;
+            }
+        }
+        else if (def.tmpl == CardTemplate::DirectDamage
+                 && def.params.targeting == Targeting::Creature
+                 && def.params.death_trigger_damage > 0)
+        {
+            int ti = FindBurnKillTarget(state, state.active_player_index, def.params.damage);
+            if (ti >= 0 && state.battlefield[ti].EffectiveToughness() <= def.params.damage)
+            {
+                direct = def.params.death_trigger_damage;
             }
         }
 
@@ -2538,12 +2553,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 // Both require an opponent creature; with none the spell has no legal
                 // target and is not cast (mirrors CastSpellFromHand's early return).
-                int ci = -1;
-                for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                // Searing Blood (death rider) prefers a creature it KILLS so the 3-to-face
+                // fires; Blaze (no rider) takes the first creature -- lockstep with the executor.
+                int ci;
+                if (def.params.death_trigger_damage > 0)
                 {
-                    const Permanent& bp = state.battlefield[bi];
-                    if (bp.controller_index != state.active_player_index && bp.card.IsCreature())
-                    { ci = bi; break; }
+                    ci = FindBurnKillTarget(state, state.active_player_index, def.params.damage);
+                }
+                else
+                {
+                    ci = -1;
+                    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                    {
+                        const Permanent& bp = state.battlefield[bi];
+                        if (bp.controller_index != state.active_player_index && bp.card.IsCreature())
+                        { ci = bi; break; }
+                    }
                 }
                 if (ci >= 0)
                 {
@@ -4744,6 +4769,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // value, so among equal-value/equal-win-turn candidates it keeps the first one —
     // this ordering makes that first one the greedy land, defaulting indifferent ties
     // to the proven heuristic without overriding any strictly-better searched line.
+    // Burn banks spare lands once flooded (BurnProvider::PreferHoldLandDrop) so a future Searing
+    // Blaze gets its landfall: among EQUAL-VALUE plans, order the DEFER (no-land) plans first
+    // instead of developing. Only flips the tiebreak below -- the value/win comparisons above are
+    // untouched, so a strictly-better (e.g. landfall-enabling) develop plan still wins.
+    const bool hold_land = ResolveProvider(state).PreferHoldLandDrop(state, state.active_player_index);
     std::stable_sort(all.begin(), all.end(),
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
@@ -4753,7 +4783,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             {
                 const bool a_has = !a.land_to_play.empty();
                 const bool b_has = !b.land_to_play.empty();
-                if (a_has != b_has) { return a_has > b_has; }                    // (1) develop
+                // (1) develop first -- UNLESS banking for landfall, then hold (no-land) first.
+                if (a_has != b_has) { return hold_land ? (a_has < b_has) : (a_has > b_has); }
                 if (a_has && b_has)
                 {
                     const bool a_tap = land_good_early_tapped(a.land_to_play);

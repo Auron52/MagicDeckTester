@@ -200,6 +200,16 @@ public:
         return ScryKeepOnTop(s, card) ? 1 : 0;
     }
 
+    // Hook 20 -- land-banking: among EQUAL-VALUE plans, prefer HOLDING the land drop (play no land)
+    // over developing it. Burn banks spare lands once it has enough mana (its curve tops at MV 2) so
+    // a future topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1).
+    // This only INVERTS the develop tiebreak in EnumeratePlansWithLand -- it never reorders plans of
+    // DIFFERENT value, so on a turn that actually casts Blaze the land drop (which raises the plan's
+    // value via landfall) still wins on value, not the tiebreak. Honoured identically in the search
+    // and the rollout (both call EnumeratePlansWithLand). DEFAULT false -> every other deck always
+    // develops (byte-identical); only BurnProvider opts in, gated on lands-in-play.
+    virtual bool PreferHoldLandDrop(const GameState& s, int controller) const { return false; }
+
     // Hook 16 -- does this deck's goldfish opponent play lands? Decks whose spells target the
     // OPPONENT'S permanents for value (Hinata: Magma Opus taps them, the spread-damage / cost-
     // reduction targeting points at them) need a realistic opponent board. When true the engine

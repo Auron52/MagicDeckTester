@@ -110,7 +110,12 @@ void GoldFishRunner::PopulateOpponentSpawns(GameState& state, int game_index)
         {{1,2,2}},                                                    // 5: single 2/2
         {{1,3,3}},                                                    // 6: single 3/3
         {{3,4,4}},                                                    // 7: 4/4 on T3
-        {{4,6,6}},                                                    // 8: 6/6 on T4
+        // 8: a 6/6 wall entering AHEAD of a 1/1 (both on T3). The 6/6 is first in board order and
+        // un-killable by any single burn (Blood 2 / Bolt-Blaze 3), so it exercises Searing Blood's
+        // targeting: the naive first-creature pick whiffs on the 6/6 (no death trigger), while
+        // FindBurnKillTarget correctly hits the 1/1 for the 3-to-face rider. (Goldfish creatures
+        // never block/attack, so P/T-per-turn realism is moot -- these are pure burn/removal targets.)
+        {{3,6,6},{3,1,1}},
         {{1,1,1},{2,1,1},{3,2,2}},                                    // 9: small + small + mid
     };
 
