@@ -68,4 +68,27 @@ policy; each arm ensemble-averaged over the salts:
 
 **Net:** the Ponder heuristic is validated near-optimal on its highest-stakes (stochastic) decision.
 Combined with the deterministic-lever bounds, the whole ponder/dig heuristic is measurably sound.
-Nothing adopted; `MTG_PONDER_FORCE` was throwaway scaffolding (reverted).
+
+### Follow-up: the always-shuffle edge REPLICATES (candidate improvement)
+
+The seed-2002 hint (item 3) was validated on two HELD-OUT seeds (4004, 5005), 200g/6-salt ensembles
+each (heuristic vs forced always-shuffle):
+
+| seed | HEUR win% | SHUF win% | Δwin% | HEUR wt | SHUF wt | Δwt |
+|---|---|---|---|---|---|---|
+| 2002 (tune)     | 96.33 | 96.50 | +0.17 | 5.819 | 5.725 | -0.094 |
+| 4004 (held-out) | 95.58 | 95.75 | +0.17 | 5.888 | 5.821 | -0.066 |
+| 5005 (held-out) | 93.75 | 94.33 | +0.58 | 5.779 | 5.710 | -0.069 |
+| **pooled**      | 95.22 | 95.53 | +0.31 | 5.829 | 5.752 | **-0.077** |
+
+Same direction on ALL three seeds (higher win% AND faster) -> a real, small, validated edge, not noise.
+Also a SIMPLIFICATION: drop `KeepReorderTop`'s missing-Hinata "keep if dig>=1 && (dig+useful)>=2"
+exception and always shuffle when Hinata is missing. Mechanism: Ponder keeps ALL 3 on top (can't bottom
+the junk 3rd card), so re-digging past a mediocre top finds combo pieces a hair faster than being locked
+into it. (The force-arm shuffled on EVERY Ponder incl. the rare Hinata-online case; the gain is almost
+certainly the common missing-Hinata regime, so the clean adoption is the missing-Hinata branch only.)
+
+Magnitude is small (~0.077 turns / +0.31pp) but consistent and never-regressing. ADOPTION PENDING user
+approval (it shifts Hinata play -> GT rebaseline). Clean adoption path: change the missing-Hinata branch
+to `return false`, re-confirm the SHIPPED change (heuristic vs new, no force flag) reproduces the edge,
+then --accept the Hinata GT across modes. Scaffolding (`MTG_PONDER_FORCE`) reverted.
