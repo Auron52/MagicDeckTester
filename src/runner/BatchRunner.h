@@ -44,8 +44,15 @@ public:
     // Parses the manifest JSON and runs it. num_threads: 0 = hardware_concurrency.
     // on_job_done (optional) streams each job's result the moment it completes; the
     // returned vector still holds every job's result in manifest order at the end.
+    // trace_dir (optional): when non-empty, each game writes a FULL decision-log JSON to
+    //   <trace_dir>/<jobname>_gi<game>.json (a real GameLogger, not digest-only). This is
+    //   the "log unpruned runs so we can see WHAT better line it found, without a rerun"
+    //   path -- expensive (structure + disk per game), so leave empty for normal batches.
+    //   The play digest is folded identically in both logger modes, so enabling traces does
+    //   NOT change win turns or digests (comparisons vs a digest-only baseline stay valid).
     // Throws std::runtime_error on a malformed manifest or unreadable deck/profile.
     static std::vector<BatchJobResult> RunManifest(
         const std::filesystem::path& manifest_path, int num_threads = 0,
-        const JobDoneCallback& on_job_done = {});
+        const JobDoneCallback& on_job_done = {},
+        const std::filesystem::path& trace_dir = {});
 };

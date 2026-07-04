@@ -1,4 +1,6 @@
 #include <cstdlib>
+#include <cctype>
+#include <utility>
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
@@ -21,18 +23,70 @@
 // pick ONE option the search never alternatives over (cast-ORDER, vial-charge, scry-keep,
 // discard-order, combat) are NOT yet opened here: making the search branch on them needs new
 // enumeration (the ordering/combat work items), not just a wider gate.
+// Human-play suppression, shared by both the global and per-gate forms: in a --claude-play
+// session (MTG_HUMAN_PLAY set) the engine's clairvoyant bottoming/keep rollout is an ENGINE
+// decision the human never makes, so un-pruning is suppressed there (a HumanPlaySuppress guard
+// is live) -> the kept hand reproduces the real gated d5 game. A pure autonomous audit (no
+// human-play) is unaffected.
+static bool UnpruneHumanSuppressed()
+{
+    static const bool hp = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    return hp && g_human_play_suppressed;
+}
+
+// Parse MTG_UNPRUNE=<comma/space/;/| separated gate names> once into a bitmask over UnprunedGate.
+// "all" (or the legacy MTG_UNPRUNED) sets every bit. Unknown tokens are ignored. Case-insensitive.
+static uint32_t ParseUnpruneMask()
+{
+    const char* e = std::getenv("MTG_UNPRUNE");
+    if (!e) { return 0; }
+    std::string s = e;
+    for (char& c : s) { c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                        if (c == ',' || c == ';' || c == '|') { c = ' '; } }
+    auto bit = [](UnprunedGate g) { return 1u << static_cast<int>(g); };
+    const std::pair<const char*, UnprunedGate> names[] = {
+        {"altpayload", UnprunedGate::AltPayload}, {"tutor",     UnprunedGate::Tutor},
+        {"fetch",      UnprunedGate::Fetch},      {"dig",       UnprunedGate::Dig},
+        {"xspell",     UnprunedGate::XSpell},     {"ponder",    UnprunedGate::Ponder},
+        {"groupcap",   UnprunedGate::GroupCap},   {"comboline", UnprunedGate::ComboLine},
+        {"searchorder",UnprunedGate::SearchOrder},{"redirect",  UnprunedGate::Redirect},
+        {"drawengine", UnprunedGate::DrawEngine},
+    };
+    uint32_t mask = 0;
+    std::size_t pos = 0;
+    while (pos < s.size())
+    {
+        while (pos < s.size() && s[pos] == ' ') { ++pos; }
+        std::size_t end = s.find(' ', pos);
+        if (end == std::string::npos) { end = s.size(); }
+        std::string tok = s.substr(pos, end - pos);
+        pos = end;
+        if (tok.empty()) { continue; }
+        if (tok == "all") { mask = (1u << static_cast<int>(UnprunedGate::_Count)) - 1u; continue; }
+        for (const auto& n : names) { if (tok == n.first) { mask |= bit(n.second); break; } }
+    }
+    return mask;
+}
+
+static uint32_t UnpruneMask()
+{
+    static const uint32_t m = ParseUnpruneMask();
+    return m;
+}
+
 bool DecisionUnpruned()
 {
     static const bool v = std::getenv("MTG_UNPRUNED") != nullptr;
     if (!v) { return false; }
-    // In a --claude-play session (MTG_HUMAN_PLAY also set), un-pruning is a human-play side effect,
-    // not an autonomous audit knob. The engine's clairvoyant bottoming/keep rollout is an ENGINE
-    // decision the human never makes, so suppress un-pruning there too (a HumanPlaySuppress guard is
-    // live) -> the kept hand reproduces the real gated d5 game. A pure autonomous MTG_UNPRUNED A/B
-    // (no human-play) is unaffected: its bottoming rollout stays unpruned as before.
-    static const bool hp = std::getenv("MTG_HUMAN_PLAY") != nullptr;
-    if (hp && g_human_play_suppressed) { return false; }
+    if (UnpruneHumanSuppressed()) { return false; }
     return true;
+}
+
+bool DecisionUnpruned(UnprunedGate g)
+{
+    if (DecisionUnpruned()) { return true; }         // global MTG_UNPRUNED opens every gate
+    if (UnpruneHumanSuppressed()) { return false; }  // selective mode honours the same suppression
+    return (UnpruneMask() >> static_cast<int>(g)) & 1u;
 }
 
 // Stage 6: the search tree calls the provider for every deck decision; here the GENERIC
@@ -219,7 +273,7 @@ std::vector<int> GenericProvider::XCandidates(const GameState&, const CardDefini
     // 1..max range so the unpruned-vs-pruned A/B can confirm the prune leaves nothing behind
     // (e.g. a turn where holding mana for a second spell beats max-X). Empty when X must be 0.
     if (max_affordable <= 0) { return {}; }
-    if (DecisionUnpruned())
+    if (DecisionUnpruned(UnprunedGate::XSpell))
     {
         std::vector<int> all;
         all.reserve(max_affordable);
@@ -291,7 +345,7 @@ AntiLifegainProvider::TutorCandidates(const GameState& s, int controller, const 
     // Human play (unpruned): offer EVERY legal target so the player picks the tutor's card
     // freely, not the enabler-then-wincon heuristic's single choice. Mirrors HinataProvider;
     // autonomous search is unchanged (DecisionUnpruned() is false there).
-    if (DecisionUnpruned()) { return GenericProvider::TutorCandidates(s, controller, pp); }
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { return GenericProvider::TutorCandidates(s, controller, pp); }
     return ::TutorCandidates(s, controller, pp);
 }
 
@@ -354,7 +408,7 @@ int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition
 bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int controller,
                                                      const CardDefinition& def) const
 {
-    if (DecisionUnpruned()) { return true; }   // unpruned A/B: let the search judge the wipe.
+    if (DecisionUnpruned(UnprunedGate::AltPayload)) { return true; }   // unpruned A/B: let the search judge the wipe.
     // Reverent Silence's destroy-all-enchantments wipes our OWN Aria/Remedy. Casting it
     // non-lethally with no surviving enabler bricks the combo (the greedy second-main rollout
     // overvalues the immediate 6 -- regression gi=36: opp 23, single Tainted Remedy, no Drone
@@ -475,7 +529,7 @@ bool TreasureHuntProvider::ShouldConsiderDig(const GameState& s) const
 {
     // Unpruned audit: consider a dig whenever a dig source exists, instead of the
     // affordability/flood heuristic gating it. See DecisionUnpruned.
-    if (DecisionUnpruned()) { return ::HasAnyDigSource(s); }
+    if (DecisionUnpruned(UnprunedGate::Dig)) { return ::HasAnyDigSource(s); }
     return ::ShouldConsiderDig(s);
 }
 std::string TreasureHuntProvider::SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const
@@ -532,7 +586,7 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
 bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,
                                                 const CardDefinition& def) const
 {
-    if (DecisionUnpruned()) { return true; }   // unpruned A/B: never gate the flood engine.
+    if (DecisionUnpruned(UnprunedGate::DrawEngine)) { return true; }   // unpruned A/B: never gate the flood engine.
     // Cast a flood engine -- Treasure Hunt (DrawUntilNonland) or a cascade/retrace card that
     // can cascade INTO it (Throes of Chaos) -- only when the cards it draws will not be wasted.
     // Without a payoff the drawn lands just hit cleanup discard (gi=67: Treasure Hunt drew 31
@@ -795,7 +849,7 @@ std::vector<std::string>
 HinataProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
     // Unpruned A/B: do not narrow -- let the search branch over every legal tutor target.
-    if (DecisionUnpruned()) { return GenericProvider::TutorCandidates(s, controller, pp); }
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { return GenericProvider::TutorCandidates(s, controller, pp); }
 
     // Already have Hinata in play or hand? The payoffs are live -> search the full set for the
     // missing piece. Otherwise the deck is dead without her, so fetch Hinata if she's findable.

@@ -833,7 +833,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // target (CR 601.2c) -- gate the emission on a target existing, but still `continue`
             // below so a Forest-controlled payload is never re-emitted as a hard-cast.
             if ((ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def)
-                 || DecisionUnpruned())
+                 || DecisionUnpruned(UnprunedGate::AltPayload))
                 && AltPayloadTargetLegal(state, def))
             {
                 constexpr int DMG = 100;
@@ -960,7 +960,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         // restores the searched 2-way branch for the standing A/B. The provider still supplies the
         // kept-card ORDER (by situational rank) either way.
         static const bool s_ponder_search = std::getenv("MTG_PONDER_SEARCH") != nullptr;
-        if (def.params.cast_reorder > 0 && (s_ponder_search || DecisionUnpruned()))
+        if (def.params.cast_reorder > 0 && (s_ponder_search || DecisionUnpruned(UnprunedGate::Ponder)))
         {
             Action keep_a = a;            keep_a.ponder_keep    = 1;
             a.ponder_keep = 0;            // `a` becomes the shuffle variant
@@ -1106,7 +1106,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                                        std::vector<std::vector<int>>& groups,
                                        std::vector<int>& group_hand_index)
 {
-    if (GroupCapDisabled() || DecisionUnpruned()) { return; }
+    if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
     // The provider supplies the breadth policy; the env knob is an engine-side A/B override.
     int cap = ResolveProvider(state).EnumGroupCap();
     if (const char* e = std::getenv("MTG_SOLVE_GROUP_CAP")) { int x = std::atoi(e); cap = x < 1 ? 1 : x; }
@@ -1384,7 +1384,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // standing A/B that proves the cut wins the same games. MTG_NO_COMBO_LINE is a dedicated isolation
     // toggle (disables ONLY this cut, keeping every other heuristic) for a clean perf A/B.
     static const bool s_no_combo_line = std::getenv("MTG_NO_COMBO_LINE") != nullptr;
-    if (any_ritual && !s_no_combo_line && !DecisionUnpruned())
+    if (any_ritual && !s_no_combo_line && !DecisionUnpruned(UnprunedGate::ComboLine))
     {
         int finisher = -1, finisher_dmg = -1;
         std::vector<int> rituals;
@@ -3095,7 +3095,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // SUPPRESSED under UNPRUNED: there the safe alt is enumerated as a real cast choice
         // (CollectActions), so the search/human decides whether to fire it -- auto-firing it
         // here too would double-cast it AND override that decision.
-        if (!DecisionUnpruned())
+        if (!DecisionUnpruned(UnprunedGate::AltPayload))
         for (;;)
         {
             Player& ap2 = state.ActivePlayer();
@@ -3714,7 +3714,7 @@ static std::string SimulateLandPlay(GameState& state)
 // MTG_UNPRUNED. Expensive (applies each tried ordering on a copy); run with a high budget.
 static bool OrderingSearchEnabled()
 {
-    static const bool v = (std::getenv("MTG_SEARCH_ORDER") != nullptr) || DecisionUnpruned();
+    static const bool v = (std::getenv("MTG_SEARCH_ORDER") != nullptr) || DecisionUnpruned(UnprunedGate::SearchOrder);
     return v;
 }
 
@@ -4648,7 +4648,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             {
                 // Unpruned audit: search EVERY fetch candidate (no cap), so a costly
                 // fetch-target heuristic can be detected. See DecisionUnpruned.
-                int cap = DecisionUnpruned() ? static_cast<int>(cands.size())
+                int cap = DecisionUnpruned(UnprunedGate::Fetch) ? static_cast<int>(cands.size())
                                              : kMaxFetchSearchTargets;
                 int n = std::min(static_cast<int>(cands.size()), cap);
                 for (int i = 0; i < n; ++i) { add_for_land(ln, cands[i]); }

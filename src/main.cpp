@@ -2042,6 +2042,7 @@ int main(int argc, char* argv[])
         std::filesystem::path manifest;
         std::filesystem::path cards_json  = "src/cards/data/cards.json";
         std::filesystem::path game_log_dir;
+        std::filesystem::path game_trace_dir;
         int                   num_threads = 0;
         for (int i = 2; i < argc; ++i)
         {
@@ -2049,12 +2050,14 @@ int main(int argc, char* argv[])
             if (flag == "--threads"    && i + 1 < argc) { num_threads = std::stoi(argv[++i]); }
             else if (flag == "--cards-json" && i + 1 < argc) { cards_json = argv[++i]; }
             else if (flag == "--game-log-dir" && i + 1 < argc) { game_log_dir = argv[++i]; }
+            else if (flag == "--game-trace-dir" && i + 1 < argc) { game_trace_dir = argv[++i]; }
             else if (manifest.empty())                  { manifest = flag; }
         }
         if (manifest.empty())
         {
             std::cerr << "Usage: " << argv[0]
-                      << " --batch <manifest.json> [--threads N] [--cards-json P]\n";
+                      << " --batch <manifest.json> [--threads N] [--cards-json P]"
+                         " [--game-log-dir D] [--game-trace-dir D]\n";
             return 1;
         }
         try
@@ -2085,7 +2088,7 @@ int main(int argc, char* argv[])
                 }
             };
             std::vector<BatchJobResult> results =
-                BatchRunner::RunManifest(manifest, num_threads, on_job_done);
+                BatchRunner::RunManifest(manifest, num_threads, on_job_done, game_trace_dir);
             int total_games = 0;
             for (const BatchJobResult& r : results) { total_games += r.games_played; }
             std::cout << "=== BATCH done (" << results.size() << " jobs, "

@@ -283,7 +283,7 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
 
     // Unpruned audit (MTG_UNPRUNED): return EVERY legal tutor target (distinct names)
     // so the search branches over all of them, instead of the heuristic-narrowed pick.
-    if (DecisionUnpruned())
+    if (DecisionUnpruned(UnprunedGate::Tutor))
     {
         std::vector<std::string>        all;
         std::unordered_set<std::string> seen;
@@ -2531,7 +2531,7 @@ inline std::vector<std::string> FetchCandidates(const GameState& state, int cont
     // library lands whose subtypes match the fetchland's target types) so the search
     // branches over all of them, instead of the heuristic-ranked pick. TurnSolver lifts
     // its fetch-target search cap in the same mode.
-    if (DecisionUnpruned())
+    if (DecisionUnpruned(UnprunedGate::Fetch))
     {
         std::vector<std::string>        all;
         std::unordered_set<std::string> seen;
@@ -3186,7 +3186,7 @@ inline void TryPumpThenSwordsRedirect(GameState& state, int active, int target_b
                                       const CardDefinition& removal_def)
 {
     if (!removal_def.params.controller_lifegain_equals_power) { return; }
-    if (DecisionUnpruned())                                   { return; }
+    if (DecisionUnpruned(UnprunedGate::Redirect))             { return; }
     if (target_bi < 0 || target_bi >= static_cast<int>(state.battlefield.size())) { return; }
     if (state.battlefield[target_bi].controller_index == active) { return; }  // opponent creatures only
     if (!RemedyActive(state, active))                         { return; }     // enabler in play

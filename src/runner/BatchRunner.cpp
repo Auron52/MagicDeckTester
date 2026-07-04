@@ -90,8 +90,9 @@ Job ParseJob(const json& jspec)
 
 std::vector<BatchJobResult> BatchRunner::RunManifest(
     const std::filesystem::path& manifest_path, int num_threads,
-    const JobDoneCallback& on_job_done)
+    const JobDoneCallback& on_job_done, const std::filesystem::path& trace_dir)
 {
+    if (!trace_dir.empty()) { std::filesystem::create_directories(trace_dir); }
     std::ifstream in(manifest_path);
     if (!in) { throw std::runtime_error("cannot open manifest: " + manifest_path.string()); }
     json manifest = json::parse(in);
@@ -225,16 +226,27 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 state.vial_target_mv = job.profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(state, wi.game);
 
-                // Attach a DIGEST-ONLY logger for the play fingerprint (no structure built, no
-                // disk written -- cheap). It records only the real game's decisions (m_logger is
-                // nulled in the search rollouts), so it does not perturb play: win turns stay
-                // byte-identical to a no-logger run. Reset per game via StartGame.
-                GameLogger dlog(/*digest_only=*/true);
+                // Attach a logger for the play fingerprint. Default: DIGEST-ONLY (no structure
+                // built, no disk -- cheap). With trace_dir set: a FULL logger that also builds
+                // the structural trace and writes it to disk (used to inspect an unpruned run's
+                // better line without re-running -- esp. valuable for the pathological deep-tail
+                // games you never want to recompute). Fold* runs before the digest_only early-out
+                // in every log method, so the digest is identical either way -> win turns and
+                // digests are byte-identical whether or not tracing is on. Reset per game via
+                // StartGame. Records only the real game's decisions (m_logger is nulled in the
+                // search rollouts), so it does not perturb play.
+                const bool trace = !trace_dir.empty();
+                GameLogger dlog(/*digest_only=*/!trace);
                 dlog.StartGame(std::string(), wi.game, job.name, job.seed + wi.game, {});
                 engine->SetLogger(&dlog);
                 win_turns[wi.job][wi.game] = engine->RunGame(state, job.max_turns);
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();
+                if (trace)
+                {
+                    dlog.EndGame(win_turns[wi.job][wi.game]);
+                    dlog.WriteToFile(trace_dir / (job.name + "_gi" + std::to_string(wi.game) + ".json"));
+                }
 
                 // Stream this job the instant its last game lands.
                 if (on_job_done

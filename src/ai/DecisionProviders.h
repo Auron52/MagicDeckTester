@@ -22,6 +22,40 @@ struct Decklist;
 // Default off => byte-identical. Defined in DecisionProviders.cpp.
 bool DecisionUnpruned();
 
+// GRANULAR un-pruning: the global MTG_UNPRUNED opens EVERY branch-narrowing gate at once,
+// which explodes the search (the full 100-game d5 audit does not finish in hours because a
+// few gates -- tutor/fetch full enumeration, dig, search-ordering -- each multiply the tree).
+// To isolate WHICH heuristic costs a line, MTG_UNPRUNE=<comma/space list of gate names> opens
+// ONLY the named gates. Each DecisionUnpruned() callsite names the gate it belongs to below.
+//
+// Invariants that keep this byte-identical to before:
+//   * MTG_UNPRUNED set  -> DecisionUnpruned(any gate) is true (global opens all) == today.
+//   * neither env set   -> always false == today.
+// Only the NEW MTG_UNPRUNE=<subset> mode depends on a callsite's gate label; the two knobs
+// above ignore it. Gate names (case-insensitive) accepted in MTG_UNPRUNE: altpayload, tutor,
+// fetch, dig, xspell, ponder, groupcap, comboline, searchorder, redirect, drawengine.
+// "all" == every gate.
+enum class UnprunedGate
+{
+    AltPayload,   // alt-cost payload cast enumeration + its auto-fire suppression (Invigorate/Reverent)
+    Tutor,        // tutor candidate set: every legal target instead of the narrowed pick
+    Fetch,        // fetchland candidate set + TurnSolver's fetch-target search cap
+    Dig,          // consider a dig whenever a dig source exists (Treasure Hunt)
+    XSpell,       // X-spell: full 1..max_affordable range instead of the single max-X pick
+    Ponder,       // cast_reorder / scry-keep: the searched 2-way keep/bottom branch
+    GroupCap,     // plan enumeration group cap (breadth policy) disabled
+    ComboLine,    // ritual finisher combo-line cut disabled (search finds it unaided)
+    SearchOrder,  // cast/resolve ordering search enabled
+    Redirect,     // pump-then-Swords redirect heuristic disabled (search owns the target)
+    DrawEngine,   // draw-engine (flood) cast gate ungated -- always a cast choice
+    _Count
+};
+
+// True if `g` should be un-pruned for this run: the global MTG_UNPRUNED opens all gates,
+// else MTG_UNPRUNE=<list> opens the named subset. Same human-play suppression as the no-arg
+// form. Default (neither env) => false.
+bool DecisionUnpruned(UnprunedGate g);
+
 class GenericProvider : public DecisionProvider
 {
 public:
