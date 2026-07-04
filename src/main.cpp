@@ -1909,6 +1909,7 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "library_filler": "Forest", "library_size": 40,   // so draws / rollouts don't run dry
 //     "depth": 5, "budget_ms": 100, "max_turns": 4,
 //     "expect_win_turn": 4,          // optional: nonzero exit if the actual win turn is later (a FAIL)
+//     "expect_no_win": true,         // optional: nonzero exit if the engine DID win (negative guard)
 //     "log_out": "logs/play/scenario.json" }            // optional: write the per-turn trace
 static int RunScenario(const std::filesystem::path& scenario_path)
 {
@@ -2002,6 +2003,20 @@ static int RunScenario(const std::filesystem::path& scenario_path)
               << " opponent_life=" << state.players[1].life
               << " active_life="   << state.players[0].life
               << (log_out.empty() ? "" : (" log=" + log_out)) << "\n";
+
+    // Optional NEGATIVE assertion: fail (exit 1) if the engine DID win, when the fixture asserts it
+    // must not (e.g. Invigorate must NOT auto-fire and gift life when it is not lethal, or when no
+    // legal target exists). Guards a conditional fire against becoming too eager.
+    if (j.value("expect_no_win", false))
+    {
+        if (won)
+        {
+            std::cout << "scenario: FAIL expected NO win, got win by turn " << win_turn << "\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (no win, as expected)\n";
+        return 0;
+    }
 
     // Optional assertion: fail (exit 1) if the win came later than expected (or not at all).
     if (j.contains("expect_win_turn"))

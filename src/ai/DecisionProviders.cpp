@@ -377,6 +377,32 @@ bool AntiLifegainProvider::CanAutoFireAltPayload(const GameState& s, int control
 {
     if (::CanAutoFireAltPayload(s, controller, def)) { return true; }  // safe payloads (Invigorate/Skyshroud)
 
+    // Invigorate-type SAFE pump-alt with no READY own attacker. ::CanAutoFireAltPayload refused it
+    // (its own-attacker requirement -- the pump is what a normal fire is FOR). But the free alt-cost
+    // damage (opp gains N -> N loss under a Remedy) can itself be LETHAL this turn with the pump
+    // moot, as long as a legal creature target exists: CR "target creature" is ANY creature -- an
+    // opponent's, or our own tapped/summoning-sick one -- so the spell is castable (item-1 guard).
+    // Fire it when it closes the game: opp life <= alt damage + ready attack power (0 when nothing
+    // can attack). Unlike casting it EARLY for tempo (a clairvoyant, enabler-dependent gamble we do
+    // NOT auto-fire), "lethal THIS turn" is deterministic from the current board -- no clairvoyance.
+    // The rollout (FireSafeAltPayloads) and executor both apply the alt-cost and skip the moot pump,
+    // staying in lockstep.
+    // opp still ALIVE guard: "close out the game this turn" presupposes it is not already closed.
+    // The auto-fire pass fires payloads greedily and re-scans the mutated board, so without this a
+    // prior payload/attack that already dropped the opponent to <= 0 would still let Invigorate fire
+    // a redundant overkill (changing the realised line for no gain). Fire only when Invigorate is the
+    // actual closer: opp alive and its alt-cost damage (+ any ready attackers, though this branch is
+    // only reached with none -- a ready attacker makes the first line fire the pump) is lethal.
+    if (def.params.target_own_creature && !def.params.destroy_all_enchantments
+        && ::RemedyActive(s, controller)
+        && ::ControlsSubtype(s, controller, def.params.alt_cost_requires_subtype)
+        && ::AltPayloadTargetLegal(s, def)
+        && s.players[1 - controller].life > 0
+        && s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller))
+    {
+        return true;
+    }
+
     // Same-turn enabler -> Reverent Silence LETHAL combo. ::CanAutoFireAltPayload refuses ANY
     // destroy_all_enchantments payload (it wipes our own Aria/Remedy, so it is normally a SEARCH
     // choice via ShouldEmitRiskyAltPayload). But when it is LETHAL this turn the wipe is moot (the

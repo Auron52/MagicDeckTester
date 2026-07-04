@@ -1,0 +1,14 @@
+{
+  "_comment": "Negative guard for item 4: Invigorate must NOT auto-fire when it is not lethal. Same board as invigorate_lethal_no_attacker but opp at 4, so the free alt-cost 3 (opp gains 3 -> -3 with Tainted Remedy) leaves opp at 1 -- not a kill, and with no ready attacker there is no other damage. Firing it would gift 3 life for nothing (and, vs a real opponent, hand them tempo). PASS = the engine does NOT fire it and does NOT win by max_turns.",
+  "deck": "decks/Anti-Lifegain.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 4,
+  "battlefield": [
+    { "name": "Forest", "controller": 0 },
+    { "name": "Tainted Remedy", "controller": 0 },
+    { "name": "Skyshroud Cutter", "controller": 1 }
+  ],
+  "hand": [ "Invigorate" ],
+  "library_filler": "Forest", "library_size": 40,
+  "depth": 5, "budget_ms": 100, "max_turns": 4,
+  "expect_no_win": true
+}

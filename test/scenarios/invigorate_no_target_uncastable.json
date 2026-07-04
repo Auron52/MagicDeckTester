@@ -1,0 +1,13 @@
+{
+  "_comment": "Guards the target-legality rule (item 1): a targeted spell with no legal target is uncastable (CR 601.2c), even when its alt-cost would otherwise be lethal. Opp at 3 with Tainted Remedy + Forest, Invigorate in hand -- the alt-cost 3 would be exactly lethal -- BUT there is NO creature anywhere (neither player controls one), so Invigorate ('target creature') has no legal target and cannot be cast. PASS = the engine does NOT fire it and does NOT win. If this ever wins, a targetless cast has crept back in.",
+  "deck": "decks/Anti-Lifegain.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 3,
+  "battlefield": [
+    { "name": "Forest", "controller": 0 },
+    { "name": "Tainted Remedy", "controller": 0 }
+  ],
+  "hand": [ "Invigorate" ],
+  "library_filler": "Forest", "library_size": 40,
+  "depth": 5, "budget_ms": 100, "max_turns": 4,
+  "expect_no_win": true
+}

@@ -2657,7 +2657,17 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                       : def->params.controller_lifegain_equals_power
                         ? FindLifegainRemovalTarget(state, state.active_player_index)
                         : FindOpponentCreature(state);
-            if (idx < 0) { return; }
+            if (idx < 0)
+            {
+                // Invigorate-type free alt-cast with no preferred (own-attacker) target: the pump is
+                // moot but the alt-cost damage still resolves and can be lethal (CanAutoFireAltPayload
+                // only fires this when a legal creature target exists AND it closes the game). Fall
+                // through with NO creature target so the pump applies to nothing -- exactly mirroring
+                // the rollout (ti<0 skips the pump; the alt-cost below still fires). A NON-alt
+                // creature-targeted spell with no legal target stays uncastable (return).
+                if (alt_lifegain <= 0) { return; }
+                break;
+            }
             Target t;
             t.type            = Target::Type::Permanent;
             t.permanent_index = idx;
