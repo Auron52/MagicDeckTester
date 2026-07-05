@@ -329,8 +329,15 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // also varies the initial deck shuffle + mulligan reshuffles.
     static const uint64_t s_shuffle_salt         = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT");         return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
     static const uint64_t s_shuffle_salt_opening = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT_OPENING"); return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
+    // Clairvoyance-decoupling instrument (ANALYSIS ONLY): the salt the SEARCH evaluation uses for its
+    // mid-game shuffles. Defaults EQUAL to shuffle_salt (unset -> same value) so normal play is
+    // byte-identical/lockstep; set it DIFFERENT to make the search plan against a reshuffle the real
+    // executor will not deal (strips shuffle-decision clairvoyance). See GameState::shuffle_salt_search.
+    static const bool     s_have_salt_search = std::getenv("MTG_SHUFFLE_SALT_SEARCH") != nullptr;
+    static const uint64_t s_shuffle_salt_search = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT_SEARCH"); return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
     state.shuffle_salt         = s_shuffle_salt;
     state.shuffle_salt_opening = s_shuffle_salt_opening;
+    state.shuffle_salt_search  = s_have_salt_search ? s_shuffle_salt_search : s_shuffle_salt;
 
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
     state.players[0].library.Shuffle(SaltSeed(seed, state.shuffle_salt_opening));

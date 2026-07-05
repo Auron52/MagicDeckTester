@@ -23,6 +23,20 @@ inline uint64_t SaltSeed(uint64_t base, uint64_t salt)
     return x;
 }
 
+// Clairvoyance-decoupling instrument (ANALYSIS ONLY): true while the engine is EVALUATING a line
+// (inside SimulateToEnd / EnumerateEarliestWins / RolloutWinTurn), so ShuffleAfterSearch picks
+// GameState::shuffle_salt_search; false during the one real committed application, which uses
+// GameState::shuffle_salt. Thread-local (worker threads each play one game). Defaults false and the
+// two salts default equal, so normal play is byte-identical. RAII guard restores on scope exit
+// (nested guards keep it true through recursion). See GameState::shuffle_salt_search.
+inline thread_local bool g_shuffle_eval = false;
+struct ShuffleEvalGuard
+{
+    bool prev;
+    explicit ShuffleEvalGuard(bool v) : prev(g_shuffle_eval) { g_shuffle_eval = v; }
+    ~ShuffleEvalGuard() { g_shuffle_eval = prev; }
+};
+
 // A passive creature that enters the opponent's battlefield at a scheduled turn.
 // Used to provide creature targets for spells like Searing Blood in goldfishing.
 struct OpponentSpawn
@@ -109,6 +123,15 @@ struct GameState
     // ordinary deterministic-seeded game). Set once per game from MTG_SHUFFLE_SALT[_OPENING].
     uint64_t                 shuffle_salt          = 0;
     uint64_t                 shuffle_salt_opening  = 0;
+    // Clairvoyance-decoupling instrument (ANALYSIS ONLY, opt-in MTG_SHUFFLE_SALT_SEARCH): the salt
+    // the SEARCH/rollout evaluation uses for its mid-game shuffles, which may DIFFER from shuffle_salt
+    // (the salt the real executor resolves). When they differ, the clairvoyant search plans against a
+    // reshuffle the real game will NOT deal -- so a decision that only wins because the search foresaw
+    // a specific reshuffle (a clairvoyance artifact) collapses, while a decision good on its features
+    // (a sound heuristic) survives. Which salt is used is selected per-shuffle by the thread-local
+    // g_shuffle_eval flag (true inside SimulateToEnd / EnumerateEarliestWins / RolloutWinTurn). Defaults
+    // EQUAL to shuffle_salt (set at game setup) -> byte-identical / lockstep intact for normal play.
+    uint64_t                 shuffle_salt_search   = 0;
     // Non-owning pointer to this game's passive opponent-spawn schedule (creatures to place on
     // the opp side at scheduled turns). Read-only after setup but copied into every search node;
     // a pointer (like m_provider) drops the per-node vector copy. Owner is the program-lifetime

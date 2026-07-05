@@ -1158,7 +1158,15 @@ bool HinataProvider::KeepReorderTop(const GameState& s, const std::vector<Card>&
     // (it cannot bottom the junk 3rd card), so locking in a merely-useful top costs the fresh look.
     // A/B (heuristic vs this) over 3 seeds incl. 2 held-out: +0.39pp win% and -0.030 avg win turn,
     // never regressing. Keeping Hinata when she is in the top-3 recovers the win% a blind always-shuffle
-    // would give up. This also matches how the deck is played by hand (you don't keep cantrips on top). ---
+    // would give up. This also matches how the deck is played by hand (you don't keep cantrips on top).
+    //
+    // CONFIRMED best on the CLAIRVOYANCE-STRIPPED metric (2026-07-05, MTG_SHUFFLE_SALT_SEARCH decouple
+    // instrument, docs/design/shuffle-variance-instrument.md). always-shuffle only beat this rule under
+    // clairvoyant timing (edge REVERSES to +0.062 when the search can't pre-see the reshuffle) -> it is
+    // an artifact, not a ceiling. Four keep-rules swept over 3 seeds x 6 decouple salts (150g d5): this
+    // "keep only Hinata" (6.043) < dig-in-hand (6.060) < original dig+useful>=2 (6.075) << ignore-dig
+    // (6.252). Keeping the EXTRA dig/useful tops isn't worth locking in the junk beside them even blind;
+    // ignoring dig keeps too little. "Keep Hinata, shuffle the rest" is the measured sweet spot. ---
     for (const Card& c : top)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);

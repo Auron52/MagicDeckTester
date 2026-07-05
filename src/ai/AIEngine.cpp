@@ -687,6 +687,7 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
     GameLogger* saved = m_logger;
     m_logger          = nullptr;
     m_in_rollout      = true;
+    ShuffleEvalGuard  _seg(true);   // decoupling instrument: rollout shuffles use shuffle_salt_search
     // The rollout PlayOut shares this AIEngine by reference, so isolate its committed
     // full-depth line: stash the real game's line, run the rollout on a fresh empty
     // line, then restore. Otherwise the rollout would consume/overwrite the line the

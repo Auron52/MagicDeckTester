@@ -5047,6 +5047,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                          bool second_main, TranspositionTable* tt)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    ShuffleEvalGuard _seg(true);  // decoupling instrument: rollout shuffles use shuffle_salt_search
     TranspositionTable::Key key;
     if (tt != nullptr)
     {
@@ -5509,6 +5510,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                                                                 int max_turns, bool second_main)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    ShuffleEvalGuard _seg(true);  // decoupling instrument: planning shuffles use shuffle_salt_search
     EarliestWinReport report;
     report.turn     = state.turn_number;
     report.earliest = max_turns + 1;

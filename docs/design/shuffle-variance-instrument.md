@@ -116,3 +116,39 @@ net faster, and the small win% cost of delaying her (captured by the loss penalt
 "insane" intuition applies to a BLIND player; for the clairvoyant engine optimising avg-turn it is
 coherent. ADOPTION OF ALWAYS-SHUFFLE pending user decision (bigger behaviour change; user had flagged
 it as counterintuitive). If adopted: missing-Hinata AND Hinata-online branches -> shuffle; re-validate; rebaseline.
+
+---
+
+## Clairvoyance-DECOUPLING instrument (`MTG_SHUFFLE_SALT_SEARCH`) — the always-shuffle "edge" is an artifact
+
+**Resolution of the always-shuffle question (2026-07-05).** The shuffle-variance ensemble above
+averages over reshuffle *realisations*, but within each salt the clairvoyant search still sees that
+salt's future and can time Ponder/Preordain around the reshuffle it is about to get. So the ensemble
+strips reshuffle *luck* but NOT the search's ability to *pre-see which reshuffle it gets*. That residual
+is exactly where "always-shuffle looks better" could be a clairvoyance artifact rather than a real edge.
+
+**The instrument.** A second salt, `GameState::shuffle_salt_search`, used by mid-game shuffles ONLY
+while the engine is *evaluating* a line (thread-local `g_shuffle_eval`, set inside `SimulateToEnd`,
+`EnumerateEarliestWins`, and `RolloutWinTurn`). The real committed application uses `shuffle_salt`.
+When the two differ (`MTG_SHUFFLE_SALT_SEARCH=k`), the search plans against a reshuffle the executor
+will NOT deal — so a decision that only wins because the search foresaw a specific reshuffle collapses,
+while a decision that is good on its *features* survives. Everything else stays clairvoyant (this is not
+Monte-Carlo play — it is an analysis-only strip). Defaults equal to `shuffle_salt` → byte-identical,
+lockstep intact (verified: seed 2002 no-env == `MTG_SHUFFLE_SALT_SEARCH=0`, 5.947). Decoupling is
+demonstrably active: play degrades (5.947 → 6.1) because the search's foresight is now wrong.
+
+**Result (Hinata, 150g seed 2002, d5 b20; decoupled averaged over salts 1–4):**
+
+| regime | heuristic metric | always-shuffle metric | shuffle − heuristic |
+|---|---|---|---|
+| COUPLED (normal clairvoyant play) | 5.900 | 5.807 | **−0.093 → shuffle better** |
+| DECOUPLED (search blind to true reshuffle) | 6.015 | 6.077 | **+0.062 → shuffle WORSE** (all salts agree: +.08/+.05/+.08/+.03) |
+
+**The always-shuffle advantage is 100% clairvoyance.** Strip the search's ability to pre-see which
+reshuffle it gets and always-shuffle flips from better to *worse* than the feature-based keep. It is
+NOT a benchmark/ceiling to chase — it is the same class of artifact the granular gate sweep finds, just
+via a cleaner tool. Corroborated by a depth sweep (edge grows d2→d5: −0.075 → −0.093, and REVERSES at
+d0 where the heuristic wins outright) — though d0 is a degenerate greedy player, so the decoupling
+instrument is the load-bearing proof. This retires the "clean the heuristic until it beats always-shuffle"
+goal: the goal is instead to pick the keep-rule that is best under the clairvoyance-STRIPPED (decoupled)
+metric, since coupled play lets the search mask keep-rule quality (all rules within ~0.02t coupled).
