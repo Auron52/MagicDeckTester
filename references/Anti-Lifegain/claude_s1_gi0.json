@@ -1,0 +1,164 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Aria of Flame" }, { "num": 26, "name": "Invigorate" }, { "num": 49, "name": "Tainted Remedy" }, { "num": 22, "name": "Ignoble Hierarch" }, { "num": 53, "name": "Temple Garden" }, { "num": 9, "name": "Blood Crypt" }, { "num": 33, "name": "Plague Drone" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Fiery Justice" }],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 9, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 53, "name": "Temple Garden", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Temple Garden; cast: (nothing)", "land": "Temple Garden", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Temple Garden; cast: Ignoble Hierarch", "land": "Temple Garden", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 2, "summary": "land=Blood Crypt; cast: (nothing)", "land": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 10, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Tainted Remedy" }],
+  "me": { "life": 18, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 1, "is_land": false }, { "name": "Temple Garden", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 9, "name": "Blood Crypt", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Blood Crypt; cast: Fiery Justice, Invigorate", "land": "Blood Crypt", "casts": ["Fiery Justice", "Invigorate"], "actions": [{ "card": "Fiery Justice" }, { "card": "Invigorate" }] },
+    { "index": 1, "summary": "land=Blood Crypt; cast: Invigorate, Fiery Justice", "land": "Blood Crypt", "casts": ["Invigorate", "Fiery Justice"], "actions": [{ "card": "Invigorate" }, { "card": "Fiery Justice" }] },
+    { "index": 2, "summary": "land=Blood Crypt; cast: Fiery Justice", "land": "Blood Crypt", "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 3, "summary": "land=Blood Crypt; cast: Aria of Flame, Invigorate", "land": "Blood Crypt", "casts": ["Aria of Flame", "Invigorate"], "actions": [{ "card": "Aria of Flame" }, { "card": "Invigorate" }] },
+    { "index": 4, "summary": "land=Blood Crypt; cast: Invigorate, Aria of Flame", "land": "Blood Crypt", "casts": ["Invigorate", "Aria of Flame"], "actions": [{ "card": "Invigorate" }, { "card": "Aria of Flame" }] },
+    { "index": 5, "summary": "land=Blood Crypt; cast: Invigorate, Tainted Remedy", "land": "Blood Crypt", "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 6, "summary": "land=Blood Crypt; cast: Tainted Remedy, Invigorate", "land": "Blood Crypt", "casts": ["Tainted Remedy", "Invigorate"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Invigorate" }] },
+    { "index": 7, "summary": "land=Blood Crypt; cast: Invigorate", "land": "Blood Crypt", "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 8, "summary": "land=none; cast: Invigorate", "land": null, "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 9, "summary": "land=Blood Crypt; cast: Aria of Flame", "land": "Blood Crypt", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 10, "summary": "land=Blood Crypt; cast: Tainted Remedy", "land": "Blood Crypt", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 11, "summary": "land=Blood Crypt; cast: (nothing)", "land": "Blood Crypt", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Tainted Remedy" }],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "is_land": false }, { "name": "Temple Garden", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Fiery Justice, Invigorate", "land": null, "casts": ["Fiery Justice", "Invigorate"], "actions": [{ "card": "Fiery Justice" }, { "card": "Invigorate" }] },
+    { "index": 1, "summary": "land=none; cast: Invigorate, Fiery Justice", "land": null, "casts": ["Invigorate", "Fiery Justice"], "actions": [{ "card": "Invigorate" }, { "card": "Fiery Justice" }] },
+    { "index": 2, "summary": "land=none; cast: Fiery Justice", "land": null, "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 3, "summary": "land=none; cast: Aria of Flame, Invigorate", "land": null, "casts": ["Aria of Flame", "Invigorate"], "actions": [{ "card": "Aria of Flame" }, { "card": "Invigorate" }] },
+    { "index": 4, "summary": "land=none; cast: Invigorate, Aria of Flame", "land": null, "casts": ["Invigorate", "Aria of Flame"], "actions": [{ "card": "Invigorate" }, { "card": "Aria of Flame" }] },
+    { "index": 5, "summary": "land=none; cast: Invigorate, Tainted Remedy", "land": null, "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 6, "summary": "land=none; cast: Tainted Remedy, Invigorate", "land": null, "casts": ["Tainted Remedy", "Invigorate"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Invigorate" }] },
+    { "index": 7, "summary": "land=none; cast: Invigorate", "land": null, "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 8, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 9, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 14, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Bloodstained Mire" }],
+  "me": { "life": 16, "battlefield": [{ "name": "Aria of Flame", "idx": 4, "is_land": false }, { "name": "Blood Crypt", "idx": 2, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "is_land": false }, { "name": "Temple Garden", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 10, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Fiery Justice, Invigorate", "land": "Bloodstained Mire", "casts": ["Fiery Justice", "Invigorate"], "actions": [{ "card": "Fiery Justice" }, { "card": "Invigorate" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Fiery Justice, Invigorate", "land": "Bloodstained Mire", "casts": ["Fiery Justice", "Invigorate"], "actions": [{ "card": "Fiery Justice" }, { "card": "Invigorate" }] },
+    { "index": 2, "summary": "land=Bloodstained Mire; cast: Fiery Justice, Invigorate", "land": "Bloodstained Mire", "casts": ["Fiery Justice", "Invigorate"], "actions": [{ "card": "Fiery Justice" }, { "card": "Invigorate" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: Invigorate, Fiery Justice", "land": "Bloodstained Mire", "casts": ["Invigorate", "Fiery Justice"], "actions": [{ "card": "Invigorate" }, { "card": "Fiery Justice" }] },
+    { "index": 4, "summary": "land=none; cast: Fiery Justice, Invigorate", "land": null, "casts": ["Fiery Justice", "Invigorate"], "actions": [{ "card": "Fiery Justice" }, { "card": "Invigorate" }] },
+    { "index": 5, "summary": "land=Bloodstained Mire; cast: Invigorate, Plague Drone", "land": "Bloodstained Mire", "casts": ["Invigorate", "Plague Drone"], "actions": [{ "card": "Invigorate" }, { "card": "Plague Drone" }] },
+    { "index": 6, "summary": "land=Bloodstained Mire; cast: Plague Drone, Invigorate", "land": "Bloodstained Mire", "casts": ["Plague Drone", "Invigorate"], "actions": [{ "card": "Plague Drone" }, { "card": "Invigorate" }] },
+    { "index": 7, "summary": "land=Bloodstained Mire; cast: Invigorate, Plague Drone", "land": "Bloodstained Mire", "casts": ["Invigorate", "Plague Drone"], "actions": [{ "card": "Invigorate" }, { "card": "Plague Drone" }] },
+    { "index": 8, "summary": "land=Bloodstained Mire; cast: Plague Drone, Invigorate", "land": "Bloodstained Mire", "casts": ["Plague Drone", "Invigorate"], "actions": [{ "card": "Plague Drone" }, { "card": "Invigorate" }] },
+    { "index": 9, "summary": "land=Bloodstained Mire; cast: Invigorate, Plague Drone", "land": "Bloodstained Mire", "casts": ["Invigorate", "Plague Drone"], "actions": [{ "card": "Invigorate" }, { "card": "Plague Drone" }] },
+    { "index": 10, "summary": "land=Bloodstained Mire; cast: Plague Drone, Invigorate", "land": "Bloodstained Mire", "casts": ["Plague Drone", "Invigorate"], "actions": [{ "card": "Plague Drone" }, { "card": "Invigorate" }] },
+    { "index": 11, "summary": "land=Bloodstained Mire; cast: Plague Drone", "land": "Bloodstained Mire", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 12, "summary": "land=Bloodstained Mire; cast: Plague Drone", "land": "Bloodstained Mire", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 13, "summary": "land=Bloodstained Mire; cast: Plague Drone", "land": "Bloodstained Mire", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 14, "summary": "land=Bloodstained Mire; cast: Fiery Justice", "land": "Bloodstained Mire", "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 15, "summary": "land=Bloodstained Mire; cast: Fiery Justice", "land": "Bloodstained Mire", "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 16, "summary": "land=Bloodstained Mire; cast: Fiery Justice", "land": "Bloodstained Mire", "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 17, "summary": "land=none; cast: Fiery Justice", "land": null, "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 18, "summary": "land=Bloodstained Mire; cast: Invigorate, Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 19, "summary": "land=Bloodstained Mire; cast: Invigorate, Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 20, "summary": "land=Bloodstained Mire; cast: Invigorate, Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 21, "summary": "land=none; cast: Invigorate, Tainted Remedy", "land": null, "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 22, "summary": "land=Bloodstained Mire; cast: Invigorate", "land": "Bloodstained Mire", "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 23, "summary": "land=Bloodstained Mire; cast: Invigorate", "land": "Bloodstained Mire", "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 24, "summary": "land=Bloodstained Mire; cast: Invigorate", "land": "Bloodstained Mire", "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 25, "summary": "land=none; cast: Invigorate", "land": null, "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 26, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 27, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 28, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 29, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 30, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 32, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 33, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": [5, 0, 0], "decision": {
+  "decision_index": 5,
+  "type": "divide",
+  "source": "Fiery Justice",
+  "turn": 4,
+  "total_damage": 5,
+  "me": { "life": 13, "battlefield": [{ "name": "Aria of Flame", "idx": 4, "is_land": false, "counters": [{ "kind": "verse", "label": "verse", "count": 1 }] }, { "name": "Blood Crypt", "idx": 2, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "is_land": false }, { "name": "Stomping Ground", "idx": 5, "tapped": true, "is_land": true }, { "name": "Tainted Remedy", "idx": 3, "is_land": false }, { "name": "Temple Garden", "idx": 0, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Bloodstained Mire"], "library_size": 48 },
+  "opponent": { "life": 9, "battlefield": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)", "default": 5 }, { "kind": "permanent", "index": 1, "label": "Ignoble Hierarch (yours)", "default": 0 }, { "kind": "player", "index": 0, "label": "You (face)", "default": 0 }],
+  "note": "reply one integer per legal target (in this order), each >= 0 and summing to 5 -- the damage assigned to each. Default = all to the opponent face."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "me": { "life": 13, "battlefield": [{ "name": "Aria of Flame", "idx": 4, "is_land": false, "counters": [{ "kind": "verse", "label": "verse", "count": 1 }] }, { "name": "Blood Crypt", "idx": 2, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "is_land": false }, { "name": "Stomping Ground", "idx": 5, "tapped": true, "is_land": true }, { "name": "Tainted Remedy", "idx": 3, "is_land": false }, { "name": "Temple Garden", "idx": 0, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Bloodstained Mire", "Fiery Justice"], "library_size": 48 },
+  "opponent": { "life": -1, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Invigorate", "land": null, "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
