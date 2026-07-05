@@ -1,0 +1,155 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 5, "name": "Birds of Paradise" }, { "num": 22, "name": "Ignoble Hierarch" }, { "num": 33, "name": "Plague Drone" }, { "num": 18, "name": "Grove of the Burnwillows" }, { "num": 19, "name": "Grove of the Burnwillows" }, { "num": 49, "name": "Tainted Remedy" }, { "num": 1, "name": "Aria of Flame" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Reverent Silence" }],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 5, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Grove of the Burnwillows", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Grove of the Burnwillows", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Grove of the Burnwillows; cast: (nothing)", "land": "Grove of the Burnwillows", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Grove of the Burnwillows; cast: Birds of Paradise", "land": "Grove of the Burnwillows", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=Grove of the Burnwillows; cast: Ignoble Hierarch", "land": "Grove of the Burnwillows", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Swords to Plowshares" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 2, "is_land": false }, { "name": "Grove of the Burnwillows", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 19, "name": "Grove of the Burnwillows", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 46, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Grove of the Burnwillows; cast: Tainted Remedy", "land": "Grove of the Burnwillows", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 1, "summary": "land=Grove of the Burnwillows; cast: Aria of Flame", "land": "Grove of the Burnwillows", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 2, "summary": "land=Grove of the Burnwillows; cast: (nothing)", "land": "Grove of the Burnwillows", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Grove of the Burnwillows; cast: Ignoble Hierarch", "land": "Grove of the Burnwillows", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 23, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Forest" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 2, "is_land": false }, { "name": "Grove of the Burnwillows", "idx": 1, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 3, "is_land": true }, { "name": "Tainted Remedy", "idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 46, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Aria of Flame, Swords to Plowshares, Reverent Silence", "land": "Forest", "casts": ["Aria of Flame", "Swords to Plowshares", "Reverent Silence"], "actions": [{ "card": "Aria of Flame" }, { "card": "Swords to Plowshares" }, { "card": "Reverent Silence" }] },
+    { "index": 1, "summary": "land=Forest; cast: Plague Drone, Reverent Silence", "land": "Forest", "casts": ["Plague Drone", "Reverent Silence"], "actions": [{ "card": "Plague Drone" }, { "card": "Reverent Silence" }] },
+    { "index": 2, "summary": "land=Forest; cast: Reverent Silence, Plague Drone", "land": "Forest", "casts": ["Reverent Silence", "Plague Drone"], "actions": [{ "card": "Reverent Silence" }, { "card": "Plague Drone" }] },
+    { "index": 3, "summary": "land=Forest; cast: Plague Drone", "land": "Forest", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 4, "summary": "land=Forest; cast: Aria of Flame, Reverent Silence, Swords to Plowshares", "land": "Forest", "casts": ["Aria of Flame", "Reverent Silence", "Swords to Plowshares"], "actions": [{ "card": "Aria of Flame" }, { "card": "Reverent Silence" }, { "card": "Swords to Plowshares" }] },
+    { "index": 5, "summary": "land=Forest; cast: Reverent Silence, Aria of Flame, Swords to Plowshares", "land": "Forest", "casts": ["Reverent Silence", "Aria of Flame", "Swords to Plowshares"], "actions": [{ "card": "Reverent Silence" }, { "card": "Aria of Flame" }, { "card": "Swords to Plowshares" }] },
+    { "index": 6, "summary": "land=Forest; cast: Reverent Silence, Swords to Plowshares, Aria of Flame", "land": "Forest", "casts": ["Reverent Silence", "Swords to Plowshares", "Aria of Flame"], "actions": [{ "card": "Reverent Silence" }, { "card": "Swords to Plowshares" }, { "card": "Aria of Flame" }] },
+    { "index": 7, "summary": "land=Forest; cast: Swords to Plowshares, Aria of Flame, Reverent Silence", "land": "Forest", "casts": ["Swords to Plowshares", "Aria of Flame", "Reverent Silence"], "actions": [{ "card": "Swords to Plowshares" }, { "card": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 8, "summary": "land=Forest; cast: Swords to Plowshares, Reverent Silence, Aria of Flame", "land": "Forest", "casts": ["Swords to Plowshares", "Reverent Silence", "Aria of Flame"], "actions": [{ "card": "Swords to Plowshares" }, { "card": "Reverent Silence" }, { "card": "Aria of Flame" }] },
+    { "index": 9, "summary": "land=Forest; cast: Aria of Flame, Reverent Silence", "land": "Forest", "casts": ["Aria of Flame", "Reverent Silence"], "actions": [{ "card": "Aria of Flame" }, { "card": "Reverent Silence" }] },
+    { "index": 10, "summary": "land=Forest; cast: Reverent Silence, Aria of Flame", "land": "Forest", "casts": ["Reverent Silence", "Aria of Flame"], "actions": [{ "card": "Reverent Silence" }, { "card": "Aria of Flame" }] },
+    { "index": 11, "summary": "land=Forest; cast: Aria of Flame, Ignoble Hierarch, Reverent Silence", "land": "Forest", "casts": ["Aria of Flame", "Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Aria of Flame" }, { "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 12, "summary": "land=Forest; cast: Ignoble Hierarch, Reverent Silence, Aria of Flame", "land": "Forest", "casts": ["Ignoble Hierarch", "Reverent Silence", "Aria of Flame"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }, { "card": "Aria of Flame" }] },
+    { "index": 13, "summary": "land=Forest; cast: Reverent Silence, Aria of Flame, Ignoble Hierarch", "land": "Forest", "casts": ["Reverent Silence", "Aria of Flame", "Ignoble Hierarch"], "actions": [{ "card": "Reverent Silence" }, { "card": "Aria of Flame" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 14, "summary": "land=Forest; cast: Reverent Silence, Swords to Plowshares", "land": "Forest", "casts": ["Reverent Silence", "Swords to Plowshares"], "actions": [{ "card": "Reverent Silence" }, { "card": "Swords to Plowshares" }] },
+    { "index": 15, "summary": "land=Forest; cast: Swords to Plowshares, Reverent Silence", "land": "Forest", "casts": ["Swords to Plowshares", "Reverent Silence"], "actions": [{ "card": "Swords to Plowshares" }, { "card": "Reverent Silence" }] },
+    { "index": 16, "summary": "land=Forest; cast: Ignoble Hierarch, Reverent Silence, Swords to Plowshares", "land": "Forest", "casts": ["Ignoble Hierarch", "Reverent Silence", "Swords to Plowshares"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }, { "card": "Swords to Plowshares" }] },
+    { "index": 17, "summary": "land=Forest; cast: Ignoble Hierarch, Swords to Plowshares, Reverent Silence", "land": "Forest", "casts": ["Ignoble Hierarch", "Swords to Plowshares", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Swords to Plowshares" }, { "card": "Reverent Silence" }] },
+    { "index": 18, "summary": "land=Forest; cast: Reverent Silence", "land": "Forest", "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 19, "summary": "land=Forest; cast: Ignoble Hierarch, Reverent Silence", "land": "Forest", "casts": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 20, "summary": "land=Forest; cast: Aria of Flame, Swords to Plowshares", "land": "Forest", "casts": ["Aria of Flame", "Swords to Plowshares"], "actions": [{ "card": "Aria of Flame" }, { "card": "Swords to Plowshares" }] },
+    { "index": 21, "summary": "land=Forest; cast: Swords to Plowshares, Aria of Flame", "land": "Forest", "casts": ["Swords to Plowshares", "Aria of Flame"], "actions": [{ "card": "Swords to Plowshares" }, { "card": "Aria of Flame" }] },
+    { "index": 22, "summary": "land=Forest; cast: Aria of Flame", "land": "Forest", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 23, "summary": "land=Forest; cast: Aria of Flame, Ignoble Hierarch", "land": "Forest", "casts": ["Aria of Flame", "Ignoble Hierarch"], "actions": [{ "card": "Aria of Flame" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 24, "summary": "land=Forest; cast: Ignoble Hierarch, Aria of Flame", "land": "Forest", "casts": ["Ignoble Hierarch", "Aria of Flame"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Aria of Flame" }] },
+    { "index": 25, "summary": "land=Forest; cast: Swords to Plowshares", "land": "Forest", "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 26, "summary": "land=Forest; cast: Ignoble Hierarch, Swords to Plowshares", "land": "Forest", "casts": ["Ignoble Hierarch", "Swords to Plowshares"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Swords to Plowshares" }] },
+    { "index": 27, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 28, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 29, "summary": "land=none; cast: Ignoble Hierarch, Swords to Plowshares", "land": null, "casts": ["Ignoble Hierarch", "Swords to Plowshares"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Swords to Plowshares" }] },
+    { "index": 30, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=Forest; cast: Ignoble Hierarch", "land": "Forest", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 32, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 33, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "me": { "life": 20, "battlefield": [{ "name": "Aria of Flame", "idx": 6, "is_land": false }, { "name": "Birds of Paradise", "idx": 2, "tapped": true, "is_land": false }, { "name": "Forest", "idx": 5, "tapped": true, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 1, "tapped": true, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 3, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 7, "is_land": false }, { "name": "Tainted Remedy", "idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 46, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Ignoble Hierarch" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Aria of Flame", "idx": 6, "is_land": false }, { "name": "Birds of Paradise", "idx": 2, "is_land": false }, { "name": "Forest", "idx": 5, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 1, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 3, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 7, "is_land": false }, { "name": "Tainted Remedy", "idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Reverent Silence", "cost": "{3}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 46, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Plague Drone, Reverent Silence, Swords to Plowshares", "land": null, "casts": ["Plague Drone", "Reverent Silence", "Swords to Plowshares"], "actions": [{ "card": "Plague Drone" }, { "card": "Reverent Silence" }, { "card": "Swords to Plowshares" }] },
+    { "index": 1, "summary": "land=none; cast: Plague Drone, Swords to Plowshares, Reverent Silence", "land": null, "casts": ["Plague Drone", "Swords to Plowshares", "Reverent Silence"], "actions": [{ "card": "Plague Drone" }, { "card": "Swords to Plowshares" }, { "card": "Reverent Silence" }] },
+    { "index": 2, "summary": "land=none; cast: Reverent Silence, Swords to Plowshares, Plague Drone", "land": null, "casts": ["Reverent Silence", "Swords to Plowshares", "Plague Drone"], "actions": [{ "card": "Reverent Silence" }, { "card": "Swords to Plowshares" }, { "card": "Plague Drone" }] },
+    { "index": 3, "summary": "land=none; cast: Plague Drone, Reverent Silence", "land": null, "casts": ["Plague Drone", "Reverent Silence"], "actions": [{ "card": "Plague Drone" }, { "card": "Reverent Silence" }] },
+    { "index": 4, "summary": "land=none; cast: Ignoble Hierarch, Plague Drone, Reverent Silence", "land": null, "casts": ["Ignoble Hierarch", "Plague Drone", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Plague Drone" }, { "card": "Reverent Silence" }] },
+    { "index": 5, "summary": "land=none; cast: Plague Drone, Ignoble Hierarch, Reverent Silence", "land": null, "casts": ["Plague Drone", "Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Plague Drone" }, { "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 6, "summary": "land=none; cast: Swords to Plowshares, Reverent Silence", "land": null, "casts": ["Swords to Plowshares", "Reverent Silence"], "actions": [{ "card": "Swords to Plowshares" }, { "card": "Reverent Silence" }] },
+    { "index": 7, "summary": "land=none; cast: Ignoble Hierarch, Reverent Silence, Swords to Plowshares", "land": null, "casts": ["Ignoble Hierarch", "Reverent Silence", "Swords to Plowshares"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }, { "card": "Swords to Plowshares" }] },
+    { "index": 8, "summary": "land=none; cast: Ignoble Hierarch, Swords to Plowshares, Reverent Silence", "land": null, "casts": ["Ignoble Hierarch", "Swords to Plowshares", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Swords to Plowshares" }, { "card": "Reverent Silence" }] },
+    { "index": 9, "summary": "land=none; cast: Reverent Silence, Plague Drone", "land": null, "casts": ["Reverent Silence", "Plague Drone"], "actions": [{ "card": "Reverent Silence" }, { "card": "Plague Drone" }] },
+    { "index": 10, "summary": "land=none; cast: Plague Drone, Swords to Plowshares", "land": null, "casts": ["Plague Drone", "Swords to Plowshares"], "actions": [{ "card": "Plague Drone" }, { "card": "Swords to Plowshares" }] },
+    { "index": 11, "summary": "land=none; cast: Reverent Silence, Swords to Plowshares", "land": null, "casts": ["Reverent Silence", "Swords to Plowshares"], "actions": [{ "card": "Reverent Silence" }, { "card": "Swords to Plowshares" }] },
+    { "index": 12, "summary": "land=none; cast: Plague Drone", "land": null, "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 13, "summary": "land=none; cast: Reverent Silence", "land": null, "casts": ["Reverent Silence"], "actions": [{ "card": "Reverent Silence" }] },
+    { "index": 14, "summary": "land=none; cast: Ignoble Hierarch, Plague Drone", "land": null, "casts": ["Ignoble Hierarch", "Plague Drone"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Plague Drone" }] },
+    { "index": 15, "summary": "land=none; cast: Plague Drone, Ignoble Hierarch", "land": null, "casts": ["Plague Drone", "Ignoble Hierarch"], "actions": [{ "card": "Plague Drone" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 16, "summary": "land=none; cast: Ignoble Hierarch, Reverent Silence", "land": null, "casts": ["Ignoble Hierarch", "Reverent Silence"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reverent Silence" }] },
+    { "index": 17, "summary": "land=none; cast: Swords to Plowshares", "land": null, "casts": ["Swords to Plowshares"], "actions": [{ "card": "Swords to Plowshares" }] },
+    { "index": 18, "summary": "land=none; cast: Ignoble Hierarch, Swords to Plowshares", "land": null, "casts": ["Ignoble Hierarch", "Swords to Plowshares"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Swords to Plowshares" }] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
