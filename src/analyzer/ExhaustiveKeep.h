@@ -48,6 +48,13 @@ struct ExhaustiveKeepConfig
                                         // clustering is byte-identical everywhere (decoupled from the
                                         // rollout seed, so pooled runs share buckets but not rollouts).
     int      max_turns = 8;
+    bool     adaptive_bottom = false;    // EXPERIMENT (MTG_KEEP_ADAPTIVE_BOTTOM): let sub-tables be
+                                         // adaptively sampled even with bottoming_enabled (instead of
+                                         // forcing every sub-cell to the cap), and restrict the bottoming
+                                         // argmin (best_sub) to REFINED cells (cnt > floor) so a floor-R
+                                         // cell can't win by optimizer's-curse noise. Recovers the
+                                         // keep-only rollout savings for bottoming-on profiles. Off => the
+                                         // current full-R-sub-table behaviour, byte-identical.
     bool     bottoming_enabled = false;  // bake into the written profile: use blind exhaustive bottoming
                                          // at runtime? default OFF (low-R bottoming is noise-limited and
                                          // loses to lookahead) -- set true only for a validated high-R
@@ -55,6 +62,13 @@ struct ExhaustiveKeepConfig
     std::string out_profile;    // if set, write the serialized keep policy (base profile + table) here
     std::string out_raw;        // if set, write the poolable raw sum+count sidecar (for cross-machine merge)
     std::string commit;         // play-logic identity stamped into the raw sidecar (from MTG_COMMIT)
+    std::string force_merge;    // MANUAL bucket override (MTG_EQUIV_FORCE_MERGE): ";"-separated groups,
+                                // each a ","-separated list of card names, unioned into ONE bucket AFTER
+                                // discovery. For deliberately merging near-equivalents the strict distance
+                                // threshold keeps apart (e.g. the four fetchlands) to shrink the hand space.
+                                // Gameplay is untouched -- cards keep real identities; only the keep/bottom
+                                // bucketing merges. Baked into bucket_fp, so pooled chunks MUST use the same
+                                // spec (a different merge => different fingerprint => won't pool).
 };
 
 // Build the exhaustive policy and print a diagnostic report (bucket list, per-size hand counts,

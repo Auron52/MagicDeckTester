@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <fstream>
+#include <iostream>
 #include <map>
 #include <ostream>
 #include <set>
@@ -77,7 +79,7 @@ struct SizeTable
 ExhaustiveKeepPolicy BuildPolicyFromTables(
     const std::vector<SizeTable>& tables, const std::vector<int>& count,
     const std::vector<std::vector<std::string>>& bucket_members, int deck_size, int max_mull,
-    int effective_R, bool bottoming_enabled = false,
+    int effective_R, bool bottoming_enabled = false, long long bottom_floor = -1,
     std::array<std::vector<double>, 2>* Dopt_out = nullptr)
 {
     const int K = static_cast<int>(count.size());
@@ -116,21 +118,32 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
     // Optimal bottoming target: the argmin (7-m)-subcomposition (same enumeration keep_val minimises,
     // but recording WHICH subcomp wins). Shared with the keep flags so the serialized keep decision
     // and its bottoming are mutually consistent (keep_val == V of the recorded target).
+    // bottom_floor >= 0 (adaptive bottoming): a floor-R sub-cell can win this argmin only by
+    // optimizer's-curse noise (a lucky-low draw) -> we'd bottom into a spuriously-good-looking hand.
+    // Restrict the argmin to REFINED cells (cnt > bottom_floor). A decisively-best bottom target is
+    // always refined (it is some kept hand's estimated argmin, which the refine loop marks), so the only
+    // cells excluded are near-ties (EV-negligible) or genuinely worse. Fall back to the unfiltered argmin
+    // only if NO subcomp is refined (shouldn't happen for a kept hand). bottom_floor < 0 => no filter =>
+    // byte-identical to the previous unconditional argmin.
     auto best_sub = [&](const std::vector<int>& h, int m, int pd) -> std::vector<int>
     {
         const int target = HAND - m;
         std::vector<std::vector<int>> subs;
         std::vector<int> cur(K, 0);
         EnumComps(0, target, cur, h, subs);
-        double best = 1e9;
-        std::vector<int> arg = h;                    // fallback: keep the whole hand
         const SizeTable& t = tables[HAND - target];
+        double best = 1e9;     std::vector<int> arg = h;       // refined-only argmin
+        double best_any = 1e9; std::vector<int> arg_any = h;   // unfiltered fallback
         for (const std::vector<int>& s : subs)
         {
             auto it = t.index.find(s);
-            if (it != t.index.end() && t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = s; }
+            if (it == t.index.end()) { continue; }
+            const int idx = it->second;
+            const double v = t.V[idx][pd];
+            if (v < best_any) { best_any = v; arg_any = s; }
+            if ((bottom_floor < 0 || t.cnt[idx][pd] > bottom_floor) && v < best) { best = v; arg = s; }
         }
-        return arg;
+        return (best < 1e9) ? arg : arg_any;
     };
 
     ExhaustiveKeepPolicy ek;
@@ -200,8 +213,57 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // ---- 1. Buckets (objective-relative equivalence) --------------------------------------------
     // Bucketing uses the FIXED equiv_seed (not the rollout seed) so the clustering is byte-identical
     // across machines -- a precondition for pooling their raw tables.
+    const auto t_bucket = std::chrono::steady_clock::now();
+    std::cerr << "[keepgen] equivalence discovery: " << cfg.probes << " probes, depth " << cfg.depth
+              << " ...\n" << std::flush;
     EquivReport eq = DiscoverEquivalence(deck, profile, cfg.probes, cfg.depth, cfg.budget_ms,
                                          cfg.threshold, cfg.equiv_seed, cfg.max_turns);
+    std::cerr << "[keepgen] equivalence discovery done: " << eq.classes.size() << " raw buckets ("
+              << static_cast<long long>(std::chrono::duration<double>(
+                     std::chrono::steady_clock::now() - t_bucket).count()) << "s)\n" << std::flush;
+
+    // MANUAL force-merge (MTG_EQUIV_FORCE_MERGE): union the classes containing each ";"-group's cards into
+    // one bucket. Deliberate near-equivalent collapse (e.g. the fetchlands) the strict distance threshold
+    // won't do. Applied to eq.classes BEFORE anything downstream (counts, tables, bucket_fp) so pooling
+    // parity is preserved: chunks with the same spec share the fingerprint; a different spec won't pool.
+    if (!cfg.force_merge.empty())
+    {
+        auto split = [](const std::string& s, char d) {
+            std::vector<std::string> out; std::string cur;
+            for (char c : s) { if (c == d) { if (!cur.empty()) out.push_back(cur); cur.clear(); } else cur += c; }
+            if (!cur.empty()) out.push_back(cur);
+            return out; };
+        auto trim = [](std::string s) {
+            std::size_t a = s.find_first_not_of(" \t"); std::size_t b = s.find_last_not_of(" \t");
+            return (a == std::string::npos) ? std::string() : s.substr(a, b - a + 1); };
+        std::vector<char> removed(eq.classes.size(), 0);
+        for (const std::string& grp : split(cfg.force_merge, ';'))
+        {
+            int keep_cls = -1;
+            for (const std::string& raw : split(grp, ','))
+            {
+                const std::string nm = trim(raw);
+                if (nm.empty()) { continue; }
+                int found = -1;
+                for (std::size_t c = 0; c < eq.classes.size(); ++c)
+                    if (!removed[c])
+                        for (const std::string& mem : eq.classes[c].members)
+                            if (mem == nm) { found = static_cast<int>(c); break; }
+                if (found < 0) { std::cerr << "[keepgen]   force-merge: card not found: '" << nm << "'\n"; continue; }
+                if (keep_cls < 0) { keep_cls = found; }
+                else if (found != keep_cls)
+                {
+                    for (const std::string& mem : eq.classes[found].members)
+                    { eq.classes[keep_cls].members.push_back(mem); }
+                    removed[found] = 1;
+                }
+            }
+        }
+        std::vector<EquivClass> kept;
+        for (std::size_t c = 0; c < eq.classes.size(); ++c) if (!removed[c]) kept.push_back(eq.classes[c]);
+        eq.classes = std::move(kept);
+        std::cerr << "[keepgen] force-merge applied: -> " << eq.classes.size() << " buckets\n" << std::flush;
+    }
     const int K = static_cast<int>(eq.classes.size());
 
     std::map<std::string, int> bucket_of;             // card name -> bucket index
@@ -316,12 +378,30 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     const int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
                                               static_cast<int>(work.size())));
+    // Progress logging to STDERR (never stdout -> never corrupts the report; never affects rollouts,
+    // V/counts or the written profile, so results stay deterministic). Generation is expensive, so each
+    // phase/wave reports its size, a periodic %-done heartbeat, elapsed and the rollout rate. The clock is
+    // wall-time only (diagnostic); it is not folded into any result.
+    const auto t_gen = std::chrono::steady_clock::now();
+    auto gen_elapsed = [&]() -> double
+    { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t_gen).count(); };
+    long long rollouts_done = 0;   // cumulative across all passes, for a running rate
     // Run a wave of (w,pd,r0,r1) rollout tasks in parallel; each worker owns one AIEngine.
     struct Task { int w; int pd; long long r0; long long r1; };
-    auto process_tasks = [&](const std::vector<Task>& tasks)
+    auto process_tasks = [&](const std::vector<Task>& tasks, const char* label)
     {
         if (tasks.empty()) { return; }
+        long long batch_rollouts = 0;
+        for (const Task& t : tasks) { batch_rollouts += (t.r1 - t.r0); }
+        std::cerr << "[keepgen] " << label << ": " << tasks.size() << " tasks / " << batch_rollouts
+                  << " rollouts on " << std::min(nthreads, static_cast<int>(tasks.size())) << " threads  ("
+                  << static_cast<long long>(gen_elapsed()) << "s elapsed)\n" << std::flush;
         std::atomic<std::size_t> tc{0};
+        const std::size_t step = std::max<std::size_t>(1, tasks.size() / 10);   // ~10% heartbeat
+        std::atomic<std::size_t> next_report{ step };
+        std::atomic<long long>   next_time{ 30 };      // ...OR every 30s, whichever comes first
+        std::atomic<long long>   roll_done{ 0 };       // rollouts completed this phase (for a live rate)
+        const auto t_batch = std::chrono::steady_clock::now();
         auto th_worker = [&]()
         {
             AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
@@ -332,12 +412,36 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (k >= tasks.size()) { break; }
                 const Task& t = tasks[k];
                 run_batch(ai, t.w, t.pd, t.r0, t.r1);
+                const std::size_t done = k + 1;
+                const long long   rd   = roll_done.fetch_add(t.r1 - t.r0) + (t.r1 - t.r0);
+                const double el = std::chrono::duration<double>(
+                                      std::chrono::steady_clock::now() - t_batch).count();
+                bool report = false;
+                std::size_t nr = next_report.load(std::memory_order_relaxed);
+                if (done >= nr && next_report.compare_exchange_strong(nr, nr + step)) { report = true; }
+                long long nt = next_time.load(std::memory_order_relaxed);
+                if (!report && static_cast<long long>(el) >= nt
+                    && next_time.compare_exchange_strong(nt, nt + 30)) { report = true; }
+                if (report)
+                {
+                    std::cerr << "[keepgen]   " << label << " " << (100 * done / tasks.size()) << "%  ("
+                              << done << "/" << tasks.size() << " tasks, " << rd << " rollouts, "
+                              << static_cast<long long>(el > 0 ? rd / el : 0) << "/s, "
+                              << static_cast<long long>(el) << "s phase / " << static_cast<long long>(gen_elapsed())
+                              << "s total)\n" << std::flush;
+                }
             }
         };
         std::vector<std::thread> pool;
         const int nt = std::max(1, std::min(nthreads, static_cast<int>(tasks.size())));
         for (int t = 0; t < nt; ++t) { pool.emplace_back(th_worker); }
         for (std::thread& th : pool) { th.join(); }
+        rollouts_done += batch_rollouts;
+        const double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_batch).count();
+        std::cerr << "[keepgen] " << label << " done: " << batch_rollouts << " rollouts in "
+                  << static_cast<long long>(el) << "s (" << static_cast<long long>(el > 0 ? batch_rollouts / el : 0)
+                  << "/s); cumulative " << rollouts_done << " rollouts, " << static_cast<long long>(gen_elapsed())
+                  << "s total\n" << std::flush;
     };
     // Recompute V (mean) and se (stderr of the mean) for every cell from its accumulators.
     auto recompute = [&]()
@@ -444,11 +548,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     const long long r0    = (cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts) ? cfg.r_floor : r_max;
     const bool adaptive   = r0 < r_max;
 
-    // Sub-tables may start at the floor ONLY for adaptive keep-only profiles. With bottoming enabled the
-    // argmin (which subhand to keep) needs the WHOLE sub-table accurate -- and a cell that is the true
-    // argmin but noisily-high at the floor would never be marked -- so bottoming forces sub-tables to the
-    // cap up front (i.e. the size-7-only scheme). Size-7 always starts at the floor.
-    const bool sub_floor = adaptive && !cfg.bottoming_enabled;
+    // Sub-tables may start at the floor for adaptive keep-only profiles. With bottoming enabled the argmin
+    // (which subhand to keep) normally needs the WHOLE sub-table accurate -- a true-argmin cell noisily-
+    // high at the floor would never be marked -- so bottoming forces sub-tables to the cap up front. The
+    // adaptive_bottom EXPERIMENT relaxes that: sub-tables stay adaptive, and best_sub instead excludes
+    // floor-R cells from the bottoming argmin (so curse-noise can't pick one). Size-7 always starts at floor.
+    const bool sub_floor = adaptive && (!cfg.bottoming_enabled || cfg.adaptive_bottom);
     {   // Pass A: size-7 to the floor; sub-tables to the floor (keep-only) or straight to the cap.
         std::vector<Task> tasks;
         tasks.reserve(work.size() * 2);
@@ -457,7 +562,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             const long long init = (work[w].H == HAND || sub_floor) ? r0 : r_max;
             for (int pd = 0; pd < 2; ++pd) { tasks.push_back({ w, pd, 0, init }); }
         }
-        process_tasks(tasks);
+        process_tasks(tasks, adaptive ? "floor-pass" : "full-pass");
         recompute();
     }
 
@@ -513,7 +618,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         const double se  = gate_se(t, arg, pd, vg[m][pd]);
                         const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
                                                      : (kv == thr ? 0.5 : 0.0);
-                        const bool confident_mull = !cfg.bottoming_enabled
+                        const bool confident_mull = (!cfg.bottoming_enabled || cfg.adaptive_bottom)
                                                   && (kv - thr > 0.0) && (flip <= cfg.flip_eps);
                         if (!confident_mull) { mark.insert({ m, arg, pd }); }
                     }
@@ -531,7 +636,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 refined_rollouts += add;
             }
             if (tasks.empty()) { break; }
-            process_tasks(tasks);
+            const std::string wlabel = "refine-wave-" + std::to_string(refine_waves + 1);
+            process_tasks(tasks, wlabel.c_str());
             recompute();
             ++refine_waves;
         }
@@ -757,7 +863,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (int b = 0; b < K; ++b) { bmembers.push_back(eq.classes[b].members); }
         ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
             tables, count, bmembers, static_cast<int>(deck.mainboard.size()),
-            cfg.max_mull, cfg.rollouts, cfg.bottoming_enabled);
+            cfg.max_mull, cfg.rollouts, cfg.bottoming_enabled,
+            cfg.adaptive_bottom ? r0 : -1);
         ek.commit      = cfg.commit;
         ek.play_digest = play_digest;
         MulliganProfile out = profile;
@@ -992,7 +1099,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     std::array<std::vector<double>, 2> Dopt;
     ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
         tables, count, buckets, static_cast<int>(deck.mainboard.size()), max_mull, effective_R,
-        bottoming_enabled, &Dopt);
+        bottoming_enabled, -1, &Dopt);
     ek.commit = commit;
     os << "merged policy: D_opt(draw)=" << Dopt[0][0] << "  D_opt(play)=" << Dopt[1][0]
        << "  (expected win-turn, optimal keep)\n";

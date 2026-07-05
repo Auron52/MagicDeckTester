@@ -277,6 +277,8 @@ int main(int argc, char* argv[])
             cfg.threshold = []{ const char* s = std::getenv("MTG_EQUIV_THRESHOLD");
                                 return (s && *s) ? std::max(0.0, std::atof(s)) : 0.01; }();
             cfg.depth     = env_int("MTG_EQUIV_DEPTH", 5, 0);
+            cfg.budget_ms = env_int("MTG_EQUIV_BUDGET", 20, 0);  // per-decision rollout search budget (ms);
+                                                                 // feeds discovery, rollouts AND play digest
             cfg.rollouts  = env_int("MTG_KEEP_ROLLOUTS", 100, 1);
             // Adaptive sampling: R_FLOOR<ROLLOUTS engages confidence-driven refinement (default off =>
             // uniform R => byte-identical). FLIP_EPS is the stop threshold; R_BATCH the per-wave add.
@@ -296,7 +298,12 @@ int main(int argc, char* argv[])
             // the confounded A/B (MTG_CONFOUND_BOTTOM) during adoption. Untabled decks fall back to lookahead.
             cfg.bottoming_enabled = []{ const char* s = std::getenv("MTG_KEEP_BOTTOMING");
                                         return !s || std::string(s) != "0"; }();
+            // EXPERIMENT: adaptively sample sub-tables even with bottoming on + curse-filter the bottom
+            // argmin to refined cells (recovers keep-only savings for bottoming-on). Off => full-R sub-tables.
+            cfg.adaptive_bottom = []{ const char* s = std::getenv("MTG_KEEP_ADAPTIVE_BOTTOM");
+                                      return s && *s && std::string(s) != "0"; }();
             if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
+            if (const char* fm = std::getenv("MTG_EQUIV_FORCE_MERGE")) { cfg.force_merge = fm; }
             // Write the serialized keep policy + poolable raw sidecar next to the deck unless suppressed.
             if (std::getenv("MTG_KEEP_NO_WRITE") == nullptr)
             {
