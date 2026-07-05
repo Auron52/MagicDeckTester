@@ -627,12 +627,14 @@ function renderPlanbar() {
     : '';
   // Buttons FIRST (left edge, next to the hand) so Commit/Clear are within easy reach while
   // you build the line; the Turn-plan label + chips follow and the chips flex to fill the rest.
-  pb.innerHTML = `<button id="commit" class="primary">${empty?'Pass / cast nothing':'Commit phase'}</button>`+
+  pb.innerHTML = `<button id="commit" class="primary" title="${empty?'Pass just THIS phase — you\'ll still get Main 2 to cast in (use Pass turn to skip the whole turn)':'Commit this line for this phase only'}">${empty?'Pass / cast nothing':'Commit phase'}</button>`+
+    `<button id="committurn" class="ghost" title="${empty?'Do nothing this turn and skip to the next turn':'Commit this line, then auto-pass the rest of this turn (skip Main 2 / any re-prompts)'}">${empty?'Pass turn ⏭':'Commit turn ⏭'}</button>`+
     (empty?'':`<button id="clearp" class="ghost">Clear</button>`)+
     `<span class="lbl">Turn plan</span>`+
     (empty?`<span class="empty">double-click or drag cards in hand to build a line</span>`:`<div class="chips">${chips}${leChip}</div>`)+
     tip;
   $('commit').onclick = commitLine;
+  $('committurn').onclick = commitTurn;
   if ($('clearp')) $('clearp').onclick = clearPlan;
   pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
 }
@@ -1427,12 +1429,26 @@ function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=
   // re-prompt in the SAME main -- e.g. Anti-Lifegain seed 1 game 0, which re-prompts a pre_main at
   // turn 4 with the opponent at -1). Don't make the user click through a decided game -- auto-pass an
   // empty line to fetch the result. Fires on ANY main decision with a dead opponent (both phases).
-  if (isDeadOpponentMain(dec)) { S.plan=[]; commitLine(); } }
+  if (isDeadOpponentMain(dec)) { S.plan=[]; commitLine(); return; }
+  // "Commit turn": auto-pass every remaining MAIN-phase decision of the same turn (a post-combat
+  // Main 2, or a draw-breakpoint re-prompt) so the user jumps to the next turn without clicking
+  // through the rest of this one. Stops as soon as the turn advances, a non-main decision appears
+  // (needs a real choice), or the game ends (result -> showResult clears the flag). Capped defensively.
+  if (S.commitTurn != null) {
+    if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
+      S.commitTurnPasses = (S.commitTurnPasses||0) + 1; S.plan=[]; commitLine(); return;
+    }
+    S.commitTurn = null;   // turn advanced / non-main / cap hit -> resume normal interaction
+  }
+}
 // A main-phase decision offered when the opponent is already dead (<=0 life) -- the game is over,
 // regardless of pre_main/post_main; the engine just hasn't stopped prompting.
 function isDeadOpponentMain(dec){
   return dec && dec.type==='main_phase' && dec.opponent && (dec.opponent.life||0) <= 0;
 }
+// Commit the current line, then auto-pass the rest of THIS turn (see advanceTo). The turn number is
+// captured now so the skip stops once the engine advances to the next turn.
+function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision && S.decision.turn; S.commitTurnPasses = 0; commitLine(); }
 function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
 function hideVerdict() { $('verdict').style.display='none'; }
 function showError(msg, raw) { $('board').innerHTML=`<div class="err">⚠ ${esc(msg)}${raw?'\n\n'+esc(raw):''}</div>`; }
@@ -1440,7 +1456,7 @@ function flashHint(msg) { const ve=$('verdict'); ve.className=''; ve.style.displ
   ve.innerHTML=`<div class="hint">${esc(msg)}</div>`; clearTimeout(S._ht); S._ht=setTimeout(hideVerdict,4000); }
 
 function showResult(r) {
-  S.over=true; S.result=r;
+  S.over=true; S.result=r; S.commitTurn=null;   // game over -> end any in-progress turn-skip
   S.history.push({ turn:r.won?r.win_turn:'—', label:r.won?`WON turn ${r.win_turn}`:'no win', win:r.won });
   renderHistory(); renderBoard(); hideVerdict(); $('vialslot').innerHTML='';
   $('endcontrols').style.display='';
