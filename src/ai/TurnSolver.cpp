@@ -2468,6 +2468,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
         if (def.tmpl == CardTemplate::DirectDamage)
         {
+            // Play-viewer event: opponent life BEFORE this burn spell's damage, so the history can
+            // report "N to opponent (before->after)". Measured up to (not including) the
+            // opponent_lifegain rider below, which OpponentGainsLife reports as its own life event.
+            // g_play_event_sink is nulled by RevealLogPause during search/rollout -> byte-identical.
+            const int burn_opp_life_before = state.players[opp_idx].life;
             // Mirror EffectHandler::ResolveDirectDamage so the rollout's life total
             // matches the real game. Previously only Any/Player targeting dealt face
             // damage, so Searing Blaze (Multi) and Searing Blood (Creature) were inert
@@ -2592,6 +2597,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // Blaze/Blood) "re-kills" it and invents face damage -> phantom early
                     // win. Mirrors the real engine's SBA after damage is dealt.
                     if (lethal) { state.battlefield.erase(state.battlefield.begin() + ci); }
+                }
+            }
+            // Play-viewer history: one "burn" event for all of this spell's direct face damage
+            // (Lightning Bolt, Searing Blaze's player hit, Searing Blood's death rider, Land's Edge,
+            // Crackle's X-damage), coalescing the multiple internal subtractions into a single line.
+            if (g_play_event_sink)
+            {
+                const int burn_after = state.players[opp_idx].life;
+                const int dealt = burn_opp_life_before - burn_after;
+                if (dealt > 0)
+                {
+                    EmitPlayEvent(state.turn_number, "damage",
+                                  "\xF0\x9F\x94\xA5 " + def.card.m_name.str() + ": "
+                                  + std::to_string(dealt) + " to opponent ("
+                                  + std::to_string(burn_opp_life_before) + "\xE2\x86\x92"
+                                  + std::to_string(burn_after) + ")");
                 }
             }
             // Rider "target opponent gains N life" (Fiery Justice) -> reversed to damage by a
@@ -3074,6 +3095,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             if (le_rate <= 0) { continue; }   // no Land's Edge in play -> nothing to fire
             Player& le_ap = state.ActivePlayer();
+            const int le_life_before = state.players[opp_idx].life;   // play-viewer "before->after"
             std::vector<Card> keep;
             int fired = 0;
             for (Card& c : le_ap.hand)
@@ -3090,6 +3112,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 else { keep.push_back(std::move(c)); }
             }
             le_ap.hand = std::move(keep);
+            // Play-viewer history: one "burn" event for this Land's Edge activation (fired `fired`
+            // lands x le_rate). Nulled by RevealLogPause during search/rollout -> byte-identical.
+            if (g_play_event_sink && fired > 0)
+            {
+                const int after = state.players[opp_idx].life;
+                EmitPlayEvent(state.turn_number, "damage",
+                              "\xF0\x9F\x94\xA5 Land's Edge: " + std::to_string(le_life_before - after)
+                              + " to opponent (" + std::to_string(fired) + " land"
+                              + (fired == 1 ? "" : "s") + " discarded, "
+                              + std::to_string(le_life_before) + "\xE2\x86\x92" + std::to_string(after) + ")");
+            }
         }
 
         // Human-play (claude-play) player-initiated dig: cycle a land from hand (Lonely Sandbar /
