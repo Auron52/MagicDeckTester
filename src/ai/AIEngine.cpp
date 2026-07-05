@@ -2240,7 +2240,7 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
         // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
         // no drip (see DripLandAnyPipColor). Mirrors TurnSolver's tap_source.
         if (def.params.tap_opponent_lifegain > 0 && col != Color::Colorless)
-        { OpponentGainsLife(state, state.active_player_index, def.params.tap_opponent_lifegain); }
+        { OpponentGainsLife(state, state.active_player_index, def.params.tap_opponent_lifegain, def.card.m_name.str()); }
         // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
         // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
         // promised. AddSourceToPool credited it as `amt` wild, so decrement `available.wild`.

@@ -350,6 +350,8 @@ void GameEngine::CombatPhase(GameState& state)
                         ? CountExalted(state.battlefield, state.active_player_index) : 0;
 
     int total_combat_dmg = 0;
+    const int opp_life_before = opp.life;                 // play-viewer event: "(before→after)"
+    std::vector<std::string> atk_desc;                    // "<name> (<power>)" per attacker, real play only
     for (int idx : atk_idx)
     {
         Permanent* attacker = &state.battlefield[idx];
@@ -373,6 +375,8 @@ void GameEngine::CombatPhase(GameState& state)
         opp.life -= power;
         total_combat_dmg += power;
         if (power > 0) { state.opponent_lost_life_this_turn = true; }
+        if (g_play_event_sink && power > 0)
+        { atk_desc.push_back(attacker->card.m_name.str() + " (" + std::to_string(power) + ")"); }
         if (!attacker->card.HasKeyword(Keyword::Vigilance)) { attacker->tapped = true; }
     }
 
@@ -394,6 +398,17 @@ void GameEngine::CombatPhase(GameState& state)
     if (m_logger && total_combat_dmg > 0)
     {
         m_logger->LogAttack(total_combat_dmg, opp.life);
+    }
+    // Play-viewer history: enumerate the attackers and the damage they dealt (real play only).
+    if (g_play_event_sink && total_combat_dmg > 0)
+    {
+        std::string names;
+        for (size_t i = 0; i < atk_desc.size(); ++i) { names += (i ? ", " : "") + atk_desc[i]; }
+        if (trigger_life_loss > 0)
+        { names += (names.empty() ? "" : " + ") + std::to_string(trigger_life_loss) + " (attack triggers)"; }
+        EmitPlayEvent(state.turn_number, "combat",
+                      "⚔ attacked: " + names + " — " + std::to_string(total_combat_dmg)
+                      + " to opponent (" + std::to_string(opp_life_before) + "→" + std::to_string(opp.life) + ")");
     }
 
     CheckStateBasedActions(state);

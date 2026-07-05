@@ -324,7 +324,8 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
 static void WriteDecisionJson(std::ostream& os, const GameState& s,
                               const std::vector<TurnSolver::Plan>& plans,
                               bool is_pre_combat, int decision_index, int reveal_count,
-                              const std::vector<std::pair<int, std::string>>& drew = {})
+                              const std::vector<std::pair<int, std::string>>& drew = {},
+                              const std::vector<PlayEvent>& events = {})
 {
     const Player& me  = s.ActivePlayer();
     os << "{\n";
@@ -344,6 +345,23 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (di) { os << ", "; }
             os << "{ \"turn\": " << drew[di].first << ", \"card\": ";
             JsonStr(os, drew[di].second);
+            os << " }";
+        }
+        os << "],\n";
+    }
+    // Life-affecting events since the previous main-phase decision (combat with attacker breakdown,
+    // burn, lifegain/loss incl. Tainted-Remedy flips), each { turn, kind, text }, so the viewer can
+    // enumerate them in the history and the user needn't recompute life by hand.
+    if (!events.empty())
+    {
+        os << "  \"events\": [";
+        for (size_t ei = 0; ei < events.size(); ++ei)
+        {
+            if (ei) { os << ", "; }
+            os << "{ \"turn\": " << events[ei].turn << ", \"kind\": ";
+            JsonStr(os, events[ei].kind);
+            os << ", \"text\": ";
+            JsonStr(os, events[ei].text);
             os << " }";
         }
         os << "],\n";
@@ -1036,6 +1054,10 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // viewer history. Nulled by RevealLogPause during the search, so only real draws land here.
     std::vector<std::pair<int, std::string>> draw_log;
     g_play_draw_sink = &draw_log;
+    // Life-affecting events (combat/burn/lifegain-loss) since the last resolved main decision, for the
+    // viewer history. Same lifecycle as draw_log: real sites append, cleared when a decision is consumed.
+    std::vector<PlayEvent> event_log;
+    g_play_event_sink = &event_log;
     ai.SetExternalChooser(
         [&](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
         {
@@ -1050,7 +1072,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                     // Only the completing full-CSV run writes the trace file (below).
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log);
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
@@ -1058,6 +1080,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 // its draws were already reported. Clear so the NEXT emitted decision reports only
                 // the draws that happen AFTER it (turn draw / cantrip draws of the next segment).
                 draw_log.clear();
+                event_log.clear();
                 return chosen;
             }
             // Human-play line reconciliation: if a --validate-line was supplied, this is the
@@ -1110,13 +1133,13 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 }
                 std::cout << "],\n";
                 std::cout << "  \"decision\": ";
-                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log);
+                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log);
                 std::cout << "}\n<<<END_VALIDATION>>>\n";
                 std::cout.flush();
                 std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log);
+            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);   // distinct code: "more input needed"
@@ -1553,6 +1576,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_discard_chooser = nullptr;
     g_play_ei_chooser = nullptr;
     g_play_draw_sink = nullptr;
+    g_play_event_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Mulligan reproducibility: the actual (count, bottomed-card-numbers) this game used. Recorded
@@ -1597,6 +1621,22 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     std::cout << "<<<CLAUDE_RESULT>>>\n{\n";
     WriteBoardContext(std::cout, state, 0);   // emits "me": {...}, "opponent": {...},
     state.active_player_index = saved_ap;
+    // Events since the last decision -- crucially the WINNING turn's combat/damage/life swings, which
+    // happen after the final chooser call and would otherwise be dropped (no next decision to carry them).
+    if (!event_log.empty())
+    {
+        std::cout << "  \"events\": [";
+        for (size_t ei = 0; ei < event_log.size(); ++ei)
+        {
+            if (ei) { std::cout << ", "; }
+            std::cout << "{ \"turn\": " << event_log[ei].turn << ", \"kind\": ";
+            JsonStr(std::cout, event_log[ei].kind);
+            std::cout << ", \"text\": ";
+            JsonStr(std::cout, event_log[ei].text);
+            std::cout << " }";
+        }
+        std::cout << "],\n";
+    }
     std::cout << "  \"win_turn\": " << (won ? win_turn : -1)
               << ", \"won\": " << (won ? "true" : "false")
               << ", \"decisions_made\": " << decisions_made

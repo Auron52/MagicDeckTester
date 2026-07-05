@@ -1643,7 +1643,7 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
         // no drip (see DripLandAnyPipColor: a generic pip absent a Remedy routes here as Colorless).
         // Mirrored in AIEngine::TapForCost and TapForCostBacktrack.
         if (def.params.tap_opponent_lifegain > 0 && col != Color::Colorless)
-        { OpponentGainsLife(state, active, def.params.tap_opponent_lifegain); }
+        { OpponentGainsLife(state, active, def.params.tap_opponent_lifegain, def.card.m_name.str()); }
         // A Karoo bounce land (Izzet Boilerworks) makes TWO mana of DIFFERENT colours from one tap
         // ({U}{R}). Crediting `amt` of the single matched colour loses the second colour, so a lone
         // bounce land could not pay a two-colour cost (Expressive Iteration {U}{R}) even though

@@ -344,6 +344,22 @@ extern thread_local SoulfireTargetChooser* g_play_soulfire_chooser;
 // is byte-identical (appending to an external vector never touches GameState). Inert unless set.
 extern thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink;
 
+// Life-affecting-event sink for the play viewer's history (damage / lifegain enumeration). Mirrors
+// g_play_draw_sink: when set, the REAL resolution sites append a PlayEvent as each combat / burn /
+// lifegain-loss event happens, so the NEXT emitted decision reports exactly the events since the
+// last one (the viewer renders them in the history so the user needn't recompute life by hand).
+// `kind` is one of "combat" / "damage" / "lifegain" / "lifeloss" (drives the viewer icon+colour);
+// `text` is the human-readable line. Nulled by RevealLogPause during every search/rollout scope, so
+// only real play appends -> autonomous play is byte-identical (an external vector never touches
+// GameState). Inert unless set.
+struct PlayEvent { int turn; std::string kind; std::string text; };
+extern thread_local std::vector<PlayEvent>* g_play_event_sink;
+// Append a play event if the sink is live (real play only). Safe no-op otherwise.
+inline void EmitPlayEvent(int turn, const char* kind, std::string text)
+{
+    if (g_play_event_sink) { g_play_event_sink->push_back({ turn, kind, std::move(text) }); }
+}
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -359,20 +375,23 @@ struct RevealLogPause
     RetraceDiscardChooser* saved_rtchooser;
     SoulfireTargetChooser* saved_sfchooser;
     std::vector<std::pair<int, std::string>>* saved_drawsink;
+    std::vector<PlayEvent>* saved_evsink;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
-                       saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink)
+                       saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
+                       saved_evsink(g_play_event_sink)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
-      g_play_draw_sink = nullptr; }
+      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
-                        g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink; }
+                        g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
+                        g_play_event_sink = saved_evsink; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

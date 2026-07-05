@@ -173,11 +173,20 @@ inline bool IsLifegainToLossCard(const std::string& name)
 // gains the life (setting the clock back), which is faithful: casting these riders without
 // a Remedy out genuinely helps the opponent, and the clairvoyant search will sequence the
 // Remedy first.
-inline void OpponentGainsLife(GameState& state, int controller_index, int amount)
+// True while the mana-payment BACKTRACKER is speculatively tapping sources (it taps a drip land,
+// recurses, and UNDOES on failure). Life events emitted during speculation are phantom -- suppress
+// them; the greedy primary payment path (outside the backtracker) still emits the real drip. RAII so
+// nested recursion keeps it set. Display-only; never affects decisions.
+inline thread_local bool g_tap_speculating = false;
+struct TapSpeculationScope { bool prev; TapSpeculationScope() : prev(g_tap_speculating) { g_tap_speculating = true; } ~TapSpeculationScope() { g_tap_speculating = prev; } };
+
+inline void OpponentGainsLife(GameState& state, int controller_index, int amount,
+                              const std::string& source = std::string())
 {
     if (amount <= 0) { return; }
     int opp = 1 - controller_index;
-    if (RemedyActive(state, controller_index))
+    const bool remedied = RemedyActive(state, controller_index);
+    if (remedied)
     {
         state.players[opp].life -= amount;
         state.opponent_lost_life_this_turn = true;
@@ -185,6 +194,18 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
     else
     {
         state.players[opp].life += amount;
+    }
+    // Play-viewer history (real play only): enumerate the life swing + its source. Under a Remedy the
+    // "gain" is flipped to a loss, which is exactly the case that confused a by-hand life count.
+    // Suppressed during speculative payment backtracking (phantom taps that get undone).
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        std::string src = !source.empty()
+            ? (" (" + source + (remedied ? ", via Tainted Remedy)" : ")"))
+            : (remedied ? " (via Tainted Remedy)" : "");
+        EmitPlayEvent(state.turn_number, remedied ? "lifeloss" : "lifegain",
+                      std::string(remedied ? "🩸 opponent −" : "＋ opponent +") + std::to_string(amount)
+                      + " life" + src);
     }
 }
 
@@ -2917,6 +2938,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 std::uint64_t reserved_mask = 0,
                                 ManaPool* out_full_pool = nullptr)
 {
+    TapSpeculationScope _spec;   // suppress phantom drip-land life events from speculative taps
     if (floating.CanPay(cost))
     {
         // Surface the over-produced remainder (forced filter/depletion over-tap) so the

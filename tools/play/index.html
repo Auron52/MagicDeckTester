@@ -327,6 +327,9 @@
   .hist { list-style:none; margin:0; padding:0; font-size:12.5px; }
   .hist li { padding:5px 8px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
   .hist li .t { color:var(--muted); white-space:nowrap; } .hist li.rej .lab { color:var(--bad); } .hist li.win .lab { color:var(--good); }
+  /* life-affecting event lines (combat / burn damage / lifegain / lifeloss) coloured by kind */
+  .hist li.ev-combat .lab { color:var(--warn); } .hist li.ev-damage .lab { color:var(--bad); }
+  .hist li.ev-lifeloss .lab { color:var(--bad); } .hist li.ev-lifegain .lab { color:var(--good); }
   #saveinfo { margin-top:10px; font-size:12px; color:var(--muted); word-break:break-all; }
   .err { color:var(--bad); white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12px; }
 
@@ -1415,6 +1418,20 @@ function logDraws(dec) {
     S.history.push({ turn:t, label:'＋ drew: '+names.join(', ') });
   }
 }
+// Life-affecting events (combat / damage / lifegain-loss) since the last decision -> history lines,
+// coalescing runs of identical events into "×N" so a repeated drip doesn't flood the panel. `kind`
+// colours the line. Shared by advanceTo (mid-game) and showResult (the winning turn's events).
+function logEventList(events) {
+  if (!events || !events.length) return;
+  let i=0;
+  while (i<events.length) {
+    const e=events[i]; let n=1;
+    while (i+n<events.length && events[i+n].text===e.text && events[i+n].kind===e.kind) n++;
+    S.history.push({ turn:e.turn, label: e.text + (n>1?` ×${n}`:''), cls:'ev-'+e.kind });
+    i+=n;
+  }
+}
+function logEvents(dec) { if (dec) logEventList(dec.events); }
 function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
   // Undo checkpoint: snapshot the history length + graveyard/hand diff state BEFORE this decision's
   // draws/gy are logged. A single forward step appends a VARIABLE number of history lines (draw
@@ -1422,7 +1439,7 @@ function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=
   // checkpoint and step() replays + re-logs the decision exactly. One checkpoint per shown decision.
   (S.checkpoints=S.checkpoints||[]).push({ histLen:S.history.length, lastGy:Object.assign({},S.lastGy||{}),
     lastCasts:new Set(S.lastCasts||[]), handOrder:S.handOrder?S.handOrder.slice():undefined });
-  if (dec && dec.type==='main_phase') { logDraws(dec); logGyAdds(dec.me); renderHistory(); }
+  if (dec && dec.type==='main_phase') { logDraws(dec); logEvents(dec); logGyAdds(dec.me); renderHistory(); }
   $('endcontrols').style.display='none'; renderBoard();
   // Game already decided: the lethal spell/combat dropped the opponent to <=0 life, but the engine
   // still offers another main-phase decision (a post-combat Main 2, or a post-lethal draw-breakpoint
@@ -1449,7 +1466,7 @@ function isDeadOpponentMain(dec){
 // Commit the current line, then auto-pass the rest of THIS turn (see advanceTo). The turn number is
 // captured now so the skip stops once the engine advances to the next turn.
 function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision && S.decision.turn; S.commitTurnPasses = 0; commitLine(); }
-function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
+function renderHistory() { $('hist').innerHTML=S.history.map(h=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span></li>`).join(''); }
 function hideVerdict() { $('verdict').style.display='none'; }
 function showError(msg, raw) { $('board').innerHTML=`<div class="err">⚠ ${esc(msg)}${raw?'\n\n'+esc(raw):''}</div>`; }
 function flashHint(msg) { const ve=$('verdict'); ve.className=''; ve.style.display='block';
@@ -1457,6 +1474,7 @@ function flashHint(msg) { const ve=$('verdict'); ve.className=''; ve.style.displ
 
 function showResult(r) {
   S.over=true; S.result=r; S.commitTurn=null;   // game over -> end any in-progress turn-skip
+  logEventList(r.events);   // the winning turn's combat/damage/life events (after the last decision)
   S.history.push({ turn:r.won?r.win_turn:'—', label:r.won?`WON turn ${r.win_turn}`:'no win', win:r.won });
   renderHistory(); renderBoard(); hideVerdict(); $('vialslot').innerHTML='';
   $('endcontrols').style.display='';
