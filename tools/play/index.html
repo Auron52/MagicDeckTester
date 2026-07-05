@@ -1290,6 +1290,14 @@ function promptPanelHtml(d, dec){
       `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
       `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
   }
+  // Creature removal (Swords to Plowshares): d.remove describes the effect -- ask which OPPONENT
+  // creature to exile (its controller gains life = its power; a Tainted Remedy flips that to loss).
+  if (d.remove){
+    return `<h3>Which creature to exile — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">The chosen opponent creature is ${esc(d.remove)} · pick 1. Click one of the opponent's creatures on the board (labelled with its power/toughness). The AI's pick (largest) is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
+      `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
+  }
   // "player or planeswalker" spells (Skullcrack) have no creature in their legal targets, so don't
   // offer creatures in the prompt; any-target burn (Lightning Bolt) does.
   const hasCreature=(d.legal_targets||[]).some(t=>t.kind==='permanent');

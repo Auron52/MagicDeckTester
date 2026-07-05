@@ -2815,6 +2815,36 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     { ci = bi; break; }
                 }
             }
+            // Human-play targeting: let the player pick WHICH opponent creature Swords exiles, and do
+            // NOT bail when there is no enabler. FindLifegainRemovalTarget returns -1 without a Tainted
+            // Remedy (a goldfishing pruning: handing a passive opponent life is strictly bad for the
+            // AI), but a human who chose to cast Swords wants it to resolve -- and the controller-
+            // lifegain rider below then applies exactly as the rules say (opponent gains life with no
+            // enabler; loses it with one). Default = the largest opponent creature (max life swing).
+            // g_play_target_chooser is nulled by RevealLogPause during search/rollout, so the autonomous
+            // engine never enters this block -> byte-identical there.
+            if (g_play_target_chooser && def.params.controller_lifegain_equals_power)
+            {
+                int default_ci = ci;
+                if (default_ci < 0)
+                {
+                    int best_pw = -1;
+                    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                    {
+                        const Permanent& bp = state.battlefield[bi];
+                        if (bp.controller_index == state.active_player_index || !bp.card.IsCreature()) { continue; }
+                        int pw = bp.EffectivePower();
+                        if (pw > best_pw) { best_pw = pw; default_ci = bi; }
+                    }
+                }
+                if (default_ci >= 0)
+                {
+                    std::vector<ChosenTarget> heur = { { 1, default_ci, 0 } };
+                    std::vector<ChosenTarget> picked =
+                        (*g_play_target_chooser)(state, def, state.active_player_index, 1, 0, heur);
+                    ci = (!picked.empty() && picked[0].kind == 1) ? picked[0].index : default_ci;
+                }
+            }
             if (ci >= 0)
             {
                 // Pump-then-Swords: redirect a free-alt Invigorate onto this creature before

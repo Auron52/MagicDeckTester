@@ -3,6 +3,46 @@
 Self-contained record (2026-07-03). How the Anti-Lifegain deck uses Swords to Plowshares as a
 life-loss tool, what shipped, and the larger combo left for later.
 
+## Shipped (2026-07-05): human-play targeting for Swords in the play viewer
+
+The autonomous `FindLifegainRemovalTarget` returns **-1 ("do not cast")** whenever no enabler is live
+(a sound goldfishing prune — handing a passive opponent life is strictly bad for the AI). But in the
+**play viewer / `--claude-play`** that -1 caused three user-visible bugs (reported from Anti-Lifegain
+seed 13 game 12): (A) casting Swords without a live enabler applied **no** lifegain at all (the rider
+never fired because no target was picked); (B) casting **Reverent Silence before Swords** — Silence
+destroys your own Tainted Remedy — left Swords unbacked, so it silently fizzled instead of making the
+opponent gain life; (C) you could not **target** Swords (the target was the fixed heuristic, never a
+decision). The rider itself (`OpponentGainsLife(state, 1 - tgt_controller, tgt_power)`) was always
+correct — only target *selection* bailed.
+
+**Fix (human-play path only, byte-identical autonomous):** in `ApplyPlanDirect`'s Removal branch
+(TurnSolver.cpp), when `g_play_target_chooser` is set (i.e. real claude-play, not a search/rollout —
+the chooser is nulled by `RevealLogPause`), surface a `target` decision for Swords. The default is the
+largest opponent creature (max life swing) **regardless of enabler**, so a human who chose to cast
+Swords always gets a target and the rider fires as the rules say (opponent gains life with no enabler;
+loses it with one). The chooser reuses the same plumbing as Invigorate's own-creature pump (commit
+6a06622): `CollectOpponentCreatureTargets` in main.cpp builds the legal set, `WriteTargetDecisionJson`
+gets a `remove_desc` → a `"remove"` field + removal-worded note, and index.html adds a `d.remove`
+prompt branch ("Which creature to exile"). **Tokens:** opponent creatures are usually tokens (Orchard
+Spirits) with no card-DB entry, so `CollectOpponentCreatureTargets` uses `Card::IsCreature()` directly
+(not `LookupCached`, which returns null for tokens and would silently drop every target).
+
+The enumeration gates (`SubsetHasUnbackedLifegainRemoval`, the CollectActions `RemedyActiveOrInHand`
+guard) were deliberately **left untouched**: the main-phase human choice is a *plan index*, so relaxing
+enumeration would shift indices and risk breaking saved reference replays. The apply-site fix alone
+covers all three symptoms because the {Silence, Swords} plan is already enumerable (Remedy is live at
+turn start), and my block targets Swords + fires the rider whether or not the enabler survives to
+resolution.
+
+**Verified:** smoke 18/18 byte-identical (antilife digest unchanged, `play-changed=0` at d0/d3/d5).
+Live-fire on seed 13 game 12 turn 4 (opponent = six 1/1 tokens, Tainted Remedy live, hand = 2×Reverent
+Silence + 2×Swords): plan 8 "Swords, then Silence" now surfaces a Swords target then wins T4 with opp
+-2 (Swords -1 loss with Remedy, Silence's flipped 6-gain -6, combat 4) — **identical outcome** to the
+recorded reference, just with the target pickable. Plan 7 "Silence, then Swords" now shows the opponent
+**+1 life** from the unbacked Swords (was: silent fizzle) — the rules-correct behaviour the user
+expected. Replaying the exact saved reference stream now surfaces one extra (Swords target) decision;
+the file is unchanged and the user re-saves at will.
+
 ## The interaction
 
 Swords to Plowshares exiles a creature and its **controller gains life equal to its power**

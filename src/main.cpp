@@ -652,6 +652,28 @@ static void CollectOwnCreatureTargets(const GameState& s, int controller,
     }
 }
 
+// The OPPONENT's creatures, in board order -- the legal targets for a creature-removal spell (Swords
+// to Plowshares exiles a creature and its controller gains life = its power; a Tainted Remedy / Plague
+// Drone flips that gain to a loss). kind==1 (permanent), index == battlefield index. No faces / own
+// creatures. The power/toughness in the label lets the player see which is biggest (max life swing).
+static void CollectOpponentCreatureTargets(const GameState& s, int controller,
+                                           std::vector<ChosenTarget>& out, std::vector<std::string>& labels)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[i];
+        if (p.controller_index == controller) { continue; }
+        // Use Card::IsCreature() directly (not a CardDatabase lookup): the opponent's creatures are
+        // often TOKENS (Orchard Spirits), which have no entry in the card DB -- a LookupCached here
+        // would return null and silently drop every token from the target list. P/T come from the
+        // Permanent, so no definition is needed for the label either.
+        if (!p.card.IsCreature()) { continue; }
+        out.push_back({ 1, i });
+        labels.push_back(p.card.m_name.str() + " (" + std::to_string(p.EffectivePower()) +
+                         "/" + std::to_string(p.EffectiveToughness()) + ")");
+    }
+}
+
 // Enumerate legal target-set options for a uniform-damage spell: every nonempty subset of the
 // legal targets with 1..max_targets members. Bounded (capped) so a big board can't explode the menu.
 static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTarget>& legal,
@@ -713,7 +735,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::vector<ChosenTarget>& legal, const std::vector<std::string>& legal_labels,
                                     const std::vector<TargetOption>& options, int per_target,
                                     int max_targets, int heuristic_default, int decision_index,
-                                    const std::string& pump_desc = "")
+                                    const std::string& pump_desc = "", const std::string& remove_desc = "")
 {
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
@@ -723,6 +745,9 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // A non-empty pump_desc (e.g. "+4/+4") flags this as an own-creature pump rather than damage, so
     // the viewer shows "gets +4/+4" and highlights your creatures instead of "N damage".
     if (!pump_desc.empty()) { os << "  \"pump\": "; JsonStr(os, pump_desc); os << ",\n"; }
+    // A non-empty remove_desc (e.g. "exiled ...") flags this as a creature-removal target (Swords),
+    // so the viewer highlights the OPPONENT's creatures and shows the removal wording, not "N damage".
+    if (!remove_desc.empty()) { os << "  \"remove\": "; JsonStr(os, remove_desc); os << ",\n"; }
     os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets << ",\n";
     WriteBoardContext(os, s, 0);
     os << "  \"legal_targets\": [";
@@ -746,6 +771,9 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     if (!pump_desc.empty())
     { os << "  \"note\": \"reply an option index. The chosen creature gets " << pump_desc
          << ". Default = the AI's pick (best attacker).\"\n"; }
+    else if (!remove_desc.empty())
+    { os << "  \"note\": \"reply an option index. The chosen opponent creature is " << remove_desc
+         << ". Default = the AI's pick (largest).\"\n"; }
     else
     { os << "  \"note\": \"reply an option index. Each chosen target takes " << per_target
          << " damage (up to " << max_targets << " target(s)). Default = the AI's pick (face).\"\n"; }
@@ -1282,10 +1310,18 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             const std::string pump_desc = own_pump
                 ? ("+" + std::to_string(def.params.power_bonus) + "/+" + std::to_string(def.params.tough_bonus))
                 : std::string();
+            // Creature removal (Swords to Plowshares): legal targets are the OPPONENT's creatures; the
+            // exile makes the opponent gain life = the creature's power (a Tainted Remedy flips that to
+            // a loss -- the whole point of the deck), so surface the target as a human choice.
+            const bool exile_removal = (def.tmpl == CardTemplate::Removal);
+            const std::string remove_desc = exile_removal
+                ? std::string("exiled; you gain life equal to its power (a Tainted Remedy / Plague Drone flips that to a life loss)")
+                : std::string();
             const bool players_only = (def.params.targeting == Targeting::Player);
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (own_pump) { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
-            else          { CollectDamageTargets(s, controller, players_only, legal, legal_labels); }
+            if (own_pump)           { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
+            else if (exile_removal) { CollectOpponentCreatureTargets(s, controller, legal, legal_labels); }
+            else                    { CollectDamageTargets(s, controller, players_only, legal, legal_labels); }
 
             // Divided damage (Fiery Justice / Magma Opus): the player allocates `per_target_damage`
             // (the TOTAL here) among ANY number of the legal targets, each >= 1. The answer is ONE
@@ -1349,14 +1385,14 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);
