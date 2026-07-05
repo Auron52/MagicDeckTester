@@ -5,6 +5,8 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -548,6 +550,71 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     const long long r0    = (cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts) ? cfg.r_floor : r_max;
     const bool adaptive   = r0 < r_max;
 
+    // ---- Periodic CHECKPOINT of the raw sidecar ------------------------------------------------
+    // A long adaptive run (antilife floor pass alone is hours) writes its raw sidecar every
+    // MTG_KEEP_CHECKPOINT_SEC (default 1800s; 0 disables) DURING the refine loop, so a crash/stop
+    // after the floor pass loses only minutes. Each checkpoint is a COMPLETE-floor state (all cells
+    // sampled >= r0) -> recover a profile from it with the merge path (MTG_KEEP_MERGE on this one
+    // file). Written atomically (tmp + rename) so a crash mid-write can't corrupt the sidecar. This
+    // is the same content as the final 6b write (below) minus the play_digest, which recovery on one
+    // machine does not need. sumsq is included for a future resume-continuation path.
+    const long long checkpoint_sec = []{ const char* s = std::getenv("MTG_KEEP_CHECKPOINT_SEC");
+        return (s && *s) ? std::max<long long>(0, std::strtoll(s, nullptr, 10)) : 1800LL; }();
+    auto write_raw_atomic = [&](const std::string& path) -> bool
+    {
+        using json = nlohmann::json;
+        uint64_t bucket_fp = 1469598103934665603ULL;
+        for (int b = 0; b < K; ++b)
+        { bucket_fp = Fnv("|", bucket_fp); for (const std::string& n : eq.classes[b].members) bucket_fp = Fnv(n + ",", bucket_fp); }
+        std::vector<std::string> deck_names;
+        for (const Card& c : deck.mainboard) { deck_names.push_back(c.m_name.str()); }
+        std::sort(deck_names.begin(), deck_names.end());
+        uint64_t deck_fp = 1469598103934665603ULL;
+        for (const std::string& n : deck_names) { deck_fp = Fnv(n + ",", deck_fp); }
+        json root;
+        root["meta"] = {
+            { "commit", cfg.commit }, { "play_digest", std::string() },
+            { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
+            { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
+            { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
+        };
+        json buckets = json::array();
+        for (int b = 0; b < K; ++b) { buckets.push_back(eq.classes[b].members); }
+        root["buckets"] = buckets;
+        json sizes = json::array();
+        for (int H = HAND; H >= min_size; --H)
+        {
+            const SizeTable& t = tables[HAND - H];
+            json entries = json::array();
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+            {
+                json je;
+                je["comp"]  = t.comps[i];
+                je["sum"]   = { t.sum[i][0], t.sum[i][1] };
+                je["sumsq"] = { t.sumsq[i][0], t.sumsq[i][1] };
+                je["count"] = { t.cnt[i][0], t.cnt[i][1] };
+                entries.push_back(je);
+            }
+            sizes.push_back({ { "H", H }, { "entries", entries } });
+        }
+        root["sizes"] = sizes;
+        const std::string tmp = path + ".tmp";
+        { std::ofstream f(tmp); if (!f) { return false; } f << root.dump(); if (!f) { return false; } }
+        std::error_code ec; std::filesystem::rename(tmp, path, ec);
+        return !ec;
+    };
+    auto t_last_ck = std::chrono::steady_clock::now();
+    auto maybe_checkpoint = [&]()
+    {
+        if (checkpoint_sec <= 0 || cfg.out_raw.empty()) { return; }
+        const auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration<double>(now - t_last_ck).count() < static_cast<double>(checkpoint_sec)) { return; }
+        t_last_ck = now;
+        const bool ok = write_raw_atomic(cfg.out_raw);
+        std::cerr << "[keepgen] checkpoint " << (ok ? "written" : "FAILED") << " -> " << cfg.out_raw
+                  << "  (" << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
+    };
+
     // Sub-tables may start at the floor for adaptive keep-only profiles. With bottoming enabled the argmin
     // (which subhand to keep) normally needs the WHOLE sub-table accurate -- a true-argmin cell noisily-
     // high at the floor would never be marked -- so bottoming forces sub-tables to the cap up front. The
@@ -565,6 +632,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         process_tasks(tasks, adaptive ? "floor-pass" : "full-pass");
         recompute();
     }
+    // Save the (expensive) floor investment immediately -- refine waves can be long, so don't wait for
+    // the first wave boundary. A complete-floor sidecar is already a valid (low-R) recoverable state.
+    if (adaptive) { maybe_checkpoint(); }
 
     int refine_waves = 0;
     long long refined_rollouts = 0;
@@ -640,6 +710,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             process_tasks(tasks, wlabel.c_str());
             recompute();
             ++refine_waves;
+            maybe_checkpoint();   // crash-safe: dump the raw sidecar every checkpoint_sec (post-floor)
         }
     }
 
@@ -914,6 +985,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // merge path reads counts per-entry and rebuilds V=sum/count, so pooling is exact even
                 // when two runs sampled a cell to different depths.
                 je["sum"]   = { t.sum[i][0], t.sum[i][1] };
+                je["sumsq"] = { t.sumsq[i][0], t.sumsq[i][1] };
                 je["count"] = { t.cnt[i][0], t.cnt[i][1] };
                 entries.push_back(je);
             }
