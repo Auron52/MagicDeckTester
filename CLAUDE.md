@@ -25,6 +25,18 @@ The application is in early development — no build system, test runner, or sou
   `scripts/analyze_deck.py decks/<name>.txt`); the regression harness's
   `DECK_FILE`/`DECK_PROF` maps in `test/regression_cases.sh` already point there.
 
+- **Reference games under `references/` are COMMIT-ONLY — never revert, discard,
+  overwrite, or delete them.** The files in `references/<deck>/claude_s*_gi*.json`
+  are user-owned, hand-played ground-truth games that represent real work the user
+  saved deliberately. An agent may ONLY *commit* them (to protect them from loss);
+  an agent must NEVER run `git checkout` / `git restore` / `git reset` / `git clean`
+  or any other command that discards changes to a file under `references/`, and must
+  never overwrite or delete one. If a reference shows as modified or untracked in
+  `git status`, **commit it** — do not revert it, and do not assume a change was
+  accidental (the user may have re-saved it via the play viewer). Only the user
+  decides to change or remove a reference. This rule exists because reverting a
+  re-saved reference already destroyed unrecoverable user work once.
+
 - **Deferred work goes in `docs/design/`, not private agent memory.** If a
   project, plan, or idea is *deferred* — i.e. not being worked on right now — write
   it as a self-contained `docs/design/<name>.md` (see `mana-source-reservation.md`
