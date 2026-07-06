@@ -3075,6 +3075,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // don't reorder its casts.
     apply_plan_actions = [&](const std::vector<Action>& acts, bool explicit_order)
     {
+        // Indices of sac-land casts already applied by the Spectacle hoist (opaque branch); the
+        // trailing sac loop skips them so they are not double-cast. Empty for every plan without a
+        // hoisted Spectacle enabler.
+        std::set<size_t> spec_hoisted_sac;
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::ActivateVial) { apply_vial(a.card_name); }
@@ -3116,6 +3120,32 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 for (const Action& a : acts)
                 { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); } }
+                // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
+                // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
+                // Spectacle un-triggered and Light Up paying full cost. When the set holds a
+                // not-yet-active Spectacle spell, cast such sac-land damage enablers HERE (before
+                // the non-sac casts) so Light Up unlocks its reduced cost, and mark them so the
+                // trailing sac loop skips them. Only the 2-card {burn, Light Up} spectacle plans
+                // pair a sac-land burn with Light Up (the general powerset never affords Light Up
+                // at full cost), so this touches no other line / has no prowess interaction. Inert
+                // unless a Spectacle spell is present -> non-burn byte-identical.
+                bool spec_needed = !state.opponent_lost_life_this_turn;
+                if (spec_needed)
+                {
+                    bool has_spec = false;
+                    for (const Action& a : acts)
+                    { if (a.kind == Action::Kind::CastFromHand && a.has_spectacle) { has_spec = true; break; } }
+                    spec_needed = has_spec;
+                }
+                for (size_t ai = 0; spec_needed && ai < acts.size(); ++ai)
+                {
+                    const Action& a = acts[ai];
+                    if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
+                    {
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
+                        spec_hoisted_sac.insert(ai);
+                    }
+                }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
@@ -3143,8 +3173,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
-        for (const Action& a : acts)
+        for (size_t ai = 0; ai < acts.size(); ++ai)
         {
+            if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
+            const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
@@ -4296,7 +4328,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     for (int i = 0; i < m; ++i)
     {
         const Action& c = cands[i];
-        if (c.direct_damage > 0 && !c.has_spectacle && !c.sacrifice_land)
+        // A spectacle-enabling trigger is any burn that reaches the opponent's face this turn --
+        // including a sac-land burn (Shard Volley). The sacrificed land can be one already tapped
+        // for mana, so pool.CanPay(trigger + spectacle) below stays a sufficient affordability
+        // test for the 2-card {trigger, draw} plan. The apply hoists a sac-land enabler ahead of
+        // the (opaque) spectacle spell so the reduced cost is realised (see ApplyPlanDirect).
+        if (c.direct_damage > 0 && !c.has_spectacle)
         {
             triggers.push_back({i, c.cost, c.direct_damage, c.eval});
         }
@@ -4320,45 +4357,56 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         ManaCost spectacle_only = draw_def->params.spectacle_cost.value();
 
         bool spectacle_active = state.opponent_lost_life_this_turn;
-        const TriggerCand* trigger = nullptr;
 
+        // Emit a {trigger, draw} plan for EACH distinct-named affordable trigger, not just the
+        // cheapest -- so the search (and the human viewer) can commit any legal spectacle line,
+        // e.g. "Searing Blood -> Light Up {R}" as well as "Lightning Bolt -> Light Up {R}". Each
+        // such plan is inherently damage-source-FIRST (the trigger is pushed before the draw), so
+        // the opaque apply casts the burn before Light Up -> spectacle unlocks -> reduced cost
+        // realised. When spectacle is already active no trigger is needed (nullptr). Zero triggers
+        // -> no plan, as before. Only fires for a spectacle draw (Light Up) -> non-burn byte-id.
+        std::vector<const TriggerCand*> chosen_triggers;
         if (!spectacle_active)
         {
+            std::unordered_set<std::string> seen_trig;
             for (const TriggerCand& tc : triggers)
             {
-                if (pool.CanPay(add_cost(tc.cost, spectacle_only)))
-                {
-                    trigger = &tc;
-                    break;
-                }
+                if (!pool.CanPay(add_cost(tc.cost, spectacle_only))) { continue; }
+                // Dedup by the trigger's real card name so two copies of the same burn don't
+                // emit identical plans.
+                if (!seen_trig.insert(cands[tc.idx].card_name).second) { continue; }
+                chosen_triggers.push_back(&tc);
             }
-            if (!trigger) { continue; }
+            if (chosen_triggers.empty()) { continue; }
         }
         else
         {
             if (!pool.CanPay(spectacle_only)) { continue; }
+            chosen_triggers.push_back(nullptr);
         }
 
-        TurnSolver::Plan plan;
-        int direct_dmg = 0;
-        if (trigger)
+        for (const TriggerCand* trigger : chosen_triggers)
         {
-            // NOTE: legacy quirk preserved for byte-identical results — the trigger's
-            // name is taken from ap.hand[trigger->idx], where trigger->idx is a
-            // *candidate* index (lands are skipped when building candidates), not a
-            // hand index. When the hand holds lands these diverge and the named card
-            // may not be the intended trigger. Faithfully reproduced here; fixing it
-            // is a separate behaviour change requiring a burn ground-truth regen.
-            Action ta = cands[trigger->idx];
-            ta.card_name = ap.hand[trigger->idx].m_name;
-            plan.actions.push_back(ta);  // cheap damage spell unlocks Spectacle
-            plan.value += trigger->eval;
-            direct_dmg += trigger->damage;
+            TurnSolver::Plan plan;
+            int direct_dmg = 0;
+            if (trigger)
+            {
+                // The trigger Action already carries its real card name (set from the true hand
+                // index when candidates were built). A prior version overwrote it with
+                // ap.hand[trigger->idx], treating the *candidate* index as a hand index -- wrong
+                // whenever the hand holds lands (it would name/cast e.g. a Mountain instead of the
+                // burn), which is exactly why "Searing Blood -> Light Up" was not enumerated when a
+                // Mountain sat earlier in hand. Use the Action's own name -> correct spell cast.
+                Action ta = cands[trigger->idx];
+                plan.actions.push_back(ta);  // cheap damage spell unlocks Spectacle
+                plan.value += trigger->eval;
+                direct_dmg += trigger->damage;
+            }
+            plan.actions.push_back(draw);  // draw spell at its Spectacle cost
+            plan.value += draw.eval;
+            plan.wins_this_turn = (pending_atk + direct_dmg) >= state.Opponent().life;
+            plans.push_back(std::move(plan));
         }
-        plan.actions.push_back(draw);  // draw spell at its Spectacle cost
-        plan.value += draw.eval;
-        plan.wins_this_turn = (pending_atk + direct_dmg) >= state.Opponent().life;
-        plans.push_back(std::move(plan));
     }
 
     // Sort so the highest-value plans are simulated first.  When a timeout fires

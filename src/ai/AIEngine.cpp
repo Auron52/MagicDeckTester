@@ -12,6 +12,7 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <set>
 #include <sstream>
 #include <mutex>
 #include <stdexcept>
@@ -1649,6 +1650,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
     // logical point (after the land drop + Vial deploys) -> identical prepay. Declined -> greedy.
     TurnSolver::BatchPrepayMainCasts(state, plan.actions);
+    // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);
+    // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
+    // enabler is hoisted below.
+    std::set<size_t> spec_hoisted_sac;
     // Cast-ordering search (C): a committed plan with searched_order set carries an
     // EXPLICIT interleaving the search scored (e.g. enabler/destroy-all-payload rebuild);
     // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
@@ -1695,6 +1700,29 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now();
         }
     }
+    // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
+    // otherwise be cast in the trailing sac loop AFTER the non-sac Spectacle spell (Light Up),
+    // leaving Spectacle un-triggered. When the set holds a not-yet-active Spectacle spell, cast
+    // such sac-land damage enablers here so Light Up unlocks its reduced cost. Only the 2-card
+    // {burn, Light Up} spectacle plans pair a sac-land burn with Light Up, so this touches no
+    // other line. Inert unless a Spectacle spell is present -> non-burn byte-identical.
+    bool spec_needed = !state.opponent_lost_life_this_turn;
+    if (spec_needed)
+    {
+        bool has_spec = false;
+        for (const Action& a : plan.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.has_spectacle) { has_spec = true; break; } }
+        spec_needed = has_spec;
+    }
+    for (size_t ai = 0; spec_needed && ai < plan.actions.size(); ++ai)
+    {
+        const Action& a = plan.actions[ai];
+        if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
+        {
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now();
+            spec_hoisted_sac.insert(ai);
+        }
+    }
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
@@ -1738,9 +1766,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     }
     }
-    for (const Action& a : plan.actions)
+    for (size_t ai = 0; ai < plan.actions.size(); ++ai)
     {
         if (staged_break) { break; }
+        if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
+        const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
         { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now(); }
     }
