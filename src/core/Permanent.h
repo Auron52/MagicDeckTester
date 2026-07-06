@@ -16,6 +16,10 @@ struct Permanent
     int  owner_index               = 0;   // index into GameState::players
     bool tapped               = false;
     int       damage               = 0;    // reset each cleanup step
+    // Accumulated "when this creature dies this turn" damage owed to its controller from delayed
+    // triggers (Searing Blood: 3 per copy). Two Searing Bloods on one creature leave 6 pending; it
+    // all fires when the creature dies (CR 603.7). Reset each cleanup with damage.
+    int       pending_death_trigger = 0;
     std::vector<Counter> counters;
     bool      entered_this_turn    = false;  // summoning sickness tracker
     Permanent* attached_to         = nullptr;

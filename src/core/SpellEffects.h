@@ -558,6 +558,31 @@ inline int FindLifegainRemovalTarget(const GameState& state, int active)
     return best;
 }
 
+// Apply a creature-targeting burn's damage AND its delayed "when that creature dies" death trigger
+// (Searing Blood / Searing Blaze) in one place, shared by the executor (EffectHandler) and the search
+// rollout (ApplyPlanDirect) so both model the SAME life loss. CR 603.7: each Searing Blood sets its
+// OWN delayed trigger, so two of them on one creature deal 3+3 = 6 to the controller when it dies --
+// the OLD code fired only the single copy that happened to push the creature to lethal (a 4/4 hit by
+// two Bloods lost the first Blood's 3). We instead ACCUMULATE each copy's death_trigger_damage as
+// `pending_death_trigger` and fire the whole pile the moment the creature FIRST reaches lethal damage
+// (from any source -- a later Bolt that finishes an already-Blooded creature still triggers it). The
+// lethal-TRANSITION gate (damage_before < toughness <= damage now) fires exactly once and never double.
+// Call AFTER adding this source's damage to target.damage; pass the pre-add damage and this source's
+// death_trigger_damage (0 for a plain burn -- it still fires any pending left by a prior Blood).
+inline void ApplyBurnToCreature(GameState& state, Permanent& target, int damage_before,
+                                int source_death_trigger, int caster_index)
+{
+    if (source_death_trigger > 0) { target.pending_death_trigger += source_death_trigger; }
+    const int tough = target.EffectiveToughness();
+    if (damage_before < tough && target.damage >= tough && target.pending_death_trigger > 0)
+    {
+        const int ctrl = target.controller_index;
+        state.players[ctrl].life -= target.pending_death_trigger;
+        if (ctrl != caster_index) { state.opponent_lost_life_this_turn = true; }
+        target.pending_death_trigger = 0;   // fired -- the transition gate also prevents a re-fire
+    }
+}
+
 // Target selection for a creature-targeting burn that carries a "when that creature dies" rider
 // (Searing Blood: 2 to a creature, then 3 to its controller if it dies this turn). The 3-to-face
 // only lands if the target actually DIES, so among the opponent's creatures we prefer one this

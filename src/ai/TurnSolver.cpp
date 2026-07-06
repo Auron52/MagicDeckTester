@@ -2533,7 +2533,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         }
                         else if (c.index >= 0 && c.index < static_cast<int>(state.battlefield.size()))
                         {
-                            state.battlefield[c.index].damage += amt;   // SBA sweep below removes the dead
+                            Permanent& tp = state.battlefield[c.index];
+                            const int before = tp.damage;
+                            tp.damage += amt;   // SBA sweep below removes the dead
+                            // This spell has no death trigger of its own (Any/Player = Bolt/Crackle/
+                            // divided), but if it KILLS a creature a prior Searing Blood damaged, that
+                            // Blood's pending trigger fires now. Shared lockstep helper (0 = no own rider).
+                            ApplyBurnToCreature(state, tp, before, 0, state.active_player_index);
                         }
                     }
                     // State-based: destroy creatures with lethal damage (highest index first so the
@@ -2583,14 +2589,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         if (dmg > 0) { state.opponent_lost_life_this_turn = true; }
                     }
                     Permanent& tgt = state.battlefield[ci];
+                    const int before = tgt.damage;
                     tgt.damage += dmg;
+                    // Delayed "when that creature dies" trigger (Searing Blood), accumulated so two
+                    // copies on one creature both fire on death. Shared with EffectHandler (lockstep).
+                    ApplyBurnToCreature(state, tgt, before, def.params.death_trigger_damage,
+                                        state.active_player_index);
                     bool lethal = tgt.damage >= tgt.EffectiveToughness();
-                    // Death trigger (Searing Blood): if the creature now has lethal damage.
-                    if (def.params.death_trigger_damage > 0 && lethal)
-                    {
-                        state.players[opp_idx].life -= def.params.death_trigger_damage;
-                        state.opponent_lost_life_this_turn = true;
-                    }
                     // State-based action: a creature with lethal damage is destroyed.
                     // Without this the rollout keeps the dead creature on the battlefield
                     // as a phantom target, so a later creature-targeting burn (Searing
@@ -3583,10 +3588,11 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // was the root cause of non-convergence on the burn deck (Monastery Swiftspear).
     for (Permanent& p : state.battlefield)
     {
-        p.damage           = 0;
-        p.temp_power_bonus = 0;
-        p.temp_tough_bonus = 0;
-        p.is_animated      = false;
+        p.damage                = 0;
+        p.pending_death_trigger = 0;   // delayed Searing Blood trigger expires with the damage marks
+        p.temp_power_bonus      = 0;
+        p.temp_tough_bonus      = 0;
+        p.is_animated           = false;
     }
 
     // Start of next turn

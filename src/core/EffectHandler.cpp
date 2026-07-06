@@ -226,19 +226,13 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
                 && t.permanent_index < static_cast<int>(state.battlefield.size()))
             {
                 Permanent& target = state.battlefield[t.permanent_index];
+                const int before = target.damage;
                 target.damage += damage;
 
-                // Death trigger: if the creature now has lethal damage, fire immediately.
-                if (def.params.death_trigger_damage > 0
-                    && target.damage >= target.EffectiveToughness())
-                {
-                    int ctrl = target.controller_index;
-                    state.players[ctrl].life -= def.params.death_trigger_damage;
-                    if (ctrl != entry.controller_index && def.params.death_trigger_damage > 0)
-                    {
-                        state.opponent_lost_life_this_turn = true;
-                    }
-                }
+                // Delayed "when that creature dies" trigger (Searing Blood), accumulated so two copies
+                // on one creature both fire when it dies. See ApplyBurnToCreature (shared lockstep).
+                ApplyBurnToCreature(state, target, before, def.params.death_trigger_damage,
+                                    entry.controller_index);
             }
         }
     }

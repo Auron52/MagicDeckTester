@@ -484,10 +484,11 @@ void GameEngine::CleanupStep(GameState& state)
     // Remove all damage marks, "until end of turn" boosts, and animation effects (CR 514.2).
     for (Permanent& p : state.battlefield)
     {
-        p.damage           = 0;
-        p.temp_power_bonus = 0;
-        p.temp_tough_bonus = 0;
-        p.is_animated      = false;
+        p.damage                = 0;
+        p.pending_death_trigger = 0;   // delayed Searing Blood trigger expires with the damage marks
+        p.temp_power_bonus      = 0;
+        p.temp_tough_bonus      = 0;
+        p.is_animated           = false;
     }
 }
 
