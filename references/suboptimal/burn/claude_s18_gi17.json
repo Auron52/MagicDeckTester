@@ -1,0 +1,180 @@
+{
+  "seed": 18, "game_index": 17, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 49, "name": "Searing Blood" }, { "num": 21, "name": "Mountain" }, { "num": 22, "name": "Mountain" }, { "num": 5, "name": "Goblin Guide" }, { "num": 50, "name": "Searing Blood" }, { "num": 23, "name": "Mountain" }, { "num": 9, "name": "Light Up the Stage" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Light Up the Stage", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 21, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 50, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Goblin Guide", "land": "Mountain", "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Skullcrack" }],
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (20→18)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 1, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Light Up the Stage", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 50, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 18, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Skullcrack", "land": "Mountain", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (18→16)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 1, "tapped": true, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Light Up the Stage", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 22, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 50, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 16, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Skullcrack", "land": "Mountain", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Light Up the Stage", "land": "Mountain", "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] },
+    { "index": 2, "summary": "land=none; cast: Light Up the Stage", "land": null, "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] },
+    { "index": 3, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Monastery Swiftspear" }, { "turn": 2, "card": "Eidolon of the Great Revel" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 1, "tapped": true, "is_land": false }, { "name": "Mountain", "idx": 0, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true, "is_staged": true, "staged_until": 3 }, { "num": 17, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true, "is_staged": true, "staged_until": 3 }, { "num": 22, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 50, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Light Up the Stage"], "library_size": 50 },
+  "opponent": { "life": 16, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Monastery Swiftspear", "land": "Mountain", "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Mountain" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 1, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 3, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }, { "name": "Mountain", "idx": 2, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true, "is_staged": true, "staged_until": 3 }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 50, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Light Up the Stage"], "library_size": 49 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Eidolon of the Great Revel", "land": "Mountain", "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 1, "summary": "land=none; cast: Eidolon of the Great Revel", "land": null, "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Skullcrack", "land": "Mountain", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 3, "summary": "land=none; cast: Skullcrack", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Searing Blood", "land": "Mountain", "casts": ["Searing Blood"], "actions": [{ "card": "Searing Blood" }] },
+    { "index": 5, "summary": "land=none; cast: Searing Blood", "land": null, "casts": ["Searing Blood"], "actions": [{ "card": "Searing Blood" }] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Eidolon of the Great Revel" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2), Monastery Swiftspear (1) — 3 to opponent (16→13)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 6, "is_land": false }, { "name": "Goblin Guide", "idx": 1, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 3, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }, { "name": "Mountain", "idx": 2, "is_land": true }, { "name": "Mountain", "idx": 5, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 50, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Light Up the Stage"], "library_size": 48 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Eidolon of the Great Revel, Skullcrack", "land": "Mountain", "casts": ["Eidolon of the Great Revel", "Skullcrack"], "actions": [{ "card": "Eidolon of the Great Revel" }, { "card": "Skullcrack" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Skullcrack, Eidolon of the Great Revel", "land": "Mountain", "casts": ["Skullcrack", "Eidolon of the Great Revel"], "actions": [{ "card": "Skullcrack" }, { "card": "Eidolon of the Great Revel" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Eidolon of the Great Revel, Searing Blood", "land": "Mountain", "casts": ["Eidolon of the Great Revel", "Searing Blood"], "actions": [{ "card": "Eidolon of the Great Revel" }, { "card": "Searing Blood" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Searing Blood, Eidolon of the Great Revel", "land": "Mountain", "casts": ["Searing Blood", "Eidolon of the Great Revel"], "actions": [{ "card": "Searing Blood" }, { "card": "Eidolon of the Great Revel" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Searing Blood, Skullcrack", "land": "Mountain", "casts": ["Searing Blood", "Skullcrack"], "actions": [{ "card": "Searing Blood" }, { "card": "Skullcrack" }] },
+    { "index": 5, "summary": "land=none; cast: Eidolon of the Great Revel", "land": null, "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 6, "summary": "land=Mountain; cast: Searing Blood, Searing Blood", "land": "Mountain", "casts": ["Searing Blood", "Searing Blood"], "actions": [{ "card": "Searing Blood" }, { "card": "Searing Blood" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Eidolon of the Great Revel", "land": "Mountain", "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 8, "summary": "land=none; cast: Skullcrack", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 9, "summary": "land=Mountain; cast: Skullcrack", "land": "Mountain", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 10, "summary": "land=none; cast: Searing Blood", "land": null, "casts": ["Searing Blood"], "actions": [{ "card": "Searing Blood" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Searing Blood", "land": "Mountain", "casts": ["Searing Blood"], "actions": [{ "card": "Searing Blood" }] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Mountain" }],
+  "events": [{ "turn": 4, "kind": "damage", "text": "🔥 Searing Blood: 3 to opponent (13→10)" }, { "turn": 4, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2), Monastery Swiftspear (3), Eidolon of the Great Revel (2) — 7 to opponent (10→3)" }],
+  "me": { "life": 16, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 5, "is_land": false }, { "name": "Goblin Guide", "idx": 1, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 3, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }, { "name": "Mountain", "idx": 2, "is_land": true }, { "name": "Mountain", "idx": 4, "is_land": true }, { "name": "Mountain", "idx": 6, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Light Up the Stage", "Searing Blood", "Searing Blood"], "library_size": 47 },
+  "opponent": { "life": 3, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Eidolon of the Great Revel, Skullcrack", "land": null, "casts": ["Eidolon of the Great Revel", "Skullcrack"], "actions": [{ "card": "Eidolon of the Great Revel" }, { "card": "Skullcrack" }] },
+    { "index": 1, "summary": "land=none; cast: Skullcrack, Eidolon of the Great Revel", "land": null, "casts": ["Skullcrack", "Eidolon of the Great Revel"], "actions": [{ "card": "Skullcrack" }, { "card": "Eidolon of the Great Revel" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Eidolon of the Great Revel, Skullcrack", "land": "Mountain", "casts": ["Eidolon of the Great Revel", "Skullcrack"], "actions": [{ "card": "Eidolon of the Great Revel" }, { "card": "Skullcrack" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Skullcrack, Eidolon of the Great Revel", "land": "Mountain", "casts": ["Skullcrack", "Eidolon of the Great Revel"], "actions": [{ "card": "Skullcrack" }, { "card": "Eidolon of the Great Revel" }] },
+    { "index": 4, "summary": "land=none; cast: Skullcrack", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Skullcrack", "land": "Mountain", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 6, "summary": "land=none; cast: Eidolon of the Great Revel", "land": null, "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Eidolon of the Great Revel", "land": "Mountain", "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "type": "target",
+  "source": "Skullcrack",
+  "turn": 5,
+  "per_target_damage": 3, "max_targets": 1,
+  "me": { "life": 14, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 5, "is_land": false }, { "name": "Goblin Guide", "idx": 1, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 3, "is_land": false }, { "name": "Mountain", "idx": 0, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "is_land": true }, { "name": "Mountain", "idx": 6, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Light Up the Stage", "Searing Blood", "Searing Blood"], "library_size": 47 },
+  "opponent": { "life": 3, "battlefield": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+}
+  ]
+}
