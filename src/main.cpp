@@ -674,6 +674,24 @@ static void CollectOpponentCreatureTargets(const GameState& s, int controller,
     }
 }
 
+// ALL creatures on the battlefield (own AND opponent) -- the legal target creatures for a creature-
+// targeting burn (Searing Blood "target creature"; Searing Blaze "target creature that player
+// controls"). Own creatures are offered too so the human can cast Blood/Blaze on their own creature
+// to trigger prowess when the opponent has none (a rare but legal line). kind==1, index == bf index.
+static void CollectCreatureTargets(const GameState& s, int controller,
+                                   std::vector<ChosenTarget>& out, std::vector<std::string>& labels)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[i];
+        if (!p.card.IsCreature()) { continue; }
+        const bool mine = (p.controller_index == controller);
+        out.push_back({ 1, i });
+        labels.push_back(p.card.m_name.str() + " (" + std::to_string(p.EffectivePower()) + "/"
+                         + std::to_string(p.EffectiveToughness()) + (mine ? ", yours)" : ")"));
+    }
+}
+
 // Enumerate legal target-set options for a uniform-damage spell: every nonempty subset of the
 // legal targets with 1..max_targets members. Bounded (capped) so a big board can't explode the menu.
 static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTarget>& legal,
@@ -784,11 +802,14 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
 // `legal` are battlefield indices; each option carries that index (so the GUI can highlight the
 // permanent on the board) plus the land's name/tap state. `heuristic_default` indexes into `legal`.
 static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
-                                    const std::vector<int>& legal, int heuristic_default, int decision_index)
+                                    const std::vector<int>& legal, int heuristic_default, int decision_index,
+                                    bool sacrifice = false)
 {
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
-    os << "  \"type\": \"bounce\",\n";
+    // A `sacrifice` variant reuses the identical board-land picker as the Karoo bounce, but the land
+    // goes to the graveyard (Shard Volley's additional cost) and the viewer says "sacrifice".
+    os << "  \"type\": \"" << (sacrifice ? "sacrifice" : "bounce") << "\",\n";
     os << "  \"source\": "; JsonStr(os, source); os << ",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
     WriteBoardContext(os, s, 0);
@@ -803,7 +824,8 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
         os << ", \"label\": "; JsonStr(os, p.card.m_name.str()); os << " }";
     }
     os << "],\n";
-    os << "  \"note\": \"reply an option index -- the land to return to your hand. Default = the AI's pick.\"\n";
+    os << "  \"note\": \"reply an option index -- the land to " << (sacrifice ? "sacrifice" : "return to your hand")
+       << ". Default = the AI's pick.\"\n";
     os << "}\n";
 }
 
@@ -1317,11 +1339,18 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             const std::string remove_desc = exile_removal
                 ? std::string("exiled; you gain life equal to its power (a Tainted Remedy / Plague Drone flips that to a life loss)")
                 : std::string();
+            // Creature-targeting burn (Searing Blood "target creature"; Searing Blaze "... that player
+            // controls"): the human picks WHICH creature takes the damage. Own creatures are offered too
+            // (cast for prowess with no opponent creature). Not the face-inclusive damage-target set.
+            const bool creature_burn = (def.tmpl == CardTemplate::DirectDamage)
+                && (def.params.targeting == Targeting::Creature || def.params.targeting == Targeting::Multi)
+                && !def.params.damage_divided;
             const bool players_only = (def.params.targeting == Targeting::Player);
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (own_pump)           { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
-            else if (exile_removal) { CollectOpponentCreatureTargets(s, controller, legal, legal_labels); }
-            else                    { CollectDamageTargets(s, controller, players_only, legal, legal_labels); }
+            if (own_pump)            { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
+            else if (exile_removal)  { CollectOpponentCreatureTargets(s, controller, legal, legal_labels); }
+            else if (creature_burn)  { CollectCreatureTargets(s, controller, legal, legal_labels); }
+            else                     { CollectDamageTargets(s, controller, players_only, legal, legal_labels); }
 
             // Divided damage (Fiery Justice / Magma Opus): the player allocates `per_target_damage`
             // (the TOTAL here) among ANY number of the legal targets, each >= 1. The answer is ONE
@@ -1429,6 +1458,38 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         };
     g_play_bounce_chooser = &bounce_chooser;
+
+    // Sacrifice-a-land (Shard Volley's additional cost): identical board-land picker as bounce, but the
+    // land is sacrificed (to graveyard). Shares the --choices stream; reply an option index into the
+    // legal lands. Default = the engine's pick (a tapped land if any). Nulled for search by RevealLogPause.
+    BounceChooser sacrifice_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(legal.size())) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteBounceDecisionJson(ss, s, source, legal, heuristic_pick, di, /*sacrifice=*/true);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteBounceDecisionJson(std::cout, s, source, legal, heuristic_pick, di, /*sacrifice=*/true);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_sacrifice_chooser = &sacrifice_chooser;
 
     // ETB dig (Acclaimed Contender): the player picks which examined card enters hand (or declines).
     // Shares the --choices stream; the reply is an examined index, or -1 to take nothing. Default =
@@ -1608,6 +1669,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_top_chooser = nullptr;
     g_play_target_chooser = nullptr;
     g_play_bounce_chooser = nullptr;
+    g_play_sacrifice_chooser = nullptr;
     g_play_dig_chooser = nullptr;
     g_play_discard_chooser = nullptr;
     g_play_ei_chooser = nullptr;

@@ -697,9 +697,20 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
         if (def->params.verse_damage
             && (cast_def.card.IsInstant() || cast_def.card.IsSorcery()))
         {
+            const int before = state.players[1 - active].life;
             state.battlefield[i].verse_counters += 1;
-            state.players[1 - active].life -= state.battlefield[i].verse_counters;
+            const int dmg = state.battlefield[i].verse_counters;
+            state.players[1 - active].life -= dmg;
             state.opponent_lost_life_this_turn = true;
+            // Play-viewer history: Aria's verse damage as a "damage" event (nulled by RevealLogPause
+            // during search -> byte-identical). Reports the counter count driving the damage.
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "damage",
+                              "\xF0\x9F\x94\xA5 Aria of Flame (" + std::to_string(dmg) + " verse): "
+                              + std::to_string(dmg) + " to opponent (" + std::to_string(before)
+                              + "\xE2\x86\x92" + std::to_string(before - dmg) + ")");
+            }
         }
 
         if (def->params.cast_trigger_creates_tokens > 0 && !def->params.cast_trigger_subtype.empty())

@@ -2581,12 +2581,37 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         { ci = bi; break; }
                     }
                 }
+                // Human-play targeting (Searing Blood / Searing Blaze): let the player pick WHICH
+                // creature takes the burn -- opponent's (default) or their own (cast for prowess). The
+                // chooser is nulled by RevealLogPause for search/rollout, so autonomous stays byte-
+                // identical (the heuristic ci). Default = the heuristic pick; falls back to the first
+                // creature (own included) when the opponent has none so the spell can still be cast.
+                if (g_play_target_chooser)
+                {
+                    int default_ci = ci;
+                    if (default_ci < 0)
+                    {
+                        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                        { if (state.battlefield[bi].card.IsCreature()) { default_ci = bi; break; } }
+                    }
+                    if (default_ci >= 0)
+                    {
+                        std::vector<ChosenTarget> heur = { { 1, default_ci, 0 } };
+                        std::vector<ChosenTarget> picked =
+                            (*g_play_target_chooser)(state, def, state.active_player_index, 1, dmg, heur);
+                        ci = (!picked.empty() && picked[0].kind == 1) ? picked[0].index : default_ci;
+                    }
+                }
                 if (ci >= 0)
                 {
+                    // Searing Blaze also hits the targeted creature's CONTROLLER (opponent in the normal
+                    // line; yourself if you targeted your own creature). For autonomous play ci is always
+                    // an opponent creature, so this is byte-identical.
+                    const int tgt_ctrl = state.battlefield[ci].controller_index;
                     if (t == Targeting::Multi)  // Searing Blaze also hits the player
                     {
-                        state.players[opp_idx].life -= dmg;
-                        if (dmg > 0) { state.opponent_lost_life_this_turn = true; }
+                        state.players[tgt_ctrl].life -= dmg;
+                        if (dmg > 0 && tgt_ctrl == opp_idx) { state.opponent_lost_life_this_turn = true; }
                     }
                     Permanent& tgt = state.battlefield[ci];
                     const int before = tgt.damage;
@@ -2982,13 +3007,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
         if (is_sacrifice)
         {
+            // Heuristic default: sacrifice a tapped land if any (keeps untapped mana available),
+            // else the first land. Under --claude-play the human picks WHICH land (Shard Volley's
+            // additional cost); g_play_sacrifice_chooser is nulled by RevealLogPause for the
+            // rollout/search, so autonomous play keeps this pick and stays byte-identical.
+            std::vector<int> lands;
             int idx = -1;
+            bool locked = false;   // once a tapped land is chosen as the default, keep it (orig `break`)
             for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
             {
                 const Permanent& p = state.battlefield[i];
                 if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
-                if (idx < 0)  { idx = i; }
-                if (p.tapped) { idx = i; break; }
+                lands.push_back(i);
+                if (!locked)
+                {
+                    if (idx < 0)  { idx = i; }
+                    if (p.tapped) { idx = i; locked = true; }   // first tapped land -> default (was break)
+                }
+            }
+            if (g_play_sacrifice_chooser && lands.size() > 1 && idx >= 0)
+            {
+                int def_opt = 0;
+                for (int k = 0; k < static_cast<int>(lands.size()); ++k) { if (lands[k] == idx) { def_opt = k; break; } }
+                int chosen = (*g_play_sacrifice_chooser)(state, state.active_player_index, name, lands, def_opt);
+                if (chosen >= 0 && chosen < static_cast<int>(lands.size())) { idx = lands[chosen]; }
             }
             if (idx >= 0)
             {

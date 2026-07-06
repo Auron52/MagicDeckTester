@@ -483,7 +483,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','dig','discard','divide','expressive_iteration','retrace_discard','soulfire_targets','mulligan','bottom'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','soulfire_targets','mulligan','bottom'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -492,7 +492,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='vial_charge' || dec==='soulfire_targets';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='soulfire_targets';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   if (dec==='divide' && S._divFor !== d.decision_index) initDivAlloc(d);   // board-edit damage allocation
   // At game end, prefer the FINAL board carried on the result (permanents in play after the winning
@@ -998,7 +998,7 @@ function initBoardSel(d){
   if (d.type==='target'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||{targets:[]};
     (def.targets||[]).forEach(t=>S.boardSel.add(tgtKey(t)));
-  } else if (d.type==='bounce'){
+  } else if (d.type==='bounce' || d.type==='sacrifice'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
   } else if (d.type==='soulfire_targets'){
@@ -1009,7 +1009,7 @@ function initBoardSel(d){
 }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
-  if (d.type==='bounce') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='bounce' || d.type==='sacrifice') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
   if (d.type==='soulfire_targets') return new Set((d.candidates||[]).map(c=>'m:'+c.perm_index));
   return new Set();
 }
@@ -1022,9 +1022,9 @@ function toggleSel(d, key, max){
 // Add highlight classes + click handlers to the real board for an active target/bounce/vial decision.
 function wireDecisionBoard(d, dec){
   const board=$('board');
-  if (dec==='target' || dec==='bounce' || dec==='soulfire_targets'){
+  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets'){
     const legal=legalTargetKeys(d);
-    const max = dec==='bounce'?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
+    const max = (dec==='bounce'||dec==='sacrifice')?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
       const key='m:'+t.dataset.idx; if (!legal.has(key)) return;
       t.classList.add('selectable'); if (S.boardSel && S.boardSel.has(key)) t.classList.add('selected');
@@ -1307,6 +1307,14 @@ function promptPanelHtml(d, dec){
       `<div class="pbtns"><span class="pcount">Returning: <b>${opt?esc(opt.name):'(pick a land)'}</b></span>`+
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  if (dec==='sacrifice'){
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    return `<h3>Sacrifice a land — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">Click a land on your board to sacrifice (${esc(d.source||'this spell')}'s additional cost). Eligible lands are highlighted; ✓ marks your pick.</div>`+
+      `<div class="pbtns"><span class="pcount">Sacrificing: <b>${opt?esc(opt.name):'(pick a land)'}</b></span>`+
+      `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+  }
   const max=d.max_targets||1, n=(S.boardSel||new Set()).size;
   // Own-creature pump (Invigorate): d.pump carries "+P/+T" -- ask which of YOUR creatures to buff.
   if (d.pump){
@@ -1409,6 +1417,9 @@ function commitBoardSel(d, dec){
   if (dec==='bounce'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: return ${opt?opt.name:'land'}`;
+  } else if (dec==='sacrifice'){
+    const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
+    oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: sacrifice ${opt?opt.name:'land'}`;
   } else if (dec==='soulfire_targets'){
     const want=sel.map(k=>+k.slice(2)).sort((a,b)=>a-b).join('|');
     const opt=(d.options||[]).find(o=>(o.perm_indices||[]).slice().sort((a,b)=>a-b).join('|')===want);

@@ -264,6 +264,12 @@ using BounceChooser = std::function<int(const GameState& state, int controller, 
                                         const std::vector<int>& legal_indices, int heuristic_pick)>;
 extern thread_local BounceChooser* g_play_bounce_chooser;
 
+// ---- Human-play sacrifice-a-land chooser (Shard Volley's additional cost) -------------------
+// "As an additional cost to cast this spell, sacrifice a land." Same signature/shape as the bounce
+// chooser (pick a battlefield land by option index); differs only in that the land goes to the
+// graveyard and the viewer says "sacrifice" not "return". Nulled by RevealLogPause for search.
+extern thread_local BounceChooser* g_play_sacrifice_chooser;
+
 // ---- Human-play ETB-dig chooser (which examined card to put into hand) ------------------
 // An ETB "look at the top N, you may reveal a <type> and put it into your hand" (Acclaimed
 // Contender) digs for a matching card. Autonomously PerformEtbDig takes the FIRST match; under
@@ -376,22 +382,23 @@ struct RevealLogPause
     SoulfireTargetChooser* saved_sfchooser;
     std::vector<std::pair<int, std::string>>* saved_drawsink;
     std::vector<PlayEvent>* saved_evsink;
+    BounceChooser* saved_sacchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
                        saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
-                       saved_evsink(g_play_event_sink)
+                       saved_evsink(g_play_event_sink), saved_sacchooser(g_play_sacrifice_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
-      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; }
+      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_sacrifice_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
-                        g_play_event_sink = saved_evsink; }
+                        g_play_event_sink = saved_evsink; g_play_sacrifice_chooser = saved_sacchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };
