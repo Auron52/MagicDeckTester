@@ -2699,14 +2699,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // of keeping them forever — the latter let the rollout win with cards
                 // the real game had already lost (a phantom-early-win source).
                 int expiry = state.turn_number + 1;
+                std::string staged_names;
                 for (int d = 0; d < n; ++d)
                 {
                     Card c = ap.library.DrawTop();
                     c.m_is_staged     = true;
                     c.m_staged_expiry = expiry;
-                    // Human-play accurate draw reporting (nulled by RevealLogPause during search).
-                    if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, c.m_name.str() }); }
+                    // Report staged cards as an EXILE event, NOT a draw: they are exiled and only
+                    // playable through the listed turn -- calling them "drew" (the draw sink) misleads
+                    // the viewer. Nulled by RevealLogPause during search/rollout -> byte-identical.
+                    if (!staged_names.empty()) { staged_names += ", "; }
+                    staged_names += c.m_name.str();
                     ap.hand.push_back(std::move(c));
+                }
+                if (g_play_event_sink && !staged_names.empty())
+                {
+                    EmitPlayEvent(state.turn_number, "staged",
+                                  "\xE2\x9F\x82 " + def.card.m_name.str() + " — exiled (playable through T"
+                                  + std::to_string(expiry) + "): " + staged_names);
                 }
             }
             else

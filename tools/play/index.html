@@ -330,6 +330,7 @@
   /* life-affecting event lines (combat / burn damage / lifegain / lifeloss) coloured by kind */
   .hist li.ev-combat .lab { color:var(--warn); } .hist li.ev-damage .lab { color:var(--bad); }
   .hist li.ev-lifeloss .lab { color:var(--bad); } .hist li.ev-lifegain .lab { color:var(--good); }
+  .hist li.ev-staged .lab { color:#b794d6; }   /* exiled-but-playable (Light Up the Stage) */
   #saveinfo { margin-top:10px; font-size:12px; color:var(--muted); word-break:break-all; }
   .err { color:var(--bad); white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12px; }
 
@@ -391,7 +392,11 @@ async function post(path, body) {
 
 // ---- plan helpers ----------------------------------------------------------
 function planLand() { return S.plan.find(p=>p.kind==='land') || null; }
-function handCounts() { const m={}; (S.decision.me.hand||[]).forEach(c=>{m[c.name]=(m[c.name]||0)+1;}); return m; }
+// Counts of REAL hand copies by name -- excludes staged (exiled-but-playable) cards, which are shown
+// and counted separately (else e.g. 1 hand Mountain + 2 staged Mountains would mis-pip the hand as x3).
+function handCounts() { const m={}; (S.decision.me.hand||[]).forEach(c=>{ if(!c.is_staged) m[c.name]=(m[c.name]||0)+1; }); return m; }
+// Counts of STAGED copies by name@expiry -- so duplicate staged cards collapse to one thumb with a x N pip.
+function stagedCounts() { const m={}; (S.decision.me.hand||[]).forEach(c=>{ if(c.is_staged){ const k=c.name+'@'+c.staged_until; m[k]=(m[k]||0)+1; } }); return m; }
 // 'le' entries are Land's Edge discards, not casts -- exclude them from the cast count.
 function plannedCount(name) { return S.plan.filter(p=>p.name===name && p.kind!=='land' && p.kind!=='le').length; }
 function leCount() { return S.plan.filter(p=>p.kind==='le').length; }
@@ -576,9 +581,27 @@ function renderBoard() {
   if (isMain) h += `<div class="zone hand" id="handzone"><h3>Hand <span class="help">double-click = cast/play · drag onto your field above`+
        (d.lands_edge?(S.leMode?` · ⚡ <b>Land’s Edge active</b> — click lands to discard (${d.lands_edge.rate} dmg each)`:` · ⚡ click your Land’s Edge to discard lands to it`):` · single-click = activate ability`)+`</span></h3>`+
        `<div class="row" id="handrow"></div></div>`;
-  else if (dec && (me.hand||[]).length)
-    h += `<div class="zone hand"><h3>Hand (${me.hand.length})</h3>`+
-         zoneRow(me.hand.map(c=>bfThumb({name:typeof c==='string'?c:c.name,is_land:(c&&c.kind==='land')})))+`</div>`;
+  else if (dec && (me.hand||[]).length) {
+    // Read-only hand during a sub-decision. Staged (exiled-but-playable) cards are shown in a
+    // set-apart section with a purple ring/badge -- NOT counted in the hand total and NOT lumped in
+    // with real hand cards (else e.g. a real + a staged Lightning Bolt read as "2 in hand").
+    const hnorm = me.hand.filter(c=>!(c&&c.is_staged));
+    const hstg  = me.hand.filter(c=>c&&c.is_staged);
+    let hrow = hnorm.map(c=>bfThumb({name:typeof c==='string'?c:c.name,is_land:(c&&c.kind==='land')})).join('');
+    if (hstg.length) {
+      const seen=new Set(); let stg='';
+      for (const c of hstg) {
+        const k=c.name+'@'+c.staged_until; if(seen.has(k)) continue; seen.add(k);
+        const n=hstg.filter(x=>x.name+'@'+x.staged_until===k).length;
+        stg += `<span class="thumb staged ${c.kind==='land'?'land':'spell'}" data-name="${esc(c.name)}">`+
+          `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/>`+
+          `<span class="stagedbadge" title="exiled — playable through turn ${c.staged_until}">▸T${c.staged_until}</span>`+
+          (n>1?`<span class="pip">×${n}</span>`:'')+`<em>${esc(c.name)}</em></span>`;
+      }
+      hrow += `<span class="stagedsep">⟂ exiled<br>playable</span>`+stg;
+    }
+    h += `<div class="zone hand"><h3>Hand (${hnorm.length})</h3><div class="row">`+(hrow||'<span class="hint">none</span>')+`</div></div>`;
+  }
   if (me.graveyard && me.graveyard.length) {
     const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace
     const gyThumbs = me.graveyard.map(n => rset.has(n)
@@ -676,15 +699,17 @@ function renderHand() {
   // Staged (exiled) cards — playable until end of their listed turn — shown set apart at the right.
   if (staged.length) {
     html += `<span class="stagedsep">⟂ exiled<br>playable</span>`;
+    const scounts=stagedCounts();      // name@expiry -> copies (collapse duplicates into one thumb, x N)
     const sseen=new Set();
     for (const c of staged) {
       const key=c.name+'@'+c.staged_until; if(sseen.has(key)) continue; sseen.add(key);
       const land = c.kind==='land';
       const q = land ? (planLand()&&planLand().name===c.name?1:0) : plannedCount(c.name);
+      const total = scounts[key]||1;   // how many staged copies of this name/expiry
       html += `<span class="thumb staged ${land?'land':'spell'} ${q?'queued':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
         `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
         `<span class="stagedbadge" title="exiled — playable through turn ${c.staged_until}">▸T${c.staged_until}</span>`+
-        (q?`<span class="qct">${q}</span>`:'')+
+        (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
         `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
     }
   }
