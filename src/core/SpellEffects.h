@@ -606,6 +606,34 @@ inline int FindBurnKillTarget(const GameState& state, int active, int damage)
     return first;   // none killable (or -1 = no opponent creature)
 }
 
+// The damage a creature-targeting burn deals to its creature target (Searing Blood 2; Searing Blaze 1,
+// or 3 with landfall). Determines whether an own creature would SURVIVE a self-cast for prowess.
+inline int CreatureBurnDamage(const CardDefinition& def, const GameState& state)
+{
+    if (def.params.landfall_damage > 0 && state.ActivePlayer().lands_played_this_turn > 0)
+    { return def.params.landfall_damage; }
+    return def.params.damage;
+}
+
+// The "prowess line" target: with no opponent creature, a creature-targeting burn (Searing Blood /
+// Searing Blaze) is normally dead, but casting it on our OWN creature triggers prowess and can be
+// lethal. To keep it a real gain rather than self-mutilation, only self-cast onto an own creature that
+// SURVIVES the burn (EffectiveToughness > damage) -- it still attacks, at the cost of a little life
+// (Blaze). Returns the survivor with the most toughness headroom (safest), or -1 if none. Shared by
+// the executor (AIEngine), the rollout (ApplyPlanDirect), and the enumeration gate so all agree.
+inline int FindSurvivingOwnCreature(const GameState& state, int active, int damage)
+{
+    int best = -1, best_tough = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || !p.card.IsCreature()) { continue; }
+        if (p.EffectiveToughness() <= damage) { continue; }        // would die -> skip
+        if (p.EffectiveToughness() > best_tough) { best_tough = p.EffectiveToughness(); best = i; }
+    }
+    return best;
+}
+
 // A spell that requires a target is UNCASTABLE with no legal target (CR 601.2c: choosing
 // targets is part of casting; a spell with no legal target cannot be put on the stack). This
 // gates every alt-cost payload's cast so we never emit a targetless line. Keyed on the spell's

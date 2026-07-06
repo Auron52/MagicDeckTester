@@ -2664,6 +2664,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                         : def->params.death_trigger_damage > 0
                           ? FindBurnKillTarget(state, state.active_player_index, def->params.damage)
                           : FindOpponentCreature(state);
+            // Prowess line: a creature-burn with no opponent creature self-casts onto a surviving own
+            // creature (the enumeration only offered it when such a target + a prowess attacker exist).
+            // Lockstep with ApplyPlanDirect / the enumeration gate. Not for Invigorate/Swords.
+            if (idx < 0 && !def->params.target_own_creature && !def->params.controller_lifegain_equals_power)
+            {
+                idx = FindSurvivingOwnCreature(state, state.active_player_index, CreatureBurnDamage(*def, state));
+            }
             if (idx < 0)
             {
                 // Invigorate-type free alt-cast with no preferred (own-attacker) target: the pump is
@@ -2684,10 +2691,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         case Targeting::Multi:
         {
             int idx = FindOpponentCreature(state);
+            // Prowess line (Searing Blaze): no opponent creature -> self-cast onto a surviving own
+            // creature; the "target player" then becomes that creature's controller (yourself).
+            if (idx < 0) { idx = FindSurvivingOwnCreature(state, state.active_player_index, CreatureBurnDamage(*def, state)); }
             if (idx < 0) { return; }
             Target player_t;
             player_t.type         = Target::Type::Player;
-            player_t.player_index = opp_index;
+            player_t.player_index = state.battlefield[idx].controller_index;   // opp_index for the normal line
             entry.targets.push_back(player_t);
             Target perm_t;
             perm_t.type            = Target::Type::Permanent;

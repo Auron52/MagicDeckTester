@@ -438,6 +438,16 @@ static bool HasLegalCreatureTarget(const GameState& state)
     return false;
 }
 
+// The "prowess line" is available when: no opponent creature (the burn is otherwise dead), a prowess
+// attacker exists to benefit from the +1/+1, and an own creature SURVIVES the burn to still attack.
+// FindSurvivingOwnCreature (SpellEffects.h) picks that target; here we add the prowess-payoff gate.
+// Shared by the enumeration gate, both executors, and the rollout so all agree the line is available.
+static int FindOwnProwessBurnTarget(const GameState& state, const CardDefinition& def)
+{
+    if (CountProwessAttackers(state) <= 0) { return -1; }   // no prowess payoff -> never self-harm
+    return FindSurvivingOwnCreature(state, state.active_player_index, CreatureBurnDamage(def, state));
+}
+
 static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state)
 {
     if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
@@ -695,9 +705,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         {
             if (FindBestOwnAttacker(state, state.active_player_index) < 0) { continue; }
         }
-        else if ((t == Targeting::Creature || t == Targeting::Multi) && !has_creature_target)
+        else if ((t == Targeting::Creature || t == Targeting::Multi) && !has_creature_target
+                 && !def.params.controller_lifegain_equals_power)
         {
-            continue;
+            // No opponent creature to target. A creature-burn (Searing Blood / Blaze) is normally dead
+            // here -- but casting it on our OWN surviving creature triggers prowess and can be lethal.
+            // Offer that "prowess line" ONLY when a prowess attacker + a surviving own target exist
+            // (FindOwnProwessBurnTarget); otherwise the spell stays uncastable. The search/rollout then
+            // keeps it only when it actually helps. (Swords -- controller_lifegain -- has its own gate
+            // below and must not take this branch.)
+            if (FindOwnProwessBurnTarget(state, def) < 0) { continue; }
         }
         // Goldfishing gate (Swords to Plowshares): its controller-lifegain rider only HELPS us with a
         // lifegain->loss enabler live when it resolves (else it just gives the passive opponent life).
@@ -2581,6 +2598,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         { ci = bi; break; }
                     }
                 }
+                // Prowess line: with no opponent creature, self-cast onto a surviving own creature
+                // (the enumeration only offered the spell here when this target exists). Lockstep with
+                // the executor + enumeration gate (FindOwnProwessBurnTarget).
+                if (ci < 0) { ci = FindOwnProwessBurnTarget(state, def); }
                 // Human-play targeting (Searing Blood / Searing Blaze): let the player pick WHICH
                 // creature takes the burn -- opponent's (default) or their own (cast for prowess). The
                 // chooser is nulled by RevealLogPause for search/rollout, so autonomous stays byte-
