@@ -2607,7 +2607,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // chooser is nulled by RevealLogPause for search/rollout, so autonomous stays byte-
                 // identical (the heuristic ci). Default = the heuristic pick; falls back to the first
                 // creature (own included) when the opponent has none so the spell can still be cast.
-                if (g_play_target_chooser)
+                // Only surface the pick when there's a GENUINE choice (>= 2 creatures on the board),
+                // mirroring the Invigorate pump-target gate. A single legal creature auto-targets (its
+                // heuristic ci), so a lone-creature Blood/Blaze cast adds no decision to saved replays.
+                int creature_count = 0;
+                for (const Permanent& p : state.battlefield) { if (p.card.IsCreature()) { ++creature_count; } }
+                if (g_play_target_chooser && creature_count >= 2)
                 {
                     int default_ci = ci;
                     if (default_ci < 0)
@@ -6217,7 +6222,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
 
     // Resolve each named cast to a card definition; bail to Unsupported for the action
     // kinds this v1 check cannot honestly validate (X spells, alt-cost, tutors).
-    struct PendingCast { std::string name; const CardDefinition* def; ManaCost cost; bool rock; };
+    // A creature-burn's death rider / Blaze's player hit, or any face/any burn, makes the opponent
+    // lose life -> turns SPECTACLE on for a later spell in the same line (Light Up the Stage {R}).
+    auto deals_opponent_damage = [](const CardDefinition& d) -> bool {
+        if (d.tmpl != CardTemplate::DirectDamage) { return false; }
+        if (d.params.death_trigger_damage > 0 || d.params.landfall_damage > 0) { return true; }
+        return d.params.damage > 0 && d.params.targeting != Targeting::Creature;   // face / any / multi
+    };
+    struct PendingCast {
+        std::string name; const CardDefinition* def; bool rock;
+        ManaCost full_cost;               // the printed cost (or hard cost of an alt-cost spell)
+        bool has_spectacle;   ManaCost spectacle_cost;
+        bool alt_free;                    // alt cost payable (controls the subtype) -> costs no mana
+    };
     std::vector<PendingCast> pending;
     for (const std::string& name : spec.casts)
     {
@@ -6229,15 +6246,25 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             return out;
         }
         const ManaCost& mc = def->card.m_mana_cost;
-        if (mc.has_x || def->params.alt_lifegain_cost > 0 ||
-            def->params.tutor_to_hand || def->params.tutor_to_top)
+        // X and tutor lines still can't be honestly modelled by this affordability check. Alt-cost
+        // (Invigorate) IS handled: if we control the required subtype (a Forest), the alt cost is a
+        // free payment (opponent gains life), so it costs no mana; else fall back to the hard cost.
+        if (mc.has_x || def->params.tutor_to_hand || def->params.tutor_to_top)
         {
             out.verdict = V::Unsupported; out.failed_action = "cast=" + name;
-            out.reason = "'" + name + "' uses an action kind (X / alt-cost / tutor) the v1 "
+            out.reason = "'" + name + "' uses an action kind (X / tutor) the v1 "
                          "line check cannot validate yet";
             return out;
         }
-        pending.push_back({ name, def, mc, def->params.mana_rock && !def->card.IsCreature() });
+        const bool alt_free = def->params.alt_lifegain_cost > 0
+            && ControlsSubtype(s, s.active_player_index, def->params.alt_cost_requires_subtype);
+        PendingCast pc;
+        pc.name = name; pc.def = def; pc.rock = def->params.mana_rock && !def->card.IsCreature();
+        pc.full_cost = mc;
+        pc.has_spectacle = def->params.spectacle_cost.has_value();
+        pc.spectacle_cost = def->params.spectacle_cost.value_or(mc);
+        pc.alt_free = alt_free;
+        pending.push_back(pc);
     }
 
     // Each named card must actually be in hand (multiset-correct for duplicates).
@@ -6262,6 +6289,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // line (the same-turn ramp the enumerator's BuildPool does not credit). Order-
     // independent, so it doesn't penalise the human's click order.
     ManaPool avail = BuildPool(s);
+    bool spectacle_on = s.opponent_lost_life_this_turn;   // set as damage spells cast in this line
+    // The mana cost to pay for pending[k] RIGHT NOW: free for an available alt cost; the spectacle
+    // cost once a same-line burn has turned spectacle on; else the printed cost.
+    auto cur_cost = [&](const PendingCast& pc) -> ManaCost {
+        if (pc.alt_free)                     { return ManaCost{}; }
+        if (pc.has_spectacle && spectacle_on) { return pc.spectacle_cost; }
+        return pc.full_cost;
+    };
     std::vector<bool> done(pending.size(), false);
     size_t remaining = pending.size();
     bool progress = true;
@@ -6274,9 +6309,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             for (size_t k = 0; k < pending.size(); ++k)
             {
                 if (done[k] || pending[k].rock != want_rock) { continue; }
-                if (!avail.CanPay(pending[k].cost)) { continue; }
-                DeductPayable(avail, pending[k].cost);
+                const ManaCost cost = cur_cost(pending[k]);
+                if (!avail.CanPay(cost)) { continue; }
+                DeductPayable(avail, cost);
                 if (pending[k].rock) { AddSourceToPool(avail, s, *pending[k].def); }
+                if (deals_opponent_damage(*pending[k].def)) { spectacle_on = true; }  // enable later spectacle
                 done[k] = true; --remaining; progress = true; break;
             }
         }
@@ -6294,7 +6331,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         if (!done[k])
         {
             out.verdict = V::Illegal; out.failed_action = "cast=" + pending[k].name;
-            out.reason  = "can't pay " + pending[k].cost.ToString() + " for '" +
+            out.reason  = "can't pay " + cur_cost(pending[k]).ToString() + " for '" +
                           pending[k].name + "' with the mana available this phase";
             break;
         }
