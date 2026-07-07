@@ -108,6 +108,28 @@ in place (lethal→faithful max, non-lethal→legacy `-1` no-kill) stays.
 - **D — validate**: regression A/B (X=2/3), rebaseline smoke+regression GT (overnight deferred),
   run both viewer checks.
 
+## STAGE B DONE (2026-07-07, commit 21555b0) — viewer count picker
+
+The play viewer now casts Crackle with a chosen target COUNT (the "can't target the
+opponent's creatures" gap). Mechanism: a new `g_viewer_enum` thread_local, set ONLY around
+`CheckLine`'s `EnumerateMainPlans`, makes Crackle enumerate every count 0..cap (vs the single
+autonomous heuristic count); `g_play_target_chooser` couldn't be the signal because the
+clairvoyance guard nulls it during CheckLine's own enumeration. CheckLine emits a `crackle`
+sub (mirrors Soulfire); the GUI's generic picker renders it (index.html KIND: crackle after x).
+Autonomous byte-identical (608/6.78289, 146/5.56164). Verified end-to-end via `--validate-line`
+at a live Hinata+Crackle state (opp with 5 Spirit Tokens): verdict "choose" carries crackle-count
+variants; picking +1 targets an opponent creature (faithful CrackleExtraTargetOrder, opp-first).
+
+**DEFERRED viewer-parity refinements (not blocking; the model is now correct):**
+1. **Full unpruned count range.** `EnumerateMainPlans` affordability-prunes counts that over-pay
+   the discount, so the picker may not offer counts that kill an EXTRA creature beyond what mana
+   needs. A complete 0..cap picker needs an unpruned viewer enumeration (or emitting the count
+   variants pre-prune for Crackle when `g_viewer_enum`).
+2. **Per-target board-click.** Which SPECIFIC creature each extra target hits is still
+   auto-ordered (opponent creatures first), not a board click. Fine for identical tokens; matters
+   when the opponent has distinct creatures. Would reuse `g_play_target_chooser` at resolution.
+3. Label which targets a given count hits (incl. self-when-safe) in the picker.
+
 ## BUNDLE + FULL VALIDATION (2026-07-07) — 3 stacked Hinata changes, ready to accept
 
 The shipped change is THREE stacked, individually-validated Hinata improvements:
