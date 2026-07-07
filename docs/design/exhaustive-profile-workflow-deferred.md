@@ -117,13 +117,26 @@ profile (PASS); verify → mechanism correct (carried cells identified, reduced 
 active). Verify saving is a real ~50% of the carried floor on a deck dominated by deep junk (Hinata); the
 tiny deck understates it (too few, too-borderline cells at loose eps).
 
-**Follow-up (NOT yet built — the R-hungrier, decision-safe-but-not-exact part).** Extend freezing to
-(a) confident-KEEP size-7 cells and (b) sub-cells (bottoming argmins) that are argmin only for
-confidently-decided hands. These are *decision*-lossless but not *exactly* policy-preserving (a frozen
-keep cell's V feeds `Dopt` at its frozen-R precision, a second-order perturbation on live-cell
-thresholds), so they need the curse-margin care in the sketch below and per-deck validation that keep
-flags don't drift. Bottoming argmins are the most R-hungry — freeze them last / not at all until high R.
-The original sketch/open-questions below still apply to that follow-up.
+**Confident-KEEP size-7 carry — DONE 2026-07-07.** The emit now also certifies confident-KEEP size-7
+cells (`V < Dopt[1]`, symmetric `|V-Dopt[1]|` flip gate ≤ `prune_eps`; default on, `MTG_KEEP_PRUNE_KEEP=0`
+for mulls-only). Each entry carries a `keep` flag and its `sum/sumsq/count`; the consume already preloads
+V so the flag falls out (skip) or is re-sampled (verify). Safety: a size-7 keep cell contributes
+`min(V,Dopt[1])==V` to `Dopt[0]` (the final EV, NOT a threshold — no other cell's decision depends on it),
+so freezing it is *decision*-preserving (all keep flags correct); only the reported `Dopt[0]` sits at
+frozen-R precision. This carries the obvious FIRST-HAND (m=0) keeps — per the user's note it helps the m=0
+decision, **not** the bottoming sub-tables. Verify-mode caveat: the curse-safe refiner catches mull→keep
+flips (an under-sampled cell reads lower → refined); a keep→mull flip (a formerly-great hand made
+un-keepable by a big change) is the weaker direction — the symmetric flip gate still catches it if the
+reduced-floor estimate lands near threshold, but use `skip` only on a stable list. Validated on the tiny
+deck: emit certifies both sides; skip-mode standalone asserts each carried decision (MULL→MULL, KEEP→KEEP)
+with 0 samples.
+
+**Follow-up (NOT yet built — the R-hungry bottoming part).** Extend freezing to sub-cells (size 6/5/4 —
+the bottoming argmins) that are argmin only for confidently-decided hands. Unlike size-7 cells these feed
+`Dopt[1..M]` *thresholds* and the bottoming argmin, so they are the R-hungry, not-exactly-lossless part —
+freeze them last / not at all until high R, with per-deck validation that keep flags and bottom targets
+don't drift. This is the piece that would cut the BOTTOMING re-run cost (size-7 carry does not). The
+original sketch/open-questions below apply to it.
 
 ### Original sketch (applies to the follow-up)
 

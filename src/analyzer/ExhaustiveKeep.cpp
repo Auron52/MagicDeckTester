@@ -433,8 +433,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         else { carry_lowfloor7[idx][pd] = true; }   // verify: reduced floor, refinable
                         ++n_carried;
                     }
-                    std::cerr << "[keepgen] PRUNE-SET: carried " << n_carried << " confident-mull size-7 cell-sides ("
-                              << (carry_skip ? "skip mode -- 0 rollouts, asserted MULL"
+                    std::cerr << "[keepgen] PRUNE-SET: carried " << n_carried << " confident size-7 cell-sides ("
+                              << (carry_skip ? "skip mode -- 0 rollouts, asserted decision (keep/mull)"
                                              : ("verify mode -- reduced floor " + std::to_string(carry_floor) + ", refinable"))
                               << ") from " << ps << " (source_R=" << m.value("source_R", 0)
                               << ", prune_eps=" << m.value("prune_eps", 0.0) << ")\n" << std::flush;
@@ -1304,15 +1304,21 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
        << "  (expected win-turn, optimal keep)\n";
 
     // ---- Cross-run PRUNE-SET emission (MTG_KEEP_PRUNE_EMIT) --------------------------------------
-    // Emit the set of size-7 cells whose keep decision is a CONFIDENT MULLIGAN at this pooled R, so a
-    // later chunk can skip re-sampling them (see the consume path in RunExhaustiveKeep). This freeze is
-    // EXACTLY policy-preserving, not merely decision-safe: a size-7 cell is read only as its own m=0
-    // keep_val and as min(keep_val(h,0), Dopt[1]) in the Dopt[0] backward induction (it is never a
-    // bottoming sub-target -- those come from the smaller tables). For a cell confidently ABOVE the
-    // mull threshold, min(V, Dopt[1]) == Dopt[1] regardless of V, and its keep flag is MULL regardless
-    // -- so fixing V at this R cannot move Dopt[0] or any keep flag. Dopt[1..M] come from the smaller
-    // tables and are untouched. The gate mirrors the adaptive STOP gate (shrunk se + erfc flip prob)
-    // at a stricter prune_eps, and requires the MULL side (V > Dopt[1]) so only junk hands freeze.
+    // Emit the size-7 cells whose m=0 keep decision is CONFIDENT at this pooled R, so a re-run can skip
+    // re-establishing them (see the consume path in RunExhaustiveKeep). A size-7 cell is read ONLY as its
+    // own m=0 keep_val and in the Dopt[0] backward induction as min(keep_val(h,0), Dopt[1]) -- it is never
+    // a bottoming sub-target (those come from the smaller tables), and Dopt[1..M] come from the smaller
+    // tables and are untouched. So confident-mull AND confident-keep size-7 cells are both safe to carry:
+    //  * MULL side (V > Dopt[1]): min(V,Dopt[1])==Dopt[1] regardless of V, flag MULL regardless -> freezing
+    //    is EXACTLY policy-preserving (Dopt[0] and every flag unchanged).
+    //  * KEEP side (V < Dopt[1]): its own flag is KEEP, and it contributes min(V,Dopt[1])==V to Dopt[0]
+    //    (the final EV -- NOT a threshold for any decision). Freezing it is DECISION-preserving (all keep
+    //    flags correct); only the reported Dopt[0] EV sits at frozen-R precision. No other cell's decision
+    //    depends on it. Confident keeps carry the obvious first-hand keeps -- see the user note that this
+    //    helps the m=0 decision, not the bottoming sub-tables.
+    // Gate = the adaptive STOP gate (shrunk se + erfc flip prob) at a stricter prune_eps, applied to
+    // |V - Dopt[1]| so it certifies either side. MTG_KEEP_PRUNE_KEEP=0 emits mulls only (the strictly
+    // exactly-lossless subset); default emits both.
     if (const char* pe = std::getenv("MTG_KEEP_PRUNE_EMIT"); pe && *pe)
     {
         if (!have_sumsq)
@@ -1324,6 +1330,8 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         {
             const double prune_eps = []{ const char* s = std::getenv("MTG_KEEP_PRUNE_EPS");
                 return (s && *s) ? std::max(0.0, std::atof(s)) : 0.005; }();
+            const bool include_keep = []{ const char* s = std::getenv("MTG_KEEP_PRUNE_KEEP");
+                return !s || std::string(s) != "0"; }();   // default: carry confident keeps too
             const double se_prior = 8.0;   // matches ExhaustiveKeepConfig::se_prior default (shrink target)
             const double SQRT2    = 1.4142135623730951;
             // Table-7 pooled per-sample variance per pd (the shrink target, guards low-R fake confidence).
@@ -1338,7 +1346,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
 
             using json = nlohmann::json;
             json frozen = json::array();
-            long long n_frozen = 0, n_size7 = 0;
+            long long n_frozen = 0, n_mull = 0, n_keep = 0, n_size7 = 0;
             for (const auto& kv : H7pool)
             {
                 ++n_size7;
@@ -1350,38 +1358,42 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                     if (c < 2) { continue; }                       // no variance -> can't certify
                     const double V   = a.sum[pd] / c;
                     const double thr = Dopt[pd][1];
-                    if (V <= thr) { continue; }                    // freeze ONLY the confident-MULL side
+                    const bool   keep = (V < thr);
+                    if (keep && !include_keep) { continue; }       // mulls-only mode
                     const double vc  = std::max(0.0, a.sumsq[pd] / c - V * V);
                     const double vs  = (c * vc + se_prior * vg7[pd]) / (c + se_prior);
                     const double se  = std::sqrt(vs / c);
-                    const double flip = (se > 0) ? 0.5 * std::erfc((V - thr) / (se * SQRT2))
-                                                 : 0.0;            // se==0 & V>thr => certain mull
+                    const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(V - thr) / (se * SQRT2))
+                                                 : 0.0;            // se==0 => certain (V!=thr)
                     if (flip > prune_eps) { continue; }            // near-tie -> keep it LIVE
                     json je;
                     je["comp"]  = comp;
                     je["pd"]    = pd;
+                    je["keep"]  = keep ? 1 : 0;                    // 1 = confident KEEP, 0 = confident MULL
                     je["sum"]   = a.sum[pd];
                     je["sumsq"] = a.sumsq[pd];
                     je["count"] = c;
                     frozen.push_back(je);
-                    ++n_frozen;
+                    ++n_frozen; if (keep) { ++n_keep; } else { ++n_mull; }
                 }
             }
             json root;
             root["meta"] = {
-                { "kind", "confident_mull_size7" }, { "commit", commit }, { "play_digest", play_digest },
+                { "kind", include_keep ? "confident_size7" : "confident_mull_size7" },
+                { "commit", commit }, { "play_digest", play_digest },
                 { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp }, { "equiv_seed", equiv_seed },
                 { "K", K }, { "max_mull", max_mull }, { "source_R", effective_R },
                 { "prune_eps", prune_eps }, { "frozen_cell_sides", n_frozen },
-                { "size7_cells", n_size7 }
+                { "frozen_mull", n_mull }, { "frozen_keep", n_keep }, { "size7_cells", n_size7 }
             };
             root["frozen"] = frozen;
             std::ofstream f(pe);
             if (f)
             {
                 f << root.dump();
-                os << "PRUNE-EMIT: " << n_frozen << " frozen size-7 cell-sides (of " << (2 * n_size7)
-                   << ") at prune_eps=" << prune_eps << ", source_R=" << effective_R << " -> " << pe << "\n";
+                os << "PRUNE-EMIT: " << n_frozen << " confident size-7 cell-sides (" << n_mull << " mull, "
+                   << n_keep << " keep; of " << (2 * n_size7) << ") at prune_eps=" << prune_eps
+                   << ", source_R=" << effective_R << " -> " << pe << "\n";
             }
             else { os << "PRUNE-EMIT: WARNING failed to write " << pe << "\n"; }
         }

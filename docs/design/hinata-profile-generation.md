@@ -103,11 +103,13 @@ MTG_KEEP_EXHAUSTIVE=1 ... MTG_KEEP_R_FLOOR=4 MTG_KEEP_ROLLOUTS=<cap> \
   ./build/Release/mtg-analyze decks/Hinata2.cod ... --seed <new base>
 ```
 `verify` re-samples carried cells at a reduced floor so the adaptive refiner still catches any hand that
-became keepable under the new play logic (curse-safe); `skip` (0 rollouts, assert MULL) is the aggressive
-option for a play change you're confident doesn't touch the junk hands. Fingerprints match (same list;
-play_digest/commit are not gated). Only the confident-MULL set carries today — confident-KEEP + sub-cell
-carry is the documented follow-up (`docs/design/exhaustive-profile-workflow-deferred.md` §2) and is the
-**big multiplier** for cutting a re-run (it would leave only the near-threshold minority to re-sample).
+became keepable under the new play logic (curse-safe); `skip` (0 rollouts, assert the carried decision) is
+the aggressive option for a play change you're confident doesn't touch those hands. Fingerprints match
+(same list; play_digest/commit not gated). The prune-set carries confident **mulls AND keeps** (both are
+first-hand m=0 decisions), so a re-run re-samples only the **near-threshold minority** of size-7 hands
+(`MTG_KEEP_PRUNE_KEEP=0` for mulls-only). NOT yet carried: the size-6/5/4 **bottoming** sub-tables — those
+feed the m≥1 thresholds and the bottom argmin, so a re-run with bottoming still re-pays them (the R-hungry
+follow-up in `docs/design/exhaustive-profile-workflow-deferred.md` §2).
 
 ```bash
 HASH=<frozen>; i=1                # chunk index; seed_base = SECONDARY prefix + i
