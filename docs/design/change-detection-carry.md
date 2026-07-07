@@ -31,7 +31,10 @@ now don't need the blind bet.
 **What would actually cut the near-threshold/bottoming re-run cost:** *execution-trace* detection — know
 which cells' rollouts hit the changed code and reuse the prior for the rest with ZERO fresh samples. That
 is a different, harder mechanism (instrument the rollout, diff vs the commit). Statistical detection can't
-beat "certifying near-threshold ≈ refining." Recorded as the real future lever.
+beat "certifying near-threshold ≈ refining." Sketched in **`docs/design/execution-trace-carry.md`** — it
+reuses the same `resolved`/`apply_prior_override` machinery this built, supplying a *provably-exact*
+resolved set instead of a statistical one, and the two compose (trace resolves the untouched cells for
+free; statistics handle the rest).
 
 ---
 
