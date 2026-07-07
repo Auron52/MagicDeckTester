@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/Card.h"
 #include "CardTemplate.h"
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -502,6 +503,22 @@ public:
     // Returns all registered card names — used by the analyzer to check coverage.
     std::vector<std::string> AllNames() const;
 
+    // Behaviorally-relevant definition hash for a card, used by the mulligan re-run
+    // carry (execution-trace Phase B) to auto-detect which cards' DATA changed between
+    // two commits. It is an FNV-1a over the card's canonical cards.json entry with the
+    // COSMETIC fields ("name", "oracle_text") removed -- i.e. every field the engine
+    // actually reads (mana_cost, types, keywords, P/T, parameters, ...). We hash the raw
+    // JSON (canonically re-serialized so key order / whitespace don't matter) rather than
+    // walking CardParams by hand, so a newly-added parameter can never be silently missed.
+    // Deterministic across machines (unlike std::hash). Returns 0 for an unknown card or
+    // one registered in C++ (Tier 3, no JSON) -- such a card's behaviour lives in the
+    // engine, so it is covered by the engine fingerprint instead.
+    uint64_t DefHash(const std::string& name) const
+    {
+        auto it = m_def_hash.find(name);
+        return it == m_def_hash.end() ? 0ULL : it->second;
+    }
+
 private:
     CardDatabase() = default;
 
@@ -509,6 +526,7 @@ private:
     CardParams BuildParamsFromJson(const nlohmann::json& params) const;
 
     std::unordered_map<std::string, CardDefinition> m_cards;
+    std::unordered_map<std::string, uint64_t>       m_def_hash;   // see DefHash()
 
     static CardDatabase s_instance;   // eager singleton storage (see Instance())
 };

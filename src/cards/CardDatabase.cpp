@@ -5,6 +5,23 @@
 
 using json = nlohmann::json;
 
+// FNV-1a over the canonical (name/oracle-stripped) cards.json entry -- see DefHash() in the
+// header. Deterministic across machines (std::hash is not), so two builds on different hosts
+// agree on whether a card's behaviourally-relevant data changed. Kept identical in spirit to
+// the analyzer's Fnv helper; the value only needs to be self-consistent across runs.
+static uint64_t CardDefHash(const json& entry)
+{
+    json canon = entry;
+    canon.erase("name");         // cosmetic: identity, not behaviour
+    canon.erase("oracle_text");  // cosmetic: human text, engine never reads it
+    // nlohmann::json objects are key-ordered (std::map), so dump() is canonical regardless of
+    // source key order or whitespace -- parse-then-dump normalizes both.
+    const std::string s = canon.dump();
+    uint64_t h = 1469598103934665603ULL;
+    for (unsigned char c : s) { h ^= c; h *= 1099511628211ULL; }
+    return h;
+}
+
 // ---- CardTemplate helpers ----
 
 CardTemplate CardTemplateFromString(const std::string& name)
@@ -86,6 +103,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         for (const std::string& s : def.params.upkeep_token_subtypes) { reg.Intern(s); }
         for (const std::string& s : def.params.tap_token_subtypes)    { reg.Intern(s); }
         for (const std::string& s : def.params.cast_token_subtypes)   { reg.Intern(s); }
+        m_def_hash[def.card.m_name] = CardDefHash(entry);
         m_cards[def.card.m_name] = std::move(def);
     }
 }
