@@ -16,16 +16,27 @@
 >   spell in `ApplyPlanDirect` + the `AIEngine::TakeTurn` mirror. Burn-only; win counts identical,
 >   avg win turn net slightly better (earlier=12 vs later=8, the later mostly removing the
 >   phantom-trigger bug); burn GT rebaselined. All three fixtures → `accept`.
-> - **#2 Invigorate (commit `2df0cbe`):** solved **match-only** in `CheckLine`, NOT by enumeration
->   (enumerating Invigorate as an action shifted plan indices at every antilife decision and broke
->   saved replays). Invigorate is an own-creature-pump safe alt payload skipped before the alt
->   emission when we have no own attacker, so it is in no plan's cast multiset. The matcher now
->   folds such an L704-blocked payload out of the human's cast set, so "Fiery Justice; Invigorate;
->   Swords" matches the enumerated "Fiery Justice; Swords" (same win turn; payload moot / auto-fires
->   as a closer). Byte-identical everywhere (CheckLine is only the --validate-line path). Fixture →
->   `choose`. **Known limitation:** if Invigorate were ever the *necessary* closer AND its only
->   target is one a same-line Swords removes, the folded line would under-realise — not the case for
->   any real fixture (the combo lines are lethal without the pump).
+> - **#2 Invigorate — FINAL (commit `a8c4555`; superseded the reverted `2df0cbe` match-only
+>   fold-out).** The fold-out was wrong: the user requires Invigorate to actually RESOLVE and update
+>   life, not be dropped. Fix: relax the CollectActions own-attacker gate so a safe alt payload
+>   reaches the alt-payload emission when it is a LIVE Remedy burn (Remedy active + control the alt
+>   subtype + a legal creature target). Under `--claude-play` (UNPRUNED) it is then enumerated → the
+>   viewer offers and casts it (verified: "Fiery Justice; Invigorate" drops opp 20→7 = 10+3).
+>   **Autonomous byte-identical** (the emission stays UNPRUNED-gated → goldfish still auto-fires it).
+>
+>   **Autonomous enumeration was tested and REJECTED (clairvoyance).** Question raised: can the
+>   SEARCH find an Invigorate-inclusive lethal? Making the safe payload an enumerated burn for
+>   autonomous too (emit whenever a Remedy is live) measured: searched earlier=8 / later=1 /
+>   **win→loss=0**, BUT greedy **d0 win→loss=6, later=106**. That split is the clairvoyance
+>   signature: Invigorate on the OPPONENT's creature is NOT free — it grants that creature +4/+4, a
+>   real downside the rollout only "safely" takes by foreseeing it won't be punished; the honest d0
+>   gets punished. So the 8 searched-earlier are speculative early-casts, not lethals the search was
+>   missing. **Genuine** Invigorate lethals ARE already found: the safe-alt auto-fire runs post-cast
+>   inside `apply_plan_actions` with a re-scan loop, so any plan whose spells/attacks bring the
+>   opponent within `alt_lifegain_cost + ReadyAttackPower` triggers it (finisher chaining), and with
+>   an own attacker it fires pre-combat to pump the attacker for a lethal swing. The pre-removal
+>   ordering case (Invigorate before a same-turn removal of its only target) is covered for Swords by
+>   the pump-then-Swords redirect. So the current auto-fire is correct; no autonomous change adopted.
 
 Self-contained record (2026-07-06). Two burn/anti-lifegain lines a human can legally play in the
 viewer but the **search never enumerates**, so the play viewer shows them as a `legal_not_enumerated`
