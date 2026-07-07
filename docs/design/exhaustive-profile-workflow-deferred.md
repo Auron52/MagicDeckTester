@@ -96,6 +96,27 @@ at the same seed, loose eps to force freezing): (1) 120/120 live cell-sides byte
 (2) 0/8 frozen cell-sides carry samples in the pruned chunk (full sampled all 8); (3) pooled keep policy
 identical over 36 cells, 0 differ.
 
+**Carry-forward across a REGENERATION (same decklist, new commit) — DONE 2026-07-07.** The primary
+motivation: never re-run a multi-day deck (Hinata) from scratch after a play-logic fix. `MTG_KEEP_PRUNE_SET`
+is accepted across a commit change (bucket_fp/deck_fp identical for the same list; play_digest/commit are
+NOT gated), and `MTG_KEEP_CARRY_MODE` picks the fidelity posture (default `verify`):
+- **`verify`** (default, safe): carried confident-mull cells start at a REDUCED floor (`MTG_KEEP_CARRY_FLOOR`,
+  default 2) instead of the full floor, and stay refinable. The adaptive gate is curse-safe (an
+  under-sampled cell reads LOWER → looks more keepable → gets refined), so any hand that FLIPPED to
+  keepable on the new commit is caught and promoted; deep-junk cells stay at the reduced floor. NOT
+  byte-identical to an uncarried run (the reduced floor perturbs the shared `Dopt` → a different but
+  equally-valid adaptive trajectory that converges to the same decisions). Poolable (real fresh samples).
+  Requires an adaptive run (a uniform run has no refiner → carried cells sampled in full).
+- **`skip`** (aggressive): carried cells get ZERO rollouts, prior value preloaded, asserted MULL. Exactly
+  policy-preserving for the multi-chunk-pool use; a fidelity BET for the new-commit use (a large enough
+  play change could lift the threshold above a carried hand's true new value — a hard skip silently keeps
+  it MULL). Use for a stable list where the junk is structural (0-land / all-land / off-colour floods).
+
+Validated (`logs/prune_val/carry.sh`, tiny deck): skip → carried cells 0 samples + MULL in a standalone
+profile (PASS); verify → mechanism correct (carried cells identified, reduced floor applied, refiner
+active). Verify saving is a real ~50% of the carried floor on a deck dominated by deep junk (Hinata); the
+tiny deck understates it (too few, too-borderline cells at loose eps).
+
 **Follow-up (NOT yet built — the R-hungrier, decision-safe-but-not-exact part).** Extend freezing to
 (a) confident-KEEP size-7 cells and (b) sub-cells (bottoming argmins) that are argmin only for
 confidently-decided hands. These are *decision*-lossless but not *exactly* policy-preserving (a frozen

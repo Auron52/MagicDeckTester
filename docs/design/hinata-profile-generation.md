@@ -87,12 +87,27 @@ MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="chunk_1.raw.json,...,chunk_k.raw.json" \
   MTG_KEEP_PRUNE_EMIT=logs/hinata_chunks/pruneset.json MTG_KEEP_PRUNE_EPS=0.005 \
   MTG_MERGE_OUT_RAW=logs/hinata_pooled.raw.json \
   ./build/Release/mtg-analyze decks/Hinata2.cod --cards-json src/cards/data/cards.json
-# then every later chunk adds MTG_KEEP_PRUNE_SET=logs/hinata_chunks/pruneset.json to the generate line.
+# then every later chunk adds these to the generate line:
+#   MTG_KEEP_PRUNE_SET=logs/hinata_chunks/pruneset.json MTG_KEEP_CARRY_MODE=skip
 ```
-The prune-set carries the deck/bucket/equiv fingerprints and is refused on any mismatch. Re-emit it as
-the pool deepens (a slightly-higher-R pool freezes a few more cells). Pruned chunks pool normally — the
-frozen cells' counts come from the earlier chunks. Only the exactly-lossless confident-MULL freeze ships
-today; confident-KEEP / sub-cell freezing is a documented follow-up (more R-hungry, not exactly lossless).
+Within-pool (same commit) use `MTG_KEEP_CARRY_MODE=skip` — exactly policy-preserving (frozen counts come
+from the earlier chunks at merge). The prune-set carries the deck/bucket/equiv fingerprints and is refused
+on any mismatch. Re-emit it as the pool deepens (a slightly-higher-R pool freezes a few more cells).
+
+**Never re-run Hinata from scratch (the main payoff).** After the first full pool, KEEP the prune-set. When
+you regenerate on a NEW COMMIT (e.g. a play-logic fix), pass it with `MTG_KEEP_CARRY_MODE=verify` (default):
+```bash
+# re-run after a play fix -- carry last run's confident-mull set, re-sample only the live cells:
+MTG_KEEP_EXHAUSTIVE=1 ... MTG_KEEP_R_FLOOR=4 MTG_KEEP_ROLLOUTS=<cap> \
+  MTG_KEEP_PRUNE_SET=logs/hinata_chunks/pruneset.json MTG_KEEP_CARRY_MODE=verify \
+  ./build/Release/mtg-analyze decks/Hinata2.cod ... --seed <new base>
+```
+`verify` re-samples carried cells at a reduced floor so the adaptive refiner still catches any hand that
+became keepable under the new play logic (curse-safe); `skip` (0 rollouts, assert MULL) is the aggressive
+option for a play change you're confident doesn't touch the junk hands. Fingerprints match (same list;
+play_digest/commit are not gated). Only the confident-MULL set carries today — confident-KEEP + sub-cell
+carry is the documented follow-up (`docs/design/exhaustive-profile-workflow-deferred.md` §2) and is the
+**big multiplier** for cutting a re-run (it would leave only the near-threshold minority to re-sample).
 
 ```bash
 HASH=<frozen>; i=1                # chunk index; seed_base = SECONDARY prefix + i
