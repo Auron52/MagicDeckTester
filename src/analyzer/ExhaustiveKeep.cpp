@@ -336,6 +336,84 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     const std::map<std::string, int>& bof = bucket_of;   // const ref -> concurrent-safe find()
 
+    // ---- Cross-run PRUNE-SET consume (MTG_KEEP_PRUNE_SET) ----------------------------------------
+    // A prior pool's prune-set lists size-7 cells that are CONFIDENT MULLIGANS (see the emit path in
+    // RunKeepMerge). We PRELOAD each frozen cell's pooled value (into V only) and SKIP re-sampling it,
+    // so this chunk spends its rollouts only on the live (near-threshold / keepable) cells. Correctness:
+    //  * The work vector is left INTACT -- a frozen cell keeps its work index w -- so every LIVE cell's
+    //    rollout seed stream is byte-identical to an unpruned chunk (the seed is a function of w).
+    //  * We set only t.V (not sum/count). recompute() skips cnt==0 cells, so the preloaded V survives;
+    //    the raw emit writes count=0/sum=0 for a frozen cell, so it carries NO samples into this chunk's
+    //    sidecar and the pool takes its counts from the prior pool at merge time (no double-count).
+    //    This is per-pd exact: a cell frozen on one pd but live on the other emits fresh samples for the
+    //    live pd and zero for the frozen pd.
+    //  * Freezing is EXACTLY policy-preserving: a confident-mull size-7 cell is read only as its own m=0
+    //    keep_val and as min(keep_val,Dopt[1])==Dopt[1] in Dopt[0], so fixing its V cannot move Dopt or
+    //    any keep flag. (See the emit-path comment for the full argument.)
+    std::vector<std::array<bool, 2>> frozen7(TB(HAND).comps.size(), { false, false });
+    if (const char* ps = std::getenv("MTG_KEEP_PRUNE_SET"); ps && *ps)
+    {
+        std::ifstream pf(ps);
+        if (!pf) { std::cerr << "[keepgen] PRUNE-SET: cannot open " << ps << " -- ignoring\n" << std::flush; }
+        else
+        {
+            nlohmann::json pj;
+            bool parsed = true;
+            try { pf >> pj; }
+            catch (const std::exception& e)
+            { std::cerr << "[keepgen] PRUNE-SET: bad json (" << e.what() << ") -- ignoring\n" << std::flush; parsed = false; }
+            if (parsed && pj.contains("meta") && pj.contains("frozen"))
+            {
+                // Fingerprints must match, else the frozen comps index a different bucket map / deck and
+                // we'd freeze the wrong cells. REFUSE on any mismatch (do not silently mis-apply).
+                uint64_t my_bucket_fp = 1469598103934665603ULL;
+                for (int b = 0; b < K; ++b)
+                { my_bucket_fp = Fnv("|", my_bucket_fp);
+                  for (const std::string& n : eq.classes[b].members) { my_bucket_fp = Fnv(n + ",", my_bucket_fp); } }
+                std::vector<std::string> dn;
+                for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
+                std::sort(dn.begin(), dn.end());
+                uint64_t my_deck_fp = 1469598103934665603ULL;
+                for (const std::string& n : dn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
+                const auto& m = pj["meta"];
+                const bool ok = m.value("bucket_fp", 0ULL) == my_bucket_fp
+                             && m.value("deck_fp", 0ULL) == my_deck_fp
+                             && m.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                             && m.value("K", -1) == K
+                             && m.value("max_mull", -1) == cfg.max_mull;
+                if (!ok)
+                {
+                    std::cerr << "[keepgen] PRUNE-SET: fingerprint mismatch "
+                                 "(bucket/deck/equiv_seed/K/max_mull) -- REFUSING to apply " << ps << "\n" << std::flush;
+                }
+                else
+                {
+                    SizeTable& t7 = TB(HAND);
+                    long long n_preloaded = 0;
+                    for (const auto& e : pj["frozen"])
+                    {
+                        const std::vector<int> comp = e["comp"].get<std::vector<int>>();
+                        const int pd = e.value("pd", -1);
+                        if (pd != 0 && pd != 1) { continue; }
+                        auto it = t7.index.find(comp);
+                        if (it == t7.index.end()) { continue; }
+                        const int idx = it->second;
+                        if (frozen7[idx][pd]) { continue; }
+                        const long long c = e.value("count", 0LL);
+                        if (c <= 0) { continue; }
+                        frozen7[idx][pd] = true;
+                        t7.V[idx][pd]    = e["sum"].get<double>() / static_cast<double>(c);  // preload V only
+                        ++n_preloaded;
+                    }
+                    std::cerr << "[keepgen] PRUNE-SET: preloaded " << n_preloaded
+                              << " frozen size-7 cell-sides from " << ps << " (source_R="
+                              << m.value("source_R", 0) << ", prune_eps=" << m.value("prune_eps", 0.0)
+                              << ") -- skipping their rollouts\n" << std::flush;
+                }
+            }
+        }
+    }
+
     // Append rollouts [r0,r1) to cell `w`, mode `pd`, folding into its sum/sumsq/cnt accumulators.
     // Each (w,pd) is scheduled at most once per wave, so the direct writes are race-free. The seed is a
     // pure function of (seed_base, r, w, pd) -- extending r for a later batch never reuses a draw.
@@ -627,7 +705,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (int w = 0; w < static_cast<int>(work.size()); ++w)
         {
             const long long init = (work[w].H == HAND || sub_floor) ? r0 : r_max;
-            for (int pd = 0; pd < 2; ++pd) { tasks.push_back({ w, pd, 0, init }); }
+            for (int pd = 0; pd < 2; ++pd)
+            {
+                // Skip a pruned (frozen confident-mull) size-7 cell-side: its V is preloaded and it
+                // carries no samples into this chunk. Live cells keep their w, so seeds are unperturbed.
+                if (work[w].H == HAND && frozen7[work[w].idx][pd]) { continue; }
+                tasks.push_back({ w, pd, 0, init });
+            }
         }
         process_tasks(tasks, adaptive ? "floor-pass" : "full-pass");
         recompute();
@@ -663,8 +747,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             for (int pd = 0; pd < 2; ++pd)
                 for (std::size_t i = 0; i < H7.comps.size(); ++i)
                 {
-                    // m=0: size-7 flip gate.
-                    if (H7.cnt[i][pd] < r_max)
+                    // m=0: size-7 flip gate. Pruned (frozen) cells are never refined -- their V is
+                    // preloaded and their decision is a certified confident mull.
+                    if (!frozen7[i][pd] && H7.cnt[i][pd] < r_max)
                     {
                         const double se = gate_se(H7, static_cast<int>(i), pd, vg[0][pd]);
                         const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
@@ -1181,6 +1266,90 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     ek.commit = commit;
     os << "merged policy: D_opt(draw)=" << Dopt[0][0] << "  D_opt(play)=" << Dopt[1][0]
        << "  (expected win-turn, optimal keep)\n";
+
+    // ---- Cross-run PRUNE-SET emission (MTG_KEEP_PRUNE_EMIT) --------------------------------------
+    // Emit the set of size-7 cells whose keep decision is a CONFIDENT MULLIGAN at this pooled R, so a
+    // later chunk can skip re-sampling them (see the consume path in RunExhaustiveKeep). This freeze is
+    // EXACTLY policy-preserving, not merely decision-safe: a size-7 cell is read only as its own m=0
+    // keep_val and as min(keep_val(h,0), Dopt[1]) in the Dopt[0] backward induction (it is never a
+    // bottoming sub-target -- those come from the smaller tables). For a cell confidently ABOVE the
+    // mull threshold, min(V, Dopt[1]) == Dopt[1] regardless of V, and its keep flag is MULL regardless
+    // -- so fixing V at this R cannot move Dopt[0] or any keep flag. Dopt[1..M] come from the smaller
+    // tables and are untouched. The gate mirrors the adaptive STOP gate (shrunk se + erfc flip prob)
+    // at a stricter prune_eps, and requires the MULL side (V > Dopt[1]) so only junk hands freeze.
+    if (const char* pe = std::getenv("MTG_KEEP_PRUNE_EMIT"); pe && *pe)
+    {
+        if (!have_sumsq)
+        {
+            os << "PRUNE-EMIT: pooled sidecars lack per-cell sumsq (need it for the freeze gate) -- "
+                  "regenerate/merge with sumsq. Nothing written.\n";
+        }
+        else
+        {
+            const double prune_eps = []{ const char* s = std::getenv("MTG_KEEP_PRUNE_EPS");
+                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.005; }();
+            const double se_prior = 8.0;   // matches ExhaustiveKeepConfig::se_prior default (shrink target)
+            const double SQRT2    = 1.4142135623730951;
+            // Table-7 pooled per-sample variance per pd (the shrink target, guards low-R fake confidence).
+            auto& H7pool = pooled[HAND];
+            std::array<double, 2> vg7 = { 0.0, 0.0 }; std::array<long long, 2> ng7 = { 0, 0 };
+            for (const auto& kv : H7pool)
+                for (int pd = 0; pd < 2; ++pd)
+                { const long long c = kv.second.cnt[pd];
+                  if (c > 1) { const double mn = kv.second.sum[pd] / c;
+                               vg7[pd] += std::max(0.0, kv.second.sumsq[pd] / c - mn * mn); ++ng7[pd]; } }
+            for (int pd = 0; pd < 2; ++pd) { if (ng7[pd] > 0) { vg7[pd] /= ng7[pd]; } }
+
+            using json = nlohmann::json;
+            json frozen = json::array();
+            long long n_frozen = 0, n_size7 = 0;
+            for (const auto& kv : H7pool)
+            {
+                ++n_size7;
+                const std::vector<int>& comp = kv.first;
+                const Acc& a = kv.second;
+                for (int pd = 0; pd < 2; ++pd)
+                {
+                    const long long c = a.cnt[pd];
+                    if (c < 2) { continue; }                       // no variance -> can't certify
+                    const double V   = a.sum[pd] / c;
+                    const double thr = Dopt[pd][1];
+                    if (V <= thr) { continue; }                    // freeze ONLY the confident-MULL side
+                    const double vc  = std::max(0.0, a.sumsq[pd] / c - V * V);
+                    const double vs  = (c * vc + se_prior * vg7[pd]) / (c + se_prior);
+                    const double se  = std::sqrt(vs / c);
+                    const double flip = (se > 0) ? 0.5 * std::erfc((V - thr) / (se * SQRT2))
+                                                 : 0.0;            // se==0 & V>thr => certain mull
+                    if (flip > prune_eps) { continue; }            // near-tie -> keep it LIVE
+                    json je;
+                    je["comp"]  = comp;
+                    je["pd"]    = pd;
+                    je["sum"]   = a.sum[pd];
+                    je["sumsq"] = a.sumsq[pd];
+                    je["count"] = c;
+                    frozen.push_back(je);
+                    ++n_frozen;
+                }
+            }
+            json root;
+            root["meta"] = {
+                { "kind", "confident_mull_size7" }, { "commit", commit }, { "play_digest", play_digest },
+                { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp }, { "equiv_seed", equiv_seed },
+                { "K", K }, { "max_mull", max_mull }, { "source_R", effective_R },
+                { "prune_eps", prune_eps }, { "frozen_cell_sides", n_frozen },
+                { "size7_cells", n_size7 }
+            };
+            root["frozen"] = frozen;
+            std::ofstream f(pe);
+            if (f)
+            {
+                f << root.dump();
+                os << "PRUNE-EMIT: " << n_frozen << " frozen size-7 cell-sides (of " << (2 * n_size7)
+                   << ") at prune_eps=" << prune_eps << ", source_R=" << effective_R << " -> " << pe << "\n";
+            }
+            else { os << "PRUNE-EMIT: WARNING failed to write " << pe << "\n"; }
+        }
+    }
 
     if (!out_profile.empty())
     {

@@ -64,7 +64,47 @@ adopt; and chunk pooling that survives adoption.
 
 ---
 
-## 2. Cross-run table pruning: freeze decisively-settled cells, spend rollouts on the ambiguous ones
+## 2. Cross-run table pruning: freeze decisively-settled cells, spend rollouts on the ambiguous ones  — PHASE 1 DONE 2026-07-07
+
+**Shipped: the exactly-lossless confident-mulligan size-7 freeze.** `MTG_KEEP_PRUNE_EMIT=<file>` on the
+merge path writes a prune-set of size-7 cell-sides whose m=0 keep decision is a **confident mulligan**
+at the pooled R (V confidently *above* `Dopt[1]`, gate = shrunk-se erfc flip ≤ `MTG_KEEP_PRUNE_EPS`,
+default 0.005). `MTG_KEEP_PRUNE_SET=<file>` on generation preloads those cells' pooled V and **skips
+re-sampling them**, so a later chunk spends its whole budget on the live (near-threshold / keepable)
+cells. Pool the pruned chunk back with the source pool as usual.
+
+**Why this subset is exactly policy-preserving (not just decision-safe).** A size-7 cell is read only as
+its own m=0 `keep_val` and as `min(keep_val(h,0), Dopt[1])` in the `Dopt[0]` backward induction — it is
+never a bottoming sub-target (those come from the smaller tables). For a confident mull (V > Dopt[1]),
+`min(V, Dopt[1]) == Dopt[1]` regardless of V, and its keep flag is MULL regardless — so fixing V cannot
+move `Dopt[0]` or any keep flag. `Dopt[1..M]` come from the smaller tables, untouched. These junk hands
+are the majority of a combo deck's size-7 space, so it's the bulk of the savings at zero fidelity risk.
+
+**Implementation guarantees (both in `ExhaustiveKeep.cpp`).**
+- The work vector is left **intact** (frozen cells keep their work index `w`), so every LIVE cell's
+  rollout seed stream is byte-identical to an unpruned chunk.
+- Consume preloads **only `t.V`** (not sum/count): `recompute()` skips `cnt==0` cells so the preloaded V
+  survives, and the raw emit writes `count=0/sum=0` for a frozen cell → it carries no samples into the
+  chunk and the pool takes its counts from the prior pool. Per-pd exact (a cell frozen on one pd, live
+  on the other, emits fresh for the live pd, zero for the frozen pd).
+- Fingerprints (`bucket_fp/deck_fp/equiv_seed/K/max_mull`) are checked on load; a mismatch **refuses**
+  to apply (never freezes the wrong cells). Emit requires per-cell `sumsq` (needs it for the gate).
+- Fully inert when `MTG_KEEP_PRUNE_SET` is unset (`frozen7` all-false → both new branches no-op).
+
+**Validated** (`logs/prune_val/run.sh`, tiny 3-bucket deck, chunk c1 → prune-set → c2_full vs c2_pruned
+at the same seed, loose eps to force freezing): (1) 120/120 live cell-sides byte-identical, 0 mismatch;
+(2) 0/8 frozen cell-sides carry samples in the pruned chunk (full sampled all 8); (3) pooled keep policy
+identical over 36 cells, 0 differ.
+
+**Follow-up (NOT yet built — the R-hungrier, decision-safe-but-not-exact part).** Extend freezing to
+(a) confident-KEEP size-7 cells and (b) sub-cells (bottoming argmins) that are argmin only for
+confidently-decided hands. These are *decision*-lossless but not *exactly* policy-preserving (a frozen
+keep cell's V feeds `Dopt` at its frozen-R precision, a second-order perturbation on live-cell
+thresholds), so they need the curse-margin care in the sketch below and per-deck validation that keep
+flags don't drift. Bottoming argmins are the most R-hungry — freeze them last / not at all until high R.
+The original sketch/open-questions below still apply to that follow-up.
+
+### Original sketch (applies to the follow-up)
 
 **Idea.** Today adaptive sampling (`MTG_KEEP_R_FLOOR` + refine waves) skips refining confident cells
 *within a run*. Extend that **across runs/chunks**: use a prior run's measured confidence to **freeze**
