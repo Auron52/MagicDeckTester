@@ -131,6 +131,12 @@ reduced-floor estimate lands near threshold, but use `skip` only on a stable lis
 deck: emit certifies both sides; skip-mode standalone asserts each carried decision (MULL→MULL, KEEP→KEEP)
 with 0 samples.
 
+**Bigger picture — change-detection carry supersedes this** (`docs/design/change-detection-carry.md`):
+instead of carrying only the *confidently-decided* cells, carry the *whole* prior pool and re-sample every
+cell thinly, refining only the cells a new commit/deck actually moved. It preserves the expensive
+near-threshold R investment too, and (with bucket translation) extends to small deck changes. The
+confident-cell carry here is the cheap 80%; change detection is the thorough version.
+
 **Follow-up (NOT yet built — the R-hungry bottoming part).** Extend freezing to sub-cells (size 6/5/4 —
 the bottoming argmins) that are argmin only for confidently-decided hands. Unlike size-7 cells these feed
 `Dopt[1..M]` *thresholds* and the bottoming argmin, so they are the R-hungry, not-exactly-lossless part —
