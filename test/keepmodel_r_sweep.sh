@@ -50,7 +50,7 @@ for i in $(seq 1 "$NUM_CHUNKS"); do
   # Direct-write the chunk raw; skip the (unneeded) per-chunk profile via empty MTG_KEEP_OUT_PROFILE.
   MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=$CHUNK_R MTG_KEEP_R_FLOOR=$CHUNK_FLOOR MTG_KEEP_MAXMULL=$MAXMULL \
     MTG_EQUIV_DEPTH=$GEN_DEPTH MTG_EQUIV_BUDGET=$GEN_BUDGET \
-    MTG_KEEP_BOTTOMING=0 MTG_KEEP_OUT_RAW="$craw" MTG_KEEP_OUT_PROFILE= \
+    MTG_KEEP_OUT_RAW="$craw" MTG_KEEP_OUT_PROFILE= \
     "$ANALYZE" "$DECK" --seed "$s" >"$OUT/gen_${i}.log" 2>&1
 done
 
@@ -77,7 +77,7 @@ for k in $TARGETS; do
   inputs=""; for i in $(seq 1 "$k"); do inputs="$inputs${inputs:+,}$CH/chunk_${i}.raw.json"; done
   R=$((k * CHUNK_R))
   prof=/tmp/${STEM}_rsweep_R${R}.profile.json
-  MTG_KEEP_MERGE=1 MTG_KEEP_BOTTOMING=0 MTG_MERGE_INPUTS="$inputs" \
+  MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="$inputs" \
     MTG_MERGE_OUT_PROFILE="$prof" MTG_MERGE_OUT_RAW=/tmp/${STEM}_rsweep_R${R}.raw.json \
     "$ANALYZE" "$DECK" >"$OUT/merge_R${R}.log" 2>&1
   expdir=$OUT/wins_R${R}; mkdir -p "$expdir"

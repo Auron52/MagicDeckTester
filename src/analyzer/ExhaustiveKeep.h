@@ -56,9 +56,11 @@ struct ExhaustiveKeepConfig
                                          // keep-only rollout savings for bottoming-on profiles. Off => the
                                          // current full-R-sub-table behaviour, byte-identical.
     bool     bottoming_enabled = false;  // bake into the written profile: use blind exhaustive bottoming
-                                         // at runtime? default OFF (low-R bottoming is noise-limited and
-                                         // loses to lookahead) -- set true only for a validated high-R
-                                         // profile. From MTG_KEEP_BOTTOMING. Keep is always on regardless.
+                                         // at runtime. main.cpp ALWAYS sets this true (no generation-time
+                                         // off switch -- shipping a bottoming-off profile is a footgun no
+                                         // agent should reach; the confounded A/B has consistently shown
+                                         // blind >= clairvoyant lookahead). The struct default stays false
+                                         // only so an unset/legacy config is inert. Keep is always on too.
     std::string out_profile;    // if set, write the serialized keep policy (base profile + table) here
     std::string out_raw;        // if set, write the poolable raw sum+count sidecar (for cross-machine merge)
     std::string commit;         // play-logic identity stamped into the raw sidecar (from MTG_COMMIT)

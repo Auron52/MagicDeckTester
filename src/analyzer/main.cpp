@@ -152,15 +152,16 @@ int main(int argc, char* argv[])
             if (const char* p = std::getenv("MTG_MERGE_OUT_PROFILE")) { out_profile = p; }
             if (const char* r = std::getenv("MTG_MERGE_OUT_RAW"))     { out_raw = r; }
             if (std::getenv("MTG_KEEP_NO_WRITE") != nullptr) { out_profile.clear(); out_raw.clear(); }
-            // Blind exhaustive bottoming ships ON by default (unset => true; "0" => off): it is the
-            // theoretically-correct policy when blind to the shuffle (a real player can't peek at the
-            // library the way clairvoyant lookahead bottoming does), and the confounded in-game A/B
-            // (MTG_CONFOUND_BOTTOM) confirms blind >= lookahead once the peek is removed. Each new
-            // profile is still validated with that A/B during adoption; set MTG_KEEP_BOTTOMING=0 to
-            // ship a profile with bottoming off if it fails. Decks with no exhaustive table are
-            // unaffected -- runtime falls back to lookahead bottoming.
-            const bool bottoming_enabled = []{ const char* s = std::getenv("MTG_KEEP_BOTTOMING");
-                                               return !s || std::string(s) != "0"; }();
+            // Bottoming is ALWAYS baked ON. Blind exhaustive bottoming is the theoretically-correct policy
+            // when blind to the shuffle (a real player can't peek at the library the way clairvoyant
+            // lookahead bottoming does), and the confounded in-game A/B (MTG_CONFOUND_BOTTOM) has
+            // consistently confirmed blind >= lookahead once the peek is removed -- the table plays the
+            // hand over the whole shuffle distribution while the lookahead commits to one peeked library.
+            // There is deliberately NO generation-time off switch: a bottoming-off profile is a footgun no
+            // agent should be able to ship. (Runtime A/B still isolates bottoming via MTG_EXHAUSTIVE_BOTTOM,
+            // which changes play ephemerally and writes no profile; decks with no exhaustive table fall
+            // back to lookahead bottoming.)
+            const bool bottoming_enabled = true;
             RunKeepMerge(std::cout, deck, profile, inputs, out_profile, out_raw, bottoming_enabled);
             return 0;
         }
@@ -293,11 +294,12 @@ int main(int argc, char* argv[])
             cfg.equiv_seed = []{ const char* s = std::getenv("MTG_EQUIV_SEED");
                                  return (s && *s) ? std::strtoull(s, nullptr, 10) : 20260701ULL; }();
             cfg.max_turns = max_turns;
-            // Default ON (unset => true; "0" => off) -- see the MTG_KEEP_BOTTOMING note on the merge path.
-            // Blind exhaustive bottoming is the correct blind-to-shuffle policy; validated per profile via
-            // the confounded A/B (MTG_CONFOUND_BOTTOM) during adoption. Untabled decks fall back to lookahead.
-            cfg.bottoming_enabled = []{ const char* s = std::getenv("MTG_KEEP_BOTTOMING");
-                                        return !s || std::string(s) != "0"; }();
+            // Bottoming is ALWAYS baked ON -- there is deliberately no generation-time off switch (see the
+            // note on the merge path). Blind exhaustive bottoming is the blind-to-shuffle policy the whole
+            // table exists to produce (its second purpose after keep), and the confounded A/B
+            // (MTG_CONFOUND_BOTTOM) has consistently shown it >= clairvoyant lookahead. Shipping a
+            // bottoming-off profile is a footgun no agent should be able to reach, so the knob is gone.
+            cfg.bottoming_enabled = true;
             // EXPERIMENT: adaptively sample sub-tables even with bottoming on + curse-filter the bottom
             // argmin to refined cells (recovers keep-only savings for bottoming-on). Off => full-R sub-tables.
             cfg.adaptive_bottom = []{ const char* s = std::getenv("MTG_KEEP_ADAPTIVE_BOTTOM");
