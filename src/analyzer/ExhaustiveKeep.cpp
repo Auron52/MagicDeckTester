@@ -443,6 +443,99 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     }
 
+    // ---- Change-detection carry (MTG_KEEP_PRIOR_RAW) ---------------------------------------------
+    // Whole-pool warm-start: given a PRIOR pool (from a previous run, typically an older commit, same
+    // decklist), re-sample every cell only THINLY at the floor and then spend the refine budget ONLY on
+    // the cells the change actually MOVED -- detected by comparing this run's thin floor estimate to the
+    // prior. Unmoved cells reuse the prior's (higher-R) value; moved cells are refined fresh. This scopes
+    // a re-run to what the change touched without needing to know what changed. See
+    // docs/design/change-detection-carry.md. Rule-0 refinement: a play change only invalidates the cells
+    // whose rollouts hit the changed code; an unmoved cell's prior value is not stale, it is the same
+    // number. The ONLY risk is a false negative (miss a real move), so the test is biased toward MOVED.
+    std::vector<std::vector<std::array<double, 2>>>    pri_V(tables.size()), pri_var(tables.size());
+    std::vector<std::vector<std::array<long long, 2>>> pri_n(tables.size());
+    std::vector<std::vector<std::array<bool, 2>>>      has_prior(tables.size()), resolved(tables.size());
+    for (int H = HAND; H >= min_size; --H)
+    {
+        const std::size_t n = TB(H).comps.size();
+        pri_V[HAND - H].assign(n, { 0.0, 0.0 });     pri_var[HAND - H].assign(n, { 0.0, 0.0 });
+        pri_n[HAND - H].assign(n, { 0, 0 });         has_prior[HAND - H].assign(n, { false, false });
+        resolved[HAND - H].assign(n, { false, false });
+    }
+    bool   change_detect = false;
+    double detect_delta  = []{ const char* s = std::getenv("MTG_KEEP_DETECT_DELTA");
+        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();   // decision-relevant win-turn shift
+    double detect_z      = []{ const char* s = std::getenv("MTG_KEEP_DETECT_Z");
+        return (s && *s) ? std::max(0.0, std::atof(s)) : 1.64; }();   // CI band for the "unmoved" call
+    if (const char* pr = std::getenv("MTG_KEEP_PRIOR_RAW"); pr && *pr)
+    {
+        std::ifstream prf(pr);
+        if (!prf) { std::cerr << "[keepgen] PRIOR-RAW: cannot open " << pr << " -- ignoring\n" << std::flush; }
+        else
+        {
+            nlohmann::json pj; bool parsed = true;
+            try { prf >> pj; } catch (const std::exception& e)
+            { std::cerr << "[keepgen] PRIOR-RAW: bad json (" << e.what() << ") -- ignoring\n" << std::flush; parsed = false; }
+            if (parsed && pj.contains("meta") && pj.contains("sizes"))
+            {
+                uint64_t my_bucket_fp = 1469598103934665603ULL;
+                for (int b = 0; b < K; ++b)
+                { my_bucket_fp = Fnv("|", my_bucket_fp);
+                  for (const std::string& n : eq.classes[b].members) { my_bucket_fp = Fnv(n + ",", my_bucket_fp); } }
+                std::vector<std::string> dnn;
+                for (const Card& c : deck.mainboard) { dnn.push_back(c.m_name.str()); }
+                std::sort(dnn.begin(), dnn.end());
+                uint64_t my_deck_fp = 1469598103934665603ULL;
+                for (const std::string& n : dnn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
+                const auto& mm = pj["meta"];
+                const bool ok = mm.value("bucket_fp", 0ULL) == my_bucket_fp
+                             && mm.value("deck_fp", 0ULL) == my_deck_fp
+                             && mm.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                             && mm.value("K", -1) == K && mm.value("max_mull", -1) == cfg.max_mull;
+                if (!ok)
+                { std::cerr << "[keepgen] PRIOR-RAW: fingerprint mismatch (bucket/deck/equiv_seed/K/max_mull)"
+                               " -- REFUSING (a changed decklist needs bucket translation, not yet built)\n" << std::flush; }
+                else if (!(cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts))
+                { std::cerr << "[keepgen] PRIOR-RAW: change-detection needs an ADAPTIVE run "
+                               "(0 < MTG_KEEP_R_FLOOR < MTG_KEEP_ROLLOUTS) -- ignoring prior\n" << std::flush; }
+                else
+                {
+                    long long loaded = 0;
+                    for (const auto& sz : pj["sizes"])
+                    {
+                        const int H = sz.value("H", 0);
+                        if (H > HAND || H < min_size) { continue; }
+                        SizeTable& t = TB(H);
+                        for (const auto& e : sz["entries"])
+                        {
+                            auto it = t.index.find(e["comp"].get<std::vector<int>>());
+                            if (it == t.index.end()) { continue; }
+                            const int i = it->second;
+                            if (!e.contains("sumsq")) { continue; }   // need variance for the test
+                            for (int pd = 0; pd < 2; ++pd)
+                            {
+                                const long long c = e["count"][pd].get<long long>();
+                                if (c < 2) { continue; }
+                                const double s = e["sum"][pd].get<double>();
+                                const double sq = e["sumsq"][pd].get<double>();
+                                const double V = s / c;
+                                pri_V[HAND - H][i][pd]     = V;
+                                pri_var[HAND - H][i][pd]   = std::max(0.0, sq / c - V * V);
+                                pri_n[HAND - H][i][pd]     = c;
+                                has_prior[HAND - H][i][pd] = true;
+                                ++loaded;
+                            }
+                        }
+                    }
+                    change_detect = true;
+                    std::cerr << "[keepgen] PRIOR-RAW: loaded " << loaded << " prior cell-sides from " << pr
+                              << " (source_R=" << mm.value("R", 0) << ", detect_delta=" << detect_delta
+                              << ", detect_z=" << detect_z << ") -- change-detection ON\n" << std::flush;
+                }
+            }
+        }
+    }
+
     // Append rollouts [r0,r1) to cell `w`, mode `pd`, folding into its sum/sumsq/cnt accumulators.
     // Each (w,pd) is scheduled at most once per wave, so the direct writes are race-free. The seed is a
     // pure function of (seed_base, r, w, pd) -- extending r for a later batch never reuses a draw.
@@ -727,7 +820,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // high at the floor would never be marked -- so bottoming forces sub-tables to the cap up front. The
     // adaptive_bottom EXPERIMENT relaxes that: sub-tables stay adaptive, and best_sub instead excludes
     // floor-R cells from the bottoming argmin (so curse-noise can't pick one). Size-7 always starts at floor.
-    const bool sub_floor = adaptive && (!cfg.bottoming_enabled || cfg.adaptive_bottom);
+    // change-detection also needs every sub-table sampled at the floor first (as the detection batch),
+    // even with bottoming on -- moved sub-cells are then refined to the cap, unmoved reuse the prior.
+    const bool sub_floor = (adaptive && (!cfg.bottoming_enabled || cfg.adaptive_bottom)) || change_detect;
     {   // Pass A: size-7 to the floor; sub-tables to the floor (keep-only) or straight to the cap.
         std::vector<Task> tasks;
         tasks.reserve(work.size() * 2);
@@ -752,6 +847,75 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         process_tasks(tasks, adaptive ? "floor-pass" : "full-pass");
         recompute();
     }
+
+    // ---- change-detection: classify moved vs unmoved from the floor batch, then reuse the prior -----
+    // For every cell with a prior, compare this run's thin floor estimate V_f (n_f = r0) to the prior V_p.
+    // "Unmoved" IFF even the CI upper bound on the shift stays below the decision-relevant delta:
+    //   |V_f - V_p| + detect_z * sqrt(var_f/n_f + var_p/n_p) < detect_delta.
+    // Everything else is "moved" -> refined fresh (bias toward moved => misses are rare). Unmoved cells
+    // reuse the prior's higher-R value for the policy (apply_prior_override) but keep their fresh floor
+    // samples in the accumulators (valid new-commit samples -> the raw stays poolable). apply_prior_
+    // override must run after EVERY recompute() (recompute derives V from the fresh accumulators, which
+    // would otherwise clobber the prior value on resolved cells).
+    auto apply_prior_override = [&]()
+    {
+        if (!change_detect) { return; }
+        for (int H = HAND; H >= min_size; --H)
+        {
+            SizeTable& t = tables[HAND - H];
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+                for (int pd = 0; pd < 2; ++pd)
+                    if (resolved[HAND - H][i][pd]) { t.V[i][pd] = pri_V[HAND - H][i][pd]; }
+        }
+    };
+    if (change_detect)
+    {
+        // Effective delta = DISTANCE TO THRESHOLD, not a flat tolerance. We don't care whether a cell
+        // moved; only whether it moved enough to flip its DECISION. A size-7 cell's m=0 keep decision
+        // flips only if its value crosses Dopt[1], so a move smaller than |V - Dopt[1]| is
+        // decision-irrelevant -- deep cells (huge margin) clear trivially from the thin floor batch,
+        // near-threshold cells (tiny margin) can't clear and are refined (correctly). Certify unmoved iff
+        // even the CI upper bound on the shift stays inside the margin: shift + z*se < margin. A deep
+        // cell that moved ACROSS the threshold has shift > margin -> flagged moved -> refined (caught).
+        // Sub-cells feed Dopt[1..M] thresholds AND the bottoming argmin, so a clean per-cell margin is
+        // not well-defined -- they use the flat MTG_KEEP_DETECT_DELTA (conservative -> refine more; the
+        // R-hungry bottoming carry is future work). Dopt from the fresh floor batch (its noise is small
+        // -- an average over cells -- and deep-cell margins dwarf it).
+        const std::array<std::vector<double>, 2> Dopt_det = { compute_Dopt(0), compute_Dopt(1) };
+        long long n_unmoved = 0, n_moved = 0, n_tested = 0;
+        for (int H = HAND; H >= min_size; --H)
+        {
+            SizeTable& t = tables[HAND - H];
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+                for (int pd = 0; pd < 2; ++pd)
+                {
+                    if (!has_prior[HAND - H][i][pd]) { continue; }   // no prior -> treat as moved (refine)
+                    const long long nf = t.cnt[i][pd];
+                    if (nf < 1) { continue; }
+                    ++n_tested;
+                    const double Vf   = t.V[i][pd];
+                    const double Vp   = pri_V[HAND - H][i][pd];
+                    const double varf = (nf > 1) ? std::max(0.0, t.sumsq[i][pd] / nf - Vf * Vf)
+                                                 : pri_var[HAND - H][i][pd];
+                    const double np   = static_cast<double>(pri_n[HAND - H][i][pd]);
+                    const double se   = std::sqrt(varf / nf + pri_var[HAND - H][i][pd] / np);
+                    const double shift = std::abs(Vf - Vp);
+                    // margin: size-7 -> distance from the prior value to the m=0 threshold; sub-cells ->
+                    // flat delta.
+                    const double margin = (H == HAND) ? std::abs(Vp - Dopt_det[pd][1]) : detect_delta;
+                    if (shift + detect_z * se < margin)
+                    { resolved[HAND - H][i][pd] = true; ++n_unmoved; }
+                    else { ++n_moved; }
+                }
+        }
+        apply_prior_override();
+        os << "change-detection: " << n_tested << " prior cell-sides tested -> " << n_unmoved
+           << " unmoved (reuse prior), " << n_moved << " moved (refine fresh)  [size-7 margin=dist-to-thr, "
+           << "sub delta=" << detect_delta << ", z=" << detect_z << "]\n";
+        std::cerr << "[keepgen] change-detection: " << n_unmoved << " unmoved / " << n_moved
+                  << " moved (of " << n_tested << " prior cell-sides)\n" << std::flush;
+    }
+
     // Save the (expensive) floor investment immediately -- refine waves can be long, so don't wait for
     // the first wave boundary. A complete-floor sidecar is already a valid (low-R) recoverable state.
     if (adaptive) { maybe_checkpoint(); }
@@ -783,9 +947,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             for (int pd = 0; pd < 2; ++pd)
                 for (std::size_t i = 0; i < H7.comps.size(); ++i)
                 {
-                    // m=0: size-7 flip gate. Pruned (frozen) cells are never refined -- their V is
-                    // preloaded and their decision is a certified confident mull.
-                    if (!frozen7[i][pd] && H7.cnt[i][pd] < r_max)
+                    // m=0: size-7 flip gate. Pruned (frozen) or change-detection-RESOLVED (unmoved,
+                    // reusing the prior) cells are never refined.
+                    if (!frozen7[i][pd] && !resolved[0][i][pd] && H7.cnt[i][pd] < r_max)
                     {
                         const double se = gate_se(H7, static_cast<int>(i), pd, vg[0][pd]);
                         const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
@@ -797,6 +961,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         const int arg = argmin_sub(H7.comps[i], m, pd);
                         if (arg < 0) { continue; }
+                        if (resolved[m][arg][pd]) { continue; }       // change-detection: unmoved -> prior
                         const SizeTable& t = tables[m];               // size-(7-m) table
                         if (t.cnt[arg][pd] >= r_max) { continue; }
                         if (m == cfg.max_mull) { mark.insert({ m, arg, pd }); continue; }   // terminal: always
@@ -830,6 +995,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             const std::string wlabel = "refine-wave-" + std::to_string(refine_waves + 1);
             process_tasks(tasks, wlabel.c_str());
             recompute();
+            apply_prior_override();   // recompute derives V from fresh accumulators -> restore prior on resolved
             ++refine_waves;
             maybe_checkpoint();   // crash-safe: dump the raw sidecar every checkpoint_sec (post-floor)
         }

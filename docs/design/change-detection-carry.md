@@ -1,8 +1,41 @@
 # Change-detection carry (whole-pool warm-start)
 
-**Status: DESIGN (2026-07-07). The most powerful "cut subsequent runs" lever; supersedes confident-cell
-carry. Not yet built.** Motivated by "never re-run Hinata for a week again" — and, per the user, useful
-for *small deck changes* too.
+**Status: PHASE 1 BUILT + validated 2026-07-07 (`MTG_KEEP_PRIOR_RAW`). Read the "Phase 1 finding" box —
+the savings are more concentrated (and the value is more about SAFETY) than the original pitch.**
+Motivated by "never re-run Hinata for a week again" — and, per the user, useful for *small deck changes* too.
+
+## Phase 1 finding (measured — read this first)
+
+Built: `MTG_KEEP_PRIOR_RAW=<pool>` loads a prior pool; the floor pass doubles as the detection batch; each
+cell is classified moved/unmoved and unmoved cells reuse the prior value (skip refine). The **effective
+delta is distance-to-threshold, not a flat tolerance** — we only care whether a cell moved enough to flip
+its DECISION (`shift + z·se < |V − Dopt[1]|` for size-7). This is essential: a flat delta certifies almost
+nothing (certifying "unmoved to 0.1t" costs ~as many samples as refining).
+
+**The honest limit.** Certifying a *near-threshold* cell didn't cross costs about as much as refining it —
+so change-detection **cannot cheaply clear near-threshold cells** (they get refined, correctly). Its saving
+is on **deep** cells (huge margin → cleared by the thin floor batch). But a normal adaptive run already
+leaves deep cells at the floor — so vs a *fresh adaptive run* the saving is the refine cost of the
+deep-ish cells the prior had pushed to high R, plus reusing that prior R. **Measured on the tiny deck: 59
+of 128 cell-sides cleared, refine 472 vs 600 (~21%).** On a real deck (many deep junk cells) the size-7
+clear-rate is higher; the size-6/5/4 **bottoming sub-cells** use a flat delta (conservative → mostly
+refined), so change-detection does **not** cut the bottoming re-run — same limitation as confident-cell
+carry.
+
+**So the real value of Phase 1 is SAFETY, not raw speed:** it is the **self-verifying** version of
+confident-cell skip. Skip-mode carry *blindly* reuses confident cells (a fidelity bet — a change that
+flipped one is silently wrong). Change-detection reuses a cell only after a fresh floor batch **verifies**
+its decision didn't flip, and refines the ones that did — at the cost of the floor batch. For a re-run you
+now don't need the blind bet.
+
+**What would actually cut the near-threshold/bottoming re-run cost:** *execution-trace* detection — know
+which cells' rollouts hit the changed code and reuse the prior for the rest with ZERO fresh samples. That
+is a different, harder mechanism (instrument the rollout, diff vs the commit). Statistical detection can't
+beat "certifying near-threshold ≈ refining." Recorded as the real future lever.
+
+---
+
+## Original design (below) — the mechanism as built matches it; the finding above refines the value prop.
 
 ## The idea
 
