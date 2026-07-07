@@ -703,7 +703,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         Targeting t = def.params.targeting;
         if (t == Targeting::Creature && def.params.target_own_creature)
         {
-            if (FindBestOwnAttacker(state, state.active_player_index) < 0) { continue; }
+            if (FindBestOwnAttacker(state, state.active_player_index) < 0)
+            {
+                // An own-creature pump (Invigorate) needs one of OUR attackers for the pump. BUT
+                // under a Tainted Remedy its free alt payload ("an opponent gains N life" -> N LOSS)
+                // is a real face-damage burn independent of the (moot) pump, castable on ANY
+                // creature (CR "target creature"). Let it through to the alt-payload block below so
+                // it is offered as the lifegain-flip damage source, as long as the alt cost is
+                // payable (we control a Forest) and a legal creature target exists. Autonomous stays
+                // byte-identical: the alt-payload block only EMITS a safe payload under UNPRUNED /
+                // ShouldEmitRiskyAltPayload, so on the goldfish path it still falls through to
+                // `continue` (auto-fired) exactly as if skipped here.
+                const bool alt_burn_live = def.params.alt_lifegain_cost > 0
+                    && RemedyActive(state, state.active_player_index)
+                    && ControlsSubtype(state, state.active_player_index, def.params.alt_cost_requires_subtype)
+                    && AltPayloadTargetLegal(state, def);
+                if (!alt_burn_live) { continue; }
+            }
         }
         else if ((t == Targeting::Creature || t == Targeting::Multi) && !has_creature_target
                  && !def.params.controller_lifegain_equals_power)
