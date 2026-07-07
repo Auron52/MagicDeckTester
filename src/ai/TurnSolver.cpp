@@ -4586,6 +4586,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (act.chosen_x > 0)            { sub.push_back("x" + act.card_name + "=" + std::to_string(act.chosen_x)); }
                 if (act.ponder_keep >= 0)        { sub.push_back("p" + act.card_name + "=" + std::to_string(act.ponder_keep)); }
                 if (act.soulfire_own_targets > 0){ sub.push_back("f" + act.card_name + "=" + std::to_string(act.soulfire_own_targets)); }
+                // Crackle declared extra-target COUNT: distinct counts are distinct human choices
+                // (each kills one more creature for one more {1} discount), so keep them as separate
+                // variants instead of collapsing to the first-enumerated. >= 0 only in viewer mode
+                // (g_viewer_enum); the autonomous single count never reaches this human-play branch.
+                if (act.crackle_targets >= 0)    { sub.push_back("c" + act.card_name + "=" + std::to_string(act.crackle_targets)); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }
