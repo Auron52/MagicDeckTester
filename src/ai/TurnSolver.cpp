@@ -51,6 +51,14 @@ static thread_local bool g_trace_arm = false;
 static const char* s_fd_leaf_depth_env = std::getenv("MTG_FD_LEAF_DEPTH");
 static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_leaf_depth_env) : 1;
 
+// Gates SPECULATIVE free safe-alt enumeration (a Remedy-flip Invigorate offered as a real burn) so
+// the SEARCH can assemble multi-payload lethal bursts the single-shot auto-fire cannot -- WITHOUT
+// the greedy path (Solve: the d0 decision AND every rollout leaf) casting it early and wasting its
+// pump/option value. Default TRUE (a real rollout-evaluated search node rejects a wasteful early
+// cast); Solve() flips it FALSE for its own enumeration so the greedy path keeps the tuned auto-fire
+// and stays byte-identical. thread_local so parallel rollouts don't race.
+static thread_local bool g_search_candidate_enum = true;
+
 // Move-ordering for the full-depth branch-and-bound (FSLineWin / FSLineTail). Each B&B loop
 // returns at the FIRST verified in-horizon win; trying the plans that statically look lethal
 // (then higher-value) first makes that win surface after fewer simulated plans, so WINNING
@@ -865,8 +873,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // A targeted alt-payload (Invigorate: "target creature") is uncastable with no legal
             // target (CR 601.2c) -- gate the emission on a target existing, but still `continue`
             // below so a Forest-controlled payload is never re-emitted as a hard-cast.
+            //
+            // SPECULATIVE search emission: under a live Tainted Remedy a safe alt payload is a free
+            // face-damage burn (opp gains N -> loses N), so a REAL search node (g_search_candidate_
+            // enum) offers it as a real cast -- letting the search STACK several (+ Aria escalation)
+            // into a lethal burst the single-shot auto-fire cannot assemble. Only emitted for the
+            // rollout-evaluated search, never the greedy Solve()/leaf (which keeps the auto-fire and
+            // would otherwise waste it early -- that is the tuned d0 behaviour). A committed plan
+            // that casts it removes it from hand so the auto-fire/redirect skip it (no double).
+            const bool spec_search_burn = g_search_candidate_enum
+                && !def.params.destroy_all_enchantments
+                && RemedyActive(state, state.active_player_index);
             if ((ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def)
-                 || DecisionUnpruned(UnprunedGate::AltPayload))
+                 || DecisionUnpruned(UnprunedGate::AltPayload) || spec_search_burn)
                 && AltPayloadTargetLegal(state, def))
             {
                 constexpr int DMG = 100;
@@ -1204,7 +1223,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     int prowess_attackers   = CountProwessAttackers(state);
     std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
 
+    // Greedy path (d0 decision + every rollout leaf): suppress the speculative safe-alt burn so
+    // Invigorate is left to the tuned auto-fire (a greedy pick would cast it early and waste it).
+    const bool saved_sce = g_search_candidate_enum;
+    g_search_candidate_enum = false;
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
+    g_search_candidate_enum = saved_sce;
     int n = static_cast<int>(ap.hand.size());
 
     // Hinata combo: does any candidate float ritual mana (Reality Spasm / Irencrag)? Each Action's

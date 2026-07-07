@@ -24,19 +24,24 @@
 >   viewer offers and casts it (verified: "Fiery Justice; Invigorate" drops opp 20→7 = 10+3).
 >   **Autonomous byte-identical** (the emission stays UNPRUNED-gated → goldfish still auto-fires it).
 >
->   **Autonomous enumeration was tested and REJECTED (clairvoyance).** Question raised: can the
->   SEARCH find an Invigorate-inclusive lethal? Making the safe payload an enumerated burn for
->   autonomous too (emit whenever a Remedy is live) measured: searched earlier=8 / later=1 /
->   **win→loss=0**, BUT greedy **d0 win→loss=6, later=106**. That split is the clairvoyance
->   signature: Invigorate on the OPPONENT's creature is NOT free — it grants that creature +4/+4, a
->   real downside the rollout only "safely" takes by foreseeing it won't be punished; the honest d0
->   gets punished. So the 8 searched-earlier are speculative early-casts, not lethals the search was
->   missing. **Genuine** Invigorate lethals ARE already found: the safe-alt auto-fire runs post-cast
->   inside `apply_plan_actions` with a re-scan loop, so any plan whose spells/attacks bring the
->   opponent within `alt_lifegain_cost + ReadyAttackPower` triggers it (finisher chaining), and with
->   an own attacker it fires pre-combat to pump the attacker for a lethal swing. The pre-removal
->   ordering case (Invigorate before a same-turn removal of its only target) is covered for Swords by
->   the pump-then-Swords redirect. So the current auto-fire is correct; no autonomous change adopted.
+>   **Autonomous: the SEARCH now enumerates Invigorate as a burn (gated to real-search nodes).**
+>   The auto-fire only ever fires ONE Invigorate as a solo closer (`opp <= alt_lifegain_cost +
+>   ReadyAttackPower`), so the search could not assemble a MULTI-payload lethal burst — e.g.
+>   `Aria of Flame + Invigorate + Invigorate` (each -3 via Remedy, plus Aria's escalating verse
+>   damage) → opp 0 a full turn sooner than the auto-fire's single-Invigorate finish. Those are
+>   REAL faster lethals the search was missing (my first read of this as "clairvoyance" was WRONG).
+>
+>   Fix: under a live Remedy, emit the safe alt payload as a real cast (`direct_damage = N`) so it
+>   enters the powerset/reach model. But a naive always-emit regressed greedy **d0 win→loss=6**: the
+>   greedy casts the free Invigorate EARLY for -3 and wastes its pump/option value (the auto-fire
+>   correctly reserves it for the lethal turn); d0 has no rollout to see the waste. So the emission
+>   is gated on `g_search_candidate_enum` — a thread_local that is TRUE by default (any real
+>   rollout-evaluated search node, which rejects a wasteful early cast) and flipped FALSE inside
+>   `Solve()` (the d0 decision AND every rollout greedy leaf, which keep the tuned auto-fire).
+>   Result (full regression): searched **earlier=21, later=1 (churn), win→loss=0**, avg win turn
+>   improved on every antilife searched case; **d0 and all non-antilife byte-identical**. The
+>   auto-fire is retained (not suppressed) for the greedy path and the pump-then-Swords redirect.
+>   Antilife searched GT rebaselined.
 
 Self-contained record (2026-07-06). Two burn/anti-lifegain lines a human can legally play in the
 viewer but the **search never enumerates**, so the play viewer shows them as a `legal_not_enumerated`
