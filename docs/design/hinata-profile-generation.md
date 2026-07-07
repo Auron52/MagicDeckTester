@@ -75,6 +75,25 @@ Per-chunk cap `<cap>`: size so ONE chunk finishes in a few hours (checkpoint-bou
 Prefer several independent chunks (distinct seeds) over one huge chunk — more resumable, and each is an
 independent poolable unit. Effective R accrues as chunks pool.
 
+**Prune junk hands after the first pool (big floor-pass saver).** Most size-7 Hinata hands are confident
+mulligans; re-sampling them every chunk is the dominant floor cost. After the first 1–2 chunks pool,
+emit a prune-set and feed it to every later chunk so they skip those cells and spend the whole budget on
+the near-threshold hands. This is exactly policy-preserving for the frozen cells (see
+`docs/design/exhaustive-profile-workflow-deferred.md` §2 — a confident-mull size-7 cell contributes
+`min(V,Dopt[1])=Dopt[1]` regardless, so its keep flag and Dopt are unchanged):
+```bash
+# after pooling chunks 1..k into hinata_pooled.raw.json:
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="chunk_1.raw.json,...,chunk_k.raw.json" \
+  MTG_KEEP_PRUNE_EMIT=logs/hinata_chunks/pruneset.json MTG_KEEP_PRUNE_EPS=0.005 \
+  MTG_MERGE_OUT_RAW=logs/hinata_pooled.raw.json \
+  ./build/Release/mtg-analyze decks/Hinata2.cod --cards-json src/cards/data/cards.json
+# then every later chunk adds MTG_KEEP_PRUNE_SET=logs/hinata_chunks/pruneset.json to the generate line.
+```
+The prune-set carries the deck/bucket/equiv fingerprints and is refused on any mismatch. Re-emit it as
+the pool deepens (a slightly-higher-R pool freezes a few more cells). Pruned chunks pool normally — the
+frozen cells' counts come from the earlier chunks. Only the exactly-lossless confident-MULL freeze ships
+today; confident-KEEP / sub-cell freezing is a documented follow-up (more R-hungry, not exactly lossless).
+
 ```bash
 HASH=<frozen>; i=1                # chunk index; seed_base = SECONDARY prefix + i
 MTG_KEEP_EXHAUSTIVE=1 \
@@ -120,14 +139,25 @@ Then synthesize lower-R profiles from the pool and A/B them to find where the wi
 (`test/keepmodel_synth_raw.py <R> <seed> hinata_pooled.raw.json /tmp/hinata_R<k>.raw.json` — sumsq now
 travels with the pooled raw, so no separate single-run sidecar is needed; then `MTG_KEEP_MERGE` that into
 a profile and A/B `KM_MODE=keep` vs static). Stop generating once the knee is reached (antilife/burn
-R-sweeps give the prior: keep plateaus ~R40; R30 already ~95%). This prevents paying for R the policy
-can't use — the whole reason to determine R empirically rather than defaulting to R=100.
+R-sweeps give the prior: **keep plateaus ~R40; R30 ≈ 95%, R20 ≈ ~90%** of the R→∞ gain). This prevents
+paying for R the policy can't use — the whole reason to determine R empirically rather than defaulting to
+R=100. **With junk-hand pruning on**, the effective R budget concentrates on the near-threshold cells, so
+the live cells reach ~R40 while the total cost stays near an R20–30 run — i.e. Hinata can get essentially
+full keep quality for the price its performance allows. Practical target: **R30 keep** (bottoming decided
+separately on the confounded gate).
 
 ## Validate + adopt (after the pooled R target)
 
 - Keep A/B: `KM_DECK=decks/Hinata2.cod KM_MODE=keep bash test/keepmodel_exhaustive_ab.sh` (vs static).
-- Bottoming: `KM_MODE=bottom` **with `MTG_CONFOUND_BOTTOM=1`** (confounded gate) — adopt blind bottoming
-  only if it ties/beats lookahead once the peek is removed.
+- Bottoming: `KM_MODE=bottom` **with `MTG_CONFOUND_BOTTOM=1`** (confounded gate) — this is the FAIR test.
+  `--lookahead-bottoming` picks what to bottom by peeking at the library (clairvoyance you do NOT have in
+  a real game); the confounded arm reshuffles after the bottom decision to remove that peek, so it
+  measures the table against the *real* blind alternative. **Expect the table to win here, even at
+  R20–30** — a noisy low-R argmin still beats a blind heuristic until R nears 1. (The earlier "low-R
+  bottoming loses" was measured against the clairvoyant lookahead, an unavailable baseline; it does NOT
+  imply the table's bottoming is bad in play. Antilife adopted blind bottoming on exactly this confounded
+  gate, −0.1123t.) So the likely outcome is **bottoming ON** even at the lower R Hinata forces; only ship
+  it OFF if the confounded A/B fails to beat blind.
 - Install `.gz` at `decks/Hinata2.keepmodel.exhaustive.profile.json.gz`, suite re-baseline (per-game
   audit — expect combo-hand win-turn shifts), commit profile + GT together. Same flow as the antilife
   adoption (commit a43f965).
