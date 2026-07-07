@@ -254,16 +254,6 @@ using TargetChooser = std::function<std::vector<ChosenTarget>(
     int max_targets, int per_target_damage, const std::vector<ChosenTarget>& heuristic_default)>;
 extern thread_local TargetChooser* g_play_target_chooser;
 
-// ---- Viewer line-check enumeration flag -------------------------------------------------
-// TRUE only while TurnSolver::CheckLine is enumerating plans to validate a human-assembled line
-// (--validate-line, the tools/play GUI). It makes CollectActions offer the FULL declared-target
-// range for Crackle with Power (every count 0..cap) instead of the single autonomous heuristic
-// count, so the GUI can present a count picker. It is NOT set in the autonomous batch (GT-stable)
-// nor during the search's own rollouts -- only around the top-level CheckLine enumeration. Distinct
-// from g_play_target_chooser, which is nulled during CheckLine's internal enumeration (clairvoyance
-// guard) and so cannot serve as the viewer signal here.
-extern thread_local bool g_viewer_enum;
-
 // ---- Human-play Karoo bounce-land chooser (which land to return to hand) ----------------
 // A Karoo bounce land (Izzet Boilerworks) ETB returns one of the controller's lands to hand.
 // Autonomously BounceKarooLand picks deterministically; under --claude-play the human picks off

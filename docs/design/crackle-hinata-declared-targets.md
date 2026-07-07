@@ -110,24 +110,36 @@ in place (lethal→faithful max, non-lethal→legacy `-1` no-kill) stays.
 
 ## STAGE B DONE (2026-07-07, commit 21555b0) — viewer count picker
 
-The play viewer now casts Crackle with a chosen target COUNT (the "can't target the
-opponent's creatures" gap). Mechanism: a new `g_viewer_enum` thread_local, set ONLY around
-`CheckLine`'s `EnumerateMainPlans`, makes Crackle enumerate every count 0..cap (vs the single
-autonomous heuristic count); `g_play_target_chooser` couldn't be the signal because the
-clairvoyance guard nulls it during CheckLine's own enumeration. CheckLine emits a `crackle`
-sub (mirrors Soulfire); the GUI's generic picker renders it (index.html KIND: crackle after x).
-Autonomous byte-identical (608/6.78289, 146/5.56164). Verified end-to-end via `--validate-line`
-at a live Hinata+Crackle state (opp with 5 Spirit Tokens): verdict "choose" carries crackle-count
-variants; picking +1 targets an opponent creature (faithful CrackleExtraTargetOrder, opp-first).
+The play viewer casts Crackle with a chosen target COUNT (the "can't target the opponent's
+creatures" gap) AND lets the human board-click which specific permanents the extra targets
+hit. Mechanism: the count range and the board-click resolution are both gated on
+`HumanPlayActive()` (initially a dedicated `g_viewer_enum` thread_local, since removed) —
+true across the plan MENU, `CheckLine`, and the apply re-run, so the count variants have
+consistent plan indices between validate and apply, and false in the search rollout / batch
+(single autonomous count, byte-identical). CheckLine emits a `crackle` sub (mirrors Soulfire);
+the GUI's generic picker renders it (index.html KIND: crackle after x). At resolution,
+`ApplyPlanDirect` routes the extra targets through `g_play_target_chooser` when it is set
+(human play), defaulting to `CrackleExtraTargetOrder`'s opp-first ordering; the chooser is
+null in the rollout so the batch falls to `CrackleHitExtraTargets` unchanged.
 
-**DEFERRED viewer-parity refinements (not blocking; the model is now correct):**
-1. **Full unpruned count range.** `EnumerateMainPlans` affordability-prunes counts that over-pay
-   the discount, so the picker may not offer counts that kill an EXTRA creature beyond what mana
-   needs. A complete 0..cap picker needs an unpruned viewer enumeration (or emitting the count
-   variants pre-prune for Crackle when `g_viewer_enum`).
-2. **Per-target board-click.** Which SPECIFIC creature each extra target hits is still
-   auto-ordered (opponent creatures first), not a board click. Fine for identical tokens; matters
-   when the opponent has distinct creatures. Would reuse `g_play_target_chooser` at resolution.
+**DEFERRED refinements #1 + #2 are now DONE:**
+1. **Full unpruned count range — DONE (167b670).** `plan_signature` now includes
+   `crackle_targets`, so distinct counts survive dedup as distinct variants instead of
+   collapsing to the first-enumerated.
+2. **Per-target board-click — DONE, proven exactly correct.** The human clicks WHICH specific
+   permanent each extra target hits (via `g_play_target_chooser` at resolution), not just a
+   count. Verified by identity routing on seed 2 / game 1 (X=2, 5X=10): clicking own 4/4
+   Hinata kills Hinata and spares all 8 opponent tokens (opp 20→10, no combat); clicking a
+   token kills exactly that token and spares Hinata (opp 20→6). Face always takes exactly 5X;
+   each extra takes exactly 5X; SBA moves the dead creature to its owner's graveyard; the
+   option set is exactly `CrackleExtraTargetOrder` (opp creatures, own non-Hinata, self-when-
+   safe, Hinata last). Autonomous byte-identical (608/6.78289 d0, digests match GT).
+
+**Still deferred:** the combined main-1 `Reality Spasm + Crackle` plan over-generates at
+enumeration (RS ritual mana credited but not realizable at apply → Crackle silently dropped).
+A speculative artifact the human path never reaches; parked in
+`docs/design/crackle-reality-spasm-overgeneration.md` alongside the autonomous RS→Crackle
+combo, since both stem from Reality Spasm's floated-mana abstraction.
 3. Label which targets a given count hits (incl. self-when-safe) in the picker.
 
 ## BUNDLE + FULL VALIDATION (2026-07-07) — 3 stacked Hinata changes, ready to accept

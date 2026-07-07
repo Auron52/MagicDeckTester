@@ -853,14 +853,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 {
                     const int per_tgt = x * mult;
                     const int cap = std::max(0, std::min(x - 1, CrackleExtraTargetCount(state, active_ci, per_tgt)));
-                    if (g_viewer_enum)
+                    if (HumanPlayActive())
                     {
-                        // VIEWER (human line check): offer EVERY declared count 0..cap so the player
-                        // picks how many extra targets (the discount derives from it, min(X,1+count)) --
-                        // Stage B's count picker (CheckLine emits a `crackle` sub). Set ONLY around the
-                        // CheckLine enumeration, so the autonomous batch (and the search's own rollouts,
-                        // where g_play_target_chooser is nulled) keep the single heuristic count below --
-                        // byte-identical, GT-stable.
+                        // HUMAN PLAY: offer EVERY declared count 0..cap so the player picks how many
+                        // extra targets (the discount derives from it, min(X,1+count)) -- Stage B's count
+                        // picker (CheckLine emits a `crackle` sub). HumanPlayActive() is true across ALL
+                        // human-play enumerations (the plan MENU, CheckLine, and the apply re-run), so the
+                        // count variants have consistent plan indices between validate and apply. It is
+                        // FALSE in the clairvoyant rollout (HumanPlaySuppress -> single count, fast) and in
+                        // the autonomous batch (byte-identical, GT-stable). Same signal the plan_signature
+                        // dedup keys on, so distinct counts survive as distinct variants.
                         cnt_lo = 0; cnt_hi = cap;
                     }
                     else
@@ -2625,9 +2627,47 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (dmg > 0)
                     {
+                        const int ci = state.active_player_index;
                         state.players[opp_idx].life -= dmg;              // face = 5X (the win)
                         state.opponent_lost_life_this_turn = true;
-                        CrackleHitExtraTargets(state, state.active_player_index, dmg, crackle_targets);
+                        if (g_play_target_chooser && crackle_targets > 0)
+                        {
+                            // Human board-click (Stage B #2): pick WHICH `crackle_targets` extras take
+                            // 5X. Default = CrackleExtraTargetOrder's first N (opp-first). Chooser is
+                            // nulled in the search rollout, so that path falls to CrackleHitExtraTargets
+                            // below -- byte-identical autonomous resolution (count fixed the discount).
+                            std::vector<int> order = CrackleExtraTargetOrder(state, ci, dmg);
+                            std::vector<ChosenTarget> heur;
+                            for (int n = 0; n < crackle_targets && n < static_cast<int>(order.size()); ++n)
+                            {
+                                int bi = order[n];
+                                heur.push_back(bi < 0 ? ChosenTarget{ 0, ci, 0 } : ChosenTarget{ 1, bi, 0 });
+                            }
+                            std::vector<ChosenTarget> picked =
+                                (*g_play_target_chooser)(state, def, ci, crackle_targets, dmg, heur);
+                            if (picked.empty()) { picked = heur; }
+                            std::vector<int> dead;
+                            for (const ChosenTarget& c : picked)
+                            {
+                                if (c.kind == 0) { state.players[c.index].life -= dmg; }
+                                else if (c.index >= 0 && c.index < static_cast<int>(state.battlefield.size()))
+                                {
+                                    Permanent& p = state.battlefield[c.index];
+                                    p.damage += dmg;
+                                    if (p.damage >= p.EffectiveToughness()) { dead.push_back(c.index); }
+                                }
+                            }
+                            std::sort(dead.begin(), dead.end(), std::greater<int>());   // erase high-first
+                            for (int bi : dead)
+                            {
+                                state.players[state.battlefield[bi].owner_index].graveyard.push_back(state.battlefield[bi].card);
+                                state.battlefield.erase(state.battlefield.begin() + bi);
+                            }
+                        }
+                        else
+                        {
+                            CrackleHitExtraTargets(state, ci, dmg, crackle_targets);
+                        }
                     }
                 }
                 else if (g_play_target_chooser && dmg > 0 && !def.params.damage_equals_top_mv)
@@ -4588,8 +4628,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (act.soulfire_own_targets > 0){ sub.push_back("f" + act.card_name + "=" + std::to_string(act.soulfire_own_targets)); }
                 // Crackle declared extra-target COUNT: distinct counts are distinct human choices
                 // (each kills one more creature for one more {1} discount), so keep them as separate
-                // variants instead of collapsing to the first-enumerated. >= 0 only in viewer mode
-                // (g_viewer_enum); the autonomous single count never reaches this human-play branch.
+                // variants instead of collapsing to the first-enumerated. >= 0 only under
+                // HumanPlayActive() (the count range); the autonomous single count leaves it at -1
+                // and so never reaches this human-play branch.
                 if (act.crackle_targets >= 0)    { sub.push_back("c" + act.card_name + "=" + std::to_string(act.crackle_targets)); }
             }
             std::sort(sub.begin(), sub.end());
@@ -6261,12 +6302,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // Soulfire count) -- in human-play mode (MTG_UNPRUNED) the search enumerates them all, so we
     // surface the distinct ones for the human to pick among. Pure cast-ORDER duplicates (same
     // sub-decisions, different order) collapse to one representative by their param signature.
-    //
-    // g_viewer_enum: CheckLine is only ever called to validate a HUMAN line, so flag the enumeration
-    // as viewer-side -- Crackle then offers every declared target count 0..cap (a count picker)
-    // instead of the single autonomous heuristic count. RAII-restored so it never leaks past here.
-    struct ViewerEnumScope { bool prev; ViewerEnumScope() : prev(g_viewer_enum) { g_viewer_enum = true; }
-                             ~ViewerEnumScope() { g_viewer_enum = prev; } } _viewer_enum_scope;
+    // (Crackle's full target-count range is gated on HumanPlayActive() in CollectActions, which is
+    // true here AND in the apply re-run, so the count variants' plan indices stay consistent.)
     std::vector<Plan> plans = EnumerateMainPlans(state, is_pre_combat);
 
     // Collect every plan matching land + cast-name MULTISET, recording each plan's cast order and

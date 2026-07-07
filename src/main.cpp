@@ -695,8 +695,12 @@ static void CollectCreatureTargets(const GameState& s, int controller,
 // Enumerate legal target-set options for a uniform-damage spell: every nonempty subset of the
 // legal targets with 1..max_targets members. Bounded (capped) so a big board can't explode the menu.
 static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTarget>& legal,
-                                                     const std::vector<std::string>& labels, int max_targets)
+                                                     const std::vector<std::string>& labels, int max_targets,
+                                                     bool exact = false)
 {
+    // exact = the human must pick EXACTLY `max_targets` targets (Crackle: the declared count is fixed
+    // at cast because it drives the Hinata discount, so a smaller set would over-count the discount).
+    // Default (false) offers every subset of size 1..cap (a plain "up to N targets" burn).
     std::vector<TargetOption> opts;
     const int n = static_cast<int>(legal.size());
     const int cap = std::max(1, std::min(max_targets, n));
@@ -704,6 +708,7 @@ static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTar
     {
         int bits = __builtin_popcount(static_cast<unsigned>(mask));
         if (bits > cap) { continue; }
+        if (exact && bits != cap) { continue; }
         TargetOption o; std::string lbl;
         for (int i = 0; i < n; ++i)
         {
@@ -1346,8 +1351,21 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 && (def.params.targeting == Targeting::Creature || def.params.targeting == Targeting::Multi)
                 && !def.params.damage_divided;
             const bool players_only = (def.params.targeting == Targeting::Player);
+            // Crackle with Power extra targets: the opponent FACE is auto (always 5X); the human picks
+            // WHICH of the declared `max_targets` EXTRA targets (creatures + self-if-safe) take 5X. The
+            // legal set + order come from CrackleExtraTargetOrder (opponent creatures, own non-Hinata,
+            // self-if-safe, Hinata last) -- so the default is opp-first and the human can retarget.
+            const bool crackle = IsCrackleCountSpell(def.params);
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (own_pump)            { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
+            if (crackle)
+            {
+                for (int bi : CrackleExtraTargetOrder(s, controller, per_target_damage))
+                {
+                    if (bi < 0) { legal.push_back({ 0, controller, 0 }); legal_labels.push_back("You (self)"); }
+                    else        { legal.push_back({ 1, bi, 0 });         legal_labels.push_back(s.battlefield[bi].card.m_name.str()); }
+                }
+            }
+            else if (own_pump)       { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
             else if (exile_removal)  { CollectOpponentCreatureTargets(s, controller, legal, legal_labels); }
             else if (creature_burn)  { CollectCreatureTargets(s, controller, legal, legal_labels); }
             else                     { CollectDamageTargets(s, controller, players_only, legal, legal_labels); }
@@ -1394,7 +1412,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 std::exit(70);
             }
 
-            std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets);
+            std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets, /*exact=*/crackle);
             if (opts.empty()) { return heuristic; }
             const int per_target = per_target_damage;   // actual engine damage per target (not recomputed)
             // Default index = the option whose target set matches the heuristic pick.
