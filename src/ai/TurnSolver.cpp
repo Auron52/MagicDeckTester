@@ -853,7 +853,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 {
                     const int per_tgt = x * mult;
                     const int cap = std::max(0, std::min(x - 1, CrackleExtraTargetCount(state, active_ci, per_tgt)));
-                    cnt_lo = cnt_hi = (per_tgt >= opp_life) ? cap : -1;   // lethal -> faithful max; else legacy
+                    if (g_viewer_enum)
+                    {
+                        // VIEWER (human line check): offer EVERY declared count 0..cap so the player
+                        // picks how many extra targets (the discount derives from it, min(X,1+count)) --
+                        // Stage B's count picker (CheckLine emits a `crackle` sub). Set ONLY around the
+                        // CheckLine enumeration, so the autonomous batch (and the search's own rollouts,
+                        // where g_play_target_chooser is nulled) keep the single heuristic count below --
+                        // byte-identical, GT-stable.
+                        cnt_lo = 0; cnt_hi = cap;
+                    }
+                    else
+                    {
+                        cnt_lo = cnt_hi = (per_tgt >= opp_life) ? cap : -1;   // lethal -> faithful max; else legacy
+                    }
                 }
                 for (int count = cnt_lo; count <= cnt_hi; ++count)
                 {
@@ -6243,6 +6256,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // Soulfire count) -- in human-play mode (MTG_UNPRUNED) the search enumerates them all, so we
     // surface the distinct ones for the human to pick among. Pure cast-ORDER duplicates (same
     // sub-decisions, different order) collapse to one representative by their param signature.
+    //
+    // g_viewer_enum: CheckLine is only ever called to validate a HUMAN line, so flag the enumeration
+    // as viewer-side -- Crackle then offers every declared target count 0..cap (a count picker)
+    // instead of the single autonomous heuristic count. RAII-restored so it never leaks past here.
+    struct ViewerEnumScope { bool prev; ViewerEnumScope() : prev(g_viewer_enum) { g_viewer_enum = true; }
+                             ~ViewerEnumScope() { g_viewer_enum = prev; } } _viewer_enum_scope;
     std::vector<Plan> plans = EnumerateMainPlans(state, is_pre_combat);
 
     // Collect every plan matching land + cast-name MULTISET, recording each plan's cast order and
@@ -6319,6 +6338,16 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     addSub(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own",
                            a.card_name + " own targets", "+" + std::to_string(a.soulfire_own_targets),
                            a.card_name, "soulfire");
+                }
+                // Crackle with Power extra-target COUNT: the declared number of targets BEYOND the
+                // opponent face (each is {1} off via Hinata and takes 5X). Emit for every count >= 0
+                // (the viewer enumerates 0..cap) so the GUI shows a per-count picker; -1 is the
+                // autonomous legacy sentinel and carries no sub. Mirrors the Soulfire own-count sub.
+                if (adef && IsCrackleCountSpell(adef->params) && a.crackle_targets >= 0)
+                {
+                    addSub(a.card_name + " +" + std::to_string(a.crackle_targets) + " tgt",
+                           a.card_name + " extra targets", "+" + std::to_string(a.crackle_targets),
+                           a.card_name, "crackle");
                 }
             }
         }

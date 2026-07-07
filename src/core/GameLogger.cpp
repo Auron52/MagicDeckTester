@@ -8,6 +8,7 @@ using json = nlohmann::json;
 thread_local GameLogger*   g_reveal_logger = nullptr;
 thread_local TopChooser*    g_play_top_chooser = nullptr;
 thread_local TargetChooser* g_play_target_chooser = nullptr;
+thread_local bool           g_viewer_enum = false;
 thread_local BounceChooser*  g_play_bounce_chooser = nullptr;
 thread_local BounceChooser*  g_play_sacrifice_chooser = nullptr;
 thread_local DigChooser*     g_play_dig_chooser    = nullptr;
