@@ -310,6 +310,11 @@ int main(int argc, char* argv[])
                 const std::string stem = (deck_path.parent_path() / deck_path.stem().string()).string();
                 cfg.out_profile = stem + ".keepmodel.exhaustive.profile.json";
                 cfg.out_raw     = stem + ".keepmodel.exhaustive.raw.json";
+                // Override output paths (mirrors the merge path's MTG_MERGE_OUT_*): lets chunked R-sweep
+                // generation write each chunk's raw straight to its own path, skipping the (unneeded)
+                // per-chunk profile via MTG_KEEP_OUT_PROFILE=/dev/null-style empty.
+                if (const char* p = std::getenv("MTG_KEEP_OUT_PROFILE")) { cfg.out_profile = p; }
+                if (const char* r = std::getenv("MTG_KEEP_OUT_RAW"))     { cfg.out_raw     = r; }
             }
             RunExhaustiveKeep(std::cout, deck, profile, cfg);
             return 0;

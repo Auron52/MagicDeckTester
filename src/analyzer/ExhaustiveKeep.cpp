@@ -1022,8 +1022,11 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     using json = nlohmann::json;
     if (raw_paths.empty()) { os << "merge: no raw sidecars given (set MTG_MERGE_INPUTS)\n"; return; }
 
-    struct Acc { double sum[2] = { 0, 0 }; long long cnt[2] = { 0, 0 }; };
-    std::map<int, std::map<std::vector<int>, Acc>> pooled;   // H -> comp -> summed sum/count
+    struct Acc { double sum[2] = { 0, 0 }; double sumsq[2] = { 0, 0 }; long long cnt[2] = { 0, 0 }; };
+    std::map<int, std::map<std::vector<int>, Acc>> pooled;   // H -> comp -> summed sum/sumsq/count
+    bool have_sumsq = true;   // pooled sumsq is emitted only if EVERY input carried it (else per-cell
+                              // variance is incomplete); a direct generation sidecar has it, an older
+                              // merged sidecar may not. Enables synthetic R-sweeps / resume from a pool.
     std::vector<std::vector<std::string>> buckets;
     std::string commit;                                     // advisory once play_digest is present
     std::string play_digest;                                // the pooling identity (rollout-config play)
@@ -1104,6 +1107,9 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                 Acc& a = pooled[H][comp];
                 a.sum[0] += e["sum"][0].get<double>();     a.sum[1] += e["sum"][1].get<double>();
                 a.cnt[0] += e["count"][0].get<long long>(); a.cnt[1] += e["count"][1].get<long long>();
+                if (e.contains("sumsq"))
+                { a.sumsq[0] += e["sumsq"][0].get<double>(); a.sumsq[1] += e["sumsq"][1].get<double>(); }
+                else { have_sumsq = false; }
             }
         }
         os << "  + " << path << "  (seed_base " << file_bases.front()
@@ -1214,6 +1220,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                 je["comp"]  = t.comps[i];
                 je["sum"]   = { a.sum[0], a.sum[1] };
                 je["count"] = { a.cnt[0], a.cnt[1] };
+                if (have_sumsq) { je["sumsq"] = { a.sumsq[0], a.sumsq[1] }; }
                 entries.push_back(je);
             }
             sizes.push_back({ { "H", H }, { "entries", entries } });
