@@ -6134,7 +6134,31 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     }
 
     const std::string wantLand = spec.has_land ? spec.land : std::string();
-    std::vector<std::string> sortedCasts = spec.casts;
+
+    // An own-creature-pump safe alt-payload (Invigorate) with NO own attacker is never enumerated
+    // as a plan action (the own-attacker gate in CollectActions skips it before the alt emission),
+    // so it appears in NO plan's cast multiset -- it is instead auto-fired as a lethal closer (or,
+    // under UNPRUNED, dropped). When the human lists such a cast explicitly (the Tainted-Remedy
+    // lifegain-flip combo "Fiery Justice; Invigorate; Swords"), drop it from the line used for
+    // PLAN-MATCHING so the line matches the enumerated "Fiery Justice; Swords" -- committing which
+    // reaches the same win turn (the combo line is lethal without the moot pump). This is a
+    // MATCH-ONLY transform: enumeration is untouched, so every saved replay's plan indices are
+    // unchanged. Only the L704-blocked case is stripped; when the payload IS enumerable (an own
+    // attacker exists) it is a real action and must match directly (not stripped).
+    auto is_autofired_safe_alt = [&](const std::string& nm) -> bool {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (!d || d->params.alt_lifegain_cost <= 0 || d->params.destroy_all_enchantments) { return false; }
+        return d->params.targeting == Targeting::Creature && d->params.target_own_creature
+            && FindBestOwnAttacker(state, state.active_player_index) < 0;
+    };
+    std::vector<std::string> matchCasts;               // spec.casts minus auto-fired safe alt payloads
+    std::vector<std::string> strippedAltPayloads;      // the dropped payload names (for the summary)
+    for (const std::string& nm : spec.casts)
+    {
+        if (is_autofired_safe_alt(nm)) { strippedAltPayloads.push_back(nm); }
+        else                          { matchCasts.push_back(nm); }
+    }
+    std::vector<std::string> sortedCasts = matchCasts;
     std::sort(sortedCasts.begin(), sortedCasts.end());
     std::vector<std::string> sortedVial = spec.vial_deploys;
     std::sort(sortedVial.begin(), sortedVial.end());
@@ -6230,7 +6254,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // (the only enumerated plan is an end-state-equivalent ordering), fall back to all candidates
     // -- the result is identical, only the displayed order may differ.
     std::vector<const Cand*> pool;
-    for (const Cand& c : cands) { if (c.order == spec.casts) { pool.push_back(&c); } }
+    for (const Cand& c : cands) { if (c.order == matchCasts) { pool.push_back(&c); } }
     if (pool.empty()) { for (const Cand& c : cands) { pool.push_back(&c); } }
 
     std::vector<std::string> seenSig;
@@ -6240,16 +6264,24 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         seenSig.push_back(c->sig);
         out.variants.push_back({ c->idx, c->label, c->cards, c->subs });
     }
+    // Note any auto-fired safe alt-payload folded out of the match, so the viewer/user sees it was
+    // not dropped silently (it auto-fires as a lethal closer, or is a moot pile-on the enumerated
+    // line already wins without).
+    std::string altNote;
+    for (const std::string& nm : strippedAltPayloads)
+    { altNote += (altNote.empty() ? " (" : ", ") + nm; }
+    if (!altNote.empty()) { altNote += " auto-fires / folded in)"; }
+
     if (out.variants.size() == 1)
     {
         out.verdict = V::Accept; out.plan_index = out.variants[0].plan_index;
-        out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index]);
+        out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index]) + altNote;
         return out;
     }
     if (out.variants.size() > 1)
     {
         out.verdict = V::Choose;
-        out.reason = "this line resolves several ways -- pick the sub-decisions";
+        out.reason = "this line resolves several ways -- pick the sub-decisions" + altNote;
         return out;
     }
 
