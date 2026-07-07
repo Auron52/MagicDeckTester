@@ -5,9 +5,35 @@ blocks the Hinata freeze. Recorded here (not private notes) per the repo's defer
 
 ---
 
-## 1. Decouple "profile under test" from "profile that drives GT / rollouts" (auto-attach churn)
+## 1. Decouple "profile under test" from "profile that drives GT / rollouts" (auto-attach churn)  — DONE 2026-07-07
 
-**Problem.** The exhaustive profile is **auto-attached by presence**: `AttachExhaustiveSidecar` layers
+**Resolution.** Added a per-context override `MTG_EXHAUSTIVE_PROFILE` inside `AttachExhaustiveSidecar`
+(`src/ai/MulliganProfileIO.h`) — one place, so all three call sites (both play paths + BatchRunner)
+inherit it:
+- `MTG_EXHAUSTIVE_PROFILE=none|off|0|""` → attach NOTHING (a genuine static baseline arm).
+- `MTG_EXHAUSTIVE_PROFILE=<path>` → attach THAT profile's exhaustive block (candidate under test),
+  without placing a `.gz` next to the deck.
+- unset → the presence-gated auto-attach below (the committed/adopted sidecar; runtime + suite GT).
+
+The env is only consulted when the loaded profile has no exhaustive block yet — a profile loaded via
+`--profile <exhaustive>` keeps its own block (early return before the env check), so `none` is a safe
+no-op there. Both A/B harnesses now set `MTG_EXHAUSTIVE_PROFILE=none` on the run (`ab()` in
+`keepmodel_exhaustive_ab.sh`; the static-baseline arm in `keepmodel_r_sweep.sh`), retiring the old
+mv/scratch-path dance. Verified on burn: unset==explicit-path (attach reproduced), none==empty (static),
+unset≠none (attach matters), and none is a no-op when the profile carries the block.
+
+**Open question — RESOLVED (generation is already invariant to adoption).** Generation loads
+`<deck>.profile.json` (the *static* profile) at `src/analyzer/main.cpp:271-274` and never calls
+`AttachExhaustiveSidecar` (it's play-only, by design — comment at `MulliganProfileIO.h:575`). So an
+adopted `.gz` at `decks/` does NOT perturb generation rollouts / `play_digest`, and **chunk pooling
+survives adoption**. The "invalidates chunking" concern was purely the play-side GT churn + A/B
+contamination, both of which the override addresses. No change to generation was needed.
+
+**Workflow going forward.** Test candidate profiles via `MTG_EXHAUSTIVE_PROFILE=<candidate-path>` (never
+place a candidate `.gz` at `decks/`); the committed profile and its GT only move when you deliberately
+adopt (install the `.gz` at `decks/` + re-baseline once).
+
+**Problem (original).** The exhaustive profile is **auto-attached by presence**: `AttachExhaustiveSidecar` layers
 `decks/<deck>.keepmodel.exhaustive.profile.json[.gz]` onto *any* run of that deck. That one mechanism
 couples things that should be independent:
 - **A/B baseline contamination** — a static-vs-exhaustive A/B run from `decks/` attaches the exhaustive

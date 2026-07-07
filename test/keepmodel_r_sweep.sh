@@ -58,8 +58,12 @@ done
 staticdir=$OUT/wins_static; mkdir -p "$staticdir"
 if [ ! -f "$staticdir/.done" ]; then
   log "static baseline A/B $(stamp)"
+  # MTG_EXHAUSTIVE_PROFILE=none forces a GENUINE static arm: if this deck has an adopted
+  # `decks/<deck>.keepmodel.exhaustive.profile.json[.gz]`, presence-gated auto-attach would otherwise
+  # layer it onto the baseline too (both arms identical => false 0.0 delta). Replaces the old
+  # "mv the .gz out of decks/" workaround.
   for s in $AB_SEEDS; do
-    MTG_DUMP_WINS=1 MTG_EXHAUSTIVE_BOTTOM=0 "$BIN" "$DECK" --profile "$STATIC" --seed "$s" \
+    MTG_EXHAUSTIVE_PROFILE=none MTG_DUMP_WINS=1 MTG_EXHAUSTIVE_BOTTOM=0 "$BIN" "$DECK" --profile "$STATIC" --seed "$s" \
       --games "$AB_GAMES" --depth "$AB_DEPTH" --budget-ms "$AB_BUDGET" --max-turns 8 \
       --lookahead-bottoming --threads 0 >/dev/null 2>"$staticdir/err_s${s}.txt"
   done
