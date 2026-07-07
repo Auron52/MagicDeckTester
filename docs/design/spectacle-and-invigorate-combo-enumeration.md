@@ -1,5 +1,32 @@
 # Enumerating the Spectacle (Light Up the Stage) and Invigorate-combo lines
 
+> **STATUS: SHIPPED (2026-07-07).** Both lines are now committable. The fixes differ from the
+> original plan below (kept for the reasoning/history):
+>
+> - **#8 spectacle (commit `984cc99`):** the fix was NOT the "opaque apply reorder + re-add the
+>   reverted general credit" plan. The search already had a dedicated **spectacle trigger+draw
+>   path** in `EnumeratePlans` (a `{trigger, draw}` plan builder, trigger pushed FIRST so the
+>   opaque apply casts the burn before Light Up). Three changes made it enumerate the fixtures:
+>   (1) emit a plan per **distinct** affordable trigger (not just the cheapest) → Searing Blood as
+>   well as Lightning Bolt; (2) **fix a latent naming bug** — the trigger name was `ap.hand[cand_idx]`
+>   (a candidate index used as a hand index), which mislabeled/cast the wrong card (a Mountain)
+>   when the hand held lands, and was the reason "Searing Blood → Light Up" wasn't enumerated AND
+>   why some old plans cast a phantom land as the "trigger" (an illegal free Light Up); (3) allow a
+>   **sac-land** burn (Shard Volley) as a trigger and **hoist** it ahead of the opaque Spectacle
+>   spell in `ApplyPlanDirect` + the `AIEngine::TakeTurn` mirror. Burn-only; win counts identical,
+>   avg win turn net slightly better (earlier=12 vs later=8, the later mostly removing the
+>   phantom-trigger bug); burn GT rebaselined. All three fixtures → `accept`.
+> - **#2 Invigorate (commit `2df0cbe`):** solved **match-only** in `CheckLine`, NOT by enumeration
+>   (enumerating Invigorate as an action shifted plan indices at every antilife decision and broke
+>   saved replays). Invigorate is an own-creature-pump safe alt payload skipped before the alt
+>   emission when we have no own attacker, so it is in no plan's cast multiset. The matcher now
+>   folds such an L704-blocked payload out of the human's cast set, so "Fiery Justice; Invigorate;
+>   Swords" matches the enumerated "Fiery Justice; Swords" (same win turn; payload moot / auto-fires
+>   as a closer). Byte-identical everywhere (CheckLine is only the --validate-line path). Fixture →
+>   `choose`. **Known limitation:** if Invigorate were ever the *necessary* closer AND its only
+>   target is one a same-line Swords removes, the folded line would under-realise — not the case for
+>   any real fixture (the combo lines are lethal without the pump).
+
 Self-contained record (2026-07-06). Two burn/anti-lifegain lines a human can legally play in the
 viewer but the **search never enumerates**, so the play viewer shows them as a `legal_not_enumerated`
 rejection (not committable). The `--validate-line` check was already fixed to report them *accurately*
