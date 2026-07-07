@@ -369,6 +369,8 @@
 <div id="decback"></div>
 <div id="decpanel"></div>
 
+<!-- Shared, DOM-free line-building logic (also require()d by test/viewer_linebuild_check.js). -->
+<script src="/linebuild.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -391,43 +393,21 @@ async function post(path, body) {
 }
 
 // ---- plan helpers ----------------------------------------------------------
-function planLand() { return S.plan.find(p=>p.kind==='land') || null; }
-// Counts of REAL hand copies by name -- excludes staged (exiled-but-playable) cards, which are shown
-// and counted separately (else e.g. 1 hand Mountain + 2 staged Mountains would mis-pip the hand as x3).
-function handCounts() { const m={}; (S.decision.me.hand||[]).forEach(c=>{ if(!c.is_staged) m[c.name]=(m[c.name]||0)+1; }); return m; }
-// Counts of STAGED copies by name@expiry -- so duplicate staged cards collapse to one thumb with a x N pip.
-function stagedCounts() { const m={}; (S.decision.me.hand||[]).forEach(c=>{ if(c.is_staged){ const k=c.name+'@'+c.staged_until; m[k]=(m[k]||0)+1; } }); return m; }
-// 'le' entries are Land's Edge discards, not casts -- exclude them from the cast count.
-function plannedCount(name) { return S.plan.filter(p=>p.name===name && p.kind!=='land' && p.kind!=='le').length; }
-function leCount() { return S.plan.filter(p=>p.kind==='le').length; }
-// How many lands may still be discarded to Land's Edge: lands in hand minus the one taken by a
-// queued land drop, minus those already queued, capped at lethal (mirrors the engine's enum cap).
-function leMax() {
-  const le = S.decision && S.decision.lands_edge; if (!le) return 0;
-  const avail = (le.lands_in_hand||0) - (planLand()?1:0);
-  const lethal = le.rate>0 ? Math.ceil((S.decision.opponent.life||0)/le.rate) : 0;
-  return Math.max(0, Math.min(avail, lethal));
-}
-function encodeLine() {
-  const parts=[]; const l=planLand(); if(l) parts.push('land='+l.name);
-  for(const p of S.plan) if(p.kind!=='land' && p.kind!=='le' && p.kind!=='vial' && p.kind!=='retrace') parts.push('cast='+p.name);
-  for(const p of S.plan) if(p.kind==='vial')    parts.push('vial='+p.name);
-  for(const p of S.plan) if(p.kind==='retrace') parts.push('retrace='+p.name);
-  const n=leCount(); if(n>0) parts.push('landsedge='+n);
-  return parts.length ? parts.join(';') : 'pass';
-}
+// The pure line-building logic lives in linebuild.js (LineBuild), the ONE copy shared with the
+// frontend regression check (test/viewer_linebuild_check.js) so a saved reference's line can be
+// reconstructed headlessly. These wrappers just bind the browser's S state to it; keep them thin.
+const LB = window.LineBuild;
+function planLand()        { return LB.planLand(S.plan); }
+function handCounts()      { return LB.handCounts(S.decision); }
+function stagedCounts()    { return LB.stagedCounts(S.decision); }
+function plannedCount(name){ return LB.plannedCount(S.plan, name); }
+function leCount()         { return LB.leCount(S.plan); }
+function leMax()           { return LB.leMax(S.decision, S.plan); }
+function encodeLine()      { return LB.encodeLine(S.plan); }
 function queueCard(name, kind) {
-  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;  // UI guard (browser-only state)
   hideVerdict();
-  if (kind==='land') {
-    const cur=planLand();
-    if (cur && cur.name===name) S.plan = S.plan.filter(p=>p!==cur);   // toggle land off
-    else { S.plan = S.plan.filter(p=>p.kind!=='land'); S.plan.push({name,kind}); } // one land
-    // A queued land drop consumes a land that can no longer feed Land's Edge -> trim excess.
-    while (leCount() > leMax()) { const i=S.plan.map(p=>p.kind).lastIndexOf('le'); if(i<0) break; S.plan.splice(i,1); }
-  } else {
-    if (plannedCount(name) < (handCounts()[name]||0)) S.plan.push({name,kind});
-  }
+  S.plan = LB.queueCard(S.decision, S.plan, name, kind);
   renderBoard();
 }
 function removePlanAt(i) { S.plan.splice(i,1); renderBoard(); }

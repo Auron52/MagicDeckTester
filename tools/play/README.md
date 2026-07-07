@@ -115,6 +115,30 @@ the search enumerates every legal sub-decision rather than the heuristic-narrowe
 human is choosing from the full set. (Plan indices are stable because the mode always enumerates
 unpruned, keeping the `--choices` replay valid.)
 
+## Regression checks
+
+Two standalone checks replay the saved `references/<deck>/` games to guard the GUI across engine
+and UI edits — they use the real played lines as exercise cases, so real bugs surface as a
+reference that no longer reconstructs. Run both after touching the engine, the decision JSON, or
+`index.html`/`linebuild.js`:
+
+```bash
+python3 test/viewer_protocol_check.py     # engine↔protocol contract layer
+node    test/viewer_linebuild_check.js     # browser line-building layer
+```
+
+- **`viewer_protocol_check.py`** — feeds each reference's chosen plan **indices** into the binary
+  and asserts the engine emits well-formed decisions, the recorded index is a valid plan, and the
+  game reaches a clean terminal. Guards the `decide(deck,seed,gi,choices)→json` contract. Reports
+  behaviour drift (won/win_turn changed) as information; `--strict` also fails on play-drift.
+- **`viewer_linebuild_check.js`** — drives the **actual** GUI line-building code (`linebuild.js`,
+  the same module `index.html` loads) headlessly: for every main-phase decision the user played, it
+  rebuilds the chosen plan's land + hand casts via `LineBuild.queueCard()` and asserts the line
+  reconstructs. This catches viewer regressions the protocol check is blind to — e.g. a staged
+  (exiled-but-playable, Soulfire dig / Light Up the Stage) cast that `queueCard` silently drops:
+  the engine still enumerates it, so the contract check is green while the GUI can't build the line.
+  That is exactly why the line-building logic lives in the shared `linebuild.js` and not inline.
+
 ## Scope today, and what's next
 
 Per the agreed "start small, build toward the full game" plan, v1 covers what the existing

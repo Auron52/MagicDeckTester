@@ -234,6 +234,34 @@ if [ -f "$SCEN" ]; then
   fi
 fi
 
+# Viewer sanity gate: guard the play GUI (tools/play) by replaying the saved reference games,
+# in two deck-agnostic layers. A hard FAIL aborts before the (long) batch, like the scenario gate.
+#   * line-build (frontend)   -- viewer_linebuild_check.js drives the REAL browser queue logic
+#     (tools/play/linebuild.js): can the GUI still rebuild every line the user actually played?
+#     Sub-second, no binary -> run in ALL modes. Catches viewer-layer regressions the protocol
+#     check is blind to (e.g. a staged/exiled cast queueCard silently drops).
+#   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
+#     indices through the binary and asserts the decision-JSON contract holds (well-formed, valid
+#     index, clean terminal). It re-invokes the binary per step, so it is MULTI-MINUTE -> run only
+#     in the (default) regression mode: smoke stays a fast pre-push gate and overnight need not
+#     repeat it (the contract does not vary by seed set). The line-build check covers the viewer
+#     layer in the other modes. Run WITHOUT --strict: behaviour drift (won/win_turn changed) is
+#     informational (re-save the reference when satisfied); only a CONTRACT break (exit 1) aborts.
+if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; then
+  log "--- viewer line-build check (frontend) ---"
+  if node "$HERE/viewer_linebuild_check.js" | tee -a "$OUT"; then :; else
+    log "ABORT: viewer line-build check failed (the GUI cannot rebuild a played reference line)."
+    exit 1
+  fi
+fi
+if [ "$MODE" = regression ] && command -v python3 >/dev/null 2>&1 && [ -f "$HERE/viewer_protocol_check.py" ]; then
+  log "--- viewer protocol check (engine<->GUI contract) ---"
+  if MTG_BIN="$BIN" python3 "$HERE/viewer_protocol_check.py" | tee -a "$OUT"; then :; else
+    log "ABORT: viewer protocol check reported a CONTRACT failure (malformed/invalid decision)."
+    exit 1
+  fi
+fi
+
 # Emit the whole case matrix as one batch manifest. `mtg.exe --batch` pools every
 # game of every case into a single atomic work queue, so the suite pays ONE
 # load-imbalance tail instead of one per case (the old per-case sweep stranded a

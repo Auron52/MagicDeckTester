@@ -200,6 +200,13 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(html);
     }
+    if (req.method === 'GET' && url.pathname === '/linebuild.js') {
+      // Shared line-building module (also require()d by test/viewer_linebuild_check.js). no-store so
+      // a browser always re-fetches after an edit (matching index.html).
+      const js = fs.readFileSync(path.join(__dirname, 'linebuild.js'));
+      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(js);
+    }
     if (req.method === 'GET' && url.pathname === '/api/decks') {
       return sendJson(res, 200, { decks: listDecks(), binExists: fs.existsSync(BIN) });
     }
