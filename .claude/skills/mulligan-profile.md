@@ -43,8 +43,10 @@ own expensive optimisation; don't pay for a baseline you're about to replace).
 | **3. High-R exhaustive** | accurate keep **+ bottoming** | hours–days (secondary machine) | after play is frozen — the definitive, adopt-able profile. |
 
 Note **static is skipped** — the deck runs on defaults, then a low-R exhaustive keep, then the high-R
-profile. Keep is robust at low R (it beats the *trained* static baseline by ~0.03t in-game at R=20);
-**bottoming is NOT** (see below), so a low-R profile must ship bottoming off.
+profile. Keep is robust at low R (it beats the *trained* static baseline by ~0.03t in-game at R=20). Bottoming
+is noisier at low R (its argmin over sub-comps is more R-sensitive), but the confound correction below
+shows blind bottoming is the correct blind-to-shuffle policy at any R — validate each profile with the
+confounded A/B rather than assuming low-R must ship off.
 
 ## Feasibility pre-check (do this first)
 
@@ -94,15 +96,35 @@ The blind exhaustive bottoming (`bottom_keep` = the argmin `(7-m)`-subcompositio
 *in expectation*, but at low R the argmin mis-ranks near-tie subhands. Measured on Slivers R=20: of 50
 d3 games where exhaustive lost to lookahead bottoming, re-scoring the kept subhands at R=400 attributed
 **28 to R=20 label noise** (exhaustive kept a genuinely blind-worse hand, mean −0.11t), only 18 to
-clairvoyance, 4 ties. So **low-R bottoming is worse than the free lookahead bottoming** and must ship
-off.
+clairvoyance, 4 ties — i.e. the R=20 "loss" was *mostly fixable R-noise, not clairvoyance*. The
+confound correction (see the `bottoming_enabled` note below) later showed that even the residual
+"clairvoyance loss" is a **test artifact** (lookahead scored on its peeked library); under the
+confounded A/B blind bottoming wins. So the fix is more R (and the confounded A/B as the gate), **not**
+shipping bottoming off.
 
-`bottoming_enabled` is **baked into the profile** (default **off**), set at generation/merge via
-`MTG_KEEP_BOTTOMING=1`. At runtime `BottomCards` follows the profile flag; `MTG_EXHAUSTIVE_BOTTOM` is a
-**3-state A/B override**: unset → follow the flag, `0` → force off, `1` → force on. Keep is independent
-of this. **Only set `bottoming_enabled=true` after** a high-R run *and* the attribution below shows
-exhaustive bottoming ties/beats lookahead (losing purely to clairvoyance is acceptable; losing to R
-label-noise is not — that's fixable with more R).
+`bottoming_enabled` is **baked into the profile** (generation/merge default is now **ON**; set
+`MTG_KEEP_BOTTOMING=0` to ship a profile with it off). At runtime `BottomCards` follows the profile flag;
+`MTG_EXHAUSTIVE_BOTTOM` is a **3-state A/B override**: unset → follow the flag, `0` → force off, `1` →
+force on. Keep is independent of this. **Decks with no exhaustive table fall back to lookahead bottoming**
+(byte-identical).
+
+**Why default-on (the confound correction).** Blind exhaustive bottoming is the *theoretically correct*
+policy when you are blind to the shuffle — a real player can't peek at the library the way the clairvoyant
+lookahead bottomer does (it rolls out the game's actual library and picks the removal best FOR that
+library). The naive in-game bottoming A/B is **confounded**: it scores lookahead on the very library it
+peeked at, so lookahead "wins" for free. **Remove the peek and the table wins.** Two proofs:
+- **Confounded in-game A/B** (`MTG_CONFOUND_BOTTOM=1`, reshuffles the library *after* the bottoming
+  decision so the playout draws are decorrelated from the peek; `test/keepmodel_burn_confound.sh`): burn
+  d5 flipped from blind **+0.076t (naive "loss")** to blind **−0.0098t (win), 11/16 seeds**.
+- **R=400 blind-EV probe** (`MTG_SCORE_COMPS`): the table's stored bottom pick IS the blind-argmin over
+  fresh shuffles; lookahead's library-specific deviations are blind-*worse* by 0.5–1.9t.
+So a low-R attribution "loss" to lookahead is mostly the peek confound plus fixable table R-noise, NOT a
+real defect. **Adoption gate for each new profile = run the CONFOUNDED A/B** (`MTG_CONFOUND_BOTTOM`) and
+confirm blind ≥ lookahead; if a profile fails it, ship that one with `MTG_KEEP_BOTTOMING=0`. (We are still
+validating the next couple profiles this way before treating default-on as fully settled.) Note the GT
+tradeoff: because the *standard* (unconfounded) goldfish metric still rewards the peek, enabling blind
+bottoming shows a small win-turn *increase* on mulligan games — a deliberate, honest shift to accept via
+per-game audit, not a regression.
 
 ## Multi-machine handoff (pooling with the secondary machine)
 

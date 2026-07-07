@@ -6,6 +6,9 @@
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#ifdef MTG_HAVE_ZLIB
+#include <zlib.h>
+#endif
 
 // ---- BottomOrder string helpers --------------------------------------------
 
@@ -509,17 +512,41 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
     return profile;
 }
 
-// Loads a DeckProfile from a file on disk.
+// Reads a profile file into a string, transparently decompressing gzip when the path ends in
+// ".gz" (and zlib is linked). Committed exhaustive keep/bottom profiles ship gzipped -- the
+// bottom_keep table is ~13 MB raw, so it lives in git as a ~1-2 MB .json.gz and the runtime reads
+// it directly. Plain paths (and builds without zlib) use an ordinary read. Returns "" on failure.
+inline std::string ReadProfileText(const std::filesystem::path& path)
+{
+    const std::string ext = path.extension().string();
+    if (ext == ".gz" || ext == ".GZ")
+    {
+#ifdef MTG_HAVE_ZLIB
+        gzFile gz = gzopen(path.string().c_str(), "rb");
+        if (!gz) { return {}; }
+        std::string out;
+        char buf[1 << 16];
+        int n;
+        while ((n = gzread(gz, buf, sizeof(buf))) > 0) { out.append(buf, static_cast<std::size_t>(n)); }
+        gzclose(gz);
+        return out;
+#else
+        return {};   // no zlib in this build -> a .gz profile cannot be read
+#endif
+    }
+    std::ifstream file(path, std::ios::binary);
+    if (!file) { return {}; }
+    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+// Loads a DeckProfile from a file on disk (plain .json or gzipped .json.gz).
 // Returns a default profile if the file cannot be opened or parsed.
 inline MulliganProfile LoadDeckProfile(const std::filesystem::path& path)
 {
     MulliganProfile profile;
-    std::ifstream file(path);
-    if (file)
+    std::string content = ReadProfileText(path);
+    if (!content.empty())
     {
-        std::string content(
-            (std::istreambuf_iterator<char>(file)),
-            std::istreambuf_iterator<char>());
         try   { profile = DeckProfileFromJson(content); }
         catch (...) { profile = MulliganProfile{}; }
     }
@@ -537,4 +564,33 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
     if (!file) { return false; }
     file << DeckProfileToJson(profile);
     return file.good();
+}
+
+// For PLAY only: after loading a deck's base profile, pull in its exhaustive keep/bottom sidecar if
+// one ships alongside -- `<deck>.profile.json` -> `<deck>.keepmodel.exhaustive.profile.json[.gz]`.
+// The engine is presence-gated: keep always uses `exhaustive_keep` when present, and bottoming uses
+// it iff the sidecar's `bottoming_enabled` is set -- so attaching the block is the whole wiring.
+// Only the exhaustive_keep block is taken (base fields stay from the static profile). No-op if the
+// loaded profile already has an exhaustive block (i.e. --profile pointed straight at it) or the path
+// isn't a `<name>.profile.json`. NOT called by the analyzer's rollout-profile loads (that would be
+// circular during generation) -- only from the game-play entry points.
+inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
+{
+    if (!profile.exhaustive_keep.empty()) { return; }
+    const std::string fn = profile_path.filename().string();
+    const std::string suffix = ".profile.json";
+    if (fn.size() <= suffix.size() || fn.compare(fn.size() - suffix.size(), suffix.size(), suffix) != 0)
+    { return; }
+    const std::string stem = fn.substr(0, fn.size() - suffix.size());
+    const std::filesystem::path dir = profile_path.parent_path();
+    for (const char* ext : { ".keepmodel.exhaustive.profile.json.gz", ".keepmodel.exhaustive.profile.json" })
+    {
+        const std::filesystem::path cand = dir / (stem + ext);
+        if (std::filesystem::exists(cand))
+        {
+            MulliganProfile exh = LoadDeckProfile(cand);
+            if (!exh.exhaustive_keep.empty()) { profile.exhaustive_keep = std::move(exh.exhaustive_keep); }
+            return;
+        }
+    }
 }

@@ -152,8 +152,15 @@ int main(int argc, char* argv[])
             if (const char* p = std::getenv("MTG_MERGE_OUT_PROFILE")) { out_profile = p; }
             if (const char* r = std::getenv("MTG_MERGE_OUT_RAW"))     { out_raw = r; }
             if (std::getenv("MTG_KEEP_NO_WRITE") != nullptr) { out_profile.clear(); out_raw.clear(); }
+            // Blind exhaustive bottoming ships ON by default (unset => true; "0" => off): it is the
+            // theoretically-correct policy when blind to the shuffle (a real player can't peek at the
+            // library the way clairvoyant lookahead bottoming does), and the confounded in-game A/B
+            // (MTG_CONFOUND_BOTTOM) confirms blind >= lookahead once the peek is removed. Each new
+            // profile is still validated with that A/B during adoption; set MTG_KEEP_BOTTOMING=0 to
+            // ship a profile with bottoming off if it fails. Decks with no exhaustive table are
+            // unaffected -- runtime falls back to lookahead bottoming.
             const bool bottoming_enabled = []{ const char* s = std::getenv("MTG_KEEP_BOTTOMING");
-                                               return s && *s && std::string(s) != "0"; }();
+                                               return !s || std::string(s) != "0"; }();
             RunKeepMerge(std::cout, deck, profile, inputs, out_profile, out_raw, bottoming_enabled);
             return 0;
         }
@@ -270,15 +277,33 @@ int main(int argc, char* argv[])
             cfg.threshold = []{ const char* s = std::getenv("MTG_EQUIV_THRESHOLD");
                                 return (s && *s) ? std::max(0.0, std::atof(s)) : 0.01; }();
             cfg.depth     = env_int("MTG_EQUIV_DEPTH", 5, 0);
+            cfg.budget_ms = env_int("MTG_EQUIV_BUDGET", 20, 0);  // per-decision rollout search budget (ms);
+                                                                 // feeds discovery, rollouts AND play digest
             cfg.rollouts  = env_int("MTG_KEEP_ROLLOUTS", 100, 1);
+            // Adaptive sampling: R_FLOOR<ROLLOUTS engages confidence-driven refinement (default off =>
+            // uniform R => byte-identical). FLIP_EPS is the stop threshold; R_BATCH the per-wave add.
+            cfg.r_floor   = env_int("MTG_KEEP_R_FLOOR", 0, 1);   // 0 => uniform (= rollouts)
+            cfg.r_batch   = env_int("MTG_KEEP_R_BATCH", 16, 1);
+            cfg.flip_eps  = []{ const char* s = std::getenv("MTG_KEEP_FLIP_EPS");
+                                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+            cfg.se_prior  = []{ const char* s = std::getenv("MTG_KEEP_SE_PRIOR");
+                                return (s && *s) ? std::max(0.0, std::atof(s)) : 8.0; }();
             cfg.max_mull  = env_int("MTG_KEEP_MAXMULL", 3, 0);
             cfg.seed      = seed;   // rollout seed base (the run id / seed_base)
             cfg.equiv_seed = []{ const char* s = std::getenv("MTG_EQUIV_SEED");
                                  return (s && *s) ? std::strtoull(s, nullptr, 10) : 20260701ULL; }();
             cfg.max_turns = max_turns;
+            // Default ON (unset => true; "0" => off) -- see the MTG_KEEP_BOTTOMING note on the merge path.
+            // Blind exhaustive bottoming is the correct blind-to-shuffle policy; validated per profile via
+            // the confounded A/B (MTG_CONFOUND_BOTTOM) during adoption. Untabled decks fall back to lookahead.
             cfg.bottoming_enabled = []{ const char* s = std::getenv("MTG_KEEP_BOTTOMING");
-                                        return s && *s && std::string(s) != "0"; }();
+                                        return !s || std::string(s) != "0"; }();
+            // EXPERIMENT: adaptively sample sub-tables even with bottoming on + curse-filter the bottom
+            // argmin to refined cells (recovers keep-only savings for bottoming-on). Off => full-R sub-tables.
+            cfg.adaptive_bottom = []{ const char* s = std::getenv("MTG_KEEP_ADAPTIVE_BOTTOM");
+                                      return s && *s && std::string(s) != "0"; }();
             if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
+            if (const char* fm = std::getenv("MTG_EQUIV_FORCE_MERGE")) { cfg.force_merge = fm; }
             // Write the serialized keep policy + poolable raw sidecar next to the deck unless suppressed.
             if (std::getenv("MTG_KEEP_NO_WRITE") == nullptr)
             {

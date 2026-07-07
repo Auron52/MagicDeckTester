@@ -42,6 +42,20 @@ add_library(mtg-core STATIC
 )
 target_include_directories(mtg-core PUBLIC src)
 target_link_libraries(mtg-core PUBLIC pugixml::pugixml nlohmann_json::nlohmann_json)
+
+# Optional: zlib, so the runtime can read gzipped deck profiles (.json.gz). Committed exhaustive
+# keep/bottom profiles ship gzipped (the raw bottom_keep table is ~13 MB; gzip -> ~1-2 MB). Linked
+# CONDITIONALLY: with zlib, MTG_HAVE_ZLIB enables transparent .gz reading in MulliganProfileIO;
+# without it the build still compiles and plain .json profiles work as before (only .gz is unread).
+find_package(ZLIB QUIET)
+if(ZLIB_FOUND)
+    message(STATUS "mtg: linking zlib (${ZLIB_VERSION_STRING}) -- gzipped profiles enabled")
+    target_link_libraries(mtg-core PUBLIC ZLIB::ZLIB)
+    target_compile_definitions(mtg-core PUBLIC MTG_HAVE_ZLIB)
+else()
+    message(STATUS "mtg: zlib not found -- .gz profiles unsupported (plain .json still works)")
+endif()
+
 if(MTG_PROFILE)
     target_compile_definitions(mtg-core PUBLIC MTG_PROFILE)
 endif()

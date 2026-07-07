@@ -2,11 +2,14 @@
 
 Status: **committed** (8b239cf core; c3dad35 bottoming flag + scorer), as of 2026-07-03. Keep
 integration, aggregation, merge tool, bottoming phase 2, A/B harness, the `bottoming_enabled` profile
-flag, and the `MTG_SCORE_COMPS` attribution scorer are all built + committed. **In-game A/B done on a
-real R=20 profile** (results below): keep adopts; bottoming ships off pending a high-R run.
-Operational guide: [`.claude/skills/mulligan-profile.md`](../../.claude/skills/mulligan-profile.md).
-Remaining: generate the definitive high-R profile (secondary machine), re-run the bottoming
-attribution, then decide `bottoming_enabled`. This is the successor to the learned-keep-model effort
+flag, and the `MTG_SCORE_COMPS` attribution scorer are all built + committed. **In-game A/B done on
+real R=20 and R=100 profiles** (results below): keep adopts; **bottoming REVERSED to ON** — blind
+exhaustive bottoming is the correct policy when blind to the shuffle, confirmed by the confounded
+in-game A/B (`MTG_CONFOUND_BOTTOM`, which reshuffles the library *after* the bottoming decision so the
+clairvoyant lookahead's peek is worthless): once the peek is removed, blind ≥ lookahead. Slivers R=100
+ships bottoming ON; the generation default is now ON (was off), validated per profile via the
+confounded A/B during adoption. Decks with no exhaustive table fall back to lookahead bottoming.
+Operational guide: [`.claude/skills/mulligan-profile.md`](../../.claude/skills/mulligan-profile.md). This is the successor to the learned-keep-model effort
 ([better-mulligan-model.md](better-mulligan-model.md),
 [keep-model-selection-by-runner.md](keep-model-selection-by-runner.md)) — it *replaces modeling with
 exhaustive evaluation* where the deck is compressible enough.
@@ -162,20 +165,48 @@ best pointed at a *different/harder* deck than piling R onto one already done �
   representatives so `D_static` is approximate (static is inconsistent across equivalents — its flaw);
   the in-game A/B is the definitive static check.
 
+## R=100 adoption + bottoming reversal (2026-07-04)
+
+The definitive Slivers table was generated at commit `9c11ae5` as **R=100**, pooled from an R=20
+(seed_base 20260704) + R=80 (seed_base 20260705) run via `MTG_KEEP_MERGE` (both stamped 9c11ae5,
+matching bucket_fp/deck_fp, distinct seeds). R is **per-mode**, so R=100 = 100 games/mode/hand
+(per-mode label stderr ~0.042t). Canonical files `decks/slivers_vial.keepmodel.exhaustive.{profile,raw}.json`.
+
+- **Keep**: R=100 vs R=20 in-game A/B on fresh off-training seeds (770001–16, d0/d3): R=100
+  marginally-but-consistently better (−0.0065t, 16/16 seeds), differing on only 4.4% of decisions
+  (all near-ties). Adopt R=100. Its value over R=20 is precision, not a big win-turn jump — which
+  also calibrates that lower R is defensible on expensive decks.
+- **Bottoming — REVERSED to ON.** The R=100 blind-EV attribution (see
+  `mulligan-profile-scaling-and-pruning.md`) showed blind bottoming makes *better* blind decisions
+  than clairvoyant lookahead (mean Δ = −0.093t, 69% ours-better, per-all-games −0.0192t, no tail
+  > 0.2t). The whole +0.0226t in-game loss is clairvoyance, which we discount. ⇒ `bottoming_enabled=true`
+  (re-merged with `MTG_KEEP_BOTTOMING=1`). Gains: better blind decisions, ~3.5× faster bottoming,
+  honest/non-clairvoyant. Cost: goldfish win-turn ~0.0226t slower → deliberate Slivers GT shift
+  (accept via per-game audit).
+
 ## Next steps
 
-1. **High-R profile on the secondary machine** — generate the definitive table (pool via `MTG_KEEP_MERGE`).
-   Follow the handoff protocol in the skill (parity fingerprints + determinism handshake + distinct seeds).
-2. **Re-run the bottoming attribution** at high R (`MTG_SCORE_COMPS`): if the 28 R-noise losses collapse
-   and exhaustive bottoming ties/beats lookahead (or loses only to clairvoyance), set
-   `bottoming_enabled=true` (`MTG_KEEP_BOTTOMING=1` at gen/merge). Otherwise keep it off.
-3. **Pull the other agent's code** (rebase; likely conflict = the `KeepHand` edit in AIEngine.cpp) —
-   needs the source location from the user.
+1. **Re-baseline Slivers *overnight* GT** for the bottoming-on win-turn shift (per-game audit → `--accept`).
+   Smoke + regression GT already reflect bottoming-on (re-baselined at 4136cc6, after the bottoming-on
+   profile shipped at 3960ca4); only the overnight seeds (s4004–7007) remain.
+   **Adoption gate for any new profile's bottoming = the confounded in-game A/B** (`MTG_CONFOUND_BOTTOM`,
+   `test/keepmodel_burn_confound.sh` shape): the *non-confounded* bottoming A/B is misleading because it
+   scores clairvoyant lookahead on the very library it peeked at (burn: blind "lost" +0.076t naive → **won
+   −0.0098t confounded**; R=400 blind-EV probe shows the table's picks ARE the blind-argmin and lookahead's
+   peek-driven deviations are blind-worse by 0.5–1.9t). Validate the next couple profiles this way before
+   treating default-on as fully settled.
+2. **Efficiency/pruning build** — the adaptive-sampling, force-merge, and rare-tail levers in
+   `mulligan-profile-scaling-and-pruning.md` (needed for expensive decks: Anti-Lifegain K=23, Hinata K=20).
+3. **Pooling gate** — the per-deck play-digest in `play-digest-and-pooling-gate.md` (demote commit-hash
+   to advisory).
+4. **Secondary machine** — Knights R=5 test in flight; higher-R or pooled Knights later for a
+   deployable profile (its play/draw split is structural, just coarse at R=5).
 
 ## Loose ends / notes
 
-- `decks/slivers_vial.keepmodel.exhaustive.{profile,raw}.json` on disk is the **real R=20** table (used
-  for the in-game A/B + attribution above); it is **not** committed and will be replaced by the high-R run.
+- `decks/slivers_vial.keepmodel.exhaustive.{profile,raw}.json` is now the **committed R=100** table
+  (bottoming ON). The `.r20`/`.r80` half-sidecars are kept on disk for provenance but are intermediate
+  and not committed.
 - `bottoming_enabled` (profile flag, default off) governs runtime use of exhaustive bottoming;
   `MTG_EXHAUSTIVE_BOTTOM` is a 3-state A/B override (unset=follow flag, 0=off, 1=on). Set at gen/merge via
   `MTG_KEEP_BOTTOMING`.
