@@ -69,6 +69,9 @@ struct SizeTable
     std::vector<std::array<double, 2>>    sum;
     std::vector<std::array<double, 2>>    sumsq;
     std::vector<std::array<long long, 2>> cnt;
+    // Execution-trace (MTG_KEEP_TRACE): per-cell UNION over its rollouts of the compact card indices
+    // whose effect ran (sparse; empty unless tracing). Written per (cell,pd) task -> race-free like sum.
+    std::vector<std::array<std::set<int>, 2>> touched;
 };
 
 // Optimal keep policy from fully-populated V tables. A PURE function of (tables, deck bucket counts):
@@ -287,6 +290,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         if (rep[it->second].m_name.str().empty()) { rep[it->second] = c; }
     }
 
+    // Execution-trace (MTG_KEEP_TRACE): compact index of every distinct card NAME in the deck, and the
+    // per-rollout "touched" recording it enables. Off => no out_hit passed => engine byte-identical.
+    const bool trace_on = []{ const char* s = std::getenv("MTG_KEEP_TRACE"); return s && *s && std::string(s) != "0"; }();
+    std::map<std::string, int> touch_index;
+    std::vector<std::string>   touch_names;
+    if (trace_on)
+        for (const Card& c : deck.mainboard)
+            if (touch_index.emplace(c.m_name.str(), static_cast<int>(touch_names.size())).second)
+            { touch_names.push_back(c.m_name.str()); }
+
     // ---- 2. Enumerate hand compositions for sizes HAND .. HAND-max_mull --------------------------
     const int min_size = std::max(1, HAND - cfg.max_mull);
     std::vector<SizeTable> tables(HAND - min_size + 1);   // tables[HAND-H] holds the size-H table
@@ -303,6 +316,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         t.sum.assign(t.comps.size(), { 0.0, 0.0 });
         t.sumsq.assign(t.comps.size(), { 0.0, 0.0 });
         t.cnt.assign(t.comps.size(), { 0, 0 });
+        if (trace_on) { t.touched.assign(t.comps.size(), {}); }
         TB(H) = std::move(t);
     }
 
@@ -467,6 +481,19 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();   // decision-relevant win-turn shift
     double detect_z      = []{ const char* s = std::getenv("MTG_KEEP_DETECT_Z");
         return (s && *s) ? std::max(0.0, std::atof(s)) : 1.64; }();   // CI band for the "unmoved" call
+    // EXECUTION-TRACE reuse (MTG_KEEP_CHANGED_CARDS): the set of cards a change touched. A prior cell
+    // whose recorded touched-set is DISJOINT from this set is byte-identical on the new commit -> reuse
+    // its prior value EXACTLY (0 samples of refine), including near-threshold + bottoming cells that the
+    // statistical test can't clear. Requires a TRACED prior (its entries carry "touched").
+    std::set<std::string> changed_cards;
+    if (const char* cc = std::getenv("MTG_KEEP_CHANGED_CARDS"); cc && *cc)
+    {
+        std::string s = cc, cur;
+        for (char ch : s) { if (ch == ',') { if (!cur.empty()) changed_cards.insert(cur); cur.clear(); } else cur += ch; }
+        if (!cur.empty()) { changed_cards.insert(cur); }
+    }
+    std::vector<std::vector<char>> trace_reuse(tables.size());   // per (H-idx, cell): prior disjoint from changed
+    long long n_trace_reuse = 0; bool prior_traced = false;
     if (const char* pr = std::getenv("MTG_KEEP_PRIOR_RAW"); pr && *pr)
     {
         std::ifstream prf(pr);
@@ -500,6 +527,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                                "(0 < MTG_KEEP_R_FLOOR < MTG_KEEP_ROLLOUTS) -- ignoring prior\n" << std::flush; }
                 else
                 {
+                    prior_traced = mm.value("traced", false);
+                    const bool trace_active = !changed_cards.empty();
+                    if (trace_active && !prior_traced)
+                    { std::cerr << "[keepgen] CHANGED-CARDS set but prior is NOT traced (no per-cell touched"
+                                   " sets) -- falling back to statistical change-detection only\n" << std::flush; }
+                    for (int H = HAND; H >= min_size; --H) { trace_reuse[HAND - H].assign(TB(H).comps.size(), 0); }
                     long long loaded = 0;
                     for (const auto& sz : pj["sizes"])
                     {
@@ -511,7 +544,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                             auto it = t.index.find(e["comp"].get<std::vector<int>>());
                             if (it == t.index.end()) { continue; }
                             const int i = it->second;
-                            if (!e.contains("sumsq")) { continue; }   // need variance for the test
+                            // Execution-trace: disjoint from the changed cards => provably unmoved => reuse.
+                            if (trace_active && prior_traced && e.contains("touched"))
+                            {
+                                bool disjoint = true;
+                                for (const auto& nm : e["touched"])
+                                    if (changed_cards.count(nm.get<std::string>())) { disjoint = false; break; }
+                                if (disjoint) { trace_reuse[HAND - H][i] = 1; ++n_trace_reuse; }
+                            }
+                            if (!e.contains("sumsq")) { continue; }   // need variance for the statistical test
                             for (int pd = 0; pd < 2; ++pd)
                             {
                                 const long long c = e["count"][pd].get<long long>();
@@ -527,6 +568,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                             }
                         }
                     }
+                    if (trace_active && prior_traced)
+                    { std::cerr << "[keepgen] EXECUTION-TRACE: " << n_trace_reuse << " cells provably untouched by {"
+                                << [&]{ std::string s; for (const auto& c : changed_cards) { s += (s.empty()?"":",") + c; } return s; }()
+                                << "} -> reuse prior exactly\n" << std::flush; }
                     change_detect = true;
                     std::cerr << "[keepgen] PRIOR-RAW: loaded " << loaded << " prior cell-sides from " << pr
                               << " (source_R=" << mm.value("R", 0) << ", detect_delta=" << detect_delta
@@ -544,6 +589,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const int H = work[w].H, idx = work[w].idx;
         const std::vector<int>& comp = tables[HAND - H].comps[idx];
         double sum = 0.0, sumsq = 0.0;
+        std::vector<char> hit;                       // execution-trace scratch (per rollout), if tracing
+        std::set<int>     cell_touched;              // union over this task's rollouts
+        if (trace_on) { hit.assign(touch_names.size(), 0); }
         for (long long r = r0; r < r1; ++r)
         {
             // Fresh shuffle per rollout: pulling the top comp[b] cards of each bucket samples WHICH
@@ -569,12 +617,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     else { ++k; }
                 }
             }
-            double wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
+            double wt;
+            if (trace_on)
+            {
+                std::fill(hit.begin(), hit.end(), 0);
+                wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, &hit);
+                for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } }
+            }
+            else { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
             sum += wt; sumsq += wt * wt;
         }
         SizeTable& t = tables[HAND - H];
         t.sum[idx][pd]   += sum;
         t.sumsq[idx][pd] += sumsq;
+        if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
         t.cnt[idx][pd]   += (r1 - r0);
     };
 
@@ -608,6 +664,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
             ai.SetSearchPostCombat(second_main);
+            if (trace_on) { ai.SetTouchIndex(&touch_index); }   // execution-trace: record cards per rollout
             for (;;)
             {
                 std::size_t k = tc.fetch_add(1);
@@ -890,6 +947,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 for (int pd = 0; pd < 2; ++pd)
                 {
                     if (!has_prior[HAND - H][i][pd]) { continue; }   // no prior -> treat as moved (refine)
+                    // Execution-trace: prior touched-set disjoint from the changed cards => this cell's
+                    // rollouts are byte-identical on the new commit => reuse the prior EXACTLY (no
+                    // statistical test, covers near-threshold + bottoming cells). Composes with the
+                    // statistical detection below for cells that DID touch a changed card.
+                    if (!trace_reuse[HAND - H].empty() && trace_reuse[HAND - H][i])
+                    { resolved[HAND - H][i][pd] = true; continue; }
                     const long long nf = t.cnt[i][pd];
                     if (nf < 1) { continue; }
                     ++n_tested;
@@ -1274,11 +1337,23 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 je["sum"]   = { t.sum[i][0], t.sum[i][1] };
                 je["sumsq"] = { t.sumsq[i][0], t.sumsq[i][1] };
                 je["count"] = { t.cnt[i][0], t.cnt[i][1] };
+                // Execution-trace: union over both pd of the card NAMES whose effect ran in this cell's
+                // rollouts (names, not indices, so a re-run matches by MTG_KEEP_CHANGED_CARDS regardless
+                // of index order). Present only when tracing.
+                if (trace_on && i < t.touched.size())
+                {
+                    std::set<int> u = t.touched[i][0];
+                    u.insert(t.touched[i][1].begin(), t.touched[i][1].end());
+                    json tn = json::array();
+                    for (int idx : u) { tn.push_back(touch_names[idx]); }
+                    je["touched"] = tn;
+                }
                 entries.push_back(je);
             }
             sizes.push_back({ { "H", H }, { "entries", entries } });
         }
         root["sizes"] = sizes;
+        if (trace_on) { root["meta"]["traced"] = true; }
         std::ofstream f(cfg.out_raw);
         if (f) { f << root.dump(); os << "raw poolable table written to " << cfg.out_raw << "\n"; }
         else   { os << "WARNING: failed to write " << cfg.out_raw << "\n"; }

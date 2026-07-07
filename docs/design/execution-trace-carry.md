@@ -1,8 +1,34 @@
 # Execution-trace carry (reuse the prior for cells the change didn't touch)
 
-**Status: DESIGN (2026-07-07). The lever that cuts the NEAR-THRESHOLD + BOTTOMING re-run cost — the part
-statistical change-detection cannot (`docs/design/change-detection-carry.md` finding).** Same-list /
-new-commit only (play-logic changes); small deck changes are a different animal (see end).
+**Status: PHASE A BUILT + validated 2026-07-07. The lever that cuts the NEAR-THRESHOLD + BOTTOMING re-run
+cost — the part statistical change-detection cannot (`docs/design/change-detection-carry.md` finding).**
+Same-list / new-commit only (play-logic changes); small deck changes are a different animal (see end).
+
+## Phase A — what shipped (2026-07-07)
+
+- **Recording** (`MTG_KEEP_TRACE=1`, off by default → byte-identical): a per-rollout thread-local sink
+  (`src/core/RolloutTouch.h`, defined in `EffectHandler.cpp`) records every card whose effect ran, hooked
+  at `EffectHandler::Resolve` + `EnterBattlefield` (spells/ETB/permanents) and `AIEngine::TryPlaySpecificLand`
+  (the rollout's land path — lands bypass the stack). The analyzer collects a per-cell UNION over its
+  rollouts (`SizeTable::touched`) and serializes it as card NAMES in the raw sidecar (`"touched":[...]`,
+  `meta.traced=true`). Records only REALIZED plays (the executor), not the per-turn search's hypotheticals.
+- **Consume** (`MTG_KEEP_CHANGED_CARDS="a,b"` + `MTG_KEEP_PRIOR_RAW=<traced pool>`): a cell whose prior
+  touched-set is DISJOINT from the changed cards is marked `resolved` → reuses the prior value EXACTLY
+  (0 refine), reusing the change-detection machinery. Composes with statistical detection for cells that
+  DID touch a changed card (those fall through to the margin test). Needs a traced prior; else it warns
+  and falls back to statistical only.
+- **Validated** (tiny deck): recording is behavior-neutral (trace on/off → byte-identical sum/count/sumsq);
+  captures land + creature + burn spell; a not-in-deck changed card → all cells provably untouched → the
+  re-run reproduces the PRIOR profile exactly (0 differ); an all-touching changed card (a land) → 0 reused,
+  statistical fallback. The 3-card deck can't show partial saving (every rollout uses all 3 cards) — that
+  needs a real singleton deck.
+
+**Remaining for real use — the fidelity gate (below): after a real card change, re-sample a sample of
+"untouched" cells and confirm they match the prior.** This certifies the hook set is complete for that
+change (catches a too-narrow "touch" or a shared-state leak). The recording captures the common paths
+(cast/ETB/permanent/land); rare channels (graveyard/hand statics, cast-but-countered, fetched basics via
+`PerformFetch`) are the known candidates a gate failure would point to → widen "touch" or reclassify as an
+engine change. Phase B (auto card-def-hash attribution + engine guard) and Phase C (mechanic-level) remain.
 
 ## The wall it breaks
 

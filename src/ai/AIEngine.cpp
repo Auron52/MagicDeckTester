@@ -6,6 +6,7 @@
 #include "../cards/CardDatabase.h"
 #include "../core/GameEngine.h"
 #include "../core/SpellEffects.h"
+#include "../core/RolloutTouch.h"
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
@@ -719,7 +720,8 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
     return win_turn > 0 ? win_turn : max_turns + 1;
 }
 
-int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns)
+int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns,
+                                 std::vector<char>* out_hit)
 {
     // The keep-model generator's oracle: evaluate the value of KEEPING this opening hand at
     // the given mulligan depth. Bottom `mulligan_count` cards exactly as HandleMulligan would
@@ -728,6 +730,17 @@ int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_tu
     // from it (keep iff this beats the expected value of mulliganing) matches real play.
     SetMaxTurns(max_turns);
     if (mulligan_count > 0) { BottomCards(trial, mulligan_count, max_turns); }
+    // Execution-trace: if a touch index + output vector are supplied, record which cards' effects run
+    // during this rollout's playout (docs/design/execution-trace-carry.md). off => byte-identical.
+    if (m_touch_index && out_hit)
+    {
+        rollout_touch::Sink sink; sink.index = m_touch_index; sink.hit = out_hit;
+        rollout_touch::Sink* saved = rollout_touch::g_sink;
+        rollout_touch::g_sink = &sink;
+        int wt = RolloutWinTurn(std::move(trial), max_turns);
+        rollout_touch::g_sink = saved;
+        return wt;
+    }
     return RolloutWinTurn(std::move(trial), max_turns);
 }
 
@@ -1920,6 +1933,7 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
         auto def = CardDatabase::Instance().Lookup(it->m_name);
         if (!def || !def->card.IsLand()) { continue; }
 
+        rollout_touch::Record(it->m_name.str());   // execution-trace: land played on the rollout path
         if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
         // Fetchland: sacrifice it to search out a real land (same heuristic as the rollout
         // so the committed line replays identically).
@@ -1969,6 +1983,7 @@ bool AIEngine::TryPlayLand(GameState& state)
 
     auto play_land_iter = [&](std::vector<Card>::iterator it, const CardDefinition& def) -> bool
     {
+        rollout_touch::Record(it->m_name.str());   // execution-trace: this land is played (bypasses the stack)
         if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
         // Fetchland: sacrifice it to search out a real land (PerformFetch heuristic).
         if (!def.params.fetch_land_types.empty())

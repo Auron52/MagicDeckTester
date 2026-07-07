@@ -7,6 +7,7 @@
 #include "TurnSolver.h"
 #include <deque>
 #include <functional>
+#include <map>
 #include <vector>
 
 class AIEngine
@@ -162,7 +163,15 @@ public:
     // with a 7-card hand and on_the_play / required_pieces already set on it. Used by
     // BuildKeepModel to label hands keep-vs-mulligan against the rollout oracle, so the
     // label uses exactly the same bottoming + rollout the deck is actually played with.
-    int RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns);
+    // out_hit (execution-trace): if non-null AND a touch index has been set (SetTouchIndex), each
+    // index whose card's effect ran during this rollout is set to 1 (caller sizes+zeroes it). Default
+    // null => no instrumentation, byte-identical.
+    int RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns,
+                           std::vector<char>* out_hit = nullptr);
+
+    // Execution-trace instrumentation: point at a card-name -> compact-index map (non-owning). When set
+    // and RolloutKeepWinTurn is given an out_hit vector, the rollout records which cards' effects ran.
+    void SetTouchIndex(const std::map<std::string, int>* idx) { m_touch_index = idx; }
 
     // Analyzer-only: the reference (static-profile) keep decision, exposed so BuildKeepModel can
     // BOOTSTRAP its policy-simulated mulligan baseline from the current static policy. Routes through
@@ -179,6 +188,7 @@ private:
     int                      m_max_turns         = 20;  // rollout horizon; kept in sync by SetMaxTurns
     bool                     m_search_post_combat  = false;
     bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts
+    const std::map<std::string, int>* m_touch_index = nullptr;  // execution-trace card index (non-owning)
     std::vector<std::string> m_kept_opening_hand;
     // Mulligan reproducibility (see the public accessors above).
     int                      m_last_mulligan_count = 0;
