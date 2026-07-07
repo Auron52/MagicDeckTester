@@ -1,6 +1,5 @@
-# Regression ground truth -- commit f4aed17  date 2026-07-07
+# Regression ground truth -- commit ccb7e65  date 2026-07-07
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (regression, 2026-07-07): gi218 (seed 2002+218=2220, d3 & d5): exhaustive R60 mulligan of a 1-land+1-dork 6-card hand (2 Invigorate,1 fetch,1 Swords,2 Plague Drone,1 Birds) that static keeps; R-stable (R30==R60 identical decision), well-sampled (50/40 rollouts), coherent mull-ladder (mull 0/1, keep at 2); EV-positive on average (deck A/B keep -0.088t, bottom -0.112t), loses this one shuffle by variance; not budget-starvation (loses at 40x budget). Net adoption: d0 +26 wins, all depths faster.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -8,21 +7,21 @@
 slivers_smoke_d0_s1001=999/4.66266/1cef9308489d08a1
 slivers_smoke_d3_s1001=250/4.292/e02388f36897f9a5
 slivers_smoke_d5_s1001=150/4.22/132bbde39d40eb3c
-burn_smoke_d0_s1001=979/4.64351/74ac5530d69a198a
-burn_smoke_d3_s1001=298/4.30872/28512f494164f2c6
-burn_smoke_d5_s1001=249/4.32129/8e57800987d06654
+burn_smoke_d0_s1001=979/4.61287/6719abe1b662e1fe
+burn_smoke_d3_s1001=298/4.25168/8ca4d06f19d8a29b
+burn_smoke_d5_s1001=249/4.25703/01844a895d2441b8
 th_smoke_d0_s1001=851/5.10811/1c9d53e56e43e61a
 th_smoke_d3_s1001=150/4.13333/0e6f0a443703e5b2
 th_smoke_d5_s1001=75/4.09333/e8842613eefbdfd1
 knights_smoke_d0_s1001=1000/4.646/4360865c11b9257f
 knights_smoke_d3_s1001=250/4.392/5fd8d96da60bf042
 knights_smoke_d5_s1001=150/4.36/2c6fece4acf412f3
-antilife_smoke_d0_s1001=895/5.43575/428ed9e6e2e77ad5
-antilife_smoke_d3_s1001=250/4.156/b091ba1947ef6626
-antilife_smoke_d5_s1001=150/4.09333/a68bd193f8e289d4
-hinata_smoke_d0_s1001=509/6.85658/5baf0be5c6d73b25
-hinata_smoke_d3_s1001=145/5.7931/936954439336d180
-hinata_smoke_d5_s1001=71/5.83099/a6285100273243dd
+antilife_smoke_d0_s1001=895/5.43017/b811ebed9ab04d2a
+antilife_smoke_d3_s1001=250/4.136/eb2a5790982e5ee1
+antilife_smoke_d5_s1001=150/4.09333/7a67e89348922a61
+hinata_smoke_d0_s1001=518/6.87066/26ee1d0a419db16d
+hinata_smoke_d3_s1001=145/5.73793/e17fa4900f1835c3
+hinata_smoke_d5_s1001=71/5.78873/abd0fec0a274a6e4
 
 # --- regression ---
 slivers_regression_d0_s2002=999/4.7007/da946ecd33614760
@@ -30,11 +29,11 @@ slivers_regression_d3_s2002=400/4.265/0149480e416863f1
 slivers_regression_d3_s3003=399/4.25815/69d7776c8689e159
 slivers_regression_d5_s2002=300/4.28/5a317e333509b231
 slivers_regression_d5_s3003=299/4.25084/6317ec6284060a44
-burn_regression_d0_s2002=983/4.65412/5370ec9e50fde6c5
-burn_regression_d3_s2002=498/4.34137/b3b15c155d5867d2
-burn_regression_d3_s3003=498/4.27108/1f8c1ac7c4b410a8
-burn_regression_d5_s2002=499/4.34269/9bc3ca2137be355c
-burn_regression_d5_s3003=499/4.27455/78d589dfc4bba0b9
+burn_regression_d0_s2002=985/4.63046/6bbf65f3d3f911e7
+burn_regression_d3_s2002=498/4.30522/37128221b4fe7983
+burn_regression_d3_s3003=498/4.249/3436faa28d40c1fb
+burn_regression_d5_s2002=499/4.30661/1b407d3f0b7fd6ea
+burn_regression_d5_s3003=499/4.2505/832323bc0e5a5b22
 th_regression_d0_s2002=839/5.14303/93cdac4e7f5659b1
 th_regression_d3_s2002=498/4.17871/0db882d584939246
 th_regression_d3_s3003=500/4.07/dc7b098321480cdd
@@ -45,16 +44,16 @@ knights_regression_d3_s2002=300/4.33/d00d7fca29ebb5ff
 knights_regression_d3_s3003=300/4.32333/b233fe7e2db1e8ee
 knights_regression_d5_s2002=250/4.308/8edb21408e3a1951
 knights_regression_d5_s3003=250/4.336/fd08d976159eaaf2
-antilife_regression_d0_s2002=881/5.33712/4d798884b4314632
-antilife_regression_d3_s2002=299/4.11037/e309cab8a60ccea3
-antilife_regression_d3_s3003=299/4.11371/442d71e92426e68e
-antilife_regression_d5_s2002=249/4.14056/da36b84b9f2e4e05
-antilife_regression_d5_s3003=249/4.1004/5068fbc82f28ed1b
-hinata_regression_d0_s2002=501/6.83832/444e5ae0c04ce0fc
-hinata_regression_d3_s2002=190/5.82105/9d7fb94ebb716db3
-hinata_regression_d3_s3003=187/5.85561/5efb6fe1ae635eef
-hinata_regression_d5_s2002=95/5.84211/3a57290bd0371e41
-hinata_regression_d5_s3003=95/5.86316/1362d3b768211431
+antilife_regression_d0_s2002=881/5.33031/0920e460e26a6f45
+antilife_regression_d3_s2002=299/4.09365/0aef4c9bf229d3dc
+antilife_regression_d3_s3003=299/4.09365/a6e11a66cb53e7b2
+antilife_regression_d5_s2002=249/4.12851/c9c811e7db3c54c8
+antilife_regression_d5_s3003=249/4.08032/c0bdb293d370b534
+hinata_regression_d0_s2002=516/6.83915/454b016db57621a5
+hinata_regression_d3_s2002=190/5.78947/53dcc749a951aecd
+hinata_regression_d3_s3003=190/5.84737/b091448e4d42c3fb
+hinata_regression_d5_s2002=95/5.82105/04353c14282583e5
+hinata_regression_d5_s3003=95/5.83158/8034e32f2c8c8bff
 
 # --- overnight ---
 slivers_overnight_d0_s4004=1998/4.66917/81443ed4f7c01e43
