@@ -22,11 +22,22 @@ sweep) are reported as UNVERIFIED (soft) rather than failing -- forcing a rare c
 tail 5h covers with a targeted repro. Only an expected type that the manifest predicts for
 a card the sweep DID cast, yet never surfaced, is a hard MISS.
 
-Usage:
-  audit_viewer_decisions.py <deck> <profile> [base_seed] [n_games] [max_turns]
+ORACLE-TEXT CROSS-CHECK (advisory, always run -- static & instant). The param manifest can
+only see choices that were IMPLEMENTED as params; if the card modeling dropped a Tier 1-3
+clause, a param-only audit is blind to it. So this also reads each card's real oracle text
+for choice phrases ("any target", "sacrifice a creature", "search your library", "choose
+one", "divided as you choose", ...) and reports any the params do NOT model -- a prompt to
+read the card and wire/model or disclose it. Advisory only (regex on prose is fuzzy); it
+never changes the exit code.
 
-Exit codes: 0 = clean (or only soft/unverified), 1 = a decision type is missing or an
-unmapped choice-param was found (hard fail), 2 = usage / build error.
+Usage:
+  audit_viewer_decisions.py <deck> [profile] [base_seed] [n_games] [max_turns] [--no-sweep]
+
+  --no-sweep : static analysis only (param expectations + oracle cross-check, no binary).
+               Fast pre-check usable at implementation time, before a profile exists.
+
+Exit codes: 0 = clean (or only soft/unverified/advisory), 1 = a decision type is missing or
+an unmapped choice-param was found (hard fail), 2 = usage / build error.
 """
 import subprocess, sys, json, re, collections, os
 
@@ -112,6 +123,65 @@ def expected_for_card(card):
     return exp, unmapped
 
 
+# ---------------------------------------------------------------------------
+# ORACLE-TEXT CROSS-CHECK (advisory). The param manifest above can only see choices that
+# were IMPLEMENTED as params -- if the card modeling dropped a Tier 1-3 clause (the exact
+# "hand-waved the gist" failure analyze-deck warns about), a param-only audit is blind to
+# it. So also read the real oracle text for choice-creating phrases and diff what the TEXT
+# implies against what the PARAMS model. A gap is advisory (regex on prose is fuzzy), and
+# means one of: a genuinely dropped/unmodeled choice (-> Stage 2), a goldfish-inert clause
+# (-> disclose; usually carries a bracket note), or a regex false match (-> ignore).
+# ---------------------------------------------------------------------------
+ORACLE_PATTERNS = [
+    ("target",    re.compile(r"\bany target\b|\btarget (creature|permanent|artifact|"
+                             r"enchantment|nonland permanent|creature or planeswalker)\b", re.I)),
+    ("sacrifice", re.compile(r"\bsacrifice (a|an|another) (creature|land|artifact|"
+                             r"permanent|enchantment|nonland permanent)\b", re.I)),
+    ("search",    re.compile(r"\bsearch your library\b", re.I)),
+    ("scry",      re.compile(r"\bscry \d", re.I)),
+    ("surveil",   re.compile(r"\bsurveil \d", re.I)),
+    ("modal",     re.compile(r"\bchoose (one|two|three|one or more|up to)\b", re.I)),
+    ("divide",    re.compile(r"\bdivided (as you choose|among|evenly)\b", re.I)),
+    ("bounce",    re.compile(r"\breturn .{0,40}\bland\b.{0,25}to (its|their) owner'?s? hand", re.I)),
+    ("discard",   re.compile(r"\bdiscard (a|one|two|three|\d+) .{0,20}?card", re.I)),
+]
+INERT_NOTE = re.compile(r"\[[^\]]*(inert|deferred|not modelled|not modeled|resolved by|"
+                        r"goldfish|simplified)[^\]]*\]", re.I)
+
+
+def modeled_tokens(card):
+    """The choice tokens the card's PARAMS actually surface a decision for."""
+    p = card.get("parameters", {}) or {}
+    t = set()
+    if real_target(p.get("targeting", "none")) or p.get("spectacle_cost"): t.add("target")
+    if p.get("sacrifice_land"):                                            t.add("sacrifice")
+    if p.get("etb_scry", 0) > 0 or p.get("cast_scry", 0) > 0:              t.add("scry")
+    if p.get("etb_surveil", 0) > 0:                                        t.add("surveil")
+    if p.get("damage_divided"):                                           t.add("divide")
+    if p.get("etb_bounce_land"):                                          t.add("bounce")
+    if p.get("retrace") or p.get("discard_land_damage"):                  t.add("discard")
+    if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types"):
+        t.add("search")
+    return t
+
+
+def oracle_advisories(card):
+    """[(token, snippet, has_inert_note)] for choice phrases in the text NOT modeled by params."""
+    text = (card.get("oracle_text") or "")
+    if not text:
+        return []
+    modeled = modeled_tokens(card)
+    has_note = bool(INERT_NOTE.search(text))
+    out = []
+    for token, rx in ORACLE_PATTERNS:
+        m = rx.search(text)
+        if m and token not in modeled:
+            s = m.start()
+            snippet = text[max(0, s - 10):s + 40].replace("\n", " ").strip()
+            out.append((token, snippet, has_note))
+    return out
+
+
 def step(deck, prof, seed, gi, choices, max_turns):
     cmd = [BIN, deck, "--profile", prof, "--claude-play", "--seed", str(seed),
            "--game-index", str(gi), "--max-turns", str(max_turns),
@@ -177,20 +247,44 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns):
     return observed, cast_text, stuck
 
 
+def print_oracle_crosscheck(cards):
+    """Advisory: what the oracle TEXT implies vs what the params model. Never fails the
+    build (fuzzy), but every line is a card whose text mentions a choice the modeling does
+    not surface -- triage each: real drop -> Stage 2; inert -> disclose; false match -> ignore."""
+    findings = []
+    for c in cards:
+        for token, snippet, note in oracle_advisories(c):
+            findings.append((c["name"], token, snippet, note))
+    print("\n--- ORACLE-TEXT CROSS-CHECK (advisory) ---")
+    if not findings:
+        print("  No oracle-text choice phrase is left unmodeled by params. Clean.")
+        return
+    print("  Card text mentions a choice the params do NOT model a decision for. Triage each\n"
+          "  (real dropped choice -> Stage 2/2c-ter; goldfish-inert -> disclose; regex false\n"
+          "  match -> ignore). '[note]' = the card carries a disclosed inert/deferred note.")
+    for name, token, snippet, note in findings:
+        tag = "  [has inert/deferred note]" if note else ""
+        print(f"  {name}: text implies '{token}'  (...{snippet}...){tag}")
+
+
 def main():
-    if len(sys.argv) < 3:
+    argv = [a for a in sys.argv[1:]]
+    no_sweep = "--no-sweep" in argv
+    argv = [a for a in argv if not a.startswith("--")]
+    if len(argv) < 1:
         print(__doc__)
         return 2
-    deck, prof = sys.argv[1], sys.argv[2]
-    base_seed = int(sys.argv[3]) if len(sys.argv) > 3 else 9001
-    n_games   = int(sys.argv[4]) if len(sys.argv) > 4 else 40
-    max_turns = int(sys.argv[5]) if len(sys.argv) > 5 else 12
-    if not os.path.exists(BIN):
+    deck = argv[0]
+    prof = argv[1] if len(argv) > 1 else None
+    base_seed = int(argv[2]) if len(argv) > 2 else 9001
+    n_games   = int(argv[3]) if len(argv) > 3 else 40
+    max_turns = int(argv[4]) if len(argv) > 4 else 12
+    if not no_sweep and not os.path.exists(BIN):
         print(f"ERROR: {BIN} not found -- build Release first "
-              f"(cmake --build build --config Release)")
+              f"(cmake --build build --config Release), or pass --no-sweep for static-only.")
         return 2
 
-    cards, names = load_deck_cards(deck, )
+    cards, names = load_deck_cards(deck)
     # Per-card expectations + self-guard.
     expected_types = set()
     per_card = {}
@@ -208,6 +302,9 @@ def main():
     print(f"Expected interactive decision types (from card params): "
           f"{sorted(expected_types) or '(none)'}")
 
+    # ---- oracle-text cross-check (advisory, always run -- it is static & instant) ----
+    print_oracle_crosscheck(cards)
+
     # ---- self-guard: unmapped choice params are a hard fail -----------------
     if guard_fail:
         print("\nSELF-GUARD FAILURE -- choice-bearing param(s) with no manifest row "
@@ -217,9 +314,18 @@ def main():
         print("Add each to MANIFEST in this script (and wire it per tools/play/DECISIONS.md).")
         return 1
 
+    if no_sweep:
+        print("\n--no-sweep: static analysis only (param expectations + oracle cross-check). "
+              "Run without --no-sweep to verify decisions actually surface.")
+        return 0
+
     if not expected_types:
         print("No param-driven interactive decisions expected for this deck. PASS.")
         return 0
+    if prof is None:
+        print("ERROR: a profile path is required for the dynamic sweep "
+              "(or pass --no-sweep for static-only).")
+        return 2
 
     print(f"Driving {n_games} games from seed {base_seed} to observe surfaced decisions...")
     observed, cast_text, stuck = run_sweep(deck, prof, base_seed, n_games, max_turns)

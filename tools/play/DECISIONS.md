@@ -3,7 +3,10 @@
 The authoritative list of every interactive decision the play viewer (`tools/play`) can
 surface, and the four wiring sites each one lives at. It is the human half of the
 `cards.json`-param → decision-type manifest that `scripts/audit_viewer_decisions.py`
-enforces mechanically.
+enforces mechanically. (That auditor also runs an **oracle-text cross-check** — scanning
+each card's real text for choice phrases like "any target" / "sacrifice a creature" /
+"choose one" and flagging any the params don't model — which is the source-of-truth check
+for *what* needs a decision here in the first place; this table is *how* to wire it.)
 
 **Use this doc two ways:**
 
