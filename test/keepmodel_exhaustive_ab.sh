@@ -23,7 +23,7 @@ BIN=./build/Release/mtg
 DECK=${KM_DECK:?set KM_DECK=decks/<name>.txt}
 MODE=${KM_MODE:-keep}
 CARDS=${KM_CARDS:-src/cards/data/cards.json}
-STEM=$(basename "$DECK" .txt)
+STEM=$(basename "$DECK" | sed -E 's/\.(txt|cod)$//')   # deck short name: strip .txt or .cod
 STATIC=decks/$STEM.profile.json
 EXH=${KM_EXH_PROFILE:-decks/$STEM.keepmodel.exhaustive.profile.json}
 
