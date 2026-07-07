@@ -1729,13 +1729,106 @@ inline int HinataAvailableTargets(const CardDefinition& def, const GameState& st
 // play. discount = min(cap, available targets): cap = discount_max_targets, or the chosen X when
 // discount_targets_scale_x (Crackle up to X, Reality Spasm X -> its whole {X} cancels). Applied
 // identically at every cast-cost finalization site so planner/rollout/executor agree.
-inline int HinataGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x)
+//
+// `crackle_targets` (default -1) is the DECLARED count of extra beneficial targets beyond the
+// opponent face for a discount_targets_scale_x spell (Crackle). When >= 0 the discount DERIVES from
+// the declaration -- min(X, 1 + count) (the face plus `count` extras, each {1}) -- so a searched/
+// human-chosen target set drives the reduction and the extras are then faithfully damaged
+// (CrackleHitExtraTargets). When < 0 (every legacy caller, and non-scale_x spells) it falls back to
+// the old auto-max min(X, avail), so behaviour is byte-identical wherever the count isn't threaded.
+inline int HinataGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x,
+                                 int crackle_targets = -1)
 {
-    int cap = def.params.discount_targets_scale_x ? chosen_x : def.params.discount_max_targets;
-    if (cap <= 0) { return 0; }
     if (!HinataInPlay(state)) { return 0; }
+    if (def.params.discount_targets_scale_x)
+    {
+        if (chosen_x <= 0) { return 0; }
+        if (crackle_targets >= 0)
+        {
+            int disc = 1 + crackle_targets;                 // face + declared extras
+            return disc < chosen_x ? disc : chosen_x;       // capped at X (can't have > X targets)
+        }
+        int avail = HinataAvailableTargets(def, state);     // auto-max fallback (unchanged)
+        return chosen_x < avail ? chosen_x : avail;
+    }
+    int cap = def.params.discount_max_targets;
+    if (cap <= 0) { return 0; }
     int avail = HinataAvailableTargets(def, state);
     return cap < avail ? cap : avail;
+}
+
+// True for Crackle with Power specifically: a scale_x Hinata-discount spell that DEALS damage to
+// its targets (x_damage_multiplier > 0). This is the spell that uses the declared-count model
+// (crackle_targets -> derived discount + faithful 5X damage). It deliberately EXCLUDES Reality
+// Spasm, which is also discount_targets_scale_x but UNTAPS permanents (no damage) and keeps the
+// auto-max discount -- so gating the count model on this predicate leaves Reality Spasm's cost
+// (and every other spell) byte-identical.
+inline bool IsCrackleCountSpell(const CardParams& p)
+{
+    return p.discount_targets_scale_x && p.x_damage_multiplier > 0;
+}
+
+// Crackle with Power: ordered EXTRA beneficial targets beyond the opponent face, for the Hinata
+// per-target discount + faithful 5X damage. Encoding: >= 0 is a battlefield index (a creature);
+// -1 is SELF (the controller's face), offered ONLY when `per_target_dmg < your life` so the self
+// hit is non-lethal (the "target yourself for the discount when safe" line). Order is expendable
+// first -- opponent creatures (board order), then your NON-Hinata creatures, then self-if-safe,
+// then Hinata LAST (targeting her removes the discount for later spells, so she is only taken at
+// the maximum count). The searched/declared crackle_targets count picks the first N of this list.
+inline std::vector<int> CrackleExtraTargetOrder(const GameState& state, int controller,
+                                                int per_target_dmg)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)   // opponent creatures
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller && p.card.IsCreature()) { out.push_back(i); }
+    }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)   // own non-Hinata creatures
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.IsCreature() && !IsHinataPermanent(p)) { out.push_back(i); }
+    }
+    if (per_target_dmg < state.players[controller].life) { out.push_back(-1); }   // self, only if non-lethal
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)   // Hinata LAST
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.IsCreature() && IsHinataPermanent(p)) { out.push_back(i); }
+    }
+    return out;
+}
+
+// Number of extra Crackle targets available (cap on the declared count) at this per-target damage.
+inline int CrackleExtraTargetCount(const GameState& state, int controller, int per_target_dmg)
+{
+    return static_cast<int>(CrackleExtraTargetOrder(state, controller, per_target_dmg).size());
+}
+
+// Deal Crackle's `per_target_dmg` (= 5X) to the first `count` extra targets from
+// CrackleExtraTargetOrder (creatures + self), then destroy lethal creatures (SBA), so a killed
+// creature leaves the target pool for later spells. The opponent FACE damage is applied separately
+// by the caller. Lockstep between ApplyPlanDirect (rollout/search) and EffectHandler (executor).
+inline void CrackleHitExtraTargets(GameState& state, int controller, int per_target_dmg, int count)
+{
+    if (count <= 0 || per_target_dmg <= 0) { return; }
+    std::vector<int> order = CrackleExtraTargetOrder(state, controller, per_target_dmg);
+    const int n = std::min(count, static_cast<int>(order.size()));
+    std::vector<int> dead;
+    for (int s = 0; s < n; ++s)
+    {
+        int bi = order[s];
+        if (bi < 0) { state.players[controller].life -= per_target_dmg; continue; }   // self
+        Permanent& cre = state.battlefield[bi];
+        cre.damage += per_target_dmg;
+        if (cre.damage >= cre.EffectiveToughness()) { dead.push_back(bi); }
+    }
+    std::sort(dead.begin(), dead.end(), std::greater<int>());   // descending -> erase stays valid
+    for (int bi : dead)
+    {
+        Permanent& cre = state.battlefield[bi];
+        state.players[cre.owner_index].graveyard.push_back(cre.card);
+        state.battlefield.erase(state.battlefield.begin() + bi);
+    }
 }
 
 // ---- Reflecting Pool: "{T}: Add one mana of any type that a LAND you control could produce."

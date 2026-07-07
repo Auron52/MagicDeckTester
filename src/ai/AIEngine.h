@@ -327,7 +327,8 @@ private:
     // Silence): pay no mana and instead make the opponent gain alt_lifegain life.
     void CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
                            int alt_lifegain = 0, const std::string& tutor_target = "",
-                           int chosen_x = 0, int own_targets = 0, int ponder_keep = -1);
+                           int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
+                           int crackle_targets = -1);   // -1 = legacy auto-max discount
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;

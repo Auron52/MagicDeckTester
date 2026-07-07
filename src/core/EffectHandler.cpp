@@ -237,6 +237,15 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         }
     }
 
+    // Crackle with Power: the declared extra targets (creatures/self) take 5X and die (SBA), so a
+    // killed creature leaves the target pool for later spells. The opponent FACE damage was applied
+    // by the target loop above (Targeting::Any sets only the opp-face target); this adds the extras.
+    // Lockstep with ApplyPlanDirect (the rollout resolves the identical set from crackle_targets).
+    if (IsCrackleCountSpell(def.params))
+    {
+        CrackleHitExtraTargets(state, entry.controller_index, damage, entry.crackle_targets.value_or(-1));
+    }
+
     // Rider "target opponent gains N life" (Fiery Justice) -> reversed to damage by a
     // Tainted Remedy / Plague Drone via OpponentGainsLife.
     if (def.params.opponent_lifegain > 0)

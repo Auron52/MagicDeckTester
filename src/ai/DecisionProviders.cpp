@@ -1175,6 +1175,20 @@ bool HinataProvider::KeepReorderTop(const GameState& s, const std::vector<Card>&
     return false;   // no Hinata on top -> shuffle and dig fresh for her
 }
 
+// Hold 0-power mana dorks (Ornithopter of Paradise) back from combat -- see the header note. In a
+// goldfish (no blockers) with no Exalted, a 0-power no-trigger creature swinging deals nothing and
+// only taps itself, forfeiting the mana the second-main Crackle wants. Off-switch
+// MTG_NO_HINATA_HOLD_DORK reverts to generic attack-with-everything for A/B. Gates the projection,
+// rollout, AND real declaration in lockstep (all call ShouldAttackWith), so no search/executor desync.
+bool HinataProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+{
+    static const bool enabled = std::getenv("MTG_NO_HINATA_HOLD_DORK") == nullptr;
+    if (!enabled) { return true; }
+    if (AttackPowerOf(s, p) > 0)      { return true; }   // deals damage (a real attacker, incl. Hinata)
+    if (AttackHasNonPowerValue(s, p)) { return true; }   // attack-trigger value (none in this deck today)
+    return false;                                         // 0-power no-trigger dork -> hold for mana
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace

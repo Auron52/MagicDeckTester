@@ -242,10 +242,12 @@ fi
 #     check is blind to (e.g. a staged/exiled cast queueCard silently drops).
 #   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed, valid
-#     index, clean terminal). It re-invokes the binary per step, so it is MULTI-MINUTE -> run only
-#     in the (default) regression mode: smoke stays a fast pre-push gate and overnight need not
-#     repeat it (the contract does not vary by seed set). The line-build check covers the viewer
-#     layer in the other modes. Run WITHOUT --strict: behaviour drift (won/win_turn changed) is
+#     index, clean terminal). It re-invokes the binary per step, so the full reference set is
+#     MULTI-MINUTE (~35min alone) -> SHARDED: regression runs a fast one-ref-per-deck SAMPLE
+#     (--sample: contract sanity across every archetype), and OVERNIGHT runs the FULL sweep. The
+#     contract does not vary by seed set, so the sample loses no coverage the nightly full run
+#     doesn't restore, and regression stays inside its <45min budget. smoke stays binary-free
+#     (line-build only). Run WITHOUT --strict: behaviour drift (won/win_turn changed) is
 #     informational (re-save the reference when satisfied); only a CONTRACT break (exit 1) aborts.
 if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; then
   log "--- viewer line-build check (frontend) ---"
@@ -254,9 +256,12 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; 
     exit 1
   fi
 fi
-if [ "$MODE" = regression ] && command -v python3 >/dev/null 2>&1 && [ -f "$HERE/viewer_protocol_check.py" ]; then
-  log "--- viewer protocol check (engine<->GUI contract) ---"
-  if MTG_BIN="$BIN" python3 "$HERE/viewer_protocol_check.py" | tee -a "$OUT"; then :; else
+if { [ "$MODE" = regression ] || [ "$MODE" = overnight ]; } && command -v python3 >/dev/null 2>&1 \
+   && [ -f "$HERE/viewer_protocol_check.py" ]; then
+  # regression -> --sample (one ref/deck, fast); overnight -> full sweep (all refs).
+  PROTO_ARGS=""; [ "$MODE" = regression ] && PROTO_ARGS="--sample"
+  log "--- viewer protocol check (engine<->GUI contract${PROTO_ARGS:+, $PROTO_ARGS}) ---"
+  if MTG_BIN="$BIN" python3 "$HERE/viewer_protocol_check.py" $PROTO_ARGS | tee -a "$OUT"; then :; else
     log "ABORT: viewer protocol check reported a CONTRACT failure (malformed/invalid decision)."
     exit 1
   fi

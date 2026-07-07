@@ -50,6 +50,17 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         if (!def) { continue; }
         if (def->params.spectacle_cost.has_value()) { return true; }
         if (def->params.lifegain_to_loss)           { return true; }
+
+        //   * HINATA CRACKLE COMBO (Hinata, Dawn-Crowned): faithful Crackle with
+        //     Power kills its declared discount targets (including Hinata herself),
+        //     so casting it pre-combat throws away the attackers' finishing damage.
+        //     The optimal line is "attack with Hinata, THEN Crackle post-combat"
+        //     targeting her for the discount once she has already dealt combat
+        //     damage. Unlike burn, this deck's combat matters (the attack closes the
+        //     game), so we need a searched second main to sequence it. The deck does
+        //     NOT need main 1 for combat pump (it plays no growing board), so main 1
+        //     stays available but the win lands via the post-combat main.
+        if (def->params.hinata_cost_reducer)        { return true; }
     }
     return false;
 }

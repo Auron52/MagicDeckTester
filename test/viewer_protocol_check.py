@@ -170,6 +170,25 @@ def main():
     if not refs:
         print("no reference games found under references/")
         return 0
+    # SAMPLE mode (--sample / VIEWER_PROTOCOL_SAMPLE): one reference per deck dir. The full per-step
+    # replay is multi-minute (an engine spawn per decision x every ref), too heavy for the <45min
+    # regression budget, so regression runs a quick one-per-archetype CONTRACT sanity and overnight
+    # runs the full sweep (the contract doesn't vary by seed set; sampling still hits every deck's
+    # decision shapes). Picks the first ref per deck for determinism.
+    if "--sample" in sys.argv[1:] or os.environ.get("VIEWER_PROTOCOL_SAMPLE"):
+        # The sample = one ref per deck (archetype coverage) + every PINNED ref. PROMOTE-ON-CATCH:
+        # if the OVERNIGHT full sweep ever flags a contract-fail on a ref the sample missed, add that
+        # ref's relative path here so regression catches it early. Paths are relative to references/.
+        PINNED = set()   # e.g. {"Hinata2/claude_s1_gi0.json"}  -- grows as overnight surfaces gaps
+        seen, sampled = set(), []
+        for p in refs:
+            deck = p.split("/")[1]
+            rel = p[len("references/"):]
+            if deck not in seen or rel in PINNED:
+                seen.add(deck); sampled.append(p)
+        refs = sampled
+        print(f"[sample mode: {len(refs)} refs (one per deck + {len(PINNED)} pinned) "
+              f"-- full sweep runs in overnight]")
     contract_fail = play_drift = mull_drift = ok = 0
     for path in refs:
         c_ok, kind, detail = check_reference(path)

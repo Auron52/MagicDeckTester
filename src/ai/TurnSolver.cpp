@@ -822,29 +822,64 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 max_x = (P - bmv + disc) / pips;
             }
             if (max_x < 0) { max_x = 0; }
+            // Crackle with Power (scale_x + Hinata): the DECLARED extra-target COUNT is a searched
+            // parameter, exactly like Soulfire's own-target count. The discount DERIVES from it
+            // (min(X, 1+count)) and the extras take 5X + die (CrackleHitExtraTargets), so the search
+            // weighs a bigger discount against losing its own creatures (Hinata last). Bound the
+            // blow-up with the user's observation that only mid X branch: X where 5X is already
+            // LETHAL collapses to the max count (creatures die free on the win turn -> cheapest), and
+            // count is naturally 0 when there are no extra targets. Gated on scale_x + Hinata, so
+            // every other {X} burn keeps the single-variant path below (byte-identical).
+            const bool crackle_branch = IsCrackleCountSpell(def.params) && HinataInPlay(state);
+            const int  active_ci      = state.active_player_index;
+            const int  opp_life       = state.players[1 - active_ci].life;
             for (int x : ResolveProvider(state).XCandidates(state, def, max_x))
             {
                 if (x <= 0) { continue; }
-                ManaCost xcost = base;
-                xcost.generic += x * pips;                // X is paid (x_pips times) as generic mana
-                // Hinata reduces the whole generic (incl. X) by the spell's target count;
-                // for an X-target spell (Reality Spasm) that scales with the chosen X.
-                xcost.generic = std::max(0, xcost.generic - HinataGenericDiscount(def, state, x));
-                Action a;
-                a.kind           = Action::Kind::CastFromHand;
-                a.card_name      = ap.hand[i].m_name;
-                a.hand_index     = i;
-                a.cost           = xcost;
-                a.chosen_x       = x;
-                a.sacrifice_land = def.params.sacrifice_land;
-                a.eval           = x * mult * 100;         // EvalCard's DMG unit (dmg-equivalents)
-                // X burn reaches the face only when not creature-only targeted (the creature-
-                // target guard above already dropped Creature/Multi with no opponent creature).
-                // Damage per target = chosen X * x_damage_multiplier (Crackle = 5X).
-                a.direct_damage  = (def.params.targeting != Targeting::Creature) ? x * mult : 0;
-                a.is_noncreature = !def.card.IsCreature();
-                a.card_mv        = def.card.m_mana_cost.ManaValue();  // X = 0 outside the stack
-                actions.push_back(std::move(a));
+                // Declared extra-target count for this X (a single autonomous HEURISTIC; the user's
+                // "the AI target heuristic can remain"). GT-NEUTRAL design:
+                //   * -1  -> the LEGACY path: auto-max discount (min(X,avail)) and NO faithful kill.
+                //           Used for every non-crackle {X} spell AND for a NON-lethal Crackle -- so a
+                //           chip Crackle behaves EXACTLY as before (same discount, no creatures die),
+                //           never throwing away the Hinata engine for damage that doesn't win.
+                //   * cap -> a LETHAL Crackle (5X >= opp life): target the extras for the discount and
+                //           faithfully kill them. The max discount equals the old auto-max at that X
+                //           (1+min(X-1,E) == min(X,1+E)), and the creatures die on the WIN turn, so the
+                //           win/turn is identical -- only now honestly modelled.
+                // Net: the autonomous search is unchanged (non-lethal identical; lethal wins the same
+                // turn) while the faithful declared-target model is live for human play (Stage B).
+                int cnt_lo = -1, cnt_hi = -1;
+                if (crackle_branch)
+                {
+                    const int per_tgt = x * mult;
+                    const int cap = std::max(0, std::min(x - 1, CrackleExtraTargetCount(state, active_ci, per_tgt)));
+                    cnt_lo = cnt_hi = (per_tgt >= opp_life) ? cap : -1;   // lethal -> faithful max; else legacy
+                }
+                for (int count = cnt_lo; count <= cnt_hi; ++count)
+                {
+                    ManaCost xcost = base;
+                    xcost.generic += x * pips;                // X is paid (x_pips times) as generic
+                    // Hinata reduces the whole generic (incl. X) by the target count. For Crackle the
+                    // discount derives from `count` (min(X,1+count)); for other X spells (Reality
+                    // Spasm) `count` is -1 and it uses the auto formula (unchanged).
+                    xcost.generic = std::max(0, xcost.generic - HinataGenericDiscount(def, state, x, count));
+                    Action a;
+                    a.kind            = Action::Kind::CastFromHand;
+                    a.card_name       = ap.hand[i].m_name;
+                    a.hand_index      = i;
+                    a.cost            = xcost;
+                    a.chosen_x        = x;
+                    a.crackle_targets = count;   // -1 = legacy (auto-max discount, no faithful kill)
+                    a.sacrifice_land  = def.params.sacrifice_land;
+                    a.eval            = x * mult * 100;        // EvalCard's DMG unit (dmg-equivalents)
+                    // X burn reaches the face only when not creature-only targeted (the creature-
+                    // target guard above already dropped Creature/Multi with no opponent creature).
+                    // Damage per target = chosen X * x_damage_multiplier (Crackle = 5X).
+                    a.direct_damage   = (def.params.targeting != Targeting::Creature) ? x * mult : 0;
+                    a.is_noncreature  = !def.card.IsCreature();
+                    a.card_mv         = def.card.m_mana_cost.ManaValue();  // X = 0 outside the stack
+                    actions.push_back(std::move(a));
+                }
             }
             continue;
         }
@@ -2401,10 +2436,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
-                    int own_targets, int ponder_keep)
+                    int own_targets, int ponder_keep, int crackle_targets)
     {
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
@@ -2445,7 +2480,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
             ec.generic += chosen_x * pips;
-            ec.generic = std::max(0, ec.generic - HinataGenericDiscount(def, state, chosen_x));
+            // Crackle: discount DERIVES from the declared count (crackle_targets); the enumeration
+            // costed it the same way -> lockstep. Non-Crackle X spells pass -1 (auto formula).
+            ec.generic = std::max(0, ec.generic
+                           - HinataGenericDiscount(def, state, chosen_x,
+                                 IsCrackleCountSpell(def.params) ? crackle_targets : -1));
         }
         if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
         zone.erase(it);
@@ -2475,6 +2514,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.chosen_x       = chosen_x;
             rec.soulfire_own_targets = own_targets;
             rec.ponder_keep    = ponder_keep;
+            rec.crackle_targets = crackle_targets;
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -2561,7 +2601,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // RevealLogPause for the search/rollout, so this is byte-identical there (face only).
                 // Uniform per-target damage: a fixed burn, or Crackle's 5X to up to X targets. Soulfire
                 // (damage_equals_top_mv) is handled above and never reaches here as a retargetable set.
-                if (g_play_target_chooser && dmg > 0 && !def.params.damage_equals_top_mv)
+                //
+                // Crackle with Power (discount_targets_scale_x): the extra-target COUNT is the
+                // searched/declared crackle_targets, so search AND human resolve identically here --
+                // 5X to the opponent face plus the first `crackle_targets` extras (creatures/self),
+                // which take 5X and die (SBA). This is the faithful model that makes the derived
+                // discount honest (the auto-max free-discount path is gone). Lockstep with
+                // EffectHandler::ResolveDirectDamage. No g_play_target_chooser detour for Crackle.
+                if (IsCrackleCountSpell(def.params))
+                {
+                    if (dmg > 0)
+                    {
+                        state.players[opp_idx].life -= dmg;              // face = 5X (the win)
+                        state.opponent_lost_life_this_turn = true;
+                        CrackleHitExtraTargets(state, state.active_player_index, dmg, crackle_targets);
+                    }
+                }
+                else if (g_play_target_chooser && dmg > 0 && !def.params.damage_equals_top_mv)
                 {
                     // Divided damage (Fiery Justice): up to `dmg` targets, the chooser returns a
                     // per-target allocation summing to dmg. Uniform burn: 1 target (or X for Crackle),
@@ -2917,7 +2973,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1);
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1);
                 }
             }
         }
@@ -3132,7 +3188,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
                 }
             }
         }
@@ -3159,7 +3215,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); } }
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); } }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -3182,14 +3238,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[ai];
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); }
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); }
                 }
             }
             else
@@ -3209,7 +3265,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
                 }
             }
         }
@@ -3219,14 +3275,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
             }
         }
 
@@ -3352,7 +3408,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -6251,7 +6307,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // chooser (g_play_top_chooser), so pre-selecting it here just stacked a redundant "choose
             // how to resolve" dialog ahead of the actual Reorder dialog. Collapsing the keep/shuffle
             // plans to one representative makes a Ponder cast 'accept' and lets the look dialog own it.
-            if (a.soulfire_own_targets > 0){ addSub(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own", a.card_name + " own targets", "+" + std::to_string(a.soulfire_own_targets), a.card_name, "soulfire"); }
+            // Soulfire own-target COUNT is a sub-decision. Emit the structured sub for EVERY count,
+            // including 0 -- otherwise the count=0 variant carries no sub and the viewer's
+            // renderChooseDialog (which falls back to the flat "choose how to resolve" dialog when ANY
+            // variant lacks subs) shows the old ugly picker instead of the nice per-count grid. Detect
+            // the Soulfire cast by its def (damage_equals_top_mv) rather than by count>0.
+            {
+                const CardDefinition* adef = CardDatabase::Instance().Lookup(a.card_name);
+                if (adef && adef->params.damage_equals_top_mv)
+                {
+                    addSub(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own",
+                           a.card_name + " own targets", "+" + std::to_string(a.soulfire_own_targets),
+                           a.card_name, "soulfire");
+                }
+            }
         }
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
         if (!p.fetch_target.empty()) { addSub(p.land_to_play + " fetches " + p.fetch_target, p.land_to_play + " fetches", p.fetch_target, p.fetch_target, "fetch"); }

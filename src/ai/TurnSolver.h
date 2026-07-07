@@ -81,6 +81,20 @@ struct Action
                                        // Hinata cost against the mana-value damage to those
                                        // creatures. SoulfireDig picks WHICH (expendable first,
                                        // Hinata last). 0 for every non-Soulfire action.
+    int         crackle_targets  = -1;
+                                       // Crackle with Power (scale_x Hinata discount): searched COUNT
+                                       // of extra beneficial targets BEYOND the opponent face
+                                       // (0..cap of opp creatures + own non-Hinata creatures + self if
+                                       // 5X<life + Hinata last). Total targets = 1 + count; the Hinata
+                                       // discount DERIVES from it (= min(X, 1+count)) instead of the old
+                                       // auto-max. The cast (rollout AND executor) deals 5X to each
+                                       // chosen creature/self and kills the lethal ones (SBA), so they
+                                       // leave the target pool for later spells.
+                                       // SENTINEL -1 = legacy (auto-max discount, NO faithful kill) --
+                                       // the DEFAULT, so any action that isn't an explicit Crackle
+                                       // count-variant behaves exactly as before. 0 would mean "declared
+                                       // zero extras" -> discount min(X,1)=1, drastically overpricing
+                                       // Crackle and hiding the combo from the search (the gi26 bug).
     int         max_casts_after  = -1;
                                        // Irencrag Feat: after this cast resolves the controller may
                                        // cast at most this many MORE spells this turn. -1 = no limit.

@@ -76,6 +76,11 @@ struct StackEntry
                                                // added as extra targets (deeper dig). EffectHandler
                                                // passes it to SoulfireDig so the executor's dig
                                                // matches the rollout's (lockstep). Unset elsewhere.
+    std::optional<int>  crackle_targets;       // Crackle with Power: searched # of extra beneficial
+                                               // targets beyond the opp face (creatures/self) whose
+                                               // {1}-each Hinata discount was taken; the cast deals 5X
+                                               // to each and kills the lethal ones (SBA). EffectHandler
+                                               // + ApplyPlanDirect resolve it in lockstep. Unset else.
     std::optional<int>  ponder_keep;           // Ponder cast_reorder: searched keep(1)-vs-shuffle(0)
                                                // call. ResolveDrawSpell passes it to
                                                // ReorderTopOrShuffle so the executor matches the

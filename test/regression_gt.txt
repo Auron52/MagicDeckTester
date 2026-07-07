@@ -1,5 +1,6 @@
-# Regression ground truth -- commit ccb7e65  date 2026-07-07
+# Regression ground truth -- commit 32e3a67  date 2026-07-07
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (regression, 2026-07-07): gi54:DRAWS DIVERGE from T1 (d5_s2002) -- different physical game/shuffle variance, not a mechanistic regression (verified via explain_game)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -19,9 +20,9 @@ knights_smoke_d5_s1001=150/4.36/2c6fece4acf412f3
 antilife_smoke_d0_s1001=895/5.43017/b811ebed9ab04d2a
 antilife_smoke_d3_s1001=250/4.136/eb2a5790982e5ee1
 antilife_smoke_d5_s1001=150/4.09333/7a67e89348922a61
-hinata_smoke_d0_s1001=518/6.87066/26ee1d0a419db16d
-hinata_smoke_d3_s1001=145/5.73793/e17fa4900f1835c3
-hinata_smoke_d5_s1001=71/5.78873/abd0fec0a274a6e4
+hinata_smoke_d0_s1001=608/6.78289/febee920ebb21f15
+hinata_smoke_d3_s1001=146/5.56164/a90a66f0727146a5
+hinata_smoke_d5_s1001=72/5.61111/392a8258d34ba762
 
 # --- regression ---
 slivers_regression_d0_s2002=999/4.7007/da946ecd33614760
@@ -49,11 +50,11 @@ antilife_regression_d3_s2002=299/4.09365/0aef4c9bf229d3dc
 antilife_regression_d3_s3003=299/4.09365/a6e11a66cb53e7b2
 antilife_regression_d5_s2002=249/4.12851/c9c811e7db3c54c8
 antilife_regression_d5_s3003=249/4.08032/c0bdb293d370b534
-hinata_regression_d0_s2002=516/6.83915/454b016db57621a5
-hinata_regression_d3_s2002=190/5.78947/53dcc749a951aecd
-hinata_regression_d3_s3003=190/5.84737/b091448e4d42c3fb
-hinata_regression_d5_s2002=95/5.82105/04353c14282583e5
-hinata_regression_d5_s3003=95/5.83158/8034e32f2c8c8bff
+hinata_regression_d0_s2002=592/6.78716/5a909ea418771732
+hinata_regression_d3_s2002=195/5.70769/cc3707d6a203afd2
+hinata_regression_d3_s3003=192/5.70312/8e44cdc7a497b7ed
+hinata_regression_d5_s2002=97/5.73196/1162cee8892aa0c4
+hinata_regression_d5_s3003=97/5.71134/137923d140cafcb0
 
 # --- overnight ---
 slivers_overnight_d0_s4004=1998/4.66917/81443ed4f7c01e43

@@ -183,6 +183,11 @@ public:
     // Soulfire's own-target branch only earn their keep with Hinata's discount online.
     bool ShouldEmitUntapRitual(const GameState&) const override;
     bool BranchSoulfireOwnTargets(const GameState&) const override;
+    // Hold mana dorks back from combat: a 0-power, no-trigger creature (Ornithopter of Paradise)
+    // deals nothing when it swings and only taps itself -- forfeiting the mana that the (now
+    // second-main) Crackle wants. In a goldfish there are no blockers and Hinata has no Exalted, so
+    // such a dork has ZERO reason to attack. Keep it untapped to fund the post-combat payoff.
+    bool ShouldAttackWith(const GameState&, const Permanent&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

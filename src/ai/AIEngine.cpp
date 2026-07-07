@@ -1377,14 +1377,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
     // Cast a spell from hand by name.
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
-                            int chosen_x = 0, int own_targets = 0, int ponder_keep = -1)
+                            int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
+                            int crackle_targets = -1)   // -1 = legacy auto-max discount (see Action::crackle_targets)
     {
         Player& ap = state.ActivePlayer();
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);
-        CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep);
+        CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
+                          crackle_targets);
     };
 
     // Cast a spell from hand via its alternative cost (Invigorate / Skyshroud Cutter /
@@ -1545,7 +1547,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
-            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); } resolve_now(); }
+            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::DigDraw)
@@ -1587,14 +1589,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
             {
-                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); resolve_now();
+                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); resolve_now();
                 if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(bp_depth + 1); }
             }
         }
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); resolve_now(); }
+            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); resolve_now(); }
         }
         for (const Action& a : extra.actions)
         {
@@ -1681,7 +1683,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -1713,7 +1715,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
             && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); note_draw_engine(a.card_name); resolve_now();
         }
     }
     // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
@@ -1735,7 +1737,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); note_draw_engine(a.card_name); resolve_now();
             spec_hoisted_sac.insert(ai);
         }
     }
@@ -1748,7 +1750,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -1778,7 +1780,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[oi];
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now();
+        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); note_draw_engine(a.card_name); resolve_now();
     }
     }
     }
@@ -1788,7 +1790,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep); note_draw_engine(a.card_name); resolve_now(); }
+        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); note_draw_engine(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
@@ -2659,7 +2661,8 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
 
 void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
                                  int alt_lifegain, const std::string& tutor_target,
-                                 int chosen_x, int own_targets, int ponder_keep)
+                                 int chosen_x, int own_targets, int ponder_keep,
+                                 int crackle_targets)
 {
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
@@ -2678,6 +2681,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // Soulfire Eruption: carry the searched own-creature target count so EffectHandler's dig
     // exiles the same N cards and kills the same own creatures as the rollout (lockstep).
     if (own_targets > 0) { entry.soulfire_own_targets = own_targets; }
+    // Crackle with Power: carry the declared extra-target count so ResolveDirectDamage's derived
+    // discount + faithful 5X damage match the rollout's (lockstep). Scale_x spells only.
+    if (IsCrackleCountSpell(def->params)) { entry.crackle_targets = crackle_targets; }
     // Ponder cast_reorder: carry the searched keep-vs-shuffle call so ResolveDrawSpell's reorder
     // matches the rollout's (lockstep). -1 = not a reorder spell (legacy heuristic path).
     if (ponder_keep >= 0) { entry.ponder_keep = ponder_keep; }
@@ -2766,7 +2772,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     {
         int pips = def->card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
         effective.generic += chosen_x * pips;
-        effective.generic = std::max(0, effective.generic - HinataGenericDiscount(*def, state, chosen_x));
+        // Crackle: derive the discount from the declared count (lockstep with enumeration + rollout).
+        effective.generic = std::max(0, effective.generic
+                              - HinataGenericDiscount(*def, state, chosen_x,
+                                    IsCrackleCountSpell(def->params) ? crackle_targets : -1));
         // X is now resolved into the generic cost: drop the {X} symbol so ToString()
         // prints the actual mana paid (e.g. "{4}{R}{R}") and not a stray "{X}" on top.
         effective.has_x  = false;
