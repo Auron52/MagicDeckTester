@@ -31,6 +31,16 @@ def step(seed, gi, choices):
 
 def pick(d):
     t = d.get("type")
+    # mulligan/bottom are driven by ai_choice, not heuristic_default; defaulting to 0 on a
+    # mulligan means "mulligan again" -> an infinite loop that never reaches a turn.
+    if t == "mulligan":
+        ac = d.get("ai_choice")
+        return ac if isinstance(ac, int) else 1
+    if t == "bottom":
+        ac = d.get("ai_choice")
+        if isinstance(ac, dict):
+            return ac.get("index", 0)
+        return ac if isinstance(ac, int) else 0
     if t == "main_phase":
         plans = d.get("plans", [])
         if not plans:

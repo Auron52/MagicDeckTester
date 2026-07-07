@@ -8,6 +8,49 @@ Use this skill when the user asks to analyze a deck, add a new deck, or run a si
 
 ---
 
+## Running this at scale — subagent decomposition (so a long analysis never blows context)
+
+A full analysis of a fresh deck is **long**: fetch + implement + review + viewer-wire every
+missing card (Stage 2), then run every verification harness reading piles of game logs (Stage
+5). Doing it all in one agent's context will exhaust it mid-run. The work is naturally
+parallel and its steps conclude in **compact structured data**, so decompose it — subagents do
+the heavy reading/fetching in *their* context and return only conclusions, keeping the
+orchestrator's context flat regardless of deck size. (This is the `Workflow` engine's shape: a
+**pipeline** for Stage 2, **parallel** verdicts for Stage 5. Use it when the user opts into
+orchestration; otherwise spawn agents with the `Agent` tool.)
+
+**Stage 2 — per-card research fan-out → single integrator.** One agent per `missing`/`gaps`
+card: it does 2a (curl Scryfall — the fat oracle JSON stays in *its* context, never the
+orchestrator's), 2b (rules skill), classifies the tier and the 2c-ter viewer bucket, and
+returns a compact draft — `{name, tier, mana_cost, cards_json_entry, cpp_changes:[{file,
+what}], viewer_decisions:[{choice, bucket, wiring}], deferrals:[…]}`. The orchestrator collects
+N small drafts, not N Scryfall dumps. **Do NOT parallelize the writes:** `cards.json` and the
+shared C++ (`CardParams`, `EffectHandler`, `TurnSolver`) can't take concurrent edits, so a
+**single integrator agent** (or the orchestrator itself) applies the drafts serially, resolves
+C++ conflicts (multiple cards extending the same struct/handler), runs 2d/2d-bis, and builds.
+Research fans out; integration is serial.
+
+**Stage 5 — verification sub-stages as agents returning verdicts.** 5a (nonconv/fd-diverge),
+5b (multi-depth), 5e/5g (heuristic mining) each read many logs but conclude in a sentence —
+one agent each, returning `{clean, outliers:[{gi, explanation}]}`. **5d is already a 100-agent
+fan-out** — copy that model. The orchestrator sees only verdicts and decides whether to loop
+back to Stage 2. The heavy log-reading never touches the main thread.
+
+**The per-deck ledger — durable state across compaction AND handoffs.** Write a git-tracked
+`docs/design/analysis-<deck>.md` (per the CLAUDE.md "deferred/shared state goes in git, not
+private memory" rule, applied to *in-flight* work) that the run continuously updates: cards
+done + tier, viewer classifications, verification verdicts, open convergence loops. Context
+becomes disposable — the ledger is the memory a resumed session or a second machine reads to
+continue.
+
+**The one caveat.** Subagents do NOT inherit the orchestrator's accumulated decisions (e.g.
+"we model Reality Spasm as a wild-mana float", an agreed deferral, a naming convention). Pass
+those in each subagent's prompt or have it read the ledger + the relevant `docs/design/` doc —
+never assume shared context. This reinforces the repo's no-private-project-memory rule rather
+than fighting it.
+
+---
+
 ## Core invariant — ONLY a deck/archetype heuristic may narrow the search
 
 **This is the most important rule for any AI/search work in this repo. Read it before touching the
@@ -194,7 +237,7 @@ Then place each of the card's choices into one bucket:
 
 - **Bucket A — reuses an existing decision type (the common case): nothing to build.** The card's choice is already surfaced (a burn spell → `target`, a scry → `scry`, a Karoo → `bounce`). For the plan-variant sub-decisions (tutor/fetch/X/ponder/soulfire-count), the ONLY per-deck work is confirming the provider's `*Candidates` hook returns **every legal option** — human-play runs unpruned (`MTG_UNPRUNED` + `MTG_PONDER_SEARCH`) so every legal sub-decision appears as a distinct `main_phase` plan variant the human picks among. Per the core invariant, the provider is the sole narrower, and **in human-play it must not narrow at all**. No new chooser is needed; just verify surfacing in 5h.
 
-- **Bucket B — introduces a NEW kind of interactive choice with no matching decision type (the bottom three rows, or anything the catalog doesn't cover): build it now.** This is a Tier 2/3 engine change, done under the same escalation ladder and reviewed in 2d. The pattern is **uniform across every viewer commit above** — replicate it, don't invent:
+- **Bucket B — introduces a NEW kind of interactive choice with no matching decision type (the bottom three rows, or anything the catalog doesn't cover): build it now.** This is a Tier 2/3 engine change, done under the same escalation ladder and reviewed in 2d. The pattern is **uniform across every viewer commit above** — replicate it, don't invent. **[tools/play/DECISIONS.md](tools/play/DECISIONS.md) is the registry of all existing decision types and their four wiring sites** — read it to copy a sibling type's shape (including which GUI shape, modal art-grid vs board-click, it uses), and after wiring add the new type's row there and its param→type mapping to `audit_viewer_decisions.py`'s manifest:
   1. **Chooser hook** — a `using <Name>Chooser = std::function<…>` typedef + `extern thread_local <Name>Chooser* g_play_<name>_chooser;` in [src/core/GameLogger.h](src/core/GameLogger.h), and null it in the `RevealLogPause` RAII (line ~305) so it is **inert during search/rollout** and fires only on real human resolution.
   2. **Call site** — invoke the chooser from the resolution code ([src/core/SpellEffects.h](src/core/SpellEffects.h) / [src/core/EffectHandler.cpp](src/core/EffectHandler.cpp)), **gated on the pointer being non-null**, falling back to the existing heuristic when null. This keeps the autonomous engine byte-identical (the search never sets the chooser).
   3. **Protocol emitter** — a `Write<Name>DecisionJson` + its wiring in `RunClaudePlay` ([src/main.cpp](src/main.cpp)): print the decision between `<<<CLAUDE_DECISION>>>`/`<<<END_DECISION>>>` (exit 70) or consume the next `--choices` index, with a `"type"` string and a `heuristic_default` field (as `vial_charge` does). Prefer **enumerated option indices** so it reuses the existing integer `--choices` stream — that ships without a new input model and is the recommended default (see `logs/viewer-issues-plan.md`).
@@ -520,7 +563,15 @@ encoded heuristic in Stage 6a.
 
 This is the verification backstop for the 2c-ter wiring: confirm the viewer actually surfaces every interactive choice the deck's cards create, so the user is not the one who discovers a missing decision mid-game. Because the play viewer and the claude-play sweep share **one** decision protocol (the `--claude-play` JSON contract), you verify the viewer by exercising that protocol — no browser needed.
 
-**Reuse the 5d sweep as the check.** From each card's 2c-ter classification, build the set of decision `type`s (and plan-variant sub-decisions) the deck *should* emit. Have each 5d agent record the decision `type`s it actually saw and the sub-decision variants it was offered (e.g. did casting the tutor offer every `tutor_target`? did the burn spell emit a `target` decision rather than resolving pre-aimed?). Aggregate across the sweep and **diff against the expected set**. The failure signature is *"the game advanced past a card's choice without a decision firing"* — that means the heuristic silently resolved it, which is exactly the class of gap the user currently finds by hand. Any such card goes back to 2c-ter (wire it), not to the user.
+**Run the mechanical gate first (`scripts/audit_viewer_decisions.py`).** This is the viewer analogue of 2d-bis's cost audit — a prose "classify each card's decisions" reminder has the same failure mode as the prose cost reminder (one card's choice ships silently auto-resolved), so a script removes the judgment call:
+
+```
+python scripts/audit_viewer_decisions.py <deck> <deck>.profile.json [base_seed] [n_games]
+```
+
+It reads each deck card's `cards.json` params, computes the **expected** decision-type set from a param→type manifest (the machine half of [tools/play/DECISIONS.md](tools/play/DECISIONS.md)), drives a bounded `--claude-play` sweep, and diffs expected vs. surfaced. It reports three outcomes: a **HARD MISS** (a card the sweep DID cast whose decision never surfaced → silently heuristic-resolved → back to 2c-ter and wire it, a hard stop like a cost mismatch); **UNVERIFIED** (the card was never cast in the sweep → confirm with the targeted repro below); and a **SELF-GUARD FAILURE** (a card carries a choice-bearing `cards.json` param with no manifest row → a new interactive mechanic was added without viewer wiring/mapping; add the row to the script's `MANIFEST` and wire it per the registry). It also fails loudly on a **DRIVER FAILURE** (games stuck in a decision loop). Treat a HARD MISS or SELF-GUARD/DRIVER FAILURE as a hard stop; UNVERIFIED rows fall through to the targeted repro. **When you wire a new decision type (bucket B), add its `cards.json` param → type mapping to the manifest and a row to the registry so the gate stays exhaustive as cards.json grows.**
+
+**Reuse the 5d sweep as the observational check for anything the auditor left UNVERIFIED.** From each card's 2c-ter classification, build the set of decision `type`s (and plan-variant sub-decisions) the deck *should* emit. Have each 5d agent record the decision `type`s it actually saw and the sub-decision variants it was offered (e.g. did casting the tutor offer every `tutor_target`? did the burn spell emit a `target` decision rather than resolving pre-aimed?). Aggregate across the sweep and **diff against the expected set**. The failure signature is *"the game advanced past a card's choice without a decision firing"* — that means the heuristic silently resolved it, which is exactly the class of gap the user currently finds by hand. Any such card goes back to 2c-ter (wire it), not to the user.
 
 **Targeted repro for anything the sweep didn't reach.** A decision only appears when a game reaches the triggering state, so a card that rarely gets cast may never surface in the sweep. For each such card, play a seed/line that casts it and confirm the expected `type` fires (exit 70) with the full option list:
 ```bash
@@ -540,7 +591,7 @@ Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
 3. Multi-depth results are monotonic and plausible, with **every outlier game explained** (legitimate line, budget starvation, or a fixed bug — not an unexplained slowdown).
 4. The 100-game claude-play sweep (5d) ran, and **every legality/invariant flag is resolved** — fixed (engine/card/data bug) or dismissed with a reason (verified false positive). Win-turn deltas are noted but do not block.
 5. Any narrowing heuristic introduced/relied on for this deck (cast ordering, dig, targeting, tutor/fetch) passed the **5e oracle diff + with/without A/B** — its proposals match the full search where it matters, with every per-game regression explained.
-6. **Play-viewer decision surface (5h) is clean**: every interactive choice the deck's cards create is surfaced in the human-play path — no card's choice is silently heuristic-resolved except a Stage 6a-disclosed, provably-inert known gap the user signed off on.
+6. **Play-viewer decision surface (5h) is clean**: `scripts/audit_viewer_decisions.py` reports no HARD MISS, no SELF-GUARD FAILURE, and no DRIVER FAILURE, and every UNVERIFIED row was confirmed by a targeted repro — every interactive choice the deck's cards create is surfaced in the human-play path, with no card's choice silently heuristic-resolved except a Stage 6a-disclosed, provably-inert known gap the user signed off on.
 
 Only a deck that satisfies all of these is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
 
