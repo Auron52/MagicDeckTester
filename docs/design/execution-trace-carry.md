@@ -111,11 +111,37 @@ failure mode.
 
 ## Phasing
 
-- **Phase A** — per-cell touched-mask in the sidecar (`MTG_KEEP_TRACE=1`) + declared `MTG_KEEP_CHANGED_CARDS`
-  reuse + the fidelity gate. Smallest, proves the exact-reuse machinery on real cells.
-- **Phase B** — automatic attribution via card-definition-hash diff + the engine-change guard.
-- **Phase C** — mechanic/effect-level trace (a change localized to one rule, e.g. trample, reuses cells
-  whose rollouts never invoked it) for localized ENGINE changes. Bigger.
+- **Phase A — DONE (d461b02).** Per-cell touched-mask in the sidecar (`MTG_KEEP_TRACE=1`) + declared
+  `MTG_KEEP_CHANGED_CARDS` reuse + the fidelity gate. Proves the exact-reuse machinery on real cells.
+- **Phase B — NEXT (queued).** Automatic attribution via card-definition-hash diff + the engine-change
+  guard. Removes the manual declaration for the common case (card-data fixes). Concrete plan below.
+- **Phase C — DEPRIORITIZED (user dubious, 2026-07-07).** Mechanic/effect-level trace for *localized engine*
+  changes. Big investment (taxonomy + per-site instrumentation + manual mechanic attribution) for the
+  less-common, harder-to-attribute case. Revisit only if routine engine work on an expensive deck makes
+  the "engine change → full re-run" fallback the bottleneck. Not planned.
+
+### Phase B build plan (concrete)
+
+1. **Def-hash primitive** (shared with `structural-bucket-merge.md`): a function hashing a card's
+   behaviorally-relevant `CardDefinition` — `tmpl`, `params`, cost, types, P/T — EXCLUDING name/oracle-text.
+   Prefer hashing the raw `cards.json` entry (minus cosmetic fields) over a hand-written field walk (so a
+   new param can't be silently missed). Expose per-card at load from `CardDatabase`.
+2. **Store in the traced sidecar** (`MTG_KEEP_TRACE=1` path in `ExhaustiveKeep.cpp` raw emit): `meta.card_defs`
+   = { card name -> def-hash } for every distinct deck card, plus an **engine fingerprint**
+   (`meta.engine_fp`) — a build-time hash of the non-cards.json engine sources (inject via CMake, or a
+   generated header) so "engine changed" is separable from "card data changed". `MTG_COMMIT` alone is NOT
+   enough (it bumps for any commit incl. docs/card-data).
+3. **Auto-attribution at re-run** (extend the `MTG_KEEP_PRIOR_RAW` consume): diff current per-card def-hashes
+   vs `meta.card_defs` → the changed-card set (feeds the existing `MTG_KEEP_CHANGED_CARDS` disjointness path,
+   so most of the consume is already built). `MTG_KEEP_CHANGED_CARDS` stays as a manual override.
+4. **Engine guard** (the safety gate): do card-level trace reuse ONLY if `engine_fp` is unchanged. If
+   `engine_fp` changed → refuse trace reuse, fall back to statistical change-detection / full (an engine
+   change can move any cell). Also: if `play_digest` unchanged → reuse everything (trivial top layer,
+   already the pooling case); if `play_digest` changed but 0 card defs changed AND engine_fp unchanged →
+   contradiction (shouldn't happen) → conservative refuse.
+5. **Validate** on the tiny deck: (a) no change (identical hashes) → reuse all → reproduce prior; (b) flip
+   one card's def-hash synthetically → only that card in the changed set → cells touching it re-sampled,
+   others reused; (c) flip engine_fp → refuse, full statistical. Reuse `logs/prune_val` harness.
 
 ## Not for small deck changes
 
