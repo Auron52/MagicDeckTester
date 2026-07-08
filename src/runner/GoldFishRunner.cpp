@@ -202,8 +202,10 @@ static void CleanupLogs(const std::filesystem::path& log_dir,
 RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base_seed,
                                int max_turns, const MulliganProfile& profile,
                                const std::filesystem::path& log_dir, int base_game_index,
-                               int lookahead_depth, int timeout_ms, int num_threads)
+                               int lookahead_depth, int timeout_ms, int num_threads,
+                               int forced_mull_count, std::vector<int> forced_bottom)
 {
+    const bool forced = forced_mull_count >= 0;
     int requested = num_threads;
     num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
     num_threads = std::min(num_threads, num_games);
@@ -232,8 +234,12 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     if (logging)
     {
         std::filesystem::create_directories(log_dir);
-        numbering = BuildCardNumbering(deck);
         run_id    = MakeRunId(base_seed);
+    }
+    // Card numbering is needed for logging AND for forced bottoming (bottoms by card m_number).
+    if (logging || forced)
+    {
+        numbering = BuildCardNumbering(deck);
     }
 
     // Dynamic self-scheduling: rather than statically partitioning games into
@@ -255,6 +261,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
         {
             AIEngine   ai(profile, lookahead_depth, per_thread_timeout);
             ai.SetSearchPostCombat(needs_second_main);
+            if (forced) { ai.SetForcedMulligan(forced_mull_count, forced_bottom); }
             GameEngine engine(ai);
 
             for (;;)
@@ -266,7 +273,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 state.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(state, base_game_index + gi);
 
-                if (logging) { AssignCardNumbers(state, numbering); }
+                if (logging || forced) { AssignCardNumbers(state, numbering); }
 
                 GameLogger logger;
                 if (logging)

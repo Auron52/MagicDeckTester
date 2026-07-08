@@ -2509,9 +2509,26 @@ int main(int argc, char* argv[])
                                  validate_line, force_mulligan);
         }
 
+        // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded
+        // opening hand on the autonomous search. Parse "<count>:<n1,n2,...>"; inert when unset.
+        int              fm_count = -1;
+        std::vector<int> fm_bottom;
+        if (!force_mulligan.empty())
+        {
+            auto colon = force_mulligan.find(':');
+            fm_count   = std::stoi(force_mulligan.substr(0, colon));
+            if (colon != std::string::npos)
+            {
+                std::stringstream bs(force_mulligan.substr(colon + 1));
+                std::string tok;
+                while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fm_bottom.push_back(std::stoi(tok)); } }
+            }
+        }
+
         GoldFishRunner runner;
         RunResult result = runner.Run(deck, num_games, seed, max_turns, profile, log_dir,
-                                       base_game_index, lookahead_depth, timeout_ms, num_threads);
+                                       base_game_index, lookahead_depth, timeout_ms, num_threads,
+                                       fm_count, std::move(fm_bottom));
 
         std::cout << "Seed         : " << result.seed << "\n";
         std::cout << "Games played : " << result.games_played << "\n";
