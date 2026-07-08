@@ -197,25 +197,33 @@ within-centering didn't help under regression. The **strong-label pivot (per-tur
 is unnecessary** — `FSLineTail` labels were never the problem (they're a full search; the objective
 was). That whole Phase-3b plan can be shelved unless a *harder* deck shows label-limited behavior.
 
-### Generalization test — burn (aggro), 2026-07-08
+### Generalization test — 3 decks, 2026-07-08
 
-Ran the whole pipeline on **burn** (aggro; contrast to TH's value/combo). Result maps the method's
-reach precisely:
+Ran the whole pipeline on three decks spanning archetypes. Result maps the method's reach precisely
+(win% / loss-penalized avg win turn; A/B seed 2002):
 
-| deck | learned **d0** vs baseline | learned **d3 leaf** vs baseline |
-|---|---|---|
-| Treasure Hunt (value/combo) | **87.2%/5.552** vs 86.8%/5.558 — matches/beats | 99.0%/4.150 vs 99.0%/4.145 — ties |
-| burn (aggro, tuned provider) | 99.0%/**4.91** vs 98.0%/**4.65** — wins as often but **~0.2t slower** | 100%/**4.320** vs 100%/4.325 — **ties** |
+| deck | complexity | learned **d0** vs baseline | learned **d3 leaf** vs baseline |
+|---|---|---|---|
+| Treasure Hunt | value/combo | **87.2%/5.552** vs 86.8%/5.558 — matches/beats | 99.0%/4.150 vs 99.0%/4.145 — ties |
+| burn | aggro, tuned provider | 99.0%/4.91 vs 98.0%/4.65 — wins as often, **~0.2t slower** | 100%/4.320 vs 100%/4.325 — ties |
+| Anti-Lifegain | combo (assemble pieces) | **30.8%**/8.24 vs 90.0%/5.65 — **much worse** (pairwise acc 57%) | 100%/4.060 vs 100%/4.060 — ties |
 
-Two robust conclusions:
-1. **The ranking objective generalizes** — burn does *not* collapse (no durdle); it wins 97–99%.
-2. **Search-leaf use is universal parity.** At d3 the learned leaf ties baseline on *both* decks —
-   the search corrects the linear model's imperfect sequencing. This is the strongest, most general
-   value: a learned leaf is a drop-in for `EvalCard` at every deck tested.
-3. **Standalone-d0 is capacity-limited on tuned-aggro.** burn's hand-tuned `BurnProvider` (Searing
-   Blaze landfall timing, creature-vs-burn sequencing, land-banking) is genuinely beyond a *generic
-   linear* ranker; it wins ~0.2t slower at d0. So a burn eval sidecar is **not** ship-worthy at d0
-   (kept in `logs/eval/`, not committed); TH's **is** (matches/beats).
+Three robust conclusions:
+1. **The ranking objective is the fix and it generalizes as an objective** — no deck reverts to the
+   regression durdle; every deck's ranker learns "cast beats pass."
+2. **Search-leaf use is a SAFE drop-in on every deck** — at d3 the learned leaf ties baseline on all
+   three (the search absorbs/corrects the linear model). Honest caveat: on converged decks "ties"
+   partly means the leaf is *inert* (the search finds lethal regardless), so the claim is **never
+   harms + deterministic**, not yet "improves". Whether a learned leaf enables *cheaper* search (same
+   quality at lower depth) is the untested, high-value follow-up.
+3. **Standalone-d0 quality tracks deck complexity; the ceiling is LINEAR CAPACITY.** Simple
+   value/combo (TH) matches/beats baseline; tuned-aggro (burn) is ~0.2t slower (its hand-tuned
+   `BurnProvider` sequencing is beyond a generic linear ranker); assemble-the-combo (Anti-Lifegain —
+   lethal needs a *conjunction* of pieces a linear sum can't represent) drops to 30.8%. Only TH's
+   sidecar is ship-worthy at d0; burn/antilife are kept in `logs/eval/` (uncommitted).
+   A naive **shared** cross-deck linear ranker (TH+burn pooled) *collapses both* (10%/0%) — the decks
+   demand opposite strategies, so one linear coefficient set serves neither. Per-deck (or nonlinear +
+   deck-conditioned) is required.
 
 The burn gap motivated **`plan_face_damage`** (v3, committed `d606e0c`): the summary punted
 `direct_damage→0`, so non-lethal face burn was invisible (only the exact lethal check saw kills).
