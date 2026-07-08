@@ -307,11 +307,30 @@ turn) per deck. A/B vs the exact rollout (`scripts/eval_ab.py --value-model`, `t
 
 **Why this matters / next:** the analyzer's cost is dominated by these rollouts (skill 5f), so a
 ~10–15× cheaper leaf directly funds deeper search / bigger mulligan grids in the same overnight
-window. Next: (a) train + A/B value sidecars for the remaining decks (antilife/hinata/knights/
-slivers); (b) test a **grindy/non-converging** deck where the leaf is decisive — there the value
-model could *improve* quality, not just speed; (c) commit the WIP behind its `MTG_VALUE_MODEL` gate
-(off by default → GT byte-identical) and ship per-deck value sidecars. Artifacts: `train_eval_gbdt.py
---regression`; rows `logs/eval/burn_value.rows`, `logs/eval/th_value.rows`; models in `/tmp`.
+window.
+
+**Generalization — all 5 decks confirmed (2026-07-08), value sidecars committed (inert-gated).**
+Trained a fixed-point regression GBDT per deck and A/B'd value-leaf vs the exact rollout (150g s2002,
+threads=1). Every deck matches baseline quality at adequate depth (d5) at a large speedup:
+
+| deck | baseline d3 | value-leaf d5 (quality) | speedup (base-d3 / value-d5) |
+|---|---|---|---|
+| Treasure Hunt | 18.1s (98.7%/4.081) | 3.8s (98.7%/4.081) | ~14× |
+| burn | 111s (100%/4.325) | 24.8s* (100%/4.32) | ~15× (value-d3 7.6s) |
+| knights | 22.1s (100%/4.32) | 2.15s (100%/4.32) | ~14× |
+| slivers | 40.0s (100%/4.26) | 2.53s (100%/4.26) | ~16× |
+| Anti-Lifegain | 38.3s (100%/4.06) | 16.0s (100%/4.06) | ~3–4× (combo leaf costlier) |
+
+Robust pattern: (1) at **adequate depth (d5)** the value-leaf reproduces baseline win%/avg-turn
+exactly — because those decks resolve lethality within the horizon, so the leaf is near-inert and the
+speedup is pure (skip the expensive playout); (2) at **shallow depth (d3)** it's slightly worse where
+the leaf IS decisive (antilife 97.3% vs 100% at d3, recovers to 100% at d5); (3) deterministic across
+threads. So it's a same-quality, ~10–15× cheaper search (antilife's combo leaf is harder to value, so
+~3–4×). Committed `decks/<name>.value.json` (5 decks), presence-gated + `MTG_VALUE_MODEL`-gated →
+byte-identical with the flag off (verified: knights model-off identical with/without the sidecar).
+Hinata sidecar pending its dump. Adoption (flip the default on + rebaseline GT to the faster search) is
+a deliberate follow-up decision. Artifacts: rows `logs/eval/*_value.rows`; `train_eval_gbdt.py
+--regression`.
 
 ### d0 lever: `plan_baseline_eval` — augment the tuned heuristic (2026-07-08, `248fd54`)
 
