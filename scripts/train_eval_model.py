@@ -134,11 +134,14 @@ def rmse(X, y, coefs, intercept):
     return math.sqrt(s / len(X))
 
 
-def write_sidecar(path, feat_names, coefs, intercept):
-    """Store NEGATED fixed-point coefs so Score() = -predicted_win_turn (higher = better)."""
-    obj = {"intercept": int(round(-intercept * SCALE)), "coefs": {}}
+def write_sidecar(path, feat_names, coefs, intercept, negate=True):
+    """Fixed-point coefs. negate=True (RANKER): store -coef so Score()=-predicted_win_turn (higher =
+    better plan). negate=False (VALUE model): store +coef so Score()=+predicted_win_turn (the search
+    reads the leaf Score directly as a win turn, lower = better)."""
+    sign = -1.0 if negate else 1.0
+    obj = {"intercept": int(round(sign * intercept * SCALE)), "coefs": {}}
     for name, c in zip(feat_names, coefs):
-        q = int(round(-c * SCALE))
+        q = int(round(sign * c * SCALE))
         if q != 0:
             obj["coefs"][name] = q
     with open(path, 'w') as f:
@@ -208,6 +211,9 @@ def main():
                     help='within-decision centering: fit only WITHIN-decision variation (ranking-targeted)')
     ap.add_argument('--rank', action='store_true',
                     help='pairwise learning-to-rank (targets d0 pick-accuracy, not win-turn RMSE)')
+    ap.add_argument('--value', action='store_true',
+                    help='VALUE model: ridge-regress win turn and store NON-negated (Score = win turn) '
+                         'for the search leaf that replaces the rollout')
     ap.add_argument('--epochs', type=int, default=300)
     ap.add_argument('--lr', type=float, default=1.0)
     args = ap.parse_args()
@@ -277,9 +283,10 @@ def main():
             print("    %-22s %+.4f" % (name, c), file=sys.stderr)
 
     if args.out:
-        obj = write_sidecar(args.out, feat_names, coefs, intercept)
-        print("wrote %s (%d nonzero coefs, fixed-point x%d)"
-              % (args.out, len(obj["coefs"]), SCALE), file=sys.stderr)
+        obj = write_sidecar(args.out, feat_names, coefs, intercept, negate=not args.value)
+        print("wrote %s (%d nonzero coefs, fixed-point x%d, %s)"
+              % (args.out, len(obj["coefs"]), SCALE, "VALUE=win-turn" if args.value else "ranker"),
+              file=sys.stderr)
 
 
 if __name__ == '__main__':

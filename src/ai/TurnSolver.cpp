@@ -5622,6 +5622,21 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (budget && budget->Overrun())   { return { max_turns + 1, {} }; }
     if (depth <= 0)
     {
+        // Learned leaf VALUE (MTG_VALUE_MODEL): distil the deep search into an O(1) win-turn estimate
+        // that REPLACES the horizon rollout -- the rollout is the weak, slow link (greedy play-out, not
+        // searched). The model's Score is a fixed-point WIN TURN (x1000); round + clamp to the legal
+        // window [this turn, loss]. nullptr / empty / flag-off -> the exact rollout below (byte-identical).
+        const MidGameEvaluator* vm = (UseValueModel() && state.m_value_model && !state.m_value_model->empty())
+                                   ? state.m_value_model : nullptr;
+        if (vm)
+        {
+            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+            const long long score = vm->Score(feats);                 // milliturns (x1000)
+            int w = static_cast<int>((score + 500) / 1000);           // round to a turn (score > 0)
+            if (w < state.turn_number) { w = state.turn_number; }
+            if (w > max_turns)         { w = max_turns + 1; }
+            return { w, {} };
+        }
         // Tail estimate beyond the horizon: roll out to game end at s_fd_leaf_depth
         // fidelity (default 1 = a 1-ply lookahead; see s_fd_leaf_depth), no committed
         // plays (the caller re-searches once it exhausts the committed line). The

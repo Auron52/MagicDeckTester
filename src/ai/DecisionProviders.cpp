@@ -122,6 +122,12 @@ bool UseLearnedEval()
     return v;
 }
 
+bool UseValueModel()
+{
+    static const bool v = std::getenv("MTG_VALUE_MODEL") != nullptr;
+    return v;
+}
+
 // Stage 6: the search tree calls the provider for every deck decision; here the GENERIC
 // defaults are minimal (a deck-agnostic baseline) and each archetype subclass holds its
 // own heuristics. Archetype detection (SelectDecisionProvider) routes each deck to its

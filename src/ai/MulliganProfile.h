@@ -93,5 +93,11 @@ struct MulliganProfile
     // ranking (byte-identical). See KeepModel.h / docs/design/learned-d0-policy.md. Play only.
     MidGameEvaluator eval_model;
 
+    // Analyzer-trained leaf VALUE model: predicts the deep-search win turn from a position, replacing
+    // the search's horizon rollout (FSLineWin's SimulateToEnd) with an O(1) estimate. Loaded from the
+    // per-deck value sidecar (decks/<name>.value.json) via AttachValueSidecar; gated by MTG_VALUE_MODEL.
+    // Empty => the exact rollout (byte-identical). Its Score() is a WIN TURN (lower = better).
+    MidGameEvaluator value_model;
+
     static MulliganProfile DefaultProfile() { return {}; }
 };

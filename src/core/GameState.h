@@ -165,6 +165,14 @@ struct GameState
     // set; nullptr / empty / flag-off -> the heuristic EvalCard ranking (byte-identical). NEVER folded
     // into BuildSimKey (a per-deck constant, like m_provider). Mid-game play only -- not mulligan.
     const MidGameEvaluator* m_evaluator = nullptr;
+    // Non-owning pointer to the deck's learned leaf VALUE model (MulliganProfile::value_model), stamped
+    // in AIEngine::HandleMulligan and propagated through every deep copy. When set + MTG_VALUE_MODEL is
+    // on, it REPLACES the search's horizon rollout (FSLineWin's SimulateToEnd) with a direct predicted
+    // win turn -- distilling the deep search into an O(1) leaf estimate (the rollout is the weak link:
+    // greedy, not searched). Its Score() is read as a WIN TURN (lower = better), unlike m_evaluator
+    // whose Score is higher=better. nullptr / empty / flag-off -> the exact rollout (byte-identical).
+    // NEVER folded into BuildSimKey (a per-deck constant). See docs/design/learned-d0-policy.md.
+    const MidGameEvaluator* m_value_model = nullptr;
 
     Player&       ActivePlayer()       { return players[active_player_index]; }
     const Player& ActivePlayer() const { return players[active_player_index]; }
