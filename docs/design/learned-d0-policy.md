@@ -273,6 +273,46 @@ Determinism verified (identical across thread counts). Nothing activates trees b
 ships the linear sidecar. GBDT models for the 3 decks live in `/tmp` (regenerate via
 `train_eval_gbdt.py`); training rows are `logs/eval/*_v3.rows`.
 
+### Leaf VALUE model — measured result (2026-07-08): same quality, ~10–15× cheaper search
+
+The uncommitted WIP is a **second, distinct** learned model: a leaf **value** model
+(`MTG_VALUE_MODEL`, `value_model` sidecar, `GameState::m_value_model`) that REPLACES the search's
+horizon rollout in `FSLineWin` (`depth<=0`) with an O(1) predicted win turn. This is different from
+`eval_model` (which ranks plans at the `Solve` tie-break) — it attacks the doc's flagged high-value
+follow-up: "does a learned leaf enable *cheaper* search?" Answer, measured: **yes.**
+
+Trained a fixed-point **regression** GBDT (`train_eval_gbdt.py --regression`, label = searched win
+turn) per deck. A/B vs the exact rollout (`scripts/eval_ab.py --value-model`, `threads=1` timing):
+
+| deck | baseline (exact rollout) | value-leaf (GBDT) | speedup |
+|---|---|---|---|
+| TH d5, 150g s2002 | 54.4s → 98.7%/4.081 | **3.8s → 98.7%/4.081** (identical) | **~14×** |
+| TH d5, 150g s3003 | 55.1s → 96.0%/4.014 | 5.5s → 96.0%/4.035 | ~10× |
+| burn d3, 200g s2002 | 111.2s → 100%/4.325 | **7.6s → 100%/4.335** | **~15×** |
+| burn d5, 200g s2002 | (minutes) | 24.8s → 100%/4.32 | — |
+
+**Findings.**
+1. **Same quality, dramatically cheaper.** The value-leaf matches baseline win%/avg-turn at adequate
+   depth (d5 for TH, d3 for burn) at ~10–15× lower wall-time. The rollout was the slow link; the
+   O(1) value skips a full greedy playout at every (usually non-decisive) leaf. Generalizes across
+   both archetypes tested (value/combo + aggro).
+2. **It's a SPEED win, not a quality win.** The value-leaf ties, never beats, the exact rollout —
+   because for these decks the leaf is often inert (search resolves lethality within the horizon). At
+   *shallow* depth, where the leaf is decisive, the model is slightly WORSE than the rollout (TH d1:
+   92% vs 98%; GBDT >> linear there). So it's "same quality, cheaper at adequate depth," not a
+   universal rollout replacement.
+3. **GBDT >> linear for the value model too** (TH d1: 92% vs 80.7%). Linear win-turn regression is
+   too coarse a leaf.
+4. **Deterministic** across thread counts (fixed-point GBDT) — keeps the regression/pooling gates.
+
+**Why this matters / next:** the analyzer's cost is dominated by these rollouts (skill 5f), so a
+~10–15× cheaper leaf directly funds deeper search / bigger mulligan grids in the same overnight
+window. Next: (a) train + A/B value sidecars for the remaining decks (antilife/hinata/knights/
+slivers); (b) test a **grindy/non-converging** deck where the leaf is decisive — there the value
+model could *improve* quality, not just speed; (c) commit the WIP behind its `MTG_VALUE_MODEL` gate
+(off by default → GT byte-identical) and ship per-deck value sidecars. Artifacts: `train_eval_gbdt.py
+--regression`; rows `logs/eval/burn_value.rows`, `logs/eval/th_value.rows`; models in `/tmp`.
+
 ## The permanent regression gate
 
 At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regression digests are
