@@ -51,6 +51,19 @@ static thread_local bool g_trace_arm = false;
 static const char* s_fd_leaf_depth_env = std::getenv("MTG_FD_LEAF_DEPTH");
 static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_leaf_depth_env) : 1;
 
+// Mana-dork ramp value (EvalCard). A 0-power mana dork (Ignoble Hierarch, Birds) scores 0 in the
+// per-turn combat eval, so the greedy Solve rollout NEVER deploys one (casting it ties the
+// do-nothing plan and loses the smallest-mask tie-break). Ramp is invisible to a per-turn eval, so
+// combo/ramp lines got evaluated a turn slow -- the search couldn't see that a turn-1 dork unlocks
+// an earlier kill (Anti-Lifegain s23: real T4 win searched as T5). Crediting a modest ramp value
+// makes the rollout develop accelerants early so the search surfaces the faster line. The value is
+// turns-scaled (a dork is worthless on the last turn, valuable early). Env-gated for A/B; default
+// off (MTG_DORK_RAMP=0) restores the old byte-identical behaviour for A/B. Default ON (100): a
+// dork is worth up to ~4 damage-equivalents early (100 * min(remaining_attacks,4)), decaying to
+// ~1 late. See heuristic-optimization + rollout-policy investigation.
+static const char* s_dork_ramp_env = std::getenv("MTG_DORK_RAMP");
+static const int   s_dork_ramp     = s_dork_ramp_env ? std::atoi(s_dork_ramp_env) : 100;
+
 // Gates SPECULATIVE free safe-alt enumeration (a Remedy-flip Invigorate offered as a real burn) so
 // the SEARCH can assemble multi-payload lethal bursts the single-shot auto-fire cannot -- WITHOUT
 // the greedy path (Solve: the d0 decision AND every rollout leaf) casting it early and wasting its
@@ -531,7 +544,18 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         int dyn = def.params.power_equals_creature_count
                   ? CreatureCount(state, state.active_player_index) + 1 : 0;
         int power = (def.card.m_power.value_or(0) + dyn + lord_pb) * (ds ? 2 : 1);
-        if (power <= 0) { return 0; }
+        if (power <= 0)
+        {
+            // Mana-dork ramp: a 0-power accelerant contributes future mana the per-turn combat
+            // eval can't see. Credit a turns-scaled ramp value (worthless late, valuable early) so
+            // the greedy rollout deploys it instead of passing. Env-gated; s_dork_ramp==0 -> old 0.
+            if (s_dork_ramp > 0 && def.tmpl == CardTemplate::ManaDork)
+            {
+                int remaining = std::max(1, ExpectedAttacks(state));
+                return s_dork_ramp * std::min(remaining, 4);
+            }
+            return 0;
+        }
 
         // Haste (from the card or from a lord already on board) attacks this turn;
         // others start next turn.

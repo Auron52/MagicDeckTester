@@ -1,6 +1,5 @@
-# Regression ground truth -- commit 9481cad  date 2026-07-08
+# Regression ground truth -- commit 18aa4f1  date 2026-07-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-08): TH R40 exhaustive mulligan profile adoption (keep + blind bottoming). Accepted win->loss are the per-game cost of blind bottoming replacing clairvoyant lookahead (blind is the correct blind-to-shuffle policy; the unconfounded metric rewards the peek); validated net-positive by 16-seed confounded A/B (keep -0.0142t, confounded bottom -0.0578t). Overnight additionally folds other-agent upstream Hinata/antilife gains already baselined in smoke+regression (131d2ae). Audited 2026-07-08; no real regressions.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -17,12 +16,12 @@ th_smoke_d5_s1001=72/4.13889/094ae2df97554c56
 knights_smoke_d0_s1001=999/4.58559/e9d8eec2cdc41c8d
 knights_smoke_d3_s1001=250/4.396/a170f420994229fb
 knights_smoke_d5_s1001=150/4.38667/8f773349483d7616
-antilife_smoke_d0_s1001=895/5.43017/b811ebed9ab04d2a
-antilife_smoke_d3_s1001=250/4.136/eb2a5790982e5ee1
-antilife_smoke_d5_s1001=150/4.09333/7a67e89348922a61
-hinata_smoke_d0_s1001=653/6.71516/d79872e0057d7007
-hinata_smoke_d3_s1001=146/5.57534/b34a9e1b21af383e
-hinata_smoke_d5_s1001=72/5.61111/3f9753fcc8841256
+antilife_smoke_d0_s1001=897/5.31773/40ea008ffc9d24db
+antilife_smoke_d3_s1001=250/4.128/6b08042704b18781
+antilife_smoke_d5_s1001=150/4.09333/7987f30043d30f4e
+hinata_smoke_d0_s1001=670/6.62985/8b42a69cda2fe23d
+hinata_smoke_d3_s1001=146/5.58219/a58fd3989c952660
+hinata_smoke_d5_s1001=72/5.59722/bc8d07fc7f975000
 
 # --- regression ---
 slivers_regression_d0_s2002=999/4.7007/da946ecd33614760
@@ -45,16 +44,16 @@ knights_regression_d3_s2002=300/4.34333/32593c93f3019402
 knights_regression_d3_s3003=300/4.36333/0f99cf70866bd230
 knights_regression_d5_s2002=250/4.312/bde18136c4fbba75
 knights_regression_d5_s3003=250/4.356/4c4f48db1b7c658a
-antilife_regression_d0_s2002=881/5.33031/0920e460e26a6f45
-antilife_regression_d3_s2002=299/4.09365/0aef4c9bf229d3dc
-antilife_regression_d3_s3003=299/4.09365/a6e11a66cb53e7b2
-antilife_regression_d5_s2002=249/4.12851/c9c811e7db3c54c8
-antilife_regression_d5_s3003=249/4.08032/c0bdb293d370b534
-hinata_regression_d0_s2002=624/6.68109/700226af88c17daf
-hinata_regression_d3_s2002=194/5.69072/2bfe90028746ad93
-hinata_regression_d3_s3003=191/5.67016/12c2e014f31592ca
-hinata_regression_d5_s2002=97/5.69072/24f53b7371f1c35c
-hinata_regression_d5_s3003=97/5.68041/d52f003b58848af8
+antilife_regression_d0_s2002=897/5.24192/b65da87ec952da18
+antilife_regression_d3_s2002=299/4.0903/740fcf0c3cf78fe8
+antilife_regression_d3_s3003=299/4.08696/9b6be2b0fe59e58b
+antilife_regression_d5_s2002=249/4.1245/3c8c9f27e06e4472
+antilife_regression_d5_s3003=249/4.07229/025469135b98dc7e
+hinata_regression_d0_s2002=646/6.64396/a9b7fb31637c4d46
+hinata_regression_d3_s2002=194/5.68557/18e255c09cc04157
+hinata_regression_d3_s3003=191/5.64398/05846eed53055ea7
+hinata_regression_d5_s2002=98/5.69388/a1a02e4a4289a3f8
+hinata_regression_d5_s3003=97/5.65979/ec97db2930e3edbc
 
 # --- overnight ---
 slivers_overnight_d0_s4004=1998/4.66917/81443ed4f7c01e43
