@@ -134,6 +134,12 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // deep copy / rollout trial (each a copy of this live state). See GameState::m_required_pieces.
     state.m_required_pieces = &m_profile.required_pieces;
 
+    // Attach the deck's learned mid-game play evaluator (nothing to do with the mulligan itself --
+    // this is just the first per-game hook that has BOTH the live state and the profile). Non-owning
+    // (m_profile outlives the game); propagates through every deep copy. Presence + MTG_EVAL_MODEL
+    // gate its actual use in TurnSolver::Solve. See GameState::m_evaluator.
+    state.m_evaluator = m_profile.eval_model.empty() ? nullptr : &m_profile.eval_model;
+
     ap.library.DrawN(7, ap.hand);
 
     // New game: reset the per-game non-convergence baseline.

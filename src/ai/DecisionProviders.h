@@ -56,6 +56,12 @@ enum class UnprunedGate
 // form. Default (neither env) => false.
 bool DecisionUnpruned(UnprunedGate g);
 
+// A/B gate for the learned mid-game evaluator (MTG_EVAL_MODEL). Default OFF: even when a deck ships
+// an eval sidecar, the learned plan ranking is used only when this is set, so every existing ground
+// truth stays byte-identical until an eval model is deliberately enabled. Reads the env once (mirrors
+// DecisionUnpruned). See docs/design/learned-d0-policy.md.
+bool UseLearnedEval();
+
 // Gate probe: run a deck once with the probe ON, then read QueriedGatesMask() to learn which gates
 // have a live decision point for that deck. A gate NOT in the mask has no reachable callsite (no
 // matching cards / rituals / dig source), so opening it provably changes nothing -- skip sweeping it.

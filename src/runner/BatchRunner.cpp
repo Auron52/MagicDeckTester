@@ -85,6 +85,7 @@ Job ParseJob(const json& jspec)
     // Play always uses a deck's exhaustive keep/bottom sidecar when it ships alongside the base
     // profile (keep on presence; bottoming per the sidecar's bottoming_enabled).
     AttachExhaustiveSidecar(j.profile, profile_path);
+    AttachEvalSidecar(j.profile, profile_path);   // ... and its learned mid-game eval sidecar if present
 
     j.second_main = GoldFishRunner::DeckUsesSecondMain(j.deck);
     return j;

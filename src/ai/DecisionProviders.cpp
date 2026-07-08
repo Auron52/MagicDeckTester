@@ -116,6 +116,12 @@ bool DecisionUnpruned(UnprunedGate g)
     return (UnpruneMask() >> static_cast<int>(g)) & 1u;
 }
 
+bool UseLearnedEval()
+{
+    static const bool v = std::getenv("MTG_EVAL_MODEL") != nullptr;
+    return v;
+}
+
 // Stage 6: the search tree calls the provider for every deck decision; here the GENERIC
 // defaults are minimal (a deck-agnostic baseline) and each archetype subclass holds its
 // own heuristics. Archetype detection (SelectDecisionProvider) routes each deck to its

@@ -1,5 +1,6 @@
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
+#include "KeepModel.h"              // MidGameEvaluator / ExtractMidGameFeatures (learned d0 eval)
 #include "Profiler.h"
 #include "../core/ManaPool.h"
 #include "../core/EffectHandler.h"
@@ -1325,6 +1326,49 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     return (b >= std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max() : static_cast<int>(b);
 }
 
+// --- Learned mid-game plan scoring (see docs/design/learned-d0-policy.md) ---------------------
+// One integer field of a plan-summary loop: fold one Action into the running board-effect summary.
+static inline void FoldActionIntoSummary(const Action& c, MidGamePlanSummary& sum)
+{
+    const bool is_cast = (c.kind == Action::Kind::CastFromHand
+                       || c.kind == Action::Kind::CastFromGraveyard);
+    if (is_cast)
+    {
+        ++sum.num_spells;
+        if (!c.is_noncreature) { ++sum.creatures_cast; }
+        sum.total_mv += c.card_mv;
+    }
+    sum.direct_damage += c.direct_damage;
+    if (c.kind == Action::Kind::PlayLand) { sum.plays_land = 1; }
+}
+
+// Score a plan (summarized by its board effect) with the deck's learned evaluator, clamped to int
+// (Plan::value is int; the score's magnitude is irrelevant -- ranking is ordinal). Only reached when
+// a model is attached AND MTG_EVAL_MODEL is set (guarded at each callsite), so default runs never
+// enter here and stay byte-identical.
+static int LearnedPlanScore(const GameState& state, const MidGamePlanSummary& sum, const MidGameEvaluator& ev)
+{
+    const long long s = ev.Score(ExtractMidGameFeatures(state, sum));
+    constexpr long long kLo = -1000000000LL, kHi = 1000000000LL;   // clamp into int (ordinal use only)
+    return static_cast<int>(std::min(kHi, std::max(kLo, s)));
+}
+
+// Seam A (Solve::consider): summary from a candidate list + selected indices.
+static MidGamePlanSummary SummarizeSelection(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    MidGamePlanSummary sum;
+    for (int j : sel) { FoldActionIntoSummary(cands[j], sum); }
+    return sum;
+}
+
+// Seam B (EnumeratePlansWithLand): summary from an already-resolved plan's Action list.
+static MidGamePlanSummary SummarizePlanActions(const std::vector<Action>& actions)
+{
+    MidGamePlanSummary sum;
+    for (const Action& c : actions) { FoldActionIntoSummary(c, sum); }
+    return sum;
+}
+
 // ---- TurnSolver::Solve ---------------------------------------------------
 
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
@@ -1386,6 +1430,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
+
+    // Learned mid-game evaluator (per-deck, MTG_EVAL_MODEL-gated): when attached it RANKS non-lethal
+    // plans by predicted win-turn in place of the EvalCard sum. nullptr in every default run
+    // (no sidecar OR flag off) -> rank_value == total_eval below -> byte-identical. learned-d0-policy.md.
+    const MidGameEvaluator* ev = (UseLearnedEval() && state.m_evaluator && !state.m_evaluator->empty())
+                               ? state.m_evaluator : nullptr;
 
     // Evaluate one selected combination of candidate indices and, if it is the new optimum,
     // record it. The optimum is ordered by (wins, value, SMALLEST action mask): a winning plan
@@ -1538,15 +1588,21 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         }
         bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
 
+        // Learned ranking for NON-lethal plans (lethal stays exact and dominates, so the model never
+        // ranks a win). rank_value replaces total_eval in the compare + best.value; it IS total_eval
+        // whenever no model is attached / the flag is off -> byte-identical. See learned-d0-policy.md.
+        int rank_value = total_eval;
+        if (ev && !wins) { rank_value = LearnedPlanScore(state, SummarizeSelection(cands, sel), *ev); }
+
         bool better;
-        if (best.wins_this_turn != wins)   { better = wins; }                  // winning dominates
-        else if (total_eval != best.value) { better = total_eval > best.value; } // then higher eval
+        if (best.wins_this_turn != wins)   { better = wins; }                    // winning dominates
+        else if (rank_value != best.value) { better = rank_value > best.value; } // then higher (learned) value
         else                               { better = mask < best_mask; }        // tie -> smallest mask
         if (!better) { return; }
 
         best.actions.clear();
         for (int j : sel) { best.actions.push_back(cands[j]); }
-        best.value          = total_eval;
+        best.value          = rank_value;
         best.wins_this_turn = wins;
         best_mask           = mask;
     };
@@ -5222,6 +5278,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // Blaze gets its landfall: among EQUAL-VALUE plans, order the DEFER (no-land) plans first
     // instead of developing. Only flips the tiebreak below -- the value/win comparisons above are
     // untouched, so a strictly-better (e.g. landfall-enabling) develop plan still wins.
+    // Learned mid-game evaluator (Seam B): re-rank the search's ROOT plans by predicted win-turn for
+    // NON-lethal plans, so the full-depth search orders (the stable_sort below) and its equal-win-turn
+    // tie-break (pass selection) follow the learned preference. Covers idle / spectacle / dig plans
+    // uniformly. nullptr in every default run (no sidecar OR flag off) -> value unchanged ->
+    // byte-identical. See docs/design/learned-d0-policy.md.
+    const MidGameEvaluator* ev_root = (UseLearnedEval() && state.m_evaluator && !state.m_evaluator->empty())
+                                    ? state.m_evaluator : nullptr;
+    if (ev_root)
+    {
+        for (TurnSolver::Plan& p : all)
+        {
+            if (p.wins_this_turn) { continue; }
+            MidGamePlanSummary sum = SummarizePlanActions(p.actions);
+            if (!p.land_to_play.empty()) { sum.plays_land = 1; }   // land is on the Plan, not in actions
+            p.value = LearnedPlanScore(state, sum, *ev_root);
+        }
+    }
+
     const bool hold_land = ResolveProvider(state).PreferHoldLandDrop(state, state.active_player_index);
     std::stable_sort(all.begin(), all.end(),
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)

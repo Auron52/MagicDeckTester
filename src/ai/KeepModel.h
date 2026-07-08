@@ -317,3 +317,123 @@ std::vector<int> ComputeKeepFeatures(const std::vector<Card>& hand, int mulligan
 
 // Apply the human constraints as a hard guard before the model is consulted.
 KeepGuard ApplyKeepConstraints(const std::vector<Card>& hand, const KeepConstraints& c);
+
+// ================================================================================================
+// Mid-game PLAY evaluator (learned d0 replacement) -- see docs/design/learned-d0-policy.md.
+// A per-deck, analyzer-trained evaluator that RANKS candidate turn-plans by predicted expected
+// win-turn, distilled from the deep search. It replaces the hand-tuned EvalCard judgment ONLY for
+// ranking NON-lethal plans inside TurnSolver::Solve (the d0 decision AND every rollout leaf); the
+// exact lethal check stays. Mid-game play only -- mulligan/bottoming keep their own model.
+// Integer/fixed-point throughout (like KeepScore) so the plan argmax is byte-identical across
+// platforms -- the digest determinism the regression harness relies on.
+// ================================================================================================
+
+struct GameState;   // forward decl: the featurizer reads it by const-ref (defined in core/GameState.h)
+
+// Named mid-game features. Same APPEND-ONLY contract as KeepFeature: the runtime vector is indexed
+// by these positions and a serialized model references them by MidGameFeatureName, so a reorder
+// silently mis-evaluates every shipped evaluator. New features go at the end, just before Count.
+enum class MidGameFeature : int
+{
+    OurLife = 0,
+    OppLife,
+    Turn,                 // turn_number (game clock)
+    OnThePlay,            // 1 = we are on the play
+    HandSize,
+    LibrarySize,          // COUNT only (never the ORDER -- the non-clairvoyance contract)
+    GraveyardSize,
+    ExileSize,
+    OurCreatures,         // creatures we control
+    OurTotalPower,        // summed EffectivePower of our creatures
+    OurReadyAttackers,    // our creatures that could attack now (untapped, not summoning-sick)
+    OurLands,
+    UntappedManaSources,  // untapped lands + usable dorks + rocks we control
+    SourceW, SourceU, SourceB, SourceR, SourceG,  // untapped sources by colour we control
+    OppCreatures,
+    OppTotalPower,
+    // --- the candidate plan being scored (its board effect, integer summary) ---
+    PlanNumSpells,
+    PlanCreaturesCast,
+    PlanDirectDamage,     // burn to the opponent's face this plan
+    PlanTotalMv,          // mana committed by the plan's casts
+    PlanPlaysLand,        // 1 if the plan plays a land
+    Count                 // sentinel: number of features
+};
+
+inline const char* MidGameFeatureName(MidGameFeature f)
+{
+    switch (f)
+    {
+        case MidGameFeature::OurLife:             return "our_life";
+        case MidGameFeature::OppLife:             return "opp_life";
+        case MidGameFeature::Turn:                return "turn";
+        case MidGameFeature::OnThePlay:           return "on_the_play";
+        case MidGameFeature::HandSize:            return "hand_size";
+        case MidGameFeature::LibrarySize:         return "library_size";
+        case MidGameFeature::GraveyardSize:       return "graveyard_size";
+        case MidGameFeature::ExileSize:           return "exile_size";
+        case MidGameFeature::OurCreatures:        return "our_creatures";
+        case MidGameFeature::OurTotalPower:       return "our_total_power";
+        case MidGameFeature::OurReadyAttackers:   return "our_ready_attackers";
+        case MidGameFeature::OurLands:            return "our_lands";
+        case MidGameFeature::UntappedManaSources: return "untapped_mana_sources";
+        case MidGameFeature::SourceW:             return "src_w";
+        case MidGameFeature::SourceU:             return "src_u";
+        case MidGameFeature::SourceB:             return "src_b";
+        case MidGameFeature::SourceR:             return "src_r";
+        case MidGameFeature::SourceG:             return "src_g";
+        case MidGameFeature::OppCreatures:        return "opp_creatures";
+        case MidGameFeature::OppTotalPower:       return "opp_total_power";
+        case MidGameFeature::PlanNumSpells:       return "plan_num_spells";
+        case MidGameFeature::PlanCreaturesCast:   return "plan_creatures_cast";
+        case MidGameFeature::PlanDirectDamage:    return "plan_direct_damage";
+        case MidGameFeature::PlanTotalMv:         return "plan_total_mv";
+        case MidGameFeature::PlanPlaysLand:       return "plan_plays_land";
+        default:                                  return "?";
+    }
+}
+
+inline int MidGameFeatureFromName(const std::string& s)
+{
+    for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
+    { if (s == MidGameFeatureName(static_cast<MidGameFeature>(i))) { return i; } }
+    return -1;
+}
+
+// Integer summary of a candidate turn-plan's board effect. Decoupled from TurnSolver::Action so the
+// featurizer stays layer-light; the solver builds this from the plan's chosen actions.
+struct MidGamePlanSummary
+{
+    int num_spells     = 0;  // spells cast this plan (hand + graveyard/retrace)
+    int creatures_cast = 0;  // of those, creatures
+    int direct_damage  = 0;  // burn to the opponent's face this plan
+    int total_mv       = 0;  // summed mana value of the casts (mana committed)
+    int plays_land     = 0;  // 1 if the plan plays a land this turn
+};
+
+// Analyzer-trained additive evaluator: predicted plan goodness = intercept + Sum coef*feat, with
+// HIGHER = better (the trainer fits toward -expected_win_turn, so a plan that wins sooner scores
+// higher). Fixed-point long long throughout -> the dot product is associative and byte-identical
+// across platforms, so the plan argmax (and thus the game digest) is deterministic. Stored as DATA
+// in the per-deck eval sidecar (decks/<name>.eval.json); empty => no model (heuristic ranking).
+struct MidGameEvaluator
+{
+    std::vector<long long> coefs;      // per MidGameFeature index, fixed-point units
+    long long              intercept = 0;
+
+    bool empty() const { return coefs.empty(); }
+
+    long long Score(const std::vector<int>& feats) const
+    {
+        long long s = intercept;
+        const int n = std::min(static_cast<int>(feats.size()), static_cast<int>(coefs.size()));
+        for (int i = 0; i < n; ++i) { s += coefs[i] * static_cast<long long>(feats[i]); }
+        return s;
+    }
+};
+
+// Single shared featurizer (defined in KeepModel.cpp): integer-pure and NON-CLAIRVOYANT (reads only
+// public information -- never library order or the opponent's hand). Called from the SAME site in
+// TurnSolver for both offline label emission and runtime inference, so training and serving see
+// byte-identical features (lockstep). Returns a vector indexed by MidGameFeature (size == Count).
+std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePlanSummary& plan);
