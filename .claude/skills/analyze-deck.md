@@ -575,7 +575,13 @@ It reads each deck card's `cards.json` params, computes the **expected** decisio
 
 **Reuse the 5d sweep as the observational check for anything the auditor left UNVERIFIED.** From each card's 2c-ter classification, build the set of decision `type`s (and plan-variant sub-decisions) the deck *should* emit. Have each 5d agent record the decision `type`s it actually saw and the sub-decision variants it was offered (e.g. did casting the tutor offer every `tutor_target`? did the burn spell emit a `target` decision rather than resolving pre-aimed?). Aggregate across the sweep and **diff against the expected set**. The failure signature is *"the game advanced past a card's choice without a decision firing"* — that means the heuristic silently resolved it, which is exactly the class of gap the user currently finds by hand. Any such card goes back to 2c-ter (wire it), not to the user.
 
-**Targeted repro for anything the sweep didn't reach.** A decision only appears when a game reaches the triggering state, so a card that rarely gets cast may never surface in the sweep. For each such card, play a seed/line that casts it and confirm the expected `type` fires (exit 70) with the full option list:
+**Targeted repro for anything the sweep left UNVERIFIED — the auditor automates this.** A decision only appears when a game reaches the triggering state, so a card that rarely gets cast may never surface in the fixed sweep (the auditor reports it UNVERIFIED, not a miss). To resolve each, let the auditor seed-search a game that casts it:
+```bash
+python scripts/audit_viewer_decisions.py <deck> <deck>.profile.json <seed> <budget> --verify-card "<name>"
+# -> VERIFIED (decision surfaced), HARD_MISS (cast but never fired -> wire it), or
+#    NOT_FORCED (couldn't force the cast in <budget> games)
+```
+It biases plan selection toward casting the named card across many deterministic games, then confirms the expected `type` surfaces. **A NOT_FORCED result for a decision whose state the forward driver can't manufacture (retrace needs the card already in the graveyard; a combo payoff needs its setup) is expected — fall back to a hand-built `--choices` line** that reaches the state and confirm the `type` fires (exit 70) with the full option list:
 ```bash
 ./build/Release/mtg <deck> --profile <deck>.profile.json --claude-play \
   --seed <S> --game-index <GI> --max-turns 8 --choices "<CSV that casts the card>"
