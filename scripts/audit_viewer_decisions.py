@@ -30,11 +30,21 @@ one", "divided as you choose", ...) and reports any the params do NOT model -- a
 read the card and wire/model or disclose it. Advisory only (regex on prose is fuzzy); it
 never changes the exit code.
 
+The <deck> may be a plain-text decklist (.txt) or a Cockatrice deck (.cod).
+
 Usage:
   audit_viewer_decisions.py <deck> [profile] [base_seed] [n_games] [max_turns] [--no-sweep]
+  audit_viewer_decisions.py <deck> <profile> [base_seed] [budget] [max_turns] --verify-card "<name>"
 
-  --no-sweep : static analysis only (param expectations + oracle cross-check, no binary).
-               Fast pre-check usable at implementation time, before a profile exists.
+  --no-sweep      : static analysis only (param expectations + oracle cross-check, no binary).
+                    Fast pre-check usable at implementation time, before a profile exists.
+  --verify-card N : seed-search up to `budget` deterministic games biased toward casting card
+                    N, then confirm its expected decision type surfaces (VERIFIED), fires-not
+                    (HARD_MISS), or the card could not be forced into play (NOT_FORCED). This
+                    is the automated form of 5h's targeted repro -- it closes a normal run's
+                    UNVERIFIED tail for any card whose cast is forward-reachable. A decision
+                    that needs a manufactured state the forward driver can't reach (e.g.
+                    retrace, which needs the card already in the graveyard) reports NOT_FORCED.
 
 Exit codes: 0 = clean (or only soft/unverified/advisory), 1 = a decision type is missing or
 an unmapped choice-param was found (hard fail), 2 = usage / build error.
@@ -94,11 +104,23 @@ RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 
 def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json"):
     names = set()
-    for ln in open(deck_path):
-        ln = ln.strip()
-        if not ln or ln.lower() in ("sideboard", "mainboard"):
-            continue
-        names.add(re.sub(r"^\s*\d+x?\s+", "", ln).strip())
+    if deck_path.lower().endswith(".cod"):
+        # Cockatrice XML: <card number="4" name="..."/> under the "main" zone.
+        import xml.etree.ElementTree as ET
+        root = ET.parse(deck_path).getroot()
+        for zone in root.iter("zone"):
+            if zone.get("name") != "main":
+                continue
+            for card in zone.iter("card"):
+                nm = card.get("name")
+                if nm:
+                    names.add(nm.strip())
+    else:
+        for ln in open(deck_path):
+            ln = ln.strip()
+            if not ln or ln.lower() in ("sideboard", "mainboard"):
+                continue
+            names.add(re.sub(r"^\s*\d+x?\s+", "", ln).strip())
     d = json.load(open(cards_json))
     cards = d if isinstance(d, list) else list(d.get("cards", d.values()))
     return [c for c in cards if c.get("name") in names], names
@@ -143,7 +165,7 @@ ORACLE_PATTERNS = [
     ("modal",     re.compile(r"\bchoose (one|two|three|one or more|up to)\b", re.I)),
     ("divide",    re.compile(r"\bdivided (as you choose|among|evenly)\b", re.I)),
     ("bounce",    re.compile(r"\breturn .{0,40}\bland\b.{0,25}to (its|their) owner'?s? hand", re.I)),
-    ("discard",   re.compile(r"\bdiscard (a|one|two|three|\d+) .{0,20}?card", re.I)),
+    ("discard",   re.compile(r"\bdiscard (a|one|two|three|\d+) .{0,20}?card(?!.{0,12}at random)", re.I)),
 ]
 INERT_NOTE = re.compile(r"\[[^\]]*(inert|deferred|not modelled|not modeled|resolved by|"
                         r"goldfish|simplified)[^\]]*\]", re.I)
@@ -172,12 +194,15 @@ def oracle_advisories(card):
         return []
     modeled = modeled_tokens(card)
     has_note = bool(INERT_NOTE.search(text))
+    # Scan the ORACLE text with implementer bracket-notes stripped -- those are comments, not
+    # card text, and their prose causes false matches (e.g. a note mentioning "Scry 3").
+    scan = re.sub(r"\[[^\]]*\]", "", text)
     out = []
     for token, rx in ORACLE_PATTERNS:
-        m = rx.search(text)
+        m = rx.search(scan)
         if m and token not in modeled:
             s = m.start()
-            snippet = text[max(0, s - 10):s + 40].replace("\n", " ").strip()
+            snippet = scan[max(0, s - 10):s + 40].replace("\n", " ").strip()
             out.append((token, snippet, has_note))
     return out
 
@@ -215,6 +240,61 @@ def pick(d):
     if "heuristic_default" in d:
         return d["heuristic_default"]
     return 0
+
+
+def pick_toward(d, target_lc):
+    """Like pick(), but on a main_phase choice PREFER a plan that casts the target card, so a
+    seed-search can force a specific card into play to verify its decision surfaces."""
+    if d.get("type") == "main_phase":
+        plans = d.get("plans", [])
+        if not plans:
+            return -1
+        want = [p for p in plans if target_lc in p.get("summary", "").lower()]
+        pool = want or plans
+        return max(pool, key=lambda p: len(p.get("summary", "")))["index"]
+    return pick(d)
+
+
+def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_turns):
+    """Seed-search for a game that casts `card_name`, then confirm its expected decision
+    type(s) surface. Returns (status, detail): VERIFIED / HARD_MISS / NOT_FORCED.
+
+    Closes the auditor's UNVERIFIED tail without an engine change: instead of hoping a card
+    is drawn in the fixed sweep, drive many deterministic games biased toward casting it.
+    Type-level attribution (a decision of the expected type appeared in a game where the card
+    was cast) -- unambiguous unless the deck has two cards producing the SAME type.
+    """
+    target_lc = card_name.lower()
+    cast_seen_anywhere = False
+    for gi in range(budget):
+        choices, guard = [], 0
+        observed = set()            # (type, source_lc)
+        cast_here = False
+        while guard < 220:
+            guard += 1
+            d = step(deck, prof, base_seed, gi, choices, max_turns)
+            if d is None:
+                break
+            t = d.get("type")
+            if t not in ("main_phase", "mulligan", "bottom", "?"):
+                observed.add((t, (d.get("source") or "").lower()))
+            choice = pick_toward(d, target_lc)
+            if t == "main_phase" and choice is not None and choice >= 0:
+                for pl in d.get("plans", []):
+                    if pl.get("index") == choice and target_lc in pl.get("summary", "").lower():
+                        cast_here = True
+                        break
+            choices.append(choice)
+        if cast_here:
+            cast_seen_anywhere = True
+            hit = {t for (t, _) in observed if t in expected_types}
+            if hit:
+                src_confirmed = any(t in expected_types and target_lc in s for (t, s) in observed)
+                return ("VERIFIED", {"seed": base_seed, "game_index": gi,
+                                     "types": sorted(hit), "source_confirmed": src_confirmed})
+    if cast_seen_anywhere:
+        return ("HARD_MISS", {"note": "card was cast but no expected decision surfaced"})
+    return ("NOT_FORCED", {"note": f"card not cast in {budget} games from seed {base_seed}"})
 
 
 def run_sweep(deck, prof, base_seed, n_games, max_turns):
@@ -268,9 +348,14 @@ def print_oracle_crosscheck(cards):
 
 
 def main():
-    argv = [a for a in sys.argv[1:]]
-    no_sweep = "--no-sweep" in argv
-    argv = [a for a in argv if not a.startswith("--")]
+    raw = sys.argv[1:]
+    no_sweep = "--no-sweep" in raw
+    verify_name = None
+    if "--verify-card" in raw:
+        i = raw.index("--verify-card")
+        verify_name = raw[i + 1] if i + 1 < len(raw) else None
+        raw = raw[:i] + raw[i + 2:]
+    argv = [a for a in raw if not a.startswith("--")]
     if len(argv) < 1:
         print(__doc__)
         return 2
@@ -279,6 +364,27 @@ def main():
     base_seed = int(argv[2]) if len(argv) > 2 else 9001
     n_games   = int(argv[3]) if len(argv) > 3 else 40
     max_turns = int(argv[4]) if len(argv) > 4 else 12
+
+    # --verify-card mode: seed-search to confirm one card's decision surfaces (targeted repro).
+    if verify_name:
+        if prof is None:
+            print("ERROR: --verify-card needs a profile path.")
+            return 2
+        cards, _ = load_deck_cards(deck)
+        match = next((c for c in cards if c["name"].lower() == verify_name.lower()), None)
+        if match is None:
+            print(f"ERROR: '{verify_name}' not found in {deck}.")
+            return 2
+        exp, _ = expected_for_card(match)
+        exp.discard("main_phase")
+        if not exp:
+            print(f"{verify_name}: no param-driven interactive decision expected. Nothing to verify.")
+            return 0
+        print(f"Verifying '{verify_name}' surfaces {sorted(exp)} "
+              f"(seed-searching {n_games} games from {base_seed})...")
+        status, detail = verify_card(deck, prof, match["name"], exp, base_seed, n_games, max_turns)
+        print(f"  {status}: {detail}")
+        return 1 if status == "HARD_MISS" else 0
     if not no_sweep and not os.path.exists(BIN):
         print(f"ERROR: {BIN} not found -- build Release first "
               f"(cmake --build build --config Release), or pass --no-sweep for static-only.")
