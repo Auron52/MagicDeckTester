@@ -137,6 +137,42 @@ skill).
 
 ## Implementation status & findings (session log — read this first when resuming)
 
+### ▶ NEXT STEPS (resume here — 2026-07-08)
+
+State: value model committed + generalized (5 decks, `decks/*.value.json`, inert-gated); `plan_baseline_eval`
+d0 feature committed (validated on burn); combo-aware d0 feature tried + reverted (negative). Everything
+pushed to `learned-d0-evaluator` @ `abdf4ba`. Tree clean, nothing running.
+
+**Where quality headroom actually is** (measured this session): converged decks (TH/burn/knights/slivers)
+are at/near the non-clairvoyant ceiling at d0 — no headroom, and more data/features buy ~0. The two real
+gaps are (a) **budget-starved / non-converging positions** and (b) **antilife d0** (learned 30–55% vs the
+non-clairvoyant hand-tuned baseline's ~90% — achievable, but gated).
+
+**Recommended next step (highest EV, tractable): convert the value model's 10–15× speedup into search
+DEPTH and measure the quality gain on budget-starved decks** (the doc's own §5f "reinvest the savings").
+- Concrete first test: a deck with a KNOWN budget-starvation gap — start with **TH's Land's-Edge line**
+  (starved at ~b200, recovers at ~b2000). A/B `value-leaf at high depth/budget` vs `baseline at the
+  suite's shallow budget` at **equal wall-clock**, diff per-game win turns.
+- **Verify the gain is real, not clairvoyance**: re-run under the `MTG_SHUFFLE_SALT_SEARCH` decouple
+  instrument (see the hinata-gate-sweep audit) — a gain that reverses when decoupled is a clairvoyance
+  artifact, not a ceiling to beat.
+- Why this over more d0 features: on converged decks the value-leaf only *ties* the rollout (leaf inert);
+  the win is on positions the search can't resolve in budget, which is exactly what cheaper leaves unlock.
+
+**Alternative (bigger gap, but blocked first): antilife d0.** Prerequisite = **pin the eval-row dump
+methodology** — my fresh antilife rows give 10–28% while the doc's saved `/tmp/antilife_rank.eval.json`
+serves ~29–30% and the doc reported 54.8% (GBDT); serving is fine, so it's the dump recipe (diff exact
+seed/K/games/budget/depth vs whatever produced the doc's `logs/eval/antilife_v3.rows`). Only after that is
+antilife d0 tunable. NB combo-readiness features BACKFIRE here (they teach a non-clairvoyant d0 to wait for
+the combo → durdle) — don't retry that; the antilife signal must reward proactive play, not combo-waiting.
+
+**Loose ends:** hinata value sidecar still pending its (slow) dump — re-dump at budget ~400 and commit
+`decks/Hinata2.value.json` to complete the set. Value-model ADOPTION (flip `MTG_VALUE_MODEL` default on +
+rebaseline GT to the faster search) is a deliberate decision, not yet made. Pre-existing TH smoke GT
+staleness still needs a deliberate rebaseline (unrelated to this work).
+
+---
+
 **Committed & verified:**
 - **Phase 1** (`7e40508`): full integration scaffold — inert, **byte-identical** (smoke 18/18 +
   regression 30/30, digests exact, 0 play-changed). Types + featurizer + both seams + sidecar + gate.
