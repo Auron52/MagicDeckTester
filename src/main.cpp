@@ -760,7 +760,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::vector<TargetOption>& options, int per_target,
                                     int max_targets, int heuristic_default, int decision_index,
                                     const std::string& pump_desc = "", const std::string& remove_desc = "",
-                                    int min_targets = 1)
+                                    int min_targets = 1, bool random_damage = false)
 {
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
@@ -773,6 +773,9 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // A non-empty remove_desc (e.g. "exiled ...") flags this as a creature-removal target (Swords),
     // so the viewer highlights the OPPONENT's creatures and shows the removal wording, not "N damage".
     if (!remove_desc.empty()) { os << "  \"remove\": "; JsonStr(os, remove_desc); os << ",\n"; }
+    // Soulfire Eruption: each target takes a RANDOM exiled card's mana value (not a fixed number), so
+    // per_target_damage is meaningless -- the viewer shows "a random card's mana value each" instead.
+    if (random_damage) { os << "  \"random_damage\": true,\n"; }
     os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets
        << ", \"min_targets\": " << min_targets << ",\n";
     WriteBoardContext(os, s, 0);
@@ -800,6 +803,10 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     else if (!remove_desc.empty())
     { os << "  \"note\": \"reply an option index. The chosen opponent creature is " << remove_desc
          << ". Default = the AI's pick (largest).\"\n"; }
+    else if (random_damage)
+    { os << "  \"note\": \"reply an option index. Each chosen target is dealt a RANDOM exiled card's "
+         << "mana value (assigned positionally, not steerable); pick " << min_targets << "-" << max_targets
+         << " targets. Default = the AI's pick.\"\n"; }
     else
     { os << "  \"note\": \"reply an option index. Each chosen target takes " << per_target
          << " damage (up to " << max_targets << " target(s)). Default = the AI's pick (face).\"\n"; }
@@ -970,75 +977,6 @@ static void WriteRetraceDiscardDecisionJson(std::ostream& os, const GameState& s
     os << "}\n";
 }
 
-// Enumerate the size-k subsets of `cand` (candidate battlefield indices), in deterministic
-// combination order. Subset 0 is {cand[0..k-1]} -- so when `cand` is in the engine's heuristic
-// (expendable-first) order, option 0 IS the heuristic default. Shared by the decision JSON and the
-// chooser so a --choices option index maps back to the same subset. Capped defensively (own-creature
-// boards are tiny; the cap only guards a pathological board).
-static std::vector<std::vector<int>> SoulfireSubsets(const std::vector<int>& cand, int k)
-{
-    std::vector<std::vector<int>> out;
-    const int n = static_cast<int>(cand.size());
-    if (k < 0 || k > n) { return out; }
-    if (k == 0) { out.push_back({}); return out; }
-    std::vector<int> comb(k);
-    for (int i = 0; i < k; ++i) { comb[i] = i; }
-    while (true)
-    {
-        std::vector<int> subset;
-        for (int i : comb) { subset.push_back(cand[i]); }
-        out.push_back(subset);
-        if (out.size() >= 256) { break; }
-        int i = k - 1;
-        while (i >= 0 && comb[i] == n - k + i) { --i; }
-        if (i < 0) { break; }
-        ++comb[i];
-        for (int j = i + 1; j < k; ++j) { comb[j] = comb[j - 1] + 1; }
-    }
-    return out;
-}
-
-// Soulfire own-target decision (Soulfire Eruption): the player picks WHICH `count` of their own
-// creatures the dig also targets (each takes a random exiled card's damage; more targets = deeper
-// dig + bigger Hinata discount). Emits the candidate creatures (for board highlighting) and the
-// enumerated size-`count` subsets as options; the reply is an option index. The board-click UI lets
-// the player select the creatures, then maps the selected set back to its option index.
-static void WriteSoulfireDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
-                                      const std::vector<int>& candidates, int count,
-                                      const std::vector<std::vector<int>>& subsets, int heur_option,
-                                      int decision_index)
-{
-    os << "{\n";
-    os << "  \"decision_index\": " << decision_index << ",\n";
-    os << "  \"type\": \"soulfire_targets\",\n";
-    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
-    os << "  \"turn\": " << s.turn_number << ",\n";
-    os << "  \"count\": " << count << ",\n";
-    WriteBoardContext(os, s, 0);
-    os << "  \"heuristic_default\": " << heur_option << ",\n";
-    os << "  \"candidates\": [";
-    for (size_t i = 0; i < candidates.size(); ++i)
-    {
-        int bi = candidates[i];
-        if (i) os << ", ";
-        os << "{ \"perm_index\": " << bi << ", \"name\": ";
-        JsonStr(os, (bi >= 0 && bi < static_cast<int>(s.battlefield.size())) ? s.battlefield[bi].card.m_name.str() : std::string());
-        os << " }";
-    }
-    os << "],\n";
-    os << "  \"options\": [";
-    for (size_t oi = 0; oi < subsets.size(); ++oi)
-    {
-        if (oi) os << ", ";
-        os << "{ \"index\": " << oi << ", \"perm_indices\": [";
-        for (size_t j = 0; j < subsets[oi].size(); ++j) { if (j) os << ", "; os << subsets[oi][j]; }
-        os << "] }";
-    }
-    os << "],\n";
-    os << "  \"note\": \"reply an option index -- which " << count
-       << " of your creatures Soulfire Eruption also targets. Default = the AI's pick (most expendable).\"\n";
-    os << "}\n";
-}
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
@@ -1653,38 +1591,74 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_retrace_chooser = &retrace_chooser;
 
-    // Soulfire own-target: the player picks which `count` of their own creatures the dig also targets.
-    // Shares the --choices stream; the reply is an option index into the enumerated size-`count`
-    // subsets. Default = the engine's heuristic subset (option 0 = most-expendable first).
+    // Soulfire Eruption targeting: the player picks the FULL target set on the board, exactly like
+    // Crackle. `legal` is the canonical target order (sentinels for the faces + battlefield indices);
+    // `min_targets` is the affordability floor (the count the cast already paid the discount for). We
+    // reuse the generic `target` decision + EnumerateTargetSets, tagged random_damage so the viewer
+    // shows "a random card's mana value each" instead of a fixed number. The reply is an option index;
+    // we map the chosen target set back to the sentinel encoding SoulfireDig expects.
+    auto sentinelToChosen = [](int t, int ci) -> ChosenTarget {
+        if (t == TARGET_OPP_FACE)  { return ChosenTarget{ 0, 1 - ci, 0 }; }
+        if (t == TARGET_SELF_FACE) { return ChosenTarget{ 0, ci,     0 }; }
+        return ChosenTarget{ 1, t, 0 };
+    };
+    auto chosenToSentinel = [](const ChosenTarget& c, int ci) -> int {
+        if (c.kind == 0) { return (c.index == ci) ? TARGET_SELF_FACE : TARGET_OPP_FACE; }
+        return c.index;
+    };
     SoulfireTargetChooser soulfire_chooser =
         [&](const GameState& s, int controller, const std::string& source,
-            const std::vector<int>& candidates, int count,
+            const std::vector<int>& legal, int min_targets,
             const std::vector<int>& heuristic_subset) -> std::vector<int>
         {
-            (void)controller;
-            std::vector<std::vector<int>> subsets = SoulfireSubsets(candidates, count);
-            if (subsets.empty()) { return heuristic_subset; }   // defensive: nothing to choose
+            // Build the ChosenTarget legal set + labels in canonical order.
+            std::vector<ChosenTarget> legal_ct; std::vector<std::string> legal_labels;
+            for (int t : legal)
+            {
+                legal_ct.push_back(sentinelToChosen(t, controller));
+                if      (t == TARGET_OPP_FACE)  { legal_labels.push_back("Opponent (face)"); }
+                else if (t == TARGET_SELF_FACE) { legal_labels.push_back("You (face)"); }
+                else if (t >= 0 && t < static_cast<int>(s.battlefield.size()))
+                {
+                    const Permanent& p = s.battlefield[t];
+                    const bool mine = (p.controller_index == controller);
+                    legal_labels.push_back(p.card.m_name.str() + " (" + std::to_string(p.EffectivePower()) + "/"
+                                           + std::to_string(p.EffectiveToughness()) + (mine ? ", yours)" : ")"));
+                }
+                else { legal_labels.push_back("?"); }
+            }
+            const int max_targets = static_cast<int>(legal.size());
+            std::vector<TargetOption> opts = EnumerateTargetSets(legal_ct, legal_labels, max_targets, min_targets);
+            if (opts.empty()) { return heuristic_subset; }   // defensive
+            // Default index = the option whose target set matches the heuristic (floor) subset.
+            std::vector<ChosenTarget> heur;
+            for (int t : heuristic_subset) { heur.push_back(sentinelToChosen(t, controller)); }
+            auto same = [](const std::vector<ChosenTarget>& a, const std::vector<ChosenTarget>& b) {
+                if (a.size() != b.size()) { return false; }
+                for (size_t i = 0; i < a.size(); ++i) { if (a[i].kind != b[i].kind || a[i].index != b[i].index) { return false; } }
+                return true; };
             int heur_option = 0;
-            for (size_t oi = 0; oi < subsets.size(); ++oi)
-            { if (subsets[oi] == heuristic_subset) { heur_option = static_cast<int>(oi); break; } }
+            for (size_t oi = 0; oi < opts.size(); ++oi) { if (same(opts[oi].targets, heur)) { heur_option = static_cast<int>(oi); break; } }
+            auto toSentinels = [&](const std::vector<ChosenTarget>& ts) {
+                std::vector<int> out; for (const ChosenTarget& c : ts) { out.push_back(chosenToSentinel(c, controller)); } return out; };
             int di = static_cast<int>(cursor);
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
                 ++decisions_made;
-                if (chosen < 0 || chosen >= static_cast<int>(subsets.size())) { chosen = heur_option; }
+                if (chosen < 0 || chosen >= static_cast<int>(opts.size())) { chosen = heur_option; }
                 if (!log_dir.empty())
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteSoulfireDecisionJson(ss, s, source, candidates, count, subsets, heur_option, di);
+                    WriteTargetDecisionJson(ss, s, source, legal_ct, legal_labels, opts, 0, max_targets, heur_option, di, "", "", min_targets, /*random_damage=*/true);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
-                return subsets[chosen];
+                return toSentinels(opts[chosen].targets);
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteSoulfireDecisionJson(std::cout, s, source, candidates, count, subsets, heur_option, di);
+            WriteTargetDecisionJson(std::cout, s, source, legal_ct, legal_labels, opts, 0, max_targets, heur_option, di, "", "", min_targets, /*random_damage=*/true);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);

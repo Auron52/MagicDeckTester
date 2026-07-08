@@ -1348,6 +1348,11 @@ inline void StageTopLibraryCard(GameState& state)
 // ALL exiled cards are staged (the dig of N, the deck's real payoff). Shared exile/stage/assign so
 // EffectHandler (real) and ApplyPlanDirect (rollout) realise the identical board (lockstep), and
 // SoulfireFaceDamage (the Solve projection) returns the same top-card face damage.
+// Face-target sentinels shared by the multi-target damage spells (Soulfire, Crackle). A target-list
+// entry >= 0 is a battlefield index; these two encode the players' faces (CRACKLE_* alias them below).
+constexpr int TARGET_SELF_FACE = -1;   // the controller's own face
+constexpr int TARGET_OPP_FACE  = -2;   // the opponent's face
+
 struct SoulfireResult { int face_damage = 0; int self_damage = 0; };
 
 // Number of BASE Soulfire targets (opponent face + opp creatures + self-if-safe). Own creatures are
@@ -1414,6 +1419,24 @@ inline std::vector<int> SoulfireOppCreatureOrder(const GameState& state, int con
     return idx;
 }
 
+// Soulfire full canonical target order = the POSITIONAL card-assignment order: opponent face, then
+// you (only if life > 9 so a self-flip can't be lethal), then opponent creatures (board order), then
+// your OWN creatures (expendable-first, Hinata LAST). Encoded with the shared face sentinels
+// (TARGET_OPP_FACE / TARGET_SELF_FACE) and battlefield indices. The autonomous default targets a
+// PREFIX of this (own creatures truncated to the searched own_targets, which -- since own creatures
+// are last -- is exactly the first base+own_targets entries); human play may pick any subset of size
+// >= the paid floor. The nth exiled card is always dealt to the nth target IN THIS ORDER, so the
+// controller cannot steer the random flips (a killed creature still leaves the pool via SBA).
+inline std::vector<int> SoulfireTargetOrder(const GameState& state, int controller)
+{
+    std::vector<int> out;
+    out.push_back(TARGET_OPP_FACE);
+    if (state.players[controller].life > 9) { out.push_back(TARGET_SELF_FACE); }
+    for (int bi : SoulfireOppCreatureOrder(state, controller)) { out.push_back(bi); }
+    for (int bi : SoulfireOwnCreatureOrder(state, controller)) { out.push_back(bi); }
+    return out;
+}
+
 // Estimate (no mutation): face damage = the mana value of the TOP card of the library. The first
 // exiled card ALWAYS goes to the opponent's face -- Soulfire's flips are a random event, so the
 // controller cannot steer the highest-MV card onto the face. own_targets no longer affects the face
@@ -1456,51 +1479,100 @@ inline int SoulfireOwnTargetDiscount(const CardDefinition& def, const GameState&
 // Returns face/self damage. Deterministic given (state, controller, own_targets) so the rollout
 // (ApplyPlanDirect) and executor (EffectHandler) realise the identical board (lockstep). Choosing
 // the target SET (which/how-many own creatures, self if safe) is a legal non-clairvoyant decision;
-// what is removed here is steering the unknown random flip onto the best target.
-inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targets = 0)
+// what is removed here is steering the unknown random flip onto the best target. `def` (the Soulfire
+// card definition) is used only to size the human's minimum-target FLOOR from spare mana; null (or a
+// null chooser) leaves the autonomous default untouched.
+inline int SpareUntappedMana(const GameState& state, int controller);   // defined below (mana helpers)
+inline bool ConsumeFloatingAny(ManaPool& floating, Color& took);        // defined below (mana helpers)
+inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def);  // below
+inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targets = 0,
+                                  const CardDefinition* def = nullptr)
 {
     Player& ap = state.players[controller];
 
-    // Target list in canonical order. Self only when safe (a self-exiled Soulfire is MV 9).
-    const bool target_self = ap.life > 9;
-    std::vector<int> opp_creatures = SoulfireOppCreatureOrder(state, controller);   // board order
-    std::vector<int> own           = SoulfireOwnCreatureOrder(state, controller);   // expendable-first
+    // Full canonical target order (opp face, self-if-safe, opp creatures, own creatures Hinata-last).
+    const std::vector<int> order = SoulfireTargetOrder(state, controller);
+    // The DEFAULT (autonomous / search) target set = base (opp face + opp creatures + self-if-safe) +
+    // the searched own_targets. Because own creatures are LAST in `order`, the first `default_count`
+    // entries of `order` ARE that set -- byte-identical to the historical "base + first own_targets"
+    // list, so the autonomous/search path below (chooser null) is unchanged.
+    const int base = 1 + (ap.life > 9 ? 1 : 0)
+                   + static_cast<int>(SoulfireOppCreatureOrder(state, controller).size());
+    const int default_count = std::min(static_cast<int>(order.size()), base + std::max(0, own_targets));
+    std::vector<int> chosen(order.begin(), order.begin() + default_count);   // autonomous default
+
+    // Human play (claude-play): let the player target ANY subset in [min_targets, order.size()] -- the
+    // opponent face, self, opponent creatures, and your own creatures are ALL individually pickable
+    // (mirroring Crackle). The MINIMUM is a real MANA-affordability floor, not the base count: the cast
+    // paid for `default_count` targets, with Hinata's discount CLAMPED to the spell's generic pips (you
+    // can't discount the coloured {R}{R}{R}). Each fewer target loses {1} of discount = costs {1} more,
+    // so the player may drop targets only as far as the SPARE untapped mana covers -- down to 1. So
+    // min = max(1, effective_discount - spare_mana), where effective_discount = min(cap, default_count,
+    // generic_pips). (E.g. Soulfire {6}{R}{R}{R} = 9, 6 mana out: discount clamps to 6, spare = 3 ->
+    // min = 3, NOT the 7 base targets.) Picking MORE than min-required only deepens the dig / raises the
+    // discount (a free over-pay). The chooser is nulled by RevealLogPause for the search/rollout, so the
+    // default set stands there (byte-identical). Positional assignment follows canonical order, so we
+    // re-canonicalise the player's pick.
+    if (g_play_soulfire_chooser)
     {
-        const int k = std::max(0, own_targets);
-        if (static_cast<int>(own.size()) > k)
+        int discount_applied = default_count;
+        if (def)
         {
-            std::vector<int> chosen(own.begin(), own.begin() + k);   // heuristic default: first k
-            // Human play (claude-play): let the player pick WHICH k own creatures are targeted; the
-            // chooser is nulled during search/rollout so the expendable-first default stands there.
-            if (g_play_soulfire_chooser && k > 0)
-            {
-                std::vector<int> pick =
-                    (*g_play_soulfire_chooser)(state, controller, "Soulfire Eruption", own, k, chosen);
-                // Accept only a well-formed subset: exactly k distinct candidates; else keep default.
-                bool ok = (static_cast<int>(pick.size()) == k);
-                std::vector<int> seen;
-                for (int bi : pick)
-                {
-                    if (!ok) { break; }
-                    if (std::find(own.begin(), own.end(), bi) == own.end()
-                        || std::find(seen.begin(), seen.end(), bi) != seen.end()) { ok = false; break; }
-                    seen.push_back(bi);
-                }
-                if (ok)
-                {
-                    // Keep canonical (heuristic) order among the chosen so the positional card
-                    // assignment stays deterministic regardless of the player's click order.
-                    std::vector<int> ordered;
-                    for (int bi : own) { if (std::find(pick.begin(), pick.end(), bi) != pick.end()) { ordered.push_back(bi); } }
-                    chosen = ordered;
-                }
-            }
-            own = chosen;
+            const int cap = def->params.discount_max_targets > 0 ? def->params.discount_max_targets : default_count;
+            const int generic = def->card.m_mana_cost.generic;
+            discount_applied = std::min(std::min(cap, default_count), generic);
+        }
+        const int spare = SpareUntappedMana(state, controller);
+        int min_targets = std::max(1, discount_applied - spare);
+        if (min_targets > default_count) { min_targets = default_count; }   // never above the paid set
+        std::vector<int> pick =
+            (*g_play_soulfire_chooser)(state, controller, "Soulfire Eruption", order, min_targets, chosen);
+        bool ok = (static_cast<int>(pick.size()) >= min_targets)
+                && (static_cast<int>(pick.size()) <= static_cast<int>(order.size()));
+        std::vector<int> seen;
+        for (int t : pick)
+        {
+            if (!ok) { break; }
+            if (std::find(order.begin(), order.end(), t) == order.end()
+                || std::find(seen.begin(), seen.end(), t) != seen.end()) { ok = false; break; }
+            seen.push_back(t);
+        }
+        if (ok)
+        {
+            std::vector<int> ordered;
+            for (int t : order) { if (std::find(pick.begin(), pick.end(), t) != pick.end()) { ordered.push_back(t); } }
+            chosen = ordered;
+        }
+        // Charge the reduced target count's real cost: the cast already paid for `default_count`
+        // targets' discount (`discount_applied`). If the human picked FEWER, each dropped target
+        // restores {1} of generic cost -- tap that owed mana NOW so the line stays legal and the freed
+        // mana can't be spent on another cast this turn. The floor guaranteed enough spare exists.
+        // Overshoot from a >1 source (Sol Ring) is dropped, never granting extra mana (conservative).
+        int real_discount = static_cast<int>(chosen.size());
+        if (def)
+        {
+            const int cap = def->params.discount_max_targets > 0 ? def->params.discount_max_targets : default_count;
+            real_discount = std::min(std::min(cap, static_cast<int>(chosen.size())), def->card.m_mana_cost.generic);
+        }
+        int owed = discount_applied - real_discount;
+        while (owed > 0 && state.floating_mana.Total() > 0) { Color took; if (!ConsumeFloatingAny(state.floating_mana, took)) { break; } --owed; }
+        for (Permanent& p : state.battlefield)
+        {
+            if (owed <= 0) { break; }
+            if (p.controller_index != controller || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            const bool is_land = (d->tmpl == CardTemplate::BasicLand);
+            const bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
+            if (!is_land && !is_dork) { continue; }
+            ManaPool one; AddSourceToPool(one, state, *d);
+            if (one.Total() <= 0) { continue; }
+            p.tapped = true;
+            owed -= one.Total();   // overshoot dropped -> never grants extra mana
         }
     }
 
-    const int n = 1 + (target_self ? 1 : 0)
-                + static_cast<int>(opp_creatures.size()) + static_cast<int>(own.size());
+    const int n = static_cast<int>(chosen.size());
 
     // Exile n cards top-down; every exiled card is staged (the dig). Keep per-flip MV in flip order.
     const bool               capture = (g_reveal_logger != nullptr);
@@ -1519,33 +1591,35 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
         ap.hand.push_back(std::move(c));
     }
 
-    // Assign cards to targets POSITIONALLY (top card -> first target, in canonical order).
+    // Assign cards to the CHOSEN targets POSITIONALLY (top card -> first chosen target, canonical
+    // order). Creature targets take real damage; lethal ones are destroyed (SBA) AFTER all assignment
+    // so later casts recompute costs from the new board and later target-dependent spells see one fewer.
     SoulfireResult r;
     std::vector<std::string> disp(mvs.size());
-    int slot = 0;
-    auto label = [&](const std::string& tgt) {
-        if (capture && slot < static_cast<int>(mvs.size()))
-        { disp[slot] = "→ " + tgt + " (" + std::to_string(mvs[slot]) + ")"; }
-    };
-
-    if (slot < static_cast<int>(mvs.size())) { label("opponent face"); r.face_damage = mvs[slot]; ++slot; }
-    if (target_self && slot < static_cast<int>(mvs.size())) { label("you"); r.self_damage = mvs[slot]; ++slot; }
-
-    // Creature targets take real damage; lethal ones are destroyed (SBA) so later casts recompute
-    // costs from the new board and later target-dependent spells see one fewer target.
     std::vector<int> dead;
-    auto hit_creature = [&](int bi, const char* who) {
-        if (slot >= static_cast<int>(mvs.size())) { return; }
-        const std::string cname = state.battlefield[bi].card.m_name;   // InternedName -> string
-        label(std::string(who) + " " + cname);
+    for (int slot = 0; slot < n && slot < static_cast<int>(mvs.size()); ++slot)
+    {
+        const int t   = chosen[slot];
         const int dmg = mvs[slot];
-        ++slot;
-        Permanent& cre = state.battlefield[bi];
-        cre.damage += dmg;
-        if (cre.damage >= cre.EffectiveToughness()) { dead.push_back(bi); }
-    };
-    for (int bi : opp_creatures) { hit_creature(bi, "opponent"); }
-    for (int bi : own)           { hit_creature(bi, "your"); }
+        if (t == TARGET_OPP_FACE)
+        {
+            if (capture) { disp[slot] = "→ opponent face (" + std::to_string(dmg) + ")"; }
+            r.face_damage = dmg;
+        }
+        else if (t == TARGET_SELF_FACE)
+        {
+            if (capture) { disp[slot] = "→ you (" + std::to_string(dmg) + ")"; }
+            r.self_damage = dmg;
+        }
+        else if (t >= 0 && t < static_cast<int>(state.battlefield.size()))
+        {
+            Permanent& cre = state.battlefield[t];
+            const char* who = (cre.controller_index == controller) ? "your" : "opponent";
+            if (capture) { disp[slot] = "→ " + std::string(who) + " " + std::string(cre.card.m_name) + " (" + std::to_string(dmg) + ")"; }
+            cre.damage += dmg;
+            if (cre.damage >= cre.EffectiveToughness()) { dead.push_back(t); }
+        }
+    }
 
     std::sort(dead.begin(), dead.end(), std::greater<int>());   // descending so erase stays valid
     for (int bi : dead)
@@ -1768,11 +1842,11 @@ inline bool IsCrackleCountSpell(const CardParams& p)
     return p.discount_targets_scale_x && p.x_damage_multiplier > 0;
 }
 
-// Crackle target sentinels (distinct from a >= 0 battlefield index):
+// Crackle target sentinels (distinct from a >= 0 battlefield index): the shared face sentinels.
 //   -1  = SELF   (the controller's own face)
 //   -2  = OPPONENT face (the win-relevant target; order[0] of CrackleTargetOrder)
-constexpr int CRACKLE_SELF_FACE = -1;
-constexpr int CRACKLE_OPP_FACE  = -2;
+constexpr int CRACKLE_SELF_FACE = TARGET_SELF_FACE;
+constexpr int CRACKLE_OPP_FACE  = TARGET_OPP_FACE;
 
 // Crackle with Power: ordered EXTRA beneficial targets beyond the opponent face, for the Hinata
 // per-target discount + faithful 5X damage. Encoding: >= 0 is a battlefield index (a creature);
@@ -2104,6 +2178,27 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
     if (prod.size() == 1)      { pool.Add(prod[0], amt); }
     else if (!prod.empty())    { pool.wild += amt; }
+}
+
+// Total mana the controller can still produce THIS instant: every UNTAPPED land/dork/rock plus any
+// turn-scoped floating reserve. Mirrors AIEngine::BuildAvailableMana (same source filter + float
+// gate) so the human-play FLOOR in SoulfireDig sees the same spare mana the planner did. Colour-
+// agnostic total (the Hinata discount reduces GENERIC, which any spare mana can re-pay).
+inline int SpareUntappedMana(const GameState& state, int controller)
+{
+    ManaPool pool;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool is_land = (d->tmpl == CardTemplate::BasicLand);
+        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
+        if (!is_land && !is_dork) { continue; }
+        AddSourceToPool(pool, state, *d);
+    }
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
+    return pool.Total();
 }
 
 // Decrements one mana of colour `c` from a floating pool. Returns true on success.

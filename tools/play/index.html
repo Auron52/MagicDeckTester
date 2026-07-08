@@ -463,7 +463,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','soulfire_targets','mulligan','bottom'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','mulligan','bottom'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -472,7 +472,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='soulfire_targets';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   if (dec==='divide' && S._divFor !== d.decision_index) initDivAlloc(d);   // board-edit damage allocation
   // At game end, prefer the FINAL board carried on the result (permanents in play after the winning
@@ -853,10 +853,14 @@ function renderChooseDialog(v, line){
     // No distinguishing dimension left (shouldn't happen — distinct variants differ in some sub) —
     // commit the first remaining plan defensively.
     if (!dim){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
-    // Crackle count is NOT a separate dialog (issue 1): the target COUNT falls out of the board
-    // targeting step. Auto-commit the MIN-count variant so the apply-time target decision offers the
-    // widest [min,max] range; the player then picks which targets (face + creatures) on the board.
-    if (dim.kind==='crackle'){
+    // Crackle target-count / Soulfire own-target-count are NOT a separate dialog: the count is a
+    // sub-decision the search enumerates as "+0", "+1", ... variants, but forcing the user to pick
+    // between otherwise-identical card thumbnails ("+0 own" vs "+1 own") makes no sense. Auto-commit
+    // the MIN-count variant (the affordability FLOOR the cast pays the discount for), then let the
+    // apply-time BOARD target step own the choice: both Crackle and Soulfire emit a `target` decision
+    // where every target (opponent face, creatures, your own creatures, self) is individually
+    // pickable in [floor, max]. So the count falls out of the board selection for both.
+    if (dim.kind==='crackle' || dim.kind==='soulfire'){
       const minChoice=choices.map(c=>c.choice).sort((a,b)=>(parseInt((a+'').replace('+',''))||0)-(parseInt((b+'').replace('+',''))||0))[0];
       const next=remaining.filter(x=>choiceOf(x,dim.key)===minChoice);
       return stepChoose(next, picks.concat([{key:dim.key, choice:minChoice}]));
@@ -930,13 +934,18 @@ function applyAccepted(planIndex, label) {
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
-  // Dropped-cast feedback (issue 2): remember the non-land casts we INTENDED and the hand counts
-  // before committing, so after the line resolves we can tell if a queued cast never actually
-  // resolved (silently dropped for mana — e.g. an over-generated Reality Spasm line). Compared in
-  // step() against the next state's hand.
+  // Dropped-cast detection (issue 2): remember the non-land casts we INTENDED plus the pre-commit
+  // hand AND graveyard counts, so after the line resolves we can tell if a queued cast never actually
+  // resolved (silently dropped for mana — e.g. an over-generated Reality Spasm / Soulfire line that
+  // couldn't pay). A cast is "dropped" only if it neither left the hand NOR reached the graveyard;
+  // the graveyard check avoids a false positive when the same-named card is cast (→ gy) but a fresh
+  // copy is re-staged into hand (Soulfire's dig), which leaves the hand count unchanged. Compared in
+  // step() against the next state; a real drop rolls the whole line back (rollbackLine).
   S._intendedCasts = (S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le'&&p.kind!=='retrace').map(p=>p.name);
   S._preHandCounts = {};
   (((S.decision||{}).me||{}).hand||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preHandCounts[nm]=(S._preHandCounts[nm]||0)+1; } });
+  S._preGyCounts = {};
+  (((S.decision||{}).me||{}).graveyard||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preGyCounts[nm]=(S._preGyCounts[nm]||0)+1; } });
   // Record a one-int step so undo can pop this main-phase decision. Without it S.steps desyncs from
   // S.choices and undo() (which bails when S.steps is empty) silently does nothing after any line.
   S.prev = S.decision; S.choices.push(planIndex); (S.steps=S.steps||[]).push(1);
@@ -996,16 +1005,12 @@ function initBoardSel(d){
   } else if (d.type==='bounce' || d.type==='sacrifice'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
-  } else if (d.type==='soulfire_targets'){
-    const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
-    if (def) (def.perm_indices||[]).forEach(pi=>S.boardSel.add('m:'+pi));
   }
   S._selFor = d.decision_index;
 }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
   if (d.type==='bounce' || d.type==='sacrifice') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
-  if (d.type==='soulfire_targets') return new Set((d.candidates||[]).map(c=>'m:'+c.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -1330,7 +1335,10 @@ function promptPanelHtml(d, dec){
   // offer creatures in the prompt; any-target burn (Lightning Bolt) does.
   const hasCreature=(d.legal_targets||[]).some(t=>t.kind==='permanent');
   const where = hasCreature ? "the opponent's life, a creature, or your own life" : "the opponent's life or your own life";
-  const dmgWord = max>1 ? `${d.per_target_damage} damage each` : `${d.per_target_damage} damage`;
+  // Soulfire Eruption (random_damage): each target takes a RANDOM exiled card's mana value, assigned
+  // positionally (not steerable), not a fixed number — so don't show a per-target damage figure.
+  const dmgWord = d.random_damage ? `a random exiled card's mana value each`
+                : max>1 ? `${d.per_target_damage} damage each` : `${d.per_target_damage} damage`;
   // min_targets is the affordability FLOOR (Crackle: the discount the cast already paid for). The
   // count must land in [min,max] — Commit stays disabled until it does (issue 3: you can't confirm a
   // short target set). The opponent's face is a NORMAL target here (issue 5) and is deselectable.
@@ -1537,31 +1545,45 @@ async function step() {
   if (S.busy) return; S.busy=true;
   const res=await post('/api/step', cfg());
   S.busy=false; $('undo').disabled = S.choices.length===0;
-  if (res.kind==='decision') { advanceTo(res.decision); checkDroppedCasts((res.decision||{}).me); }
-  else if (res.kind==='result') { checkDroppedCasts((res.result||{}).me); showResult(res.result); }
-  else showError(res.error||'unknown error', res.raw);
+  if (res.kind==='decision') {
+    advanceTo(res.decision);
+    const dropped=detectDropped((res.decision||{}).me);
+    if (dropped.length) return rollbackLine(dropped);
+  } else if (res.kind==='result') {
+    const dropped=detectDropped((res.result||{}).me);
+    if (dropped.length) return rollbackLine(dropped);
+    showResult(res.result);
+  } else showError(res.error||'unknown error', res.raw);
 }
-// Dropped-cast feedback (issue 2): a queued non-land cast that is STILL in hand at (or above) its
-// pre-commit count never resolved — silently dropped because the line couldn't actually pay for it
-// (the known Reality-Spasm over-generation). Surface it via the reusable #verdict panel instead of
-// advancing with no sign anything happened. A future validate-time rejection can reuse notifyDropped.
-function checkDroppedCasts(meAfter){
-  const intended=S._intendedCasts; S._intendedCasts=null; const pre=S._preHandCounts||{}; S._preHandCounts=null;
-  if (!intended || !intended.length || !meAfter) return;
-  const after={}; (meAfter.hand||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ after[nm]=(after[nm]||0)+1; } });
+// Dropped-cast detection (issue 2): return the intended non-land casts that never resolved. A cast
+// is "dropped" only if it BOTH stayed in hand (count did not fall below pre-commit) AND did not reach
+// the graveyard (an instant/sorcery that resolved always lands there) — the graveyard check keeps a
+// cast-then-re-staged copy (Soulfire's dig re-adds a same-named card, so the hand count is unchanged)
+// from being misread as dropped, and keeps a discard (left hand → gy, never cast) from being missed.
+// This is the known Reality-Spasm / Soulfire over-generation: the search enumerated a line the board
+// can't actually pay for. Such a line is illegal, so step() rolls the whole thing back (rollbackLine).
+function detectDropped(meAfter){
+  const intended=S._intendedCasts; S._intendedCasts=null;
+  const preH=S._preHandCounts||{}; S._preHandCounts=null;
+  const preG=S._preGyCounts||{};   S._preGyCounts=null;
+  if (!intended || !intended.length || !meAfter) return [];
+  const cn=c=>typeof c==='string'?c:(c&&c.name);
+  const afterH={}; (meAfter.hand||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterH[nm]=(afterH[nm]||0)+1; } });
+  const afterG={}; (meAfter.graveyard||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterG[nm]=(afterG[nm]||0)+1; } });
   const dropped=[]; const seen=new Set();
   intended.forEach(nm=>{ if(seen.has(nm)) return; seen.add(nm);
-    // still present at >= its pre-commit count -> it did not leave the hand -> not cast.
-    if ((after[nm]||0) >= (pre[nm]||0) && (pre[nm]||0) > 0) dropped.push(nm); });
-  if (dropped.length) notifyDropped(dropped);
+    const stillInHand=(afterH[nm]||0) >= (preH[nm]||0) && (preH[nm]||0) > 0;
+    const reachedGy  =(afterG[nm]||0) >  (preG[nm]||0);
+    if (stillInHand && !reachedGy) dropped.push(nm); });
+  return dropped;
 }
 function notifyDropped(names){
   const ve=$('verdict'); ve.className='unsupported';
-  ve.innerHTML=`<span class="vtag">not cast</span>`+
+  ve.innerHTML=`<span class="vtag">line rejected</span>`+
     `<h4>${names.map(esc).join(', ')} — not enough mana</h4>`+
-    `<div>The line was accepted but ${names.length>1?'these spells were':'this spell was'} silently dropped at resolution `+
-    `(the mana didn’t actually come together — e.g. a ritual that couldn’t untap enough). Nothing was cast; `+
-    `try a line the board can really pay for.</div>`+
+    `<div>The mana didn’t actually come together (e.g. a Reality Spasm that couldn’t untap enough), so `+
+    `${names.length>1?'these spells were':'this spell was'} unpayable. The whole line was <b>rolled back</b> — `+
+    `nothing was cast, tapped, or drawn. Pick a line the board can really pay for.</div>`+
     `<div class="actions"><button id="dropok" class="ghost">Dismiss</button></div>`;
   ve.style.display='block';
   $('dropok').onclick=hideVerdict;
@@ -1576,14 +1598,16 @@ async function nextGame() {
   $('gi').value   = (+$('gi').value   || 0) + 1;
   await newGame();
 }
-async function undo() {
-  if (!(S.steps&&S.steps.length)) return;
+// Pop the last-committed decision's state: drop its choices, roll history + gy/hand diff state back
+// to the checkpoint captured when we first advanced to the decision we're returning to (index = the
+// now-reduced DECISION count, not the int count -- divide is one decision but several ints). Shared
+// by undo() (user-initiated) and rollbackLine() (auto-reject of an unpayable line). Returns false if
+// there was nothing to pop. Callers then step() to replay + re-log the returned decision exactly.
+function rollbackStep() {
+  if (!(S.steps&&S.steps.length)) return false;
   const n=S.steps.pop();                       // ints the last-committed decision contributed (>=1)
   S.choices.length=Math.max(0,S.choices.length-n);
   S.history=S.history.filter(h=>!h.win);
-  // Roll history + gy/hand diff state back to the checkpoint captured when we first advanced to the
-  // decision we're returning to (index = the now-reduced DECISION count, not the int count -- divide
-  // is one decision but several ints). step() then replays and re-logs that decision exactly.
   const cp=(S.checkpoints||[])[S.steps.length];
   if (cp) { S.history.length=Math.min(S.history.length,cp.histLen);
             S.lastGy=Object.assign({},cp.lastGy); S.lastCasts=new Set(cp.lastCasts);
@@ -1592,7 +1616,20 @@ async function undo() {
   (S.checkpoints||[]).length=S.steps.length;   // drop this + the returned decision's cp; advanceTo recreates it
   S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null; hideDecPanel();
+  return true;
+}
+async function undo() {
+  if (!rollbackStep()) return;
   renderHistory(); await step();
+}
+// Auto-reject: the committed line dropped a cast it couldn't pay for (detectDropped). Roll the whole
+// line back to the previous phase — as if it was never committed (nothing cast/tapped/drawn, history
+// entries removed) — then re-fetch that decision and tell the user why. Stateless replay makes the
+// rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
+async function rollbackLine(names) {
+  rollbackStep();
+  renderHistory(); await step();   // re-fetch the pre-commit decision (board fully restored)
+  notifyDropped(names);            // then surface why the line was rejected
 }
 async function saveRef(suboptimal) {
   $('saveinfo').textContent='saving…';

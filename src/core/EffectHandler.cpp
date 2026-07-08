@@ -211,7 +211,7 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         if (def.params.damage_equals_top_mv)
         {
             SoulfireResult sr = SoulfireDig(state, entry.controller_index,
-                                            entry.soulfire_own_targets.value_or(0));
+                                            entry.soulfire_own_targets.value_or(0), &def);
             damage = sr.face_damage;
             state.players[entry.controller_index].life -= sr.self_damage;
         }

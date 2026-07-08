@@ -2604,7 +2604,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // self = min MV). Mirrors EffectHandler so the rollout matches the executor (lockstep).
             if (def.params.damage_equals_top_mv)
             {
-                SoulfireResult sr = SoulfireDig(state, state.active_player_index, own_targets);
+                SoulfireResult sr = SoulfireDig(state, state.active_player_index, own_targets, &def);
                 dmg = sr.face_damage;
                 state.players[state.active_player_index].life -= sr.self_damage;
             }

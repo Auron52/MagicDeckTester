@@ -325,16 +325,19 @@ extern thread_local RetraceDiscardChooser* g_play_retrace_chooser;
 // Soulfire Eruption targets the face + opponent creatures + (optionally) you + a SEARCHED COUNT of
 // your OWN creatures (each = a deeper dig + a bigger Hinata discount, but takes a random exiled
 // card's damage). The count is chosen by the search; autonomously SoulfireDig picks WHICH creatures
-// expendable-first (Hinata last). Under --claude-play the human picks which `count` of the candidate
-// own creatures are targeted. The chooser receives the candidate battlefield indices (heuristic
-// order), the count to pick, and the heuristic's default subset; it returns the chosen subset of
-// battlefield indices (size == count, each a candidate). Nulled by RevealLogPause for every
-// search/rollout/enumeration scope (SoulfireDig runs in both the executor and the rollout), so it
-// fires only for the REAL resolution and the search stays byte-identical. Inert unless set.
+// Under --claude-play the human picks the FULL Soulfire target set (like Crackle): the chooser
+// receives `legal` = the whole canonical target order (SoulfireTargetOrder: opponent face
+// [TARGET_OPP_FACE], self [TARGET_SELF_FACE], opponent creatures, own creatures, each a sentinel or a
+// battlefield index), `min_targets` = the affordability floor (the count the cast already paid the
+// Hinata discount for), and the heuristic default subset. It returns the chosen subset (size in
+// [min_targets, legal.size()], each an entry of `legal`); SoulfireDig re-canonicalises it and assigns
+// the exiled cards positionally. Nulled by RevealLogPause for every search/rollout/enumeration scope
+// (SoulfireDig runs in both the executor and the rollout), so it fires only for the REAL resolution
+// and the search stays byte-identical. Inert unless set.
 using SoulfireTargetChooser = std::function<std::vector<int>(const GameState& state, int controller,
                                                              const std::string& source,
-                                                             const std::vector<int>& candidates,
-                                                             int count,
+                                                             const std::vector<int>& legal,
+                                                             int min_targets,
                                                              const std::vector<int>& heuristic_subset)>;
 extern thread_local SoulfireTargetChooser* g_play_soulfire_chooser;
 
