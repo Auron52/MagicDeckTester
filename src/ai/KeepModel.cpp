@@ -390,6 +390,11 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     set(MidGameFeature::GraveyardSize, static_cast<int>(ap.graveyard.size()));
     set(MidGameFeature::ExileSize,     static_cast<int>(state.exile.size()));
 
+    // Lands in our OWN hand (public to us -> non-clairvoyant). Land's Edge discards these for burn and
+    // Treasure Hunt refills them, so hand land-count is a load-bearing signal this model was blind to.
+    int lands_in_hand = 0;
+    for (const Card& c : ap.hand) { if (c.IsLand()) { ++lands_in_hand; } }
+
     int our_creatures = 0, our_power = 0, our_ready = 0, our_lands = 0, untapped_sources = 0;
     int src[kNumColors] = {0};
     int opp_creatures = 0, opp_power = 0;
@@ -449,6 +454,16 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     set(MidGameFeature::PlanDirectDamage,  plan.direct_damage);
     set(MidGameFeature::PlanTotalMv,       plan.total_mv);
     set(MidGameFeature::PlanPlaysLand,     plan.plays_land);
+
+    // v2 discriminators. plan_* come straight from the (name-derived) summary; the two board estimates
+    // combine the plan with the pre-plan board so plans differ by the state they LEAVE, not just size.
+    set(MidGameFeature::PlanCardsDrawn,        plan.cards_drawn);
+    set(MidGameFeature::PlanNoncreatureSpells, plan.num_spells - plan.creatures_cast);
+    set(MidGameFeature::PlanMaxCastMv,         plan.max_cast_mv);
+    set(MidGameFeature::PlanDrawEngine,        plan.draw_engine);
+    set(MidGameFeature::LandsInHand,           lands_in_hand);
+    set(MidGameFeature::ManaLeftAfter,         std::max(0, untapped_sources - plan.total_mv));
+    set(MidGameFeature::TapsOut,               (plan.num_spells > 0 && plan.total_mv >= untapped_sources) ? 1 : 0);
     return f;
 }
 
@@ -464,7 +479,21 @@ MidGamePlanSummary SummarizePlanByNames(const std::vector<std::string>& cast_nam
         const CardDefinition* def = CardDatabase::Instance().Lookup(nm);
         if (!def) { continue; }
         if (def->card.IsCreature()) { ++sum.creatures_cast; }
-        sum.total_mv += def->card.m_mana_cost.ManaValue();
+        const int mv = def->card.m_mana_cost.ManaValue();
+        sum.total_mv += mv;
+        if (mv > sum.max_cast_mv) { sum.max_cast_mv = mv; }
+        sum.cards_drawn += def->params.draw;   // FIXED draw only (variable draw would be clairvoyant)
+        // A variable draw / dig / recur engine (Treasure Hunt = draw_until_nonland, cascade, retrace,
+        // Expressive Iteration, staged digs). Mirrors TurnSolver::OrderingOpaque so the "card-advantage
+        // engine" signal is defined once. Non-clairvoyant: flags the KIND of spell, never how many
+        // cards it will draw from the hidden-order library.
+        if (def->tmpl == CardTemplate::DrawUntilNonland
+            || def->params.stages_cards
+            || def->params.cascade_max_mv > 0
+            || def->params.retrace
+            || def->params.expressive_iteration
+            || def->params.draw > 0)
+        { sum.draw_engine = 1; }
     }
     // direct_damage stays 0 for v1: it depends on the chosen X and the target (face vs creature),
     // which a card NAME alone can't resolve, so computing it here would diverge from a resolved plan

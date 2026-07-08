@@ -1,0 +1,23 @@
+{
+  "eval_model": {
+    "intercept": 0,
+    "coefs": {
+      "our_life": -34,
+      "hand_size": 29,
+      "library_size": -19,
+      "graveyard_size": 1,
+      "our_lands": 91,
+      "untapped_mana_sources": 29,
+      "src_u": -73,
+      "src_r": -5,
+      "plan_num_spells": 1300,
+      "plan_total_mv": 71,
+      "plan_plays_land": -353,
+      "plan_noncreature_spells": 1300,
+      "plan_max_cast_mv": 432,
+      "plan_draw_engine": -1971,
+      "mana_left_after": 15,
+      "taps_out": 174
+    }
+  }
+}

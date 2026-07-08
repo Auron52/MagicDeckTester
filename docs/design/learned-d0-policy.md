@@ -146,42 +146,67 @@ skill).
 - **Trainer**: `scripts/train_eval_model.py` — pure-Python ridge (no numpy), stores NEGATED
   fixed-point coefs so `Score = -predicted_win_turn` (higher=better). `--learning-curve` mode.
 
-**Empirical results (Treasure Hunt, trained on seed 20000, tested on 2002):**
-- **Learning curve**: held-out RMSE flattens at ~2–4k rows (0.92→0.89 turns). **Answers the data
-  question**: a linear model saturates at ~2.5k rows; the ~0.89-turn floor is set by *feature
-  coarseness*, not data quantity (many candidate plans share features — e.g. land-only turn-1 plans
-  differ only by which land, which the v1 summary doesn't encode).
-- **A/B**: d3 learned = **100% / 4.17** (≈ baseline 100% / 4.15 — safe but near-**inert**; the
-  search overrides the model). d0 learned = **7% / 6.14** (baseline 86.7% / 5.15) — **catastrophic**,
-  identical under `MTG_LEGACY_SEARCH` (so it's `Solve` itself, not the full-depth leaf).
-- **Diagnosis (NOT a bug)**: on its *training* distribution the model's rank-regret is only 0.285
-  turns and it correctly favors casting (within-decision label slope −0.39). The d0 collapse is the
-  **train/serve gap**: weak `FSLineTail` labels + **covariate shift** (a round-0 model trained on
-  baseline-d0 states plays into flooded states it never saw and compounds). d3 masks it because the
-  search's rolled-out win-turn dominates the (learned) value tiebreak.
+### SOLVED (2026-07-08 overnight): the collapse was the TRAINING OBJECTIVE, not features/labels/data
 
-**Next step — stronger labels (user directive): "learn from better paths used in searched
-clairvoyant play."**
-- `EnumerateEarliestWins` labels each candidate via an **`FSLineTail`** (commit-the-line) tail —
-  the "default search path" flagged as inefficient. Replace it with a **per-turn re-search**
-  continuation, ideally at **high depth/budget (~d7 / budget 10000)** for the "most correct" label
-  (user's words); cost is the main risk, so make label depth/budget env-configurable and validate
-  cheaply (moderate depth, few games) before scaling.
-- **API constraints found**: `AIEngine::RolloutWinTurn` is **private**; `EnumeratePlansWithLand` /
-  `ApplyPlanDirect` are **not exposed**; `GameEngine::PlayOut`→`RunTurn` does `++turn; UntapStep…`
-  so it **cannot start mid-turn**. Therefore the strong continuation must resume **post-combat** the
-  way `FSLineTail` does. Cleanest design: add an optional continuation callback
-  `std::function<int(GameState&)>` to `EnumerateEarliestWins` (default null → today's `FSLineTail`,
-  byte-identical); `AIEngine` passes a lambda backed by a **separate high-depth labeling `AIEngine`**
-  (so `MTG_EVAL_MODEL` stays OFF during labeling and the real game's `m_committed_line` isn't
-  touched). Gate the strong path behind e.g. `MTG_DUMP_EVAL_ROWS_STRONG=1`.
-- **Also needed** (independent of labels): (a) **DAgger** — relabel on the *student's own* d0 states
-  and retrain, to close the covariate-shift collapse for standalone-d0; (b) **richer features** —
-  encode the plan's specific effect (per-card / post-plan board) so plans that differ only in *which*
-  card/land are distinguishable (the 0.89 RMSE floor).
-- **Priority (user)**: optimize **standalone-d0 first**, but keep it capable of **both** uses.
-- The bad v1 TH sidecar was NOT committed (regenerate from `scripts/train_eval_model.py`); training
-  rows persist at `logs/eval/th_train.rows`.
+The v1 collapse (d0 = 11% vs baseline 86%) was **misdiagnosed** as weak labels + covariate shift.
+A systematic ablation refuted every hypothesis except the objective:
+
+| Change | d0 win% (seed 2002, 500g) | verdict |
+|---|---|---|
+| v1 ridge-regression, 25 feats | 11% | the collapse |
+| + DAgger (on-policy states) | 11% | covariate shift **ruled out** |
+| + 8 richer plan features (v2) | 11% | feature coarseness **ruled out** |
+| + within-decision centering | 11% | still regression → no help |
+| **→ pairwise RANKING objective (v2, `--rank`)** | **87.2%** | **fixed** (baseline 86.8%) |
+
+**Root cause (found by tracing one game).** `FSLineTail` is already a full win-turn-minimizing
+B&B — the labels are near-optimal (cast=5.56 < land=6.28 < pass=6.60 expected win turn). But **ridge
+regression on absolute win-turn does not optimize the within-decision ranking**: over collinear,
+coarse plan features it splits the "casting is good" signal and picks up a confounding positive
+`draw_engine`/`total_mv` term (casting a setup spell *correlates* with "not yet won"), so the net
+makes developing look like it *delays* the win. Result: the model scores the **do-nothing/pass plan
+highest and durdles** — in the traced game it played 2 lands then passed every turn T3–T8, opp
+stayed at 20. Four different regression models (v1, +DAgger, v2, v2-centered) gave the *identical*
+11%/22-win trajectory — the signature of a structural (objective) fault, not a fine-ranking one.
+
+**The fix** — `train_eval_model.py --rank`: pairwise learning-to-rank. Within each decision, anchor
+on the oracle-best candidate (min label) and push it to outrank every other candidate, weighted by
+the win-turn gap (logistic loss, GD, feature-standardized, folded back to fixed-point). This
+directly encodes "cast beats pass" and is what d0 argmax actually needs. Serving is unchanged
+(`Score = coefs·feats`, higher = better); intercept is 0 (it cancels in every pairwise diff).
+Stability note: keep `lr·lam` small — `lr=0.3, lam=0.001` converges; `lr·lam≈1` flips `w` each epoch.
+
+**Validated results (v2-rank, `logs/eval/th_v2rank.eval.json`, trained on 11.7k rows @ seed 20000):**
+- **d0 standalone**: seed 2002 = **87.2%/5.552** (baseline 86.8%/5.558); seed 3003 = **87.0%/5.574**
+  (baseline 85.8%/5.620). **Slightly beats** the hand-tuned baseline on both held-out seeds.
+- **d3 search-leaf**: **99.0%/4.150** (baseline 99.0%/4.145) — tied. Works as **both** uses.
+- **Deterministic**: identical game outcomes across thread counts (fixed-point integer dot product).
+- **Data sufficiency (ranking)**: held-out pick-accuracy saturates by **~100–200 decisions (~1–2k
+  rows)** and is flat after — **capacity-bound, not data-bound**. (Also: pick-accuracy is only ~42%
+  yet play matches baseline — what governs win% is *avoiding the catastrophic pass-durdle*, not fine
+  pick precision. So global RMSE / pick-accuracy are poor proxies; the game A/B is the real metric.)
+
+**Interpretation of the d0→d3 gap (87%→99%).** Most of it is **clairvoyance** — the deep search
+reads the real library; a non-clairvoyant d0 fundamentally can't. So *matching/slightly beating the
+non-clairvoyant baseline is near the real ceiling* for standalone d0, and the label de-clairvoying
+(K-reshuffle) is doing its job. Don't chase the full gap at d0.
+
+**Ruled out / negative results (don't repeat):** DAgger *hurt* when added to the ranking model
+(87%→62%, over-fits the on-policy distribution); richer features alone did nothing under regression;
+within-centering didn't help under regression. The **strong-label pivot (per-turn re-search / d7)
+is unnecessary** — `FSLineTail` labels were never the problem (they're a full search; the objective
+was). That whole Phase-3b plan can be shelved unless a *harder* deck shows label-limited behavior.
+
+**Remaining levers to BEAT baseline more (all optional; headroom is small under the clairvoyance
+ceiling):** (a) interaction features (draw-engine × board context) or a fixed-point GBDT for capacity;
+(b) generalization test on a 2nd deck (burn/antilife) — the real payoff is a *shared* learned
+evaluator replacing hand-tuned `EvalCard`. Priority per user: standalone-d0 first, both eventually.
+
+**Artifacts:** trainer `--rank`/`--center` modes + `rank_fit`/`within_center`; new harness
+`scripts/eval_ab.py` (loss-penalized A/B) and `scripts/eval_regret.py` (within-decision pick-accuracy);
+v2 featurizer adds 7 append-only non-clairvoyant features (plan_cards_drawn, plan_noncreature_spells,
+plan_max_cast_mv, **plan_draw_engine**, **lands_in_hand**, mana_left_after, taps_out). Rows persist
+under `logs/eval/` (th_v2.rows = the winning training set).
 
 ## The permanent regression gate
 
