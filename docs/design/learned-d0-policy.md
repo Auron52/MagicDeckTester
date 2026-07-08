@@ -330,8 +330,17 @@ model unaffected); byte-identical with no model.
 | 3003 | 4.693 | 4.880 (+0.187) | 4.800 (+0.107) | ~43% (avg-turn 4.782→4.685, ~51%) |
 
 Real, replicated. The linear ranker still can't fully match the tuned `BurnProvider` sequencing, but
-the feature is a clear step. Next: test on antilife (combo — plan_baseline_eval is itself a linear
-per-card sum, so it may not fix the conjunction problem; GBDT + this feature is the interesting test).
+the feature is a clear step.
+
+**Antilife (combo): plan_baseline_eval does NOT help — as predicted.** On antilife its coef trains to
+~0 (inert); the linear ranker still durdles (`plan_num_spells < 0`) and GBDT reaches only ~28% (vs
+baseline ~89%). This is the doc's already-identified residual: antilife lethal needs a *conjunction* of
+pieces, and `plan_baseline_eval` is itself a linear per-card `EvalCard` sum — blind to the combo, so it
+can't represent it. **The real antilife lever is a combo-AWARE feature** ("plan assembles/controls the
+lethal set"), not a per-card value. So plan_baseline_eval is a burn/aggro-sequencing win, not a
+combo-deck win. (Method note found here: for a COMBO deck the row *dump* must play at a high enough
+`--budget-ms` to actually reach combo-assembled states, or the rows lack the informative positions —
+budget 200 gave GBDT 10%, budget 2000 gave 28%; aggro decks like burn are insensitive to this.)
 
 ### ⚠️ CRITICAL training footgun (cost 3 wrong diagnoses here): default `lr*lam` collapses `--rank`
 
