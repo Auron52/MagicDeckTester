@@ -1327,21 +1327,6 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
 }
 
 // --- Learned mid-game plan scoring (see docs/design/learned-d0-policy.md) ---------------------
-// One integer field of a plan-summary loop: fold one Action into the running board-effect summary.
-static inline void FoldActionIntoSummary(const Action& c, MidGamePlanSummary& sum)
-{
-    const bool is_cast = (c.kind == Action::Kind::CastFromHand
-                       || c.kind == Action::Kind::CastFromGraveyard);
-    if (is_cast)
-    {
-        ++sum.num_spells;
-        if (!c.is_noncreature) { ++sum.creatures_cast; }
-        sum.total_mv += c.card_mv;
-    }
-    sum.direct_damage += c.direct_damage;
-    if (c.kind == Action::Kind::PlayLand) { sum.plays_land = 1; }
-}
-
 // Score a plan (summarized by its board effect) with the deck's learned evaluator, clamped to int
 // (Plan::value is int; the score's magnitude is irrelevant -- ranking is ordinal). Only reached when
 // a model is attached AND MTG_EVAL_MODEL is set (guarded at each callsite), so default runs never
@@ -1353,20 +1338,35 @@ static int LearnedPlanScore(const GameState& state, const MidGamePlanSummary& su
     return static_cast<int>(std::min(kHi, std::max(kLo, s)));
 }
 
-// Seam A (Solve::consider): summary from a candidate list + selected indices.
-static MidGamePlanSummary SummarizeSelection(const std::vector<Action>& cands, const std::vector<int>& sel)
+// The plan summary is built by the SHARED name-based SummarizePlanByNames (KeepModel.cpp) so runtime
+// inference (here) and offline label emission (AIEngine's EnumerateEarliestWins dump) compute
+// byte-identical summaries from the same cast names -> no train/serve skew. These helpers just pull
+// the cast-spell names (and land-drop bit) out of a selection / resolved plan.
+static std::vector<std::string> PlanCastNames(const std::vector<Action>& cands, const std::vector<int>& sel)
 {
-    MidGamePlanSummary sum;
-    for (int j : sel) { FoldActionIntoSummary(cands[j], sum); }
-    return sum;
+    std::vector<std::string> names;
+    for (int j : sel)
+    {
+        const Action::Kind k = cands[j].kind;
+        if (k == Action::Kind::CastFromHand || k == Action::Kind::CastFromGraveyard)
+        { names.push_back(cands[j].card_name); }
+    }
+    return names;
 }
-
-// Seam B (EnumeratePlansWithLand): summary from an already-resolved plan's Action list.
-static MidGamePlanSummary SummarizePlanActions(const std::vector<Action>& actions)
+static std::vector<std::string> PlanCastNames(const std::vector<Action>& actions)
 {
-    MidGamePlanSummary sum;
-    for (const Action& c : actions) { FoldActionIntoSummary(c, sum); }
-    return sum;
+    std::vector<std::string> names;
+    for (const Action& c : actions)
+    {
+        if (c.kind == Action::Kind::CastFromHand || c.kind == Action::Kind::CastFromGraveyard)
+        { names.push_back(c.card_name); }
+    }
+    return names;
+}
+static bool PlanHasLand(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    for (int j : sel) { if (cands[j].kind == Action::Kind::PlayLand) { return true; } }
+    return false;
 }
 
 // ---- TurnSolver::Solve ---------------------------------------------------
@@ -1592,7 +1592,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // ranks a win). rank_value replaces total_eval in the compare + best.value; it IS total_eval
         // whenever no model is attached / the flag is off -> byte-identical. See learned-d0-policy.md.
         int rank_value = total_eval;
-        if (ev && !wins) { rank_value = LearnedPlanScore(state, SummarizeSelection(cands, sel), *ev); }
+        if (ev && !wins)
+        { rank_value = LearnedPlanScore(state, SummarizePlanByNames(PlanCastNames(cands, sel), PlanHasLand(cands, sel)), *ev); }
 
         bool better;
         if (best.wins_this_turn != wins)   { better = wins; }                    // winning dominates
@@ -5290,8 +5291,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         for (TurnSolver::Plan& p : all)
         {
             if (p.wins_this_turn) { continue; }
-            MidGamePlanSummary sum = SummarizePlanActions(p.actions);
-            if (!p.land_to_play.empty()) { sum.plays_land = 1; }   // land is on the Plan, not in actions
+            MidGamePlanSummary sum = SummarizePlanByNames(PlanCastNames(p.actions), !p.land_to_play.empty());
             p.value = LearnedPlanScore(state, sum, *ev_root);
         }
     }

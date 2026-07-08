@@ -16,6 +16,8 @@
 #include <set>
 #include <sstream>
 #include <mutex>
+#include <fstream>
+#include <map>
 #include <stdexcept>
 
 // Non-convergence detector gate, read once. When set (MTG_FLAG_NONCONV in the
@@ -49,6 +51,79 @@ static const bool s_dump_ewins = std::getenv("MTG_DUMP_EWINS") != nullptr;
 static const int  s_dump_ewins_turn = []{
     const char* e = std::getenv("MTG_DUMP_EWINS_TURN"); return e ? std::atoi(e) : 1;
 }();
+
+// Learned-eval LABEL GENERATION (MTG_DUMP_EVAL_ROWS=<file>, MTG_EVAL_ROWS_K=<K>): at each REAL
+// pre-combat main, run EnumerateEarliestWins K times under RESHUFFLED remaining libraries and emit
+// one row per candidate plan for the offline eval-model trainer. This de-clairvoys the label: the
+// search reads the real library order (clairvoyant), so averaging its earliest-win over K independent
+// future draw orders marginalises the draw out -- the plan's EXPECTED win turn, which is what a
+// non-clairvoyant policy should predict (the same "blind rollout" trick the mulligan trainer uses).
+// Features are the NON-CLAIRVOYANT ExtractMidGameFeatures of the ORIGINAL state (reshuffle-invariant).
+// Row: "<label> <feat0> ... <featN> <seed> <turn>". Losses count as max_turns+1 (the primary metric).
+// EXPENSIVE (K x full search per decision) -- run on a bounded set of games. Inert unless set.
+// See docs/design/learned-d0-policy.md.
+static const char* s_eval_rows_path = std::getenv("MTG_DUMP_EVAL_ROWS");
+static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_ROWS_K");
+                                          int v = (e && *e) ? std::atoi(e) : 8; return v < 1 ? 1 : v; }();
+
+static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
+{
+    // Per-candidate accumulator, keyed by a canonical plan string (stable across reshuffles).
+    struct Acc { long long sum = 0; int count = 0; std::vector<std::string> casts, sac; std::string land; };
+    std::map<std::string, Acc> acc;
+    for (int k = 0; k < s_eval_rows_k; ++k)
+    {
+        GameState s = state;
+        // Reshuffle the REMAINING library so the label averages over future draw orders (de-clairvoy).
+        // Deterministic per (seed, turn, k); k==0 also reshuffles, so the mean is over K independent
+        // futures. EnumerateEarliestWins itself sets g_shuffle_eval, so its internal shuffles decouple.
+        const uint64_t rs = state.game_seed
+                          + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
+                          + 1000003ULL * static_cast<uint64_t>(state.turn_number);
+        s.ActivePlayer().library.Shuffle(rs);
+        const TurnSolver::EarliestWinReport rep =
+            TurnSolver::EnumerateEarliestWins(s, max_turns, second_main);
+        for (const TurnSolver::EarliestWinCandidate& c : rep.candidates)
+        {
+            std::string key = c.land + "|" + c.fetch + "|";
+            for (const std::string& n : c.cast_order) { key += n; key += ","; }
+            key += "#";
+            for (const std::string& n : c.sac_casts)  { key += n; key += ","; }
+            Acc& a = acc[key];
+            const int wt = (c.win_turn > 0 && c.win_turn <= max_turns) ? c.win_turn : (max_turns + 1);
+            a.sum += wt; ++a.count;
+            if (a.count == 1) { a.casts = c.cast_order; a.sac = c.sac_casts; a.land = c.land; }
+        }
+    }
+    if (acc.empty()) { return; }
+
+    // Features are reshuffle-invariant -> compute from the ORIGINAL state. Serialize file writes.
+    static std::mutex    s_mtx;
+    static std::ofstream s_out(s_eval_rows_path, std::ios::app);
+    static bool          s_header = false;
+    std::lock_guard<std::mutex> lk(s_mtx);
+    if (!s_out.good()) { return; }
+    if (!s_header)
+    {
+        s_out << "# label";
+        for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
+        { s_out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
+        s_out << " seed turn\n";
+        s_header = true;
+    }
+    for (const auto& kv : acc)
+    {
+        const Acc& a = kv.second;
+        std::vector<std::string> names = a.casts;
+        names.insert(names.end(), a.sac.begin(), a.sac.end());
+        const MidGamePlanSummary sum  = SummarizePlanByNames(names, !a.land.empty());
+        const std::vector<int>   feat = ExtractMidGameFeatures(state, sum);
+        s_out << (static_cast<double>(a.sum) / a.count);
+        for (int v : feat) { s_out << ' ' << v; }
+        s_out << ' ' << state.game_seed << ' ' << state.turn_number << '\n';
+    }
+    s_out.flush();
+}
 
 // Provider cast-order rank for a hand cast by name (lower = cast earlier). MUST stay
 // byte-for-byte identical to TurnSolver::CastRankOf so the executor's canonical cast
@@ -982,6 +1057,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         static std::mutex s_ewins_mtx;   // one whole line at a time (workers share cerr)
         std::lock_guard<std::mutex> lk(s_ewins_mtx);
         std::cerr << js.str();
+    }
+
+    // Learned-eval label generation (inert unless MTG_DUMP_EVAL_ROWS set): emit de-clairvoyed
+    // (features, expected-win-turn) rows for every candidate plan at this REAL decision, ALL turns.
+    if (s_eval_rows_path && !m_in_rollout && is_pre_combat_main)
+    {
+        EmitEvalRows(state, m_max_turns, m_search_post_combat);
     }
 
     // The post-combat (second) main phase does NOTHING unless post-combat search
