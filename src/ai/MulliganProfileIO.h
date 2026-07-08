@@ -624,6 +624,28 @@ inline nlohmann::json EvalModelToJsonObj(const MidGameEvaluator& e)
     for (int j = 0; j < static_cast<int>(e.coefs.size()) && j < static_cast<int>(MidGameFeature::Count); ++j)
     { if (e.coefs[j] != 0) { coefs[MidGameFeatureName(static_cast<MidGameFeature>(j))] = e.coefs[j]; } }
     m["coefs"] = coefs;
+    // GBDT ensemble (optional). Split features by NAME (enum-robust, like coefs). Compact per-node
+    // arrays: leaf = [value]; internal = [feat_name, threshold, left, right].
+    if (!e.trees.empty())
+    {
+        json trees = json::array();
+        for (const std::vector<MidGameTreeNode>& t : e.trees)
+        {
+            json nodes = json::array();
+            for (const MidGameTreeNode& n : t)
+            {
+                if (n.feature < 0) { nodes.push_back(json::array({ n.value })); }
+                else
+                {
+                    const char* nm = (n.feature < static_cast<int>(MidGameFeature::Count))
+                                   ? MidGameFeatureName(static_cast<MidGameFeature>(n.feature)) : "?";
+                    nodes.push_back(json::array({ nm, n.threshold, n.left, n.right }));
+                }
+            }
+            trees.push_back(std::move(nodes));
+        }
+        m["trees"] = std::move(trees);
+    }
     return m;
 }
 
@@ -632,15 +654,43 @@ inline MidGameEvaluator EvalModelFromJsonObj(const nlohmann::json& j)
     MidGameEvaluator e;
     // Accept either the model object directly or a wrapper { "eval_model": {...} }.
     const nlohmann::json& m = j.contains("eval_model") ? j["eval_model"] : j;
-    // No/empty coefs -> return the EMPTY model (inert; heuristic ranking), never an all-zero "active"
+    const bool has_coefs = m.contains("coefs") && m["coefs"].is_object() && !m["coefs"].empty();
+    const bool has_trees = m.contains("trees") && m["trees"].is_array() && !m["trees"].empty();
+    // Neither part present -> the EMPTY model (inert; heuristic ranking), never an all-zero "active"
     // model that would silently re-tiebreak plans.
-    if (!m.contains("coefs") || !m["coefs"].is_object() || m["coefs"].empty()) { return e; }
+    if (!has_coefs && !has_trees) { return e; }
     e.intercept = m.value("intercept", 0LL);
-    e.coefs.assign(static_cast<int>(MidGameFeature::Count), 0LL);
-    for (const auto& [name, val] : m["coefs"].items())
+    if (has_coefs)
     {
-        const int idx = MidGameFeatureFromName(name);
-        if (idx >= 0 && idx < static_cast<int>(e.coefs.size())) { e.coefs[idx] = val.get<long long>(); }
+        e.coefs.assign(static_cast<int>(MidGameFeature::Count), 0LL);
+        for (const auto& [name, val] : m["coefs"].items())
+        {
+            const int idx = MidGameFeatureFromName(name);
+            if (idx >= 0 && idx < static_cast<int>(e.coefs.size())) { e.coefs[idx] = val.get<long long>(); }
+        }
+    }
+    if (has_trees)
+    {
+        for (const auto& jt : m["trees"])
+        {
+            if (!jt.is_array()) { continue; }
+            std::vector<MidGameTreeNode> tree;
+            tree.reserve(jt.size());
+            for (const auto& jn : jt)
+            {
+                MidGameTreeNode node;
+                if (jn.is_array() && jn.size() == 1) { node.value = jn[0].get<long long>(); }   // leaf
+                else if (jn.is_array() && jn.size() == 4)
+                {
+                    node.feature   = MidGameFeatureFromName(jn[0].get<std::string>());
+                    node.threshold = jn[1].get<int>();
+                    node.left      = jn[2].get<int>();
+                    node.right     = jn[3].get<int>();
+                }
+                tree.push_back(node);
+            }
+            if (!tree.empty()) { e.trees.push_back(std::move(tree)); }
+        }
     }
     return e;
 }
