@@ -357,6 +357,18 @@ enum class MidGameFeature : int
     PlanDirectDamage,     // burn to the opponent's face this plan
     PlanTotalMv,          // mana committed by the plan's casts
     PlanPlaysLand,        // 1 if the plan plays a land
+    // --- appended (v2): richer, still NON-CLAIRVOYANT plan/board discriminators. Within one
+    //     decision the pre-plan board features above are constant across candidates, so only the
+    //     plan_* terms distinguish plans; v1's were coarse counts (num_spells/total_mv) -> the model
+    //     could only "cast the most". These let it see WHICH plan and the board it leaves behind
+    //     (own hand + card identity are public to us; we never read library order). learned-d0-policy.md
+    PlanCardsDrawn,        // fixed card-draw the plan's casts add (Sum params.draw)
+    PlanNoncreatureSpells, // noncreature casts (instants/sorceries) = num_spells - creatures_cast
+    PlanMaxCastMv,         // largest single cast's MV (a big spell vs several small ones)
+    PlanDrawEngine,        // 1 if a cast is a variable draw/dig engine (Treasure Hunt et al.)
+    LandsInHand,           // lands in our hand (Land's Edge ammo / Treasure Hunt fuel; own-hand = public)
+    ManaLeftAfter,         // untapped sources left after paying the plan (max(0, sources - total_mv))
+    TapsOut,               // 1 if the plan commits all our mana (total_mv >= untapped sources)
     Count                 // sentinel: number of features
 };
 
@@ -389,6 +401,13 @@ inline const char* MidGameFeatureName(MidGameFeature f)
         case MidGameFeature::PlanDirectDamage:    return "plan_direct_damage";
         case MidGameFeature::PlanTotalMv:         return "plan_total_mv";
         case MidGameFeature::PlanPlaysLand:       return "plan_plays_land";
+        case MidGameFeature::PlanCardsDrawn:      return "plan_cards_drawn";
+        case MidGameFeature::PlanNoncreatureSpells: return "plan_noncreature_spells";
+        case MidGameFeature::PlanMaxCastMv:       return "plan_max_cast_mv";
+        case MidGameFeature::PlanDrawEngine:      return "plan_draw_engine";
+        case MidGameFeature::LandsInHand:         return "lands_in_hand";
+        case MidGameFeature::ManaLeftAfter:       return "mana_left_after";
+        case MidGameFeature::TapsOut:             return "taps_out";
         default:                                  return "?";
     }
 }
@@ -409,6 +428,9 @@ struct MidGamePlanSummary
     int direct_damage  = 0;  // burn to the opponent's face this plan
     int total_mv       = 0;  // summed mana value of the casts (mana committed)
     int plays_land     = 0;  // 1 if the plan plays a land this turn
+    int cards_drawn    = 0;  // fixed card-draw the casts add (Sum params.draw; variable draw excluded)
+    int max_cast_mv    = 0;  // largest single cast's mana value
+    int draw_engine    = 0;  // 1 if a cast is a variable draw/dig engine (draw_until_nonland etc.)
 };
 
 // Analyzer-trained additive evaluator: predicted plan goodness = intercept + Sum coef*feat, with
