@@ -271,10 +271,12 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
     """
     target_lc = card_name.lower()
     cast_seen_anywhere = False
+    drawn_games = 0             # games where the card was ever in hand (distinguishes NOT_FORCED reasons)
     for gi in range(budget):
         choices, guard = [], 0
         observed = set()            # (type, source_lc)
         cast_here = False
+        in_hand_here = False
         while guard < 220:
             guard += 1
             d = step(deck, prof, base_seed, gi, choices, max_turns)
@@ -283,6 +285,9 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             t = d.get("type")
             if t not in ("main_phase", "mulligan", "bottom", "?"):
                 observed.add((t, (d.get("source") or "").lower()))
+            hand = (d.get("me", {}) or {}).get("hand") or []
+            if any(str(c.get("name", "")).lower() == target_lc for c in hand):
+                in_hand_here = True
             choice = pick_toward(d, target_lc)
             if t == "main_phase" and choice is not None and choice >= 0:
                 for pl in d.get("plans", []):
@@ -290,6 +295,8 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                         cast_here = True
                         break
             choices.append(choice)
+        if in_hand_here:
+            drawn_games += 1
         if cast_here:
             cast_seen_anywhere = True
             hit = {t for (t, _) in observed if t in expected_types}
@@ -299,7 +306,12 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                                      "types": sorted(hit), "source_confirmed": src_confirmed})
     if cast_seen_anywhere:
         return ("HARD_MISS", {"note": "card was cast but no expected decision surfaced"})
-    return ("NOT_FORCED", {"note": f"card not cast in {budget} games from seed {base_seed}"})
+    if drawn_games:
+        return ("NOT_FORCED", {"note": f"card was in hand in {drawn_games}/{budget} games but never "
+                               f"cast (never castable/offered on the driven line -- try a hand-built "
+                               f"--choices line, more turns, or a wider seed)"})
+    return ("NOT_FORCED", {"note": f"card never drawn in {budget} games from seed {base_seed} "
+                           f"(try a different/wider seed or more games)"})
 
 
 def run_sweep(deck, prof, base_seed, n_games, max_turns):
