@@ -135,6 +135,54 @@ Only if the linear/GBDT learning curve shows real regret vs. the oracle: escalat
 aggregate-stability test, report the tradeoff, adopt on approval (per the heuristic-optimization
 skill).
 
+## Implementation status & findings (session log — read this first when resuming)
+
+**Committed & verified:**
+- **Phase 1** (`7e40508`): full integration scaffold — inert, **byte-identical** (smoke 18/18 +
+  regression 30/30, digests exact, 0 play-changed). Types + featurizer + both seams + sidecar + gate.
+- **Phase 2** (`3c999f4`): `MTG_DUMP_EVAL_ROWS` label dump (de-clairvoyed, K-reshuffle) +
+  `SummarizePlanByNames` (one canonical name-based summary shared by seams and dump → no skew).
+  Still byte-identical by default. `direct_damage` is 0 for v1.
+- **Trainer**: `scripts/train_eval_model.py` — pure-Python ridge (no numpy), stores NEGATED
+  fixed-point coefs so `Score = -predicted_win_turn` (higher=better). `--learning-curve` mode.
+
+**Empirical results (Treasure Hunt, trained on seed 20000, tested on 2002):**
+- **Learning curve**: held-out RMSE flattens at ~2–4k rows (0.92→0.89 turns). **Answers the data
+  question**: a linear model saturates at ~2.5k rows; the ~0.89-turn floor is set by *feature
+  coarseness*, not data quantity (many candidate plans share features — e.g. land-only turn-1 plans
+  differ only by which land, which the v1 summary doesn't encode).
+- **A/B**: d3 learned = **100% / 4.17** (≈ baseline 100% / 4.15 — safe but near-**inert**; the
+  search overrides the model). d0 learned = **7% / 6.14** (baseline 86.7% / 5.15) — **catastrophic**,
+  identical under `MTG_LEGACY_SEARCH` (so it's `Solve` itself, not the full-depth leaf).
+- **Diagnosis (NOT a bug)**: on its *training* distribution the model's rank-regret is only 0.285
+  turns and it correctly favors casting (within-decision label slope −0.39). The d0 collapse is the
+  **train/serve gap**: weak `FSLineTail` labels + **covariate shift** (a round-0 model trained on
+  baseline-d0 states plays into flooded states it never saw and compounds). d3 masks it because the
+  search's rolled-out win-turn dominates the (learned) value tiebreak.
+
+**Next step — stronger labels (user directive): "learn from better paths used in searched
+clairvoyant play."**
+- `EnumerateEarliestWins` labels each candidate via an **`FSLineTail`** (commit-the-line) tail —
+  the "default search path" flagged as inefficient. Replace it with a **per-turn re-search**
+  continuation, ideally at **high depth/budget (~d7 / budget 10000)** for the "most correct" label
+  (user's words); cost is the main risk, so make label depth/budget env-configurable and validate
+  cheaply (moderate depth, few games) before scaling.
+- **API constraints found**: `AIEngine::RolloutWinTurn` is **private**; `EnumeratePlansWithLand` /
+  `ApplyPlanDirect` are **not exposed**; `GameEngine::PlayOut`→`RunTurn` does `++turn; UntapStep…`
+  so it **cannot start mid-turn**. Therefore the strong continuation must resume **post-combat** the
+  way `FSLineTail` does. Cleanest design: add an optional continuation callback
+  `std::function<int(GameState&)>` to `EnumerateEarliestWins` (default null → today's `FSLineTail`,
+  byte-identical); `AIEngine` passes a lambda backed by a **separate high-depth labeling `AIEngine`**
+  (so `MTG_EVAL_MODEL` stays OFF during labeling and the real game's `m_committed_line` isn't
+  touched). Gate the strong path behind e.g. `MTG_DUMP_EVAL_ROWS_STRONG=1`.
+- **Also needed** (independent of labels): (a) **DAgger** — relabel on the *student's own* d0 states
+  and retrain, to close the covariate-shift collapse for standalone-d0; (b) **richer features** —
+  encode the plan's specific effect (per-card / post-plan board) so plans that differ only in *which*
+  card/land are distinguishable (the 0.89 RMSE floor).
+- **Priority (user)**: optimize **standalone-d0 first**, but keep it capable of **both** uses.
+- The bad v1 TH sidecar was NOT committed (regenerate from `scripts/train_eval_model.py`); training
+  rows persist at `logs/eval/th_train.rows`.
+
 ## The permanent regression gate
 
 At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regression digests are
