@@ -141,6 +141,9 @@ def main():
                     help="hold out every 4th DECISION; report held-out pairwise acc as it boosts")
     ap.add_argument("--init-linear", action="store_true",
                     help="warm-start F from the linear rank model (hybrid: linear + boosted trees)")
+    ap.add_argument("--regression", action="store_true",
+                    help="VALUE model: boost squared-error on win turn (predict absolute win turn) "
+                         "instead of pairwise ranking; writes a value sidecar (Score = win turn)")
     args = ap.parse_args()
 
     feat_names, X, y, groups = _tm.read_rows(args.rows)
@@ -155,25 +158,35 @@ def main():
         lin_coefs_wt, _ = _tm.rank_fit(X, y, groups, 0.001, 600, 0.3)
         print("warm-started from linear rank model", file=sys.stderr)
 
-    # optional held-out split by decision
-    te_pairs = None
-    if args.holdout:
-        gids = sorted(set(groups)); held = set(gids[::4])
-        tr_i = [i for i in range(n) if groups[i] not in held]
-        pairs_all = build_pairs([groups[i] for i in range(n)], y)
-        te_pairs = [(a, j, w) for (a, j, w) in pairs_all if groups[a] in held]
-        pairs = [(a, j, w) for (a, j, w) in pairs_all if groups[a] not in held]
-    else:
-        pairs = build_pairs(groups, y)
-    print("pairs=%d" % len(pairs), file=sys.stderr)
-
+    reg_intercept = 0.0
     F = [0.0] * n
-    if lin_coefs_wt is not None:
-        for i in range(n):
-            F[i] = sum(-lin_coefs_wt[j] * X[i][j] for j in range(d))    # linear goodness init
+    pairs = te_pairs = None
+    if args.regression:
+        # VALUE model: init F at the mean win turn, boost squared-error residuals toward y.
+        reg_intercept = sum(y) / n
+        F = [reg_intercept] * n
+    else:
+        if args.holdout:
+            gids = sorted(set(groups)); held = set(gids[::4])
+            pairs_all = build_pairs([groups[i] for i in range(n)], y)
+            te_pairs = [(a, j, w) for (a, j, w) in pairs_all if groups[a] in held]
+            pairs = [(a, j, w) for (a, j, w) in pairs_all if groups[a] not in held]
+        else:
+            pairs = build_pairs(groups, y)
+        print("pairs=%d" % len(pairs), file=sys.stderr)
+        if lin_coefs_wt is not None:
+            for i in range(n):
+                F[i] = sum(-lin_coefs_wt[j] * X[i][j] for j in range(d))    # linear goodness init
+
+    def rmse():
+        return math.sqrt(sum((F[i] - y[i]) ** 2 for i in range(n)) / n)
+
     trees = []
     for rnd in range(args.trees):
-        resid, loss = pairwise_residuals(pairs, F, n)
+        if args.regression:
+            resid = [y[i] - F[i] for i in range(n)]                        # squared-error negative gradient
+        else:
+            resid, _ = pairwise_residuals(pairs, F, n)
         nodes = fit_tree(X, resid, list(range(n)), args.depth, args.min_leaf, d)
         for i in range(n):
             F[i] += args.lr * tree_predict(nodes, X[i])
@@ -183,10 +196,13 @@ def main():
                 nd[4] *= args.lr
         trees.append(nodes)
         if rnd % 20 == 0 or rnd == args.trees - 1:
-            msg = "round %3d  train_pair_acc=%.1f%%" % (rnd, pairwise_acc(pairs, F))
-            if te_pairs is not None:
-                msg += "  heldout_pair_acc=%.1f%%" % pairwise_acc(te_pairs, F)
-            print(msg, file=sys.stderr)
+            if args.regression:
+                print("round %3d  train_RMSE=%.4f turns" % (rnd, rmse()), file=sys.stderr)
+            else:
+                msg = "round %3d  train_pair_acc=%.1f%%" % (rnd, pairwise_acc(pairs, F))
+                if te_pairs is not None:
+                    msg += "  heldout_pair_acc=%.1f%%" % pairwise_acc(te_pairs, F)
+                print(msg, file=sys.stderr)
 
     # Quantize to fixed-point integer trees and emit the sidecar.
     jtrees = []
@@ -206,14 +222,16 @@ def main():
             q = int(round(-c * SCALE))
             if q != 0:
                 coefs_obj[name] = q
+    intercept = int(round(reg_intercept * SCALE))   # regression: mean-win-turn init; ranking: 0
     if args.out:
-        obj = {"eval_model": {"intercept": 0, "coefs": coefs_obj, "trees": jtrees}}
+        obj = {"eval_model": {"intercept": intercept, "coefs": coefs_obj, "trees": jtrees}}
         with open(args.out, "w") as f:
             json.dump(obj, f)
             f.write("\n")
         leaves = sum(1 for nodes in trees for nd in nodes if nd[0] < 0)
-        print("wrote %s (%d trees, %d leaves, fixed-point x%d)" % (args.out, len(trees), leaves, SCALE),
-              file=sys.stderr)
+        kind = "VALUE=win-turn" if args.regression else "ranker"
+        print("wrote %s (%d trees, %d leaves, fixed-point x%d, %s)"
+              % (args.out, len(trees), leaves, SCALE, kind), file=sys.stderr)
 
 
 if __name__ == "__main__":

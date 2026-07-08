@@ -2074,6 +2074,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     if (std::filesystem::exists(profile_path)) { profile = LoadDeckProfile(profile_path); }
     AttachExhaustiveSidecar(profile, profile_path);  // play uses the deck's exhaustive sidecar if present
     AttachEvalSidecar(profile, profile_path);        // ... and its learned mid-game eval sidecar if present
+    AttachValueSidecar(profile, profile_path);       // ... and its learned leaf value sidecar if present
 
     const int depth     = j.value("depth", 5);
     const int budget_ms = j.value("budget_ms", 100);
@@ -2433,6 +2434,7 @@ int main(int argc, char* argv[])
         }
         AttachExhaustiveSidecar(profile, profile_path);  // play uses the deck's exhaustive sidecar if present
         AttachEvalSidecar(profile, profile_path);        // ... and its learned mid-game eval sidecar if present
+        AttachValueSidecar(profile, profile_path);       // ... and its learned leaf value sidecar if present
 
         // --eval-hand: one keep/mull decision on a constructed hand via the runtime predicate.
         // Prints "KEEP"/"MULLIGAN" for the given (hand, mull, play/draw) so a keep-model can be

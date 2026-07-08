@@ -730,3 +730,36 @@ inline void AttachEvalSidecar(MulliganProfile& profile, const std::filesystem::p
     const std::filesystem::path cand = profile_path.parent_path() / (stem + ".eval.json");
     if (std::filesystem::exists(cand)) { load_from(cand); }
 }
+
+// For PLAY only: pull in the deck's learned leaf VALUE sidecar (`<deck>.value.json`) the same way as
+// the eval sidecar. Presence-gated + runtime-gated by MTG_VALUE_MODEL (inert until enabled). Override:
+// MTG_VALUE_PROFILE=none|off|0|"" -> attach nothing; <path> -> that file. Reuses EvalModelFromJsonObj
+// (same schema); the value model's coefs/trees predict a WIN TURN. See docs/design/learned-d0-policy.md.
+inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
+{
+    if (!profile.value_model.empty()) { return; }
+
+    auto load_from = [&](const std::filesystem::path& p)
+    {
+        std::ifstream f(p);
+        if (!f) { return; }
+        try { nlohmann::json j; f >> j; profile.value_model = EvalModelFromJsonObj(j); }
+        catch (...) { profile.value_model = MidGameEvaluator{}; }
+    };
+
+    if (const char* ov = std::getenv("MTG_VALUE_PROFILE"))
+    {
+        const std::string v = ov;
+        if (v.empty() || v == "none" || v == "off" || v == "0") { return; }
+        load_from(v);
+        return;
+    }
+
+    const std::string fn = profile_path.filename().string();
+    const std::string suffix = ".profile.json";
+    if (fn.size() <= suffix.size() || fn.compare(fn.size() - suffix.size(), suffix.size(), suffix) != 0)
+    { return; }
+    const std::string stem = fn.substr(0, fn.size() - suffix.size());
+    const std::filesystem::path cand = profile_path.parent_path() / (stem + ".value.json");
+    if (std::filesystem::exists(cand)) { load_from(cand); }
+}

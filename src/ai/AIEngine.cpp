@@ -63,6 +63,12 @@ static const int  s_dump_ewins_turn = []{
 // EXPENSIVE (K x full search per decision) -- run on a bounded set of games. Inert unless set.
 // See docs/design/learned-d0-policy.md.
 static const char* s_eval_rows_path = std::getenv("MTG_DUMP_EVAL_ROWS");
+// Leaf VALUE label dump (MTG_DUMP_VALUE_ROWS=<file>): one row per POSITION whose label is the
+// de-clairvoyed DEEP-SEARCH win turn from here (avg over K reshuffles of EnumerateEarliestWins'
+// report.earliest = the best achievable win turn). Features are the POSITION only (null plan). This
+// is the training target for the value model that replaces the search's horizon rollout with the
+// searched result. Shares the same K-reshuffle loop as the eval dump. See learned-d0-policy.md.
+static const char* s_value_rows_path = std::getenv("MTG_DUMP_VALUE_ROWS");
 static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_ROWS_K");
                                           int v = (e && *e) ? std::atoi(e) : 8; return v < 1 ? 1 : v; }();
 
@@ -71,6 +77,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
     // Per-candidate accumulator, keyed by a canonical plan string (stable across reshuffles).
     struct Acc { long long sum = 0; int count = 0; std::vector<std::string> casts, sac; std::string land; };
     std::map<std::string, Acc> acc;
+    long long earliest_sum = 0; int earliest_n = 0;   // for the position VALUE label (avg report.earliest)
     for (int k = 0; k < s_eval_rows_k; ++k)
     {
         GameState s = state;
@@ -83,6 +90,8 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         s.ActivePlayer().library.Shuffle(rs);
         const TurnSolver::EarliestWinReport rep =
             TurnSolver::EnumerateEarliestWins(s, max_turns, second_main);
+        const int e = (rep.earliest > 0 && rep.earliest <= max_turns) ? rep.earliest : (max_turns + 1);
+        earliest_sum += e; ++earliest_n;
         for (const TurnSolver::EarliestWinCandidate& c : rep.candidates)
         {
             std::string key = c.land + "|" + c.fetch + "|";
@@ -95,13 +104,38 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
             if (a.count == 1) { a.casts = c.cast_order; a.sac = c.sac_casts; a.land = c.land; }
         }
     }
-    if (acc.empty()) { return; }
 
-    // Features are reshuffle-invariant -> compute from the ORIGINAL state. Serialize file writes.
-    static std::mutex    s_mtx;
+    static std::mutex s_mtx;
+    std::lock_guard<std::mutex> lk(s_mtx);
+
+    // Position VALUE row: features are the board only (null plan), label = de-clairvoyed best win turn.
+    if (s_value_rows_path && earliest_n > 0)
+    {
+        static std::ofstream v_out(s_value_rows_path, std::ios::app);
+        static bool v_header = false;
+        if (v_out.good())
+        {
+            if (!v_header)
+            {
+                v_out << "# label";
+                for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
+                { v_out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
+                v_out << " seed turn\n";
+                v_header = true;
+            }
+            const std::vector<int> feat = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+            v_out << (static_cast<double>(earliest_sum) / earliest_n);
+            for (int vv : feat) { v_out << ' ' << vv; }
+            v_out << ' ' << state.game_seed << ' ' << state.turn_number << '\n';
+            v_out.flush();
+        }
+    }
+
+    if (!s_eval_rows_path || acc.empty()) { return; }
+
+    // Per-candidate eval rows (features reshuffle-invariant -> from the ORIGINAL state).
     static std::ofstream s_out(s_eval_rows_path, std::ios::app);
     static bool          s_header = false;
-    std::lock_guard<std::mutex> lk(s_mtx);
     if (!s_out.good()) { return; }
     if (!s_header)
     {
@@ -214,6 +248,9 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // (m_profile outlives the game); propagates through every deep copy. Presence + MTG_EVAL_MODEL
     // gate its actual use in TurnSolver::Solve. See GameState::m_evaluator.
     state.m_evaluator = m_profile.eval_model.empty() ? nullptr : &m_profile.eval_model;
+    // ... and the deck's learned leaf value model (replaces the search's horizon rollout when
+    // MTG_VALUE_MODEL is set). Same non-owning / deep-copy propagation. See GameState::m_value_model.
+    state.m_value_model = m_profile.value_model.empty() ? nullptr : &m_profile.value_model;
 
     ap.library.DrawN(7, ap.hand);
 
@@ -1059,9 +1096,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         std::cerr << js.str();
     }
 
-    // Learned-eval label generation (inert unless MTG_DUMP_EVAL_ROWS set): emit de-clairvoyed
-    // (features, expected-win-turn) rows for every candidate plan at this REAL decision, ALL turns.
-    if (s_eval_rows_path && !m_in_rollout && is_pre_combat_main)
+    // Learned-eval / leaf-value label generation (inert unless MTG_DUMP_EVAL_ROWS or MTG_DUMP_VALUE_ROWS
+    // set): emit de-clairvoyed per-candidate (eval) and/or per-position (value) rows at this REAL decision.
+    if ((s_eval_rows_path || s_value_rows_path) && !m_in_rollout && is_pre_combat_main)
     {
         EmitEvalRows(state, m_max_turns, m_search_post_combat);
     }
