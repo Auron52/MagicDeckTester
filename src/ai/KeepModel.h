@@ -437,3 +437,9 @@ struct MidGameEvaluator
 // TurnSolver for both offline label emission and runtime inference, so training and serving see
 // byte-identical features (lockstep). Returns a vector indexed by MidGameFeature (size == Count).
 std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePlanSummary& plan);
+
+// Build the plan summary from the cast-spell NAMES + whether a land is played. This is the SINGLE
+// canonical summary builder, used by BOTH runtime inference (the TurnSolver seams) and offline label
+// emission (AIEngine's EnumerateEarliestWins dump) -- so both compute byte-identical summaries from
+// the same names -> no train/serve skew. Looks each name up in the card database (deterministic).
+MidGamePlanSummary SummarizePlanByNames(const std::vector<std::string>& cast_names, bool plays_land);

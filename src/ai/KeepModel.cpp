@@ -451,3 +451,25 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     set(MidGameFeature::PlanPlaysLand,     plan.plays_land);
     return f;
 }
+
+// Single canonical plan-summary builder (see KeepModel.h). Shared by the runtime seams and the
+// offline label dump so both see byte-identical summaries from the same card names (no skew).
+MidGamePlanSummary SummarizePlanByNames(const std::vector<std::string>& cast_names, bool plays_land)
+{
+    MidGamePlanSummary sum;
+    sum.plays_land = plays_land ? 1 : 0;
+    for (const std::string& nm : cast_names)
+    {
+        ++sum.num_spells;
+        const CardDefinition* def = CardDatabase::Instance().Lookup(nm);
+        if (!def) { continue; }
+        if (def->card.IsCreature()) { ++sum.creatures_cast; }
+        sum.total_mv += def->card.m_mana_cost.ManaValue();
+    }
+    // direct_damage stays 0 for v1: it depends on the chosen X and the target (face vs creature),
+    // which a card NAME alone can't resolve, so computing it here would diverge from a resolved plan
+    // and create train/serve skew. The exact lethal check already handles burn-to-face; add a
+    // consistent burn-to-face feature later if the learning curve shows headroom. See
+    // docs/design/learned-d0-policy.md.
+    return sum;
+}
