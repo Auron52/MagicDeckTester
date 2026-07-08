@@ -25,6 +25,23 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# Build-time engine fingerprint (see cmake/EngineFingerprint.cmake and
+# docs/design/execution-trace-carry.md, Phase B). Regenerated on every build via a custom
+# command so it tracks the real source on disk; only rewrites the header when it changes.
+# mtg-core depends on it and exposes the generated include dir PUBLIC-ly, so both the runner
+# and the analyzer see MTG_ENGINE_FP.
+set(MTG_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
+set(MTG_ENGINE_FP_HEADER "${MTG_GENERATED_DIR}/engine_fp.h")
+file(MAKE_DIRECTORY "${MTG_GENERATED_DIR}")
+add_custom_target(mtg_engine_fp
+    BYPRODUCTS "${MTG_ENGINE_FP_HEADER}"
+    COMMAND ${CMAKE_COMMAND}
+            -DSRC_DIR=${CMAKE_SOURCE_DIR}/src
+            -DOUT_FILE=${MTG_ENGINE_FP_HEADER}
+            -P ${CMAKE_SOURCE_DIR}/cmake/EngineFingerprint.cmake
+    COMMENT "Computing engine fingerprint (MTG_ENGINE_FP)"
+    VERBATIM)
+
 # Shared game engine library — linked by both the runner and the analyzer
 add_library(mtg-core STATIC
     src/core/GameEngine.cpp
@@ -40,8 +57,9 @@ add_library(mtg-core STATIC
     src/cards/CardDatabase.cpp
     src/core/NameRegistry.cpp
 )
-target_include_directories(mtg-core PUBLIC src)
+target_include_directories(mtg-core PUBLIC src "${MTG_GENERATED_DIR}")
 target_link_libraries(mtg-core PUBLIC pugixml::pugixml nlohmann_json::nlohmann_json)
+add_dependencies(mtg-core mtg_engine_fp)
 
 # Optional: zlib, so the runtime can read gzipped deck profiles (.json.gz). Committed exhaustive
 # keep/bottom profiles ship gzipped (the raw bottom_keep table is ~13 MB; gzip -> ~1-2 MB). Linked

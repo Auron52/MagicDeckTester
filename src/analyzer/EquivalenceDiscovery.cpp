@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "../ai/AIEngine.h"
+#include "../cards/CardDatabase.h"
 #include "../core/HardwareConcurrency.h"
 #include "../runner/GoldFishRunner.h"
 
@@ -103,6 +104,23 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
         for (int b = a + 1; b < N; ++b)
         {
             if (SigDistance(sig[a], sig[b]) <= threshold) { parent[find(a)] = find(b); }
+        }
+    }
+    // Merge all goldfish-inert cards BY CONSTRUCTION. They are provably game-equivalent -- the engine
+    // never casts them (TurnSolver skips def.params.goldfish_inert), so any two are the same faithful
+    // dead draw and belong in one bucket. The signature clustering can miss this: a dead card still
+    // sits in hand and can perturb a play heuristic on a handful of the N probes, nudging the mean
+    // |Δ win-turn| just over `threshold` (observed on Hinata -- three cheap inert cards merged but the
+    // {X}{U}{U}{U} Distorting Wake landed just outside). Unioning them here is exact, not heuristic,
+    // and shrinks K (fewer hand dimensions) for inert-heavy decks. No effect on decks without inert cards.
+    int inert_root = -1;
+    for (int k = 0; k < N; ++k)
+    {
+        auto def = CardDatabase::Instance().LookupCached(reps[k]);
+        if (def && def->params.goldfish_inert)
+        {
+            if (inert_root < 0) { inert_root = k; }
+            else { parent[find(k)] = find(inert_root); }
         }
     }
     EquivReport rep;

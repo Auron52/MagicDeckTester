@@ -1,6 +1,7 @@
 #pragma once
 #include "MulliganProfile.h"
 #include <nlohmann/json.hpp>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -577,6 +578,23 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
 inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
 {
     if (!profile.exhaustive_keep.empty()) { return; }
+
+    // Explicit per-context override -- decouples "the profile under test" from the presence-gated
+    // committed sidecar so A/Bs and candidate testing don't churn `decks/` or the deck's GT:
+    //   MTG_EXHAUSTIVE_PROFILE=none|off|0|"" -> attach NOTHING (a genuine static baseline arm).
+    //   MTG_EXHAUSTIVE_PROFILE=<path>        -> attach THAT profile's exhaustive block (candidate under
+    //                                           test), without placing a `.gz` next to the deck.
+    //   unset                                -> presence-gated auto-attach below (the adopted sidecar).
+    // Process-global, so it's a single-deck tool for A/B; a suite run uses `none` (disable) or unset.
+    if (const char* ov = std::getenv("MTG_EXHAUSTIVE_PROFILE"))
+    {
+        const std::string v = ov;
+        if (v.empty() || v == "none" || v == "off" || v == "0") { return; }
+        MulliganProfile exh = LoadDeckProfile(v);
+        if (!exh.exhaustive_keep.empty()) { profile.exhaustive_keep = std::move(exh.exhaustive_keep); }
+        return;
+    }
+
     const std::string fn = profile_path.filename().string();
     const std::string suffix = ".profile.json";
     if (fn.size() <= suffix.size() || fn.compare(fn.size() - suffix.size(), suffix.size(), suffix) != 0)

@@ -1,12 +1,17 @@
 #include "EffectHandler.h"
 #include "SpellEffects.h"
+#include "RolloutTouch.h"
 #include <algorithm>
+
+// Execution-trace instrumentation sink (off by default -> byte-identical). See RolloutTouch.h.
+namespace rollout_touch { thread_local Sink* g_sink = nullptr; }
 
 // ---- Helpers ----
 
 void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
                                       const CardDefinition& def)
 {
+    rollout_touch::Record(entry.source.m_name.str());   // execution-trace: permanent's code runs on the battlefield
     Permanent perm;
     perm.card              = def.card;
     perm.card.m_number     = entry.source.m_number;  // preserve per-copy ID from cast
@@ -25,6 +30,8 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 
 bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def)
 {
+    // Execution-trace: this card's effect is about to run -> record it as touched (no-op when off).
+    rollout_touch::Record(entry.source.m_name.str());
     switch (def.tmpl)
     {
         case CardTemplate::BasicLand:

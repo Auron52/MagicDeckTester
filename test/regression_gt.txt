@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 69231db  date 2026-07-08
+# Regression ground truth -- commit 69231db  date 2026-07-08 (merged with 9652c9f knights rebaseline)
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (regression, 2026-07-08): gi104:variance (kept-hands-differ, different physical game -- keep-model mulligan shift); gi173:variance (draws-diverge from T8, fetch/shuffle split -- different physical game)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
@@ -14,9 +14,9 @@ burn_smoke_d5_s1001=249/4.25703/01844a895d2441b8
 th_smoke_d0_s1001=851/5.10811/1c9d53e56e43e61a
 th_smoke_d3_s1001=150/4.13333/0e6f0a443703e5b2
 th_smoke_d5_s1001=75/4.09333/e8842613eefbdfd1
-knights_smoke_d0_s1001=1000/4.646/4360865c11b9257f
-knights_smoke_d3_s1001=250/4.392/5fd8d96da60bf042
-knights_smoke_d5_s1001=150/4.36/2c6fece4acf412f3
+knights_smoke_d0_s1001=999/4.58559/e9d8eec2cdc41c8d
+knights_smoke_d3_s1001=250/4.396/a170f420994229fb
+knights_smoke_d5_s1001=150/4.38667/8f773349483d7616
 antilife_smoke_d0_s1001=895/5.43017/b811ebed9ab04d2a
 antilife_smoke_d3_s1001=250/4.136/eb2a5790982e5ee1
 antilife_smoke_d5_s1001=150/4.09333/7a67e89348922a61
@@ -40,11 +40,11 @@ th_regression_d3_s2002=498/4.17871/0db882d584939246
 th_regression_d3_s3003=500/4.07/dc7b098321480cdd
 th_regression_d5_s2002=300/4.15667/e6efdaaf01195593
 th_regression_d5_s3003=300/4.02/a745847c5b401dd1
-knights_regression_d0_s2002=998/4.66232/0b99acb1b3afa99c
-knights_regression_d3_s2002=300/4.33/d00d7fca29ebb5ff
-knights_regression_d3_s3003=300/4.32333/b233fe7e2db1e8ee
-knights_regression_d5_s2002=250/4.308/8edb21408e3a1951
-knights_regression_d5_s3003=250/4.336/fd08d976159eaaf2
+knights_regression_d0_s2002=1000/4.591/4ce5880eb17329fc
+knights_regression_d3_s2002=300/4.34333/32593c93f3019402
+knights_regression_d3_s3003=300/4.36333/0f99cf70866bd230
+knights_regression_d5_s2002=250/4.312/bde18136c4fbba75
+knights_regression_d5_s3003=250/4.356/4c4f48db1b7c658a
 antilife_regression_d0_s2002=881/5.33031/0920e460e26a6f45
 antilife_regression_d3_s2002=299/4.09365/0aef4c9bf229d3dc
 antilife_regression_d3_s3003=299/4.09365/a6e11a66cb53e7b2

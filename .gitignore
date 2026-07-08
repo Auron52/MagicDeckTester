@@ -88,3 +88,6 @@ test/ab_scratch/
 # Python bytecode cache
 __pycache__/
 *.pyc
+# Exhaustive keep/bottom tables: commit the .gz (small), never the uncompressed blob (~90MB).
+decks/*.keepmodel.exhaustive.profile.json
+decks/*.keepmodel.exhaustive.raw.json

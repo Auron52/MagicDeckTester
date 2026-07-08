@@ -23,8 +23,8 @@ BIN=./build/Release/mtg
 DECK=${KM_DECK:?set KM_DECK=decks/<name>.txt}
 MODE=${KM_MODE:-keep}
 CARDS=${KM_CARDS:-src/cards/data/cards.json}
-STEM=$(basename "$DECK" | sed -E 's/\.(txt|cod)$//')   # deck short name: strip .txt or .cod
-STATIC=decks/$STEM.profile.json
+STEM=$(basename "$DECK"); STEM=${STEM%.*}   # strip ANY extension (.txt or .cod) -> deck stem
+STATIC=${KM_STATIC:-decks/$STEM.profile.json}
 EXH=${KM_EXH_PROFILE:-decks/$STEM.keepmodel.exhaustive.profile.json}
 
 [ -f "$EXH" ]    || { echo "missing exhaustive profile: $EXH (generate with MTG_KEEP_EXHAUSTIVE=1)"; exit 1; }
@@ -45,9 +45,14 @@ log "seeds[$SEEDS] depths[$DEPTHS] games=$GAMES budget-ms=20 max-turns=8"
 log "exhaustive profile: $EXH"
 
 # ab <profile> <tag> <exhaustive_bottom 0|1>
+# MTG_EXHAUSTIVE_PROFILE=none suppresses presence-gated auto-attach so the STATIC arm is genuinely
+# static even when this deck has an adopted decks/<deck>.keepmodel.exhaustive sidecar. It's a no-op for
+# the exhaustive arms: those load the block directly via --profile, and AttachExhaustiveSidecar returns
+# early on an already-populated block before it ever consults the env. Replaces the old mv/scratch-path
+# workaround for A/B baseline contamination.
 ab(){ local prof="$1" tag="$2" exb="$3"
   for d in $DEPTHS; do for s in $SEEDS; do
-    MTG_DUMP_WINS=1 MTG_EXHAUSTIVE_BOTTOM="$exb" "$BIN" "$DECK" --profile "$prof" --seed "$s" \
+    MTG_EXHAUSTIVE_PROFILE=none MTG_DUMP_WINS=1 MTG_EXHAUSTIVE_BOTTOM="$exb" "$BIN" "$DECK" --profile "$prof" --seed "$s" \
       --games "$GAMES" --depth "$d" --budget-ms 20 --max-turns 8 --lookahead-bottoming --threads 0 \
       > "$OUT/wins_${tag}_d${d}_s${s}.wins" 2> "$OUT/err_${tag}_d${d}_s${s}.txt"
   done; done; }

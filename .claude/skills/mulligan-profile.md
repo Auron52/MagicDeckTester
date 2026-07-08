@@ -19,7 +19,9 @@ model *fit*:
 
 At runtime `AIEngine::KeepHand` consults the policy first (presence-gated: a hand it can't resolve
 falls through, so decks without a profile are byte-identical). **Keep is default-on whenever the
-profile is present. Bottoming is governed by the profile's `bottoming_enabled` flag** (below).
+profile is present, and every generated profile now bakes bottoming ON** — there is no
+generation-time off switch (see "Bottoming" below). The `bottoming_enabled` flag still exists in the
+format (legacy profiles / runtime), but generation always sets it true.
 
 ## Rule 0 — generate LATE, on a FROZEN commit
 
@@ -39,14 +41,15 @@ own expensive optimisation; don't pay for a baseline you're about to replace).
 | tier | policy | cost | when |
 |---|---|---|---|
 | **1. Defaults** (`MulliganProfile::DefaultProfile`) | generic, deck-agnostic | free | earliest card/rules bug-shaking — mulligan quality doesn't affect rules-correctness. May be bad for an atypical deck. |
-| **2. Low-R exhaustive, keep-only** | deck-aware keep, **bottoming OFF** (lookahead) | minutes | once you want the deck playing *sensibly* while polishing. Doubles as a pipeline smoke. |
-| **3. High-R exhaustive** | accurate keep **+ bottoming** | hours–days (secondary machine) | after play is frozen — the definitive, adopt-able profile. |
+| **2. Low-R exhaustive** | deck-aware keep **+ bottoming** (both on) | minutes | once you want the deck playing *sensibly* while polishing. Doubles as a pipeline smoke. |
+| **3. High-R exhaustive** | more-precise keep + bottoming | hours–days (secondary machine) | after play is frozen — the definitive, adopt-able profile. |
 
-Note **static is skipped** — the deck runs on defaults, then a low-R exhaustive keep, then the high-R
-profile. Keep is robust at low R (it beats the *trained* static baseline by ~0.03t in-game at R=20). Bottoming
-is noisier at low R (its argmin over sub-comps is more R-sensitive), but the confound correction below
-shows blind bottoming is the correct blind-to-shuffle policy at any R — validate each profile with the
-confounded A/B rather than assuming low-R must ship off.
+Note **static is skipped** — the deck runs on defaults, then a low-R exhaustive, then the high-R
+profile. Both keep AND bottoming are ON at every tier (there is no bottoming-off generation option). Keep
+is robust at low R (it beats the *trained* static baseline by ~0.03t in-game at R=20). Bottoming's argmin
+over sub-comps is more R-sensitive, so higher R sharpens it — but blind bottoming is the correct
+blind-to-shuffle policy at *any* R (confound correction below), so you never ship it off; you just gain
+precision with R. Confirm each profile with the confounded A/B.
 
 ## Feasibility pre-check (do this first)
 
@@ -74,8 +77,7 @@ MTG_KEEP_EXHAUSTIVE=1 \
   MTG_EQUIV_PROBES=400 MTG_EQUIV_THRESHOLD=0.01 MTG_EQUIV_DEPTH=5 \  # bucketing (pinned)
   MTG_EQUIV_SEED=20260701 \                                          # FIXED bucket seed (all machines)
   MTG_KEEP_ROLLOUTS=<R> MTG_KEEP_MAXMULL=3 \                         # R = label precision; depth of mull
-  MTG_COMMIT="$HASH" \
-  MTG_KEEP_BOTTOMING=0 \                                             # bottoming_enabled (see below)
+  MTG_COMMIT="$HASH" \                                               # (bottoming is always on -- no flag)
   ./build/Release/mtg-analyze decks/<name>.txt --cards-json src/cards/data/cards.json \
     --max-turns 8 --seed <SEED_BASE>                                 # SEED_BASE = the rollout run id
 ```
@@ -90,7 +92,11 @@ it to pick the minimum viable R for the deck.
   regret ~0.004t). R=100 is comfortably definitive.
 - Bottoming is **not** robust at low R (next section) — it needs the high-R run.
 
-## Bottoming: ships OFF until a validated high-R profile
+## Bottoming: always ON (no generation off switch)
+
+Blind exhaustive bottoming is the table's **second purpose** and is baked ON in every generated profile.
+There is deliberately **no** generation-time off switch (a bottoming-off profile is a footgun no agent
+should be able to ship). What follows is *why* that's safe, and how to confirm it per profile.
 
 The blind exhaustive bottoming (`bottom_keep` = the argmin `(7-m)`-subcomposition) is jointly optimal
 *in expectation*, but at low R the argmin mis-ranks near-tie subhands. Measured on Slivers R=20: of 50
@@ -102,11 +108,12 @@ confound correction (see the `bottoming_enabled` note below) later showed that e
 confounded A/B blind bottoming wins. So the fix is more R (and the confounded A/B as the gate), **not**
 shipping bottoming off.
 
-`bottoming_enabled` is **baked into the profile** (generation/merge default is now **ON**; set
-`MTG_KEEP_BOTTOMING=0` to ship a profile with it off). At runtime `BottomCards` follows the profile flag;
-`MTG_EXHAUSTIVE_BOTTOM` is a **3-state A/B override**: unset → follow the flag, `0` → force off, `1` →
-force on. Keep is independent of this. **Decks with no exhaustive table fall back to lookahead bottoming**
-(byte-identical).
+`bottoming_enabled` is **baked into the profile and generation always sets it true** — `MTG_KEEP_BOTTOMING`
+is no longer read (the off switch was removed, commit ea2d530). At runtime `BottomCards` follows the profile
+flag; `MTG_EXHAUSTIVE_BOTTOM` remains a **3-state A/B override** for *testing only* (unset → follow the flag,
+`0` → force off, `1` → force on) — it changes play ephemerally and writes no profile, so it's the safe way to
+isolate bottoming in an A/B. Keep is independent of this. **Decks with no exhaustive table fall back to
+lookahead bottoming** (byte-identical).
 
 **Why default-on (the confound correction).** Blind exhaustive bottoming is the *theoretically correct*
 policy when you are blind to the shuffle — a real player can't peek at the library the way the clairvoyant
@@ -119,10 +126,10 @@ peeked at, so lookahead "wins" for free. **Remove the peek and the table wins.**
 - **R=400 blind-EV probe** (`MTG_SCORE_COMPS`): the table's stored bottom pick IS the blind-argmin over
   fresh shuffles; lookahead's library-specific deviations are blind-*worse* by 0.5–1.9t.
 So a low-R attribution "loss" to lookahead is mostly the peek confound plus fixable table R-noise, NOT a
-real defect. **Adoption gate for each new profile = run the CONFOUNDED A/B** (`MTG_CONFOUND_BOTTOM`) and
-confirm blind ≥ lookahead; if a profile fails it, ship that one with `MTG_KEEP_BOTTOMING=0`. (We are still
-validating the next couple profiles this way before treating default-on as fully settled.) Note the GT
-tradeoff: because the *standard* (unconfounded) goldfish metric still rewards the peek, enabling blind
+real defect. **Confirm each new profile with the CONFOUNDED A/B** (`MTG_CONFOUND_BOTTOM`) and check that
+blind ≥ lookahead — this has held on every profile so far. There is no ship-off escape hatch, so a
+profile that ever *failed* the confounded A/B would be a signal to fix the bottoming heuristic or raise R
+(a modeling/quality problem), NOT to disable bottoming. Note the GT tradeoff: because the *standard* (unconfounded) goldfish metric still rewards the peek, enabling blind
 bottoming shows a small win-turn *increase* on mulligan games — a deliberate, honest shift to accept via
 per-game audit, not a regression.
 
@@ -155,8 +162,8 @@ not the plan.
 ```bash
 MTG_KEEP_MERGE=1 \
   MTG_MERGE_INPUTS="decks/<name>.keepmodel.exhaustive.raw.json,/path/to/secondary.raw.json" \
-  MTG_KEEP_BOTTOMING=<0|1> \        # bake bottoming_enabled based on the POOLED R + attribution
   ./build/Release/mtg-analyze decks/<name>.txt --cards-json src/cards/data/cards.json
+  # (bottoming is always baked on -- no flag)
 ```
 
 The merge rebuilds the policy at the pooled R via the same code the in-run path uses (identical output)
@@ -187,9 +194,9 @@ high R → clairvoyance (acceptable); if blind-*worse* → R-noise (raise R).
 ## Adoption
 
 - **Keep:** presence-gated — it takes effect the moment the profile ships. No flag.
-- **Bottoming:** set `bottoming_enabled=true` (regenerate/merge with `MTG_KEEP_BOTTOMING=1`) **only**
-  after a high-R run whose A/B + attribution clears it (ties/beats lookahead, or loses only to
-  clairvoyance).
+- **Bottoming:** always on (generation bakes `bottoming_enabled=true`; no off switch). It ships with the
+  profile; confirm it with the confounded A/B (`MTG_CONFOUND_BOTTOM`, `KM_MODE=bottom`) as a sanity check,
+  not a gate. A failure means fix the heuristic / raise R, not disable bottoming.
 
 ## Artifacts
 
