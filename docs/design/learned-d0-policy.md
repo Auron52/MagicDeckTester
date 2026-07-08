@@ -244,6 +244,35 @@ model shipped inert at `decks/treasure_hunt.eval.json`; rows persist under `logs
 (th_v3.rows / burn_v3.rows are the current training sets; regenerate a model via
 `train_eval_model.py --rank`).
 
+### GBDT capacity experiment — 2026-07-08 (committed `3610648`)
+
+Built a **fixed-point ranking GBDT** (integer-threshold splits on integer features, integer leaves →
+byte-identical serving; `MidGameEvaluator.trees`, trainer `scripts/train_eval_gbdt.py`, pairwise
+LambdaMART-lite). Verdict: a real capacity lever, **not** a uniform upgrade.
+
+| deck | linear d0 | GBDT d0 | note |
+|---|---|---|---|
+| Anti-Lifegain | 30.8% | **54.8%** | capacity helps where linear badly underfits (combo) |
+| burn | 4.91t | 5.53t (worse) | linear was the sweet spot; pure GBDT overfits / covariate-shifts |
+| Treasure Hunt | 87.2% | ~87% | neutral |
+
+- **Model class is deck-dependent** and must be tuned on **game A/B**, not pairwise accuracy (burn hit
+  85% pair-acc yet played *worse* — pair-acc doesn't see sequential covariate shift). Hybrid
+  (linear-init + trees) recovered burn (~linear) but *destabilised* antilife (collapse) — not robust.
+- **Nonlinearity ENABLES a shared cross-deck model** (the headline). A naive *shared linear* ranker
+  collapses (TH 10% / burn 0%); a **shared GBDT** plays both — **TH 81% / burn 95% at d0, and ties
+  baseline at the leaf (d3) for both**. A 3-deck shared GBDT (adds antilife) degrades (60/94/40%) —
+  fixed capacity dilutes with more decks — but never collapses. So the "one learned evaluator for many
+  decks" vision is *reachable with nonlinearity*, impossible with linear.
+- **Even at best, no learned model reaches the hand-tuned baseline on burn/antilife at d0.** The
+  residual gap is **combo/sequencing feature-completeness** (e.g. "plan assembles a lethal combo",
+  "controls the pieces"), not model capacity. Next lever: combo-aware features, or expose the
+  baseline `EvalCard` plan value as a feature (learn to *augment* the tuned heuristic, not replace it).
+
+Determinism verified (identical across thread counts). Nothing activates trees by default; TH still
+ships the linear sidecar. GBDT models for the 3 decks live in `/tmp` (regenerate via
+`train_eval_gbdt.py`); training rows are `logs/eval/*_v3.rows`.
+
 ## The permanent regression gate
 
 At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regression digests are
