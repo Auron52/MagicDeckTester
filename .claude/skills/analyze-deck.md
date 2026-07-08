@@ -229,7 +229,7 @@ For every card you implement, ask **what interactive choices does its Oracle tex
 | Cleanup discard to hand size | any flooded hand | `discard` decision (`g_play_discard_chooser`) | yes — `1ccbe95` |
 | Aether Vial upkeep charge | Aether Vial | `vial_charge` (`SetExternalVialChooser`) | yes — `772ff62` |
 | Retrace additional-cost land discard | Throes of Chaos | `retrace_discard` (`g_play_retrace_chooser`) | yes |
-| WHICH permanents a multi/own-target spell hits (not the count) | Soulfire own-targets | `soulfire_targets` board-click (`g_play_soulfire_chooser`) | yes |
+| WHICH permanents a multi/own-target spell hits (not the count) | Soulfire own-targets, Crackle | reuses the **`target`** decision (`g_play_soulfire_chooser` → `EnumerateTargetSets`, `source`=spell); the `soulfire_targets` type / `WriteSoulfireDecisionJson` are **dead code** | yes (as `target`) |
 | **Modal "choose one/two" (non-damage)** | Reality Spasm (tap vs untap; also "which sources to untap") | — | **NO — PHASE 2: needs an engine-model change, not viewer wiring (see note)** |
 | **Cascade / Retrace SEARCH target** (which card the cascade/retrace flip casts) | cascade cards | — | **NO — heuristic-picked; build if the deck needs it** |
 
