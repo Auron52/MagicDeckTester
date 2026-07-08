@@ -313,6 +313,47 @@ model could *improve* quality, not just speed; (c) commit the WIP behind its `MT
 (off by default → GT byte-identical) and ship per-deck value sidecars. Artifacts: `train_eval_gbdt.py
 --regression`; rows `logs/eval/burn_value.rows`, `logs/eval/th_value.rows`; models in `/tmp`.
 
+### d0 lever: `plan_baseline_eval` — augment the tuned heuristic (2026-07-08, `248fd54`)
+
+Implemented the doc's flagged #1 d0 lever: expose the hand-tuned baseline's own plan verdict as a
+feature so the ranker learns to *augment* it instead of reconstructing "casting is good" from coarse
+proxies. Feature = `Sum EvalCard(def, state)` over the plan's casts, computed by a shared
+`TurnSolver::PlanBaselineEval` helper at BOTH the ranking seam and the label dump → lockstep,
+non-clairvoyant. Appended (v4); name-keyed sidecars stay compatible; 0 for the null/leaf plan (value
+model unaffected); byte-identical with no model.
+
+**Result — burn d0, 300g, held-out seeds: closes ~45% of the gap to baseline.**
+
+| seed | baseline LP | v3 ranker (no feat) | v4 (+plan_baseline_eval) | gap closed |
+|---|---|---|---|---|
+| 2002 | 4.740 | 4.907 (+0.167) | 4.843 (+0.103) | ~38% (avg-turn 4.879→4.773, ~47%) |
+| 3003 | 4.693 | 4.880 (+0.187) | 4.800 (+0.107) | ~43% (avg-turn 4.782→4.685, ~51%) |
+
+Real, replicated. The linear ranker still can't fully match the tuned `BurnProvider` sequencing, but
+the feature is a clear step. Next: test on antilife (combo — plan_baseline_eval is itself a linear
+per-card sum, so it may not fix the conjunction problem; GBDT + this feature is the interesting test).
+
+### ⚠️ CRITICAL training footgun (cost 3 wrong diagnoses here): default `lr*lam` collapses `--rank`
+
+`train_eval_model.py`'s DEFAULTS are `lr=1.0, lam=1.0` → `lr*lam=1.0`, which is exactly the unstable
+pairwise-ranking regime the earlier note warned about (the weight vector flips each epoch, yielding a
+**durdling** model with `plan_num_spells < 0` = "cast nothing"). Retraining burn on the SAME rows that
+produced 99% gave **53%** with the defaults — a collapse that looks like a bad feature or bad rows but
+is **pure hyperparameters**. Diagnosis path that works: A/B the *saved* known-good model vs a fresh
+retrain; identical rows + different model ⇒ hyperparameters. **Always train `--rank` with `--lr 0.3
+--lam 0.001`.** A guard now warns when `lr*lam >= 0.5`. (Serving was never the issue — the committed TH
+model still reproduces 86.7% at d0.)
+
+### ⚠️ Pre-existing branch issue: TH smoke GT is stale (NOT caused by the above)
+
+The `--smoke` gate FAILs `th_smoke_d0/d3/d5` (`regression_gt.txt` expects `150/4.13333/0e6f0a44…`; the
+engine model-off produces `144/…/cdc448…`). burn/knights/antilife/hinata/slivers all PASS, and the
+featurizer changes here are byte-identical for model-off (proven by those 19 PASSes + the TH `got`
+digest being unchanged across the change). So this is **pre-existing GT staleness** — TH ships an
+`eval.json` sidecar and its smoke GT is out of sync with the current engine. It predates this session's
+work; the learned-d0 owner should re-inspect and rebaseline TH GT deliberately (not from an
+uncommitted experiment). Flagged, not silently rebaselined.
+
 ## The permanent regression gate
 
 At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regression digests are
