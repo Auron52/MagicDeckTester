@@ -59,8 +59,16 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `discard` | `g_play_discard_chooser` (`DiscardChooser`) | cleanup discard | `WriteDiscardDecisionJson` | `discardPanelHtml` | modal |
 | `expressive_iteration` | `g_play_ei_chooser` (`EIChooser`) | Expressive Iteration resolution | `WriteEIDecisionJson` | `eiPanelHtml` | modal |
 | `retrace_discard` | `g_play_retrace_chooser` (`RetraceDiscardChooser`) | `ApplyPlan` `apply_one` retrace | `WriteRetraceDiscardDecisionJson` | `retraceDiscardPanelHtml` | modal |
-| `soulfire_targets` | `g_play_soulfire_chooser` (`SoulfireTargetChooser`) | Soulfire own-target resolution | `WriteSoulfireDecisionJson` | `promptPanelHtml` | board |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
+
+**Soulfire Eruption / Crackle with Power full-board targeting** does NOT use a distinct type:
+the `g_play_soulfire_chooser` (`SoulfireTargetChooser`) lambda in `main.cpp` **reuses the generic
+`target` decision** (via `EnumerateTargetSets`, tagged `random_damage`, `source` = the spell name)
+— so at runtime these surface as a `target` decision with a full subset enumeration, not as a
+`soulfire_targets` type. `WriteSoulfireDecisionJson` exists but is **dead code (never called)**;
+treat `target` (source-matched) as the decision to verify. *(Confirmed by live trace 2026-07-08:
+Soulfire cast → `target`, source="Soulfire Eruption", 256 = 2⁸ subset options.)* The plan-variant
+own-target **count** (`soulfire_own_targets`) still rides the `main_phase` plan list separately.
 
 Plan-variant sub-decisions ride the `main_phase` plan list rather than their own `type`
 (the human picks a plan index): `tutor_target`, `fetch_target`, `chosen_x`, `ponder_keep`,

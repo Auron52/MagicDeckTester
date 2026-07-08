@@ -89,8 +89,13 @@ MANIFEST = {
 }
 
 # Cards whose interactive choice is not param-driven (matched by name).
+# NB Soulfire Eruption's board-click targeting REUSES the generic `target` decision at runtime
+# (main.cpp soulfire_chooser -> EnumerateTargetSets, source="Soulfire Eruption"); the distinct
+# `soulfire_targets` type / WriteSoulfireDecisionJson is dead code, never emitted. So expect
+# `target`, not `soulfire_targets`. (Crackle with Power is the same pattern.) Verified by live
+# trace: Soulfire cast -> `target` decision, source="Soulfire Eruption", 256 (=2^8) subset opts.
 NAME_CHOICES = {
-    "Soulfire Eruption": "soulfire_targets",
+    "Soulfire Eruption": "target",
 }
 
 # Every param key that CAN carry a player choice. The self-guard fails if a deck card has
