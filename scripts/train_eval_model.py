@@ -218,6 +218,16 @@ def main():
     ap.add_argument('--lr', type=float, default=1.0)
     args = ap.parse_args()
 
+    # STABILITY GUARD: the pairwise ranking GD is unstable when lr*lam is large -- it flips the weight
+    # vector each epoch and yields a durdling model (e.g. plan_num_spells < 0 => "cast nothing"), which
+    # A/Bs as a collapse (burn 99% -> 53%) that looks like a bad feature/rows but is pure hyperparameters.
+    # The DEFAULTS (lr=1.0, lam=1.0) sit exactly in that regime, so warn loudly for --rank. Proven-stable:
+    # lr=0.3, lam=0.001 (see docs/design/learned-d0-policy.md). This is a guard, not an override.
+    if args.rank and args.lr * args.lam >= 0.5:
+        print("WARNING: --rank with lr*lam=%.3f (>=0.5) is in the UNSTABLE regime and will likely "
+              "produce a COLLAPSED (durdling) model. Use --lr 0.3 --lam 0.001." % (args.lr * args.lam),
+              file=sys.stderr)
+
     feat_names, X, y, groups = read_rows(args.rows)
     n, d = len(X), (len(X[0]) if X else 0)
     print("rows=%d features=%d decisions=%d label[min/mean/max]=%.2f/%.2f/%.2f"

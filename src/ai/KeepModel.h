@@ -374,6 +374,14 @@ enum class MidGameFeature : int
     //     undervalued racing and won ~0.25t slower on burn. This is the FIXED (non-X) burn a plan's
     //     casts deal -- known from the card, non-clairvoyant. learned-d0-policy.md
     PlanFaceDamage,        // Sum of FIXED direct damage the plan's casts deal (Lightning Bolt=3, ...)
+    // --- appended (v4): the hand-tuned baseline's own verdict on this plan. The ranker was rebuilding
+    //     "casting is good" from coarse plan_* proxies and underfit tuned-provider sequencing
+    //     (burn ~0.2t slow, antilife combo). Expose Sum EvalCard(def,state) over the plan's casts --
+    //     the baseline EvalCard ranking key -- so the model learns to AUGMENT the tuned heuristic
+    //     (w=1 recovers baseline + a learned correction) instead of reconstructing it. Computed by the
+    //     shared PlanBaselineEval helper at BOTH the seam and the label dump => lockstep, non-clairvoyant
+    //     (EvalCard reads only the public board). 0 for the leaf value model (empty plan). learned-d0-policy.md
+    PlanBaselineEval,
     Count                 // sentinel: number of features
 };
 
@@ -414,6 +422,7 @@ inline const char* MidGameFeatureName(MidGameFeature f)
         case MidGameFeature::ManaLeftAfter:       return "mana_left_after";
         case MidGameFeature::TapsOut:             return "taps_out";
         case MidGameFeature::PlanFaceDamage:      return "plan_face_damage";
+        case MidGameFeature::PlanBaselineEval:    return "plan_baseline_eval";
         default:                                  return "?";
     }
 }
@@ -438,6 +447,8 @@ struct MidGamePlanSummary
     int max_cast_mv    = 0;  // largest single cast's mana value
     int draw_engine    = 0;  // 1 if a cast is a variable draw/dig engine (draw_until_nonland etc.)
     int face_damage    = 0;  // fixed direct damage the casts deal (Sum params.damage; X-spells excluded)
+    int baseline_eval  = 0;  // Sum EvalCard(def,state) over the casts (the hand-tuned baseline's plan
+                             // value); set by PlanBaselineEval at the seam + dump. 0 for the null/leaf plan.
 };
 
 // One node of a fixed-point regression tree. Internal nodes split on an INTEGER feature threshold

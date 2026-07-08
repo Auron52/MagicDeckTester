@@ -150,7 +150,8 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         const Acc& a = kv.second;
         std::vector<std::string> names = a.casts;
         names.insert(names.end(), a.sac.begin(), a.sac.end());
-        const MidGamePlanSummary sum  = SummarizePlanByNames(names, !a.land.empty());
+        MidGamePlanSummary sum  = SummarizePlanByNames(names, !a.land.empty());
+        sum.baseline_eval       = TurnSolver::PlanBaselineEval(state, names);  // lockstep w/ the ranking seam
         const std::vector<int>   feat = ExtractMidGameFeatures(state, sum);
         s_out << (static_cast<double>(a.sum) / a.count);
         for (int v : feat) { s_out << ' ' << v; }

@@ -465,6 +465,7 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     set(MidGameFeature::ManaLeftAfter,         std::max(0, untapped_sources - plan.total_mv));
     set(MidGameFeature::TapsOut,               (plan.num_spells > 0 && plan.total_mv >= untapped_sources) ? 1 : 0);
     set(MidGameFeature::PlanFaceDamage,        plan.face_damage);
+    set(MidGameFeature::PlanBaselineEval,      plan.baseline_eval);  // hand-tuned EvalCard sum (set by seam/dump)
     return f;
 }
 
