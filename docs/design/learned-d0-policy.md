@@ -382,6 +382,30 @@ digest being unchanged across the change). So this is **pre-existing GT stalenes
 work; the learned-d0 owner should re-inspect and rebaseline TH GT deliberately (not from an
 uncommitted experiment). Flagged, not silently rebaselined.
 
+### Combo-aware d0 feature for antilife — tried, NEGATIVE, reverted (2026-07-08)
+
+Implemented two combo features for antilife's conjunction (`combo_enabler_active` = a
+`lifegain_to_loss` enabler on board; `plan_opponent_lifegain` = Sum of opponent-lifegain the plan's
+casts cause — the payoff that becomes damage under the enabler). Both non-clairvoyant, lockstep,
+inert (0) for other decks. The hypothesis: a GBDT could split "enabler & plan_opp_lifegain>0" = the
+combo firing, representing what a linear sum can't.
+
+**Result: it made antilife d0 WORSE, and is reverted.** GBDT-with-combo A/B'd at **0.7%** (s2002 d0)
+vs ~10–28% without. Two findings, both honest:
+1. **Exposing the combo conjunction backfires on a NON-CLAIRVOYANT d0.** The oracle labels reward
+   *waiting* for the full combo (casting a lone piece early genuinely delays the win), and a clean
+   `enabler_active` signal lets the model learn "wait until the combo is primed" — a policy a
+   clairvoyant search can afford but a d0 that can't guarantee drawing the enabler cannot. It durdles.
+   The hand-tuned baseline (~89%) wins by playing *proactively* instead. So combo-readiness features
+   are a trap for d0: they rationalise the durdle. (A *value/search* use, not d0 argmax, might differ.)
+2. **My antilife EVAL-row dumps never reproduce the doc's saved antilife ranker** (my 10–28% vs the
+   doc's 54.8%/linear-30.8%), across budgets (200→2000) and featurizer versions. The doc's saved
+   `/tmp/antilife_rank.eval.json` still serves at ~29% on the current binary, so **serving is fine —
+   the gap is dump METHODOLOGY** (seed/K/row-count/how the label search is configured). This is the
+   real blocker for any antilife d0 tuning and should be pinned down (diff the doc's exact dump
+   command) before more antilife d0 work. Reverted the C++ (kept the featurizer clean); the two
+   features are easy to re-add from this description if a value-model or better-rows approach revisits.
+
 ## The permanent regression gate
 
 At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regression digests are
