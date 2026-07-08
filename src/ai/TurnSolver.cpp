@@ -1363,6 +1363,20 @@ static std::vector<std::string> PlanCastNames(const std::vector<Action>& actions
     }
     return names;
 }
+// Sum the hand-tuned EvalCard over a plan's cast cards -> the plan_baseline_eval feature. Called from
+// BOTH the ranking seam and the label dump (via TurnSolver::PlanBaselineEval) so train == serve. It is
+// intentionally the name-derived EvalCard sum (deterministic in state), NOT the seam's internal
+// total_eval (which carries X/ritual overrides the name-only dump can't reconstruct) -> lockstep.
+int TurnSolver::PlanBaselineEval(const GameState& state, const std::vector<std::string>& cast_names)
+{
+    int sum = 0;
+    for (const std::string& nm : cast_names)
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(nm);
+        if (def) { sum += EvalCard(*def, state); }
+    }
+    return sum;
+}
 static bool PlanHasLand(const std::vector<Action>& cands, const std::vector<int>& sel)
 {
     for (int j : sel) { if (cands[j].kind == Action::Kind::PlayLand) { return true; } }
@@ -1593,7 +1607,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // whenever no model is attached / the flag is off -> byte-identical. See learned-d0-policy.md.
         int rank_value = total_eval;
         if (ev && !wins)
-        { rank_value = LearnedPlanScore(state, SummarizePlanByNames(PlanCastNames(cands, sel), PlanHasLand(cands, sel)), *ev); }
+        {
+            const std::vector<std::string> cnames = PlanCastNames(cands, sel);
+            MidGamePlanSummary psum = SummarizePlanByNames(cnames, PlanHasLand(cands, sel));
+            psum.baseline_eval = TurnSolver::PlanBaselineEval(state, cnames);
+            rank_value = LearnedPlanScore(state, psum, *ev);
+        }
 
         bool better;
         if (best.wins_this_turn != wins)   { better = wins; }                    // winning dominates
@@ -5291,7 +5310,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         for (TurnSolver::Plan& p : all)
         {
             if (p.wins_this_turn) { continue; }
-            MidGamePlanSummary sum = SummarizePlanByNames(PlanCastNames(p.actions), !p.land_to_play.empty());
+            const std::vector<std::string> cnames = PlanCastNames(p.actions);
+            MidGamePlanSummary sum = SummarizePlanByNames(cnames, !p.land_to_play.empty());
+            sum.baseline_eval = TurnSolver::PlanBaselineEval(state, cnames);
             p.value = LearnedPlanScore(state, sum, *ev_root);
         }
     }

@@ -428,4 +428,9 @@ public:
     };
     static EarliestWinReport EnumerateEarliestWins(const GameState& state, int max_turns,
                                                    bool second_main);
+
+    // The hand-tuned baseline's plan value = Sum EvalCard(def, state) over the plan's cast cards.
+    // Exposed so the learned-eval label dump (AIEngine) and the ranking seam compute the SAME
+    // plan_baseline_eval feature (lockstep, non-clairvoyant). See docs/design/learned-d0-policy.md.
+    static int PlanBaselineEval(const GameState& state, const std::vector<std::string>& cast_names);
 };
