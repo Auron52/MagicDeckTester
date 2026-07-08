@@ -197,16 +197,44 @@ within-centering didn't help under regression. The **strong-label pivot (per-tur
 is unnecessary** — `FSLineTail` labels were never the problem (they're a full search; the objective
 was). That whole Phase-3b plan can be shelved unless a *harder* deck shows label-limited behavior.
 
-**Remaining levers to BEAT baseline more (all optional; headroom is small under the clairvoyance
-ceiling):** (a) interaction features (draw-engine × board context) or a fixed-point GBDT for capacity;
-(b) generalization test on a 2nd deck (burn/antilife) — the real payoff is a *shared* learned
-evaluator replacing hand-tuned `EvalCard`. Priority per user: standalone-d0 first, both eventually.
+### Generalization test — burn (aggro), 2026-07-08
 
-**Artifacts:** trainer `--rank`/`--center` modes + `rank_fit`/`within_center`; new harness
-`scripts/eval_ab.py` (loss-penalized A/B) and `scripts/eval_regret.py` (within-decision pick-accuracy);
-v2 featurizer adds 7 append-only non-clairvoyant features (plan_cards_drawn, plan_noncreature_spells,
-plan_max_cast_mv, **plan_draw_engine**, **lands_in_hand**, mana_left_after, taps_out). Rows persist
-under `logs/eval/` (th_v2.rows = the winning training set).
+Ran the whole pipeline on **burn** (aggro; contrast to TH's value/combo). Result maps the method's
+reach precisely:
+
+| deck | learned **d0** vs baseline | learned **d3 leaf** vs baseline |
+|---|---|---|
+| Treasure Hunt (value/combo) | **87.2%/5.552** vs 86.8%/5.558 — matches/beats | 99.0%/4.150 vs 99.0%/4.145 — ties |
+| burn (aggro, tuned provider) | 99.0%/**4.91** vs 98.0%/**4.65** — wins as often but **~0.2t slower** | 100%/**4.320** vs 100%/4.325 — **ties** |
+
+Two robust conclusions:
+1. **The ranking objective generalizes** — burn does *not* collapse (no durdle); it wins 97–99%.
+2. **Search-leaf use is universal parity.** At d3 the learned leaf ties baseline on *both* decks —
+   the search corrects the linear model's imperfect sequencing. This is the strongest, most general
+   value: a learned leaf is a drop-in for `EvalCard` at every deck tested.
+3. **Standalone-d0 is capacity-limited on tuned-aggro.** burn's hand-tuned `BurnProvider` (Searing
+   Blaze landfall timing, creature-vs-burn sequencing, land-banking) is genuinely beyond a *generic
+   linear* ranker; it wins ~0.2t slower at d0. So a burn eval sidecar is **not** ship-worthy at d0
+   (kept in `logs/eval/`, not committed); TH's **is** (matches/beats).
+
+The burn gap motivated **`plan_face_damage`** (v3, committed `d606e0c`): the summary punted
+`direct_damage→0`, so non-lethal face burn was invisible (only the exact lethal check saw kills).
+Summing *fixed* burn (`params.damage`; X excluded) helped burn only marginally — confirming the gap
+is model **capacity**, not a missing feature. Inert for TH (variable Land's-Edge burn → d0 identical).
+
+**Remaining levers (optional; ordered by expected value):** (a) **fixed-point GBDT** — the honest
+capacity fix for tuned-aggro d0 (linear saturates ~150 decisions; nonlinearity is the lever, not more
+data/features); (b) **interaction features** (draw-engine/face-damage × board context) as a cheaper
+half-step; (c) a **shared cross-deck** ranker (the real payoff — one learned evaluator replacing
+hand-tuned `EvalCard` everywhere). Priority per user: standalone-d0 first, both eventually.
+
+**Artifacts:** trainer `--rank`/`--center` (`rank_fit`/`within_center`); harness `scripts/eval_ab.py`
+(loss-penalized A/B) + `scripts/eval_regret.py` (within-decision pick-accuracy); v3 featurizer adds
+8 append-only non-clairvoyant features (plan_cards_drawn, plan_noncreature_spells, plan_max_cast_mv,
+**plan_draw_engine**, **lands_in_hand**, mana_left_after, taps_out, **plan_face_damage**). Winning TH
+model shipped inert at `decks/treasure_hunt.eval.json`; rows persist under `logs/eval/`
+(th_v3.rows / burn_v3.rows are the current training sets; regenerate a model via
+`train_eval_model.py --rank`).
 
 ## The permanent regression gate
 
