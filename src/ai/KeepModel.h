@@ -369,6 +369,11 @@ enum class MidGameFeature : int
     LandsInHand,           // lands in our hand (Land's Edge ammo / Treasure Hunt fuel; own-hand = public)
     ManaLeftAfter,         // untapped sources left after paying the plan (max(0, sources - total_mv))
     TapsOut,               // 1 if the plan commits all our mana (total_mv >= untapped sources)
+    // --- appended (v3): the aggro axis. The exact lethal check handles kills, but NON-lethal face
+    //     burn was invisible (the summary punts direct_damage->0 for X/target reasons), so the ranker
+    //     undervalued racing and won ~0.25t slower on burn. This is the FIXED (non-X) burn a plan's
+    //     casts deal -- known from the card, non-clairvoyant. learned-d0-policy.md
+    PlanFaceDamage,        // Sum of FIXED direct damage the plan's casts deal (Lightning Bolt=3, ...)
     Count                 // sentinel: number of features
 };
 
@@ -408,6 +413,7 @@ inline const char* MidGameFeatureName(MidGameFeature f)
         case MidGameFeature::LandsInHand:         return "lands_in_hand";
         case MidGameFeature::ManaLeftAfter:       return "mana_left_after";
         case MidGameFeature::TapsOut:             return "taps_out";
+        case MidGameFeature::PlanFaceDamage:      return "plan_face_damage";
         default:                                  return "?";
     }
 }
@@ -431,6 +437,7 @@ struct MidGamePlanSummary
     int cards_drawn    = 0;  // fixed card-draw the casts add (Sum params.draw; variable draw excluded)
     int max_cast_mv    = 0;  // largest single cast's mana value
     int draw_engine    = 0;  // 1 if a cast is a variable draw/dig engine (draw_until_nonland etc.)
+    int face_damage    = 0;  // fixed direct damage the casts deal (Sum params.damage; X-spells excluded)
 };
 
 // Analyzer-trained additive evaluator: predicted plan goodness = intercept + Sum coef*feat, with

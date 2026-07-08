@@ -464,6 +464,7 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     set(MidGameFeature::LandsInHand,           lands_in_hand);
     set(MidGameFeature::ManaLeftAfter,         std::max(0, untapped_sources - plan.total_mv));
     set(MidGameFeature::TapsOut,               (plan.num_spells > 0 && plan.total_mv >= untapped_sources) ? 1 : 0);
+    set(MidGameFeature::PlanFaceDamage,        plan.face_damage);
     return f;
 }
 
@@ -494,6 +495,10 @@ MidGamePlanSummary SummarizePlanByNames(const std::vector<std::string>& cast_nam
             || def->params.expressive_iteration
             || def->params.draw > 0)
         { sum.draw_engine = 1; }
+        // Fixed direct damage (Lightning Bolt = 3). X-spells (Crackle/Fireball) carry a variable
+        // damage the name can't resolve, so exclude them (x_damage_multiplier > 1); the exact lethal
+        // check still covers their kills. Goldfish opp has no creatures, so this burn is face burn.
+        if (def->params.x_damage_multiplier <= 1) { sum.face_damage += def->params.damage; }
     }
     // direct_damage stays 0 for v1: it depends on the chosen X and the target (face vs creature),
     // which a card NAME alone can't resolve, so computing it here would diverge from a resolved plan
