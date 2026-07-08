@@ -1768,6 +1768,12 @@ inline bool IsCrackleCountSpell(const CardParams& p)
     return p.discount_targets_scale_x && p.x_damage_multiplier > 0;
 }
 
+// Crackle target sentinels (distinct from a >= 0 battlefield index):
+//   -1  = SELF   (the controller's own face)
+//   -2  = OPPONENT face (the win-relevant target; order[0] of CrackleTargetOrder)
+constexpr int CRACKLE_SELF_FACE = -1;
+constexpr int CRACKLE_OPP_FACE  = -2;
+
 // Crackle with Power: ordered EXTRA beneficial targets beyond the opponent face, for the Hinata
 // per-target discount + faithful 5X damage. Encoding: >= 0 is a battlefield index (a creature);
 // -1 is SELF (the controller's face), offered ONLY when `per_target_dmg < your life` so the self
@@ -1829,6 +1835,54 @@ inline void CrackleHitExtraTargets(GameState& state, int controller, int per_tar
         state.players[cre.owner_index].graveyard.push_back(cre.card);
         state.battlefield.erase(state.battlefield.begin() + bi);
     }
+}
+
+// Crackle with Power FULL target order, opponent face FIRST (CRACKLE_OPP_FACE), then the extra
+// beneficial targets (CrackleExtraTargetOrder: opp creatures, own non-Hinata, self-if-safe, Hinata
+// last). This is the generic "up to X targets" order that makes the opponent face a NORMAL,
+// optional target instead of a forced hit -- the autonomous default picks the first T (face
+// included, byte-identical to the old face+extras resolution), while human play may choose any
+// subset. Total legal target count = 1 (opp face) + CrackleExtraTargetCount.
+inline std::vector<int> CrackleTargetOrder(const GameState& state, int controller,
+                                           int per_target_dmg)
+{
+    std::vector<int> out;
+    out.push_back(CRACKLE_OPP_FACE);                                        // opponent face FIRST
+    for (int t : CrackleExtraTargetOrder(state, controller, per_target_dmg)) { out.push_back(t); }
+    return out;
+}
+
+// Deal Crackle's `per_target_dmg` (= 5X) to an EXPLICIT ordered target list (sentinels per
+// CrackleTargetOrder: -2 opp face, -1 self face, >= 0 creature), then destroy lethal creatures
+// (SBA). Returns true iff the opponent face was among the targets (so the caller can set
+// opponent_lost_life_this_turn only when it actually did). Applying [CRACKLE_OPP_FACE] + the first
+// N extras is byte-identical to the old "face -= dmg; CrackleHitExtraTargets(N)" path (same order,
+// same SBA), so autonomous resolution is unchanged; human play passes an arbitrary chosen subset.
+inline bool CrackleApplyTargets(GameState& state, int controller, int per_target_dmg,
+                                const std::vector<int>& targets)
+{
+    bool hit_opp = false;
+    if (per_target_dmg <= 0) { return hit_opp; }
+    std::vector<int> dead;
+    for (int t : targets)
+    {
+        if (t == CRACKLE_OPP_FACE) { state.players[1 - controller].life -= per_target_dmg; hit_opp = true; }
+        else if (t == CRACKLE_SELF_FACE) { state.players[controller].life -= per_target_dmg; }
+        else if (t >= 0 && t < static_cast<int>(state.battlefield.size()))
+        {
+            Permanent& cre = state.battlefield[t];
+            cre.damage += per_target_dmg;
+            if (cre.damage >= cre.EffectiveToughness()) { dead.push_back(t); }
+        }
+    }
+    std::sort(dead.begin(), dead.end(), std::greater<int>());   // descending -> erase stays valid
+    for (int bi : dead)
+    {
+        Permanent& cre = state.battlefield[bi];
+        state.players[cre.owner_index].graveyard.push_back(cre.card);
+        state.battlefield.erase(state.battlefield.begin() + bi);
+    }
+    return hit_opp;
 }
 
 // ---- Reflecting Pool: "{T}: Add one mana of any type that a LAND you control could produce."

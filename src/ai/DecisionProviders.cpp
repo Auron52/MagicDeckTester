@@ -1200,6 +1200,10 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
     std::vector<int> generic = GenericProvider::XCandidates(s, def, max_affordable);
     static const bool enabled = std::getenv("MTG_NO_HINATA_HOLD_CRACKLE") == nullptr;
     if (!enabled || generic.empty() || !IsCrackleCountSpell(def.params)) { return generic; }
+    // HUMAN play (the viewer): never hide a castable Crackle -- the hold-as-a-combo-piece prior is
+    // an AUTONOMOUS search heuristic, not a restriction on the player. Offer the full affordable X
+    // range so the human can choose to fire a chip Crackle if they want.
+    if (HumanPlayActive()) { return generic; }
 
     const int active   = s.active_player_index;
     const int opp_life = s.players[1 - active].life;

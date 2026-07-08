@@ -696,19 +696,20 @@ static void CollectCreatureTargets(const GameState& s, int controller,
 // legal targets with 1..max_targets members. Bounded (capped) so a big board can't explode the menu.
 static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTarget>& legal,
                                                      const std::vector<std::string>& labels, int max_targets,
-                                                     bool exact = false)
+                                                     int min_targets = 1)
 {
-    // exact = the human must pick EXACTLY `max_targets` targets (Crackle: the declared count is fixed
-    // at cast because it drives the Hinata discount, so a smaller set would over-count the discount).
-    // Default (false) offers every subset of size 1..cap (a plain "up to N targets" burn).
+    // Offer every subset of size [min_targets, cap]. min_targets is the affordability FLOOR: for
+    // Crackle it is the committed plan's target count (the discount it already paid for) -- picking
+    // fewer would under-pay the discount, so those subsets are not offered; picking more only raises
+    // the discount (a free over-pay). A plain "up to N targets" burn passes min_targets = 1.
     std::vector<TargetOption> opts;
     const int n = static_cast<int>(legal.size());
     const int cap = std::max(1, std::min(max_targets, n));
+    const int lo  = std::max(1, std::min(min_targets, cap));
     for (int mask = 1; mask < (1 << n) && opts.size() < 256; ++mask)
     {
         int bits = __builtin_popcount(static_cast<unsigned>(mask));
-        if (bits > cap) { continue; }
-        if (exact && bits != cap) { continue; }
+        if (bits > cap || bits < lo) { continue; }
         TargetOption o; std::string lbl;
         for (int i = 0; i < n; ++i)
         {
@@ -758,7 +759,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::vector<ChosenTarget>& legal, const std::vector<std::string>& legal_labels,
                                     const std::vector<TargetOption>& options, int per_target,
                                     int max_targets, int heuristic_default, int decision_index,
-                                    const std::string& pump_desc = "", const std::string& remove_desc = "")
+                                    const std::string& pump_desc = "", const std::string& remove_desc = "",
+                                    int min_targets = 1)
 {
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
@@ -771,7 +773,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // A non-empty remove_desc (e.g. "exiled ...") flags this as a creature-removal target (Swords),
     // so the viewer highlights the OPPONENT's creatures and shows the removal wording, not "N damage".
     if (!remove_desc.empty()) { os << "  \"remove\": "; JsonStr(os, remove_desc); os << ",\n"; }
-    os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets << ",\n";
+    os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets
+       << ", \"min_targets\": " << min_targets << ",\n";
     WriteBoardContext(os, s, 0);
     os << "  \"legal_targets\": [";
     for (size_t i = 0; i < legal.size(); ++i)
@@ -1351,18 +1354,21 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 && (def.params.targeting == Targeting::Creature || def.params.targeting == Targeting::Multi)
                 && !def.params.damage_divided;
             const bool players_only = (def.params.targeting == Targeting::Player);
-            // Crackle with Power extra targets: the opponent FACE is auto (always 5X); the human picks
-            // WHICH of the declared `max_targets` EXTRA targets (creatures + self-if-safe) take 5X. The
-            // legal set + order come from CrackleExtraTargetOrder (opponent creatures, own non-Hinata,
-            // self-if-safe, Hinata last) -- so the default is opp-first and the human can retarget.
+            // Crackle with Power: a generic "up to X targets, 5X each" spell. The opponent FACE is a
+            // NORMAL, optional target (CrackleTargetOrder[0]), NOT a forced hit -- the human may target
+            // it, deselect it, and add creatures/self. Legal set + order come from CrackleTargetOrder
+            // (opponent face, opponent creatures, own non-Hinata, self-if-safe, Hinata last). The count
+            // is bounded [min, max]: min = the committed plan's paid discount (heuristic.size()), max =
+            // max_targets (= min(X, #legal)). No separate count dialog -- the count IS the selection.
             const bool crackle = IsCrackleCountSpell(def.params);
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
             if (crackle)
             {
-                for (int bi : CrackleExtraTargetOrder(s, controller, per_target_damage))
+                for (int t : CrackleTargetOrder(s, controller, per_target_damage))
                 {
-                    if (bi < 0) { legal.push_back({ 0, controller, 0 }); legal_labels.push_back("You (self)"); }
-                    else        { legal.push_back({ 1, bi, 0 });         legal_labels.push_back(s.battlefield[bi].card.m_name.str()); }
+                    if      (t == CRACKLE_OPP_FACE)  { legal.push_back({ 0, 1 - controller, 0 }); legal_labels.push_back("Opponent"); }
+                    else if (t == CRACKLE_SELF_FACE) { legal.push_back({ 0, controller, 0 });     legal_labels.push_back("You (self)"); }
+                    else                             { legal.push_back({ 1, t, 0 });              legal_labels.push_back(s.battlefield[t].card.m_name.str()); }
                 }
             }
             else if (own_pump)       { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
@@ -1412,7 +1418,10 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 std::exit(70);
             }
 
-            std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets, /*exact=*/crackle);
+            // Crackle: floor the count at the committed plan's discount (heuristic.size()); every other
+            // burn offers 1..max. max_targets is min(X, #legal) for Crackle, 1 for a single-target burn.
+            const int min_targets = crackle ? std::max(1, static_cast<int>(heuristic.size())) : 1;
+            std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets, min_targets);
             if (opts.empty()) { return heuristic; }
             const int per_target = per_target_damage;   // actual engine damage per target (not recomputed)
             // Default index = the option whose target set matches the heuristic pick.
@@ -1432,14 +1441,14 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);

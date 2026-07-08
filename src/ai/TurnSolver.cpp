@@ -2628,44 +2628,48 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (dmg > 0)
                     {
                         const int ci = state.active_player_index;
-                        state.players[opp_idx].life -= dmg;              // face = 5X (the win)
-                        state.opponent_lost_life_this_turn = true;
-                        if (g_play_target_chooser && crackle_targets > 0)
+                        if (g_play_target_chooser)
                         {
-                            // Human board-click (Stage B #2): pick WHICH `crackle_targets` extras take
-                            // 5X. Default = CrackleExtraTargetOrder's first N (opp-first). Chooser is
-                            // nulled in the search rollout, so that path falls to CrackleHitExtraTargets
-                            // below -- byte-identical autonomous resolution (count fixed the discount).
-                            std::vector<int> order = CrackleExtraTargetOrder(state, ci, dmg);
+                            // HUMAN play: the opponent face is a NORMAL, optional target (order[0]),
+                            // not a forced hit. Default = CrackleTargetOrder's first Tmin (Tmin = 1
+                            // face + the plan's crackle_targets extras = the affordability FLOOR: the
+                            // committed plan paid the discount for exactly this many targets). The
+                            // player may retarget, deselect the face, or add extras up to Tmax = min(X,
+                            // #legal) -- more targets only raise the discount (the plan overpaid, which
+                            // is free). The chooser infers min = heur.size(), max = the passed max. ALL
+                            // damage is applied AFTER the chooser returns, so the target decision's
+                            // dumped state is not pre-reduced (no phantom negative life).
+                            const int Tmin = std::max(1, crackle_targets + 1);
+                            std::vector<int> order = CrackleTargetOrder(state, ci, dmg);
+                            const int Xval = (def.params.x_damage_multiplier > 0)
+                                             ? dmg / def.params.x_damage_multiplier : Tmin;
+                            const int Tmax = std::max(Tmin, std::min(Xval, static_cast<int>(order.size())));
                             std::vector<ChosenTarget> heur;
-                            for (int n = 0; n < crackle_targets && n < static_cast<int>(order.size()); ++n)
+                            for (int n = 0; n < Tmin && n < static_cast<int>(order.size()); ++n)
                             {
-                                int bi = order[n];
-                                heur.push_back(bi < 0 ? ChosenTarget{ 0, ci, 0 } : ChosenTarget{ 1, bi, 0 });
+                                int t = order[n];
+                                heur.push_back(t == CRACKLE_OPP_FACE  ? ChosenTarget{ 0, 1 - ci, 0 }
+                                             : t == CRACKLE_SELF_FACE ? ChosenTarget{ 0, ci,     0 }
+                                             :                          ChosenTarget{ 1, t,      0 });
                             }
                             std::vector<ChosenTarget> picked =
-                                (*g_play_target_chooser)(state, def, ci, crackle_targets, dmg, heur);
+                                (*g_play_target_chooser)(state, def, ci, Tmax, dmg, heur);
                             if (picked.empty()) { picked = heur; }
-                            std::vector<int> dead;
+                            std::vector<int> tlist;
                             for (const ChosenTarget& c : picked)
                             {
-                                if (c.kind == 0) { state.players[c.index].life -= dmg; }
-                                else if (c.index >= 0 && c.index < static_cast<int>(state.battlefield.size()))
-                                {
-                                    Permanent& p = state.battlefield[c.index];
-                                    p.damage += dmg;
-                                    if (p.damage >= p.EffectiveToughness()) { dead.push_back(c.index); }
-                                }
+                                if (c.kind == 0) { tlist.push_back(c.index == ci ? CRACKLE_SELF_FACE : CRACKLE_OPP_FACE); }
+                                else             { tlist.push_back(c.index); }
                             }
-                            std::sort(dead.begin(), dead.end(), std::greater<int>());   // erase high-first
-                            for (int bi : dead)
-                            {
-                                state.players[state.battlefield[bi].owner_index].graveyard.push_back(state.battlefield[bi].card);
-                                state.battlefield.erase(state.battlefield.begin() + bi);
-                            }
+                            if (CrackleApplyTargets(state, ci, dmg, tlist)) { state.opponent_lost_life_this_turn = true; }
                         }
                         else
                         {
+                            // AUTONOMOUS (no chooser): the win line always hits the face, so resolve the
+                            // face plus the first `crackle_targets` extras -- byte-identical to the old
+                            // "face -= dmg; CrackleHitExtraTargets(count)" path (same order, same SBA).
+                            state.players[opp_idx].life -= dmg;              // face = 5X (the win)
+                            state.opponent_lost_life_this_turn = true;
                             CrackleHitExtraTargets(state, ci, dmg, crackle_targets);
                         }
                     }

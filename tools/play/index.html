@@ -853,6 +853,14 @@ function renderChooseDialog(v, line){
     // No distinguishing dimension left (shouldn't happen — distinct variants differ in some sub) —
     // commit the first remaining plan defensively.
     if (!dim){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
+    // Crackle count is NOT a separate dialog (issue 1): the target COUNT falls out of the board
+    // targeting step. Auto-commit the MIN-count variant so the apply-time target decision offers the
+    // widest [min,max] range; the player then picks which targets (face + creatures) on the board.
+    if (dim.kind==='crackle'){
+      const minChoice=choices.map(c=>c.choice).sort((a,b)=>(parseInt((a+'').replace('+',''))||0)-(parseInt((b+'').replace('+',''))||0))[0];
+      const next=remaining.filter(x=>choiceOf(x,dim.key)===minChoice);
+      return stepChoose(next, picks.concat([{key:dim.key, choice:minChoice}]));
+    }
     renderDimPick(dim, choices, remaining, picks);
   }
 
@@ -922,6 +930,13 @@ function applyAccepted(planIndex, label) {
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
+  // Dropped-cast feedback (issue 2): remember the non-land casts we INTENDED and the hand counts
+  // before committing, so after the line resolves we can tell if a queued cast never actually
+  // resolved (silently dropped for mana — e.g. an over-generated Reality Spasm line). Compared in
+  // step() against the next state's hand.
+  S._intendedCasts = (S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le'&&p.kind!=='retrace').map(p=>p.name);
+  S._preHandCounts = {};
+  (((S.decision||{}).me||{}).hand||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preHandCounts[nm]=(S._preHandCounts[nm]||0)+1; } });
   // Record a one-int step so undo can pop this main-phase decision. Without it S.steps desyncs from
   // S.choices and undo() (which bails when S.steps is empty) silently does nothing after any line.
   S.prev = S.decision; S.choices.push(planIndex); (S.steps=S.steps||[]).push(1);
@@ -1316,10 +1331,17 @@ function promptPanelHtml(d, dec){
   const hasCreature=(d.legal_targets||[]).some(t=>t.kind==='permanent');
   const where = hasCreature ? "the opponent's life, a creature, or your own life" : "the opponent's life or your own life";
   const dmgWord = max>1 ? `${d.per_target_damage} damage each` : `${d.per_target_damage} damage`;
+  // min_targets is the affordability FLOOR (Crackle: the discount the cast already paid for). The
+  // count must land in [min,max] — Commit stays disabled until it does (issue 3: you can't confirm a
+  // short target set). The opponent's face is a NORMAL target here (issue 5) and is deselectable.
+  const min = Math.max(1, d.min_targets||1);
+  const inRange = n>=min && n<=max;
+  const rangeWord = min>=max ? `pick exactly ${max}` : (min<=1 ? `pick up to ${max}` : `pick ${min}–${max}`);
+  const needNote = n<min ? ` — need ${min-n} more` : '';
   return `<h3>Choose targets — ${esc(d.source||'')}</h3>`+
-    `<div class="sub">${dmgWord} · pick up to ${max}. Click targets on the board — ${where}. The AI's pick is preselected.</div>`+
-    `<div class="pbtns"><span class="pcount">${n} / ${max} selected</span><span class="spacer"></span>`+
-    `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm ${n} target${n===1?'':'s'}</button></div>`;
+    `<div class="sub">${dmgWord} · ${rangeWord}. Click targets on the board — ${where} (the opponent's face is a target you can deselect). The AI's pick is preselected.</div>`+
+    `<div class="pbtns"><span class="pcount">${n} / ${max} selected${needNote}</span><span class="spacer"></span>`+
+    `<button id="decconfirm" class="primary" ${inRange?'':'disabled'}>Confirm ${n} target${n===1?'':'s'}</button></div>`;
 }
 function wireDecisionPanel(d, dec){
   const panel=$('decpanel');
@@ -1515,9 +1537,34 @@ async function step() {
   if (S.busy) return; S.busy=true;
   const res=await post('/api/step', cfg());
   S.busy=false; $('undo').disabled = S.choices.length===0;
-  if (res.kind==='decision') advanceTo(res.decision);
-  else if (res.kind==='result') showResult(res.result);
+  if (res.kind==='decision') { advanceTo(res.decision); checkDroppedCasts((res.decision||{}).me); }
+  else if (res.kind==='result') { checkDroppedCasts((res.result||{}).me); showResult(res.result); }
   else showError(res.error||'unknown error', res.raw);
+}
+// Dropped-cast feedback (issue 2): a queued non-land cast that is STILL in hand at (or above) its
+// pre-commit count never resolved — silently dropped because the line couldn't actually pay for it
+// (the known Reality-Spasm over-generation). Surface it via the reusable #verdict panel instead of
+// advancing with no sign anything happened. A future validate-time rejection can reuse notifyDropped.
+function checkDroppedCasts(meAfter){
+  const intended=S._intendedCasts; S._intendedCasts=null; const pre=S._preHandCounts||{}; S._preHandCounts=null;
+  if (!intended || !intended.length || !meAfter) return;
+  const after={}; (meAfter.hand||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ after[nm]=(after[nm]||0)+1; } });
+  const dropped=[]; const seen=new Set();
+  intended.forEach(nm=>{ if(seen.has(nm)) return; seen.add(nm);
+    // still present at >= its pre-commit count -> it did not leave the hand -> not cast.
+    if ((after[nm]||0) >= (pre[nm]||0) && (pre[nm]||0) > 0) dropped.push(nm); });
+  if (dropped.length) notifyDropped(dropped);
+}
+function notifyDropped(names){
+  const ve=$('verdict'); ve.className='unsupported';
+  ve.innerHTML=`<span class="vtag">not cast</span>`+
+    `<h4>${names.map(esc).join(', ')} — not enough mana</h4>`+
+    `<div>The line was accepted but ${names.length>1?'these spells were':'this spell was'} silently dropped at resolution `+
+    `(the mana didn’t actually come together — e.g. a ritual that couldn’t untap enough). Nothing was cast; `+
+    `try a line the board can really pay for.</div>`+
+    `<div class="actions"><button id="dropok" class="ghost">Dismiss</button></div>`;
+  ve.style.display='block';
+  $('dropok').onclick=hideVerdict;
 }
 async function newGame() {
   S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
