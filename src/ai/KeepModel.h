@@ -440,23 +440,57 @@ struct MidGamePlanSummary
     int face_damage    = 0;  // fixed direct damage the casts deal (Sum params.damage; X-spells excluded)
 };
 
-// Analyzer-trained additive evaluator: predicted plan goodness = intercept + Sum coef*feat, with
-// HIGHER = better (the trainer fits toward -expected_win_turn, so a plan that wins sooner scores
-// higher). Fixed-point long long throughout -> the dot product is associative and byte-identical
-// across platforms, so the plan argmax (and thus the game digest) is deterministic. Stored as DATA
-// in the per-deck eval sidecar (decks/<name>.eval.json); empty => no model (heuristic ranking).
+// One node of a fixed-point regression tree. Internal nodes split on an INTEGER feature threshold
+// (go left iff feats[feature] <= threshold); leaves carry a fixed-point value. All-integer, so tree
+// traversal + summation is byte-identical across platforms (the determinism contract). feature < 0
+// marks a leaf. child indices point within the same tree's node vector.
+struct MidGameTreeNode
+{
+    int       feature   = -1;   // split feature index; < 0 => leaf
+    int       threshold = 0;    // go LEFT iff feats[feature] <= threshold
+    int       left      = -1;   // child indices (internal nodes only)
+    int       right     = -1;
+    long long value     = 0;    // leaf output, fixed-point units (internal nodes: 0)
+};
+
+// Analyzer-trained additive evaluator: predicted plan goodness = intercept + Sum coef*feat + Sum of
+// regression-tree outputs, with HIGHER = better (the trainer fits toward earlier expected win, so a
+// plan that wins sooner scores higher). Fixed-point long long throughout -> associative integer sum
+// + integer-threshold tree traversal, so the plan argmax (and the game digest) is deterministic. The
+// linear part (coefs) and the GBDT part (trees) are independent: a model may be pure-linear (--rank),
+// pure-GBDT, or linear-init + boosted trees (--gbdt). Stored as DATA in the per-deck eval sidecar
+// (decks/<name>.eval.json); empty => no model (heuristic ranking).
 struct MidGameEvaluator
 {
-    std::vector<long long> coefs;      // per MidGameFeature index, fixed-point units
-    long long              intercept = 0;
+    std::vector<long long>                    coefs;          // per MidGameFeature index, fixed-point
+    long long                                 intercept = 0;
+    std::vector<std::vector<MidGameTreeNode>> trees;          // GBDT ensemble (each: node vector, root=0)
 
-    bool empty() const { return coefs.empty(); }
+    bool empty() const { return coefs.empty() && trees.empty(); }
+
+    static long long EvalTree(const std::vector<MidGameTreeNode>& tree, const std::vector<int>& feats)
+    {
+        if (tree.empty()) { return 0; }
+        int i = 0;
+        // Bounded by node count so a malformed (cyclic) tree can never loop forever.
+        for (int guard = 0; guard < static_cast<int>(tree.size()); ++guard)
+        {
+            const MidGameTreeNode& n = tree[i];
+            if (n.feature < 0) { return n.value; }                       // leaf
+            const int fv = (n.feature < static_cast<int>(feats.size())) ? feats[n.feature] : 0;
+            const int nx = (fv <= n.threshold) ? n.left : n.right;
+            if (nx < 0 || nx >= static_cast<int>(tree.size())) { return n.value; }  // malformed guard
+            i = nx;
+        }
+        return tree[i].value;
+    }
 
     long long Score(const std::vector<int>& feats) const
     {
         long long s = intercept;
         const int n = std::min(static_cast<int>(feats.size()), static_cast<int>(coefs.size()));
         for (int i = 0; i < n; ++i) { s += coefs[i] * static_cast<long long>(feats[i]); }
+        for (const std::vector<MidGameTreeNode>& t : trees) { s += EvalTree(t, feats); }
         return s;
     }
 };
