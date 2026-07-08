@@ -51,6 +51,10 @@ struct OpponentSpawn
 // here to avoid pulling the AI layer into this core header.
 class DecisionProvider;
 
+// Per-deck learned mid-game PLAY evaluator (defined in ai/KeepModel.h); GameState carries a
+// non-owning pointer, threaded like m_provider. Forward-declared to keep the AI layer out of core.
+struct MidGameEvaluator;
+
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
 enum class Step  { Untap, Upkeep, Draw, MainPhase,
                    BeginCombat, DeclareAttackers, DeclareBlockers, CombatDamage, EndCombat,
@@ -155,6 +159,12 @@ struct GameState
     // hoarded lands, over-counting a Land's Edge flood the real game never accumulates (gi=220).
     // nullptr -> no protection (matches a raw GameState with no profile attached).
     const std::vector<std::string>* m_required_pieces = nullptr;
+    // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),
+    // stamped in AIEngine::HandleMulligan and propagated through every deep copy. Ranks NON-lethal
+    // turn-plans in TurnSolver::Solve (the d0 decision + every rollout leaf) when MTG_EVAL_MODEL is
+    // set; nullptr / empty / flag-off -> the heuristic EvalCard ranking (byte-identical). NEVER folded
+    // into BuildSimKey (a per-deck constant, like m_provider). Mid-game play only -- not mulligan.
+    const MidGameEvaluator* m_evaluator = nullptr;
 
     Player&       ActivePlayer()       { return players[active_player_index]; }
     const Player& ActivePlayer() const { return players[active_player_index]; }

@@ -612,3 +612,71 @@ inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesys
         }
     }
 }
+
+// --- Learned mid-game eval sidecar (decks/<name>.eval.json) ------------------------------------
+// coefs keyed by MidGameFeature NAME (robust to the append-only enum growing), + intercept.
+inline nlohmann::json EvalModelToJsonObj(const MidGameEvaluator& e)
+{
+    using json = nlohmann::json;
+    json m;
+    m["intercept"] = e.intercept;
+    json coefs = json::object();
+    for (int j = 0; j < static_cast<int>(e.coefs.size()) && j < static_cast<int>(MidGameFeature::Count); ++j)
+    { if (e.coefs[j] != 0) { coefs[MidGameFeatureName(static_cast<MidGameFeature>(j))] = e.coefs[j]; } }
+    m["coefs"] = coefs;
+    return m;
+}
+
+inline MidGameEvaluator EvalModelFromJsonObj(const nlohmann::json& j)
+{
+    MidGameEvaluator e;
+    // Accept either the model object directly or a wrapper { "eval_model": {...} }.
+    const nlohmann::json& m = j.contains("eval_model") ? j["eval_model"] : j;
+    // No/empty coefs -> return the EMPTY model (inert; heuristic ranking), never an all-zero "active"
+    // model that would silently re-tiebreak plans.
+    if (!m.contains("coefs") || !m["coefs"].is_object() || m["coefs"].empty()) { return e; }
+    e.intercept = m.value("intercept", 0LL);
+    e.coefs.assign(static_cast<int>(MidGameFeature::Count), 0LL);
+    for (const auto& [name, val] : m["coefs"].items())
+    {
+        const int idx = MidGameFeatureFromName(name);
+        if (idx >= 0 && idx < static_cast<int>(e.coefs.size())) { e.coefs[idx] = val.get<long long>(); }
+    }
+    return e;
+}
+
+// For PLAY only: after loading a deck's base profile, pull in its learned mid-game eval sidecar if one
+// ships alongside -- `<deck>.profile.json` -> `<deck>.eval.json`. Presence-gated: absent/malformed =>
+// eval_model stays empty => the heuristic ranking (byte-identical). The learned ranking is additionally
+// gated at runtime by MTG_EVAL_MODEL (UseLearnedEval), so a shipped sidecar is inert until deliberately
+// enabled. NOT called by the analyzer's rollout loads. See docs/design/learned-d0-policy.md.
+inline void AttachEvalSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
+{
+    if (!profile.eval_model.empty()) { return; }
+
+    auto load_from = [&](const std::filesystem::path& p)
+    {
+        std::ifstream f(p);
+        if (!f) { return; }
+        try { nlohmann::json j; f >> j; profile.eval_model = EvalModelFromJsonObj(j); }
+        catch (...) { profile.eval_model = MidGameEvaluator{}; }
+    };
+
+    // Per-context override (decouples "the model under test" from the committed sidecar for A/B):
+    //   MTG_EVAL_PROFILE=none|off|0|"" -> attach NOTHING; <path> -> attach THAT file's eval model.
+    if (const char* ov = std::getenv("MTG_EVAL_PROFILE"))
+    {
+        const std::string v = ov;
+        if (v.empty() || v == "none" || v == "off" || v == "0") { return; }
+        load_from(v);
+        return;
+    }
+
+    const std::string fn = profile_path.filename().string();
+    const std::string suffix = ".profile.json";
+    if (fn.size() <= suffix.size() || fn.compare(fn.size() - suffix.size(), suffix.size(), suffix) != 0)
+    { return; }
+    const std::string stem = fn.substr(0, fn.size() - suffix.size());
+    const std::filesystem::path cand = profile_path.parent_path() / (stem + ".eval.json");
+    if (std::filesystem::exists(cand)) { load_from(cand); }
+}

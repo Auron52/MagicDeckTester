@@ -1,5 +1,6 @@
 #include "KeepModel.h"
 #include "../cards/CardDatabase.h"
+#include "../core/GameState.h"      // ExtractMidGameFeatures reads the live board (mid-game play)
 #include "../core/SpellEffects.h"   // EffectiveProducesInHand (Reflecting-Pool-aware colours)
 #include <algorithm>
 #include <map>
@@ -366,4 +367,87 @@ KeepGuard ApplyKeepConstraints(const std::vector<Card>& hand, const KeepConstrai
         if (!found) { return KeepGuard::ForceMulligan; }
     }
     return KeepGuard::Undecided;
+}
+
+// --- Mid-game PLAY featurizer (learned d0 evaluator) ------------------------------------------
+// Integer-pure and NON-CLAIRVOYANT: reads only public information -- our hand/board/graveyard/exile/
+// life, the opponent's visible board + life, and library SIZE (never library ORDER or the opponent's
+// hand). Perspective is the active player (Solve runs on our turn). See docs/design/learned-d0-policy.md.
+std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePlanSummary& plan)
+{
+    std::vector<int> f(static_cast<int>(MidGameFeature::Count), 0);
+    const Player& ap  = state.ActivePlayer();
+    const Player& opp = state.Opponent();
+    const int     active = state.active_player_index;
+    auto set = [&](MidGameFeature k, int v) { f[static_cast<int>(k)] = v; };
+
+    set(MidGameFeature::OurLife,       ap.life);
+    set(MidGameFeature::OppLife,       opp.life);
+    set(MidGameFeature::Turn,          state.turn_number);
+    set(MidGameFeature::OnThePlay,     state.on_the_play ? 1 : 0);
+    set(MidGameFeature::HandSize,      static_cast<int>(ap.hand.size()));
+    set(MidGameFeature::LibrarySize,   static_cast<int>(ap.library.size()));
+    set(MidGameFeature::GraveyardSize, static_cast<int>(ap.graveyard.size()));
+    set(MidGameFeature::ExileSize,     static_cast<int>(state.exile.size()));
+
+    int our_creatures = 0, our_power = 0, our_ready = 0, our_lands = 0, untapped_sources = 0;
+    int src[kNumColors] = {0};
+    int opp_creatures = 0, opp_power = 0;
+
+    for (const Permanent& p : state.battlefield)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        const bool is_creature = p.card.IsCreature() || p.is_animated;
+        if (p.controller_index == active)
+        {
+            if (is_creature)
+            {
+                ++our_creatures;
+                our_power += p.EffectivePower();
+                if (p.CanAttack()) { ++our_ready; }
+            }
+            if (p.card.IsLand()) { ++our_lands; }
+            // Mana source: an untapped land, a usable dork, or a rock we control.
+            const bool is_land = p.card.IsLand();
+            const bool is_dork = def && def->tmpl == CardTemplate::ManaDork && p.CanTap();
+            const bool is_rock = def && def->params.mana_rock;
+            if (!p.tapped && (is_land || is_dork || is_rock))
+            {
+                ++untapped_sources;
+                if (def)
+                {
+                    for (Color c : def->params.produces)
+                    {
+                        const int ci = static_cast<int>(c);
+                        if (ci >= 0 && ci < kNumColors) { ++src[ci]; }
+                    }
+                }
+            }
+        }
+        else if (is_creature)
+        {
+            ++opp_creatures;
+            opp_power += p.EffectivePower();
+        }
+    }
+
+    set(MidGameFeature::OurCreatures,        our_creatures);
+    set(MidGameFeature::OurTotalPower,       our_power);
+    set(MidGameFeature::OurReadyAttackers,   our_ready);
+    set(MidGameFeature::OurLands,            our_lands);
+    set(MidGameFeature::UntappedManaSources, untapped_sources);
+    set(MidGameFeature::SourceW, src[static_cast<int>(Color::White)]);
+    set(MidGameFeature::SourceU, src[static_cast<int>(Color::Blue)]);
+    set(MidGameFeature::SourceB, src[static_cast<int>(Color::Black)]);
+    set(MidGameFeature::SourceR, src[static_cast<int>(Color::Red)]);
+    set(MidGameFeature::SourceG, src[static_cast<int>(Color::Green)]);
+    set(MidGameFeature::OppCreatures,  opp_creatures);
+    set(MidGameFeature::OppTotalPower, opp_power);
+
+    set(MidGameFeature::PlanNumSpells,     plan.num_spells);
+    set(MidGameFeature::PlanCreaturesCast, plan.creatures_cast);
+    set(MidGameFeature::PlanDirectDamage,  plan.direct_damage);
+    set(MidGameFeature::PlanTotalMv,       plan.total_mv);
+    set(MidGameFeature::PlanPlaysLand,     plan.plays_land);
+    return f;
 }

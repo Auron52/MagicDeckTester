@@ -87,5 +87,11 @@ struct MulliganProfile
     // clobbers them. Applied as a hard guard wrapping keep_model at runtime. Empty => no constraints.
     KeepConstraints keep_constraints;
 
+    // Analyzer-trained mid-game PLAY evaluator (learned d0 replacement): ranks non-lethal turn-plans
+    // by predicted expected win-turn inside TurnSolver::Solve. Loaded from the per-deck eval sidecar
+    // (decks/<name>.eval.json) via AttachEvalSidecar; gated by MTG_EVAL_MODEL. Empty => heuristic
+    // ranking (byte-identical). See KeepModel.h / docs/design/learned-d0-policy.md. Play only.
+    MidGameEvaluator eval_model;
+
     static MulliganProfile DefaultProfile() { return {}; }
 };
