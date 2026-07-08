@@ -1189,6 +1189,46 @@ bool HinataProvider::ShouldAttackWith(const GameState& s, const Permanent& p) co
     return false;                                         // 0-power no-trigger dork -> hold for mana
 }
 
+// Hold a LONE Crackle with Power as a combo piece. See the header note: casting a single non-lethal
+// Crackle for chip damage throws away the Reality-Spasm -> big-Crackle lethal the shallow search
+// cannot see past its horizon. This is the "default to hold Crackle unless you have multiples" prior
+// -- the search's own lethal enumeration still fires it the turn it wins (the combo turn's ritual
+// mana inflates max_affordable so 5X reaches lethal here and the gate lets it through).
+std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefinition& def,
+                                             int max_affordable) const
+{
+    std::vector<int> generic = GenericProvider::XCandidates(s, def, max_affordable);
+    static const bool enabled = std::getenv("MTG_NO_HINATA_HOLD_CRACKLE") == nullptr;
+    if (!enabled || generic.empty() || !IsCrackleCountSpell(def.params)) { return generic; }
+
+    const int active   = s.active_player_index;
+    const int opp_life = s.players[1 - active].life;
+    int mult = def.params.x_damage_multiplier; if (mult < 1) { mult = 1; }
+
+    // A SECOND copy in hand -> spending one chip Crackle is free (the other stays for the combo).
+    int copies = 0;
+    for (const Card& h : s.players[active].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d && IsCrackleCountSpell(d->params)) { ++copies; }
+    }
+    if (copies >= 2) { return generic; }
+
+    // Would the biggest affordable Crackle win THIS turn? Over-estimate the attack (every own
+    // creature's power, ignoring summoning sickness) so we only ever HOLD when even the best case
+    // whiffs -- never forfeiting a same-turn Crackle+attack kill.
+    int max_x = 0;
+    for (int x : generic) { if (x > max_x) { max_x = x; } }
+    int attack_ub = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == active) { attack_ub += std::max(0, AttackPowerOf(s, p)); }
+    }
+    if (max_x * mult + attack_ub >= opp_life) { return generic; }   // wins now -> cast it
+
+    return {};   // lone, non-lethal -> HOLD the combo piece
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace

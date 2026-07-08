@@ -188,6 +188,13 @@ public:
     // second-main) Crackle wants. In a goldfish there are no blockers and Hinata has no Exalted, so
     // such a dork has ZERO reason to attack. Keep it untapped to fund the post-combat payoff.
     bool ShouldAttackWith(const GameState&, const Permanent&) const override;
+    // Hold a LONE Crackle with Power as a combo piece (Hook 18 / XCandidates): casting a single
+    // non-lethal Crackle for chip damage throws away the Reality-Spasm -> big-Crackle lethal the
+    // shallow search cannot see past its horizon (the combo pays off several turns later). Default:
+    // HOLD the lone Crackle unless casting it wins THIS turn (5X + optimistic attack >= opp life) or
+    // a second copy is already in hand. Off-switch MTG_NO_HINATA_HOLD_CRACKLE. Deterministic on the
+    // GameState, so lockstep across the search enumeration, the rollout, and the executor.
+    std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the
