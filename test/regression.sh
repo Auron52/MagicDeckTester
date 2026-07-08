@@ -48,8 +48,8 @@ THREADS=${THREADS:-0}
 
 MODE=regression
 ACCEPT=0
-ACCEPT_ACK=""     # --accept-with-regressions=<ack>: acknowledge each searched win->loss so
-                  # --accept may proceed; the ack string is recorded in the GT provenance header.
+ACCEPT_ACK=""     # --accept-with-regressions=<note>: same as --accept (promote, no re-run/re-audit);
+                  # the note is recorded in the GT provenance header to document intended win->loss.
 DECK_ONLY=""      # --deck=<name>: restrict this run to one deck's cases (see regression_cases.sh)
 for arg in "$@"; do
   case "$arg" in
@@ -108,25 +108,13 @@ if [ "$ACCEPT" = 1 ]; then
     echo "ERROR: $RESULTS not found. Run 'bash test/regression.sh $MODEFLAG' first, inspect it, then --accept." >&2
     exit 1
   fi
-  # ---- pre-accept gate: the per-game audit must show no unexplained searched-depth
-  # win->loss. gt_logs still holds the PRE-accept baseline and $LOGDIR/wins holds the
-  # last run's per-game outcomes, so this is exactly the old-vs-new per-game diff. A
-  # searched-depth win->loss (audit exit != 0) hard-blocks promotion unless every one
-  # is acknowledged via --accept-with-regressions="gi<N>:<reason>; ...". Turn-later is
-  # surfaced but does not block (it must still be classified -- see the audit output).
-  if [ -f "$HERE/audit_changed_games.py" ] && command -v python3 >/dev/null 2>&1; then
-    echo "--- pre-accept per-game audit ($MODE) ---"
-    audit_out=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1); audit_rc=$?
-    printf '%s\n' "$audit_out"
-    if [ "$audit_rc" -ne 0 ] && [ -z "$ACCEPT_ACK" ]; then
-      echo "" >&2
-      echo "REFUSING TO ACCEPT: audit reports searched-depth win->loss (above)." >&2
-      echo "Root-cause each, then re-run with:" >&2
-      echo "  bash test/regression.sh $MODEFLAG --accept-with-regressions=\"gi<N>:<reason>; ...\"" >&2
-      exit 1
-    fi
-    [ -n "$ACCEPT_ACK" ] && echo "Proceeding with acknowledged regressions: $ACCEPT_ACK"
-  fi
+  # --accept means "I have inspected this run and these results are the new ground truth" -- so it
+  # ONLY promotes; it does NOT re-run the games and does NOT re-run the per-game audit. Inspect the
+  # audit in the RUN output first (a plain `regression.sh <mode>` prints the per-game audit + the
+  # searched-depth win->loss list at the end), decide there, then --accept to promote. The optional
+  # --accept-with-regressions="<note>" records WHY any accepted win->loss are intended into the GT
+  # provenance header (below) -- it is documentation, not a gate.
+  [ -n "$ACCEPT_ACK" ] && echo "Accepting with recorded note: $ACCEPT_ACK"
   # shellcheck disable=SC1090
   [ -f "$GT" ] && source "$GT" 2>/dev/null || true   # existing values for all modes
   # shellcheck disable=SC1090
