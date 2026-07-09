@@ -1044,3 +1044,46 @@ Attacked the RECOVERABLE (non-clairvoyance) gaps, esp. aggro. Findings:
 - **Net:** d0 beats heuristic 5/5 and is near the achievable non-clairvoyant ceiling. Aggro ~0.13-0.20 from
   search (imitation floor); combo ~1.4 from search (clairvoyance). Data is not the lever; discriminating labels
   / a de-clairvoyed search baseline are the open directions.
+
+### The saturation is a MODEL-CAPACITY ceiling, not a data ceiling — but only knights can use it (2026-07-09)
+
+User pushback: "I still wonder whether we might be using the wrong approach if it maxes out on the data it can
+use effectively so quickly." Correct instinct — investigated with three diagnostics (`scripts/label_discrim.py`,
+`feature_collision.py`, `linear_ceiling.py`), decomposing within-decision label variance (rows sharing (seed,turn)
+= the competing candidates of ONE decision):
+
+1. **Labels are NOT dead.** knights: 77% of decisions have label spread (mean 0.82 turns); searched labels are
+   *less* discriminating than rollout (spread 0.62 vs 0.82). So "weak teacher / no gradient" is not the story.
+2. **Features are NOT the ceiling (aggro).** feature-collision (same feature vector, different label) ≈ 0;
+   a lookup table on the features explains **95–100%** of within-decision label variance (knights 0.955, slivers
+   0.978, burn 1.000). Combo is genuinely feature-limited (antilife 0.658, TH 0.568 = the clairvoyant library
+   order the non-clairvoyant features can't see — consistent with the combo=clairvoyance split).
+3. **The LINEAR FORM is the ceiling.** A global-linear within-decision fit captures only **0.42–0.59** of that
+   0.95+ table ceiling (knights 0.586, slivers 0.587, burn 0.420). The 0.37–0.58 gap is pure functional-form loss
+   — interactions a linear ranker can't represent. THIS is why it saturates on <1k rows: ~9-12 weights fit fast,
+   then it's structurally done. Pairwise feature crosses recover part of it and **generalize** (held-out
+   knights 0.591→0.685, slivers 0.591→0.644, burn 0.444→0.504, TH 0.132→0.229) — real interaction signal.
+
+**End-to-end (the metric that counts, held-out win-turn): a REGULARIZED GBDT helps knights, and CORRECTS the
+earlier "GBDT collapses" claim** — that collapse was the config (depth 4, lr 0.15, free warm-start, no min-leaf
+control). The fix: `--init-linear` (or new `--init-model <anchored sidecar>`) + shallow + high min-leaf. Recipe
+g2 = init-linear, depth 3, lr 0.05, 80 trees, min-leaf 50:
+- **knights (aggro): −0.012 vs linear, ROBUST** across 3 disjoint seed sets (tune 2002/3003/7007, first-5, fresh
+  4020-4025). Extends the beat-heuristic margin 0.030 → 0.042 (~40% larger). Extra depth-4 capacity (g3) ties g2
+  on fresh → g2 is the pick. Saved `logs/eval/knights_d0_gbdt.eval.json`.
+- **burn (aggro): +0.002 = WASH.** Table ceiling 1.0 but the extra R² is argmax-irrelevant (doesn't flip the top
+  pick), so capacity buys nothing.
+- **slivers (Vial): +0.235 = HURTS BADLY** (worse than heuristic). **antilife (Vial): +0.053 = HURTS.** These are
+  ANCHOR-DOMINATED: the hand-tuned heuristic is already near-optimal (slivers linear beats heuristic by 0.19, the
+  biggest margin of any deck — almost all from the anchor + a tiny correction), and the rollout labels are NOISIER
+  than the anchor. Capacity lets the trees deviate from the good anchor toward label noise → worse. Warm-starting
+  the GBDT from the anchored linear (`--init-model`) does NOT save it — the pairwise trees still misrank.
+
+**Strategic conclusion (answers the "wrong approach?" question).** The linear model genuinely maxes out fast
+because it is linear — a real, measured capacity ceiling. But capturing more of it improves PLAY only where
+(a) the model is capacity-limited AND (b) the labels are a BETTER TEACHER than the anchor. That holds only on
+knights. On Vial decks the anchor already IS the ceiling and the labels are worse than it, so neither data nor
+capacity helps (capacity hurts). **The binding constraint is LABEL/TEACHER QUALITY, not data quantity or model
+capacity.** The lever that would move every deck is a stronger, de-clairvoyed teacher — the reshuffle-averaged
+search (already the deferred "fair baseline" build) — not more data and not a fancier model. Ship: knights GBDT
+sidecar + `--init-model` trainer flag + the 3 diagnostics; adopt knights-GBDT when d0 sidecars are adopted.

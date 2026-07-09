@@ -139,6 +139,11 @@ def main():
     ap.add_argument("--min-leaf", type=int, default=20)
     ap.add_argument("--holdout", action="store_true",
                     help="hold out every 4th DECISION; report held-out pairwise acc as it boosts")
+    ap.add_argument("--init-model", default=None,
+                    help="warm-start from an EXISTING linear sidecar (e.g. the faithful-anchor "
+                         "linear d0) instead of a free rank_fit; boosts trees on THAT base's residual "
+                         "and re-emits its exact linear coefs. Use for anchor-dominated (Vial) decks "
+                         "where a free linear warm-start reintroduces the noise the anchor removed.")
     ap.add_argument("--init-linear", action="store_true",
                     help="warm-start F from the linear rank model (hybrid: linear + boosted trees)")
     ap.add_argument("--regression", action="store_true",
@@ -154,7 +159,17 @@ def main():
     # only correct where linear is wrong. coef_wt is in win-turn units (+ = later win); serving
     # goodness = -coef_wt . feats, which is exactly what we accumulate into F.
     lin_coefs_wt = None
-    if args.init_linear:
+    if args.init_model:
+        with open(args.init_model) as f:
+            base = json.load(f)["eval_model"]
+        if int(base.get("intercept", 0)) != 0:
+            print("WARN: --init-model intercept != 0 is dropped (ranking intercept is 0)", file=sys.stderr)
+        # stored coefs are GOODNESS fixed-point (higher=better) = -coef_wt*SCALE; invert to win-turn units.
+        gcoef = base.get("coefs", {})
+        lin_coefs_wt = [-float(gcoef.get(name, 0)) / SCALE for name in feat_names]
+        print("warm-started from anchored linear sidecar %s (%d nonzero coefs)"
+              % (args.init_model, sum(1 for v in gcoef.values() if v)), file=sys.stderr)
+    elif args.init_linear:
         lin_coefs_wt, _ = _tm.rank_fit(X, y, groups, 0.001, 600, 0.3)
         print("warm-started from linear rank model", file=sys.stderr)
 
