@@ -1315,8 +1315,34 @@ touches. Deep rollout is also prohibitively slow (d5 K8 stalled for many minutes
 do NOT pursue a deeper-continuation teacher.** Levers that could actually move it (unproven, for discussion): a
 tempo-sensitive objective (quantile/best-of instead of mean — but reintroduces fusion optimism), explicit
 combo-assembled→deploy knowledge (hand-tuning the project resists), or imitation-learning from the human references
-(the real near-ceiling policy). And the standing frame: **EVPI is small, so the cheap CLAIRVOYANT value-leaf search
-is already within ~0.4 of the true ceiling** — the strongest *practical* policy on the table. Data: `logs/eval/deep_d{3,5}`.
+(the real near-ceiling policy). Data: `logs/eval/deep_d{3,5}`.
+
+### ⚠️ "EVPI IS SMALL" WAS AN OVERSTATEMENT — it's UNRESOLVED and the baseline is confounded (2026-07-09, user pushback)
+
+The user challenged "EVPI is small." Correct to challenge — I conflated an **upper bound** with a measurement.
+What we can actually measure is `human_LP − clair_LP` on the exact reference openings (single-game exact replay,
+`--seed S --game-index G --games 1`, `env -u`, depth 5), which upper-bounds EVPI ONLY because a human is *some*
+non-clairvoyant policy (ceiling ≤ human). **K does NOT enter — both terms are K-free** (human = references,
+clair = ordinary search). Per deck:
+
+| deck | n | human_LP | clair_LP | human−clair (loose EVPI upper bd) |
+|---|---|---|---|---|
+| antilife | 30 | 4.500 | 4.100 | **+0.400** |
+| burn | 16 | 4.625 | 4.438 | **+0.188** |
+| slivers | 4 | 4.000 | 4.000 | +0.000 |
+| TH | 1 | 5.000 | 5.000 | +0.000 (n=1, useless) |
+| knights | 3 | 4.667 | **5.000** | **−0.333** |
+| Hinata | — | (7, ref) | — | clairvoyant search INTRACTABLE at d5 (>4 min/game, combo explosion) |
+
+**Three reasons these are NOT clean EVPI:** (1) `human−clair = EVPI + human-suboptimality − our-search-suboptimality`
+— three tangled terms. (2) **Our "clairvoyant" search is NOT the clairvoyant optimum**: on knights a HUMAN beats it
+by 0.33 (and antilife gi25 human T4 < clair T5), so `clair_LP` is not a valid lower bound on the ceiling there —
+the baseline itself is soft. (3) fetchland reshuffles diverge the library once policies differ, adding per-game
+noise. So: antilife EVPI ∈ [0, 0.40], burn ∈ [0, ~0.19], slivers ≈ 0 — these upper bounds ARE well below the
+retracted 0.6–0.79 table (that table WAS overstated), but 0.40 on a turn-4 deck is ~10% of the clock — **NOT
+"small"**, and the true EVPI within [0, bound] is genuinely unresolved. Clean EVPI is blocked from BOTH ends: the
+NC ceiling estimator is weak (durdles), and the clairvoyant baseline is itself beatable. Honest status: **EVPI is
+un-pinned per deck; do not claim it's small.** Data: `logs/eval/evpi_bound.log`.
 
 ### ⚠️⚠️ CORRECTION 2 — the EVPI numbers below are WRONG: a HUMAN beats our NC policy (2026-07-09, user review, DEFINITIVE)
 
