@@ -411,10 +411,18 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
     // has value a single 1-mana dork cannot supply, while a 2nd black source does not.
     ColorSet have{};
     int n_black_src = 0, n_white_src = 0;
-    auto count_bw = [&](const std::vector<Color>& prod)
+    // Per-colour SOURCE COUNT (how many distinct sources already make each colour), used by the
+    // s_short coverage key below to detect "I want this colour more times this turn than I have
+    // sources for it" (e.g. Fiery Justice {W} + Swords {W} both want white -- one white land is not
+    // enough). Distinct from the bool `have` set, which only records whether a colour is coverable
+    // at all. Counts battlefield lands/dorks/rocks, non-fetch hand lands, AND hand dorks/rocks about
+    // to be cast (a dork is a near-future source -- see below).
+    std::array<int, NC> src_cnt{};
+    auto count_src = [&](const std::vector<Color>& prod)
     {
         for (Color c : prod)
         {
+            ++src_cnt[static_cast<int>(c)];
             if (c == Color::Black) { ++n_black_src; }
             if (c == Color::White) { ++n_white_src; }
         }
@@ -426,7 +434,7 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
         if (!d) { continue; }
         if (!(d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { continue; }
         add_colors(have, d->params.produces);
-        count_bw(d->params.produces);
+        count_src(d->params.produces);
     }
     // Plus colours from OTHER (non-fetch) lands in hand -- part of the deck-fixing equation.
     ColorSet have_or_hand = have;
@@ -435,7 +443,20 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || !d->card.IsLand() || !d->params.fetch_land_types.empty()) { continue; }
         add_colors(have_or_hand, d->params.produces);
-        count_bw(d->params.produces);
+        count_src(d->params.produces);
+    }
+    // A mana dork/rock IN HAND about to be cast is a near-future source of its colours -- the payoff
+    // it fixes for (e.g. Tainted Remedy {2}{B}) is cast the turn the dork can tap, not the turn the
+    // dork is played. So it counts toward securing a colour: don't fetch to secure black when the
+    // Ignoble Hierarch already in hand will make it. (Only the source COUNTS -- `have`/`have_or_hand`
+    // are left untouched so the distinct-colour coverage keys s_turn/s_deck/s_breadth are unchanged;
+    // this is a strictly additive multiplicity signal.)
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand()) { continue; }
+        if (!(d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { continue; }
+        count_src(d->params.produces);
     }
     const bool black_secured = n_black_src > 0;   // one black source is enough for the wincon
     const bool want_more_white = n_white_src < 2; // a 2nd white source is still useful
@@ -499,6 +520,11 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
     // (Enlightened/Idyllic) in hand thus registers white in want_turn, so coverage fetches a white
     // source when white is genuinely wanted; no separate "white when a tutor is in hand" special case.
     ColorSet want_turn{}, want_deck{};
+    // How MANY nonland hand cards want each colour this turn (one count per card per colour, not per
+    // pip). demand_turn[W]==2 for a hand of Fiery Justice {W}{R}{G} + Swords {W} -- the multiplicity
+    // the bool want_turn cannot express -- so the s_short key below can tell "I have a white source
+    // but want white TWICE, so a 2nd white source is still genuine coverage" from "already covered".
+    std::array<int, NC> demand_turn{};
     auto note_cost = [&](const Card& card, ColorSet& set)
     {
         const ManaCost& mc = card.m_mana_cost;
@@ -515,6 +541,12 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
         if (card.IsLand()) { continue; }
         note_cost(card, want_turn);
         note_cost(card, want_deck);
+        const ManaCost& mc = card.m_mana_cost;
+        if (mc.white > 0) { ++demand_turn[static_cast<int>(Color::White)]; }
+        if (mc.blue  > 0) { ++demand_turn[static_cast<int>(Color::Blue)];  }
+        if (mc.black > 0) { ++demand_turn[static_cast<int>(Color::Black)]; }
+        if (mc.red   > 0) { ++demand_turn[static_cast<int>(Color::Red)];   }
+        if (mc.green > 0) { ++demand_turn[static_cast<int>(Color::Green)]; }
     }
     for (const Card& c : ap.library)
     {
@@ -531,10 +563,11 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
     // reproducing the old sort-by-(keys desc, insertion order asc) + front(). Keys, highest first:
     //   gives_crit (carries the critical subtype we still need, e.g. Forest unlock)
     //   s_turn (new colours wanted THIS turn) / s_deck (deck-wide) / s_breadth (new colours)
-    //   multi (fixes >1 colour) / dup_pref (colour-priority tiebreak) / shock (dual over basic)
+    //   multi (fixes >1 colour) / s_short (a colour wanted more times this turn than we have
+    //   sources for) / dup_pref (colour-priority tiebreak) / shock (dual over basic)
     bool        have_best = false;
     std::string best_name;
-    int b_gc = 0, b_st = 0, b_sd = 0, b_sb = 0, b_multi = 0, b_dup = 0, b_shock = 0;
+    int b_gc = 0, b_st = 0, b_sd = 0, b_sb = 0, b_multi = 0, b_short = 0, b_dup = 0, b_shock = 0;
     for (const Card& lc : ap.library)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
@@ -563,6 +596,22 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
             if (!have[ci] && ci != static_cast<int>(Color::Colorless)) { ++s_breadth; }
         }
         int multi = static_cast<int>(prod.size()) > 1 ? 1 : 0;
+        // s_short: this candidate produces a colour we want MORE times this turn than we currently
+        // have sources for (demand_turn[c] > src_cnt[c]). This is the multiplicity coverage the
+        // distinct-colour keys (s_turn/s_breadth) miss: a hand of Fiery Justice {W}{R}{G} + Swords
+        // {W} wants white twice, so a 2nd white source is real coverage even though white is already
+        // in `have`. Ranked ABOVE the cosmetic dup_pref (which rewards green-first regardless of
+        // whether green is already over-covered) but below the distinct-colour keys, so it only
+        // decides among candidates those keys tie -- exactly where the green-first tiebreak used to
+        // strand a needed 2nd white behind a redundant green/red dual. src_cnt counts near-future
+        // in-hand dorks, so a colour a to-be-cast dork already makes is not counted "short".
+        int s_short = 0;
+        for (Color c : prod)
+        {
+            int ci = static_cast<int>(c);
+            if (ci == static_cast<int>(Color::Colorless)) { continue; }
+            if (demand_turn[ci] > src_cnt[ci]) { ++s_short; }
+        }
         bool pw = false, pg = false, pb = false, pr = false;
         for (Color c : prod)
         {
@@ -611,6 +660,7 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
         else if (s_deck     != b_sd)    { better = s_deck     > b_sd; }
         else if (s_breadth  != b_sb)    { better = s_breadth  > b_sb; }
         else if (multi      != b_multi) { better = multi      > b_multi; }
+        else if (s_short    != b_short) { better = s_short    > b_short; }
         else if (dup_pref   != b_dup)   { better = dup_pref   > b_dup; }
         else if (shock      != b_shock) { better = shock      > b_shock; }
         else                            { better = false; }  // full tie -> keep the earlier incumbent
@@ -620,7 +670,7 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
             have_best = true;
             best_name = lc.m_name;
             b_gc = gives_crit; b_st = s_turn; b_sd = s_deck; b_sb = s_breadth;
-            b_multi = multi;   b_dup = dup_pref; b_shock = shock;
+            b_multi = multi;   b_short = s_short; b_dup = dup_pref; b_shock = shock;
         }
     }
 

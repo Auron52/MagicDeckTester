@@ -1,20 +1,41 @@
-# Anti-Lifegain fetch heuristic over-prunes a strictly-better target (0a1172d)
+# Anti-Lifegain fetch heuristic mis-values colour multiplicity (0a1172d)
 
-**Status:** OPEN (2026-07-09). Root-caused, not yet fixed. **Blocks the overnight
-GT rebaseline.** Self-contained — pick it up cold.
+**Status:** FIXED (2026-07-09) via a ranking fix; smoke+regression validated,
+overnight rebaseline pending. History kept below. Self-contained.
 
-**TL;DR:** `AntiLifegainProvider::FetchCandidates` (added in commit **0a1172d**,
-`feat(antilife): coverage-aware fetch heuristic`) returns a **single** fetch
-target. On ~5 antilife games it picks a **strictly worse** land than the search
-would, costing **one turn**, and because it prunes to one candidate the search
-can't override it. `MTG_UNPRUNED=1` (which makes the provider offer every legal
-fetch target) **recovers the faster win on every one**. That violates this repo's
-core bar — *heuristics only prune equivalent options; `MTG_UNPRUNED` must be
-byte-identical* — so it is a real heuristic bug, not variance.
+**TL;DR (root cause):** `AntiLifegainProvider::FetchCandidates` (added in commit
+**0a1172d**) returns a **single** fetch target ranked by colour coverage. Its
+`dup_pref` cosmetic tiebreak (Green > Black > White > Red) is a LOW-priority
+tie-break that was allowed to override a **genuine colour-multiplicity need**, so
+on the flagged games it fetched a redundant green/red dual instead of a
+**needed second white source** (Fiery Justice `{W}` + Swords `{W}` want white
+twice; one white land is not enough). It also double-secured black by fetching it
+when the **in-hand Ignoble Hierarch dork about to be cast already makes black**.
+Because it prunes to one candidate the search couldn't override it, and
+`MTG_UNPRUNED=1` recovered the faster win on every one — a real heuristic bug, not
+variance (the framing was originally "over-prunes a strictly-better target"; the
+precise cause is the colour-multiplicity mis-valuation described here).
 
-This is **upstream** work, independent of the committed Land's Edge fix
-(`c8c4a53`). It was surfaced while auditing the overnight run for the Land's Edge
-change; the Land's Edge change itself is clean (TH-only, 0 regressions).
+**The fix (ranking, no search fallback):** two additions to `FetchCandidates`,
+antilife-only, keeping the single-pick design:
+1. Count **in-hand mana dorks/rocks** toward the per-colour source counts (so
+   black is seen as secured when the Hierarch about to resolve makes it —
+   `n_black_src` now includes the in-hand dork).
+2. New coverage key **`s_short`** — a candidate produces a colour we want *more
+   times this turn* than we have sources for (`demand_turn[c] > src_cnt[c]`) —
+   ranked **above** the cosmetic `dup_pref` but below the distinct-colour keys, so
+   the needed 2nd white beats a redundant green/red dual while genuine ties still
+   fall to `dup_pref`.
+
+Result: all three target games win their GT turn **at default** (no
+`MTG_UNPRUNED`, d3+d5); **default == unpruned** on the whole antilife smoke d5 set
+(the byte-identical bar holds — the heuristic strands nothing); every non-antilife
+deck byte-identical; antilife searched depths net-faster/neutral with **0
+win→loss**; the remaining searched turn-later games are fetch-shuffle variance
+(draws diverge). Code: `src/ai/DecisionProviders.cpp::AntiLifegainProvider::FetchCandidates`.
+
+This was **upstream** work, independent of the committed Land's Edge fix
+(`c8c4a53`); the Land's Edge change itself is clean (TH-only, 0 regressions).
 
 ## How it was found (the whole-set audit)
 
@@ -40,18 +61,22 @@ vs HEAD:
 Full per-game classification: `logs/antilife_fetch_bug/CLASSIFICATION_256.txt`
 (lines are `DIVERGE | SAME_DRAWS`, with seed/gi/GT/run).
 
-## The 5 problem games
+## The problem games (user-triaged: 3 real, 2 variance)
 
 Deck `decks/Anti-Lifegain.cod`, profile `decks/Anti-Lifegain.profile.json`.
 Per-game seed = `base_seed + gi` (so `--seed <base+gi> --game-index <gi> --games 1`).
+On inspection the user triaged the original five: the **first three are real fetch
+mis-valuations** (fixed by the ranking change above — all now win their GT turn at
+default); the **last two are genuine draw divergences** (variance, not fixed —
+their `MTG_UNPRUNED` "recovery" was a different physical game, left as-is).
 
-| case | gi | seed | GT (fast) | run (slow) | recovers with |
-|------|----|------|-----------|------------|---------------|
-| s4004 d3/d5 | 235 | 4239 | T3 | T4 | `MTG_UNPRUNED=1` |
-| s4004 d3/d5 | 422 | 4426 | T4 | T5 | `MTG_UNPRUNED=1` |
-| s6006 d3/d5 | 6   | 6012 | T3 | T4 | `MTG_UNPRUNED=1` |
-| s6006 d3/d5 | 355 | 6361 | T4 | T5 | `MTG_UNPRUNED=1` |
-| s6006 d3/d5 | 395 | 6401 | T4 | T5 | `MTG_UNPRUNED=1` |
+| case | gi | seed | GT | pre-fix | post-fix (default) | verdict |
+|------|----|------|----|---------|--------------------|---------|
+| s4004 d3/d5 | 235 | 4239 | T3 | T4 | **T3** | FIXED (2nd white) |
+| s4004 d3/d5 | 422 | 4426 | T4 | T5 | **T4** | FIXED (dork-black / white) |
+| s6006 d3/d5 | 6   | 6012 | T3 | T4 | **T3** | FIXED (2nd white) |
+| s6006 d3/d5 | 355 | 6361 | T4 | T5 | T5 | variance (draws diverge) |
+| s6006 d3/d5 | 395 | 6401 | T4 | T5 | T5 | variance (draws diverge) |
 
 (Each reproduces at both d3 and d5. `MTG_DORK_RAMP=0` leaves them slow; `d7`
 +16× budget leaves them slow; only fetch-unpruned recovers.)
