@@ -689,9 +689,23 @@ reasons, both now understood.
 target** — not more label depth alone, and not chasing clairvoyance we can't have. Top candidate feature:
 **value-model-as-feature** — rank each plan by the value model's predicted win-turn of the *resulting*
 position (the value model already encodes full-horizon search, so this injects multi-turn value the coarse
-plan-summary misses, and inherits the user's d5–d7 depth for free). Needs seam+dump lockstep wiring
-(evaluate the value model on each applied candidate plan) — scoped, not yet built. Secondary: hand-crafted
+plan-summary misses, and inherits the user's d5–d7 depth for free). Secondary: hand-crafted
 non-clairvoyant sequencing features (develops-attacker, curve/mana-efficiency, holds-reach).
+
+**Value-model-as-feature — first attempt FAILED (crude approximation), reverted (2026-07-09).** Implemented
+`plan_value_eval` (v5 feature + shared `PlanValueEval` helper) computing the value model's win-turn on an
+**estimated** post-plan position — the pre-plan value features *adjusted* by the plan summary (opp_life −=
+face_damage, our_creatures += creatures_cast, hand/library/graveyard deltas). Lockstep-trivial (pure
+function of state+summary, like `plan_baseline_eval`) and byte-identical inert by default. But it **did not
+discriminate plans**: measured `plan_value_eval` range within a decision = **0.0 across all 1711 decisions**
+— the value GBDT doesn't split finely enough on the few coarse fields I adjust, so every candidate got the
+same predicted win-turn. A constant-but-large feature then *destabilised* the ranker (burn collapsed to LP
+6.33). Reverted the 4-file change. **Lesson: the approximation is too crude — the value model needs the
+REAL applied post-plan position** (actual P/T, tapped mana, combat, triggers) to tell plans apart. Correct
+build: compute the feature *inside* the plan application — `EnumerateEarliestWins` already `ApplyPlanDirect`s
+each candidate (so the dump gets the true post-plan state for free); the seam must likewise apply each
+candidate subset (added d0 hot-path cost) and evaluate the value model on the resulting `GameState`. That is
+the next attempt; the crude shortcut is a dead end.
 
 **Also settled here:** a *shared* cross-deck LINEAR ranker still collapses under rollout labels (burn/antilife
 0%) — sharing needs nonlinearity/deck-conditioning. And `MTG_EVAL_ROLLOUT_DEPTH` (the rollout-policy depth
