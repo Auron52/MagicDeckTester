@@ -711,6 +711,48 @@ the next attempt; the crude shortcut is a dead end.
 0%) — sharing needs nonlinearity/deck-conditioning. And `MTG_EVAL_ROLLOUT_DEPTH` (the rollout-policy depth
 knob) is committed; depth>0 is affordable on aggro but intractable on combo (hinata).
 
+### ★ Yardstick = SEARCH depth; value-leaf matches/beats d1-heuristic, reaches d5-search cheaply (2026-07-09)
+
+Per the user, the right yardstick is the SEARCH, laddered by depth (d1 → d3 → d5 → d7), and the model
+should "see" turns ahead like a chess player's intuition — not just imitate the hand-tuned d0. The fair
+matchable bar (user): **d1 with HEURISTIC rollout vs the model** (using the model as the rollout leaf on
+both sides makes d0 unable to win, so compare d1-heuristic to the model policy). Clairvoyant library-
+manipulation effects excepted.
+
+**Result (LP, loss=9, s2002):**
+
+| deck | d1-heur (bar) | d3-search | d5-search | **value-leaf d5** (cheap) | d1-value-leaf | d0 ranker |
+|---|---|---|---|---|---|---|
+| burn | 4.303 | 4.29 | 4.29 | 4.32 | 4.40 | 4.66 |
+| knights | 4.30 | 4.29 | 4.29 | 4.32 | 4.45 | 4.72 |
+| slivers | 4.355 | 4.26 | 4.27 | **4.26** | 4.63 | 4.80 |
+| antilife | 4.12 | 4.05 | 4.00 | **4.06** | 5.54 | 5.66 |
+| TH | 4.22 | 4.18 | 4.15 | **4.147** | 5.34 | 5.58 |
+
+**Findings:**
+1. **The value model in a shallow (d5) search is the winning "fast near-search policy."** value-leaf d5
+   **matches or beats d1-heuristic on all 5 decks** — beats on slivers/antilife/TH (deep search matters,
+   the value model encodes it), +0.02 on burn/knights (d1's greedy leaf is already near-optimal; a
+   regressor can't quite match a real playout) — and lands within **~0.03–0.06 of full d5-search**, at an
+   O(1) leaf instead of a full rollout. This is the chess-intuition goal realized: the value model sees the
+   outcome without playing it out.
+2. **The pure d0 RANKER is the weak artifact** (~4.66 burn, far from every search depth). A static per-plan
+   score cannot encode multi-turn planning; computing an accurate post-plan value requires *applying* each
+   plan = a 1-ply search (so value-model-as-feature buys nothing over just running the value-leaf search —
+   see the reverted v1). **d0-ranker is a dead end for reaching search quality; the value model is the path.**
+3. **The value model is NOT data-limited** (burn d1-value-leaf: 2175 rows = 4007 rows = 4.40) nor
+   capacity-limited (t120→t400 no better). Its shallow-depth shortfall vs a greedy playout is *regression
+   fidelity*, which shrinks with depth (d1 4.40 → d5 4.32) as the leaf becomes less decisive.
+4. **d1-value-leaf < d1-heuristic** everywhere: at d1 the exact greedy playout beats the value regressor;
+   the value model's win is SPEED at adequate depth, and QUALITY on combo where greedy misplays.
+
+**⇒ The per-deck "high-quality solution" is the value model used in a d3–d5 value-leaf search** (cheap,
+matches/beats d1, ~0.05 off full search), NOT a pure d0 ranker. Remaining: (a) climb the ladder to d7 as
+the yardstick; (b) now that gaps are ~0.05, READ individual games (not hand-wave) to attribute the residual
+to clairvoyance — especially the shuffle decks (antilife/hinata) where the user expects a bit more; (c)
+goal #4 (bound real-search depth by the value model's predicted win turn) to make the deep search itself
+cheaper. Deprioritized: pushing the d0 ranker further (structurally capped below a 1-ply search).
+
 ## The permanent regression gate
 
 At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regression digests are
