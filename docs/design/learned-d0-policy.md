@@ -1189,6 +1189,45 @@ generator and the instrument that PROVED the ceiling is real — but it is not t
 `logs/eval/antilife_honest_d{1,2,3}.rows`, `logs/eval/anti-lifegain_honest_d{1,2}.eval.json`,
 `logs/eval/{slivers_vial,treasure_hunt}_qmodel.{rows,eval.json}`; driver `scripts/honest_teacher_ab.py`.
 
+### ★ Follow-up (user steer): reshuffle-avg search as PLAY, + push the MODEL with honest labels as TARGET (2026-07-09)
+
+User: "brief test of reshuffle-avg search as PLAY (perf+quality), but keep focus on the MODEL — I don't believe
+we've hit its limits; maybe use the reshuffle-avg search as the TARGET if not the training method." Both done.
+
+**(A) Reshuffle-avg search as a PLAY policy — INERT or self-defeating (brief test).** Added `MTG_HONEST_PLAY`
+(gates `g_honest_teacher` around the real search; inert by default, VERIFIED byte-identical). d5, held-out
+2002/3003, heuristic-leaf: **dLP = +0.000 on antilife/slivers/TH, at 0.97-1.33× wall-clock.** Zero quality change,
+pure overhead. Mechanism: `FullSearchLine` commits VERIFIED in-horizon wins (real simulation of the true library);
+the tail decouple only perturbs the greedy ESTIMATE beyond the horizon, which never flips a committed line. A
+*true* non-clairvoyant play policy would have to decouple the IN-HORIZON branching — which removes win
+VERIFICATION, the search's entire strength on these verify-driven decks. So reshuffle-avg search as PLAY is either
+inert (cheap tail decouple) or self-defeating (full decouple kills verification). Confirms non-clairvoyant play is
+~search-verification-bounded here; NOT a viable play mode. Kept the gate as an instrument.
+
+**(B) Model push with honest labels as the target — capacity helps ONLY the capacity-limited deck, marginally.**
+The honest teacher gives a BETTER (de-clairvoyed, non-clairvoyant) target than rollout/bootstrap — antilife label
+discrimination: honest 9.1% dead / spread 1.16 vs bootstrap 18.4% / 0.95 (richer gradient). Tested whether more
+model CAPACITY finally exploits it (the prior "GBDT hurts Vial" was vs NOISIER rollout labels):
+- **antilife (clairvoyance-limited, feature table-ceiling 0.658): capacity HURTS.** GBDT-honest 5.866/5.879 (fresh)
+  vs linear-honest 5.840 vs bootstrap **5.807**. The extra honest-label spread is variance the trees overfit, not
+  play signal — the EVPI wall (residual is hidden library order the features can't see).
+- **slivers (capacity-limited, table-ceiling 0.978): GBDT-honest is the NEW BEST.** LP **4.3738** (fresh
+  4004/9009/5050/6060, 800g) edges bootstrap 4.3762 and anchor 4.3838 (−0.010 vs anchor). Real but tiny (+0.0024
+  over bootstrap). NB slivers honest labels have LOWER spread (0.731 vs rollout 0.982) — the de-clairvoyed
+  continuation compresses first-move gaps — so there's little for capacity to grip; the win is at the margin.
+  Saved `logs/eval/slivers_honest_gbdt.eval.json` (candidate best slivers d0).
+
+**Reading (answers "have we hit the model's limits?").** On the tested decks, essentially YES for non-clairvoyant
+d0: every model lever (teacher strength, capacity, form) now lands within ~0.01 of the same per-deck ceiling.
+Capacity + a better teacher squeezes a marginal win ONLY where the deck is capacity-limited (slivers), and HURTS
+where it's clairvoyance-limited (antilife) — exactly what the earlier feature_collision/linear_ceiling diagnostics
+predicted (capacity helps iff table-ceiling is high AND labels beat the anchor). The one place with LARGE
+headroom is COMBO (antilife/TH, model +~1.4 from search), and its bottleneck is FEATURES = the hidden library
+order (clairvoyance), NOT capacity or teacher. So the only remaining model lever with real upside is richer,
+plan-INTERACTING non-clairvoyant features that encode more LEGAL library info (e.g. v9 `plan_dig_yield` = plan
+casts dig × lib land-density, already added but UNTESTED on combo; plan × lib-composition crosses) — the untested
+combo lever. Everything else is at the ceiling.
+
 ### ▶ NEXT STEP (for the next session)
 
 Teacher-strength is EXHAUSTED as a lever (both cheap bootstrap and full honest search hit the same EVPI ceiling
