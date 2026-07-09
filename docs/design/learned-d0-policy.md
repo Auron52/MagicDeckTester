@@ -1292,6 +1292,30 @@ K16→{10,13}, K32→{5}) while win count climbs (28→29→30/31). Shifting los
 structural failure on specific games; reducible with K but expensive (K32 d2 ≈ minutes/deck). Data:
 `logs/eval/{alln,allc}` game logs; per-game table in session notes; traces `logs/eval/tr_*`, `g22{n,c}`.
 
+### ★★★ THE MULLIGAN CONFOUND — benchmark human vs search on IDENTICAL hands (2026-07-09, user caught it)
+
+The whole human-vs-search benchmark was confounded: my runs used the goldfish/search runner, which makes its OWN
+mulligan decision from the profile, while the references' hands came from the human's mulligan. **Only 14/30 antilife
+kept hands actually matched** (and 11 references mulliganed). So every "human vs clairvoyant/NC" number above compared
+DIFFERENT opening hands. FIX: wired `--force-mulligan "<count>:<nums>"` (previously claude-play-only) into
+`GoldFishRunner` (validated: reconstructs the human's exact kept hand byte-for-byte). Re-ran with each reference's
+exact hand forced onto all policies:
+
+| policy | LP, IDENTICAL hands | LP, autonomous (confounded) |
+|---|---|---|
+| clairvoyant d5 | 4.233 | 4.097 |
+| **human** | **4.500** | 4.500 |
+| **NC honest K8 d2** | **4.733** | ~5.0–5.27 |
+| NC q25 / q10 | 5.033 / 4.867 | (looked ~equal) |
+
+**Findings:** (1) The mulligan confound was hiding **~0.3 turns** — forcing identical hands drops NC from ~5.0 to
+**4.733**, so the play gap to human is only **0.23** (not 0.53), and clairvoyance is worth **0.27** (human 4.50 →
+clairvoyant 4.23). (2) The optimism "lever" (q25/q10) was a **confound artifact** — on identical hands the honest
+MEAN is best; optimism is strictly worse. (3) Corollary: the engine's autonomous mulligan differs a lot from the
+human's (it over-mulligans on many keep-7s) — a separate MULLIGAN-quality issue from the PLAY search. **Method rule
+going forward: benchmark the search against references ONLY with `--force-mulligan`, never autonomous mulligan.**
+Data: `logs/eval/forced_bench.log`; driver `/tmp/forced_bench.py` (per-ref exact-hand replay).
+
 ### ★★ A DEEPER TEACHER DOES NOT HELP — depth was never the bottleneck (2026-07-09, user asked to try d5–d8)
 
 Hypothesis (user): the durdle is myopia — a deeper continuation (d5–d8, cost OK for a training-only teacher) would
