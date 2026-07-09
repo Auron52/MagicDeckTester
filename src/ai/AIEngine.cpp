@@ -1174,12 +1174,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
                         m_shared_tt, &budget, &searched_depth);
 
-                    // Oracle: track the EARLIEST win any line predicted this game. The
-                    // realised win is compared against it at game end (OnGameEnd) — NOT
-                    // per recompute, because a pre-combat recompute happens before that
-                    // turn's combat and so can't see a win that arrives via combat, which
-                    // made the old per-recompute flag fire on games that won on time.
-                    if (s_fd_oracle && !m_in_rollout && line.win_turn < m_fd_best_win)
+                    // Oracle: track the EARLIEST win the search actually FOUND this game --
+                    // i.e. a win VERIFIED inside the searched horizon (win_turn within
+                    // turn + searched_depth - 1), the SAME condition that decides to commit
+                    // the whole line (verified_win, below). A beyond-horizon leaf ESTIMATE is
+                    // NOT a win the search found: it is never committed (the line is truncated
+                    // to this turn), so a realised game that comes in later than an optimistic
+                    // estimate is not a commit-the-line divergence -- it is just the leaf
+                    // estimator being optimistic, which the engine correctly declines to trust.
+                    // Gating on the verified horizon makes the oracle flag ONLY genuine
+                    // "committed a verified win, did not realise it" divergences (rollout vs
+                    // real execution), never leaf-estimate optimism (a budget/search-depth
+                    // matter, measured elsewhere). The realised win is compared at game end
+                    // (OnGameEnd) -- NOT per recompute, because a pre-combat recompute happens
+                    // before that turn's combat and so can't see a win that arrives via combat.
+                    const bool fd_verified =
+                        line.win_turn <= state.turn_number + searched_depth - 1;
+                    if (s_fd_oracle && !m_in_rollout && fd_verified
+                        && line.win_turn < m_fd_best_win)
                     {
                         m_fd_best_win  = line.win_turn;
                         m_fd_best_turn = state.turn_number;
