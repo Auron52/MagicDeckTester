@@ -1223,10 +1223,43 @@ Capacity + a better teacher squeezes a marginal win ONLY where the deck is capac
 where it's clairvoyance-limited (antilife) — exactly what the earlier feature_collision/linear_ceiling diagnostics
 predicted (capacity helps iff table-ceiling is high AND labels beat the anchor). The one place with LARGE
 headroom is COMBO (antilife/TH, model +~1.4 from search), and its bottleneck is FEATURES = the hidden library
-order (clairvoyance), NOT capacity or teacher. So the only remaining model lever with real upside is richer,
-plan-INTERACTING non-clairvoyant features that encode more LEGAL library info (e.g. v9 `plan_dig_yield` = plan
-casts dig × lib land-density, already added but UNTESTED on combo; plan × lib-composition crosses) — the untested
-combo lever. Everything else is at the ceiling.
+order (clairvoyance), NOT capacity or teacher.
+
+### ★ Combo feature lever TESTED + CLOSED — it's an INFORMATION limit, not a modeling one (2026-07-09)
+
+User steer: "try richer combo features; ideally EXTRACT them naturally from the searched results rather than
+hand-defining; if impractical, hand-defining beats nothing." Tested the natural-extraction path (which turns out
+to be the practical one) and it does NOT move combo — because the wall is information, not representation.
+
+**Key framing.** "Natural extraction" of plan×library interactions = let a **GBDT auto-discover** them: the
+featurizer already emits BOTH plan features (plan_draw_engine, ...) AND the v6/v7 order-invariant library/hand
+composition counts (lib_land_density_pct, lib_draw_engines, ...) + the v9 hand-defined `plan_dig_yield`. A GBDT
+splits first on a plan feature (varies across a decision's candidates) then on lib_density (varies across
+decisions) → it LEARNS "a dig-plan's value depends on library land-density" without anyone writing the product.
+So hand-defining (v9) is just a baseline; the trees mine the interaction from the search's own rankings.
+
+**Result — auto-interaction HURTS combo; the committed linear stays best (TH d0, held-out 2002/3003/7007, 150g):**
+- committed linear (searched, NO lib feats): **LP 5.540** (best) ; heuristic 5.580.
+- GBDT auto-interaction on searched rows (has lib feats), 3 capacities: 5.591 / 5.593 / 5.596 — all WORSE than
+  heuristic.
+- fresh LINEAR retrained WITH lib feats: 5.573–7.309 — worse, and it assigns **plan_draw_engine a large NEGATIVE
+  weight** (overfits the searched-label correlation "cast dig ⇒ not-won-yet" → learns to AVOID the combo engine).
+
+**Why it can't work (the decisive point).** The combo edge is the library **ORDER** — the search wins by reading
+that the next few cards are a land clump (Land's Edge / Treasure Hunt). The v6/v7 features are order-INVARIANT
+counts: "6 lands in 18" cannot encode "the next 3 are lands." So NO non-clairvoyant feature — composition,
+auto-discovered interaction (GBDT), hand-defined product (v9), pairwise cross, or even a future NN over the same
+inputs — can capture it, because they all read the same order-blind information. This is an INFORMATION-theoretic
+limit (the EVPI/hidden-order wall), not a capacity / feature-engineering / representation limit. A fancier model
+over non-clairvoyant inputs hits the identical wall.
+
+**Conclusion (answers "have we hit the model's limits?"): YES, definitively, for non-clairvoyant d0.** Aggro is at
+the imitation ceiling; combo is at the information ceiling. The committed TH searched-linear is TH's best d0; the
+combo gap to search is irreducibly clairvoyant. Do NOT pursue richer combo features further. The value proposition
+stands where it always was: the model matches/beats the HEURISTIC non-clairvoyantly at d0 speed, and the value
+LEAF delivers search quality via cheap DEPTH — not by out-reading the search at d0.
+
+Everything else is at the ceiling.
 
 ### ▶ NEXT STEP (for the next session)
 
@@ -1240,12 +1273,14 @@ on high-fusion decks; aggro is already at parity). The remaining open directions
    (`g_honest_teacher`); measuring whether a decoupled d3/d5 search as the actual d0-replacement policy beats
    heuristic d1 is the untested "non-clairvoyant see-ahead" question (lever 5 in the older list). Distinct from
    this session (which used the decoupled search only to LABEL a d0 model).
-3. **Combo (TH/hinata) is clairvoyance-bounded at d0** — no non-clairvoyant lever moves it; only searched labels
-   (already best for TH) or accepting the ceiling.
+3. **Combo (TH/hinata) is clairvoyance-bounded at d0 — CLOSED this session** (richer/auto-discovered features
+   tested, don't move it; it's an information limit — see the "Combo feature lever TESTED + CLOSED" entry). No
+   non-clairvoyant d0 lever remains; the value LEAF (cheap depth) is the combo answer, not a smarter d0.
 
-ADOPTION (deferred, when ready): lock in decks/*.eval.json = {knights: knights_d0_gbdt, antilife:
-antilife_d0_qmodel_v2, slivers/burn/TH: their linear d0 anchors}, flip MTG_EVAL_MODEL default on, rebaseline GT
-(incl. burn bottoming table). Kept in logs/eval/ (gitignored) until then.
+The non-clairvoyant d0 model is now fully characterized (at its per-deck ceiling everywhere). The live levers are
+(1) ADOPTION and (2) reshuffle-averaged search as a PLAY mode (the harder, unbuilt in-horizon decouple — the cheap
+tail decouple was measured inert this session). If continuing the MODEL thread, the only remaining upside needs
+NEW INFORMATION (interactive opponent / phase 2), not a better non-clairvoyant d0.
 
 MEMORY NOTE (env): the label DUMPS (EnumerateEarliestWins, uncapped memo `FromVirtualMs(1000000)`, TurnSolver.cpp:5999)
 are memory-heavy on durdle decks x threads; run ONE at a time. WSL2 lags returning freed anon pages (looks like
