@@ -284,7 +284,8 @@ The user's d1-is-beatable point holds for that; the value-leaf-d5 result is the 
 Same depth, same aggregate quality, 1.6–25× less wall-clock (biggest where the greedy play-out is longest =
 grindy decks; smallest on combo, where branching above the leaf dominates). NB: same LP ≠ byte-identical lines
 (the leaf picks different plans), so adoption requires a deliberate GT rebaseline. Driver scripts:
-`/tmp/eval_matrix.py`, `/tmp/speed_matrix.py`; raw in `logs/eval/{matrix,speed}_results.txt`.
+`scripts/value_leaf_matrix.py` (goal-#1 depth table), `scripts/value_leaf_speedup.py` (matched-quality
+speedup); raw output in `logs/eval/{matrix,speed}_results.txt`.
 
 Do NOT: hand-fix provider heuristics (user decision — trust the non-clairvoyant model); retry combo-readiness
 features (durdle trap); use searched labels for a non-clairvoyant d0 policy (they inherit clairvoyant
