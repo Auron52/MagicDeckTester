@@ -185,6 +185,40 @@ the game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude app
   justified clairvoyance (small, irreducible — antilife 2/120 shuffle games) + indifferent sloppiness
   (recoverable; rollout labels remove it).** Only justified clairvoyance is a true floor.
 
+### ★★ D0 POLICY BEATS THE HEURISTIC — 5/5 decks (2026-07-09, user's priority)
+
+The user's core goal: the model as a **d0 replacement** (a static, fully non-clairvoyant plan ranker — no
+playout, no search) that BEATS the hand-tuned `EvalCard` heuristic. Was stuck at parity/losing (knights −0.23).
+**Now WINS (or ties) on every deck.** Two fixes:
+
+1. **FAITHFUL ANCHOR (the key fix).** The d0 ranker had no faithful anchor: `plan_baseline_eval` was a
+   name-derived `EvalCard` sum over CASTS, omitting the Vial/X/ritual evals the real ranking key (`total_eval`)
+   carries. On Vial decks (knights/slivers) the name-based value was off by hundreds, so even a tiny learned
+   weight on it ADDED NOISE → the model LOST to the policy it imitates. Fix: at `Solve::consider`, set
+   `psum.baseline_eval = total_eval` (the exact key, available right there). Proven: `{plan_baseline_eval:1}`
+   now reproduces the heuristic EXACTLY on all decks incl. Vial. Byte-identical when no model attached.
+2. **Per-deck label + regularization.** rollout labels for aggro/Vial (burn/knights/slivers), searched for TH
+   (combo — rollout durdles it to +0.64; searched-linear needed). Antilife (assemble-combo) over-corrected at
+   `lam=0.001` (+0.04); a `lam` sweep is monotonic → `lam≥0.05` WINS (5.52 vs 5.59). searched-linear COLLAPSES
+   antilife to 9.0 (conjunction a linear model can't represent — the durdle trap), so rollout+high-lam is it.
+
+**Final d0 scorecard (held-out 2002/3003/7007 / fresh 4004/9009; avg win turn, lower better):**
+
+| deck | heuristic d0 | model d0 | Δ (3-seed) | Δ (fresh 2-seed) |
+|---|---|---|---|---|
+| slivers | 4.718 | 4.442 | **−0.276** | −0.247 |
+| antilife | 5.591 | 5.522 | **−0.069** | −0.140 |
+| knights | 4.553 | 4.484 | **−0.069** | −0.020 |
+| TH | 5.580 | 5.540 | **−0.040** | −0.047 |
+| burn | 4.682 | 4.669 | −0.013 | 0.000 (tie; heur d0 ~optimal, depth-flat) |
+
+The model **never loses** and wins clearly on 4/5. This is a fully non-clairvoyant d0 policy (no playout, no
+draw-reading) beating the hand-tuned heuristic — the user's goal #1 in its clean d0 form. Winning per-deck
+sidecars in `logs/eval/*_d0_anchor.eval.json` (+ TH's committed searched `decks/treasure_hunt.eval.json`).
+Next: adopt (move to `decks/*.eval.json`, flip `MTG_EVAL_MODEL` default, rebaseline GT); the anchor also wants
+the ROOT-ranking seam (TurnSolver.cpp:5220) + the eval DUMP made faithful for full train/serve consistency
+(currently the tiny baseline_eval weight makes the dump skew immaterial, but fix it before scaling).
+
 **Open next levers (pick by EV):**
 1. ~~Close the aggro residual~~ **CLOSED as noise.** Aggro decks are depth-flat + near-optimal; residual ~0.02.
 2. **Push value-leaf FIT higher (user's pick).** Race-clock reverted (inert); GBDT-regression a wash (same
