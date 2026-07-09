@@ -1261,21 +1261,112 @@ LEAF delivers search quality via cheap DEPTH — not by out-reading the search a
 
 Everything else is at the ceiling.
 
+### ★★ THE NON-CLAIRVOYANT CEILING — measured (reshuffle-averaged search as a play policy) (2026-07-09)
+
+Built the real thing the prior sessions kept deferring: `TurnSolver::ReshuffleAvgChoosePlan` (gate
+`MTG_NC_SEARCH`, `MTG_NC_K`/`MTG_NC_DEPTH`, inert by default). At each real decision it ranks candidate
+plans by their win turn AVERAGED over K reshuffled futures (common random numbers across candidates) with an
+honest depth-D continuation (each ply re-planned against a fresh reshuffle → non-clairvoyant at every level;
+depth 0 = greedy non-clairvoyant rollout). The chosen plan executes against the TRUE library; re-decide each
+turn. As K/depth grow this is the strongest tractable non-clairvoyant policy = the CEILING the user asked to
+measure. Swept (K,depth) vs references, quality (LP, loss=9) AND wall-clock, 100g × seeds 2002/3003.
+Full data: `logs/eval/nc_ceiling_results.txt`; driver `scripts/nc_ceiling.py`.
+
+**The ceiling table (LP; NC ceiling = best cell, ~K8 d2):**
+
+| deck | heur d0 | d0-model | **NC ceiling** | heur d1 (clairv.) | search (d5) | headroom d0→ceiling | EVPI ceiling→search |
+|---|---|---|---|---|---|---|---|
+| slivers | 4.740 | 4.460 | **4.275** | 4.360 | 4.265 | **0.185** | ~0 |
+| knights | 4.515 | 4.435 | **4.325** | 4.325 | 4.315 | **0.110** | ~0 |
+| burn | 4.590 | 4.575 | 4.520 | 4.370 | 4.365 | 0.055 | 0.155 |
+| TH | 5.655 | 5.615 | **4.805** | 4.275 | 4.205 | **0.810** | 0.600 |
+| antilife | 5.625 | 5.515 | **4.865** | 4.135 | 4.075 | **0.650** | 0.790 |
+
+**Findings (this is the money data):**
+1. **The non-clairvoyant ceiling is MEANINGFULLY ABOVE the static d0 model on every deck** (0.055–0.81). So the
+   d0 model is NOT at the non-clairvoyant limit — the earlier "we've hit the model's limit" was true only for
+   the STATIC d0 *function class*. Planning-under-uncertainty is a real, unclaimed lever.
+2. **The static d0 model captures almost NONE of it — because it can't simulate forward.** Even NC **depth-0**
+   (a greedy rollout merely AVERAGED over K futures, the cheapest possible forward sim) crushes the static model:
+   antilife 4.925 vs 5.515, TH 5.055 vs 5.615, slivers 4.445 vs 4.460. The value was never in a better static
+   evaluator (why every capacity/feature/teacher lever plateaued) — it's in DOING the rollout at decision time.
+3. **Two regimes.** (a) **Aggro-Vial (slivers/knights): NC ceiling ≈ the clairvoyant search (EVPI≈0)** — a
+   non-clairvoyant policy loses essentially nothing vs reading real draws; on slivers NC-d1 (4.330) even BEATS
+   the clairvoyant heuristic-d1 (4.360) — averaging over futures > a shallow real-draw peek. (b) **Combo
+   (TH/antilife): NC ceiling far ABOVE the search (EVPI 0.6–0.79 = irreducible clairvoyance) but ALSO far above
+   d0 (headroom 0.65–0.81)** — you can't read the land clump, yet forward-sim-under-uncertainty still recovers a
+   lot. burn is in between (moderate EVPI 0.15; its d1 gain is clairvoyant burn-sequencing).
+4. **Convergence:** NC plateaus by **depth 2** (d3 = d2 or slightly worse from variance); **K8** suffices (K16
+   marginal / noisier on durdle decks). Aggro gets most headroom at depth 0–1; combo needs d1–d2.
+
+**Performance / the speed bar for a learned lookahead (ms/game, 12 threads):**
+
+| deck | d0-model | value-leaf d5 (clairv. search) | **NC ceiling (K8 d2)** | NC d3 |
+|---|---|---|---|---|
+| slivers | 1.3 | 3.3 | 120 | 1436 |
+| knights | 7.8 | 9.2 | 48 | 437 |
+| TH | 17 | 22 | 103 | 892 |
+| antilife | 191 | 147 | 270 | 816 |
+
+The NC search is **6–90× the d0 model** and 5–40× the (clairvoyant) value-leaf search; depth 3 is prohibitive
+(0.4–1.4 s/game). So the ceiling is expensive — exactly the setup for a learned lookahead that "pays
+significantly less," per the user. NB the reference `value-leaf d5` already matches the clairvoyant search
+cheaply (2–22 ms) — but it is CLAIRVOYANT; the non-clairvoyant equivalent is a value leaf inside the NC search.
+
+### Toward a learned lookahead — what amortises the NC search, and what doesn't (2026-07-09)
+
+Two amortisation attempts, guided by the ceiling data (the goal: reach the NC ceiling far cheaper).
+
+**(1) Value LEAF inside the NC search (replace the greedy rollout with the O(1) value model).** Matched (K,depth)
+gives IDENTICAL quality (slivers/TH/antilife K8 d2 unchanged) but only helps COST where rollouts are long:
+antilife K8 d2 270→132 ms (~2×), K8 d1 205→97 ms; slivers/TH unchanged (~0). Diagnosis: the bottleneck is the
+reshuffle-averaged **branching** (K × #plans × depth turns), not the leaf — so the leaf only pays off
+proportionally to rollout length (durdle decks). A modest cost-reducer, not the win.
+
+**(2) Fully-static amortisation (train a d0 model to REPRODUCE the NC ranking) — the crux.** The ceiling data
+already shows why this is hard: even NC **depth-0** (a greedy rollout merely averaged over K) beats the static d0
+model by 0.5–0.6 turns on combo — because the winning quantity is *the expected outcome of playing forward*,
+which is a rollout, not a feature function. A static evaluator (any capacity) cannot represent an expectation
+over trajectories it doesn't run.
+
+Confirmed it end-to-end (the crux experiment): dumped states from NC play itself (ON-POLICY, no covariate
+shift) labelled with the ceiling's own honest reshuffle-avg K8/d2 signal, trained linear + GBDT, A/B'd d0:
+
+| deck | d0-model | best ON-POLICY static (lin/GBDT) | NC ceiling | headroom captured |
+|---|---|---|---|---|
+| slivers | 4.460 | 4.440 | 4.275 | **~11%** |
+| antilife | 5.515 | 5.495 | 4.865 | **~3%** |
+
+Even trained on-policy on the ceiling's exact labels, the static model plateaus at ~d0 (captures 3–11% of the
+headroom). Rows `logs/eval/{slivers,antilife}_ncpolicy.rows`; sidecars `*_ncpolicy_{lin,gbdt}.eval.json`.
+
+**Verdict on "can a more complex model reach the non-clairvoyant ceiling?"** A more complex *static evaluator*: NO
+(proven three ways now — feature/capacity/teacher plateau, and now on-policy imitation of the ceiling itself). To
+reach the ceiling you must SIMULATE FORWARD at decision time. The options and their standing:
+- **Run the NC search directly** — reaches the ceiling; costs 48–270 ms/game (6–90× d0). Fine for the project's
+  OFFLINE deck-comparison purpose (≈ minutes per deck at 1000 games); not a cheap real-time policy.
+- **Value leaf inside NC** — same quality, ~2× cheaper only on long-rollout (durdle) decks; branching still dominates.
+- **A model that learns forward DYNAMICS** (recurrent / latent-rollout / MuZero-style, amortising the branching, not
+  just the leaf) — the ONLY path to a cheap ceiling-quality non-clairvoyant policy, and a large speculative build.
+  Its payoff hinges on whether latent dynamics are learnable from these features (the same information the static
+  eval has), which the static-imitation failure makes uncertain. This is the honest "learned lookahead" frontier.
+
 ### ▶ NEXT STEP (for the next session)
 
-Teacher-strength is EXHAUSTED as a lever (both cheap bootstrap and full honest search hit the same EVPI ceiling
-on high-fusion decks; aggro is already at parity). The remaining open directions, by EV:
+The whole non-clairvoyant landscape is now MAPPED: the d0 STATIC model is at its ceiling (teacher/capacity/feature/
+on-policy-imitation all plateau), and the non-clairvoyant POLICY ceiling (reshuffle-averaged search) sits 0.06–0.81
+above it — reachable only by simulating forward at play time (no static shortcut). Open directions, by EV:
 1. **ADOPTION** (top lever, needs user sign-off). Lock in `decks/*.eval.json` = {knights: knights_d0_gbdt,
-   antilife: antilife_d0_qmodel_v2, slivers: slivers_vial_qmodel (the bootstrap, +0.008 over anchor), burn/TH:
-   their linear d0 anchors}, flip `MTG_EVAL_MODEL` default on-when-present, rebaseline smoke/regression GT (incl.
-   burn bottoming table). Deliberate GT change → user decides.
-2. **Reshuffle-averaged SEARCH as a PLAY mode** (not a label generator) — the honest machinery now exists
-   (`g_honest_teacher`); measuring whether a decoupled d3/d5 search as the actual d0-replacement policy beats
-   heuristic d1 is the untested "non-clairvoyant see-ahead" question (lever 5 in the older list). Distinct from
-   this session (which used the decoupled search only to LABEL a d0 model).
-3. **Combo (TH/hinata) is clairvoyance-bounded at d0 — CLOSED this session** (richer/auto-discovered features
-   tested, don't move it; it's an information limit — see the "Combo feature lever TESTED + CLOSED" entry). No
-   non-clairvoyant d0 lever remains; the value LEAF (cheap depth) is the combo answer, not a smarter d0.
+   antilife: antilife_d0_qmodel_v2, slivers: slivers_vial_qmodel (or slivers_honest_gbdt), burn/TH: linear
+   anchors}, flip `MTG_EVAL_MODEL` default on-when-present, rebaseline smoke/regression GT. Deliberate GT change.
+2. **Adopt the NC search as an OFFLINE analysis policy** — it reaches the non-clairvoyant ceiling and is affordable
+   for the project's deck-comparison purpose (48–270 ms/game). Would need a `decks/*` opt-in + accepting the cost.
+   No new build; `MTG_NC_SEARCH` exists. This is the concrete way to actually PLAY closer to the ceiling today.
+3. **Learned forward-dynamics model (MuZero-style)** — the only path to a CHEAP ceiling-quality policy; large
+   speculative build; payoff uncertain (static imitation of the ceiling failed, so latent dynamics may be equally
+   information-limited). The honest "learned lookahead" frontier the user asked about.
+4. **Combo is clairvoyance-bounded** (information limit, CLOSED); the value LEAF (cheap clairvoyant depth) is its
+   answer, not a smarter non-clairvoyant model.
 
 The non-clairvoyant d0 model is now fully characterized (at its per-deck ceiling everywhere). The live levers are
 (1) ADOPTION and (2) reshuffle-averaged search as a PLAY mode (the harder, unbuilt in-horizon decouple — the cheap
