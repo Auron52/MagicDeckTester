@@ -159,17 +159,125 @@ DEPTH and measure the quality gain on budget-starved decks** (the doc's own §5f
 - Why this over more d0 features: on converged decks the value-leaf only *ties* the rollout (leaf inert);
   the win is on positions the search can't resolve in budget, which is exactly what cheaper leaves unlock.
 
-**Alternative (bigger gap, but blocked first): antilife d0.** Prerequisite = **pin the eval-row dump
-methodology** — my fresh antilife rows give 10–28% while the doc's saved `/tmp/antilife_rank.eval.json`
-serves ~29–30% and the doc reported 54.8% (GBDT); serving is fine, so it's the dump recipe (diff exact
-seed/K/games/budget/depth vs whatever produced the doc's `logs/eval/antilife_v3.rows`). Only after that is
-antilife d0 tunable. NB combo-readiness features BACKFIRE here (they teach a non-clairvoyant d0 to wait for
-the combo → durdle) — don't retry that; the antilife signal must reward proactive play, not combo-waiting.
+**Antilife d0 — dump methodology PINNED (2026-07-09), now tunable (~48–55% vs baseline ~88%).** The
+blocker is resolved: the lever was the dump's **play depth**, not seed/K/budget (dump from `--depth 3`
+play so the rows contain combo-payoff states; train **GBDT** trees=200/depth=5 — linear collapses to 0%).
+Full recipe + artifacts in the session-log entry below. Remaining antilife work is **step 2 (capacity/
+features to close the ~33pt gap to baseline)**, NOT methodology. NB combo-readiness features BACKFIRE here
+(they teach a non-clairvoyant d0 to wait for the combo → durdle) — don't retry that; the gain came from
+better training-state coverage + GBDT capacity, not from telling the model about the combo.
 
 **Loose ends:** hinata value sidecar still pending its (slow) dump — re-dump at budget ~400 and commit
 `decks/Hinata2.value.json` to complete the set. Value-model ADOPTION (flip `MTG_VALUE_MODEL` default on +
 rebaseline GT to the faster search) is a deliberate decision, not yet made. Pre-existing TH smoke GT
 staleness still needs a deliberate rebaseline (unrelated to this work).
+
+### Budget-starvation depth-reinvestment A/B on TH's Land's-Edge line — DONE (2026-07-09)
+
+Ran the doc's flagged "reinvest the value-model speedup into DEPTH" test on TH. **The lever is DEPTH,
+not budget** — a budget sweep at d5 (below) shows baseline is already converged at *budget 10*, so the
+doc's "starved at ~b200, recovers at ~b2000" framing is a depth phenomenon (short horizon can't see the
+multi-discard Land's-Edge kill), not a budget one. Everything below is threads=1 for clean wall-clock;
+seeds 2002/3003 are held-out (training used 20000).
+
+**1. Budget is not the lever at d5** (100g, s2002): baseline exact-rollout is flat 98–99/4.08–4.10 across
+budget 10→2000, just linearly slower (4.5s→35.6s); the value-leaf ties it (99/4.10) flat at ~3s. So at
+adequate depth the value-leaf is the doc's known ~5–11× speed win, and budget buys nothing.
+
+**2. Depth IS the lever** (100g, s2002, budget 200). Baseline needs d3+ (13–16s) to reach converged
+99/4.101; the value-leaf reaches it at d5 in 3.3s — so *at equal wall-clock the baseline is stuck shallow*:
+
+| depth | baseline won/avg/wall | value-leaf won/avg/wall |
+|---|---|---|
+| 1 | 98/4.153/2.4s | 94/5.106/1.7s |
+| 2 | 98/4.092/4.9s | 96/4.344/1.9s |
+| 3 | 99/4.101/13.1s | 98/4.153/2.2s |
+| 5 | 99/4.101/16.2s | 99/4.101/3.3s |
+
+**3. Equal-wall-clock A/B** (500g, budget 200, loss-penalized avg, losses=9):
+
+| seed | baseline d1 (~5s) | baseline d2 (~16s) | value-leaf d5 |
+|---|---|---|---|
+| 2002 | 488/500 LP 4.268 | 491/500 LP 4.202 | **492/500 LP 4.182** @ 12.1s |
+| 3003 | 484/500 LP 4.290 | 487/500 LP 4.242 | 486/500 LP 4.254 @ 16.2s |
+
+At value-d5's wall-clock the baseline sits at ~d1–d2. **s2002: value-d5 wins** (LP 4.182 < baseline-d2's
+4.202, and cheaper). **s3003: ~wash/slight-loss** (value-d5 LP 4.254 ≈ baseline-d2 4.242 at ~equal 16s —
+the value-leaf's wall-clock is seed-variable, 12s vs 16s). The aggregate delta is small because TH already
+wins ~97–98% at d1.
+
+**4. Per-game, the gain is directional, not noise** (s2002 500g, baseline-d1 vs value-d5): of 33 games that
+differ, value-d5 wins 32 — **+4 net wins (5 loss→win, 1 win→loss) and 27 faster kills, baseline faster in
+0**. The Land's-Edge line concretely benefits from horizon: deeper search finds the multi-discard kill
+earlier / at all. So "reinvest into depth" is a *real* concentrated improvement on the starved subset, just
+swamped in the aggregate by TH's already-high shallow win rate.
+
+**5. Clairvoyance adjudication — the prescribed instrument is STRUCTURALLY INAPPLICABLE to TH, resolved a
+different way.** `MTG_SHUFFLE_SALT_SEARCH` (and even mid-game `MTG_SHUFFLE_SALT`) are **byte-inert** on TH
+(0 win-turn diff across salts 1/2/3/7); only `MTG_SHUFFLE_SALT_OPENING` moves games (164/120-dump). Cause:
+**TH has zero mid-game shuffle events** — its library is fixed by the opening shuffle and fully known
+thereafter (Treasure Hunt / Land's Edge read/discard, never `Shuffle()`). The decouple instrument only
+perturbs reshuffle *realizations*, so it can't perturb TH's static known draw order. (Note: burn d3/budget200
+was also inert in this run — the reshuffle-decouple family only bites decks with mid-game shuffles like the
+hinata always-shuffle line; that deck's `.txt` isn't present in this checkout.) **Adjudicated instead by
+showing the value-leaf adds no clairvoyance of its own:** value-d5 vs baseline-d5 differ in only **2/500**
+games (gi168 win→loss, gi176 7→6 — net 0), i.e. the value-leaf faithfully reproduces the engine's
+*already-accepted* d5 policy (the one the regression GT runs at d5), ~5× cheaper. The d5-over-d1 advantage
+is therefore the engine's ordinary lookahead-into-known-library, a pre-existing accepted property — NOT new
+clairvoyance introduced by the reinvestment.
+
+**Verdict.** The value-model speedup converts cleanly into reaching converged (d5) quality at ~5× lower
+wall-clock, and on the Land's-Edge subset that shows up as +4 wins / 27 faster kills vs an equal-wall-clock
+shallow baseline. But on TH it is **"reach the existing ceiling cheaper," not a NEW ceiling** — TH converges
+by d3–d5 regardless, so the aggregate equal-wall-clock gain is modest and seed-variable (clear on s2002,
+wash on s3003). The reinvestment thesis is *validated in mechanism* but TH is a weak showcase because it's
+nearly converged even shallow. **Next, to actually demonstrate a headroom win, this test wants a deck whose
+search does NOT converge by d5 within the suite budget** (a genuinely budget-starved / deep-combo deck) —
+there the cheaper leaf should unlock depth the baseline can't afford at all. TH proved the plumbing + no
+clairvoyance regression; it did not (because it can't) prove a large quality ceiling gain.
+
+### Antilife d0 dump methodology — PINNED, and the doc's diagnosis was wrong (2026-07-09)
+
+Executed the d0-plan step 1 ("pin the antilife dump methodology"). **Root cause found, and it is NOT
+seed/K/budget as the doc claimed — it's the dump's PLAY DEPTH.** Isolation experiment (all A/B at d0,
+held-out seed 2002, 300g; baseline = hand-tuned 88.7%):
+
+1. **The rows were never the mystery.** Retraining *linear-rank* from the saved `logs/eval/antilife_v3.rows`
+   reproduces the doc's ~30.8% (got 34.0%); the doc's saved `/tmp/antilife_rank.eval.json` serves 29.3% as
+   claimed. So the LINEAR result is fully reproducible from committed rows.
+2. **The 53% model still exists** (`/tmp/antilife_gbdt.eval.json`, serves **53.0%**) — but it can NOT be
+   reproduced from `antilife_v3.rows`: GBDT trees=150/depth=5 on those rows caps at ~34.7% even matching its
+   leaf count (3865 vs its 4161). Same v3 featurizer (splits on `plan_face_damage`, no `plan_baseline_eval`),
+   so it trained on a *different, better* v3-featurizer dump that was never saved.
+3. **The lever is the play depth of the DUMP.** The label search (`EnumerateEarliestWins`) always runs at
+   full depth + unlimited budget (`FromVirtualMs(1000000)`), so `--budget-ms`/`--depth` in the dump command
+   affect ONLY *which states get visited*, not label quality. A **d0-played** dump durdles (antilife d0 ≈
+   the problem itself) → its rows lack combo-assembled payoff positions → GBDT learns 29%. A **d3-played**
+   dump reaches the winning combo states → informative rows that teach "cast the piece."
+
+**Pinned + reproducible recipe (beats the doc's lost 53% model):**
+```
+# DUMP from d3 play (reaches combo-payoff states); label search is full-depth regardless of budget:
+MTG_DUMP_EVAL_ROWS=logs/eval/antilife_d3play.rows MTG_EVAL_ROWS_K=8 \
+  build/Release/mtg decks/Anti-Lifegain.cod --games 400 --seed 20000 --depth 3 --budget-ms 400 \
+  --max-turns 8 --threads 12
+# TRAIN GBDT (linear COLLAPSES to 0% on these rows — combo conjunction needs nonlinearity):
+scripts/train_eval_gbdt.py --rows logs/eval/antilife_d3play.rows --trees 200 --depth 5 --min-leaf 20 \
+  --out <model>.eval.json
+```
+Result (d0, `logs/eval/antilife_pinned_gbdt.eval.json`, trained on ~10k d3-play rows): **s2002 55.3%,
+s3003 48.0%** — reproduces AND exceeds the doc's 54.8%. **Deterministic** (t1==t4, fixed-point GBDT).
+Hyperparam notes: trees 200 > 150 > 120 (default underfits); **depth 5 is the sweet spot — depth 6 overfits
+to 24%**; min-leaf 20 > 15; the *linear* ranker collapses to 0% on d3-play rows (only GBDT represents the
+combo). Artifacts persisted in `logs/eval/` (`antilife_d3play_pinned.rows`, `antilife_pinned_gbdt.eval.json`).
+Dump caveat: the full-depth label search has a **pathological heavy-tail game** at 400g (one combo state's
+unlimited-budget search churns for minutes) — ~10k rows from the first ~380 games is plenty; kill the tail.
+
+**Status: antilife d0 is UNBLOCKED and tunable.** It sits at ~48–55% vs the hand-tuned baseline's ~88% —
+that residual is d0-plan **step 2** (capacity/features to close the gap), NOT a methodology blocker anymore.
+NB the doc's standing warning still holds: combo-*readiness* features backfire on non-clairvoyant d0 (teach
+it to wait/durdle); the win here came from better *training-state coverage* (d3-play rows) + GBDT capacity,
+not from telling the model about the combo.
 
 ---
 
