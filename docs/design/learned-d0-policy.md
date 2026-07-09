@@ -753,6 +753,45 @@ to clairvoyance — especially the shuffle decks (antilife/hinata) where the use
 goal #4 (bound real-search depth by the value model's predicted win turn) to make the deep search itself
 cheaper. Deprioritized: pushing the d0 ranker further (structurally capped below a 1-ply search).
 
+### Reading games — clairvoyance taxonomy (2026-07-09, with the user)
+
+Per the user's methodology (close gaps, THEN read individual games instead of hand-waving), read divergent
+games (non-clairvoyant d0 vs clairvoyant d5-search). Seed hygiene verified: trained on seed 20000, all A/B
+on held-out 2002/3003/7007; the antilife value-leaf-d5-beats-d1 result replicates on fresh seed 7007
+(4.033 vs 4.073).
+
+**Three distinct gap sources emerged — only one is irreducible:**
+
+1. **Learnable play quality (recoverable).** *Burn game 18/29, identical draws (no shuffle):* d5 wins T5,
+   the d0 ranker wins T8 — purely because the ranker dribbles one spell/turn while the search holds Shard
+   Volley and assembles a burst. Zero clairvoyance (same draws). The **pure d0 ranker is myopic** (can't see
+   a play's multi-turn cost); the **value-leaf search plays these lines correctly** (why value-leaf d5 ≈
+   search while the ranker sits at 4.66). Fully recoverable.
+2. **Justified clairvoyance (irreducible).** *Antilife game 18:* the search plays Forest T2 (declines to
+   crack Marsh Flats) to PRESERVE a library top it can see holds Plague Drone + Invigorate → wins T4; the
+   blind d0 fetches, reshuffles the combo away, loses. A non-clairvoyant policy structurally can't make this
+   call. This is the shuffle-clairvoyance channel the decouple instrument measures — small (2/120 antilife
+   games at d3). The true non-clairvoyant floor.
+3. **Indifferent sloppiness (recoverable — and the reason rollout labels win).** *Antilife game 18:* the
+   search casts Aria of Flame T2 with no enabler, GIFTING the opponent 10 life (verified: `opponentLife
+   20→30`; Aria has `etb_opponent_lifegain:10`, flipped only by a `lifegain_to_loss` enabler). The play is
+   genuinely BAD — clairvoyance just tells the engine it won't be punished (it wins T4 regardless), so the
+   SEARCHED label never flags it. This is the mechanism behind insane search lines: **clairvoyance doesn't
+   only reward clever plays, it erases the cost of careless ones, and searched labels inherit the missing
+   penalty.** A **non-clairvoyant ROLLOUT label re-introduces the penalty** (a blind greedy playout after
+   gifting 10 often does NOT win T4) → the model plays saner at zero win-rate cost (the play was
+   outcome-neutral). This is *why* rollout labels fixed antilife d0.
+
+**Consequence for the target:** the irreducible non-clairvoyant gap is ONLY the *justified* clairvoyance
+(category 2, small). Categories 1 and 3 are recoverable, so the achievable floor is well below the raw
+d0-vs-search gap. Method for future game-reads: sort each divergence into learnable / justified / indifferent;
+NB fetchland decks confound per-game comparison (different plays → different shuffles → different draws), so
+read no-shuffle decks (burn/knights/TH) for clean play-quality attribution and use the decouple instrument
+for the shuffle channel. Decision (user): do NOT hand-fix the eager pre-enabler Aria cast or similar
+provider heuristics — the non-clairvoyant (rollout-labeled) model should iron these out on its own, because
+a bad-but-unpunished play doesn't advance the win so the model has no reason to keep it. Trust the model,
+not hand-tuning.
+
 ## The permanent regression gate
 
 At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regression digests are
