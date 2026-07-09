@@ -202,10 +202,25 @@ the game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude app
 5. **Hinata: DEFERRED** — no value sidecar (searched-value dump is pathologically slow) and no mulligan
    profile yet (other machine grinding it, slow). Revisit once its profile lands.
 
-**Reframe for use #1 ("beat d1-search / see ahead"):** the value LEAF cannot do this on combo decks — the win
-turn genuinely depends on hidden library order (clairvoyance), so a non-clairvoyant leaf can't make d1 match d5
-there. It CAN on depth-flat decks (aggro), where d1≈d5 already. The honest deliverable is uses #2/#3/#4
-(grounded 5.5× speedup at parity); use #1 is bounded by irreducible clairvoyance on combo decks.
+**Reframe for use #1 ("beat d1-search / see ahead") — STRUCTURALLY BOUNDED (measured 2026-07-09).** No
+non-clairvoyant **d0** policy beats **d1-heuristic-search**, on any deck:
+
+| deck | heuristic d1 | value-leaf d0 | Δ(v0−h1) |
+|---|---|---|---|
+| burn | 4.353 | 4.793 | +0.44 |
+| knights | 4.327 | 4.520 | +0.19 |
+| slivers | 4.340 | 4.733 | +0.39 |
+| TH | 4.220 | 5.500 | +1.28 |
+
+The eval-ranker d0 is the same story (rollout-lin d0 ≈ baseline d0 ≈ 4.7 on burn, vs heuristic d1 4.35). The
+reason is structural, not a training/feature deficiency: **d1 = 1 ply of real lookahead + a full greedy playout
+at the leaf; d0 = a static evaluation of the current position.** One ply of branching plus a playout beats any
+static scalar. Even "d0 + 1-ply value" (= value-leaf d1) trails d1-heuristic (burn 4.45 vs 4.35; TH 5.33 vs
+4.22), because the value scalar is a weaker leaf than an actual playout. So goal #1 as literally stated ("a d0
+model that beats d1-search") is not reachable; the model's realised value is as a **search LEAF** — deep-search
+quality at O(1) leaf cost (grounded 5.5× at parity). On combo decks there is an additional irreducible
+clairvoyance floor (the win turn depends on hidden library order a non-clairvoyant leaf can't see). The honest,
+delivered use set is #2/#3/#4 (fast eval / fast rollouts / cheaper deep search); #1 is bounded.
 
 Do NOT: hand-fix provider heuristics (user decision — trust the non-clairvoyant model); retry combo-readiness
 features (durdle trap); use searched labels for a non-clairvoyant d0 policy (they inherit clairvoyant
