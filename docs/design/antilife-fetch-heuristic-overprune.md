@@ -162,16 +162,32 @@ game; drive it over all slowdowns. To rebuild the "old" (pre-drift) binary:
 /tmp/wt_base/build` (binary lands at `/tmp/wt_base/build/mtg`, not
 `build/Release/`).
 
-## Overnight rebaseline: gated on this
+## Overnight rebaseline: DONE (2026-07-09, commit 30e5c76)
 
-The overnight audit otherwise passed: net **+76** searched (355 improve / 279
-regress), **8 new wins vs 3 win→loss** (all 3 Hinata, budget/depth-recoverable),
-`nonconv=0`. The drift traces to two intentional, regression-validated commits —
-**f197730** (`credit mana-dork ramp in rollout eval`, deck-agnostic → Hinata) and
-**0a1172d** (this fetch heuristic → antilife). Once the 5 fetch over-prune games
-are fixed and re-verified, re-run `bash test/regression.sh --overnight` and
-`--accept` (acknowledge the 3 Hinata win→loss as budget/depth-edge). Do NOT
-`--accept` the overnight while these 5 non-recoverable regressions stand.
+The fix is committed (**b387eed**) and the overnight GT is rebaselined (**30e5c76**,
+seeds 4004-7007). Full audit passed every gate:
+
+- **Searched win→loss = 3**, all Hinata **horizon-edge T8 wins** (gi258 d3+d5
+  s6006, gi176 d5 s4004) — recover to T8 at 16× budget / at d5, and legacy
+  per-turn search ALSO loses at case budget ⇒ not commit-the-line. These are the
+  **f197730** dork-ramp drift, not this fetch fix (Hinata never touches the
+  antilife provider). Acknowledged in the GT provenance header.
+- **nonconv = 0** across all changed searched jobs.
+- **fd-diverge**: off-by-one (minor) + 2 severe (delta=2, Hinata) that are
+  **pre-existing** — byte-identical on the pre-drift baseline binary, so not
+  introduced by any of the bundled changes.
+- **Searched turn-later (211)** all benign: antilife (191) fetch-shuffle variance
+  (a fetch-target change reorders the no-shuffle library ⇒ draw-divergent by
+  construction; verified 0 win→loss on all 4 seeds); hinata (18) budget churn
+  (3/3 sampled recover at 16×); th (2) minor.
+- **Net-positive every changed deck**: antilife +233 faster / +1 win, th (Land's
+  Edge c8c4a53) +26 / +2, hinata (dork-ramp f197730) +42 / +2. burn/knights/
+  slivers byte-identical (unchanged).
+
+GOTCHA for future sweeps: `[win]` (MTG_DUMP_WINS) is on **stderr** — dump pipes
+must use `2>&1`, not `2>/dev/null` (the latter silently yields empty files).
+Run antilife d5 sweeps **sequentially** (one `--games N` process); many concurrent
+d5 processes OOM the 32 GB WSL cap.
 
 ## Perf caveat discovered here
 
