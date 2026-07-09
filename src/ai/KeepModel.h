@@ -395,6 +395,13 @@ enum class MidGameFeature : int
     LibDamageSources,     // remaining cards that deal damage (params.damage / landfall_damage > 0)
     LibDrawEngines,       // remaining card-advantage/dig engines (draw>0 / stages / cascade / DrawUntilNonland)
     LibLandDensityPct,    // 100 * lands / library_size  = P(next draw is a land); 0 if empty
+    // --- appended (v7): HAND composition. Same idea as v6 but for the most IMMEDIATE driver of a shallow
+    //     decision -- what we can act on THIS turn. Own hand is fully public => non-clairvoyant. Extends the
+    //     rollout-under-uncertainty inputs to the board-driven decks (aggro win = threats in hand, not library).
+    HandCreatures,        // creatures in our hand
+    HandDamageSources,    // damage/removal spells in our hand (params.damage / landfall_damage / death_trigger)
+    HandDrawEngines,      // card-advantage/dig spells in our hand
+    HandCastableNow,      // nonland hand cards with MV <= untapped mana sources (playable this turn)
     Count                 // sentinel: number of features
 };
 
@@ -441,6 +448,10 @@ inline const char* MidGameFeatureName(MidGameFeature f)
         case MidGameFeature::LibDamageSources:    return "lib_damage_sources";
         case MidGameFeature::LibDrawEngines:      return "lib_draw_engines";
         case MidGameFeature::LibLandDensityPct:   return "lib_land_density_pct";
+        case MidGameFeature::HandCreatures:       return "hand_creatures";
+        case MidGameFeature::HandDamageSources:   return "hand_damage_sources";
+        case MidGameFeature::HandDrawEngines:     return "hand_draw_engines";
+        case MidGameFeature::HandCastableNow:     return "hand_castable_now";
         default:                                  return "?";
     }
 }

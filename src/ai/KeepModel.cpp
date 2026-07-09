@@ -392,8 +392,26 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
 
     // Lands in our OWN hand (public to us -> non-clairvoyant). Land's Edge discards these for burn and
     // Treasure Hunt refills them, so hand land-count is a load-bearing signal this model was blind to.
-    int lands_in_hand = 0;
-    for (const Card& c : ap.hand) { if (c.IsLand()) { ++lands_in_hand; } }
+    // v7 also categorises the rest of the hand (the most immediate driver of a shallow decision). MVs of
+    // nonland cards are collected for HandCastableNow, computed once untapped sources are known below.
+    int lands_in_hand = 0, hand_creatures = 0, hand_damage = 0, hand_draw = 0;
+    std::vector<int> hand_nonland_mv;
+    for (const Card& c : ap.hand)
+    {
+        if (c.IsLand()) { ++lands_in_hand; continue; }
+        if (c.IsCreature()) { ++hand_creatures; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        hand_nonland_mv.push_back(d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue());
+        if (d)
+        {
+            if (d->params.damage > 0 || d->params.landfall_damage > 0 || d->params.death_trigger_damage > 0)
+            { ++hand_damage; }
+            if (d->params.draw > 0 || d->params.stages_cards || d->params.cascade_max_mv > 0
+                || d->params.retrace || d->params.expressive_iteration
+                || d->tmpl == CardTemplate::DrawUntilNonland)
+            { ++hand_draw; }
+        }
+    }
 
     int our_creatures = 0, our_power = 0, our_ready = 0, our_lands = 0, untapped_sources = 0;
     int src[kNumColors] = {0};
@@ -493,6 +511,14 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     set(MidGameFeature::LibDamageSources,  lib_damage);
     set(MidGameFeature::LibDrawEngines,    lib_draw);
     set(MidGameFeature::LibLandDensityPct, lib_size > 0 ? (100 * lib_lands) / lib_size : 0);
+
+    // v7 hand composition (own hand = public). HandCastableNow: nonland cards whose MV fits untapped mana.
+    int hand_castable = 0;
+    for (int mv : hand_nonland_mv) { if (mv <= untapped_sources) { ++hand_castable; } }
+    set(MidGameFeature::HandCreatures,     hand_creatures);
+    set(MidGameFeature::HandDamageSources, hand_damage);
+    set(MidGameFeature::HandDrawEngines,   hand_draw);
+    set(MidGameFeature::HandCastableNow,   hand_castable);
     return f;
 }
 

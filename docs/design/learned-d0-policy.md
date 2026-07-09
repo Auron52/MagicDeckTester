@@ -308,11 +308,18 @@ lib_draw_engines, lib_land_density_pct` (KeepModel v6). This is the human's "8 b
 - **burn / slivers (board-driven aggro):** inert (RMSE −0.009; d1 unchanged/slightly worse). The outcome is
   driven by the visible board + hand, not the uncertain library, so composition adds no signal.
 
-**Reading:** the distributional inputs are the RIGHT foundation for a non-clairvoyant policy (they add signal
-precisely where "rollout under uncertainty" matters), and they compose with lever 5 (reshuffle-averaged search).
-Features are append-only + byte-identical when the model is off (featurizer only runs under the model gates).
-Still below clairvoyant heur-d1 at d1 (heur's leaf reads real draws); closing that needs the non-clairvoyant
-search or more inputs (a hand-composition variant is the obvious next feature). Rows: `logs/eval/*_v6dist.rows`.
+**v7 HAND composition (follow-up):** same idea for the OWN hand (public) — the most immediate driver of a
+shallow decision: `hand_creatures, hand_damage_sources, hand_draw_engines, hand_castable_now`. On TH (3-way on
+identical rows): board-only d1 5.084 → +lib 4.944 → **+hand 4.816** (cumulative −0.27, gap to heur-d1 4.242 down
+from +0.84 to +0.57). Inert on board-driven aggro *play* (burn/slivers d1 unchanged — their easy picks don't
+flip) but the hand feats get real weight there (`hand_damage_sources` +338 on burn) = they improve the FIT.
+All wash out at d3+ (branching dominates the leaf).
+
+**Reading:** the distributional inputs (lib + hand) are the RIGHT foundation for a non-clairvoyant policy (they
+add signal precisely where "rollout under uncertainty" matters — shallow depth, uncertainty-driven decks), and
+they compose with lever 5 (reshuffle-averaged search). Append-only + byte-identical when the model is off
+(featurizer runs only under the model gates). Still below CLAIRVOYANT heur-d1 at d1 (heur's leaf reads real
+draws); closing that fully needs the non-clairvoyant search. Rows: `logs/eval/*_v6dist.rows`, `*_v7.rows`.
 
 Do NOT: hand-fix provider heuristics (user decision — trust the non-clairvoyant model); retry combo-readiness
 features (durdle trap); use searched labels for a non-clairvoyant d0 policy (they inherit clairvoyant
