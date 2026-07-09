@@ -1292,6 +1292,32 @@ K16→{10,13}, K32→{5}) while win count climbs (28→29→30/31). Shifting los
 structural failure on specific games; reducible with K but expensive (K32 d2 ≈ minutes/deck). Data:
 `logs/eval/{alln,allc}` game logs; per-game table in session notes; traces `logs/eval/tr_*`, `g22{n,c}`.
 
+### ★★ A DEEPER TEACHER DOES NOT HELP — depth was never the bottleneck (2026-07-09, user asked to try d5–d8)
+
+Hypothesis (user): the durdle is myopia — a deeper continuation (d5–d8, cost OK for a training-only teacher) would
+see the faster kill and deploy the combo on curve. **Tested and REFUTED.** Matched on the same 26 antilife games at
+the same K8:
+
+| policy | won | LP | Tainted-Remedy deploy turn |
+|---|---|---|---|
+| clairvoyant | 26/26 | 4.077 | 2.96 |
+| human | — | 4.500 | — |
+| NC **d3** K8 | 23/26 | 5.385 | **3.41** |
+| NC **d5** K8 | 22/26 | 5.462 | **3.41** |
+
+d3→d5 is **byte-identical on Remedy-deploy (3.41)** and 25/26 games identical win-turn (1 *worse*). Deeper is, if
+anything, slightly worse (a stronger continuation *rescues* the durdle line in the averaged futures, flattening the
+tempo signal further). **Control that explains it: the CLAIRVOYANT search is depth-SATURATED at d2** — antilife
+clairvoyant LP is byte-identical 4.0968 at d2 = d3 = d5. The deck's kill is within a 2-ply horizon, so lookahead
+depth was never the binding constraint for *anyone*; the entire NC shortfall is the **averaging objective**
+(`max_π E_f[win_turn]` rewards robustness / washes out tempo) + finite-K variance, neither of which more depth
+touches. Deep rollout is also prohibitively slow (d5 K8 stalled for many minutes on the long games). **Conclusion:
+do NOT pursue a deeper-continuation teacher.** Levers that could actually move it (unproven, for discussion): a
+tempo-sensitive objective (quantile/best-of instead of mean — but reintroduces fusion optimism), explicit
+combo-assembled→deploy knowledge (hand-tuning the project resists), or imitation-learning from the human references
+(the real near-ceiling policy). And the standing frame: **EVPI is small, so the cheap CLAIRVOYANT value-leaf search
+is already within ~0.4 of the true ceiling** — the strongest *practical* policy on the table. Data: `logs/eval/deep_d{3,5}`.
+
 ### ⚠️⚠️ CORRECTION 2 — the EVPI numbers below are WRONG: a HUMAN beats our NC policy (2026-07-09, user review, DEFINITIVE)
 
 The whole ceiling table below is **retracted as an EVPI measurement.** Two independent errors, both found by
