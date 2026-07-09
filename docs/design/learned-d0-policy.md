@@ -1113,3 +1113,51 @@ a strong-AND-honest teacher (reshuffle-averaged search, E inside the max) is the
 searched is already safe and the model ~=captures it, so the reshuffle search adds little at the decision level
 (EVPI~=0). NOTE the reshuffle search is a TRAINING-LABEL generator, NOT a play-time default (per user). TH has no
 aligned rollout/searched pair dumped (counts differ: rollout 1699 vs train 1081) — antilife is the combo exemplar.
+
+### Bootstrap teacher (Q^model = one policy-iteration step): helps antilife, does NOT compound (2026-07-09)
+
+Followed the "stronger non-clairvoyant teacher" thesis with the CHEAP realization: use the trained d0 MODEL
+as the rollout CONTINUATION (it reads only board/hand/lib-summary features, never library order -> non-clairvoyant
+by construction, and stronger than greedy). Label candidate a = E_f[play a, then follow the model], averaged over
+K reshuffles = Q^model(s,a) = one step of policy improvement over the model. Mechanism confirmed in code: the
+rollout continuation goes through Solve, which re-ranks by the attached evaluator (TurnSolver.cpp:5214) when
+MTG_EVAL_MODEL is set -> dumping rows WITH the d0 model attached makes the continuation Q^model. No new engine
+code needed; no draw-order decoupling needed (the model can't peek).
+
+Antilife (highest fusion regret = where theory predicts the biggest win), 150 games seed 20000 K=8, held-out
+fresh seeds 4020-4023:
+  heuristic 5.430 | v1 anchor (greedy cont) 5.300 | **v2 Q^model iter1 5.285 (best, better on ALL 4 seeds)** |
+  v3 Q^model iter2 5.305 (REGRESSED past v2).
+So: ONE bootstrap step helps (margin over heuristic 0.130 -> 0.145), but it does NOT compound — iter2 oscillates
+back (approximate policy iteration wobble: on-policy state drift + label noise). **v2 is the keeper**
+(logs/eval/antilife_d0_qmodel_v2.eval.json). Q^model labels have LOWER spread than greedy-cont (0.95 vs 1.32,
+18% dead vs 7%) — the stronger continuation rescues more lines, so first-move differences compress (more honest:
+greedy over-weighted first moves it couldn't recover from). Gain is real but modest.
+
+### ▶ NEXT STEP (for the next session)
+
+The bootstrap PROVED the teacher-strength lever works on high-fusion decks — but the model-as-continuation is only
+MARGINALLY stronger than greedy, hence the small (0.015) one-step gain. The full-strength honest teacher is the
+explicit **reshuffle-averaged (draw-order-decoupled) search** the user originally asked for: at each continuation
+turn, run a depth-D search whose library reads are DECOUPLED from the resolved draws (chooses against a random
+future, resolves against the true one), averaged over K. That is a much stronger teacher than model-greedy and is
+the direct test of whether the recoverable Vial/combo gap can be closed.
+
+CONCRETE BUILD (the one missing piece): the existing shuffle-decouple (`shuffle_salt_search` / `g_shuffle_eval`)
+only salts MID-GAME shuffles (SearchShuffleSeed/Gamble), NOT the base draw order (GameState.h:135-143) — which is
+exactly the clairvoyance that matters on antilife (why the decouple is inert there). So extend the decouple to the
+BASE DRAW ORDER: make the continuation's lookahead (SimulateToEndImpl -> SolveWithLookahead(depth>0),
+TurnSolver.cpp:5441) evaluate against a reshuffled unseen library so rollout_depth>0 stops being clairvoyant
+(today rollout_depth=1 is WORSE precisely because it reads the real draws). Then dump antilife/slivers/TH with this
+teacher and A/B vs v2. Prediction: bigger step than the bootstrap on high-fusion decks; ~0 on aggro (EVPI~=0).
+
+CHEAP PARALLEL (no build): run the same one-step bootstrap (dump with the deck's d0 model attached, train, A/B) on
+SLIVERS (Vial, expect high fusion like antilife) and TH (combo) to see if antilife's one-step gain generalizes.
+
+ADOPTION (deferred, when ready): lock in decks/*.eval.json = {knights: knights_d0_gbdt, antilife:
+antilife_d0_qmodel_v2, slivers/burn/TH: their linear d0 anchors}, flip MTG_EVAL_MODEL default on, rebaseline GT
+(incl. burn bottoming table). Kept in logs/eval/ (gitignored) until then.
+
+MEMORY NOTE (env): the label DUMPS (EnumerateEarliestWins, uncapped memo `FromVirtualMs(1000000)`, TurnSolver.cpp:5999)
+are memory-heavy on durdle decks x threads; run ONE at a time. WSL2 lags returning freed anon pages (looks like
+near-OOM for ~20-60s, self-reclaims). d0 A/B runs are light.
