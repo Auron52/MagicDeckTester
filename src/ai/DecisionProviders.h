@@ -128,6 +128,7 @@ public:
     bool        ScryKeepOnTop(const GameState&, const Card&) const override;
     bool        ShouldCastDrawEngine(const GameState&, int, const CardDefinition&) const override;
     std::string PostDrawKeepLandName(const GameState&, int) const override;
+    bool        HoldDeferredDropForLethal(const GameState&, int) const override;
     bool        HasExtraLethalModel() const override;
     int         ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
     bool        ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;

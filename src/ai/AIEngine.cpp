@@ -1620,9 +1620,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // still open (deferred before Treasure Hunt), play it now -- TryPlayLand prioritizes a
         // drawn Reliquary Tower when flooding (see its pre-pass), keeping the whole draw as
         // Land's Edge ammo instead of discarding it at cleanup (gi=65). Only when flooding, so
-        // non-flood draw turns keep their normal land timing.
+        // non-flood draw turns keep their normal land timing. HOLD the drop when the hand is the
+        // marginal Land's Edge ammo for a lethal this turn (Hook 21, mirrors the search's
+        // play_drawn_flood_keep_land) so the deferred drop isn't spent out of the ammo pool.
         if (is_pre_combat_main
-            && static_cast<int>(state.ActivePlayer().hand.size()) > 7) { TryPlayLand(state); }
+            && static_cast<int>(state.ActivePlayer().hand.size()) > 7
+            && !ResolveProvider(state).HoldDeferredDropForLethal(state, state.active_player_index))
+        { TryPlayLand(state); }
     };
 
     // Canonical execution order: Vial deployments first (lords live before spell casts),

@@ -210,6 +210,20 @@ public:
     // develops (byte-identical); only BurnProvider opts in, gated on lands-in-play.
     virtual bool PreferHoldLandDrop(const GameState& s, int controller) const { return false; }
 
+    // Hook 21 -- after a deferred Treasure Hunt (DrawUntilNonland) resolves, HOLD the still-open
+    // land drop entirely rather than developing it, because the lands now in hand are the marginal
+    // Land's Edge ammunition for a lethal THIS turn. Generically the engine plays the deferred drop
+    // (play_drawn_flood_keep_land), but with Land's Edge in play a land in HAND is worth `rate`
+    // damage this turn; playing it as the drop removes it from the ammo pool and can drop the count
+    // below lethal -- and the fire-count heuristic (LandsEdgeHeuristicFireCount) then HOLDS the rest,
+    // slipping the kill a full turn (the s1 gi0 T4-vs-T3 shortfall: 10 lands in hand -> play one ->
+    // 9 -> no-longer-lethal -> hold -> win T4 instead of T3). Return true only when the hand is
+    // ALREADY lethal ammo and developing the drop would push it BELOW lethal (the marginal case), so
+    // the subsequent auto-fire discards them all for the kill. DEFAULT false -> every other deck (and
+    // every non-marginal TH turn) develops the drop byte-identically. The engine keeps the land-play
+    // MECHANISM and the open-drop precondition; only this hold decision is provider-owned.
+    virtual bool HoldDeferredDropForLethal(const GameState& s, int controller) const { return false; }
+
     // Hook 16 -- does this deck's goldfish opponent play lands? Decks whose spells target the
     // OPPONENT'S permanents for value (Hinata: Magma Opus taps them, the spread-damage / cost-
     // reduction targeting points at them) need a realistic opponent board. When true the engine

@@ -984,6 +984,45 @@ std::string TreasureHuntProvider::PostDrawKeepLandName(const GameState& s, int c
     return {};
 }
 
+bool TreasureHuntProvider::HoldDeferredDropForLethal(const GameState& s, int controller) const
+{
+    // After a deferred Treasure Hunt resolves with the land drop still open: HOLD the drop when the
+    // lands now in hand are the MARGINAL Land's Edge ammunition for a lethal this turn. Developing
+    // the drop (play_drawn_flood_keep_land / the engine's generic land play) would spend a land that
+    // is worth `rate` face damage as ammo, dropping the count below lethal -- and the fire-count
+    // heuristic (LandsEdgeHeuristicFireCount) then holds the remaining lands, slipping the kill a
+    // full turn (s1 gi0: 10 lands -> play one -> 9 -> not lethal -> hold -> T4 instead of T3). Only
+    // the marginal case (developing would cost the kill) holds; a hand with strictly MORE than
+    // lethal ammo still develops (playing one leaves it lethal, so the win turn is unchanged and we
+    // keep the extra land in play). MTG_NO_LE_HOLD_LETHAL disables -> legacy develop-always (A/B).
+    static const bool s_off = std::getenv("MTG_NO_LE_HOLD_LETHAL") != nullptr;
+    if (s_off) { return false; }
+
+    // Land's Edge damage-per-land currently on the battlefield.
+    int rate = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.discard_land_damage > 0) { rate = std::max(rate, d->params.discard_land_damage); }
+    }
+    if (rate <= 0) { return false; }
+
+    int lands_in_hand = 0;
+    for (const Card& c : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d ? d->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
+    }
+    if (lands_in_hand == 0) { return false; }
+
+    const Player& opp = s.players[1 - controller];
+    const int lethal_lands = (opp.life + rate - 1) / rate;
+    // Marginal: already lethal, but developing the single open drop would drop below lethal. (Only
+    // one land is ever played by the deferred-drop step, so the -1 test is exact.)
+    return lands_in_hand >= lethal_lands && (lands_in_hand - 1) < lethal_lands;
+}
+
 bool TreasureHuntProvider::HasExtraLethalModel() const
 {
     return true;   // the Land's Edge / Treasure Hunt lethal model below.

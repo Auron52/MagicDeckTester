@@ -1,5 +1,38 @@
 # Treasure Hunt — Land's Edge lethal held a turn too late (s1: AI T4 vs human T3)
 
+**Status:** RESOLVED (2026-07-09). Fixed via Fix-direction 1 (hold the land drop
+when it enables Land's Edge lethal this turn), implemented as provider Hook 21
+`HoldDeferredDropForLethal`. `seed 1 gi0` now wins **T3** (was T4); persists
+b200/b1000/b4000, d3/d5. Smoke+regression accepted: TH strictly faster (9 games
+turn-earlier across regression seeds, 0 slower, 0 win→loss), every other deck
+byte-identical. A/B toggle `MTG_NO_LE_HOLD_LETHAL=1` restores legacy. History
+below kept for context.
+
+## The fix (what shipped)
+
+The real lever was **not** the fire count but the deferred land-play after
+Treasure Hunt: `ApplyPlanDirect`'s `play_drawn_flood_keep_land`
+(`TurnSolver.cpp` ~2447) **always developed** the still-open drop once TH
+resolved, spending one land out of the Land's Edge ammo pool (10 → 9). The
+fire-count heuristic then saw 9 < 10 lethal and held — so the search's *defer the
+drop* plan, though enumerated, still realised only a partial fire and the kill
+slipped a turn. (This is why `MTG_UNPRUNED` never helped: the loss was in the
+land-play, not a tutor/payload pruning gate.)
+
+Hook 21 `HoldDeferredDropForLethal(state, controller)`
+(`DecisionProviders.cpp`) returns true **only in the marginal case** — Land's
+Edge in play, and the lands now in hand are lethal ammo but developing the drop
+would push them *below* lethal (`lands_in_hand >= ceil(opp.life/rate)` AND
+`lands_in_hand - 1 < ceil(...)`). When it fires, `play_drawn_flood_keep_land`
+holds the drop, the subsequent auto-fire block discards all the lands for the
+kill, and the committed line records no `PlayLand` so the executor replays the
+hold. Mirrored in the real engine's fallback (`AIEngine.cpp` ~1624) for lockstep.
+DEFAULT false → other decks and every non-marginal TH turn stay byte-identical.
+
+---
+
+## Original hand-off notes (root-cause history)
+
 **Status:** OPEN / deferred. Root-caused to the `LandsEdgeHeuristicFireCount` +
 land-play interaction; fix not yet written. This doc is self-contained — pick it
 up cold.

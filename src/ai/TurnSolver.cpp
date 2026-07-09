@@ -2452,6 +2452,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         Player& lp = state.ActivePlayer();
         if (lp.lands_played_this_turn >= lp.LandDropsAvailable()) { return; }   // drop already used
 
+        // Hold the drop entirely when the lands in hand are the marginal Land's Edge ammo for a
+        // lethal this turn: playing one would push the count below lethal and the fire-count
+        // heuristic (below, in this same ApplyPlanDirect) would then hold the rest, slipping the
+        // win a turn (s1 gi0 T4-vs-T3). Provider-owned (Hook 21); default off for every other deck.
+        if (ResolveProvider(state).HoldDeferredDropForLethal(state, state.active_player_index)) { return; }
+
         // The keep-ammo land CHOICE is deck logic -> ask the provider (Hook 13); the engine
         // keeps the open-drop precondition above and the land-play mechanism below.
         std::string reliquary =
