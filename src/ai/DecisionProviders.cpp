@@ -377,9 +377,258 @@ AntiLifegainProvider::TutorCandidates(const GameState& s, int controller, const 
 }
 
 std::vector<std::string>
-AntiLifegainProvider::FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const
+AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_index,
+                                      const CardParams& fetch_pp) const
 {
-    return ::FetchCandidates(s, controller, fetch_pp);
+    // Deck-specific colour-fixing fetch heuristic (relocated here from a shared free function --
+    // it is tuned to THIS 4-colour shell and must not live in standard code). It ranks fetch
+    // targets by colour COVERAGE, not just the tiebreak order, and returns the single best pick
+    // so the search never branches over fetch targets. GenericProvider returns every legal
+    // target instead, so no other deck sees this logic.
+
+    // Unpruned audit (MTG_UNPRUNED): return EVERY legal fetch target so the search branches over
+    // all of them -- identical to the generic "return all matching library lands" path.
+    if (DecisionUnpruned(UnprunedGate::Fetch))
+    {
+        return GenericProvider::FetchCandidates(state, controller_index, fetch_pp);
+    }
+
+    const Player& ap = state.players[controller_index];
+
+    constexpr int NC = 6;   // Color enum cardinality (W,U,B,R,G,C)
+    using ColorSet = std::array<bool, NC>;   // stack-resident; avoids per-call vector<bool> allocs + bit-proxy cost
+    auto add_colors = [](ColorSet& set, const std::vector<Color>& cs)
+    {
+        for (Color c : cs) { set[static_cast<int>(c)] = true; }
+    };
+
+    // Colours we already have on the battlefield (lands + mana dorks/rocks we control). A mana dork
+    // (incl. a produces-any Birds of Paradise) COUNTS as a source of the colours it makes -- that is
+    // exactly why we don't over-fetch black once a dork can make it (see the conditional black
+    // tiebreak below): "dorks can be that black". Also count how many DISTINCT sources make black vs
+    // white, because the deck needs black only ONCE (one black source suffices to cast the payoffs)
+    // but can want white TWICE in a turn (Fiery Justice {W} + Swords {W}) -- so a 2nd white source
+    // has value a single 1-mana dork cannot supply, while a 2nd black source does not.
+    ColorSet have{};
+    int n_black_src = 0, n_white_src = 0;
+    auto count_bw = [&](const std::vector<Color>& prod)
+    {
+        for (Color c : prod)
+        {
+            if (c == Color::Black) { ++n_black_src; }
+            if (c == Color::White) { ++n_white_src; }
+        }
+    };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (!(d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { continue; }
+        add_colors(have, d->params.produces);
+        count_bw(d->params.produces);
+    }
+    // Plus colours from OTHER (non-fetch) lands in hand -- part of the deck-fixing equation.
+    ColorSet have_or_hand = have;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || !d->card.IsLand() || !d->params.fetch_land_types.empty()) { continue; }
+        add_colors(have_or_hand, d->params.produces);
+        count_bw(d->params.produces);
+    }
+    const bool black_secured = n_black_src > 0;   // one black source is enough for the wincon
+    const bool want_more_white = n_white_src < 2; // a 2nd white source is still useful
+
+    // Critical subtype (e.g. "Forest"): the subtype an alt-cost card in HAND requires
+    // ("If you control a Forest, rather than pay ...") -- a Forest also makes {G} for the
+    // dorks. We only weight it when we DON'T already control/hold that subtype.
+    std::string crit_subtype;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && !d->params.alt_cost_requires_subtype.empty())
+        { crit_subtype = d->params.alt_cost_requires_subtype; break; }
+    }
+    bool have_crit = crit_subtype.empty()
+                  || ControlsSubtype(state, controller_index, crit_subtype);
+    if (!have_crit)   // also satisfied by a non-fetch land of that subtype already in hand
+    {
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || !d->card.IsLand() || !d->params.fetch_land_types.empty()) { continue; }
+            for (const std::string& s : d->card.m_subtypes) { if (s == crit_subtype) { have_crit = true; break; } }
+            if (have_crit) { break; }
+        }
+    }
+    bool want_crit = !crit_subtype.empty() && !have_crit;
+
+    // Proactive subtype-bank ("bank a Forest when there's no other immediate need"): the reactive
+    // want_crit above fires only when the alt-cost payoff (Skyshroud Cutter / Invigorate) is in
+    // HAND. But a Forest is worth banking BEFORE we draw the payoff -- and green from Grove /
+    // dorks does NOT satisfy it (that is a colour, not the Forest SUBTYPE). So also detect the
+    // subtype anywhere in the DECK (hand + library), and if we don't yet control/hold it, prefer a
+    // candidate carrying it -- but as the LOWEST-priority key (below the coverage keys), so it
+    // never pre-empts a colour we actually need this turn/deck-wide.
+    std::string deck_crit = crit_subtype;
+    if (deck_crit.empty())
+    {
+        for (const Card& c : ap.library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && !d->params.alt_cost_requires_subtype.empty())
+            { deck_crit = d->params.alt_cost_requires_subtype; break; }
+        }
+    }
+    bool have_deck_crit = deck_crit.empty()
+                       || ControlsSubtype(state, controller_index, deck_crit);
+    if (!have_deck_crit)
+    {
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || !d->card.IsLand() || !d->params.fetch_land_types.empty()) { continue; }
+            for (const std::string& s : d->card.m_subtypes) { if (s == deck_crit) { have_deck_crit = true; break; } }
+            if (have_deck_crit) { break; }
+        }
+    }
+    bool bank_crit = !deck_crit.empty() && !have_deck_crit;
+
+    // Colours wanted this turn (coloured pips of nonland cards in hand) and deck-wide. A {W} tutor
+    // (Enlightened/Idyllic) in hand thus registers white in want_turn, so coverage fetches a white
+    // source when white is genuinely wanted; no separate "white when a tutor is in hand" special case.
+    ColorSet want_turn{}, want_deck{};
+    auto note_cost = [&](const Card& card, ColorSet& set)
+    {
+        const ManaCost& mc = card.m_mana_cost;
+        if (mc.white > 0)  { set[static_cast<int>(Color::White)] = true; }
+        if (mc.blue  > 0)  { set[static_cast<int>(Color::Blue)]  = true; }
+        if (mc.black > 0)  { set[static_cast<int>(Color::Black)] = true; }
+        if (mc.red   > 0)  { set[static_cast<int>(Color::Red)]   = true; }
+        if (mc.green > 0)  { set[static_cast<int>(Color::Green)] = true; }
+    };
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const Card& card = d ? d->card : c;
+        if (card.IsLand()) { continue; }
+        note_cost(card, want_turn);
+        note_cost(card, want_deck);
+    }
+    for (const Card& c : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const Card& card = d ? d->card : c;
+        if (card.IsLand()) { continue; }
+        note_cost(card, want_deck);
+    }
+
+    // Score each distinct candidate land (subtype in fetch_land_types) and keep the single best in
+    // ONE PASS over the library (no candidate vector / dedup set / sort -- fetch-decision hot path).
+    // A candidate beats the incumbent on the first differing key (all "higher is better"); a full
+    // tie keeps the incumbent, which -- scanning the library in order -- is the earliest, exactly
+    // reproducing the old sort-by-(keys desc, insertion order asc) + front(). Keys, highest first:
+    //   gives_crit (carries the critical subtype we still need, e.g. Forest unlock)
+    //   s_turn (new colours wanted THIS turn) / s_deck (deck-wide) / s_breadth (new colours)
+    //   multi (fixes >1 colour) / dup_pref (colour-priority tiebreak) / shock (dual over basic)
+    bool        have_best = false;
+    std::string best_name;
+    int b_gc = 0, b_st = 0, b_sd = 0, b_sb = 0, b_multi = 0, b_dup = 0, b_shock = 0;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        const Card& card = d ? d->card : lc;
+        if (!card.IsLand()) { continue; }
+        bool type_ok = false;
+        for (const std::string& want : fetch_pp.fetch_land_types)
+        {
+            for (const std::string& cs : card.m_subtypes) { if (cs == want) { type_ok = true; break; } }
+            if (type_ok) { break; }
+        }
+        if (!type_ok) { continue; }
+
+        int gives_crit = 0;
+        if (want_crit)
+        {
+            for (const std::string& cs : card.m_subtypes) { if (cs == crit_subtype) { gives_crit = 1; break; } }
+        }
+        const std::vector<Color>& prod = d ? d->params.produces : std::vector<Color>{};
+        int s_turn = 0, s_deck = 0, s_breadth = 0;
+        for (Color c : prod)
+        {
+            int ci = static_cast<int>(c);
+            if (want_turn[ci] && !have[ci])         { ++s_turn; }
+            if (want_deck[ci] && !have_or_hand[ci]) { ++s_deck; }
+            if (!have[ci] && ci != static_cast<int>(Color::Colorless)) { ++s_breadth; }
+        }
+        int multi = static_cast<int>(prod.size()) > 1 ? 1 : 0;
+        bool pw = false, pg = false, pb = false, pr = false;
+        for (Color c : prod)
+        {
+            if      (c == Color::White) { pw = true; }
+            else if (c == Color::Green) { pg = true; }
+            else if (c == Color::Black) { pb = true; }
+            else if (c == Color::Red)   { pr = true; }
+        }
+        // Colour-priority tiebreak among coverage-equal targets -- the user's rule for THIS deck,
+        // all else being equal, SUMMED so a land carrying several ranks higher ("when we can we get
+        // multiple"), each rank weighted to dominate every lower one combined so the order is strict.
+        // This is a LOW-priority key (below the coverage keys), so it only decides genuine ties (which
+        // dual to grab first) and never strands a needed colour -- a colour not yet covered scores on
+        // s_turn/s_deck/s_breadth first. Green is always top (it enables the {G} dorks + the free
+        // alt-cost spells + Fiery Justice). Black is CONDITIONAL: the deck needs black only ONCE (a
+        // single black source lets it cast the payoffs = the wincon), so black outranks white ONLY
+        // while black is unsecured; once ANY source (incl. a dork -- "dorks can be that black") makes
+        // black, a further black source is not useless (it frees the dork to attack) but ranks BELOW
+        // white, because a 2nd WHITE source can still be used the same turn (Fiery Justice {W} + Swords
+        // {W}) and a single 1-mana dork cannot supply two. White is thus itself gated on wanting a 2nd
+        // source (want_more_white). Forest (the alt-cost subtype) is the finest term and counts only
+        // while we still want one (bank_crit); green from Grove/dorks is a colour, not the subtype.
+        //   black still needed:  Green(16) > Black(8) > White(4) > Red(2) > Forest(1)
+        //   black not needed  :  Green(16) > White(4) > Red(2) > Black(1) > Forest(via bank_crit)
+        // "Still needed" = black is unsecured AND we still run a black spell we want to cast
+        // (want_deck[Black]) -- i.e. we have not yet secured our one black and there is a payoff/
+        // enabler that requires it. Once black is secured (a land OR dork makes it) OR there is no
+        // black spell left to cast (the enabler is already down and nothing black remains), a further
+        // black source is not useless -- it frees the dork to attack -- but ranks BELOW red, per the
+        // user: "if you've already cast your enabler, black is of very low priority."
+        const int BLACK_I = static_cast<int>(Color::Black);
+        const bool black_still_needed = !black_secured && want_deck[BLACK_I];
+        int black_w = black_still_needed ? 8 : 1;
+        int white_w = want_more_white ? 4 : 0;
+        bool pf = false;
+        if (bank_crit)
+        {
+            for (const std::string& s : card.m_subtypes) { if (s == deck_crit) { pf = true; break; } }
+        }
+        int dup_pref = (pg ? 16 : 0) + (pw ? white_w : 0) + (pr ? 2 : 0) + (pb ? black_w : 0) + (pf ? 1 : 0);
+        int shock    = (d && d->params.etb_pay_life_to_untap > 0) ? 1 : 0;
+
+        bool better;
+        if      (gives_crit != b_gc)    { better = gives_crit > b_gc; }
+        else if (s_turn     != b_st)    { better = s_turn     > b_st; }
+        else if (s_deck     != b_sd)    { better = s_deck     > b_sd; }
+        else if (s_breadth  != b_sb)    { better = s_breadth  > b_sb; }
+        else if (multi      != b_multi) { better = multi      > b_multi; }
+        else if (dup_pref   != b_dup)   { better = dup_pref   > b_dup; }
+        else if (shock      != b_shock) { better = shock      > b_shock; }
+        else                            { better = false; }  // full tie -> keep the earlier incumbent
+
+        if (!have_best || better)
+        {
+            have_best = true;
+            best_name = lc.m_name;
+            b_gc = gives_crit; b_st = s_turn; b_sd = s_deck; b_sb = s_breadth;
+            b_multi = multi;   b_dup = dup_pref; b_shock = shock;
+        }
+    }
+
+    // Return exactly the single best (never a tied group) so a fetch is always decided by the
+    // heuristic and the search never branches over fetch targets. Empty only on a true whiff.
+    std::vector<std::string> out;
+    if (have_best) { out.push_back(best_name); }
+    return out;
 }
 
 // Total power of the controller's creatures that can still attack this turn (untapped, not
