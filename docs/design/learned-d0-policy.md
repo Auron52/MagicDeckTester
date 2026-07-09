@@ -1018,3 +1018,11 @@ clairvoyance* (timing a library-dependent payoff you can see). Small recoverable
 double-casts Throes). Aggro gaps (~0.15-0.20) are small and likely mostly recoverable/minor mid-game clairvoyance.
 A truly fair search baseline would need a reshuffle-averaged (de-clairvoyed) search — the `MTG_SHUFFLE_SALT_SEARCH`
 decouple is INERT on no-shuffle decks (burn/knights/TH), so that's the deferred "extra work" for a clean ceiling.
+
+**Aggro gap = RECOVERABLE, no clairvoyance (game-read, knights seed 4033, same opening hand).** Lines diverge
+on a pure board-development call: T3 the MODEL casts Acclaimed Contender (1 body) while SEARCH casts Venerable
+Knight + Worthy Knight (2 bodies, same 3 mana). SEARCH's wider board + T4 lords (Inspiring Veteran + Marshal
+pump the team) → lethal T4; the model is one body short → lethal T5. No hidden info — going wider beats one
+bigger card on tempo. Confirms the split: COMBO gap = clairvoyance (irrecoverable), AGGRO gap = recoverable
+sequencing. Concrete lever: the d0 model must value board WIDTH (body count, esp. with lords), not just
+plan_power_added (total power). This is a d0 feature/label improvement, not a clairvoyance floor.
