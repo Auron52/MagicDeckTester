@@ -519,6 +519,10 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     set(MidGameFeature::HandDamageSources, hand_damage);
     set(MidGameFeature::HandDrawEngines,   hand_draw);
     set(MidGameFeature::HandCastableNow,   hand_castable);
+
+    // v8 plan-varying resulting-state (the d0 RANKER discriminators): the board a plan develops.
+    set(MidGameFeature::PlanPowerAdded,     plan.power_added);
+    set(MidGameFeature::PlanToughnessAdded, plan.toughness_added);
     return f;
 }
 
@@ -533,7 +537,12 @@ MidGamePlanSummary SummarizePlanByNames(const std::vector<std::string>& cast_nam
         ++sum.num_spells;
         const CardDefinition* def = CardDatabase::Instance().Lookup(nm);
         if (!def) { continue; }
-        if (def->card.IsCreature()) { ++sum.creatures_cast; }
+        if (def->card.IsCreature())
+        {
+            ++sum.creatures_cast;
+            sum.power_added     += def->card.m_power.value_or(0);   // printed P/T (v8 plan-varying board dev)
+            sum.toughness_added += def->card.m_toughness.value_or(0);
+        }
         const int mv = def->card.m_mana_cost.ManaValue();
         sum.total_mv += mv;
         if (mv > sum.max_cast_mv) { sum.max_cast_mv = mv; }

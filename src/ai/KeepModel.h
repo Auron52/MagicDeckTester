@@ -402,6 +402,12 @@ enum class MidGameFeature : int
     HandDamageSources,    // damage/removal spells in our hand (params.damage / landfall_damage / death_trigger)
     HandDrawEngines,      // card-advantage/dig spells in our hand
     HandCastableNow,      // nonland hand cards with MV <= untapped mana sources (playable this turn)
+    // --- appended (v8): PLAN-VARYING resulting-state features for the d0 RANKER. The d0 model ranks
+    //     candidate plans at ONE decision, so only features that DIFFER across candidates carry signal
+    //     (the pre-plan board/lib/hand feats are constant per decision and cancel). Coarse counts couldn't
+    //     tell a 3/3 plan from a 1/1 plan; these expose the board a plan develops. learned-d0-policy.md
+    PlanPowerAdded,       // summed printed power of creatures this plan casts
+    PlanToughnessAdded,   // summed printed toughness of creatures this plan casts
     Count                 // sentinel: number of features
 };
 
@@ -452,6 +458,8 @@ inline const char* MidGameFeatureName(MidGameFeature f)
         case MidGameFeature::HandDamageSources:   return "hand_damage_sources";
         case MidGameFeature::HandDrawEngines:     return "hand_draw_engines";
         case MidGameFeature::HandCastableNow:     return "hand_castable_now";
+        case MidGameFeature::PlanPowerAdded:      return "plan_power_added";
+        case MidGameFeature::PlanToughnessAdded:  return "plan_toughness_added";
         default:                                  return "?";
     }
 }
@@ -478,6 +486,8 @@ struct MidGamePlanSummary
     int face_damage    = 0;  // fixed direct damage the casts deal (Sum params.damage; X-spells excluded)
     int baseline_eval  = 0;  // Sum EvalCard(def,state) over the casts (the hand-tuned baseline's plan
                              // value); set by PlanBaselineEval at the seam + dump. 0 for the null/leaf plan.
+    int power_added    = 0;  // summed printed POWER of creatures this plan casts (board development)
+    int toughness_added = 0; // summed printed TOUGHNESS of creatures this plan casts (resilience)
 };
 
 // One node of a fixed-point regression tree. Internal nodes split on an INTEGER feature threshold

@@ -1610,7 +1610,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         {
             const std::vector<std::string> cnames = PlanCastNames(cands, sel);
             MidGamePlanSummary psum = SummarizePlanByNames(cnames, PlanHasLand(cands, sel));
-            psum.baseline_eval = TurnSolver::PlanBaselineEval(state, cnames);
+            // Anchor on the EXACT heuristic ranking key (total_eval) available right here -- this carries
+            // Vial/X/ritual evals the name-only PlanBaselineEval can't reconstruct, so a unit-weight model
+            // reproduces the heuristic exactly and learns a correction on top. See learned-d0-policy.md.
+            psum.baseline_eval = total_eval;
             rank_value = LearnedPlanScore(state, psum, *ev);
         }
 
