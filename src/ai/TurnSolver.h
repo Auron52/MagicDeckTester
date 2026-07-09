@@ -449,7 +449,7 @@ public:
     // K/depth grow; expensive by construction (K x #plans x unmemoised honest rollout). See
     // g_honest_teacher and learned-d0-policy.md.
     static Plan ReshuffleAvgChoosePlan(const GameState& state, int K, int depth,
-                                       int max_turns, bool second_main);
+                                       int max_turns, bool second_main, bool is_pre_combat = true);
 
     // The hand-tuned baseline's plan value = Sum EvalCard(def, state) over the plan's cast cards.
     // Exposed so the learned-eval label dump (AIEngine) and the ranking seam compute the SAME

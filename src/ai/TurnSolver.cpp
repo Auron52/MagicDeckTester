@@ -6208,10 +6208,21 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
 // pure greedy non-clairvoyant rollout. NO memo/budget (each sample reshuffles a distinct future, so
 // the leaf TT's size=>content assumption breaks) -- expensive by design; this measures the ceiling.
 TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int K, int depth,
-                                                    int max_turns, bool second_main)
+                                                    int max_turns, bool second_main, bool is_pre_combat)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
-    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, true);
+    std::vector<TurnSolver::Plan> plans;
+    if (is_pre_combat)
+    {
+        plans = EnumeratePlansWithLand(state, true);
+    }
+    else
+    {
+        // Post-combat (second) main: the same candidate set FSLineTail searches -- every castable
+        // post-combat play PLUS the idle option (advance without casting). See FSLineTail.
+        plans = EnumeratePlans(state, false);
+        plans.push_back(TurnSolver::Plan{});
+    }
     if (plans.empty())     { return TurnSolver::Plan{}; }
     if (plans.size() == 1) { return plans[0]; }
     if (K < 1) { K = 1; }
@@ -6224,7 +6235,8 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         // One sampled future per sample k, SHARED across all candidates (common random numbers).
         const uint64_t rs = state.game_seed
                           + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
-                          + 1000003ULL * static_cast<uint64_t>(turn);
+                          + 1000003ULL * static_cast<uint64_t>(turn)
+                          + (is_pre_combat ? 0ULL : 7919ULL);   // distinct sample stream per phase
         for (size_t i = 0; i < plans.size(); ++i)
         {
             GameState s = state;
@@ -6233,30 +6245,47 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
             ShuffleEvalGuard   _seg(true);
             HonestTeacherGuard _htg(depth > 0);     // decouple the depth>0 continuation lookahead
             std::vector<Action> bp;
-            ApplyPlanDirect(s, plans[i], true, &bp);
-            int wt;
+            ApplyPlanDirect(s, plans[i], is_pre_combat, &bp);
+            int wt = max_turns + 1;
             if (s.ActivePlayer().life <= 0)         // self-lethal line -> never a win
             {
                 wt = max_turns + 1;
             }
             else
             {
-                SimulateAnimateLands(s);
-                SimulateTapTokens(s);
-                SimulateCombat(s);
+                if (is_pre_combat)
+                {
+                    SimulateAnimateLands(s);
+                    SimulateTapTokens(s);
+                    SimulateCombat(s);
+                }
                 if (s.Opponent().life <= 0)         // wins THIS turn (library-independent -> all k agree)
                 {
                     wt = turn;
                 }
                 else
                 {
-                    GameState r = s;
-                    if (!SimulateEndAndStartNextTurn(r)) { wt = max_turns + 1; }
+                    // This turn's SECOND main (only when evaluating the pre-combat plan of a
+                    // second-main deck): search it honestly (reshuffled) so the pre-combat plan's
+                    // value ACCOUNTS for the finisher it enables, instead of skipping it. Not greedy.
+                    if (is_pre_combat && second_main)
+                    {
+                        TurnSolver::Plan post = TurnSolver::SolveWithLookahead(
+                            s, false, depth > 0 ? depth : 1, max_turns, nullptr, false,
+                            second_main, nullptr);
+                        ApplyPlanDirect(s, post, false);
+                    }
+                    if (s.Opponent().life <= 0) { wt = turn; }
                     else
                     {
-                        ExpireStagedCards(r);
-                        wt = SimulateToEnd(std::move(r), depth, max_turns, nullptr,
-                                           max_turns + 1, second_main, nullptr);
+                        GameState r = s;
+                        if (!SimulateEndAndStartNextTurn(r)) { wt = max_turns + 1; }
+                        else
+                        {
+                            ExpireStagedCards(r);
+                            wt = SimulateToEnd(std::move(r), depth, max_turns, nullptr,
+                                               max_turns + 1, second_main, nullptr);
+                        }
                     }
                 }
             }

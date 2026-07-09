@@ -1261,6 +1261,32 @@ LEAF delivers search quality via cheap DEPTH — not by out-reading the search a
 
 Everything else is at the ceiling.
 
+### ⚠️ CORRECTION — the NC ceiling numbers below are UNRELIABLE (overstate EVPI) (2026-07-09, user review)
+
+The user (domain expert) flagged the EVPI gaps below as too large — esp. TH (0.6), antilife (0.79), burn (0.15) —
+and was RIGHT. `ReshuffleAvgChoosePlan` is a WEAK non-clairvoyant policy, so it is a LOWER BOUND on the true
+non-clairvoyant ceiling and therefore OVERESTIMATES EVPI. Three confirmed weaknesses:
+1. **Greedy/heuristic CONTINUATION (dominant).** The per-plan rollout can't pilot a multi-turn combo forward
+   non-clairvoyantly (TH Land's-Edge, antilife Remedy). A static/greedy policy structurally can't (see the whole
+   "static can't amortise" thread). So combo NC is capped ~0.7 above the search REGARDLESS of K.
+2. **Under-powered K/depth.** TH d2 was still DROPPING at K32 (K8 4.865 → K16 4.805 → K32 4.715, not converged) —
+   the reported "4.805 @ K16" underestimated the ceiling. d1 plateaus (~4.85) but d2 keeps improving with K.
+3. **Greedy second main** (FIXED for our experiments: `ReshuffleAvgChoosePlan` now searches the post-combat main,
+   both the executed play and this-turn's finisher in the pre-combat eval; `MTG_NC_SEARCH` branch no longer
+   `Solve`s it). Impact was SMALL though: antilife 4.865 → 4.825 (K8 d2). So the second main was a minor inflator;
+   the continuation is the real one. (NOTE: the PRODUCTION full-depth search searches both mains correctly via
+   FSLineWin/FSLineTail — an earlier claim that it didn't was WRONG; only the beyond-horizon leaf + legacy
+   SolveWithLookahead are greedy. This is being addressed generally by an agent on the regular branch.)
+
+**So: treat the EVPI / "clairvoyance-bound" claims in the table below as UPPER BOUNDS on EVPI, not measurements.**
+The true non-clairvoyant ceiling is closer to the clairvoyant search than the table shows (much closer on aggro;
+still some real gap on combo, but < the reported 0.6-0.8). A CLEAN EVPI measurement needs either a STRONG
+non-clairvoyant policy (a searched continuation — intractable recursively, or clairvoyant-within-sample = strategy
+fusion) or decoupling the strong full-depth search IN-HORIZON (breaks commit-the-line; unbuilt). **The one robust
+conclusion that survives: forward simulation beats the static d0 model (NC d0 >> static d0), so the value is in
+simulating, not evaluating — but HOW FAR the non-clairvoyant ceiling sits above d0 is NOT reliably measured yet.**
+Data: `logs/eval/{th_highk,nc_secondmain_fix}.log`.
+
 ### ★★ THE NON-CLAIRVOYANT CEILING — measured (reshuffle-averaged search as a play policy) (2026-07-09)
 
 Built the real thing the prior sessions kept deferring: `TurnSolver::ReshuffleAvgChoosePlan` (gate

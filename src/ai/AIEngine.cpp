@@ -1324,10 +1324,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                return (e && *e) ? std::atoi(e) : 2; }();
             if (s_nc_search)
             {
-                plan = is_pre_combat_main
-                     ? TurnSolver::ReshuffleAvgChoosePlan(state, s_nc_k, s_nc_depth,
-                                                          m_max_turns, m_search_post_combat)
-                     : TurnSolver::Solve(state, false);   // second main: greedy (like the rollout)
+                // Both mains use the reshuffle-averaged non-clairvoyant search -- NO greedy play on
+                // a searched turn (the executed second main is searched, not Solve'd).
+                plan = TurnSolver::ReshuffleAvgChoosePlan(state, s_nc_k, s_nc_depth,
+                                                          m_max_turns, m_search_post_combat,
+                                                          is_pre_combat_main);
             }
             else if (s_full_depth)
             {
