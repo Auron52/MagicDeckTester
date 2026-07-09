@@ -1316,6 +1316,25 @@ human's (it over-mulligans on many keep-7s) — a separate MULLIGAN-quality issu
 going forward: benchmark the search against references ONLY with `--force-mulligan`, never autonomous mulligan.**
 Data: `logs/eval/forced_bench.log`; driver `/tmp/forced_bench.py` (per-ref exact-hand replay).
 
+### ★★★ ON IDENTICAL HANDS, THE PLAY SEARCH IS AT HUMAN PARITY (within noise) (2026-07-09)
+
+With the mulligan confound removed (force-mulligan), chased the residual NC-vs-human PLAY gap on the 30 antilife
+references. Per-game paired diff (NC − human), identical hands: **mean +0.233, but NOT significant** — bootstrap
+95% CI **[−0.067, +0.533]** (includes 0), t=1.49. NC is FASTER than the human on 4 games, slower on 8, tied on 18.
+So the play search is statistically indistinguishable from human play once hands are controlled. The earlier
+"0.5–0.9 gaps" were entirely mulligan confound + the env-presence measurement bug.
+
+Tracing the slower games shows the errors are REAL but small and self-cancelling: gi11 skips a turn-1 fetchland
+(+3), gi9 plays its turn-1 mana dork a turn late / fetches the wrong color to enable it (+2) — both are ramp/tempo/
+mana-sequencing imperfections a human avoids. But they're offset by games where NC beats the human, and blunt fixes
+just move them around: clairvoyant-continuation FIXED gi9 (−3) but REGRESSED 5 other games (+1 each) → net wash
+(4.767 vs 4.733); optimistic root modes (q25/q10) are strictly worse on clean hands. So there's no free uniform win
+in the play policy — it's near its practical floor, and the remaining measurable diffs are within the 30-game noise.
+The one SIGNIFICANT, irreducible gap is clairvoyance: human/NC ≈ 4.6–4.73 vs clairvoyant 4.23 (~0.4). Rejected the
+MTG_NC_ROOT_MODE / MTG_NC_CLAIRV_CONT experiment gates (reverted — both non-helpful on clean hands). **Conclusion:
+the play component is not where quality is left on the table; mulligan quality + more reference data (to tighten the
+CI) are the better targets.** Data: `logs/eval/{forced_bench,fb_cc,ncf_pergame}.log`.
+
 ### ★★ A DEEPER TEACHER DOES NOT HELP — depth was never the bottleneck (2026-07-09, user asked to try d5–d8)
 
 Hypothesis (user): the durdle is myopia — a deeper continuation (d5–d8, cost OK for a training-only teacher) would
