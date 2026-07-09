@@ -1087,3 +1087,29 @@ capacity helps (capacity hurts). **The binding constraint is LABEL/TEACHER QUALI
 capacity.** The lever that would move every deck is a stronger, de-clairvoyed teacher — the reshuffle-averaged
 search (already the deferred "fair baseline" build) — not more data and not a fancier model. Ship: knights GBDT
 sidecar + `--init-model` trainer flag + the 3 diagnostics; adopt knights-GBDT when d0 sidecars are adopted.
+
+### Can we "average out" clairvoyance with more data? NO — measured (2026-07-09)
+
+User's image: train on the clairvoyant search, throw enough games at it so clairvoyance averages out.
+Averaging removes VARIANCE (which library you drew) but not the BIAS: the searched label is
+`E_f[max_{pi|f} outcome]` (continuation chosen AFTER seeing future f = strategy fusion), while the
+achievable non-clairvoyant value is `max_pi E_f[outcome]`. `E[max] >= max[E]` (Jensen) always, and the
+gap = value of hidden info (EVPI) — a property of max/expectation ORDER, not sample size. Un-averageable.
+
+**Measured it** (`scripts/evpi.py`, pairs the aligned rollout vs searched dumps by candidate position;
+fusion_regret = rollout[argmin searched] - rollout[argmin rollout] = honest turns lost by trusting the
+clairvoyant pick):
+- **knights (aggro):** raw clairvoyance gap 0.225t, argmin-disagree 20.6%, **fusion regret 0.029t** (7.4% of
+  decisions, max 1.0). Clairvoyance is decision-BENIGN -> searched labels SAFE -> matches searched~=rollout.
+- **antilife (Vial):** raw clairvoyance gap 0.231t (SAME as knights!), argmin-disagree 58.9%, **fusion regret
+  0.390t** (54% of decisions, max 3.38). Clairvoyance is decision-TOXIC -> this is exactly WHY antilife's
+  searched-linear model COLLAPSED to 9.0 (strategy fusion poisons a majority of decisions).
+
+**The raw outcome gap (0.225 vs 0.231) does NOT distinguish safe from toxic — the decision-level fusion regret
+does (13x apart).** So you cannot look at "how much earlier does the search win" and decide whether to trust
+its labels; you must look at whether the clairvoyant ARGMAX survives honest evaluation. Confirms: on high-fusion
+decks (antilife/combo) the strong teacher (searched) is unusable, so we're stuck on the weak greedy teacher ->
+a strong-AND-honest teacher (reshuffle-averaged search, E inside the max) is the ONLY lever there. On aggro,
+searched is already safe and the model ~=captures it, so the reshuffle search adds little at the decision level
+(EVPI~=0). NOTE the reshuffle search is a TRAINING-LABEL generator, NOT a play-time default (per user). TH has no
+aligned rollout/searched pair dumped (counts differ: rollout 1699 vs train 1081) — antilife is the combo exemplar.
