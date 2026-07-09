@@ -150,27 +150,39 @@ skill).
 
 ## Implementation status & findings (session log — read this first when resuming)
 
-### ▶ NEXT STEPS (resume here — 2026-07-08)
+### ▶ NEXT STEPS (resume here — 2026-07-09, post game-reading)
 
-State: value model committed + generalized (5 decks, `decks/*.value.json`, inert-gated); `plan_baseline_eval`
-d0 feature committed (validated on burn); combo-aware d0 feature tried + reverted (negative). Everything
-pushed to `learned-d0-evaluator` @ `abdf4ba`. Tree clean, nothing running.
+State: all work pushed to `learned-d0-evaluator` @ `aad5a1d`. Tree clean, nothing running. Committed this
+session: ROLLOUT LABELS (`MTG_EVAL_ROWS_ROLLOUT` + `rollout_depth`), the search-depth reframe, the
+game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude approx non-discriminative).
 
-**Where quality headroom actually is** (measured this session): converged decks (TH/burn/knights/slivers)
-are at/near the non-clairvoyant ceiling at d0 — no headroom, and more data/features buy ~0. The two real
-gaps are (a) **budget-starved / non-converging positions** and (b) **antilife d0** (learned 30–55% vs the
-non-clairvoyant hand-tuned baseline's ~90% — achievable, but gated).
+**The settled picture (metric = avg win turn, loss=9; target = the SEARCH, laddered d1→d3→d5→d7):**
+- **Per-deck solution = the value model in a d3–d5 value-leaf search.** It matches or beats d1-heuristic on
+  all 5 value-model decks and lands within ~0.03–0.06 of full d5-search, at an O(1) leaf. It also plays SANE
+  lines (burn g29: value-leaf d1 == d5-search, holds Shard Volley, wins T5; the d0 ranker dribbles to T8).
+- **The pure d0 RANKER is a dead end for search quality** — myopic (can't see a play's multi-turn cost); an
+  accurate post-plan value needs plan application = a 1-ply search (so value-model-as-feature buys nothing
+  over the value-leaf search). Rollout labels still made it the best *pure-d0* option and fixed antilife/burn
+  vs the hand-tuned baseline, but it structurally can't reach a 1-ply search.
+- **Gap decomposition (from reading games): learnable sequencing (recoverable by multi-turn value) +
+  justified clairvoyance (small, irreducible — antilife 2/120 shuffle games) + indifferent sloppiness
+  (recoverable; rollout labels remove it).** Only justified clairvoyance is a true floor.
 
-**Recommended next step (highest EV, tractable): convert the value model's 10–15× speedup into search
-DEPTH and measure the quality gain on budget-starved decks** (the doc's own §5f "reinvest the savings").
-- Concrete first test: a deck with a KNOWN budget-starvation gap — start with **TH's Land's-Edge line**
-  (starved at ~b200, recovers at ~b2000). A/B `value-leaf at high depth/budget` vs `baseline at the
-  suite's shallow budget` at **equal wall-clock**, diff per-game win turns.
-- **Verify the gain is real, not clairvoyance**: re-run under the `MTG_SHUFFLE_SALT_SEARCH` decouple
-  instrument (see the hinata-gate-sweep audit) — a gain that reverses when decoupled is a clairvoyance
-  artifact, not a ceiling to beat.
-- Why this over more d0 features: on converged decks the value-leaf only *ties* the rollout (leaf inert);
-  the win is on positions the search can't resolve in budget, which is exactly what cheaper leaves unlock.
+**Open next levers (pick by EV):**
+1. **Close the ~0.1 aggro residual of the value policy** (d1-value-leaf 4.40 vs d1-heuristic 4.30): it is
+   NOT data- or capacity-limited (burn 2k=4k rows, t120=t400) — it's the value model's *board-feature
+   fidelity* vs an exact playout. Lever = richer non-clairvoyant board-quality features on the VALUE model.
+2. **Goal #4** — bound the real search's depth by the value model's predicted win turn (search only to the
+   turn the model says it wins). Makes deep search itself cheaper; untested.
+3. **Climb the yardstick to d7** (value-leaf d7 vs d7-search) — confirm the model keeps planning deeper.
+4. **Adoption**: commit per-deck value/eval sidecars (rollout-lin for burn/antilife/knights/slivers,
+   searched for TH; value sidecars already committed for 5) + flip defaults + rebaseline GT — deliberate.
+5. **Hinata: DEFERRED** — no value sidecar (searched-value dump is pathologically slow) and no mulligan
+   profile yet (other machine grinding it, slow). Revisit once its profile lands.
+
+Do NOT: hand-fix provider heuristics (user decision — trust the non-clairvoyant model); retry combo-readiness
+features (durdle trap); use searched labels for a non-clairvoyant d0 policy (they inherit clairvoyant
+sloppiness). Older budget-starvation/depth-reinvestment framing below is superseded by the sections above.
 
 **★ Antilife AND burn d0 — SOLVED via ROLLOUT LABELS (2026-07-09). The "fundamental gap" was a label
 artifact, not capacity.** Non-clairvoyant rollout labels (`MTG_EVAL_ROWS_ROLLOUT`: label each candidate by
