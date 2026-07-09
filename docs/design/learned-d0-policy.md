@@ -1261,31 +1261,46 @@ LEAF delivers search quality via cheap DEPTH — not by out-reading the search a
 
 Everything else is at the ceiling.
 
-### ⚠️ CORRECTION — the NC ceiling numbers below are UNRELIABLE (overstate EVPI) (2026-07-09, user review)
+### ⚠️⚠️ CORRECTION 2 — the EVPI numbers below are WRONG: a HUMAN beats our NC policy (2026-07-09, user review, DEFINITIVE)
 
-The user (domain expert) flagged the EVPI gaps below as too large — esp. TH (0.6), antilife (0.79), burn (0.15) —
-and was RIGHT. `ReshuffleAvgChoosePlan` is a WEAK non-clairvoyant policy, so it is a LOWER BOUND on the true
-non-clairvoyant ceiling and therefore OVERESTIMATES EVPI. Three confirmed weaknesses:
-1. **Greedy/heuristic CONTINUATION (dominant).** The per-plan rollout can't pilot a multi-turn combo forward
-   non-clairvoyantly (TH Land's-Edge, antilife Remedy). A static/greedy policy structurally can't (see the whole
-   "static can't amortise" thread). So combo NC is capped ~0.7 above the search REGARDLESS of K.
-2. **Under-powered K/depth.** TH d2 was still DROPPING at K32 (K8 4.865 → K16 4.805 → K32 4.715, not converged) —
-   the reported "4.805 @ K16" underestimated the ceiling. d1 plateaus (~4.85) but d2 keeps improving with K.
-3. **Greedy second main** (FIXED for our experiments: `ReshuffleAvgChoosePlan` now searches the post-combat main,
-   both the executed play and this-turn's finisher in the pre-combat eval; `MTG_NC_SEARCH` branch no longer
-   `Solve`s it). Impact was SMALL though: antilife 4.865 → 4.825 (K8 d2). So the second main was a minor inflator;
-   the continuation is the real one. (NOTE: the PRODUCTION full-depth search searches both mains correctly via
-   FSLineWin/FSLineTail — an earlier claim that it didn't was WRONG; only the beyond-horizon leaf + legacy
-   SolveWithLookahead are greedy. This is being addressed generally by an agent on the regular branch.)
+The whole ceiling table below is **retracted as an EVPI measurement.** Two independent errors, both found by
+running the user's suggested test — compare against the hand-played **references** (genuine non-clairvoyant human
+play), same openings:
 
-**So: treat the EVPI / "clairvoyance-bound" claims in the table below as UPPER BOUNDS on EVPI, not measurements.**
-The true non-clairvoyant ceiling is closer to the clairvoyant search than the table shows (much closer on aggro;
-still some real gap on combo, but < the reported 0.6-0.8). A CLEAN EVPI measurement needs either a STRONG
-non-clairvoyant policy (a searched continuation — intractable recursively, or clairvoyant-within-sample = strategy
-fusion) or decoupling the strong full-depth search IN-HORIZON (breaks commit-the-line; unbuilt). **The one robust
-conclusion that survives: forward simulation beats the static d0 model (NC d0 >> static d0), so the value is in
-simulating, not evaluating — but HOW FAR the non-clairvoyant ceiling sits above d0 is NOT reliably measured yet.**
-Data: `logs/eval/{th_highk,nc_secondmain_fix}.log`.
+1. **Measurement bug: the "clairvoyant baseline" was accidentally the NC policy.** `MTG_NC_SEARCH` is gated on env
+   **presence** (`getenv(...) != nullptr`), so `MTG_NC_SEARCH=` (empty *but present*, as a bash `VAR= cmd` prefix)
+   turns NC **on**. Several baselines were measured that way, so "clairvoyant vs NC" was NC-vs-NC. Corrected with
+   `env -u MTG_NC_SEARCH`: **real antilife clairvoyant search = ~turn 4.0, 100% wins** (not the 4.075/4.79 quoted).
+   The deck is as fast as the user said. (Fix in your own scripts: `env -u`, or use `scripts/nc_ceiling.py` which
+   `env.pop`s the vars correctly.)
+
+2. **Our NC policy is WEAKER THAN A HUMAN → it overstates EVPI by ~3×.** On antilife's 30 references (seeds 1–31,
+   same openings): **human 30/30 @ 4.50**, **clairvoyant search 31/31 @ 4.097**, **our NC policy 28/31 @ 4.82
+   (LP 5.23)**. The human — a non-clairvoyant player — **wins every game our "non-clairvoyant ceiling" policy
+   loses.** So `ReshuffleAvgChoosePlan` is a poor lower bound on the ceiling, and its 1.13 gap to the search is
+   mostly *policy weakness*, not clairvoyance value.
+
+**The real EVPI is SMALL.** The true non-clairvoyant ceiling is bounded: `clairvoyant ≤ ceiling ≤ best-known-NC`.
+Best-known-NC = the human (30/30 @ 4.50), and the mulligan *table* mulligans BETTER than a human (user), so the
+ceiling with ideal mulligans is **< 4.50**. Thus **antilife EVPI = ceiling − clairvoyant ≤ 4.50 − 4.097 = 0.40**,
+and likely well under that. Not 0.79. Same logic voids TH's "0.6" (only 1 TH reference @ turn 5, but clairvoyant
+TH is ~4.1–4.2 at ~100% — a fast deck; the 0.66 NC-gap is an upper bound we know is loose). **The best available
+ceiling yardstick is the references (human play), NOT `ReshuffleAvgChoosePlan`.**
+
+What still stands from CORRECTION 1: forward simulation beats the static d0 model (NC d0 >> static d0). And the
+second-main fix (below) is real and kept — `SimulateToEndImpl` no longer `Solve`s the continuation second main
+greedily under `g_honest_teacher` (searches it via reshuffled `SolveWithLookahead`); inert in production (the guard
+is never set there). It's a correct strengthening but does NOT make NC a trustworthy ceiling — the human still beats
+it. Data: `logs/eval/{th_highk,nc_secondmain_fix}.log`; references `references/Anti-Lifegain/*.json`.
+
+---
+### ⚠️ CORRECTION 1 (SUPERSEDED by CORRECTION 2) — NC numbers overstate EVPI (2026-07-09, user review)
+
+The user flagged the EVPI gaps as too large — esp. TH (0.6), antilife (0.79), burn (0.15) — and was RIGHT.
+`ReshuffleAvgChoosePlan` is a WEAK non-clairvoyant policy → LOWER BOUND on the ceiling → OVERESTIMATES EVPI.
+Weaknesses: (1) greedy/heuristic CONTINUATION can't pilot a multi-turn combo forward; (2) under-powered K/depth
+(TH d2 still dropping at K32); (3) greedy second main (now fixed). CORRECTION 2 supersedes this with a concrete
+number: the human (a real NC player) beats the NC policy, so the gap is policy weakness, and real EVPI ≤ 0.40.
 
 ### ★★ THE NON-CLAIRVOYANT CEILING — measured (reshuffle-averaged search as a play policy) (2026-07-09)
 

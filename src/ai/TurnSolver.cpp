@@ -5495,7 +5495,29 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // the search optimise against plays that never happen. See AIEngine::TakeTurn.
         if (second_main)
         {
-            TurnSolver::Plan post_plan = TurnSolver::Solve(state, false);
+            TurnSolver::Plan post_plan;
+            if (g_honest_teacher && depth > 0)
+            {
+                // Honest ceiling policy: SEARCH the continuation's second main against a
+                // RESHUFFLED library (mirroring the pre-combat above), then resolve against
+                // the true order. Greedy here would understate a second-main deck's finisher
+                // sequencing at every future ply -> understate the ceiling -> OVERSTATE EVPI.
+                // This is the last greedy site in the non-clairvoyant continuation policy.
+                GameState ss2 = state;
+                const uint64_t hsalt2 = SaltSeed(
+                    state.game_seed
+                        + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(state.turn_number)
+                        + 7919ULL,   // distinct stream from the pre-combat reshuffle
+                    state.shuffle_salt_search);
+                ss2.ActivePlayer().library.Shuffle(hsalt2);
+                post_plan = TurnSolver::SolveWithLookahead(
+                    ss2, false, depth, max_turns, budget, false, second_main, nullptr);
+            }
+            else
+            {
+                // Default rollout: greedy second main (speed). The real game searches it.
+                post_plan = TurnSolver::Solve(state, false);
+            }
             ApplyPlanDirect(state, post_plan, false);
             if (state.Opponent().life <= 0) { return state.turn_number; }
         }
