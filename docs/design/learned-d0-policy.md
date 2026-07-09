@@ -150,11 +150,28 @@ skill).
 
 ## Implementation status & findings (session log — read this first when resuming)
 
-### ▶ NEXT STEPS (resume here — 2026-07-09, post game-reading)
+### ▶ NEXT STEPS (resume here — 2026-07-09, post value-leaf characterization)
 
-State: all work pushed to `learned-d0-evaluator` @ `aad5a1d`. Tree clean, nothing running. Committed this
-session: ROLLOUT LABELS (`MTG_EVAL_ROWS_ROLLOUT` + `rollout_depth`), the search-depth reframe, the
-game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude approx non-discriminative).
+State: all work pushed to `learned-d0-evaluator`. Tree clean, nothing running. This session GROUNDED the
+value proposition and CHARACTERIZED the value leaf's depth behavior; tried + reverted a race-clock feature.
+
+**Grounded results (this session):**
+- **The value leaf is a same-depth CHEAPER leaf, NOT free depth.** value-leaf d1 is WORSE than heuristic d1
+  (TH: value-leaf d1 = 5.33 vs heuristic d1 = 4.22); it only *catches up at equal depth* (value-leaf d5 =
+  4.147 = heuristic d5 = d7, within +0.02 on held-out 2002/3003/7007). So it delivers uses #2/#3/#4 (leaf-cost
+  reduction) — NOT use #1 "see ahead" (making d1 play like d5), except on depth-flat decks where d1≈d5 anyway.
+- **Speedup grounded: value-leaf d5 = 5.5× faster than heuristic d5 on TH** (2.0s vs 11.1s, 100g) at quality
+  parity. This is the core deliverable — deep-search quality at O(1) leaf cost.
+- **The "aggro residual" (lever #1) is noise on SOLVED decks.** All aggro decks are near-optimal AND depth-flat:
+  burn d1=d3=4.325 (d5=4.320), knights d1=4.300≈d5=4.295, slivers d1=4.355→d3=4.285 (mild 0.07). Value-leaf
+  matches heuristic at d3 within ~0.02–0.035. There is no meaningful aggro headroom to close.
+- **Race-clock feature (`our/opp_clock_to_lethal`, ceil(life/power)) TRIED + REVERTED.** Motivated (a ratio the
+  linear leaf can't form), but INERT: burn d1 slightly worse (4.425→4.450), knights unchanged, slivers +1 game.
+  Cause = goldfish opponent is passive (no board to race → combat clock has ~no signal) and the model already
+  captures the win turn from life/power. No shipped model used it; reverted to keep the feature set clean.
+
+Prior session committed: ROLLOUT LABELS (`MTG_EVAL_ROWS_ROLLOUT` + `rollout_depth`), the search-depth reframe,
+the game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude approx non-discriminative).
 
 **The settled picture (metric = avg win turn, loss=9; target = the SEARCH, laddered d1→d3→d5→d7):**
 - **Per-deck solution = the value model in a d3–d5 value-leaf search.** It matches or beats d1-heuristic on
@@ -169,16 +186,26 @@ game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude approx 
   (recoverable; rollout labels remove it).** Only justified clairvoyance is a true floor.
 
 **Open next levers (pick by EV):**
-1. **Close the ~0.1 aggro residual of the value policy** (d1-value-leaf 4.40 vs d1-heuristic 4.30): it is
-   NOT data- or capacity-limited (burn 2k=4k rows, t120=t400) — it's the value model's *board-feature
-   fidelity* vs an exact playout. Lever = richer non-clairvoyant board-quality features on the VALUE model.
-2. **Goal #4** — bound the real search's depth by the value model's predicted win turn (search only to the
-   turn the model says it wins). Makes deep search itself cheaper; untested.
-3. **Climb the yardstick to d7** (value-leaf d7 vs d7-search) — confirm the model keeps planning deeper.
+1. ~~Close the aggro residual~~ **CLOSED as noise (this session).** Aggro decks are depth-flat AND
+   near-optimal; the residual is ~0.02 (1–3 games). Not data/capacity/feature limited — there is simply no
+   headroom. The clock feature (the obvious "board-quality" fix) was tried and is inert (goldfish opp passive).
+2. **Goal #4 — bound the real search's depth by the value model's predicted win turn** (search only to the
+   turn the model says it wins). NOW THE TOP LEVER: the value leaf already gives 5.5× at fixed depth; goal #4
+   compounds it by pruning the OUTER horizon. Untested. Note `EnumerateEarliestWins` already early-terminates
+   at the first win found, so the win is *iterative-deepening seeded by the model's predicted turn* (try
+   depth≈predicted−current first, deepen only on a miss) — measure the prune vs the risk of missing a faster line.
+3. **Climb the yardstick to d7** (value-leaf d7 vs d7-search) — TH already shows d5=d7 (converged), so this is
+   mostly a combo/antilife check that the leaf keeps tracking as depth grows.
 4. **Adoption**: commit per-deck value/eval sidecars (rollout-lin for burn/antilife/knights/slivers,
    searched for TH; value sidecars already committed for 5) + flip defaults + rebaseline GT — deliberate.
+   Grounded now: value-leaf is 5.5× faster at parity, so adoption's payoff (cheaper GT/regression) is real.
 5. **Hinata: DEFERRED** — no value sidecar (searched-value dump is pathologically slow) and no mulligan
    profile yet (other machine grinding it, slow). Revisit once its profile lands.
+
+**Reframe for use #1 ("beat d1-search / see ahead"):** the value LEAF cannot do this on combo decks — the win
+turn genuinely depends on hidden library order (clairvoyance), so a non-clairvoyant leaf can't make d1 match d5
+there. It CAN on depth-flat decks (aggro), where d1≈d5 already. The honest deliverable is uses #2/#3/#4
+(grounded 5.5× speedup at parity); use #1 is bounded by irreducible clairvoyance on combo decks.
 
 Do NOT: hand-fix provider heuristics (user decision — trust the non-clairvoyant model); retry combo-readiness
 features (durdle trap); use searched labels for a non-clairvoyant d0 policy (they inherit clairvoyant
