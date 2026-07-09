@@ -1304,6 +1304,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
             int committed_win       = m_max_turns + 1;
             int committed_sub_depth = 0;
+            // EXPERIMENTAL (MTG_HONEST_PLAY, default off): run the search's forward model
+            // DRAW-DECOUPLED -- each rollout turn plans against a reshuffled unseen library and
+            // resolves against the true order (see g_honest_teacher). A cheap 1-sample proxy for
+            // the reshuffle-averaged NON-clairvoyant policy (the untested goal-#1 lever). Byte-
+            // identical when unset. Kept as an instrument, not a shipped play mode.
+            static const bool s_honest_play = std::getenv("MTG_HONEST_PLAY") != nullptr;
+            HonestTeacherGuard _htp(s_honest_play);
             if (s_full_depth)
             {
                 // Full-depth commit-the-line path: searches up to m_lookahead_depth
