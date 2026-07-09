@@ -186,21 +186,18 @@ the game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude app
   (recoverable; rollout labels remove it).** Only justified clairvoyance is a true floor.
 
 **Open next levers (pick by EV):**
-1. ~~Close the aggro residual~~ **CLOSED as noise (this session).** Aggro decks are depth-flat AND
-   near-optimal; the residual is ~0.02 (1–3 games). Not data/capacity/feature limited — there is simply no
-   headroom. The clock feature (the obvious "board-quality" fix) was tried and is inert (goldfish opp passive).
-2. **Goal #4 — bound the real search's depth by the value model's predicted win turn** (search only to the
-   turn the model says it wins). NOW THE TOP LEVER: the value leaf already gives 5.5× at fixed depth; goal #4
-   compounds it by pruning the OUTER horizon. Untested. Note `EnumerateEarliestWins` already early-terminates
-   at the first win found, so the win is *iterative-deepening seeded by the model's predicted turn* (try
-   depth≈predicted−current first, deepen only on a miss) — measure the prune vs the risk of missing a faster line.
-3. **Climb the yardstick to d7** (value-leaf d7 vs d7-search) — TH already shows d5=d7 (converged), so this is
-   mostly a combo/antilife check that the leaf keeps tracking as depth grows.
-4. **Adoption**: commit per-deck value/eval sidecars (rollout-lin for burn/antilife/knights/slivers,
-   searched for TH; value sidecars already committed for 5) + flip defaults + rebaseline GT — deliberate.
-   Grounded now: value-leaf is 5.5× faster at parity, so adoption's payoff (cheaper GT/regression) is real.
-5. **Hinata: DEFERRED** — no value sidecar (searched-value dump is pathologically slow) and no mulligan
-   profile yet (other machine grinding it, slow). Revisit once its profile lands.
+1. ~~Close the aggro residual~~ **CLOSED as noise.** Aggro decks are depth-flat + near-optimal; residual ~0.02.
+2. ~~Push value-leaf FIT higher (the user's pick)~~ **DONE — saturated.** Race-clock feature reverted (inert);
+   GBDT-regression value model is a wash at every depth (leaf is at the non-clairvoyant info limit, RMSE ~0.5t).
+   A richer leaf does NOT let shallower search beat d1-heur — the shallow-depth gap is branching-limited.
+3. **★ ADOPTION is now the top lever (needs user sign-off).** Both deliverables GROUNDED (tables above): goal #1
+   (value-leaf d5 beats heur d1 on all 5 decks, held-out) and goals #2/#3/#4 (exact-parity 1.6–25× speedup).
+   Adoption = flip `MTG_VALUE_MODEL` default on-when-present + rebaseline smoke/regression GT to the value-leaf
+   lines (NOT byte-identical — same LP, different plans). Deliberate GT change → user decides. Open sub-question:
+   what search depth the adopted harness uses (d3 = fast + ties d1-heur; d5 = beats everywhere).
+4. **Goal #4 — search-horizon cutoff:** LOW value; the ID search already early-terminates at the first verified
+   win (TurnSolver.cpp:5875) and shallow passes are near-free via shared memo. Model-seeded start = minor.
+5. **Hinata: DEFERRED** — no value sidecar (searched-value dump pathologically slow) + no mulligan profile yet.
 
 **Reframe for use #1 ("beat d1-search / see ahead") — d1 IS BEATABLE; the target is FIT QUALITY (corrected
 2026-07-09, per user).** An earlier draft here claimed d1 was a structural wall for a non-clairvoyant policy.
@@ -240,6 +237,36 @@ well as searching deeper. The leaf is fit-saturated at the non-clairvoyant infor
 the residual is clairvoyance, not learnable structure). **Conclusion: the way to beat d1-heur is cheap DEPTH
 (value-leaf d3/d5), which already works on the headroom decks; pushing leaf FIT buys nothing there.** The
 "pure d0/d1 judgment beats d1-search" goal is branching-limited, not a fit target after all.
+
+### ★ GROUNDED RESULTS — both deliverables, all 5 value-model decks, held-out seeds (2026-07-09)
+
+**(1) Goal #1 — value-leaf beats heuristic d1 on EVERY deck (avg over held-out seeds 2002/3003/7007, 150g):**
+
+| deck | heuristic d1 | value-leaf d3 | value-leaf d5 | Δ(d5−h1) | first depth ≤ h1 |
+|---|---|---|---|---|---|
+| burn | 4.289 | 4.300 | 4.276 | **−0.013** | d5 (d3 ties) |
+| knights | 4.364 | 4.382 | 4.356 | **−0.009** | d5 |
+| slivers | 4.331 | 4.271 | 4.253 | **−0.078** | d3 |
+| TH | 4.242 | 4.258 | 4.178 | **−0.064** | d5 (d3 ties) |
+| antilife | 4.124 | 4.418 | 4.067 | **−0.057** | d5 |
+
+value-leaf **d1** is always worse (branching-limited); **d3** ties/beats on aggro, **d5** beats everywhere.
+So the model DOES "see ahead" past d1 — it needs ≥3 plies of branching, with the O(1) leaf making that cheap.
+
+**(2) Goals #2/#3/#4 — matched-quality speedup: value-leaf d5 vs heuristic d5 (EXACT LP parity, Δ=0.0000):**
+
+| deck | heur d5 LP | value-leaf d5 LP | wall heur / value (100g) | speedup |
+|---|---|---|---|---|
+| burn | 4.3467 | 4.3467 | 48.55s / 1.93s | **25.1×** |
+| slivers | 4.2600 | 4.2600 | 6.18s / 0.34s | **18.4×** |
+| TH | 4.1467 | 4.1467 | 11.75s / 2.01s | **5.8×** |
+| knights | 4.3200 | 4.3200 | 3.46s / 0.93s | 3.7× |
+| antilife | 4.0600 | 4.0600 | 15.36s / 9.82s | 1.6× |
+
+Same depth, same aggregate quality, 1.6–25× less wall-clock (biggest where the greedy play-out is longest =
+grindy decks; smallest on combo, where branching above the leaf dominates). NB: same LP ≠ byte-identical lines
+(the leaf picks different plans), so adoption requires a deliberate GT rebaseline. Driver scripts:
+`/tmp/eval_matrix.py`, `/tmp/speed_matrix.py`; raw in `logs/eval/{matrix,speed}_results.txt`.
 
 Do NOT: hand-fix provider heuristics (user decision — trust the non-clairvoyant model); retry combo-readiness
 features (durdle trap); use searched labels for a non-clairvoyant d0 policy (they inherit clairvoyant
