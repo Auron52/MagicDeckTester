@@ -37,6 +37,24 @@ struct ShuffleEvalGuard
     ~ShuffleEvalGuard() { g_shuffle_eval = prev; }
 };
 
+// Honest-teacher label instrument (ANALYSIS ONLY): true while generating a full-strength
+// non-clairvoyant TEACHER label -- a depth>0 rollout continuation whose per-turn lookahead is
+// DECOUPLED from the real draw order. g_shuffle_eval only decouples mid-game shuffle EVENTS
+// (SearchShuffleSeed / Gamble); the BASE draw order (opening shuffle) has no such event, so a
+// depth>0 rollout continuation would otherwise read the real future (clairvoyant). When this is
+// set, SimulateToEndImpl reshuffles the unseen library into a random future BEFORE each turn's
+// SolveWithLookahead (the plan is chosen against that random future, then RESOLVED against the true
+// order) -- so the continuation is a genuine "mental sim under uncertainty", not a clairvoyant peek.
+// Averaged over K by the outer dump loop (which varies GameState::shuffle_salt_search per k, folded
+// into the per-turn reshuffle salt). Defaults false -> byte-identical to normal play. RAII guard.
+inline thread_local bool g_honest_teacher = false;
+struct HonestTeacherGuard
+{
+    bool prev;
+    explicit HonestTeacherGuard(bool v) : prev(g_honest_teacher) { g_honest_teacher = v; }
+    ~HonestTeacherGuard() { g_honest_teacher = prev; }
+};
+
 // A passive creature that enters the opponent's battlefield at a scheduled turn.
 // Used to provide creature targets for spells like Searing Blood in goldfishing.
 struct OpponentSpawn

@@ -433,9 +433,12 @@ public:
     // rollout_depth: the per-turn lookahead the rollout policy uses (0 = greedy d0 = imitate the
     // baseline; >0 = a stronger searched policy, distilled via K-reshuffle averaging -> can BEAT a
     // weak baseline). Only used when rollout_label. See learned-d0-policy.md (hinata d0).
+    // honest: when rollout_depth>0, DECOUPLE the continuation lookahead from the real draw order
+    // (reshuffle each turn's unseen library before the lookahead, resolve against the true order) ->
+    // a full-strength NON-clairvoyant teacher, not a clairvoyant deep search. See g_honest_teacher.
     static EarliestWinReport EnumerateEarliestWins(const GameState& state, int max_turns,
                                                    bool second_main, bool rollout_label = false,
-                                                   int rollout_depth = 0);
+                                                   int rollout_depth = 0, bool honest = false);
 
     // The hand-tuned baseline's plan value = Sum EvalCard(def, state) over the plan's cast cards.
     // Exposed so the learned-eval label dump (AIEngine) and the ranking seam compute the SAME

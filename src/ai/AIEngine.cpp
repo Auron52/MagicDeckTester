@@ -80,6 +80,11 @@ static const bool  s_eval_rows_rollout = std::getenv("MTG_EVAL_ROWS_ROLLOUT") !=
 // baseline; >0 distils a stronger policy, for weak-baseline decks like hinata). See learned-d0-policy.md.
 static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_EVAL_ROLLOUT_DEPTH");
                                               return (e && *e) ? std::atoi(e) : 0; }();
+// MTG_EVAL_ROWS_HONEST: with MTG_EVAL_ROLLOUT_DEPTH>0, make the rollout continuation a full-strength
+// NON-clairvoyant teacher -- its per-turn lookahead plans against a reshuffled unseen library and
+// resolves against the true order (see g_honest_teacher). Without this, rollout_depth>0 is a
+// clairvoyant deep search (reads the real future) and is WORSE than greedy. See learned-d0-policy.md.
+static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != nullptr;
 
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
 {
@@ -97,9 +102,13 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
                           + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
                           + 1000003ULL * static_cast<uint64_t>(state.turn_number);
         s.ActivePlayer().library.Shuffle(rs);
+        // Honest-teacher per-turn reshuffle (g_honest_teacher) folds shuffle_salt_search; vary it per
+        // k so the K outer samples draw independent decoupled futures (else all k share one future).
+        // Guarded to honest mode: leaves the non-honest rollout/searched dump path byte-unchanged.
+        if (s_eval_rows_honest) { s.shuffle_salt_search = rs; }
         const TurnSolver::EarliestWinReport rep =
             TurnSolver::EnumerateEarliestWins(s, max_turns, second_main, s_eval_rows_rollout,
-                                              s_eval_rollout_depth);
+                                              s_eval_rollout_depth, s_eval_rows_honest);
         const int e = (rep.earliest > 0 && rep.earliest <= max_turns) ? rep.earliest : (max_turns + 1);
         earliest_sum += e; ++earliest_n;
         for (const TurnSolver::EarliestWinCandidate& c : rep.candidates)
