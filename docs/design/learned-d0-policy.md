@@ -43,6 +43,19 @@ max_turns+1).
   search leaf, an out-of-process call is a non-starter — this alone argues for a cheap model at the
   leaf, independent of determinism.
 
+## Why this model — the four motivating uses (settled with the user, 2026-07-09)
+
+1. **An option to greatly improve non-clairvoyant play** (a strong d0 policy — the `eval_model` ranker).
+2. **Quick evaluation / testing of a deck without compromising much on quality** (fast d0 ≈ search quality).
+3. **Higher-quality and faster rollouts** (the `value_model` leaf — O(1) win-turn vs a greedy playout).
+4. **Reduce time spent by search: search only needs to go up to the turn where the model predicts a win**
+   (use the value model's predicted win turn as a search depth/cutoff bound). *Not yet implemented — top
+   follow-up.*
+
+Eventually (phase 2) this model approach may train decks to play *against each other*. Implication for
+scope: the d0 ranker (#1) and the value/leaf model (#2/#3/#4) are equally first-class deliverables — a
+"high-quality per-deck solution" means BOTH a non-clairvoyant d0 policy AND a committed value sidecar.
+
 ## Integration (grounded in the code)
 
 **Strategy: learned plan *scorer*, reuse the enumerator.** Do not emit `Plan`s from a policy head
@@ -171,6 +184,37 @@ Full detail + the imitation-vs-distillation model in the session-log entry "★ 
 **Next:** (a) commit per-deck ship-worthy linear sidecars (rollout for burn/antilife, searched for TH);
 (b) re-test the SHARED cross-deck model with rollout/imitation labels (may pool where searched labels
 collapsed). Superseded: the "combo-readiness features / GBDT capacity" narrative for antilife d0.
+
+### All 6 decks d0 — per-deck best label + result (2026-07-09)
+
+Ran the rollout-vs-searched label choice across every deck (d0, held-out seeds, LINEAR unless noted;
+rollout dumps are d3-play/K8/400g, ~cheap). **`MidGameEvaluator` linear sidecars are near/at parity on
+all decks; the label recipe is deck-dependent.**
+
+| deck | archetype | best d0 model | learned | baseline | Δ |
+|---|---|---|---|---|---|
+| Treasure Hunt | value/combo | **searched**-lin | 87.2% | 86.7% | **beats** |
+| burn | aggro | rollout-lin | LP 4.723/4.693 | 4.740/4.693 | **parity/better** |
+| Anti-Lifegain | combo (assemble) | rollout-lin | 87.8%/87.2% | 88.0%/88.5% | parity (−0.01/+0.06 LP) |
+| knights | aggro | rollout-lin | 99.3%/99.3% | 100%/100% | near (−0.22 LP) |
+| slivers | aggro | rollout-lin | 100%/99.7% | 100%/100% | near (−0.04/−0.10 LP) |
+| hinata | combo (spellslinger) | rollout-lin | 56% | 59% | near non-clairvoyant ceiling |
+
+Findings:
+- **Rollout (imitation) label wins on aggro + assemble-combo** (burn/antilife/knights/slivers); **searched
+  (distillation) label wins on TH** (Land's-Edge needs the searched optimum). GBDT overfits every aggro
+  deck (knights rollout-GBDT LP +1.41; burn/hinata likewise) — **linear is the right class for imitation
+  labels**; GBDT only helped searched-label antilife (now obsolete).
+- **hinata is the honest ceiling case.** d0 baseline is only 59% but d1 = **96%** — that 37-pt jump is
+  largely **clairvoyance** (1-ply lookahead sees the immediate combo payoff a non-clairvoyant d0 can't).
+  So ~59% is near the non-clairvoyant d0 ceiling; rollout-lin's 56% (imitating the weak baseline) is about
+  as good as non-clairvoyant d0 gets. **Distilling the stronger d1 policy via deeper rollout labels is
+  intractable for hinata** — depth-1/2 rollout labels (a per-turn search × K × candidates) time out on the
+  combo. Added the `rollout_depth` knob (`MTG_EVAL_ROLLOUT_DEPTH`, env; `EnumerateEarliestWins` int param,
+  inert default 0) for decks where it IS affordable; hinata isn't one.
+- Per-deck best d0 sidecars persisted in `logs/eval/*_rollout_lin.eval.json` (+ TH's searched
+  `th_v2rank`/`treasure_hunt.eval.json`). Adoption to `decks/*.eval.json` (+ GT rebaseline) is the
+  remaining deliberate step.
 
 **Loose ends:** hinata value sidecar still pending its (slow) dump — re-dump at budget ~400 and commit
 `decks/Hinata2.value.json` to complete the set. Value-model ADOPTION (flip `MTG_VALUE_MODEL` default on +

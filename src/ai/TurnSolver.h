@@ -430,8 +430,12 @@ public:
     // SimulateToEnd under the baseline policy) instead of the clairvoyant earliest-win SEARCH. Used
     // for eval-row LABEL generation to stop the oracle over-crediting durdle lines a real d0 can't
     // realise (see the antilife d0 work in learned-d0-policy.md). Default false = searched label.
+    // rollout_depth: the per-turn lookahead the rollout policy uses (0 = greedy d0 = imitate the
+    // baseline; >0 = a stronger searched policy, distilled via K-reshuffle averaging -> can BEAT a
+    // weak baseline). Only used when rollout_label. See learned-d0-policy.md (hinata d0).
     static EarliestWinReport EnumerateEarliestWins(const GameState& state, int max_turns,
-                                                   bool second_main, bool rollout_label = false);
+                                                   bool second_main, bool rollout_label = false,
+                                                   int rollout_depth = 0);
 
     // The hand-tuned baseline's plan value = Sum EvalCard(def, state) over the plan's cast cards.
     // Exposed so the learned-eval label dump (AIEngine) and the ranking seam compute the SAME

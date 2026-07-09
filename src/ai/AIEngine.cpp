@@ -76,6 +76,10 @@ static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_
 // realise). Affects the label from EnumerateEarliestWins -> use for EVAL-row dumps only, NOT value
 // dumps (the value model wants the searched label). See learned-d0-policy.md (antilife d0).
 static const bool  s_eval_rows_rollout = std::getenv("MTG_EVAL_ROWS_ROLLOUT") != nullptr;
+// MTG_EVAL_ROLLOUT_DEPTH: per-turn lookahead of the rollout policy (default 0 = greedy d0 = imitate
+// baseline; >0 distils a stronger policy, for weak-baseline decks like hinata). See learned-d0-policy.md.
+static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_EVAL_ROLLOUT_DEPTH");
+                                              return (e && *e) ? std::atoi(e) : 0; }();
 
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
 {
@@ -94,7 +98,8 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
                           + 1000003ULL * static_cast<uint64_t>(state.turn_number);
         s.ActivePlayer().library.Shuffle(rs);
         const TurnSolver::EarliestWinReport rep =
-            TurnSolver::EnumerateEarliestWins(s, max_turns, second_main, s_eval_rows_rollout);
+            TurnSolver::EnumerateEarliestWins(s, max_turns, second_main, s_eval_rows_rollout,
+                                              s_eval_rollout_depth);
         const int e = (rep.earliest > 0 && rep.earliest <= max_turns) ? rep.earliest : (max_turns + 1);
         earliest_sum += e; ++earliest_n;
         for (const TurnSolver::EarliestWinCandidate& c : rep.candidates)
