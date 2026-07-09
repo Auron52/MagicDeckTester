@@ -6200,6 +6200,81 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     return report;
 }
 
+// Reshuffle-averaged non-clairvoyant search as a PLAY policy. See the header. Mirrors the per-
+// candidate evaluation of EnumerateEarliestWins' rollout branch, but (a) averages over K reshuffled
+// futures with COMMON RANDOM NUMBERS across candidates (same reshuffle per sample k -> low-variance
+// comparison), (b) returns the best Plan for the caller to execute against the TRUE library. The
+// continuation is honest (g_honest_teacher) at depth>0 so it never reads real draws; depth 0 is a
+// pure greedy non-clairvoyant rollout. NO memo/budget (each sample reshuffles a distinct future, so
+// the leaf TT's size=>content assumption breaks) -- expensive by design; this measures the ceiling.
+TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int K, int depth,
+                                                    int max_turns, bool second_main)
+{
+    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, true);
+    if (plans.empty())     { return TurnSolver::Plan{}; }
+    if (plans.size() == 1) { return plans[0]; }
+    if (K < 1) { K = 1; }
+
+    const int turn = state.turn_number;
+    std::vector<long long> sum(plans.size(), 0);
+
+    for (int k = 0; k < K; ++k)
+    {
+        // One sampled future per sample k, SHARED across all candidates (common random numbers).
+        const uint64_t rs = state.game_seed
+                          + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
+                          + 1000003ULL * static_cast<uint64_t>(turn);
+        for (size_t i = 0; i < plans.size(); ++i)
+        {
+            GameState s = state;
+            s.ActivePlayer().library.Shuffle(rs);
+            s.shuffle_salt_search = rs;             // honest continuation folds this (varies per k)
+            ShuffleEvalGuard   _seg(true);
+            HonestTeacherGuard _htg(depth > 0);     // decouple the depth>0 continuation lookahead
+            std::vector<Action> bp;
+            ApplyPlanDirect(s, plans[i], true, &bp);
+            int wt;
+            if (s.ActivePlayer().life <= 0)         // self-lethal line -> never a win
+            {
+                wt = max_turns + 1;
+            }
+            else
+            {
+                SimulateAnimateLands(s);
+                SimulateTapTokens(s);
+                SimulateCombat(s);
+                if (s.Opponent().life <= 0)         // wins THIS turn (library-independent -> all k agree)
+                {
+                    wt = turn;
+                }
+                else
+                {
+                    GameState r = s;
+                    if (!SimulateEndAndStartNextTurn(r)) { wt = max_turns + 1; }
+                    else
+                    {
+                        ExpireStagedCards(r);
+                        wt = SimulateToEnd(std::move(r), depth, max_turns, nullptr,
+                                           max_turns + 1, second_main, nullptr);
+                    }
+                }
+            }
+            sum[i] += wt;
+        }
+    }
+
+    // Pick min average win turn. EnumeratePlansWithLand is value-sorted, so scanning in order and
+    // keeping the STRICT minimum breaks ties toward the highest static value (the engine's tiebreak).
+    size_t best     = 0;
+    long long best_sum = sum[0];
+    for (size_t i = 1; i < plans.size(); ++i)
+    {
+        if (sum[i] < best_sum) { best_sum = sum[i]; best = i; }
+    }
+    return plans[best];
+}
+
 // ---- Public API ----
 
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
