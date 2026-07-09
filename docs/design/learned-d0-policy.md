@@ -197,7 +197,14 @@ the game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude app
    what search depth the adopted harness uses (d3 = fast + ties d1-heur; d5 = beats everywhere).
 4. **Goal #4 — search-horizon cutoff:** LOW value; the ID search already early-terminates at the first verified
    win (TurnSolver.cpp:5875) and shallow passes are near-free via shared memo. Model-seeded start = minor.
-5. **Hinata: DEFERRED** — no value sidecar (searched-value dump pathologically slow) + no mulligan profile yet.
+5. **★ Non-clairvoyant "see-ahead" (the real goal #1) — reshuffle-averaged search.** value-leaf d5 beats d1 but
+   is a CHEAP CLAIRVOYANT search (branching reads real draws; see honesty caveat). The principled non-clairvoyant
+   policy is a search whose BRANCHING averages over K reshuffled futures + the value leaf — the "mental sim under
+   uncertainty" a human does. Machinery exists (label gen already does K-reshuffle search; `MTG_SHUFFLE_SALT_SEARCH`
+   decouples search-shuffle from execution). Untested as a PLAY mode. Measures: does reshuffle-avg d3/d5 beat
+   heuristic d1? If yes → non-clairvoyant see-ahead is real; if no → non-clairvoyant play is genuinely ~d1-bounded.
+   A real (but non-trivial) build; the clearest path to the user's original "greatly improve non-clairvoyant play".
+6. **Hinata: DEFERRED** — no value sidecar (searched-value dump pathologically slow) + no mulligan profile yet.
 
 **Reframe for use #1 ("beat d1-search / see ahead") — d1 IS BEATABLE; the target is FIT QUALITY (corrected
 2026-07-09, per user).** An earlier draft here claimed d1 was a structural wall for a non-clairvoyant policy.
@@ -252,6 +259,17 @@ the residual is clairvoyance, not learnable structure). **Conclusion: the way to
 
 value-leaf **d1** is always worse (branching-limited); **d3** ties/beats on aggro, **d5** beats everywhere.
 So the model DOES "see ahead" past d1 — it needs ≥3 plies of branching, with the O(1) leaf making that cheap.
+
+**HONESTY CAVEAT — value-leaf d5 is a cheap CLAIRVOYANT search, not a non-clairvoyant policy.** Only the *leaf*
+is non-clairvoyant; the d5 *branching* still draws from the real seeded library (`GameState s = state;` +
+advance, no reshuffle — TurnSolver.cpp:5693+). So "value-leaf d5 beats heuristic d1" is *deeper clairvoyant
+search beating shallower clairvoyant search* (both read real draws; d5 wins by depth), made cheap by the O(1)
+leaf. This fully delivers uses #2/#3/#4 (a fast drop-in for the deep search). It is NOT the same as goal #1's
+first phrasing ("greatly improve *non-clairvoyant* play"): the truly non-clairvoyant policy is value-leaf **d0**
+(no library-reading branching), which stays bounded (can't beat d1) — and GBDT/features didn't move it. A
+principled non-clairvoyant "see-ahead" would be a *reshuffle-averaged* search (branching over sampled futures +
+value leaf, the mental-simulation-under-uncertainty a human does) — expensive (K× branching), not yet built.
+The user's d1-is-beatable point holds for that; the value-leaf-d5 result is the clairvoyant-search speedup.
 
 **(2) Goals #2/#3/#4 — matched-quality speedup: value-leaf d5 vs heuristic d5 (EXACT LP parity, Δ=0.0000):**
 
