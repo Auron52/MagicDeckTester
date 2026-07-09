@@ -202,25 +202,44 @@ the game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude app
 5. **Hinata: DEFERRED** — no value sidecar (searched-value dump is pathologically slow) and no mulligan
    profile yet (other machine grinding it, slow). Revisit once its profile lands.
 
-**Reframe for use #1 ("beat d1-search / see ahead") — STRUCTURALLY BOUNDED (measured 2026-07-09).** No
-non-clairvoyant **d0** policy beats **d1-heuristic-search**, on any deck:
+**Reframe for use #1 ("beat d1-search / see ahead") — d1 IS BEATABLE; the target is FIT QUALITY (corrected
+2026-07-09, per user).** An earlier draft here claimed d1 was a structural wall for a non-clairvoyant policy.
+**That was wrong, on two counts:**
+1. **Conceptual (the decisive point).** `d1-heuristic`'s leaf is a *greedy play-out of the myopic d0 baseline*
+   policy — a WEAK, non-optimal estimate, not the truth. Better judgment beats it. A human beats d1 exactly
+   because their positional evaluation is better than rolling the greedy policy forward. So d1 is not a ceiling.
+2. **Empirical.** `SolveWithLookahead(depth<=0)` returns plain `Solve()` (TurnSolver.cpp:6094) — **the value
+   model is NOT consulted at d0.** The prior "value-leaf d0" table was measuring the baseline d0, not the model.
 
-| deck | heuristic d1 | value-leaf d0 | Δ(v0−h1) |
-|---|---|---|---|
-| burn | 4.353 | 4.793 | +0.44 |
-| knights | 4.327 | 4.520 | +0.19 |
-| slivers | 4.340 | 4.733 | +0.39 |
-| TH | 4.220 | 5.500 | +1.28 |
+**The value model's LABEL is the de-clairvoyed SEARCHED win turn — strictly better than a greedy play-out.** So
+a well-fit value leaf *should* beat `d1-heuristic`, whose leaf IS that greedy play-out. The right yardstick is
+**value-leaf d1** (identical 1-ply branching to heuristic d1; value leaf vs play-out leaf) **beating heuristic
+d1**, with the ceiling being *searched* quality — which sits BELOW heuristic d1 (burn searched≈4.32 < heur d1
+4.35; TH searched≈4.15 < heur d1 4.22). value-leaf d1 currently TRAILS (burn 4.45 vs 4.35; TH 5.33 vs 4.22) only
+because the current LINEAR value model is a worse leaf than the play-out.
 
-The eval-ranker d0 is the same story (rollout-lin d0 ≈ baseline d0 ≈ 4.7 on burn, vs heuristic d1 4.35). The
-reason is structural, not a training/feature deficiency: **d1 = 1 ply of real lookahead + a full greedy playout
-at the leaf; d0 = a static evaluation of the current position.** One ply of branching plus a playout beats any
-static scalar. Even "d0 + 1-ply value" (= value-leaf d1) trails d1-heuristic (burn 4.45 vs 4.35; TH 5.33 vs
-4.22), because the value scalar is a weaker leaf than an actual playout. So goal #1 as literally stated ("a d0
-model that beats d1-search") is not reachable; the model's realised value is as a **search LEAF** — deep-search
-quality at O(1) leaf cost (grounded 5.5× at parity). On combo decks there is an additional irreducible
-clairvoyance floor (the win turn depends on hidden library order a non-clairvoyant leaf can't see). The honest,
-delivered use set is #2/#3/#4 (fast eval / fast rollouts / cheaper deep search); #1 is bounded.
+**HOW THE MODEL ALREADY BEATS d1-heuristic — via cheap DEPTH, not a shallow d0/d1 eval (measured, reconciled
+with the user 2026-07-09).** The right lens is `value-leaf d5` (the model as the LEAF of a depth-5 search) vs
+`heuristic d1`. It WINS on the decks where d1-heur is suboptimal, at COMPARABLE cost:
+
+| deck | heur d1 | value-leaf d5 | Δ | cost heur-d1 / value-leaf-d5 (100g) |
+|---|---|---|---|---|
+| burn | 4.353 | 4.347 | −0.007 (tie; burn depth-flat, d1 already optimal) | 0.26s / 1.93s |
+| slivers | 4.340 | 4.260 | **−0.080 (beats)** | 0.23s / 0.34s |
+| TH | 4.220 | 4.147 | **−0.073 (beats)** | 1.78s / 2.10s |
+
+So goal #1 IS met — the model "sees ahead" (d5) for ~the price of d1 because its leaf is O(1), and d5 beats d1.
+This is what the earlier "value-leaf d5 beats d1-heur" table measured: **d5 with the model in the leaf nodes,
+NOT a d0 model.**
+
+**The FIT lever (GBDT / richer leaf) is a WASH for the shallow-depth goal (measured).** GBDT-regression value
+model ≈ linear at every depth (burn d1 4.41 vs 4.45; slivers d1 4.65 vs 4.67, d3 4.28=4.28, d5 4.26=4.26). A
+fancier leaf does NOT let a SHALLOWER search beat d1-heur: the value leaf needs real branching depth (d3+) to win,
+because at d1 the 1-ply-out positions are unresolved (combo not assembled) and no static leaf can judge them as
+well as searching deeper. The leaf is fit-saturated at the non-clairvoyant information limit (RMSE ≈ 0.5 turns =
+the residual is clairvoyance, not learnable structure). **Conclusion: the way to beat d1-heur is cheap DEPTH
+(value-leaf d3/d5), which already works on the headroom decks; pushing leaf FIT buys nothing there.** The
+"pure d0/d1 judgment beats d1-search" goal is branching-limited, not a fit target after all.
 
 Do NOT: hand-fix provider heuristics (user decision — trust the non-clairvoyant model); retry combo-readiness
 features (durdle trap); use searched labels for a non-clairvoyant d0 policy (they inherit clairvoyant
