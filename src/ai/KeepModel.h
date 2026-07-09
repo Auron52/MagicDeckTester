@@ -382,6 +382,19 @@ enum class MidGameFeature : int
     //     shared PlanBaselineEval helper at BOTH the seam and the label dump => lockstep, non-clairvoyant
     //     (EvalCard reads only the public board). 0 for the leaf value model (empty plan). learned-d0-policy.md
     PlanBaselineEval,
+    // --- appended (v6): DISTRIBUTIONAL / rollout-under-uncertainty features. The value model's LABEL is
+    //     already the de-clairvoyed (reshuffle-averaged) win turn, but its INPUTS were board-only -- it read
+    //     library SIZE but nothing about the COMPOSITION, so it couldn't tell "6 burn left in 18 cards" from
+    //     "0 burn left" and couldn't amortise the rollout. The remaining-library MULTISET is public
+    //     (own decklist minus every visible zone); only the ORDER is hidden. These count the library
+    //     ORDER-INVARIANTLY (sum over the whole multiset, never position i) => non-clairvoyant. This is the
+    //     "quick mental simulation under uncertainty" a human does ("8 burn in 20 => ~40% to draw one").
+    //     learned-d0-policy.md (rollout-under-uncertainty features).
+    LibLands,             // lands remaining in library
+    LibCreatures,         // creatures remaining in library
+    LibDamageSources,     // remaining cards that deal damage (params.damage / landfall_damage > 0)
+    LibDrawEngines,       // remaining card-advantage/dig engines (draw>0 / stages / cascade / DrawUntilNonland)
+    LibLandDensityPct,    // 100 * lands / library_size  = P(next draw is a land); 0 if empty
     Count                 // sentinel: number of features
 };
 
@@ -423,6 +436,11 @@ inline const char* MidGameFeatureName(MidGameFeature f)
         case MidGameFeature::TapsOut:             return "taps_out";
         case MidGameFeature::PlanFaceDamage:      return "plan_face_damage";
         case MidGameFeature::PlanBaselineEval:    return "plan_baseline_eval";
+        case MidGameFeature::LibLands:            return "lib_lands";
+        case MidGameFeature::LibCreatures:        return "lib_creatures";
+        case MidGameFeature::LibDamageSources:    return "lib_damage_sources";
+        case MidGameFeature::LibDrawEngines:      return "lib_draw_engines";
+        case MidGameFeature::LibLandDensityPct:   return "lib_land_density_pct";
         default:                                  return "?";
     }
 }
