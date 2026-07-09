@@ -440,6 +440,17 @@ public:
                                                    bool second_main, bool rollout_label = false,
                                                    int rollout_depth = 0, bool honest = false);
 
+    // Reshuffle-averaged NON-CLAIRVOYANT search as a PLAY policy (ceiling measurement +
+    // learned-lookahead training target). Ranks each candidate plan by its win turn AVERAGED over K
+    // reshuffled futures (common random numbers across candidates), with an honest depth-D
+    // continuation (each continuation turn re-plans against a fresh reshuffle -> non-clairvoyant at
+    // every ply; depth 0 = greedy non-clairvoyant rollout). Returns the best plan for the caller to
+    // EXECUTE against the true library. Approaches the strongest tractable non-clairvoyant policy as
+    // K/depth grow; expensive by construction (K x #plans x unmemoised honest rollout). See
+    // g_honest_teacher and learned-d0-policy.md.
+    static Plan ReshuffleAvgChoosePlan(const GameState& state, int K, int depth,
+                                       int max_turns, bool second_main);
+
     // The hand-tuned baseline's plan value = Sum EvalCard(def, state) over the plan's cast cards.
     // Exposed so the learned-eval label dump (AIEngine) and the ranking seam compute the SAME
     // plan_baseline_eval feature (lockstep, non-clairvoyant). See docs/design/learned-d0-policy.md.

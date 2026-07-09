@@ -1304,7 +1304,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // identical when unset. Kept as an instrument, not a shipped play mode.
             static const bool s_honest_play = std::getenv("MTG_HONEST_PLAY") != nullptr;
             HonestTeacherGuard _htp(s_honest_play);
-            if (s_full_depth)
+            // EXPERIMENTAL (MTG_NC_SEARCH, default off): the non-clairvoyant CEILING policy --
+            // reshuffle-averaged search (each real decision ranks plans by K-reshuffle-averaged
+            // honest depth-D win turn; execute the best against the true library, re-decide next
+            // turn, no committed line). MTG_NC_K / MTG_NC_DEPTH tune the averaging / lookahead
+            // (depth 0 = greedy non-clairvoyant). Byte-identical when unset. See
+            // TurnSolver::ReshuffleAvgChoosePlan and learned-d0-policy.md.
+            static const bool s_nc_search = std::getenv("MTG_NC_SEARCH") != nullptr;
+            static const int  s_nc_k     = []{ const char* e = std::getenv("MTG_NC_K");
+                                               return (e && *e) ? std::atoi(e) : 8; }();
+            static const int  s_nc_depth = []{ const char* e = std::getenv("MTG_NC_DEPTH");
+                                               return (e && *e) ? std::atoi(e) : 2; }();
+            if (s_nc_search)
+            {
+                plan = is_pre_combat_main
+                     ? TurnSolver::ReshuffleAvgChoosePlan(state, s_nc_k, s_nc_depth,
+                                                          m_max_turns, m_search_post_combat)
+                     : TurnSolver::Solve(state, false);   // second main: greedy (like the rollout)
+            }
+            else if (s_full_depth)
             {
                 // Full-depth commit-the-line path: searches up to m_lookahead_depth
                 // complete turns (no reduced rollout / greedy second main) via iterative
