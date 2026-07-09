@@ -1134,25 +1134,75 @@ back (approximate policy iteration wobble: on-policy state drift + label noise).
 18% dead vs 7%) — the stronger continuation rescues more lines, so first-move differences compress (more honest:
 greedy over-weighted first moves it couldn't recover from). Gain is real but modest.
 
+### ★ Full-strength honest teacher: BUILT + tested — does NOT beat the cheap bootstrap (2026-07-09)
+
+Built the draw-order-decoupled reshuffle-averaged search the prior NEXT STEP prescribed, and A/B'd it. **The
+prediction ("bigger step than the bootstrap on high-fusion decks") is REFUTED. The cheap Q^model bootstrap is
+the keeper.** The recoverable Vial/combo gap is NOT closed by a stronger *non-clairvoyant* teacher — consistent
+with the EVPI finding that antilife's residual is mostly JUSTIFIED (irreducible) clairvoyance, which no
+non-clairvoyant teacher can recover by construction.
+
+**The build (committed, inert by default).** Extended the shuffle-decouple to the BASE draw order. New
+thread-local `g_honest_teacher` (`GameState.h`) + `HonestTeacherGuard`; in `SimulateToEndImpl` (TurnSolver.cpp
+~5441) when set and `depth>0`, the continuation chooses each turn's plan against a RESHUFFLED unseen library (a
+random future) then RESOLVES it against the true order — so the depth>0 lookahead can't read the real draws
+(`g_shuffle_eval` only decoupled mid-game shuffle EVENTS, not the opening order). Reshuffle salt folds
+`shuffle_salt_search` (varied per-k by the dump loop) → the K outer samples get independent futures; applied at
+EVERY continuation ply → the whole continuation policy is non-clairvoyant ("E inside the max" at every level).
+The reshuffled lookahead passes `tt=nullptr` (the clairvoyant leaf memo keys on library SIZE, not order — reusing
+it would return a real-order value for a reshuffled state). Wired via `MTG_EVAL_ROWS_HONEST` +
+`EnumerateEarliestWins(..., honest)`. Byte-identical when off (baselines reproduce documented values exactly:
+antilife heuristic 5.430, slivers 4.7178≈doc 4.718, TH 5.58).
+
+**Antilife A/B — teacher held-recipe-constant (`--rank`, per-teacher best lam), d0, LP (loss=9), 150g/seed:**
+
+| teacher (continuation) | tune seeds 4020-4023 | **fresh seeds 5050-5055** | won (fresh) |
+|---|---|---|---|
+| heuristic | 5.430 | 5.914 | 806/900 |
+| Q^model bootstrap (v2, depth-0 model cont.) | 5.285 | **5.807 (best)** | **808/900** |
+| honest_d1 (decoupled 1-ply cont.) | 5.270 (best) | 5.840 | 791/900 |
+| honest_d2 | 5.283 | 5.860 | 791/900 |
+| honest_d3 | 5.283 | — | — |
+
+On the TUNING seeds honest_d1 edged the bootstrap by 0.015, but on FRESH seeds the ordering REVERSES: the cheap
+bootstrap wins (5.807 < 5.840) AND wins more games (808 vs 791). The honest edge was tuning-seed noise/overfit.
+Deeper honest lookahead (d2/d3) never beats d1 and converges to the bootstrap level — extra decoupled depth buys
+nothing (and its no-memo cost is ~5× the bootstrap's O(1) continuation). **Verdict: the full-strength honest
+teacher ≈ the cheap bootstrap on antilife, at much higher cost → not worth it.**
+
+**Cheap-parallel bootstrap (Q^model, dump with the deck's d0 model attached, train `--rank`, A/B):**
+- **slivers (Vial): GENERALIZES.** Bootstrap 4.3762 vs committed anchor 4.3838 on FRESH seeds (4004/9009/5050/6060,
+  800g) = **−0.008 robust** (−0.015 on lam-select seeds 2002/3003/7007). Same direction + magnitude as antilife's
+  one-step bootstrap gain → the ~0.008-0.015 one-step improvement is a real, deck-general property on high-fusion
+  Vial decks. Saved `logs/eval/slivers_vial_qmodel.eval.json`.
+- **TH (combo): COLLAPSES.** Bootstrap LP 7.15 vs committed searched 5.54 (heuristic 5.58) — much WORSE. TH needs
+  the SEARCHED optimum; the rollout-style Q^model continuation durdles it (imitation label = the durdle trap for
+  combo). Reconfirms the label recipe is deck-dependent: rollout/imitation (incl. Q^model bootstrap) for
+  aggro/Vial, SEARCHED for combo/TH. Do NOT bootstrap TH.
+
+**Net conclusion for the teacher-strength thesis.** Both the cheap bootstrap AND the expensive honest search land
+at the same ~0.01-0.015 improvement ceiling on the high-fusion Vial/combo decks — because that residual is
+justified clairvoyance (EVPI), not recoverable non-clairvoyant sequencing. The **cheap Q^model bootstrap is the
+adoptable lever** (slivers/antilife: +~0.01 over the anchor, O(1) continuation, no engine build needed at
+serve time). The honest-teacher machinery is kept (committed, gated) as the *correct* non-clairvoyant label
+generator and the instrument that PROVED the ceiling is real — but it is not the path to a bigger gain. Artifacts:
+`logs/eval/antilife_honest_d{1,2,3}.rows`, `logs/eval/anti-lifegain_honest_d{1,2}.eval.json`,
+`logs/eval/{slivers_vial,treasure_hunt}_qmodel.{rows,eval.json}`; driver `scripts/honest_teacher_ab.py`.
+
 ### ▶ NEXT STEP (for the next session)
 
-The bootstrap PROVED the teacher-strength lever works on high-fusion decks — but the model-as-continuation is only
-MARGINALLY stronger than greedy, hence the small (0.015) one-step gain. The full-strength honest teacher is the
-explicit **reshuffle-averaged (draw-order-decoupled) search** the user originally asked for: at each continuation
-turn, run a depth-D search whose library reads are DECOUPLED from the resolved draws (chooses against a random
-future, resolves against the true one), averaged over K. That is a much stronger teacher than model-greedy and is
-the direct test of whether the recoverable Vial/combo gap can be closed.
-
-CONCRETE BUILD (the one missing piece): the existing shuffle-decouple (`shuffle_salt_search` / `g_shuffle_eval`)
-only salts MID-GAME shuffles (SearchShuffleSeed/Gamble), NOT the base draw order (GameState.h:135-143) — which is
-exactly the clairvoyance that matters on antilife (why the decouple is inert there). So extend the decouple to the
-BASE DRAW ORDER: make the continuation's lookahead (SimulateToEndImpl -> SolveWithLookahead(depth>0),
-TurnSolver.cpp:5441) evaluate against a reshuffled unseen library so rollout_depth>0 stops being clairvoyant
-(today rollout_depth=1 is WORSE precisely because it reads the real draws). Then dump antilife/slivers/TH with this
-teacher and A/B vs v2. Prediction: bigger step than the bootstrap on high-fusion decks; ~0 on aggro (EVPI~=0).
-
-CHEAP PARALLEL (no build): run the same one-step bootstrap (dump with the deck's d0 model attached, train, A/B) on
-SLIVERS (Vial, expect high fusion like antilife) and TH (combo) to see if antilife's one-step gain generalizes.
+Teacher-strength is EXHAUSTED as a lever (both cheap bootstrap and full honest search hit the same EVPI ceiling
+on high-fusion decks; aggro is already at parity). The remaining open directions, by EV:
+1. **ADOPTION** (top lever, needs user sign-off). Lock in `decks/*.eval.json` = {knights: knights_d0_gbdt,
+   antilife: antilife_d0_qmodel_v2, slivers: slivers_vial_qmodel (the bootstrap, +0.008 over anchor), burn/TH:
+   their linear d0 anchors}, flip `MTG_EVAL_MODEL` default on-when-present, rebaseline smoke/regression GT (incl.
+   burn bottoming table). Deliberate GT change → user decides.
+2. **Reshuffle-averaged SEARCH as a PLAY mode** (not a label generator) — the honest machinery now exists
+   (`g_honest_teacher`); measuring whether a decoupled d3/d5 search as the actual d0-replacement policy beats
+   heuristic d1 is the untested "non-clairvoyant see-ahead" question (lever 5 in the older list). Distinct from
+   this session (which used the decoupled search only to LABEL a d0 model).
+3. **Combo (TH/hinata) is clairvoyance-bounded at d0** — no non-clairvoyant lever moves it; only searched labels
+   (already best for TH) or accepting the ceiling.
 
 ADOPTION (deferred, when ready): lock in decks/*.eval.json = {knights: knights_d0_gbdt, antilife:
 antilife_d0_qmodel_v2, slivers/burn/TH: their linear d0 anchors}, flip MTG_EVAL_MODEL default on, rebaseline GT

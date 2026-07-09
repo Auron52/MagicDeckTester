@@ -5532,9 +5532,34 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             std::cerr << (tp.library.empty() ? std::string("(none)") : tp.library.front().m_name.str()) << "\n";
         }
 
-        // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens
-        TurnSolver::Plan pre_plan = TurnSolver::SolveWithLookahead(
-            state, true, depth, max_turns, budget, false, second_main, tt);
+        // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens.
+        TurnSolver::Plan pre_plan;
+        if (g_honest_teacher && depth > 0)
+        {
+            // HONEST-TEACHER label: choose this turn's plan against a RESHUFFLED unseen library (a
+            // random future), then RESOLVE it against the true order below. The plan references only
+            // the known hand/battlefield, so it transfers to the real state; any within-turn dig
+            // resolves against the true library in ApplyPlanDirect. This strips the base-draw-order
+            // clairvoyance a depth>0 lookahead would otherwise have (g_shuffle_eval only decouples
+            // mid-game shuffle EVENTS, not the opening order). Applied at EVERY continuation turn ->
+            // the whole continuation policy is non-clairvoyant ("E inside the max" at every ply).
+            // The reshuffle salt folds shuffle_salt_search (varied per-k by the dump loop) so the K
+            // outer samples get independent futures. tt is NOT shared: the clairvoyant leaf memo keys
+            // on library SIZE (BuildSimKey folds order only when SearchShuffleEnabled), so reusing it
+            // would return a real-order value for a reshuffled state -- pass nullptr (offline tool).
+            GameState ss = state;
+            const uint64_t hsalt = SaltSeed(
+                state.game_seed + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(state.turn_number),
+                state.shuffle_salt_search);
+            ss.ActivePlayer().library.Shuffle(hsalt);
+            pre_plan = TurnSolver::SolveWithLookahead(
+                ss, true, depth, max_turns, budget, false, second_main, nullptr);
+        }
+        else
+        {
+            pre_plan = TurnSolver::SolveWithLookahead(
+                state, true, depth, max_turns, budget, false, second_main, tt);
+        }
         int life_before_pl = state.Opponent().life;
         ApplyPlanDirect(state, pre_plan, true);
         SimulateAnimateLands(state);
@@ -6070,10 +6095,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic, see header) ----------
 TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState& state,
                                                                 int max_turns, bool second_main,
-                                                                bool rollout_label, int rollout_depth)
+                                                                bool rollout_label, int rollout_depth,
+                                                                bool honest)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     ShuffleEvalGuard _seg(true);  // decoupling instrument: planning shuffles use shuffle_salt_search
+    // Full-strength honest teacher: decouple the rollout continuation's per-turn lookahead from the
+    // real draw order (see g_honest_teacher). Only meaningful with a depth>0 rollout label.
+    HonestTeacherGuard _htg(honest && rollout_label && rollout_depth > 0);
     EarliestWinReport report;
     report.turn     = state.turn_number;
     report.earliest = max_turns + 1;
