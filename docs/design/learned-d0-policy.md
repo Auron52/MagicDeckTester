@@ -1026,3 +1026,21 @@ pump the team) → lethal T4; the model is one body short → lethal T5. No hidd
 bigger card on tempo. Confirms the split: COMBO gap = clairvoyance (irrecoverable), AGGRO gap = recoverable
 sequencing. Concrete lever: the d0 model must value board WIDTH (body count, esp. with lords), not just
 plan_power_added (total power). This is a d0 feature/label improvement, not a clairvoyance floor.
+
+### Closing the gap to search — what moves it and what doesn't (2026-07-09)
+
+Attacked the RECOVERABLE (non-clairvoyance) gaps, esp. aggro. Findings:
+- **More DATA does NOT help (answered directly).** knights d0 learning curve is FLAT: 656 → 5248 decisions =
+  4.467 → 4.464. Saturates <1k decisions. The gap is NOT data-limited.
+- **Every label/capacity lever fails on the aggro gap:** searched labels = rollout (4.484), `rollout_depth=1`
+  is WORSE (4.51/4.55), GBDT collapses (5.44), higher lam worse. The recoverable aggro gap (~0.13) sits at the
+  IMITATION CEILING: the labels don't DISCRIMINATE the tied plans (go-wide vs Acclaimed Contender reach similar
+  outcomes under both greedy AND searched continuation → neither punishes the narrow line), so imitation can't
+  learn the preference. Closing it would need a signal outside imitation (a hand-crafted width heuristic — which
+  the user has ruled out) or is simply the ~0.13 floor of this approach.
+- **v9 `plan_dig_yield`** (plan casts dig engine × lib land-density = expected Treasure-Hunt yield, a
+  non-clairvoyant proxy for the search's clairvoyant dig timing) added + built, **UNTESTED on combo** (TH dump
+  is slow; deferred). Byte-identical when the model is off. Intended to recover a slice of the combo gap.
+- **Net:** d0 beats heuristic 5/5 and is near the achievable non-clairvoyant ceiling. Aggro ~0.13-0.20 from
+  search (imitation floor); combo ~1.4 from search (clairvoyance). Data is not the lever; discriminating labels
+  / a de-clairvoyed search baseline are the open directions.

@@ -408,6 +408,12 @@ enum class MidGameFeature : int
     //     tell a 3/3 plan from a 1/1 plan; these expose the board a plan develops. learned-d0-policy.md
     PlanPowerAdded,       // summed printed power of creatures this plan casts
     PlanToughnessAdded,   // summed printed toughness of creatures this plan casts
+    // --- appended (v9): plan x board INTERACTION. The d0 ranker is linear over plan-varying features, so
+    //     it can't learn "fire the dig engine WHEN the library is land-dense" (the board term is constant
+    //     across a decision's candidates and cancels). This product is high exactly when a candidate casts
+    //     a draw/dig engine INTO a land-dense library = the expected yield of Treasure-Hunt-style digs, the
+    //     non-clairvoyant proxy for the timing the search gets by reading the real library. learned-d0-policy.md
+    PlanDigYield,         // (plan casts a draw/dig engine) ? lib_land_density_pct : 0
     Count                 // sentinel: number of features
 };
 
@@ -460,6 +466,7 @@ inline const char* MidGameFeatureName(MidGameFeature f)
         case MidGameFeature::HandCastableNow:     return "hand_castable_now";
         case MidGameFeature::PlanPowerAdded:      return "plan_power_added";
         case MidGameFeature::PlanToughnessAdded:  return "plan_toughness_added";
+        case MidGameFeature::PlanDigYield:        return "plan_dig_yield";
         default:                                  return "?";
     }
 }

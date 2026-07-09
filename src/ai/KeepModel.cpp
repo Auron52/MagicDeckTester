@@ -523,6 +523,9 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     // v8 plan-varying resulting-state (the d0 RANKER discriminators): the board a plan develops.
     set(MidGameFeature::PlanPowerAdded,     plan.power_added);
     set(MidGameFeature::PlanToughnessAdded, plan.toughness_added);
+    // v9 plan x board interaction: firing a dig engine into a land-dense library (expected yield).
+    const int lib_land_density = lib_size > 0 ? (100 * lib_lands) / lib_size : 0;
+    set(MidGameFeature::PlanDigYield, plan.draw_engine ? lib_land_density : 0);
     return f;
 }
 
