@@ -652,6 +652,51 @@ vs ~10–28% without. Two findings, both honest:
    command) before more antilife d0 work. Reverted the C++ (kept the featurizer clean); the two
    features are easy to re-add from this description if a value-model or better-rows approach revisits.
 
+### ★ CORRECTION: the d0→search gap is LEARNABLE (feature-limited), NOT clairvoyance (2026-07-09)
+
+Reframed the whole evaluation on the user's steer: **the metric is avg win turn (loss=9), and the target
+is the SEARCH (d3, ideally d5–d7) — not the hand-tuned d0 baseline.** In that frame the earlier "parity"
+claims evaporate: the best learned d0 trails d3-search on every deck (LP, s2002):
+
+| deck | hand-d0 | learned-d0 | **d3 search** | d5 |
+|---|---|---|---|---|
+| burn | 4.74 | 4.66 | **4.29** | 4.29 |
+| antilife | 5.65 | 5.66 | **4.05** | 4.00 |
+| knights | 4.49 | 4.72 | **4.29** | 4.29 |
+| slivers | 4.74 | 4.80 | **4.26** | 4.27 |
+| TH | 5.58 | 5.58 | **4.18** | 4.15 |
+
+**I initially mis-attributed burn's gap to clairvoyance. The user pushed back (burn is simple: drop
+creatures early, use mana efficiently — clairvoyance rarely matters), and a decisive test proved them
+right.** Comparing the *de-clairvoyed* rollout labels (K-reshuffle averaged, so the future is washed out):
+
+- **depth-0 (greedy-baseline) labels**: mean best-per-decision = **4.907**
+- **depth-3 (d3-policy) labels**: mean best-per-decision = **4.705**
+
+The d3 policy is **0.2t better than greedy even non-clairvoyantly** ⇒ the gap is a *policy-quality* gap,
+learnable, not clairvoyance. So a better non-clairvoyant policy provably exists (~4.7 vs greedy 4.9).
+
+**Why the learned d0 still plateaus at ~4.66 despite depth-1/2/3 labels + linear/GBDT:** two structural
+reasons, both now understood.
+1. **A d0 policy plays *itself* forward.** Training on depth-3 labels teaches d3's *first* move, but after
+   that the model plays d0 forward — so it only reaches d0-forward quality, never d3-forward, unless it
+   ranks like d3 at *every* decision.
+2. **The features can't separate the deeper policy's preferred plan.** The plan summary (total MV, face
+   damage, num-spells, baseline_eval…) is too coarse to encode "develop this creature now so it attacks
+   next turn." Label quality is fine; **feature/representation capacity is the bottleneck.**
+
+**⇒ The path to close the gap to search is RICHER FEATURES + the depth-3 (or deeper) rollout label as the
+target** — not more label depth alone, and not chasing clairvoyance we can't have. Top candidate feature:
+**value-model-as-feature** — rank each plan by the value model's predicted win-turn of the *resulting*
+position (the value model already encodes full-horizon search, so this injects multi-turn value the coarse
+plan-summary misses, and inherits the user's d5–d7 depth for free). Needs seam+dump lockstep wiring
+(evaluate the value model on each applied candidate plan) — scoped, not yet built. Secondary: hand-crafted
+non-clairvoyant sequencing features (develops-attacker, curve/mana-efficiency, holds-reach).
+
+**Also settled here:** a *shared* cross-deck LINEAR ranker still collapses under rollout labels (burn/antilife
+0%) — sharing needs nonlinearity/deck-conditioning. And `MTG_EVAL_ROLLOUT_DEPTH` (the rollout-policy depth
+knob) is committed; depth>0 is affordable on aggro but intractable on combo (hinata).
+
 ## The permanent regression gate
 
 At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regression digests are
