@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# CONFOUNDED bottoming A/B for burn: same two arms as the bottoming 3-way, but MTG_CONFOUND_BOTTOM=1 on
-# BOTH -- the library is reshuffled AFTER the bottoming decision, so the clairvoyant lookahead's peek at
-# the exact library is worthless. The only remaining difference is the KEPT HAND (the bottoming decision).
-#   A  uniform keep + lookahead bottoming   (peek nullified by the reshuffle)
-#   B  uniform keep + blind exhaustive R=100 bottoming  (never peeked; chosen as argmin over fresh shuffles)
-# Expectation (per the argmin argument): B >= A now, reversing the non-confounded +0.076t "loss".
-# Both arms confounded => paired on the SAME fresh library per game; comparable to logs/keepmodel_exh_burn_bottom3.
+# CONFOUNDED bottoming A/B for burn: both arms keep=exhaustive, MTG_CONFOUND_BOTTOM=1 on BOTH -- the
+# library is reshuffled AFTER the bottoming decision, so the clairvoyant lookahead's peek at the exact
+# library is worthless. The only remaining difference is the KEPT HAND (the bottoming decision).
+#   A  exhaustive keep + lookahead bottoming            (peek nullified by the reshuffle)
+#   B  exhaustive keep + blind exhaustive bottoming      (never peeked; argmin over fresh shuffles)
+# Expectation (per the argmin argument): blind B >= lookahead A once the peek is nullified.
+# Uses the adopted decks/burn.keepmodel.exhaustive.profile.json[.gz] sidecar (transparent gzip load).
 set -u
 BIN=./build/Release/mtg
-DECK=decks/test_deck.txt
-UNIFORM=decks/test_deck.keepmodel.exhaustive.uniform.r100.profile.json
-[ -f "$UNIFORM" ] || { echo "missing $UNIFORM"; exit 1; }
+DECK=decks/burn.txt
+EXH=decks/burn.keepmodel.exhaustive.profile.json.gz
+[ -f "$EXH" ] || EXH=decks/burn.keepmodel.exhaustive.profile.json
+[ -f "$EXH" ] || { echo "missing $EXH"; exit 1; }
 
 SEEDS=${KM_AB_SEEDS:-"4004 5005 6006 7007 8008 9009 10010 11011 12012 13013 14014 15015 16016 17017 18018 19019"}
 DEPTHS=${KM_AB_DEPTHS:-"0 3 5"}
@@ -21,13 +22,13 @@ REPORT=$OUT/REPORT.txt
 stamp(){ date -u +%Y-%m-%dT%H:%M:%SZ; }
 log(){ echo "$*" | tee -a "$REPORT"; }
 : > "$REPORT"
-log "=== BURN CONFOUNDED bottoming A/B ($(stamp)) ==="
+log "=== BURN CONFOUNDED bottoming A/B ($(stamp)) profile=$EXH ==="
 log "seeds[$SEEDS] depths[$DEPTHS] games=$GAMES budget-ms=20 max-turns=8 (MTG_CONFOUND_BOTTOM=1 both arms)"
 
 # ab <tag> <exhaustive_bottom 0|1>
 ab(){ local tag="$1" exb="$2"
   for d in $DEPTHS; do for s in $SEEDS; do
-    MTG_DUMP_WINS=1 MTG_CONFOUND_BOTTOM=1 MTG_EXHAUSTIVE_BOTTOM="$exb" "$BIN" "$DECK" --profile "$UNIFORM" --seed "$s" \
+    MTG_DUMP_WINS=1 MTG_CONFOUND_BOTTOM=1 MTG_EXHAUSTIVE_BOTTOM="$exb" "$BIN" "$DECK" --profile "$EXH" --seed "$s" \
       --games "$GAMES" --depth "$d" --budget-ms 20 --max-turns 8 --lookahead-bottoming --threads 0 \
       > "$OUT/wins_${tag}_d${d}_s${s}.wins" 2> "$OUT/err_${tag}_d${d}_s${s}.txt"
   done; done; }
@@ -61,6 +62,5 @@ for d in depths:
     print(f"d{d:<5}{wl:>10}{wbd:>10}{am:>9.3f}{bm:>9.3f}{delta:>+9.4f}{str(nlt)+'/'+str(len(seeds)):>10}")
 gm=mean(grand)
 print(f"overall meanD: {gm:>+.4f}  ({'blind BEATS lookahead' if gm<0 else 'blind loses to lookahead'})")
-print("(compare non-confounded logs/keepmodel_exh_burn_bottom3: blind lost +0.0488 overall, +0.076 at d3/d5)")
 PY
 log "=== BURN CONFOUNDED A/B DONE ($(stamp)) ==="
