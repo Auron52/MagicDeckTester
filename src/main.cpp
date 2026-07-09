@@ -2515,7 +2515,8 @@ int main(int argc, char* argv[])
 
         GoldFishRunner runner;
         RunResult result = runner.Run(deck, num_games, seed, max_turns, profile, log_dir,
-                                       base_game_index, lookahead_depth, timeout_ms, num_threads);
+                                       base_game_index, lookahead_depth, timeout_ms, num_threads,
+                                       force_mulligan);
 
         std::cout << "Seed         : " << result.seed << "\n";
         std::cout << "Games played : " << result.games_played << "\n";
