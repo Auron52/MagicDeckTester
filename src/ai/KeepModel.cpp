@@ -466,6 +466,33 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     set(MidGameFeature::TapsOut,               (plan.num_spells > 0 && plan.total_mv >= untapped_sources) ? 1 : 0);
     set(MidGameFeature::PlanFaceDamage,        plan.face_damage);
     set(MidGameFeature::PlanBaselineEval,      plan.baseline_eval);  // hand-tuned EvalCard sum (set by seam/dump)
+
+    // v6 DISTRIBUTIONAL features: the remaining-library COMPOSITION (a public multiset -- own decklist minus
+    // visible zones; only ORDER is hidden). Counted ORDER-INVARIANTLY (sum over the whole library, never
+    // position i) -> non-clairvoyant. Lets the value model amortise the rollout-under-uncertainty its
+    // de-clairvoyed label already targets. See learned-d0-policy.md.
+    int lib_lands = 0, lib_creatures = 0, lib_damage = 0, lib_draw = 0;
+    for (const Card& c : ap.library)
+    {
+        if (c.IsLand())     { ++lib_lands; }
+        if (c.IsCreature()) { ++lib_creatures; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d)
+        {
+            if (d->params.damage > 0 || d->params.landfall_damage > 0 || d->params.death_trigger_damage > 0)
+            { ++lib_damage; }
+            if (d->params.draw > 0 || d->params.stages_cards || d->params.cascade_max_mv > 0
+                || d->params.retrace || d->params.expressive_iteration
+                || d->tmpl == CardTemplate::DrawUntilNonland)
+            { ++lib_draw; }
+        }
+    }
+    const int lib_size = static_cast<int>(ap.library.size());
+    set(MidGameFeature::LibLands,          lib_lands);
+    set(MidGameFeature::LibCreatures,      lib_creatures);
+    set(MidGameFeature::LibDamageSources,  lib_damage);
+    set(MidGameFeature::LibDrawEngines,    lib_draw);
+    set(MidGameFeature::LibLandDensityPct, lib_size > 0 ? (100 * lib_lands) / lib_size : 0);
     return f;
 }
 

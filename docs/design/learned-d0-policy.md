@@ -187,9 +187,13 @@ the game-reading taxonomy. Value-model-as-feature v1 tried + REVERTED (crude app
 
 **Open next levers (pick by EV):**
 1. ~~Close the aggro residual~~ **CLOSED as noise.** Aggro decks are depth-flat + near-optimal; residual ~0.02.
-2. ~~Push value-leaf FIT higher (the user's pick)~~ **DONE — saturated.** Race-clock feature reverted (inert);
-   GBDT-regression value model is a wash at every depth (leaf is at the non-clairvoyant info limit, RMSE ~0.5t).
-   A richer leaf does NOT let shallower search beat d1-heur — the shallow-depth gap is branching-limited.
+2. **Push value-leaf FIT higher (user's pick).** Race-clock reverted (inert); GBDT-regression a wash (same
+   board-only inputs). BUT **v6 DISTRIBUTIONAL features are a real win where library uncertainty drives the game**
+   (see the entry below): the board-only leaf read library SIZE but not COMPOSITION, so it couldn't amortise the
+   rollout its de-clairvoyed label already targets. Adding the (non-clairvoyant, public) remaining-library
+   multiset counts (`lib_lands/creatures/damage_sources/draw_engines/land_density_pct`) cut TH held-out RMSE
+   1.145→0.947 (−17%) and improved TH **d1** play −0.54 (5.44→4.90). Inert on board-driven aggro (burn/slivers).
+   Open: this is the right INPUT for a non-clairvoyant policy (lever 5); a hand-composition variant may extend it.
 3. **★ ADOPTION is now the top lever (needs user sign-off).** Both deliverables GROUNDED (tables above): goal #1
    (value-leaf d5 beats heur d1 on all 5 decks, held-out) and goals #2/#3/#4 (exact-parity 1.6–25× speedup).
    Adoption = flip `MTG_VALUE_MODEL` default on-when-present + rebaseline smoke/regression GT to the value-leaf
@@ -286,6 +290,29 @@ grindy decks; smallest on combo, where branching above the leaf dominates). NB: 
 (the leaf picks different plans), so adoption requires a deliberate GT rebaseline. Driver scripts:
 `scripts/value_leaf_matrix.py` (goal-#1 depth table), `scripts/value_leaf_speedup.py` (matched-quality
 speedup); raw output in `logs/eval/{matrix,speed}_results.txt`.
+
+### ★ v6 DISTRIBUTIONAL features — "rollout under uncertainty, built in" (2026-07-09, user's idea)
+
+**Question (user):** can we build a model that has some rollout-under-uncertainty *built in* and decides with it?
+**Answer: yes — the LABEL already targets it (de-clairvoyed = expected win turn over K futures); what was missing
+were the INPUTS.** The board-only leaf read library SIZE but nothing about COMPOSITION, so it couldn't tell "6
+burn left in 18" from "0 left" and couldn't amortise the rollout. The remaining-library MULTISET is PUBLIC (own
+decklist minus visible zones; only ORDER is hidden/forbidden). Added 5 order-invariant counts (summed over the
+whole library, never position i → non-clairvoyant): `lib_lands, lib_creatures, lib_damage_sources,
+lib_draw_engines, lib_land_density_pct` (KeepModel v6). This is the human's "8 burn in 20 → ~40% to draw one".
+
+**Result — real win exactly where library uncertainty drives the game:**
+- **TH (Land's-Edge / dig combo):** held-out RMSE 1.145 → **0.947 (−17%)**; `lib_draw_engines` is a top-weight
+  coef. Value-leaf **d1** play 5.44 → **4.90 (−0.54)** — nearly halves the gap to heuristic d1 (4.24). d3/d5
+  converge (branching washes out the leaf once you search deeper).
+- **burn / slivers (board-driven aggro):** inert (RMSE −0.009; d1 unchanged/slightly worse). The outcome is
+  driven by the visible board + hand, not the uncertain library, so composition adds no signal.
+
+**Reading:** the distributional inputs are the RIGHT foundation for a non-clairvoyant policy (they add signal
+precisely where "rollout under uncertainty" matters), and they compose with lever 5 (reshuffle-averaged search).
+Features are append-only + byte-identical when the model is off (featurizer only runs under the model gates).
+Still below clairvoyant heur-d1 at d1 (heur's leaf reads real draws); closing that needs the non-clairvoyant
+search or more inputs (a hand-composition variant is the obvious next feature). Rows: `logs/eval/*_v6dist.rows`.
 
 Do NOT: hand-fix provider heuristics (user decision — trust the non-clairvoyant model); retry combo-readiness
 features (durdle trap); use searched labels for a non-clairvoyant d0 policy (they inherit clairvoyant
