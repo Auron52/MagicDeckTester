@@ -985,3 +985,36 @@ At every phase: with **no sidecar or `MTG_EVAL_MODEL` unset**, smoke + regressio
 **byte-identical** to committed GT. The seam defaults `rank_value = total_eval`; the sidecar is
 presence-gated; the dump hook is env-gated. This "no-op reproduces GT" property is what makes the
 whole feature safe to land incrementally.
+
+### ★ d0 vs SEARCH gap + clairvoyance attribution (2026-07-09)
+
+After the d0 model beat the heuristic, measured how far it is from the SEARCH and attributed the gap.
+
+**Bottoming correction (user caught it):** bottoming is table-based (exhaustive `*.keepmodel.exhaustive.
+profile.json.gz` sidecar, `bottoming_enabled=on`) → depth-independent + non-clairvoyant, when the sidecar is
+present. It was present for 4/5 decks (knights/slivers/TH/antilife) but MISSING for burn, so burn alone fell to
+the depth-dependent CLAIRVOYANT lookahead-bottoming fallback (keeps worse hands at d0, reads library at d5).
+Committed burn's R=100 table (`bottoming_enabled` flipped on) → burn now fair. Effect: burn d0-vs-d5 gap
+0.393→0.198 (the 0.164 removed was pure bottoming-clairvoyance, isolated via `MTG_CONFOUND_BOTTOM`:
+heur-d5 4.276 clairvoyant → 4.440 de-clairvoyed). Verified knights mulligan hands keep the SAME bottomed hand
+at d0/d5 (table = depth-independent). Burn GT now needs a rebaseline (bottoming changes its play).
+
+**Fair gap-to-search map (all 5 decks, table bottoming, held-out):**
+
+| deck | model d0 | heur search | gap | regime |
+|---|---|---|---|---|
+| knights | 4.484 | 4.356 (d5) | +0.13 | aggro (close) |
+| slivers | 4.442 | 4.253 (d5) | +0.19 | aggro (close) |
+| burn | 4.549 | 4.351 (d5) | +0.20 | aggro (close) |
+| TH | 5.540 | 4.169 (d3) | **+1.37** | combo (huge) |
+| antilife | 5.522 | 4.069 (d3) | **+1.45** | combo (huge) |
+
+**Combo gap = dominated by CLAIRVOYANCE (game-read, TH seed 4025, fair bottoming).** Both play the
+Treasure-Hunt/Land's-Edge combo (draw a land pile, Land's-Edge it to the face). Treasure Hunt draws "until a
+nonland" = count depends on the HIDDEN library order. SEARCH fires Treasure Hunt on T4 (a 13-land clump on top →
+instant lethal) because its d5 lookahead reads the real library; MODEL d0 (non-clairvoyant) fires it into a
+2-land clump (fizzle) T6 and only lucks into the payoff T7 → +3-turn gap. This is irrecoverable *justified
+clairvoyance* (timing a library-dependent payoff you can see). Small recoverable slice (model durdles T1-T3 +
+double-casts Throes). Aggro gaps (~0.15-0.20) are small and likely mostly recoverable/minor mid-game clairvoyance.
+A truly fair search baseline would need a reshuffle-averaged (de-clairvoyed) search — the `MTG_SHUFFLE_SALT_SEARCH`
+decouple is INERT on no-shuffle decks (burn/knights/TH), so that's the deferred "extra work" for a clean ceiling.
