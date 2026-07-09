@@ -159,13 +159,18 @@ DEPTH and measure the quality gain on budget-starved decks** (the doc's own §5f
 - Why this over more d0 features: on converged decks the value-leaf only *ties* the rollout (leaf inert);
   the win is on positions the search can't resolve in budget, which is exactly what cheaper leaves unlock.
 
-**Antilife d0 — dump methodology PINNED (2026-07-09), now tunable (~48–55% vs baseline ~88%).** The
-blocker is resolved: the lever was the dump's **play depth**, not seed/K/budget (dump from `--depth 3`
-play so the rows contain combo-payoff states; train **GBDT** trees=200/depth=5 — linear collapses to 0%).
-Full recipe + artifacts in the session-log entry below. Remaining antilife work is **step 2 (capacity/
-features to close the ~33pt gap to baseline)**, NOT methodology. NB combo-readiness features BACKFIRE here
-(they teach a non-clairvoyant d0 to wait for the combo → durdle) — don't retry that; the gain came from
-better training-state coverage + GBDT capacity, not from telling the model about the combo.
+**★ Antilife AND burn d0 — SOLVED via ROLLOUT LABELS (2026-07-09). The "fundamental gap" was a label
+artifact, not capacity.** Non-clairvoyant rollout labels (`MTG_EVAL_ROWS_ROLLOUT`: label each candidate by
+apply-plan→greedy-baseline-`SimulateToEnd`, not the clairvoyant earliest-win search) let a plain **LINEAR**
+model reach **baseline parity** on both: antilife 87.8%/87.2% vs 88.0%/88.5% (was 30–55%); burn LP
+4.723/4.693 vs 4.740/4.693 (was ~0.1t worse). The searched label was over-crediting durdle lines a real d0
+can't realise. **Label choice is deck-dependent**: rollout (imitate baseline) wins for aggro/durdle-prone
+(burn/antilife); **searched (distill optimum) still wins for TH** — rollout HURTS TH (77.7% vs 86.7%,
+combo needs the searched line). Engine change inert by default; rollout dumps ~10× cheaper (no search tail).
+Full detail + the imitation-vs-distillation model in the session-log entry "★ ROLLOUT LABELS solve antilife".
+**Next:** (a) commit per-deck ship-worthy linear sidecars (rollout for burn/antilife, searched for TH);
+(b) re-test the SHARED cross-deck model with rollout/imitation labels (may pool where searched labels
+collapsed). Superseded: the "combo-readiness features / GBDT capacity" narrative for antilife d0.
 
 **Loose ends:** hinata value sidecar still pending its (slow) dump — re-dump at budget ~400 and commit
 `decks/Hinata2.value.json` to complete the set. Value-model ADOPTION (flip `MTG_VALUE_MODEL` default on +
@@ -278,6 +283,59 @@ that residual is d0-plan **step 2** (capacity/features to close the gap), NOT a 
 NB the doc's standing warning still holds: combo-*readiness* features backfire on non-clairvoyant d0 (teach
 it to wait/durdle); the win here came from better *training-state coverage* (d3-play rows) + GBDT capacity,
 not from telling the model about the combo.
+
+### ★ ROLLOUT LABELS solve antilife (and burn) d0 — the "fundamental gap" was a LABEL artifact (2026-07-09)
+
+d0-plan step 2. The doc's standing conclusion — *"no learned model reaches the hand-tuned baseline on
+burn/antilife d0; the residual is combo/sequencing feature-completeness / capacity"* — **is wrong.** It was
+the **label**. Fixed it; antilife and burn d0 now reach **baseline parity with a plain LINEAR model.**
+
+**Root cause.** The label came from `EnumerateEarliestWins` = the CLAIRVOYANT earliest-win **search** per
+candidate (de-clairvoyed over K reshuffles). That search over-credits a **durdle** plan: after passing, the
+clairvoyant search still finds a fast win by reading the library, so "pass" gets a deceptively good label —
+a line a real non-clairvoyant d0 cannot realise. Capacity/features/K/rows can't fix a target that rewards
+durdling.
+
+**Fix — non-clairvoyant ROLLOUT labels** (engine change, inert by default): new
+`MTG_EVAL_ROWS_ROLLOUT` gate + `EnumerateEarliestWins(..., rollout_label=true)`. Label each candidate by
+**apply the plan → advance a turn → `SimulateToEnd` at depth 0** (the greedy **baseline d0 policy** played
+forward), averaged over the same K reshuffles. This is exactly what a non-clairvoyant player achieves from
+here, so it does NOT over-credit durdle (greedy play from a durdle state wins slower). Mechanically it
+mirrors `FSLineTail`'s advance step (`SimulateEndAndStartNextTurn`+`ExpireStagedCards`) then swaps the
+search for the greedy rollout. Play path untouched (`EnumerateEarliestWins` is offline-only); model-off
+byte-identical. **Bonus: rollout dumps are ~10× cheaper** — no clairvoyant-search pathological tail (antilife
+400g: **15.7s** vs *minutes*).
+
+**Results — d0, held-out seeds, vs hand-tuned baseline (LP = loss-penalized avg turn, lower better):**
+
+| deck | searched-label (old) | **rollout-label LINEAR** | baseline |
+|---|---|---|---|
+| Anti-Lifegain | 30–55% | **s2002 87.8% / LP 5.735; s3003 87.2% / LP 5.800** | 88.0% / 88.5% (Δ −0.01, +0.06 — **parity**) |
+| burn | LP 4.843 (~0.1t worse) | **s2002 LP 4.723; s3003 LP 4.693** | 4.740 / 4.693 (Δ −0.017, 0.000 — **parity/better**) |
+| Treasure Hunt | 87.2% (searched ✓) | 77.7% lin / 83.3% GBDT (**worse**) | 86.7% — **keep SEARCHED for TH** |
+
+Deterministic (t1==t8, fixed-point linear). Artifacts: `logs/eval/{antilife,burn}_rollout.rows`,
+`logs/eval/{antilife,burn}_rollout_lin.eval.json`, `logs/eval/th_rollout.rows`.
+
+**The unifying model (important).** A rollout label trains the ranker to **imitate the baseline policy**
+(reproduce what greedy baseline play achieves); a searched label **distills the clairvoyant optimum**.
+So the best label is **deck-dependent**:
+- **Rollout wins** where the hand-tuned baseline is already good AND the ranker can imitate it — proactive
+  aggro (burn) and durdle-prone combo where the *labels* (not the play) were the trap (antilife).
+- **Searched wins** where the baseline is *suboptimal* but the winning line is *findable* by search and the
+  ranker can capture its structure — TH's Land's-Edge combo (greedy rollout misvalues it; the searched
+  optimum is needed). Rollout HURT TH (77.7% vs 86.7%), GBDT didn't rescue it (83.3%).
+
+**Consequences / TODO:**
+- **antilife d0 is SOLVED** (parity), and **burn d0's residual gap is closed** — both with a *linear* model.
+  This retires the doc's "capacity/GBDT/feature-completeness" narrative for these decks: it was the label.
+- Ship candidate: per-deck, pick the label that wins (rollout for burn/antilife, searched for TH), train
+  linear, A/B, adopt where ≥ baseline. Antilife/burn linear sidecars are now ship-worthy at d0.
+- Re-examine the **shared cross-deck** model with rollout labels — imitation labels + linear may pool far
+  better than searched labels did (searched-shared-linear collapsed both TH+burn). Untested.
+- Caveat: rollout labels imitate the baseline, so they match it, rarely *exceed* it — the value is
+  replacing hand-tuned `EvalCard` (generalization to new decks) and enabling the shared model, not beating
+  the baseline where it's already good.
 
 ---
 

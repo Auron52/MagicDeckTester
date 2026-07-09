@@ -6066,7 +6066,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
 // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic, see header) ----------
 TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState& state,
-                                                                int max_turns, bool second_main)
+                                                                int max_turns, bool second_main,
+                                                                bool rollout_label)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     ShuffleEvalGuard _seg(true);  // decoupling instrument: planning shuffles use shuffle_salt_search
@@ -6108,6 +6109,23 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             if (s.Opponent().life <= 0)
             {
                 wt = state.turn_number;                 // wins THIS turn
+            }
+            else if (rollout_label)
+            {
+                // NON-CLAIRVOYANT label: advance to the next turn (mirroring FSLineTail's
+                // pre-FSLineWin step) and play the greedy d0 baseline policy forward. This
+                // is what a real non-clairvoyant player achieves from here -- it does NOT
+                // over-credit a durdle plan the way the clairvoyant search does (the search
+                // recovers with a lucky line it reads from the library; the greedy rollout
+                // cannot). Depth 0 => SolveWithLookahead reduces to Solve (the d0 policy).
+                GameState r = s;
+                if (!SimulateEndAndStartNextTurn(r)) { wt = max_turns + 1; }
+                else
+                {
+                    ExpireStagedCards(r);
+                    wt = SimulateToEnd(std::move(r), 0, max_turns, &budget,
+                                       max_turns + 1, second_main, &tt);
+                }
             }
             else
             {

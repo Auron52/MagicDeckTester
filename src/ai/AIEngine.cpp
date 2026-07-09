@@ -71,6 +71,11 @@ static const char* s_eval_rows_path = std::getenv("MTG_DUMP_EVAL_ROWS");
 static const char* s_value_rows_path = std::getenv("MTG_DUMP_VALUE_ROWS");
 static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_ROWS_K");
                                           int v = (e && *e) ? std::atoi(e) : 8; return v < 1 ? 1 : v; }();
+// MTG_EVAL_ROWS_ROLLOUT: label candidates by a non-clairvoyant greedy d0 rollout instead of the
+// clairvoyant earliest-win search (stops the oracle over-crediting durdle lines a real d0 can't
+// realise). Affects the label from EnumerateEarliestWins -> use for EVAL-row dumps only, NOT value
+// dumps (the value model wants the searched label). See learned-d0-policy.md (antilife d0).
+static const bool  s_eval_rows_rollout = std::getenv("MTG_EVAL_ROWS_ROLLOUT") != nullptr;
 
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
 {
@@ -89,7 +94,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
                           + 1000003ULL * static_cast<uint64_t>(state.turn_number);
         s.ActivePlayer().library.Shuffle(rs);
         const TurnSolver::EarliestWinReport rep =
-            TurnSolver::EnumerateEarliestWins(s, max_turns, second_main);
+            TurnSolver::EnumerateEarliestWins(s, max_turns, second_main, s_eval_rows_rollout);
         const int e = (rep.earliest > 0 && rep.earliest <= max_turns) ? rep.earliest : (max_turns + 1);
         earliest_sum += e; ++earliest_n;
         for (const TurnSolver::EarliestWinCandidate& c : rep.candidates)
