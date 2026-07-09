@@ -1,6 +1,5 @@
-# Regression ground truth -- commit 9481cad  date 2026-07-08
+# Regression ground truth -- commit e5de44a  date 2026-07-09
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-08): TH R40 exhaustive mulligan profile adoption (keep + blind bottoming). Accepted win->loss are the per-game cost of blind bottoming replacing clairvoyant lookahead (blind is the correct blind-to-shuffle policy; the unconfounded metric rewards the peek); validated net-positive by 16-seed confounded A/B (keep -0.0142t, confounded bottom -0.0578t). Overnight additionally folds other-agent upstream Hinata/antilife gains already baselined in smoke+regression (131d2ae). Audited 2026-07-08; no real regressions.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -8,21 +7,21 @@
 slivers_smoke_d0_s1001=999/4.66266/1cef9308489d08a1
 slivers_smoke_d3_s1001=250/4.292/e02388f36897f9a5
 slivers_smoke_d5_s1001=150/4.22/132bbde39d40eb3c
-burn_smoke_d0_s1001=979/4.61287/6719abe1b662e1fe
-burn_smoke_d3_s1001=298/4.25168/8ca4d06f19d8a29b
-burn_smoke_d5_s1001=249/4.25703/01844a895d2441b8
+burn_smoke_d0_s1001=987/4.5613/a6a4948ba33995ee
+burn_smoke_d3_s1001=298/4.32886/0561d2d22c9a5038
+burn_smoke_d5_s1001=249/4.35341/44caacfda02d0d42
 th_smoke_d0_s1001=837/5.06213/b63cd4d3a25b8207
 th_smoke_d3_s1001=144/4.15278/cdc4480921f47246
 th_smoke_d5_s1001=72/4.13889/094ae2df97554c56
 knights_smoke_d0_s1001=999/4.58559/e9d8eec2cdc41c8d
 knights_smoke_d3_s1001=250/4.396/a170f420994229fb
 knights_smoke_d5_s1001=150/4.38667/8f773349483d7616
-antilife_smoke_d0_s1001=895/5.43017/b811ebed9ab04d2a
-antilife_smoke_d3_s1001=250/4.136/eb2a5790982e5ee1
-antilife_smoke_d5_s1001=150/4.09333/7a67e89348922a61
-hinata_smoke_d0_s1001=653/6.71516/d79872e0057d7007
-hinata_smoke_d3_s1001=146/5.57534/b34a9e1b21af383e
-hinata_smoke_d5_s1001=72/5.61111/3f9753fcc8841256
+antilife_smoke_d0_s1001=905/5.33039/aae5a2ffc8d5645c
+antilife_smoke_d3_s1001=250/4.14/d718e8755501ca0b
+antilife_smoke_d5_s1001=150/4.09333/857cb820874f84ea
+hinata_smoke_d0_s1001=670/6.62985/8b42a69cda2fe23d
+hinata_smoke_d3_s1001=146/5.58219/a58fd3989c952660
+hinata_smoke_d5_s1001=72/5.59722/bc8d07fc7f975000
 
 # --- regression ---
 slivers_regression_d0_s2002=999/4.7007/da946ecd33614760
