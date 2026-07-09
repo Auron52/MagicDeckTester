@@ -426,8 +426,12 @@ public:
         int earliest = 0;                      // min win_turn over all candidates
         std::vector<EarliestWinCandidate> candidates;
     };
+    // rollout_label: label each candidate by a NON-CLAIRVOYANT greedy d0 rollout (apply plan ->
+    // SimulateToEnd under the baseline policy) instead of the clairvoyant earliest-win SEARCH. Used
+    // for eval-row LABEL generation to stop the oracle over-crediting durdle lines a real d0 can't
+    // realise (see the antilife d0 work in learned-d0-policy.md). Default false = searched label.
     static EarliestWinReport EnumerateEarliestWins(const GameState& state, int max_turns,
-                                                   bool second_main);
+                                                   bool second_main, bool rollout_label = false);
 
     // The hand-tuned baseline's plan value = Sum EvalCard(def, state) over the plan's cast cards.
     // Exposed so the learned-eval label dump (AIEngine) and the ranking seam compute the SAME
