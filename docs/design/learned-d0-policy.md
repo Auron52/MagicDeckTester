@@ -1261,6 +1261,37 @@ LEAF delivers search quality via cheap DEPTH — not by out-reading the search a
 
 Everything else is at the ceiling.
 
+### ★ WHY the NC search falls short of the human — it DEPLOYS THE COMBO LATE (2026-07-09, mechanism traced)
+
+Followed up CORRECTION 2 with the user: *why* does our NC policy lose to human play on the antilife references?
+Traced per-game (matched openings, `MTG_DUMP_WINS` per-game turns + `--log-dir` game logs, `env -u`). Two components:
+
+**(A) Systematic: NC deploys the combo ~half a turn late (the dominant, deterministic shortfall).** Matched over
+the 30 reference games (K16 d2): **NC is +0.53 turns vs human, +0.93 vs clairvoyant.** The mechanism is a
+**tempo/sequencing** failure — NC casts the enabler **Tainted Remedy** on average **turn 3.30 vs clairvoyant 2.78
+(+0.52 later; later in 9/23 games)**, and that +0.52 combo-deploy delay maps almost 1:1 onto the +0.53 win-turn
+shortfall. Concrete traces (same opening, byte-reproducible via `--seed S --game-index GI --games 1`):
+- **gi22** (human T4, clair T4, NC T6): both hold Tainted Remedy in the OPENING hand. Clairvoyant deploys it T3 →
+  Aria T4 → win. NC spends T3 on **Idyllic Tutor** (durdles for a piece it doesn't need), delays Remedy to T4,
+  Aria T5–T6. Idyllic Tutor *usage is identical* across policies (8 vs 8) — it's not "tutors more", it's *when*.
+- **gi15** (human T4, clair T4, NC T6): NC casts **Aria of Flame with no Remedy in play → opponent GAINS 10 life**
+  (20→30; Aria ETB is "each opponent gains 10 life", inverted to −10 only with Remedy out). A 20-life swing thrown
+  away. The human/clairvoyant hold Aria for the combo. An occasional misplay, downstream of the same "doesn't
+  value on-curve combo deployment" root.
+
+**Root cause:** the reshuffle-avg objective (min AVERAGE win turn over K futures, shallow d2 + greedy leaf) can't
+reward on-curve combo deployment: (1) the **weak continuation** can't demonstrate the faster kill, so the objective
+is ~indifferent to a 1-turn tempo loss; (2) **averaging** over futures rewards robust/consistent sequencing and
+dilutes the specific fast line. The human, though non-clairvoyant, deploys on curve via combo KNOWLEDGE the flat
+objective lacks. This is exactly why NC is a LOOSE ceiling estimate (CORRECTION 2) — and why a stronger teacher
+would need a stronger (deeper/recursive) continuation, which is intractable. **The references remain the best
+ceiling yardstick.**
+
+**(B) Variance: finite-K Monte-Carlo noise → occasional bricks.** The loss set is UNSTABLE across K (K8→{5,13,15},
+K16→{10,13}, K32→{5}) while win count climbs (28→29→30/31). Shifting losses = estimator noise, not a fixed
+structural failure on specific games; reducible with K but expensive (K32 d2 ≈ minutes/deck). Data:
+`logs/eval/{alln,allc}` game logs; per-game table in session notes; traces `logs/eval/tr_*`, `g22{n,c}`.
+
 ### ⚠️⚠️ CORRECTION 2 — the EVPI numbers below are WRONG: a HUMAN beats our NC policy (2026-07-09, user review, DEFINITIVE)
 
 The whole ceiling table below is **retracted as an EVPI measurement.** Two independent errors, both found by
