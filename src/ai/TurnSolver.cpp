@@ -6067,7 +6067,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic, see header) ----------
 TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState& state,
                                                                 int max_turns, bool second_main,
-                                                                bool rollout_label)
+                                                                bool rollout_label, int rollout_depth)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     ShuffleEvalGuard _seg(true);  // decoupling instrument: planning shuffles use shuffle_salt_search
@@ -6123,7 +6123,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 else
                 {
                     ExpireStagedCards(r);
-                    wt = SimulateToEnd(std::move(r), 0, max_turns, &budget,
+                    wt = SimulateToEnd(std::move(r), rollout_depth, max_turns, &budget,
                                        max_turns + 1, second_main, &tt);
                 }
             }
