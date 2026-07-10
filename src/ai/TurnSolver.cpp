@@ -1290,13 +1290,36 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
 // CanPay in consider()/eval_and_push() would reject it anyway -- so skipping it during enumeration is
 // BYTE-IDENTICAL; it just avoids the per-combo scan for the doomed majority on low-mana durdle turns.
 // Crediting ALL ramp upfront (not per-subset) means a subset that pays for a ritual/rock which nets
-// positive, or contains a free (cost-0) spell, is never wrongly pruned. Filters only convert colour
-// (no total-mana gain), so the total-necessary condition holds with them too. MTG_MANA_PRUNE=0 disables
-// (returns INT_MAX -> no prune -> the original enumeration), for the byte-identical A/B.
+// positive, or contains a free (cost-0) spell (Aether Vial deploy / alt-cost payload, whose Action.cost
+// is ManaCost{}), is never wrongly pruned. Filters only convert colour (no total-mana gain), so the
+// total-necessary condition holds with them too.
+//
+// The prune's soundness rests on `Action.cost.ManaValue()` being the TRUE mana a subset needs. That
+// holds for every reduction BAKED INTO the action cost at build time (Hinata's generic discount for a
+// Hinata ALREADY in play, X=0, Spectacle's alt cost) -- consider() sees the same baked cost, so bound
+// and affordability agree. It does NOT hold for a reduction applied PER-SUBSET inside consider() AFTER
+// the action costs are summed: there the subset's real cost is BELOW sum(cost.ManaValue()), so pruning
+// on the undiscounted sum drops a payable plan -- NOT byte-identical.
+//
+// AFFINITY is the one such case today (SameTurnAffinityGenericCredit subtracts a per-Sliver generic
+// discount that GROWS as the subset grows -- anti-monotonic, so no cheap scalar upfront bound captures
+// it; this bit slivers_vial). We bail out: when any candidate is affinity-reducible, disable the prune
+// (return INT_MAX). Only affinity decks pay the cost; the durdle-heavy generation decks (burn/th/knights)
+// have none, so the speedup is unaffected.
+//
+// >>> MAINTENANCE BREADCRUMB: any FUTURE cost reducer that is credited per-subset in consider() rather
+// than baked into a.cost (e.g. "instants cost {1} less" / "Dragon spells cost {2} less" cast the SAME
+// turn as their enabler, or a same-turn-cast Hinata crediting later spells) MUST be added to this bail-out
+// too, exactly like affinity -- otherwise it silently breaks byte-identity. A reducer already in play that
+// bakes into a.cost needs nothing. MTG_MANA_PRUNE=0 also disables (the byte-identical A/B toggle).
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands)
 {
     static const bool on = []{ const char* e = std::getenv("MTG_MANA_PRUNE"); return !(e && std::string(e) == "0"); }();
     if (!on) { return std::numeric_limits<int>::max(); }
+    // Affinity applies a per-subset generic discount consider() sees but this scalar bound cannot ->
+    // sum(cost.ManaValue()) overstates the true cost -> disable the prune to stay byte-identical.
+    for (const Action& a : cands)
+    { if (a.def && a.def->params.affinity_for_subtype) { return std::numeric_limits<int>::max(); } }
     long long b = pool.Total();
     for (const Action& a : cands) { b += a.ritual_float; b += a.rock_mana.Total(); }
     return (b >= std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max() : static_cast<int>(b);
