@@ -1,5 +1,6 @@
-# Regression ground truth -- commit 1d49327  date 2026-07-10
+# Regression ground truth -- commit 6f233a7  date 2026-07-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (regression, 2026-07-10): gi260 d3+d5 s2002 (5->-1): flood-side of the sampling-fix keep correction -- NEW correctly mulligans a 5-Mountain+GoblinGuide+LightUp flood hand OLD kept; not budget (loses at 40x); net +1 win/-0.05t avg on the SAME seed; 0 searched win->loss at s3003; gi405 0-land-keep defect FIXED (-1->win T3)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -7,9 +8,9 @@
 slivers_smoke_d0_s1001=999/4.66266/1cef9308489d08a1
 slivers_smoke_d3_s1001=250/4.292/e02388f36897f9a5
 slivers_smoke_d5_s1001=150/4.22/132bbde39d40eb3c
-burn_smoke_d0_s1001=987/4.5613/a6a4948ba33995ee
-burn_smoke_d3_s1001=298/4.32886/0561d2d22c9a5038
-burn_smoke_d5_s1001=249/4.35341/44caacfda02d0d42
+burn_smoke_d0_s1001=990/4.56667/96294120b3c0eab0
+burn_smoke_d3_s1001=298/4.32886/a15edea06f72e956
+burn_smoke_d5_s1001=249/4.33333/4b1a467893ff4578
 th_smoke_d0_s1001=837/5.06213/b63cd4d3a25b8207
 th_smoke_d3_s1001=144/4.13194/8d3e37e99d4379e7
 th_smoke_d5_s1001=72/4.13889/6f5f8f8023747f05
@@ -29,11 +30,11 @@ slivers_regression_d3_s2002=400/4.265/0149480e416863f1
 slivers_regression_d3_s3003=399/4.25815/69d7776c8689e159
 slivers_regression_d5_s2002=300/4.28/5a317e333509b231
 slivers_regression_d5_s3003=299/4.25084/6317ec6284060a44
-burn_regression_d0_s2002=992/4.5504/98199a1f9d37f719
-burn_regression_d3_s2002=496/4.39113/d6ddcd629bcf2eb2
-burn_regression_d3_s3003=499/4.3006/e2b53095c8198953
-burn_regression_d5_s2002=497/4.39638/1891ddd14d4111b9
-burn_regression_d5_s3003=499/4.3006/098f1b27a8a2014e
+burn_regression_d0_s2002=990/4.53636/9cf8c0b8b7ce3777
+burn_regression_d3_s2002=497/4.34004/eb38ddf15ca91ca1
+burn_regression_d3_s3003=499/4.28457/58b39bc9a68790b1
+burn_regression_d5_s2002=498/4.34538/f31ecaec84784ad6
+burn_regression_d5_s3003=499/4.28257/ad15ccffd6fe1681
 th_regression_d0_s2002=851/5.06463/de85fbad8c7fc9d1
 th_regression_d3_s2002=492/4.13008/79cb997e07d35e53
 th_regression_d3_s3003=487/4.1191/960211f76c026529
