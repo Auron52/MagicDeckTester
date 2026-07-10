@@ -1176,6 +1176,41 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
     return lands >= kBankThreshold;
 }
 
+// ---- NC tempo bonus (Hook 22) -----------------------------------------------
+
+static int CountLandsInPlay(const GameState& s, int controller)
+{
+    int lands = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller && p.card.IsLand()) { ++lands; }
+    }
+    return lands;
+}
+
+double GenericProvider::NcLandDropTempoBonus(const GameState& s, int controller) const
+{
+    // SAFE conservative default for ANY deck (incl. unknown/new ones): a small tempo bonus that only
+    // breaks decisions the mana-optimistic NC objective already considers close, and ONLY while still
+    // establishing the mana base (<2 lands = turns 1-2 on curve, where playing a land is pure tempo for
+    // every archetype -- even a land-pitch deck needs its first lands). Off once the base exists (a land
+    // in hand may then be a resource) or when the archetype wants to bank/hold (PreferHoldLandDrop). This
+    // is why an UNGATED bonus wrecks Treasure Hunt (-18/400 games) but this gated default does not.
+    if (PreferHoldLandDrop(s, controller)) { return 0.0; }
+    return CountLandsInPlay(s, controller) < 2 ? 0.5 : 0.0;
+}
+
+double AntiLifegainProvider::NcLandDropTempoBonus(const GameState& s, int controller) const
+{
+    // Anti-Lifegain wins through dorks + an on-curve enabler (Tainted Remedy) deploy and has NO
+    // land-as-resource mechanic, so developing mana is essentially always correct -- reward the land
+    // drop every turn (ungated), not just while establishing the base. Measured best on this deck
+    // (dLP -0.040 vs -0.017 for the gated generic rule over 400 autonomous games).
+    (void)controller;
+    (void)s;
+    return 1.0;
+}
+
 // ---- HinataProvider ---------------------------------------------------------
 
 std::vector<std::string>

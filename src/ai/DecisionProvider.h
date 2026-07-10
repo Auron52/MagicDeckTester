@@ -210,6 +210,20 @@ public:
     // develops (byte-identical); only BurnProvider opts in, gated on lands-in-play.
     virtual bool PreferHoldLandDrop(const GameState& s, int controller) const { return false; }
 
+    // Hook 22 -- NON-CLAIRVOYANT search tempo bonus (avg win-turns) for MAKING a land drop this turn.
+    // The reshuffle-averaged NC search (TurnSolver::ReshuffleAvgChoosePlan) is mana-OPTIMISTIC: it
+    // shuffles the true library away, so its mean future has normal land density and it undervalues a
+    // land drop as screw-insurance -- it will DEFER the drop (a fetch-crack costs 1 life) and durdle in
+    // a genuinely land-light game. This bonus prices developing mana back: it is subtracted from the
+    // averaged win-turn of any land-drop plan before the min is taken, so it breaks decisions the
+    // objective considers close WITHOUT overriding a real win-turn difference larger than the bonus.
+    // DEFAULT 0.0 -> inert (only used inside the experimental MTG_NC_SEARCH path anyway). GenericProvider
+    // supplies the SAFE conservative rule (small bonus, only while still building the mana base, and
+    // never when PreferHoldLandDrop wants to bank/hold); archetypes that specifically benefit (mana-
+    // hungry, no land-as-resource mechanic) override to be more aggressive. Land-pitch decks (Land's
+    // Edge / Seismic Assault) are protected by the mana-base gate + PreferHoldLandDrop.
+    virtual double NcLandDropTempoBonus(const GameState& s, int controller) const { (void)s; (void)controller; return 0.0; }
+
     // Hook 16 -- does this deck's goldfish opponent play lands? Decks whose spells target the
     // OPPONENT'S permanents for value (Hinata: Magma Opus taps them, the spread-damage / cost-
     // reduction targeting points at them) need a realistic opponent board. When true the engine

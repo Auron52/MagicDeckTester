@@ -1543,3 +1543,163 @@ NEW INFORMATION (interactive opponent / phase 2), not a better non-clairvoyant d
 MEMORY NOTE (env): the label DUMPS (EnumerateEarliestWins, uncapped memo `FromVirtualMs(1000000)`, TurnSolver.cpp:5999)
 are memory-heavy on durdle decks x threads; run ONE at a time. WSL2 lags returning freed anon pages (looks like
 near-OOM for ~20-60s, self-reclaims). d0 A/B runs are light.
+
+---
+
+## NC SEARCH QUALITY — the reshuffle-averaged objective is MANA-OPTIMISTIC; a land-drop tempo bonus recovers most of the gap (2026-07-10)
+
+Picking up "continue investigating non-clairvoyant search quality." Built `scripts/ref_bench.py` — the ONLY
+correct per-game reference comparison: for each `references/<deck>/*.json` it forces the ref's exact opening hand
+(`--force-mulligan`) into BOTH the clairvoyant search (depth 5, no NC env) and the NC reshuffle search
+(`MTG_NC_SEARCH` K8 d2), beside the human's saved win turn. (Memory `--game-log-dir` is manifest-only; the goldfish
+runner writes JSON decision logs via `--log-dir`.) ⚠️ **The NC search uses ~3 GB RSS/game** (uncapped reshuffle
+memo) — run ≤2–4 concurrent or the OOM killer SIGKILLs siblings (`rc=-9`). Stream rows so a mid-run OOM keeps partial data.
+
+**Clean antilife per-game result (n=30, identical hands, no losses so LP = avg win turn):**
+clairvoyant **4.133**, human **4.500**, NC **4.767**. The 0.267 NC-vs-human gap is CONCENTRATED, not diffuse:
+gi11 (NC 8 vs human/clair 5), gi9 (NC 7 vs human 5, clair 4), gi8 (NC 6 vs human 4), plus five +1 games. The old
+memory "gi15 Aria-without-Remedy" misplay is RESOLVED (NC now byte-identical to human/clair — the reconciled fixes
+fixed it). Do not trust the stale per-game notes; re-measure with ref_bench.
+
+**gi11 traced — NC SKIPS ITS TURN-1 LAND DROP.** Hand after 1 mull = {2 fetchlands, Plague Drone, Swords, 2×Invigorate}
+(a 2-lander). NC plays NEITHER fetch on T1 (life stays 20), stays a land behind all game, deploys the kill T8; clair
+and human play a fetch T1 and win T5. NOT clairvoyance (clair=human=5), NOT horizon (byte-identical durdle at NC
+depth 3 AND 4), NOT a CRN/reshuffle break (`ShuffleAfterSearch` is a no-op by default, so a fetch-crack preserves the
+common-random-number future). The `MTG_NC_DEBUG` instrument (TurnSolver.cpp, in ReshuffleAvgChoosePlan) prints the
+per-plan sums at T1:
+```
+play Wooded Foothills sum=58(avg7.25) | play Bloodstained Mire 56(7.00) | DEFER 52(6.50)   <- defer strictly best
+```
+Deferring scores **0.5 avg-turns "better"** — and it's exactly BACKWARDS (defer→T8, land→T5). ROOT CAUSE: the
+reshuffle averaging shuffles the TRUE (here land-screwed) library away, so its mean future has NORMAL land density.
+The objective is **optimistic about mana** — it can't see that THIS game is mana-light, so the T1 land's value ≈ 0
+while its costs (1 life to crack + one fewer library land) are slightly negative. On T2+ the calculus flips and NC
+does play lands; only the do-nothing-else T1 drop is skipped. This is the general "averaging washes out tempo"
+limitation, now pinned to a specific mechanism and decision.
+
+**FIX — `MTG_NC_TEMPO=<avg-turns>` land-drop bonus (default 0 = off, byte-identical).** In ReshuffleAvgChoosePlan,
+subtract `round(TEMPO*K)` from any plan that makes its land drop before taking the min. A land drop is screw-insurance
+the mean-objective under-prices; the bonus prices it back. It never overrides a real win-turn difference bigger than
+TEMPO. Swept on refs (`scripts/nc_tempo_sweep.py`, forced hands, NC-only), LP by TEMPO:
+
+| deck | human | t=0 | t=0.5 | t=0.7 | t=1.0 |
+|------|-------|-----|-------|-------|-------|
+| antilife (n30) | 4.50 | 4.77 | 4.60 | 4.60 | **4.57** |
+| burn (n16)     | 4.62 | 4.44 | 4.38 |  —   | 4.38 |
+| slivers (n4)   | 4.00 | 4.00 | 4.00 |  —   | 4.00 |
+
+**ZERO games regressed at any TEMPO on any deck** (no fetch-in-hand / Land's-Edge blow-up on burn — the win-turn
+objective still keeps lands when pitching them matters). Antilife gap to human 0.27→0.07 (t=1.0) / 0.10 (t=0.5);
+burn already beats human and improves; slivers flat. **t=0.5 captures most of the win at half the override risk**;
+t=1.0 wins the marginal gi11 6→5. Fixes: antilife gi11 (−3), gi10/gi29/gi5 (−1 each), burn gi12 (−1).
+
+**RESIDUAL after tempo (a DIFFERENT, finer class — land SELECTION / on-curve sequencing).** gi9 is tempo-INVARIANT
+(7 at every TEMPO): NC plays *a* T1 land but the WRONG one — **Godless Shrine (W/B shock) instead of a green fetch**
+— so it can't cast its T1 mana dork **Ignoble Hierarch** and delays it to T3 (clair plays Windswept Heath→green→Hierarch
+T1, wins T4). This is the memory "dork-late / wrong-color" case: not a missed drop but a colour-enabling land choice +
+mana-dork ramp the averaged shallow objective under-values (same mana-optimism, but the lever is *which* land, not
+*whether*). gi21/gi22/gi28/gi1 (+1 each) are the same family. A land-drop bonus can't reach these; they'd need a
+curve/colour-coverage term (value the land that maximises castable spells / enables a ramp creature) — harder, and
+riskier to encode. The mana-dork ramp EvalCard fix (MTG_DORK_RAMP) doesn't reach the NC ranking (NC ranks by averaged
+win-turn, not static eval).
+
+**STATUS:** land-drop tempo bonus is a clean, safe, measured win that moves NC into a satisfactory range vs the human
+references (antilife within 0.07–0.10, burn/slivers ≥ human). It's a HEURISTIC judgment the averaged search genuinely
+can't resolve from its objective (per heuristic-optimization skill). Flag lives in TurnSolver.cpp behind
+`MTG_NC_TEMPO`; `MTG_NC_DEBUG` prints the tie/sum structure. Adoption target = the NC-search config (teacher/ceiling),
+NOT a shipped provider — pending user sign-off on a value (0.5 recommended). Repro: `scripts/ref_bench.py --deck <d>`,
+`scripts/nc_tempo_sweep.py --deck <d> --tempos 0 0.5 1.0`.
+
+### Tempo bonus is DECK-DEPENDENT, not a universal win — broad autonomous validation (2026-07-10)
+
+User (correctly): "this is a general change, test it extensively, not just on my reference files — especially if we
+want to turn it on in general." Two refinements + a broad sweep followed.
+
+**GATE added: `MTG_NC_TEMPO_LANDS` (default 99 = ungated).** The bonus now applies only while the active player
+controls FEWER than this many lands (still building the mana base). Rationale (user: "even turn 2 is safe, but with
+TH you may want to wait for a Treasure Hunt to resolve before playing" a land): the mana-optimism pathology is
+EARLY; late, a land in hand can be a RESOURCE not a wasted drop — TH's win-con is **Treasure Hunt + Land's Edge**
+(`Discard a land: 2 damage`), so lands are ammunition and forcing a late drop throws away reach. A lands-in-play gate
+(not a raw turn cap) self-adjusts: it switches off right as TH reaches ~2-3 lands / casts Treasure Hunt, yet still
+fires if you're genuinely land-light late. Gating to L<2 costs ~0.06 of the antilife gain (a few antilife land drops
+that helped happened at 2+ lands) — a real safety/benefit trade.
+
+**Thread-invariance confirmed:** per-game seed = base+game_index, independent of `--threads`; antilife 40g at threads
+2 vs 8 = byte-identical (37 won, 4.64865). So the NC sweep scales to many threads (bumped 2→6) with no result change.
+(The ~3 GB/game OOM risk is only the FORCED-hand durdle runs; autonomous mulligan games are light + fast.)
+
+**BROAD AUTONOMOUS SWEEP (`scripts/nc_tempo_bigsweep.py`, 150 games/deck, fresh seed 40000, disjoint from refs 1-31
+and regression):** this is the real no-regression gate — the runner mulligans + plays itself over many seeds, not the
+30 hand-played hands. dLP vs baseline (loss-penalised avg win turn, lower=better):
+
+| deck | baseline LP | t0.5_L2 | t0.5_L3 | t1.0_L2 | read |
+|------|-------------|---------|---------|---------|------|
+| antilife | 4.860 | **−0.060 (+2 won)** | −0.053 | −0.053 | clear HELP |
+| burn     | 4.340 | **+0.013** | +0.013 | +0.013 | tiny HURT (consistent) |
+| slivers  | 4.247 | 0.000 | 0.000 | 0.000 | neutral |
+| knights  | 4.420 | 0.000 | 0.000 | 0.000 | neutral |
+| TH       | 4.793 | −0.007 (−1 won) | −0.000 (−1 won) | −0.007 (−1 won) | ~neutral, faster wins but 1 more loss |
+
+**VERDICT: do NOT turn the tempo bonus on globally.** It clearly helps only the mana-hungry combo deck (antilife);
+it's a small but consistent HURT on burn (+0.013) and gives TH a subtle faster-but-loses-1 tradeoff. The reference
+subset had shown burn IMPROVING — an artifact the 16-hand sample missed and the 150-game sweep caught. This is an
+ARCHETYPE-LEVEL knob: adopt on antilife (and decks like it — mana-hungry, no land-as-resource mechanic), leave OFF
+on burn/TH (land-pitch decks) and where neutral. A wider run (400 games, ungated L99 controls, seed 50000) is
+in flight to (a) confirm the antilife gain and (b) separate burn's +0.013 / TH's −1 from noise with more power.
+
+### DECISIVE (400-game powered sweep): the GATE is load-bearing — gated tempo is a clean no-regression win (2026-07-10)
+
+Re-ran the broad sweep at 400 games/deck (seed 50000, threads 6 — thread-invariant), adding UNGATED (L99) controls.
+The 150-game small effects were partly noise; the powered numbers (dLP vs baseline, lower=better):
+
+| deck | baseline LP | gated t0.5_L2 | gated t1.0_L2 | UNGATED t0.5_L99 | UNGATED t1.0_L99 |
+|------|-------------|---------------|---------------|------------------|------------------|
+| antilife | 4.670 | -0.017 (+1) | -0.017 (+0) | -0.028 (+3) | -0.040 (+3) |
+| burn     | 4.460 |  0.000 | -0.003 | -0.008 | -0.010 |
+| slivers  | 4.300 |  0.000 |  0.000 |  0.000 |  0.000 |
+| knights  | 4.365 |  0.000 |  0.000 |  0.000 |  0.000 |
+| TH       | 5.047 | -0.022 (+2) | -0.017 (+2) | +0.043 (-8) | +0.143 (-18!) |
+
+THE GATE IS LOAD-BEARING; the user's TH instinct was the crux. UNGATED tempo helps antilife/burn MORE but is
+CATASTROPHIC on TH (t1.0_L99 loses 18/400 games -- playing lands late that should be Land's-Edge ammo). The
+lands-in-play GATE confines the bonus to the mana-building phase and turns TH into a small GAIN (+2 won). With the
+gate the bonus is NEUTRAL-OR-BETTER on all five decks -- ZERO regressions. Corrections vs the 150-game/reference reads:
+burn's "+0.013 hurt" was NOISE (gated ~0); TH's "-1 loss" was NOISE (gated +2). Antilife gain is REAL but MODEST on
+random games (-0.017 gated) vs the concentrated reference blunders (gi11 -3), because land-skip blunders are rarer in
+random games than in hand-played refs.
+
+RECOMMENDATION: adopt the GATED tempo bonus for the NC search -- MTG_NC_TEMPO with MTG_NC_TEMPO_LANDS~2. Safe to
+enable generally ONLY because of the gate (ungated is not). t1.0_L2 catches the concentrated blunders most fully
+(gi11 -> T5) at zero measured regression; t0.5_L2 is the conservative pick. NC-search (teacher/ceiling) knob, not a
+shipped-search change. Repro: scripts/nc_tempo_bigsweep.py --games 400 --seed 50000 --threads 6. Remaining NC residual
+(unfixed by tempo): the dork-late/wrong-COLOUR land-SELECTION class (gi9), a curve/colour-coverage lever, deferred.
+
+### Moved the tempo bonus INTO THE PROVIDER LAYER (safe generic default + archetype overrides) (2026-07-10)
+
+User: "isn't this flag a heuristic anyway? implement a safe rule in the GenericProvider, potentially overrides for TH
+and Anti-Lifegain as needed -- so it doesn't bite new decks but can be aggressive where needed." Correct: the env flag
+was the A/B SELECTOR stage (per the heuristic-optimization skill); adoption = the provider. The codebase already had
+the mirror concept -- PreferHoldLandDrop (BurnProvider banks lands for Searing Blaze landfall) + the main search's
+develop-vs-hold tiebreak (TurnSolver.cpp:5253). The MTG_NC_TEMPO_LANDS env gate was a crude global proxy for that.
+
+New Hook 22 DecisionProvider::NcLandDropTempoBonus(state, controller) -> double (avg-turns bonus for a land drop):
+- base default 0.0 (inert; unknown decks unaffected).
+- GenericProvider = SAFE: 0 if PreferHoldLandDrop; else lands_in_play < 2 ? 0.5 : 0.0 (turns 1-2 only, pure tempo).
+- AntiLifegainProvider = AGGRESSIVE: 1.0 ungated (dorks + on-curve enabler, no land-as-resource -> always develop).
+- ReshuffleAvgChoosePlan calls the provider by default; MTG_NC_TEMPO/_LANDS override with a flat gated bonus (A/B).
+
+400-game autonomous validation (nc_tempo_bigsweep.py seed 50000, "provider" = env unset), dLP vs baseline:
+
+| deck | provider (ADOPTED) | global gated t1.0_L2 | global ungated t1.0_L99 |
+|------|--------------------|----------------------|-------------------------|
+| antilife | -0.040 (+3 won) | -0.017 | -0.040 |
+| burn     | 0.000 | -0.003 | -0.010 |
+| slivers  | 0.000 | 0.000 | 0.000 |
+| knights  | 0.000 | 0.000 | 0.000 |
+| TH       | -0.022 (+2 won) | -0.017 | +0.143 (-18 won!) |
+
+Provider default is STRICTLY BETTER than any global setting: full antilife gain (-0.040) via the archetype override,
+while the generic safe rule keeps TH a small GAIN (-0.022) where global ungated loses 18/400. TH needed NO override;
+only Anti-Lifegain did. Shipped (non-NC) play byte-identical (hook only in ReshuffleAvgChoosePlan / MTG_NC_SEARCH).
+Files: DecisionProvider.h (Hook 22), DecisionProviders.{h,cpp}, TurnSolver.cpp. MTG_NC_DEBUG kept (inert). Follow-ups:
+burn could take a mild override; gi9 land-SELECTION/colour class is the next provider lever (which land, not whether).
