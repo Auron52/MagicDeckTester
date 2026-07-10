@@ -1284,6 +1284,24 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     group_hand_index.swap(kept_hand_index);
 }
 
+// Conservative upper bound on this turn's TOTAL available mana: the current pool plus ALL ritual/rock
+// ramp the hand could add (both ManaPool::Total()-style scalar totals), credited upfront. A combination
+// whose total mana cost (sum of ManaValue()) exceeds this bound can never be paid -- the color-aware
+// CanPay in consider()/eval_and_push() would reject it anyway -- so skipping it during enumeration is
+// BYTE-IDENTICAL; it just avoids the per-combo scan for the doomed majority on low-mana durdle turns.
+// Crediting ALL ramp upfront (not per-subset) means a subset that pays for a ritual/rock which nets
+// positive, or contains a free (cost-0) spell, is never wrongly pruned. Filters only convert colour
+// (no total-mana gain), so the total-necessary condition holds with them too. MTG_MANA_PRUNE=0 disables
+// (returns INT_MAX -> no prune -> the original enumeration), for the byte-identical A/B.
+static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands)
+{
+    static const bool on = []{ const char* e = std::getenv("MTG_MANA_PRUNE"); return !(e && std::string(e) == "0"); }();
+    if (!on) { return std::numeric_limits<int>::max(); }
+    long long b = pool.Total();
+    for (const Action& a : cands) { b += a.ritual_float; b += a.rock_mana.Total(); }
+    return (b >= std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max() : static_cast<int>(b);
+}
+
 // ---- TurnSolver::Solve ---------------------------------------------------
 
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
@@ -1694,22 +1712,34 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         return true;
     };
 
+    const int mana_bound = ManaPruneBound(pool, cands);   // total-mana prune (byte-identical); see helper
     std::vector<int> choice(num_groups, 0);
     bool done = false;
     while (!done)
     {
-        for (int imask = 0; imask < (1 << num_ind); ++imask)
+        // Group-selection total mana cost (once per odometer position). If it already exceeds the
+        // ramp-credited bound, every extension (independent actions only add cost) is unpayable, so
+        // skip the whole inner loop -- the combos skipped are exactly those consider()'s CanPay rejects.
+        int gcost = 0;
+        for (int g = 0; g < num_groups; ++g)
+        { if (choice[g] > 0) { gcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
+        if (gcost <= mana_bound)
         {
-            sel.clear();
-            for (int g = 0; g < num_groups; ++g)
+            for (int imask = 0; imask < (1 << num_ind); ++imask)
             {
-                if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); }
+                sel.clear();
+                int icost = 0;
+                for (int g = 0; g < num_groups; ++g)
+                {
+                    if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); }
+                }
+                for (int b = 0; b < num_ind; ++b)
+                {
+                    if (imask & (1 << b)) { sel.push_back(independent[b]);
+                                            icost += cands[independent[b]].cost.ManaValue(); }
+                }
+                if (!sel.empty() && gcost + icost <= mana_bound && vial_ok(sel)) { consider(sel); }
             }
-            for (int b = 0; b < num_ind; ++b)
-            {
-                if (imask & (1 << b)) { sel.push_back(independent[b]); }
-            }
-            if (!sel.empty() && vial_ok(sel)) { consider(sel); }
         }
 
         int g = 0;
@@ -4467,23 +4497,35 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Odometer over per-card choices (0 = skip the card, v >= 1 selects
     // groups[g][v-1]), crossed with the 2^num_ind powerset of independent actions.
     // The empty combination (skip everything) is not a plan and is dropped.
+    const int mana_bound = ManaPruneBound(pool, cands);   // total-mana prune (byte-identical); see helper
     std::vector<int> choice(num_groups, 0);
     std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-combo alloc)
     bool done = false;
     while (!done)
     {
-        for (int imask = 0; imask < (1 << num_ind); ++imask)
+        // Group-selection total mana cost (once per odometer position). If it already exceeds the
+        // ramp-credited bound, every extension is unpayable, so skip the inner loop -- the combos
+        // skipped are exactly those eval_and_push()'s CanPay would reject. Byte-identical, same order.
+        int gcost = 0;
+        for (int g = 0; g < num_groups; ++g)
+        { if (choice[g] > 0) { gcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
+        if (gcost <= mana_bound)
         {
-            sel.clear();
-            for (int g = 0; g < num_groups; ++g)
+            for (int imask = 0; imask < (1 << num_ind); ++imask)
             {
-                if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); }
+                sel.clear();
+                int icost = 0;
+                for (int g = 0; g < num_groups; ++g)
+                {
+                    if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); }
+                }
+                for (int b = 0; b < num_ind; ++b)
+                {
+                    if (imask & (1 << b)) { sel.push_back(independent[b]);
+                                            icost += cands[independent[b]].cost.ManaValue(); }
+                }
+                if (!sel.empty() && gcost + icost <= mana_bound) { eval_and_push(sel); }
             }
-            for (int b = 0; b < num_ind; ++b)
-            {
-                if (imask & (1 << b)) { sel.push_back(independent[b]); }
-            }
-            if (!sel.empty()) { eval_and_push(sel); }
         }
 
         int g = 0;
