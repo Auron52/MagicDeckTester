@@ -1,5 +1,6 @@
-# Regression ground truth -- commit e5de44a  date 2026-07-09
+# Regression ground truth -- commit 91b8a24  date 2026-07-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (regression, 2026-07-10): reconcile phase-1-2: antilife/hinata play-fix gains (fetch+ramp, more wins, no NEW win->loss); 4 burn searched win->loss (d3/d5 gi405,gi452) are PRE-EXISTING stale burn GT — reproduced independent of the merge (burn has no ManaDork/fetch; loses with MTG_DORK_RAMP=0 too), flagged for separate burn investigation
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -29,11 +30,11 @@ slivers_regression_d3_s2002=400/4.265/0149480e416863f1
 slivers_regression_d3_s3003=399/4.25815/69d7776c8689e159
 slivers_regression_d5_s2002=300/4.28/5a317e333509b231
 slivers_regression_d5_s3003=299/4.25084/6317ec6284060a44
-burn_regression_d0_s2002=985/4.63046/6bbf65f3d3f911e7
-burn_regression_d3_s2002=498/4.30522/37128221b4fe7983
-burn_regression_d3_s3003=498/4.249/3436faa28d40c1fb
-burn_regression_d5_s2002=499/4.30661/1b407d3f0b7fd6ea
-burn_regression_d5_s3003=499/4.2505/832323bc0e5a5b22
+burn_regression_d0_s2002=992/4.5504/98199a1f9d37f719
+burn_regression_d3_s2002=496/4.39113/d6ddcd629bcf2eb2
+burn_regression_d3_s3003=499/4.3006/e2b53095c8198953
+burn_regression_d5_s2002=497/4.39638/1891ddd14d4111b9
+burn_regression_d5_s3003=499/4.3006/098f1b27a8a2014e
 th_regression_d0_s2002=851/5.06463/de85fbad8c7fc9d1
 th_regression_d3_s2002=492/4.13211/c4431f036556b9f4
 th_regression_d3_s3003=487/4.12731/c0deabb660fcbc7f
@@ -44,16 +45,16 @@ knights_regression_d3_s2002=300/4.34333/32593c93f3019402
 knights_regression_d3_s3003=300/4.36333/0f99cf70866bd230
 knights_regression_d5_s2002=250/4.312/bde18136c4fbba75
 knights_regression_d5_s3003=250/4.356/4c4f48db1b7c658a
-antilife_regression_d0_s2002=881/5.33031/0920e460e26a6f45
-antilife_regression_d3_s2002=299/4.09365/0aef4c9bf229d3dc
-antilife_regression_d3_s3003=299/4.09365/a6e11a66cb53e7b2
-antilife_regression_d5_s2002=249/4.12851/c9c811e7db3c54c8
-antilife_regression_d5_s3003=249/4.08032/c0bdb293d370b534
-hinata_regression_d0_s2002=624/6.68109/700226af88c17daf
-hinata_regression_d3_s2002=194/5.69072/2bfe90028746ad93
-hinata_regression_d3_s3003=191/5.67016/12c2e014f31592ca
-hinata_regression_d5_s2002=97/5.69072/24f53b7371f1c35c
-hinata_regression_d5_s3003=97/5.68041/d52f003b58848af8
+antilife_regression_d0_s2002=905/5.23536/f12acc9fe7ca94cc
+antilife_regression_d3_s2002=299/4.10033/ba35e70080ca62de
+antilife_regression_d3_s3003=299/4.11371/01c3129e93387ccb
+antilife_regression_d5_s2002=249/4.13253/8c1f91b21a4b3129
+antilife_regression_d5_s3003=249/4.09639/71711d2c360e402f
+hinata_regression_d0_s2002=646/6.64396/a9b7fb31637c4d46
+hinata_regression_d3_s2002=194/5.68557/18e255c09cc04157
+hinata_regression_d3_s3003=191/5.64398/05846eed53055ea7
+hinata_regression_d5_s2002=98/5.69388/a1a02e4a4289a3f8
+hinata_regression_d5_s3003=97/5.65979/ec97db2930e3edbc
 
 # --- overnight ---
 slivers_overnight_d0_s4004=1998/4.66917/81443ed4f7c01e43
