@@ -8,11 +8,13 @@
 #include "EquivalenceDiscovery.h"
 #include "ExhaustiveKeep.h"
 #include "../ai/AIEngine.h"
+#include "../core/GameEngine.h"
 #include "../runner/GoldFishRunner.h"
 #include "../core/HardwareConcurrency.h"
 #include <fstream>
 #include <atomic>
 #include <thread>
+#include <mutex>
 #include <array>
 #include "../deck/DeckLoader.h"
 #include "../cards/CardDatabase.h"
@@ -166,6 +168,177 @@ int main(int argc, char* argv[])
             return 0;
         }
 
+        // Constructed-hand game logger (MTG_LOG_HAND="c0,c1,...,cK-1"): set up games with an EXACT
+        // bucket composition as the opening hand, play them out with a real logger, and save the ones
+        // that win on MTG_LOG_TURN (default 3) as replay JSON under MTG_LOG_DIR (default logs/hand_lines).
+        // MTG_LOG_MAXTOP2LANDS (default 1) skips games whose first two draws are BOTH lands (the "clean"
+        // path), so the saved lines are the harder wins. MTG_LOG_N games, MTG_LOG_PLAY=1 for on-the-play.
+        if (const char* e = std::getenv("MTG_LOG_HAND"); e && *e && std::string(e) != "0")
+        {
+            std::filesystem::path in_path =
+                deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
+            MulliganProfile profile = std::filesystem::exists(in_path) ? LoadDeckProfile(in_path)
+                                                                       : MulliganProfile::DefaultProfile();
+            const auto& buckets = profile.exhaustive_keep.buckets;
+            const int K = static_cast<int>(buckets.size());
+            std::map<std::string,int> bof;
+            for (int b = 0; b < K; ++b) { for (const std::string& n : buckets[b]) { bof[n] = b; } }
+            std::vector<int> comp(K, 0);
+            { std::stringstream cs(e); std::string t; int b = 0;
+              while (std::getline(cs, t, ',') && b < K) { comp[b++] = std::atoi(t.c_str()); } }
+            const int depth = []{ const char* s = std::getenv("MTG_EQUIV_DEPTH");
+                                  return (s && *s) ? std::max(0, std::atoi(s)) : 5; }();
+            const int target = []{ const char* s = std::getenv("MTG_LOG_TURN");
+                                   return (s && *s) ? std::atoi(s) : 3; }();
+            const int want   = []{ const char* s = std::getenv("MTG_LOG_N");
+                                   return (s && *s) ? std::max(1, std::atoi(s)) : 3; }();
+            const int max2   = []{ const char* s = std::getenv("MTG_LOG_MAXTOP2LANDS");
+                                   return (s && *s) ? std::atoi(s) : 1; }();
+            const bool on_play = std::getenv("MTG_LOG_PLAY") != nullptr;
+            std::filesystem::path log_dir = std::getenv("MTG_LOG_DIR") ? std::getenv("MTG_LOG_DIR")
+                                                                       : "logs/hand_lines";
+            std::filesystem::create_directories(log_dir);
+            auto numbering = GoldFishRunner::BuildCardNumbering(deck);
+            MulliganProfile rp = profile; rp.keep_model = KeepModel{};
+            const bool second_main = GoldFishRunner::DeckUsesSecondMain(deck);
+            AIEngine ai(rp, depth, 20); ai.SetSearchPostCombat(second_main);
+            int found = 0, scanned = 0;
+            const uint64_t base = 900'000'000ULL;
+            for (uint64_t seed = base; found < want && seed < base + 200000; ++seed)
+            {
+                ++scanned;
+                GameState s = GoldFishRunner::SetupGame(deck, seed);
+                s.m_required_pieces = &rp.required_pieces;
+                s.vial_target_mv    = rp.vial_target_mv;
+                s.on_the_play       = on_play;
+                GoldFishRunner::AssignCardNumbers(s, numbering);
+                Player& ap = s.ActivePlayer(); ap.hand.clear();
+                for (int b = 0; b < K; ++b) { int need = comp[b];
+                    for (std::size_t k = 0; k < ap.library.size() && need > 0; ) {
+                        auto bit = bof.find(ap.library[k].m_name.str());
+                        if (bit != bof.end() && bit->second == b)
+                        { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin()+k); --need; }
+                        else { ++k; } } }
+                ap.library.Shuffle(SaltSeed(seed, 0x5EED5ULL));   // unbias continuation (see ExhaustiveKeep)
+                // Peek the first 3 draws (on the draw: turns 1-3) for the filter + context.
+                std::vector<std::string> top;
+                for (int k = 0; k < 3 && k < static_cast<int>(ap.library.size()); ++k)
+                { top.push_back(ap.library[k].m_name.str()); }
+                int top2lands = 0;
+                for (int k = 0; k < 2 && k < static_cast<int>(ap.library.size()); ++k)
+                { const CardDefinition* d = CardDatabase::Instance().Lookup(ap.library[k].m_name.str());
+                  if (d && d->card.IsLand()) { ++top2lands; } }
+                if (top2lands > max2) { continue; }   // skip the easy 2-lands-on-top wins
+                std::vector<int> nums; std::vector<std::string> names;
+                for (const Card& c : ap.hand) { nums.push_back(c.m_number); names.push_back(c.m_name.str()); }
+                GameLogger logger;
+                logger.StartGame("hand", static_cast<int>(seed - base), "d1", seed, numbering);
+                logger.LogOpeningHand(nums, names);
+                GameEngine engine(ai); engine.SetLogger(&logger);
+                int wt = engine.PlayOut(s, max_turns);
+                engine.SetLogger(nullptr);
+                if (wt != target) { continue; }
+                logger.EndGame(wt);
+                std::filesystem::path path = log_dir /
+                    ("t" + std::to_string(target) + "_seed" + std::to_string(seed) + ".json");
+                logger.WriteToFile(path);
+                ++found;
+                std::cout << "WIN t" << wt << "  " << path.string() << "\n  opening: ";
+                for (const std::string& n : names) { std::cout << n << ", "; }
+                std::cout << "\n  first 3 draws: ";
+                for (const std::string& n : top) { std::cout << n << ", "; }
+                std::cout << "\n";
+            }
+            std::cout << "found " << found << " turn-" << target << " wins (scanned " << scanned
+                      << " seeds, on_the_" << (on_play ? "play" : "draw") << ")\n" << std::flush;
+            return 0;
+        }
+
+        // Mulligan-EV probe (MTG_MULL_EV): measure the value of mulliganing a RANDOM opening hand down
+        // to (7-m) cards and playing out, for m=0..MAXM. This is the KEEP THRESHOLD the exhaustive policy
+        // compares a specific hand against: keep iff V[hand] <= Dopt[m+1], and Dopt[m+1] ~ the mean here
+        // at m+1 (value of mulliganing again). Draws a natural top-7 per fresh shuffle, bottoms m via the
+        // deck's bottoming policy, plays out; averages over MTG_SCORE_R shuffles. MTG_SCORE_HIST adds the
+        // per-(m,pd) win-turn histogram. Read-only diagnostic.
+        if (const char* e = std::getenv("MTG_MULL_EV"); e && *e && std::string(e) != "0")
+        {
+            std::filesystem::path in_path =
+                deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
+            MulliganProfile profile = std::filesystem::exists(in_path) ? LoadDeckProfile(in_path)
+                                                                       : MulliganProfile::DefaultProfile();
+            const int R = []{ const char* s = std::getenv("MTG_SCORE_R");
+                              return (s && *s) ? std::max(1, std::atoi(s)) : 400; }();
+            const int depth = []{ const char* s = std::getenv("MTG_EQUIV_DEPTH");
+                                  return (s && *s) ? std::max(0, std::atoi(s)) : 5; }();
+            const int MAXM = []{ const char* s = std::getenv("MTG_MULL_EV_MAXM");
+                                 return (s && *s) ? std::max(0, std::atoi(s)) : 2; }();
+            const bool hist_on = std::getenv("MTG_SCORE_HIST") != nullptr;
+            MulliganProfile rp = profile; rp.keep_model = KeepModel{};
+            const bool second_main = GoldFishRunner::DeckUsesSecondMain(deck);
+            std::vector<std::array<double, 2>> sum(MAXM + 1, { 0, 0 }), sumsq(MAXM + 1, { 0, 0 });
+            std::vector<std::array<std::array<long long, 12>, 2>> hist(MAXM + 1);
+            std::mutex mtx;
+            std::atomic<int> next{ 0 };
+            auto worker = [&]()
+            {
+                AIEngine ai(rp, depth, 20); ai.SetSearchPostCombat(second_main);
+                std::vector<std::array<double, 2>> ls(MAXM + 1, { 0, 0 }), lsq(MAXM + 1, { 0, 0 });
+                std::vector<std::array<std::array<long long, 12>, 2>> lh(MAXM + 1);
+                for (;;)
+                {
+                    int r = next.fetch_add(1);
+                    if (r >= R) { break; }
+                    for (int pd = 0; pd < 2; ++pd)
+                    {
+                        const uint64_t rs = 555'000'000ULL + 0x9E3779B97F4A7C15ULL * (r + 1)
+                                          + 100003ULL * static_cast<uint64_t>(pd);
+                        GameState base = GoldFishRunner::SetupGame(deck, rs);
+                        base.m_required_pieces = &rp.required_pieces;
+                        base.vial_target_mv    = rp.vial_target_mv;
+                        base.on_the_play       = (pd == 1);
+                        Player& ap = base.ActivePlayer();
+                        ap.hand.clear();
+                        for (int k = 0; k < 7 && !ap.library.empty(); ++k)
+                        { ap.hand.push_back(ap.library.front()); ap.library.erase(ap.library.begin()); }
+                        for (int m = 0; m <= MAXM; ++m)
+                        {
+                            GameState s = base;
+                            double wt = ai.RolloutKeepWinTurn(s, m, max_turns);
+                            ls[m][pd] += wt; lsq[m][pd] += wt * wt;
+                            int wb = static_cast<int>(wt); if (wb < 0) { wb = 0; } if (wb > 11) { wb = 11; }
+                            ++lh[m][pd][wb];
+                        }
+                    }
+                }
+                std::lock_guard<std::mutex> g(mtx);
+                for (int m = 0; m <= MAXM; ++m)
+                    for (int pd = 0; pd < 2; ++pd)
+                    { sum[m][pd] += ls[m][pd]; sumsq[m][pd] += lsq[m][pd];
+                      for (int t = 0; t < 12; ++t) { hist[m][pd][t] += lh[m][pd][t]; } }
+            };
+            int nthreads = std::max(1, concurrency_util::AffinityCpuCount());
+            std::vector<std::thread> pool;
+            for (int t = 0; t < nthreads; ++t) { pool.emplace_back(worker); }
+            for (std::thread& th : pool) { th.join(); }
+            std::cout << "# MULL-EV deck=" << deck_path.stem().string() << " R=" << R << " depth=" << depth
+                      << " max_turns=" << max_turns << "\n";
+            std::cout << "# m = cards bottomed (hand size 7-m); mean = keep threshold Dopt[m] (lower=better)\n";
+            for (int m = 0; m <= MAXM; ++m)
+                for (int pd = 0; pd < 2; ++pd)
+                {
+                    double mean = sum[m][pd] / R;
+                    double var  = std::max(0.0, sumsq[m][pd] / R - mean * mean);
+                    std::cout << "m" << m << " keep" << (7 - m) << " " << (pd ? "PLAY" : "DRAW")
+                              << "  mean=" << mean << "  se=" << std::sqrt(var / R);
+                    if (hist_on)
+                    { std::cout << "  hist:";
+                      for (int t = 0; t < 12; ++t) { if (hist[m][pd][t]) { std::cout << " t" << t << "=" << hist[m][pd][t]; } } }
+                    std::cout << "\n";
+                }
+            std::cout << std::flush;
+            return 0;
+        }
+
         // Targeted comp-scorer (MTG_SCORE_COMPS): re-evaluate specific bucket compositions at high R
         // to non-circularly check bottoming decisions (is the kept subhand truly blind-better?). Reads
         // MTG_SCORE_FILE lines "H:c0,c1,...,cK-1" (hand size + per-bucket counts, bucket order = the
@@ -206,12 +379,38 @@ int main(int argc, char* argv[])
                 items.push_back({ line, std::move(comp) });
             }
             std::vector<std::array<double, 4>> out(items.size(), { 0, 0, 0, 0 });  // dmean,dse,pmean,pse
+            // Optional per-comp win-turn histogram (MTG_SCORE_HIST): [item][pd][win_turn 0..11], last
+            // buckets catch max_turns+1 (no win). Per-item ownership => race-free like `out`.
+            const bool score_hist = std::getenv("MTG_SCORE_HIST") != nullptr;
+            std::vector<std::array<std::array<long long, 12>, 2>> hist(items.size());
+
+            // Optional detail mode (MTG_SCORE_DETAIL): for each win-turn bucket, the lands-in-play split
+            // (player-0 lands controlled at the win) and how many of those wins cast Light Up the Stage
+            // (via the execution-trace touch index). Answers "how many turn-3 wins ran on 1 vs 2 lands,
+            // and did the spectacle dig participate?".
+            const bool detail_on = std::getenv("MTG_SCORE_DETAIL") != nullptr;
+            struct Detail { std::array<std::array<long long, 10>, 12> lands{};   // [winturn][lands 0..9]
+                            std::array<long long, 12> lightup{};                 // [winturn] wins that cast LUS
+                            std::array<std::array<long long, 3>, 12> top2{}; };  // [winturn][lands in first 2 draws]
+            std::vector<std::array<Detail, 2>> detail(detail_on ? items.size() : 0);
+            std::map<std::string, int> touch_index; std::vector<std::string> touch_names;
+            int lightup_idx = -1;
+            if (detail_on)
+            {
+                for (const Card& c : deck.mainboard)
+                    if (touch_index.emplace(c.m_name.str(), static_cast<int>(touch_names.size())).second)
+                    { touch_names.push_back(c.m_name.str()); }
+                auto it = touch_index.find("Light Up the Stage");
+                if (it != touch_index.end()) { lightup_idx = it->second; }
+            }
 
             std::atomic<int> next{0};
             const std::map<std::string, int>& bofref = bof;   // const ref -> concurrent-safe find()
             auto worker = [&]()
             {
                 AIEngine ai(rp, depth, 20); ai.SetSearchPostCombat(second_main);
+                std::vector<char> hit;
+                if (detail_on) { ai.SetTouchIndex(&touch_index); hit.assign(touch_names.size(), 0); }
                 for (;;)
                 {
                     int w = next.fetch_add(1);
@@ -235,8 +434,25 @@ int main(int argc, char* argv[])
                                     if (bit != bofref.end() && bit->second == b)
                                     { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin()+k); --need; }
                                     else { ++k; } } }
-                            double wt = ai.RolloutKeepWinTurn(s, 0, max_turns);
+                            ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));   // unbias continuation (see ExhaustiveKeep)
+                            int top2lands = 0;
+                            if (detail_on)
+                                for (int q = 0; q < 2 && q < static_cast<int>(ap.library.size()); ++q)
+                                { const CardDefinition* dd = CardDatabase::Instance().Lookup(ap.library[q].m_name.str());
+                                  if (dd && dd->card.IsLand()) { ++top2lands; } }
+                            double wt; int lands = -1;
+                            if (detail_on)
+                            { std::fill(hit.begin(), hit.end(), 0);
+                              wt = ai.RolloutKeepWinTurn(s, 0, max_turns, &hit, &lands); }
+                            else { wt = ai.RolloutKeepWinTurn(s, 0, max_turns); }
                             sum += wt; sumsq += wt*wt;
+                            int wb = static_cast<int>(wt); if (wb < 0) wb = 0; if (wb > 11) wb = 11;
+                            ++hist[w][pd][wb];
+                            if (detail_on)
+                            { int lb = lands < 0 ? 0 : (lands > 9 ? 9 : lands);
+                              ++detail[w][pd].lands[wb][lb];
+                              ++detail[w][pd].top2[wb][top2lands < 0 ? 0 : (top2lands > 2 ? 2 : top2lands)];
+                              if (lightup_idx >= 0 && hit[lightup_idx]) { ++detail[w][pd].lightup[wb]; } }
                         }
                         double mean = sum / R;
                         double var  = R > 1 ? std::max(0.0, sumsq/R - mean*mean) : 0.0;
@@ -255,6 +471,38 @@ int main(int argc, char* argv[])
             {
                 std::cout << items[i].line << "\t" << out[i][0] << " " << out[i][1] << "\t"
                           << out[i][2] << " " << out[i][3] << "\n";
+            }
+            if (score_hist)
+            {
+                std::cout << "\n# win-turn histogram (tN=count; the last populated bucket = no win by "
+                             "max_turns, scored max_turns+1)\n";
+                for (std::size_t i = 0; i < items.size(); ++i)
+                    for (int pd = 0; pd < 2; ++pd)
+                    {
+                        std::cout << items[i].line << (pd ? "  PLAY " : "  DRAW ");
+                        for (int t = 0; t < 12; ++t)
+                        { if (hist[i][pd][t]) { std::cout << "t" << t << "=" << hist[i][pd][t] << " "; } }
+                        std::cout << "\n";
+                    }
+            }
+            if (detail_on)
+            {
+                std::cout << "\n# per-win-turn lands-in-play split (L<n>=count of wins with n player-0 "
+                             "lands) + LightUp=wins that cast Light Up the Stage\n";
+                for (std::size_t i = 0; i < items.size(); ++i)
+                    for (int pd = 0; pd < 2; ++pd)
+                        for (int t = 0; t < 12; ++t)
+                        {
+                            long long tot = 0; for (int l = 0; l < 10; ++l) { tot += detail[i][pd].lands[t][l]; }
+                            if (!tot) { continue; }
+                            std::cout << items[i].line << (pd ? "  PLAY t" : "  DRAW t") << t << " n=" << tot << "  ";
+                            for (int l = 0; l < 10; ++l)
+                            { if (detail[i][pd].lands[t][l]) { std::cout << "L" << l << "=" << detail[i][pd].lands[t][l] << " "; } }
+                            std::cout << " LightUp=" << detail[i][pd].lightup[t]
+                                      << "  top2draws[0L=" << detail[i][pd].top2[t][0]
+                                      << " 1L=" << detail[i][pd].top2[t][1]
+                                      << " 2L=" << detail[i][pd].top2[t][2] << "]\n";
+                        }
             }
             std::cout << std::flush;
             return 0;

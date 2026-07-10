@@ -680,8 +680,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (long long r = r0; r < r1; ++r)
         {
             // Fresh shuffle per rollout: pulling the top comp[b] cards of each bucket samples WHICH
-            // specific members fill the slots (proportional to their deck counts) AND the library
-            // continuation -- both in one draw.
+            // specific members fill the slots (proportional to their deck counts). The library
+            // continuation is then RE-SHUFFLED below (see the fix note) so its order is unbiased.
             const uint64_t rs = cfg.seed + 21'000'000ULL
                               + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
                               + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
@@ -702,6 +702,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     else { ++k; }
                 }
             }
+            // FIX (library-continuation bias): the top-pull above removes the EARLIEST copies of the
+            // hand's card types, leaving the remaining library's top depleted of those types and
+            // enriched in everything else -- notably LANDS. That made a spell-heavy / land-light hand
+            // draw into its lands far too fast (measured: P(2 lands in first 2 draws) 0.29 vs the true
+            // 0.20), inflating win-turn and spuriously KEEPING land-light hands. Re-shuffle the leftover
+            // so the continuation is a fresh uniform permutation of the remaining cards; the hand's
+            // member sampling from the top is already correct, only the ORDER was biased. Deterministic
+            // + portable (SaltSeed), so pooling parity holds; a fixed salt keeps it independent of the
+            // opening shuffle.
+            ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
             double wt;
             if (trace_on)
             {

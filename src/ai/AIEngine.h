@@ -166,8 +166,10 @@ public:
     // out_hit (execution-trace): if non-null AND a touch index has been set (SetTouchIndex), each
     // index whose card's effect ran during this rollout is set to 1 (caller sizes+zeroes it). Default
     // null => no instrumentation, byte-identical.
+    // lands_out (diagnostic): if non-null, receives the number of lands player 0 controls at the moment
+    // the rollout ends (win or horizon). Default null => no effect, byte-identical.
     int RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns,
-                           std::vector<char>* out_hit = nullptr);
+                           std::vector<char>* out_hit = nullptr, int* lands_out = nullptr);
 
     // Execution-trace instrumentation: point at a card-name -> compact-index map (non-owning). When set
     // and RolloutKeepWinTurn is given an out_hit vector, the rollout records which cards' effects ran.
@@ -277,7 +279,7 @@ private:
 
     // Plays a full clairvoyant game from a (post-mulligan) trial state and returns
     // the win turn, or max_turns + 1 if no win. Suppresses logging during the rollout.
-    int RolloutWinTurn(GameState trial, int max_turns);
+    int RolloutWinTurn(GameState trial, int max_turns, int* lands_out = nullptr);
 
     // Discards up to `count` lands from hand to Land's Edge at `rate` damage each.
     // Used by ActivateLandsEdge for both the real game path and rollout comparisons.

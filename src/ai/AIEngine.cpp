@@ -698,7 +698,7 @@ void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan
     std::cerr << os.str();
 }
 
-int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
+int AIEngine::RolloutWinTurn(GameState trial, int max_turns, int* lands_out)
 {
     RevealLogPause _rlp;  // rollout: suppress scry/dig reveal logging (real play only)
     HumanPlaySuppress _hps;  // rollout: play autonomously even under --claude-play (bottoming/keep parity)
@@ -714,6 +714,13 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
     m_committed_line.clear();
     GameEngine engine(*this);
     int win_turn = engine.PlayOut(trial, max_turns);
+    if (lands_out)
+    {
+        int n = 0;
+        for (const Permanent& p : trial.battlefield)
+        { if (p.controller_index == 0 && p.card.IsLand()) { ++n; } }
+        *lands_out = n;
+    }
     m_committed_line = std::move(saved_line);
     m_in_rollout = false;
     m_logger     = saved;
@@ -721,7 +728,7 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns)
 }
 
 int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_turns,
-                                 std::vector<char>* out_hit)
+                                 std::vector<char>* out_hit, int* lands_out)
 {
     // The keep-model generator's oracle: evaluate the value of KEEPING this opening hand at
     // the given mulligan depth. Bottom `mulligan_count` cards exactly as HandleMulligan would
@@ -737,11 +744,11 @@ int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_tu
         rollout_touch::Sink sink; sink.index = m_touch_index; sink.hit = out_hit;
         rollout_touch::Sink* saved = rollout_touch::g_sink;
         rollout_touch::g_sink = &sink;
-        int wt = RolloutWinTurn(std::move(trial), max_turns);
+        int wt = RolloutWinTurn(std::move(trial), max_turns, lands_out);
         rollout_touch::g_sink = saved;
         return wt;
     }
-    return RolloutWinTurn(std::move(trial), max_turns);
+    return RolloutWinTurn(std::move(trial), max_turns, lands_out);
 }
 
 void AIEngine::BottomCards(GameState& state, int count, int max_turns)
