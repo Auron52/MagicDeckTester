@@ -19,16 +19,24 @@ DECKS = {
 }
 
 
-def run(deck, depth, games, seed, mt, threads, profile=None):
+# Regression per-decision virtual-ms budgets (test/regression_cases.sh: d3=10, d5=20). 0 = unlimited.
+BUDGETS = {3: 10, 5: 20}
+
+
+def run(deck, depth, games, seed, mt, threads, profile=None, budget=None):
     env = dict(os.environ)
     for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE","MTG_NC_SEARCH"):
         env.pop(k, None)
     if profile:
         env["MTG_VALUE_MODEL"] = "1"; env["MTG_VALUE_PROFILE"] = profile
+    if budget is None:
+        budget = BUDGETS.get(depth, 0)
+    cmd = [MTG, deck, "--games", str(games), "--seed", str(seed),
+           "--depth", str(depth), "--max-turns", str(mt), "--threads", str(threads)]
+    if budget and budget > 0:
+        cmd += ["--budget-ms", str(budget)]
     t0 = time.time()
-    out = subprocess.run([MTG, deck, "--games", str(games), "--seed", str(seed),
-                          "--depth", str(depth), "--max-turns", str(mt), "--threads", str(threads)],
-                         capture_output=True, text=True, env=env).stdout
+    out = subprocess.run(cmd, capture_output=True, text=True, env=env).stdout
     dt = time.time() - t0
     p = int(re.search(r"Games played\s*:\s*(\d+)", out).group(1))
     w = int(re.search(r"Games won\s*:\s*(\d+)", out).group(1))
