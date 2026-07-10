@@ -2513,10 +2513,26 @@ int main(int argc, char* argv[])
                                  validate_line, force_mulligan);
         }
 
+        // Parse --force-mulligan "<count>:<n1,n2,...>" into the runner's typed args (count + bottom
+        // numbers). RunClaudePlay above still takes the raw string; the goldfish/search runner takes
+        // the pre-parsed form. -1 count = inert (normal mulligan).
+        int              fm_count = -1;
+        std::vector<int> fm_bottom;
+        if (!force_mulligan.empty())
+        {
+            auto colon = force_mulligan.find(':');
+            fm_count   = std::stoi(force_mulligan.substr(0, colon));
+            if (colon != std::string::npos)
+            {
+                std::stringstream bs(force_mulligan.substr(colon + 1));
+                std::string tok;
+                while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fm_bottom.push_back(std::stoi(tok)); } }
+            }
+        }
         GoldFishRunner runner;
         RunResult result = runner.Run(deck, num_games, seed, max_turns, profile, log_dir,
                                        base_game_index, lookahead_depth, timeout_ms, num_threads,
-                                       force_mulligan);
+                                       fm_count, std::move(fm_bottom));
 
         std::cout << "Seed         : " << result.seed << "\n";
         std::cout << "Games played : " << result.games_played << "\n";

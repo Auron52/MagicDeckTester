@@ -33,12 +33,16 @@ public:
                   int base_game_index = 0,
                   int lookahead_depth = 0,
                   int timeout_ms = 0,
-                  int num_threads = 0,   // 0 = use hardware_concurrency
+                  int num_threads = 0,    // 0 = use hardware_concurrency
                   // (bottoming is derived from lookahead_depth: on iff depth>0)
-                  // Reconstruct a reference's EXACT opening hand ("<count>:<n1,n2,...>") on every
-                  // game, then let the search play from it. Only meaningful with num_games == 1
-                  // (the same spec would otherwise apply to every game). Empty = normal mulligan.
-                  const std::string& force_mulligan = {});
+                  // Forced-mulligan replay (isolates PLAY from mulligan/bottoming): when
+                  // forced_mull_count >= 0, every game keeps at exactly that many mulligans and
+                  // bottoms exactly forced_bottom (by card m_number), reconstructing a recorded
+                  // opening hand and letting the autonomous search play it out. Inert (<0) by
+                  // default -- goldfish GT byte-identical when unset. Meaningful only for a single
+                  // game (one spec), so pair with num_games==1 + --seed/--game-index.
+                  int forced_mull_count = -1,
+                  std::vector<int> forced_bottom = {});
 
     // Build the initial GameState for a single game with the given seed.
     // Shared by the runner and the analyzer.

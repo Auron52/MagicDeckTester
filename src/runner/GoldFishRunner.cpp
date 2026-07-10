@@ -203,26 +203,9 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                                int max_turns, const MulliganProfile& profile,
                                const std::filesystem::path& log_dir, int base_game_index,
                                int lookahead_depth, int timeout_ms, int num_threads,
-                               const std::string& force_mulligan)
+                               int forced_mull_count, std::vector<int> forced_bottom)
 {
-    // Parse --force-mulligan "<count>:<n1,n2,...>": keep at EXACTLY <count> mulligans and bottom the
-    // listed card numbers, reconstructing a reference's exact opening hand (see AIEngine::SetForcedMulligan).
-    // Forcing needs card numbers assigned (the bottom list matches on m_number), so we also build/assign
-    // the numbering below even when not logging.
-    const bool forcing = !force_mulligan.empty();
-    int force_count = 0;
-    std::vector<int> force_bottom;
-    if (forcing)
-    {
-        auto colon = force_mulligan.find(':');
-        force_count = std::stoi(force_mulligan.substr(0, colon));
-        if (colon != std::string::npos)
-        {
-            std::stringstream bs(force_mulligan.substr(colon + 1));
-            std::string tok;
-            while (std::getline(bs, tok, ',')) { if (!tok.empty()) { force_bottom.push_back(std::stoi(tok)); } }
-        }
-    }
+    const bool forced = forced_mull_count >= 0;
     int requested = num_threads;
     num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
     num_threads = std::min(num_threads, num_games);
@@ -248,14 +231,15 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     std::map<std::string, std::vector<int>> numbering;
     std::string run_id;
 
-    if (logging || forcing)
-    {
-        numbering = BuildCardNumbering(deck);   // forced-bottom matches on m_number
-    }
     if (logging)
     {
         std::filesystem::create_directories(log_dir);
         run_id    = MakeRunId(base_seed);
+    }
+    // Card numbering is needed for logging AND for forced bottoming (bottoms by card m_number).
+    if (logging || forced)
+    {
+        numbering = BuildCardNumbering(deck);
     }
 
     // Dynamic self-scheduling: rather than statically partitioning games into
@@ -277,6 +261,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
         {
             AIEngine   ai(profile, lookahead_depth, per_thread_timeout);
             ai.SetSearchPostCombat(needs_second_main);
+            if (forced) { ai.SetForcedMulligan(forced_mull_count, forced_bottom); }
             GameEngine engine(ai);
 
             for (;;)
@@ -288,8 +273,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 state.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(state, base_game_index + gi);
 
-                if (logging || forcing) { AssignCardNumbers(state, numbering); }
-                if (forcing) { ai.SetForcedMulligan(force_count, std::vector<int>(force_bottom)); }
+                if (logging || forced) { AssignCardNumbers(state, numbering); }
 
                 GameLogger logger;
                 if (logging)
