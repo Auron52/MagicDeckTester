@@ -89,5 +89,7 @@ test/ab_scratch/
 __pycache__/
 *.pyc
 # Exhaustive keep/bottom tables: commit the .gz (small), never the uncompressed blob (~90MB).
-decks/*.keepmodel.exhaustive.profile.json
-decks/*.keepmodel.exhaustive.raw.json
+# Broad glob catches every uncompressed variant (.profile.json, .raw.json, .adaptive.rN.profile.json);
+# the .gz files end in .gz so they are NOT matched, and per-deck <name>.profile.json lacks the
+# "keepmodel.exhaustive" infix so analyzer profiles stay tracked.
+decks/*.keepmodel.exhaustive*.json
