@@ -1787,3 +1787,46 @@ MID-game salt can't decouple — still NOT proof TH is clean (an opening-order d
 A/B and human-legible play) must pair `MTG_NC_SEARCH` with `MTG_NC_BLIND_BOTTOM` on profile-less decks; otherwise the
 mulligan stage re-injects clairvoyance the play policy carefully avoids. Candidate for auto-enabling under NC (adoption
 call — report to user). Drivers: scripts/{decouple_test,nc_leak_localize}.py. Data: logs/eval/{decouple_test,blind_confirm}.txt.
+
+### Value-leaf HYBRID — a safe default-on vehicle under the NODE budget (2026-07-10)
+
+The clairvoyant value-leaf is exact-parity + 2–24× UNBUDGETED at d5. But the regression harness runs a deterministic
+NODE budget (`SearchBudget::FromVirtualMs`, d3=10 / d5=20 virtual-ms; interior nodes + heuristic-rollout leaves consume
+budget, value-leaf leaves are free). Under that budget the value-leaf's cheap leaf buys **no extra search** — the budget
+is spent on interior nodes — so when it commits a SHALLOW pass it plays at the shallow-pass quality where the leaf
+estimate is unreliable (measured cost: antilife d4 +0.06, d3 +0.25 LP). Ungated value-leaf therefore *regresses*
+antilife under the real budget even though it's a pure win unbudgeted.
+
+**Crossover K\* (unbudgeted, depth at which value-leaf reaches the heuristic ceiling):** slivers/knights **d4**,
+antilife/TH/burn **d5** → universal safe **K = 5**.
+
+**HYBRID (`MTG_VALUE_MIN_DEPTH`, default 0 = off = byte-identical).** Run the whole search once with the cheap
+value-leaf; only if the committed pass is BOTH shallower than K AND **unverified** (its `win_turn` is a beyond-horizon
+leaf ESTIMATE, not a real-simulation result) re-run that one decision with the exact heuristic leaf on a fresh budget.
+The **verified-win check is load-bearing**: a win within the committed horizon is decided by real simulation, so the
+leaf can't have mis-ranked it — redoing verified wins fired on nearly every game of the fast decks and erased the
+speedup (antilife 124 ms → 62 ms after adding `!verified`). The value-leaf pass doubles as a cheap reachability probe;
+the redo gets a fresh `line_cache` (uncontaminated by value-leaf entries) via `ForceHeuristicLeafGuard`.
+
+Code: `TurnSolver::FullSearchLineHybrid` + `g_force_heuristic_leaf`/`ForceHeuristicLeafGuard` (TurnSolver.cpp);
+`AIEngine::TakeTurn` full-depth path reads `MTG_VALUE_MIN_DEPTH` and calls the hybrid.
+
+**RESULTS (250 g, seed 2002, K=5):**
+
+| deck | budgeted d5=20 (LP / speedup) | unbudgeted d5 |
+|------|-------------------------------|---------------|
+| slivers  | parity, **2.73×** | == plain value-leaf |
+| knights  | parity, **1.80×** | == plain value-leaf |
+| burn     | parity, **1.67×** | == plain value-leaf |
+| TH       | **−0.012**, **1.28×** | == plain value-leaf |
+| antilife | parity, **1.11×** | == plain value-leaf |
+
+No regression on any deck at any depth; d3=10 stays ≈1× (no pass reaches K). Unbudgeted hybrid is byte-identical to
+plain value-leaf (the redo never fires — everything is either deep or verified). This makes value-leaf a **safe
+default-on**: attach `<deck>.value.json` + set `MTG_VALUE_MIN_DEPTH=5` and the budgeted regime gets speedup with no
+quality cost. Drivers: scripts/valueleaf_{adaptive,budget,headroom,adopt}.py. Data: logs/eval/valueleaf_*.txt.
+
+**OPEN (next lever, user-flagged as most important):** the node budget still *rolls back* a value-leaf pass at depth ≥ K
+that runs slightly over budget, even though that pass was cheap to reach — the start-gate/overrun guard doesn't credit
+the value-leaf's low per-node cost. Crediting it (finish a nearly-complete transitional-depth pass instead of rolling
+back) would unlock more budgeted speedup, especially on the heuristic→value-leaf transition depth.

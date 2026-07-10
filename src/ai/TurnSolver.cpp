@@ -5680,6 +5680,22 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
 using FSLineCache = std::unordered_map<TranspositionTable::Key, TurnSolver::SearchLine,
                                        TranspositionTable::KeyHash>;
 
+// Hybrid value-leaf policy (MTG_VALUE_MIN_DEPTH, read at the caller): the learned value-leaf is
+// exact-parity with the heuristic rollout only at PASS depth >= ~5 (measured; shallower it costs quality:
+// antilife d4 +0.06, d3 +0.25). Rather than gate per-pass (which starves the deep pass of budget and
+// collapses to heuristic), the caller (AIEngine) runs the whole search with the cheap value-leaf, then --
+// only if the committed pass landed SHALLOWER than the safe depth -- re-runs it with the exact heuristic
+// leaf (forced via g_force_heuristic_leaf). This keeps full value-leaf speed whenever the search reaches
+// the safe depth, and falls back to heuristic quality (no regression) when it can't. See TurnSolver::
+// ForceHeuristicLeafGuard / AIEngine's full-depth path / learned-d0-policy.md.
+inline thread_local bool g_force_heuristic_leaf = false;
+struct ForceHeuristicLeafGuard
+{
+    bool prev;
+    explicit ForceHeuristicLeafGuard(bool v) : prev(g_force_heuristic_leaf) { g_force_heuristic_leaf = v; }
+    ~ForceHeuristicLeafGuard() { g_force_heuristic_leaf = prev; }
+};
+
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget);
@@ -5793,7 +5809,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // that REPLACES the horizon rollout -- the rollout is the weak, slow link (greedy play-out, not
         // searched). The model's Score is a fixed-point WIN TURN (x1000); round + clamp to the legal
         // window [this turn, loss]. nullptr / empty / flag-off -> the exact rollout below (byte-identical).
-        const MidGameEvaluator* vm = (UseValueModel() && state.m_value_model && !state.m_value_model->empty())
+        // Hybrid: the caller forces the exact heuristic leaf (g_force_heuristic_leaf) on the re-run pass
+        // when value-leaf committed too shallow; otherwise use the learned leaf as before.
+        const MidGameEvaluator* vm = (!g_force_heuristic_leaf && UseValueModel()
+                                      && state.m_value_model && !state.m_value_model->empty())
                                    ? state.m_value_model : nullptr;
         if (vm)
         {
@@ -6112,6 +6131,40 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             first = false;
         }
     }
+    return line;
+}
+
+// Hybrid value-leaf search (see header). Run once with the cheap learned leaf; if it committed a pass
+// shallower than the value-leaf trust depth, re-run once with the exact heuristic rollout leaf on a fresh
+// budget (the value-leaf pass was a cheap probe of reachable depth). value_min_depth <= 0 or no value
+// model => plain FullSearchLine (byte-identical).
+TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, int depth,
+                                                        int max_turns, bool second_main,
+                                                        TranspositionTable* tt, SearchBudget* budget,
+                                                        int* out_committed_depth,
+                                                        int value_min_depth, int budget_ms)
+{
+    int committed = depth;
+    SearchLine line = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &committed);
+
+    const bool value_active = UseValueModel() && state.m_value_model && !state.m_value_model->empty();
+    // A VERIFIED win (win_turn within the committed horizon) is decided by real simulation, NOT the leaf
+    // estimate, so the value-leaf can't have mis-ranked it -> never redo it (redoing verified wins was
+    // firing on nearly every game of fast decks and erasing the speedup). Only an UNVERIFIED committed
+    // line (its win_turn is a beyond-horizon leaf ESTIMATE) depends on the value-leaf and needs the redo.
+    const bool verified = (line.win_turn <= state.turn_number + committed - 1);
+    if (value_min_depth > 0 && value_active && committed < value_min_depth && !verified)
+    {
+        // The value-leaf committed a shallow, ESTIMATE-based line -> re-evaluate with the exact heuristic
+        // rollout leaf. Fresh budget (the value-leaf run was a cheap reachability probe); its own
+        // line_cache (fresh per FullSearchLine call) is uncontaminated by value-leaf entries.
+        ForceHeuristicLeafGuard _fh(true);
+        SearchBudget hbud = SearchBudget::FromVirtualMs(budget_ms);
+        int hcommitted = depth;
+        line = FullSearchLine(state, depth, max_turns, second_main, tt, &hbud, &hcommitted);
+        committed = hcommitted;
+    }
+    if (out_committed_depth) { *out_committed_depth = committed; }
     return line;
 }
 

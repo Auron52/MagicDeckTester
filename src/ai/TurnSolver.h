@@ -401,6 +401,17 @@ public:
                                      SearchBudget* budget = nullptr,
                                      int* out_committed_depth = nullptr);
 
+    // Hybrid value-leaf search: run FullSearchLine with the cheap learned value-leaf, and if it committed
+    // a pass SHALLOWER than value_min_depth (where the leaf estimate is unreliable) re-run once with the
+    // exact heuristic rollout leaf on a fresh budget_ms budget. Keeps full value-leaf speed whenever the
+    // search reaches the safe depth, falls back to heuristic quality otherwise. value_min_depth <= 0, or
+    // no value model attached/enabled, => identical to FullSearchLine (no redo). See learned-d0-policy.md.
+    static SearchLine FullSearchLineHybrid(const GameState& state, int depth,
+                                           int max_turns, bool second_main,
+                                           TranspositionTable* tt, SearchBudget* budget,
+                                           int* out_committed_depth,
+                                           int value_min_depth, int budget_ms);
+
     // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic) -------------------
     // For the CURRENT pre-combat main, score EVERY candidate top-level play (the same
     // EnumeratePlansWithLand candidates the search ranks -- run with MTG_SEARCH_ORDER=1 to

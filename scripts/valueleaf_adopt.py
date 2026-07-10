@@ -53,6 +53,7 @@ def main():
     ap.add_argument("--threads", type=int, default=6)
     ap.add_argument("--depths", nargs="+", type=int, default=[3, 5])
     ap.add_argument("--decks", nargs="+", default=list(DECKS))
+    ap.add_argument("--unbudgeted", action="store_true", help="force budget=0 (unlimited) at every depth")
     ap.add_argument("--out", default="logs/eval/valueleaf_adopt.txt")
     args = ap.parse_args()
     of = open(args.out, "a")
@@ -64,9 +65,10 @@ def main():
     for dname in args.decks:
         deck, prof, mt = DECKS[dname]
         for depth in args.depths:
+            bud = 0 if args.unbudgeted else None
             try:
-                hp,hw,ha,hlp,hms = run(deck, depth, args.games, args.seed, mt, args.threads, None)
-                vp,vw,va,vlp,vms = run(deck, depth, args.games, args.seed, mt, args.threads, prof)
+                hp,hw,ha,hlp,hms = run(deck, depth, args.games, args.seed, mt, args.threads, None, bud)
+                vp,vw,va,vlp,vms = run(deck, depth, args.games, args.seed, mt, args.threads, prof, bud)
                 emit("%-8s d%d  %8.3f %8.3f %8.1f %9s %8.3f %8.3f %8.1f %9s   %+6.3f %6.1fx" % (
                     dname, depth, hlp, ha, hms, "(%d/%d)"%(hw,hp),
                     vlp, va, vms, "(%d/%d)"%(vw,vp), vlp-hlp, hms/vms if vms>0 else 0))

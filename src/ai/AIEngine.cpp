@@ -1384,10 +1384,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // table. Either way the greedy tail leaves are now memoized — the
                     // deep search no longer re-rolls identical leaf states. Lossless:
                     // SimulateToEnd is a pure function of its key.
+                    // Hybrid value-leaf (MTG_VALUE_MIN_DEPTH, default 0 => off => plain FullSearchLine,
+                    // byte-identical): run the cheap value-leaf, and only if it commits shallower than the
+                    // trust depth re-run that decision with the exact heuristic leaf. See TurnSolver.
+                    static const int s_value_min_depth = []{ const char* e = std::getenv("MTG_VALUE_MIN_DEPTH");
+                                                             return (e && *e) ? std::atoi(e) : 0; }();
                     int searched_depth = m_lookahead_depth;
-                    TurnSolver::SearchLine line = TurnSolver::FullSearchLine(
+                    TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
-                        m_shared_tt, &budget, &searched_depth);
+                        m_shared_tt, &budget, &searched_depth, s_value_min_depth, m_budget_ms);
 
                     // Oracle: track the EARLIEST win the search actually FOUND this game --
                     // i.e. a win VERIFIED inside the searched horizon (win_turn within
