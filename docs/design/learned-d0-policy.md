@@ -1745,33 +1745,45 @@ Three concrete uses -- the first two apply to the CURRENT offline deck-compariso
 These make the fast NON-clairvoyant model a validity/interpretability tool for TODAY (1,2) and the phase-2 foundation (3),
 independent of the clairvoyant value-leaf (which stays the raw offline-speed tool).
 
-### NC-d1 is NOT cleanly non-clairvoyant on SEARCHED-mid-game-shuffle decks (Hinata/Ponder) — decouple test (2026-07-10)
+### The Hinata NC "decouple leak" was the MULLIGAN BOTTOMER, not the turn policy — localized + fixed (2026-07-10)
 
-User reasoning (correct): NC-d1's per-sample reshuffle decouples the ROLLOUT from the true order, but a plan that
-READS the library within the turn (draw/dig/scry) and CHANGES a decision on what it sees is behaviorally clairvoyant.
-Hinata is the sharp case (Ponder = look at top 3, reorder OR shuffle, draw -- a searched library-reading DECISION;
-also draws-and-casts same turn). Tested with the existing clairvoyance-decouple instrument `MTG_SHUFFLE_SALT_SEARCH`
-(search evaluates mid-game shuffles with salt A, executor deals salt B; coupled=lockstep, decoupled=A!=B). LP delta
-coupled->decoupled (positive = the policy was exploiting the coupled shuffle order = clairvoyance):
+The 2026-07-10 decouple test first read as "NC-d1 exploits Ponder-shuffle clairvoyance on Hinata" (coupled 6.983 ->
+decoupled ~7.3, avg ~+0.32). **That attribution was WRONG.** Localizing it:
 
-| deck | policy | coupled | decoupled (3 salt pairs) | read |
-|------|--------|---------|--------------------------|------|
-| Hinata | heuristic d3 (clairvoyant ref) | 5.562 | 5.625 (+0.062) | instrument LIVE via Ponder |
-| Hinata | **NC-d1** | 6.983 | 7.18 / 7.35 / 7.37 (**+0.20 / +0.37 / +0.38, avg ~+0.32**) | **LEAKS -- exploits Ponder-shuffle clairvoyance** |
-| TH | NC-d1 | 4.875 | 4.875 (**0.000**) | flat (Treasure Hunt reads OPENING order, no mid-game shuffle to decouple) |
+- The `MTG_SHUFFLE_SALT_SEARCH` instrument decouples only mid-game shuffle EVENTS read under `g_shuffle_eval` on a state
+  carrying the real `shuffle_salt_search`. `ReshuffleAvgChoosePlan` does NOT qualify: it reshuffles per-k with its own
+  `rs` (game_seed-derived) and STAMPS `s.shuffle_salt_search = rs`, so every planning/rollout shuffle folds `rs` and is
+  executor-order-INDEPENDENT. Static trace => the NC turn policy is salt-independent; the instrument is inert on it.
+- So where did decoupled-A (executor salt held at 0, only `shuffle_salt_search` changed 0->7777) move the result?
+  **d0 leaked TOO** (+0.5, 21/24 vs 24/24) with the honest-teacher continuation OFF — ruling out both the honest
+  continuation AND the "shared enumeration" hypothesis. The only remaining salt-dependent path is `AIEngine::BottomCards`
+  under `LookaheadBottoming()` (= `m_lookahead_depth > 0`, true under NC's `--depth 5`): its per-candidate `RolloutWinTurn`
+  runs under `ShuffleEvalGuard(true)` on the REAL state (`shuffle_salt_search=7777`) and keeps the true post-bottom draw
+  order -- a CLAIRVOYANT mulligan bottomer. Hinata has no exhaustive keep/bottom profile (too expensive to generate), so
+  it falls back to this lookahead bottomer; the NC play policy inherits it because it shares the AIEngine mulligan path.
 
-**FINDINGS:** (1) NC-d1 on Hinata is NOT non-clairvoyant -- it loses ~0.32 turns / ~5-of-60 games when decoupled,
-MORE than the clairvoyant reference's own clairvoyance (0.062). MECHANISM: the candidate enumeration runs ONCE on the
-true state (`EnumeratePlansWithLand(state)`), so it conditions on the true Ponder result, and that enumeration is SHARED
-across all K reshuffle samples -> the leak is amplified (the per-sample reshuffle can't undo an enumeration-time peek).
-(2) TH is FLAT under this instrument, but that only means TH's library-reading is OPENING-order (Treasure Hunt), which
-the MID-GAME-shuffle salt can't decouple -- it is NOT proof TH is clean (the user's "knows whether it'll discard" concern
-would need an OPENING-order decouple to test). (3) Decks with NO searched mid-game shuffle (antilife/burn/slivers/knights)
-are UNAFFECTED -- the tempo-bonus adoption + all their NC numbers stand.
+**FIX — `MTG_NC_BLIND_BOTTOM` (default off => byte-identical).** When on, the lookahead bottomer reshuffles each
+candidate's trial library to an unseen future (game_seed-derived salt, executor-order-independent; the removed card truly
+bottoms) and averages over K (`MTG_NC_BLIND_BOTTOM_K`, default 4), matching the NC turn policy's reshuffle-averaged
+evaluation -- so the removal is judged on EXPECTED win turn over unknown draws, not the one true sequence.
 
-**IMPLICATIONS:** NC numbers on Ponder/scry-shuffle decks (Hinata) are OPTIMISTIC (clairvoyance-contaminated); NC-d1
-cannot serve as the non-clairvoyant reference there without a fix. FIX = extend the reshuffle decouple to the
-ENUMERATION (evaluate the shuffle-DECISION against a hidden order the candidate set can't optimize against), not just
-the per-turn continuation. This is the "hidden order for within-turn reveals" refinement flagged earlier; the decouple
-test now proves it's needed on shuffle-decision decks. TODO before trusting NC on Hinata / using it for clairvoyance-
-abuse A/B on such decks. Driver: scripts/decouple_test.py. Data: logs/eval/decouple_{test,hinata}.txt.
+**CONFIRMATION (Hinata NC-d0, 24g seed 2002):**
+
+| bottomer | coupled | decoupled-A | dLP | read |
+|----------|---------|-------------|-----|------|
+| clairvoyant (blind OFF, default) | 24/24  6.667 | 21/24  7.167 | **+0.50** | leaks — the mulligan bottomer |
+| **blind ON** (K=2)               | 22/24  7.409 | 22/24  7.409 | **0.000 (byte-identical)** | leak GONE |
+
+FINDINGS: (1) The NC turn policy (`ReshuffleAvgChoosePlan`) is genuinely NON-clairvoyant — the entire Hinata decouple
+delta was the clairvoyant lookahead bottomer. The earlier "Ponder-shuffle clairvoyance / shared enumeration" mechanism
+is RETRACTED. (2) Honest non-clairvoyant bottoming COSTS ~0.74 turns on Hinata (6.667 -> 7.409) — that gap IS the
+clairvoyance value of the bottoming decision itself, real and now honestly excluded. (3) Decks WITH a validated
+exhaustive blind keep/bottom profile (`bottoming_enabled`) are already non-clairvoyant here; `MTG_NC_BLIND_BOTTOM` fills
+the gap for profile-less decks (Hinata). Default OFF is byte-identical (verified: NC-d0 coupled 24/24 6.667 unchanged;
+regression smoke 18/18 PASS, all digests identical). (4) TH stayed flat under the instrument only because its reads are OPENING-order (Treasure Hunt), which a
+MID-game salt can't decouple — still NOT proof TH is clean (an opening-order decouple would be needed).
+
+**IMPLICATION for the pipeline:** a truly non-clairvoyant NC run (needed for motivations 1 & 2 — clairvoyance-abuse
+A/B and human-legible play) must pair `MTG_NC_SEARCH` with `MTG_NC_BLIND_BOTTOM` on profile-less decks; otherwise the
+mulligan stage re-injects clairvoyance the play policy carefully avoids. Candidate for auto-enabling under NC (adoption
+call — report to user). Drivers: scripts/{decouple_test,nc_leak_localize}.py. Data: logs/eval/{decouple_test,blind_confirm}.txt.

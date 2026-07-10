@@ -972,15 +972,52 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             // preserves the earliest win. Restrict the heuristic tiebreak below to
             // those win-optimal removals, so lookahead only ever overrides the
             // heuristic to secure a strictly earlier win.
+            //
+            // BLIND (non-clairvoyant) bottoming, MTG_NC_BLIND_BOTTOM (default off => byte-identical):
+            // the lookahead bottomer above reads the REAL post-bottom draws (each rollout keeps the true
+            // library order), so its removal choice is CLAIRVOYANT -- which contaminates the otherwise
+            // non-clairvoyant NC play policy's pipeline (the decouple instrument on Hinata attributes the
+            // whole coupled->decoupled drop to THIS stage, not to ReshuffleAvgChoosePlan). When on, each
+            // candidate's trial library is RESHUFFLED to an unseen future (game_seed-derived salt, so it
+            // is executor-order-INDEPENDENT) and averaged over K samples, matching the NC turn policy's
+            // reshuffle-averaged evaluation. The removal is then judged on EXPECTED win turn over unknown
+            // draws, not the one true draw sequence. See ReshuffleAvgChoosePlan / learned-d0-policy.md.
+            static const bool s_blind_bottom = std::getenv("MTG_NC_BLIND_BOTTOM") != nullptr;
+            static const int  s_blind_k      = []{ const char* e = std::getenv("MTG_NC_BLIND_BOTTOM_K");
+                                                   return (e && *e) ? std::max(1, std::atoi(e)) : 4; }();
             std::vector<int> win_turn(hand_size, 0);
             int best_win = std::numeric_limits<int>::max();
             for (int j = 0; j < hand_size; ++j)
             {
-                GameState trial = state;
-                Player& trial_ap = trial.ActivePlayer();
-                trial_ap.library.push_back(trial_ap.hand[j]);
-                trial_ap.hand.erase(trial_ap.hand.begin() + j);
-                win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                if (s_blind_bottom)
+                {
+                    // Average the removal's value over K reshuffled unseen futures (non-clairvoyant).
+                    long long acc = 0;
+                    for (int k = 0; k < s_blind_k; ++k)
+                    {
+                        GameState trial = state;
+                        Player& trial_ap = trial.ActivePlayer();
+                        Card bottomed = trial_ap.hand[j];
+                        trial_ap.hand.erase(trial_ap.hand.begin() + j);
+                        const uint64_t rs = state.game_seed
+                                          + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
+                                          + 1000003ULL * static_cast<uint64_t>(i)      // per bottom step
+                                          + 7919ULL   * static_cast<uint64_t>(j);      // per candidate
+                        trial_ap.library.Shuffle(rs);                   // unseen future draw order
+                        trial_ap.library.push_back(std::move(bottomed)); // the removed card truly bottoms
+                        trial.shuffle_salt_search = rs;   // rollout mid-game shuffles fold this too
+                        acc += RolloutWinTurn(std::move(trial), max_turns);
+                    }
+                    win_turn[j] = static_cast<int>((acc + s_blind_k / 2) / s_blind_k);  // rounded mean
+                }
+                else
+                {
+                    GameState trial = state;
+                    Player& trial_ap = trial.ActivePlayer();
+                    trial_ap.library.push_back(trial_ap.hand[j]);
+                    trial_ap.hand.erase(trial_ap.hand.begin() + j);
+                    win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                }
                 if (win_turn[j] < best_win) { best_win = win_turn[j]; }
             }
             for (int j = 0; j < hand_size; ++j)
