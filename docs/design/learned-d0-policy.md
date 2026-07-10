@@ -1703,3 +1703,75 @@ while the generic safe rule keeps TH a small GAIN (-0.022) where global ungated 
 only Anti-Lifegain did. Shipped (non-NC) play byte-identical (hook only in ReshuffleAvgChoosePlan / MTG_NC_SEARCH).
 Files: DecisionProvider.h (Hook 22), DecisionProviders.{h,cpp}, TurnSolver.cpp. MTG_NC_DEBUG kept (inert). Follow-ups:
 burn could take a mild override; gi9 land-SELECTION/colour class is the next provider lever (which land, not whether).
+
+### Speed/quality landscape + the "distill NC" prize (2026-07-10)
+
+Benchmarked the fast policies vs the search (scripts/speed_quality.py, nc_budget.py; LP + ms/game). Two decisions came out:
+
+**value-leaf = the fast CLAIRVOYANT search alternative, already excellent.** Reproduces deep-search LP EXACTLY at
+2-32x speedup (slivers 32x, burn 15x, TH/knights 6x, antilife 2x); deterministic + inspectable, no NN risk. This is
+the performant search-replacement for OFFLINE deck comparison (clairvoyance is fine when goldfishing).
+
+**The "distill high-budget NC into a fast model" prize is DECK-DEPENDENT, and "high-budget" is NOT the lever.**
+Non-clairvoyant search SATURATES fast (its limit is information/EVPI, not compute): antilife NC K8d2 4.700 -> K32d3
+4.650 (8.7x cost); TH K8d2 4.575 -> K16d3 4.425 (17x cost). Prize = gap from the fast STATIC d0 to the NC ceiling:
+- antilife (aggro-combo): static d0 ~4.80 ~= NC ceiling ~4.65 -> prize ~0.15, NONE. Static d0 already at the NC limit.
+- TH (dig/combo): static d0 ~5.6 vs NC ceiling ~4.43 -> prize ~1.2 turns that the STATIC distillation demonstrably
+  CANNOT capture (the NC value is forward Treasure-Hunt-timing simulation; a static eval can't hold it). Likely
+  bigger on Hinata (deep combo -- user flagged as the tough perf case, worth testing profile-free).
+Residual after a perfect fast NC model on TH: ~4.43 vs clairvoyant value-leaf 4.10 = ~0.3 = EVPI (irreducible).
+
+**Implication for the dynamic-distillation prototype:** worth trying ONLY on dig/combo decks (TH, Hinata) where
+static fails and the prize is ~1 turn, and ONLY if fast NON-clairvoyant play is needed (references/realism/phase-2 --
+for offline analysis the clairvoyant value-leaf already dominates on both axes). NOT worth it on aggro/antilife (no
+prize). The target is capturing forward-simulation value at inference (which needs learned rollouts / a dynamic
+model), NOT high budget (NC is already saturated + cheap-ish). FOLLOW-UP: try Hinata through the speed/quality +
+prize lens (its search is the hardest perf case). Data: logs/eval/{speed_quality,nc_budget}.txt.
+
+### WHY fast non-clairvoyant play matters (user rationale, 2026-07-10)
+
+Three concrete uses -- the first two apply to the CURRENT offline deck-comparison purpose, not just phase 2:
+1. **Clairvoyance-abuse detection in A/B card testing.** Comparing card A vs card B: if B's edge comes from the search
+   ABUSING clairvoyance (timing to a known library), a non-clairvoyant policy reveals A is actually better in real
+   play. Lets us DISCOUNT clairvoyance-driven advantages and trust the deck-comparison verdict. (Core to the project's
+   validity.)
+2. **Human-legible play.** Clairvoyant play is hard to follow -- it plays "poorly" in many spots but is never punished
+   because it knows the future. A non-clairvoyant, reshuffle-AVERAGED policy should play in a way that makes more human
+   sense (robust lines, not future-peeking), so its games are interpretable.
+3. **Phase 2 (vs real opponents).** Clairvoyant search is illegal against a real opponent (can't predict their
+   confounding choices). Sketch: train a model to GOLDFISH via non-clairvoyant search, then bootstrap to vs-other-decks
+   by alternating who plays with search until play converges (goldfish model -> vs-field model -> vs-specific-opponent).
+
+These make the fast NON-clairvoyant model a validity/interpretability tool for TODAY (1,2) and the phase-2 foundation (3),
+independent of the clairvoyant value-leaf (which stays the raw offline-speed tool).
+
+### NC-d1 is NOT cleanly non-clairvoyant on SEARCHED-mid-game-shuffle decks (Hinata/Ponder) — decouple test (2026-07-10)
+
+User reasoning (correct): NC-d1's per-sample reshuffle decouples the ROLLOUT from the true order, but a plan that
+READS the library within the turn (draw/dig/scry) and CHANGES a decision on what it sees is behaviorally clairvoyant.
+Hinata is the sharp case (Ponder = look at top 3, reorder OR shuffle, draw -- a searched library-reading DECISION;
+also draws-and-casts same turn). Tested with the existing clairvoyance-decouple instrument `MTG_SHUFFLE_SALT_SEARCH`
+(search evaluates mid-game shuffles with salt A, executor deals salt B; coupled=lockstep, decoupled=A!=B). LP delta
+coupled->decoupled (positive = the policy was exploiting the coupled shuffle order = clairvoyance):
+
+| deck | policy | coupled | decoupled (3 salt pairs) | read |
+|------|--------|---------|--------------------------|------|
+| Hinata | heuristic d3 (clairvoyant ref) | 5.562 | 5.625 (+0.062) | instrument LIVE via Ponder |
+| Hinata | **NC-d1** | 6.983 | 7.18 / 7.35 / 7.37 (**+0.20 / +0.37 / +0.38, avg ~+0.32**) | **LEAKS -- exploits Ponder-shuffle clairvoyance** |
+| TH | NC-d1 | 4.875 | 4.875 (**0.000**) | flat (Treasure Hunt reads OPENING order, no mid-game shuffle to decouple) |
+
+**FINDINGS:** (1) NC-d1 on Hinata is NOT non-clairvoyant -- it loses ~0.32 turns / ~5-of-60 games when decoupled,
+MORE than the clairvoyant reference's own clairvoyance (0.062). MECHANISM: the candidate enumeration runs ONCE on the
+true state (`EnumeratePlansWithLand(state)`), so it conditions on the true Ponder result, and that enumeration is SHARED
+across all K reshuffle samples -> the leak is amplified (the per-sample reshuffle can't undo an enumeration-time peek).
+(2) TH is FLAT under this instrument, but that only means TH's library-reading is OPENING-order (Treasure Hunt), which
+the MID-GAME-shuffle salt can't decouple -- it is NOT proof TH is clean (the user's "knows whether it'll discard" concern
+would need an OPENING-order decouple to test). (3) Decks with NO searched mid-game shuffle (antilife/burn/slivers/knights)
+are UNAFFECTED -- the tempo-bonus adoption + all their NC numbers stand.
+
+**IMPLICATIONS:** NC numbers on Ponder/scry-shuffle decks (Hinata) are OPTIMISTIC (clairvoyance-contaminated); NC-d1
+cannot serve as the non-clairvoyant reference there without a fix. FIX = extend the reshuffle decouple to the
+ENUMERATION (evaluate the shuffle-DECISION against a hidden order the candidate set can't optimize against), not just
+the per-turn continuation. This is the "hidden order for within-turn reveals" refinement flagged earlier; the decouple
+test now proves it's needed on shuffle-decision decks. TODO before trusting NC on Hinata / using it for clairvoyance-
+abuse A/B on such decks. Driver: scripts/decouple_test.py. Data: logs/eval/decouple_{test,hinata}.txt.
