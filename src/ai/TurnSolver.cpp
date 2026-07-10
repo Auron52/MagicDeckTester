@@ -8,6 +8,7 @@
 #include "../core/Trace.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
@@ -6322,6 +6323,76 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
     for (size_t i = 1; i < plans.size(); ++i)
     {
         if (sum[i] < best_sum) { best_sum = sum[i]; best = i; }
+    }
+
+    auto makes_land = [](const TurnSolver::Plan& p)
+    { return p.land_decided && !p.land_to_play.empty(); };
+
+    // Tempo bonus: the reshuffle averaging shuffles the TRUE library away, so its mean future has
+    // NORMAL land density -- it is optimistic about mana and undervalues a land drop as screw-insurance.
+    // In a truly land-light game (invisible to the averaging) skipping the drop is a permanent tempo
+    // loss (gi11: defer scores 0.5t "better" yet durdles to T8; the land drop wins T5). Reward
+    // developing mana: subtract round(bonus*K) from any land-drop plan before picking the min -- breaks
+    // decisions the objective considers close without overriding a real win-turn difference > bonus.
+    // The bonus (avg-turns) is the ARCHETYPE PROVIDER's call (Hook 22): GenericProvider = safe gated
+    // default, AntiLifegain = aggressive/ungated, land-pitch decks protected by the mana-base gate +
+    // PreferHoldLandDrop. MTG_NC_TEMPO(/_LANDS), when set, OVERRIDE the provider with a flat gated bonus
+    // (the A/B sweep controls). Provider default 0 for unknown decks + env unset => byte-identical.
+    static const bool   s_tempo_env_set = std::getenv("MTG_NC_TEMPO") != nullptr;
+    static const double s_env_tempo     = []{ const char* e = std::getenv("MTG_NC_TEMPO");
+                                              return (e && *e) ? std::atof(e) : 0.0; }();
+    static const int    s_env_lands     = []{ const char* e = std::getenv("MTG_NC_TEMPO_LANDS");
+                                              return (e && *e) ? std::atoi(e) : 99; }();
+    double tempo_turns = 0.0;
+    if (is_pre_combat)
+    {
+        if (s_tempo_env_set)   // A/B override: flat env bonus, gated by env lands cap
+        {
+            int lands = 0;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++lands; }
+            }
+            if (lands < s_env_lands) { tempo_turns = s_env_tempo; }
+        }
+        else                   // default: the archetype provider decides (gated internally)
+        {
+            tempo_turns = ResolveProvider(state).NcLandDropTempoBonus(state, state.active_player_index);
+        }
+    }
+    if (tempo_turns > 0.0)
+    {
+        const long long bonus = std::llround(tempo_turns * K);
+        size_t    bt   = 0;
+        long long badj = sum[0] - (makes_land(plans[0]) ? bonus : 0);
+        for (size_t i = 1; i < plans.size(); ++i)
+        {
+            long long a = sum[i] - (makes_land(plans[i]) ? bonus : 0);
+            if (a < badj) { badj = a; bt = i; }
+        }
+        best = bt;
+    }
+
+    static const bool s_nc_debug = std::getenv("MTG_NC_DEBUG") != nullptr;
+    if (s_nc_debug && is_pre_combat)
+    {
+        int n_ties = 0, n_land_ties = 0;
+        for (size_t i = 0; i < plans.size(); ++i)
+        {
+            if (sum[i] == best_sum) { ++n_ties; if (makes_land(plans[i])) ++n_land_ties; }
+        }
+        std::fprintf(stderr,
+            "[NCDBG] turn=%d plans=%zu bestsum=%lld(avg%.2f) ties=%d land_in_ties=%d "
+            "best_makes_land=%d chosen_land='%s'\n",
+            turn, plans.size(), best_sum, (double)best_sum / K, n_ties, n_land_ties,
+            (int)makes_land(plans[best]), plans[best].land_to_play.c_str());
+        if (turn <= 2)
+        {
+            for (size_t i = 0; i < plans.size(); ++i)
+                std::fprintf(stderr, "        plan[%zu] sum=%lld(avg%.2f) val=%d land='%s' actions=%zu\n",
+                    i, sum[i], (double)sum[i] / K, plans[i].value,
+                    plans[i].land_to_play.c_str(), plans[i].actions.size());
+        }
     }
     return plans[best];
 }

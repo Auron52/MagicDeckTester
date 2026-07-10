@@ -100,6 +100,7 @@ public:
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
     int         ManaSourceRank(const GameState&, const CardDefinition&) const override;
+    double      NcLandDropTempoBonus(const GameState&, int) const override;
 };
 
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the
@@ -124,6 +125,9 @@ public:
     // Invigorate pump). Required for mana-source reservation to be lossless here (a HELD dork that
     // then pointlessly attacked would forfeit Exalted).
     bool ShouldAttackWith(const GameState&, const Permanent&) const override;
+    // Mana-hungry combo (dorks + on-curve enabler deploy) with NO land-as-resource mechanic -> the NC
+    // search should ALWAYS develop mana, not just while establishing the base. Aggressive (ungated).
+    double NcLandDropTempoBonus(const GameState&, int) const override;
 };
 
 // Treasure Hunt + Land's Edge: dig-when-stuck, Land's Edge fire count, deck-aware
