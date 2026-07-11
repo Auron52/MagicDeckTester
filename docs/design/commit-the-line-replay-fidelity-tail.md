@@ -1,10 +1,10 @@
 # Commit-the-line replay-fidelity tail (fd-diverge optimism)
 
-Status: **open, deferred** — a rare, pre-existing accuracy tail in the
-commit-the-line engine. Not a card bug, not result-degrading on aggregate, and it
-does **not** bias any keep-profile A/B (both arms use the same engine). Recorded
-here so the ~6/1000 tail isn't lost after the burn overnight investigation
-(2026-07-10).
+Status: **staged-land class FIXED (2026-07-11); one residual class (6225) deferred.**
+A rare, pre-existing accuracy tail in the commit-the-line engine. Not a card bug.
+The dominant class — the executor lapsing a Light Up the Stage-staged land — is now
+fixed (burn `d3 s6006` fd-diverge 8 → 2). The remaining 6225-class (flood +
+intermediate leaf-estimate optimism) is a separate, murkier residual, deferred.
 
 ## What fd-diverge is
 
@@ -18,49 +18,47 @@ overnight rebaseline run, the tail was:
   (seeds 6225 and 6303, each counted once at d3 and once at d5). Both predicted
   **T4** and realized **T6** (delta 2).
 
-## Root cause (2026-07-10) — Light Up the Stage staged land, but the exact mechanism is NOT yet pinned
+## Root cause (2026-07-11, FIXED) — the executor lapsed a Light Up the Stage-staged land
 
-Investigated the cleanest severe game, **burn seed 6303** (predicts T4, realizes
-T6), via `MTG_FD_TRACE` (committed line + predicted opp-life / `hand_lands` per
-phase). What is established:
+Root-caused on **burn seed 6303** (predicted T4, realized T6) via `MTG_FD_TRACE`:
 
 1. **Light Up the Stage** (cast turn 2) exiles 2 cards playable only **through the
    end of turn 3** (`expiry_turn = cast_turn + 1`; `Player.h:6,23`,
-   `EffectHandler.cpp:349`). On seed 6303 it stages **a Mountain + a Lightning
-   Bolt** (`hand_lands` jumps 0→1 right after it resolves).
-2. The search's committed line reaches lethal at T4 by casting **two Shard Volleys
-   on turn 4** (each extra cost = *sacrifice a land*) + the Goblin Guide attack
-   (opp 8→0). That needs two sacrificeable lands on T4.
-3. Reading `hand_lands` across the turns, the search plays the **staged** Mountain
-   on **T3** (within its window) and keeps the **drawn** Mountain (card 23) for T4
-   — a sequence that is, on its face, **legal**. The executor instead plays the
-   drawn Mountain on T3, lapses the staged Mountain at end of T3, and so has only
-   one land on T4 (the T4 draw was Eidolon, a non-land) → one Shard Volley →
-   realized T6.
+   `EffectHandler.cpp:349`). On 6303 it stages **a Mountain + a Lightning Bolt**.
+2. The committed T4 line reaches lethal by casting **two Shard Volleys on turn 4**
+   (each extra cost = *sacrifice a land*) + a Goblin Guide attack. That needs a land
+   drop on T4, which only works if the **staged** Mountain is spent on **T3** and
+   the **drawn** Mountain is held for T4 — a legal sequence.
+3. The gap was **which copy each side plays**. The search's rollout and the
+   executor use **separate** land-play functions: `TurnSolver::PlayLandByName`
+   (search/rollout) vs `AIEngine::TryPlaySpecificLand` / `TryPlayLand` (real
+   executor). Both took the **first hand match** by hand order, so the executor
+   played the *drawn* Mountain on T3, lapsed the staged Mountain at end of T3, and
+   had no land on T4 → one Shard Volley → realized T6. The staged-T3/drawn-T4 line
+   the search intended was never realized.
 
-**UNRESOLVED CONTRADICTION (do not "fix" until this is understood).** If the
-staged-T3 / drawn-T4 line is genuinely legal, an optimal per-turn re-decider should
-find it — but **no engine at any budget realizes T4**: default(commit)=T6,
-`MTG_LEGACY_SEARCH`=T5, `MTG_FD_ALWAYS_RESEARCH`=T5, and default at depth 5 / 25×
-budget still =T6 (predicting T4 *earlier*, `proven_at_turn=1`). Best realized is T5.
-So either (a) the "legal T4 line" has a blocker not visible in the phase trace
-(e.g. a T3 mana/sacrifice conflict between casting the staged Bolt **and** a Shard
-Volley **and** playing the staged land, so holding the drawn Mountain isn't
-actually affordable), or (b) the search over-credits something at T4 that even the
-staged-land sequence can't deliver. This gap is the crux; it must be closed before
-any code change.
+**Why the first attempt failed** (recorded so the trap is remembered): changing only
+`PlayLandByName` to prefer the staged copy made the *search* more optimistic (more
+committed T4 lines) while the *executor* still lapsed the staged land — so the
+fd-diverge set *grew*. The two paths must be fixed **together**.
 
-**FAILED FIX ATTEMPT (2026-07-10, reverted).** Hypothesis: the executor and search
-disagree on *which* Mountain to play on T3 because `PlayLandByName`
-(`TurnSolver.cpp` ~4031) picks the first hand match (hand-order dependent) in
-autonomous mode and only prefers the expiring staged copy under `s_human_play`.
-Change tried: make **all** modes prefer the staged copy. Result: **did NOT help** —
-seed 6303 stayed T6 and the burn `d3 s6006` fd-diverge set *grew* (6→8+; the search
-committed *more* phantom T4 lines while the executor still realized T6). Reverted;
-`src` is byte-clean vs HEAD `5aa7573`. Lesson: the divergence is not a simple
-land-copy pick, and the search-side change makes the search *more* optimistic
-without improving realization — consistent with (a)/(b) above being the real issue,
-not the executor's land choice. Needs the contradiction resolved first.
+**THE FIX (2026-07-11).** Prefer the expiring staged copy of a land in **both**
+paths — `PlayLandByName` (removed the `s_human_play` gate) **and**
+`TryPlaySpecificLand` (added the same pick). Now the search's committed line and the
+executor pick the same land, so the line realises exactly. Result: seed 6303 → **T4**;
+burn `d3 s6006` fd-diverge **8 → 2**; **byte-identical on all non-staging decks**
+(slivers/th/knights/antilife/hinata smoke unchanged); burn smoke = play-changed only,
+**0 searched win→loss**, no win-turn change. It is strictly-correct MTG play (spend
+the deadline resource first) and generalizes to any staged-land situation.
+
+**REMAINING RESIDUAL — 6225 (deferred, separate class).** After the fix, burn
+`d3 s6006` still shows 2 (6225 severe T4→T6, 6420 T4→T5). 6225 is **not** a
+staged-land case: it is a **flood** hand (4 Mountains kept, draws more Mountains + a
+dead Searing Blood) whose committed *play* line is actually **T5** (Skullcrack ×2 +
+Eidolon + Swiftspear prowess). The `fd_best_win=4` is an **intermediate verified
+estimate** the oracle recorded that is neither committed (T5) nor realized (T6) —
+i.e. a search-consistency / leaf-optimism issue on a flooded draw, with no clean
+single mechanism. Deferred as its own investigation (next after this ships).
 
 Ruled out as causes:
 
@@ -97,33 +95,27 @@ on average. Commit-the-line is the right default.
 Because the tail is pre-existing and engine-level (identical on both A/B arms), it
 does not bias the burn NEW-vs-OLD keep-profile comparison or any other keep A/B.
 
-## Next step (when picked up) — CLOSE THE CONTRADICTION FIRST, then decide the fix
+## Next: the 6225 residual (flood + intermediate leaf-optimism)
 
-Do NOT jump to a code change (the first attempt did, and made it worse). The
-investigation order:
+The staged-land class is fixed and shipped. The remaining 6225-class is a separate
+investigation:
 
-1. **Determine whether the T4 line is actually realizable at all.** On seed 6303,
-   hand-force the "legal" sequence and see if it wins T4: play the **staged**
-   Mountain on T3, cast the staged **Lightning Bolt** + one **Shard Volley** on T3,
-   hold the drawn Mountain, then two Shard Volleys on T4. Check the T3 mana budget
-   carefully — casting Bolt **and** a Shard Volley (which also *sacrifices* a land)
-   the same turn you played only your second land may leave you a mana/land short,
-   which would mean the drawn Mountain can't be held and the T4 double-Volley is
-   impossible. Use `--force-mulligan` / a scripted line or `MTG_FD_TRACE`'s
-   per-phase mana to verify. If no legal sequence wins T4 → the search is
-   **over-crediting** (a real fidelity bug: the committed line's T4 is a phantom the
-   `FSLineWin` simulation accepts but `ApplyPlanDirect` can't reproduce). Find the
-   over-credit in `FSLineWin`/`ApplyPlanDirect` for the Shard-Volley-sacrifice +
-   staged-land combination.
-2. **If a legal T4 sequence *does* exist**, the bug is that neither the executor's
-   committed-line replay nor legacy re-decide finds it. Then instrument WHERE the
-   executor's replay of the committed line diverges from the search's simulated
-   line (which turn's applied plan first differs, and why) — the land-copy pick was
-   only one candidate and was ruled out.
-3. Only after (1)/(2) pin the mechanism: make the change, then re-run the fd-oracle
-   over the burn overnight seeds (target: severe delta≥2 → ~0), confirm non-Light-Up
-   decks stay **byte-identical**, and A/B burn overnight for the aggregate before
-   `--accept`.
+1. **Find where `fd_best_win=4` is recorded** for 6225 when the committed line is
+   T5. The oracle updates `m_fd_best_win` at `AIEngine.cpp:~1200` from a
+   `FullSearchLine` result whose `line.win_turn <= turn + searched_depth - 1`
+   (verified-in-horizon). Trace which turn/pass returns win_turn=4 — it is NOT the
+   final committed line (T5), so either an intermediate pass or a sub-branch verified
+   a T4 the top-level selection then discarded. A verified win the engine does not
+   commit is itself suspicious (it should commit the earliest verified win).
+2. **Check for a flood realizability gap.** The committed T5 line assumes casting a
+   **second Skullcrack** (+ prowess) that the flooded real draws (Mountains + a dead
+   Searing Blood) don't deliver by that turn. Determine whether the search's
+   simulated draws diverge from the executor's (Light Up exile shifting the draw
+   order) or whether a staged **spell** (Skullcrack) is being counted past its
+   expiry — the staged-expiry analog of the land fix, but for casts (a different
+   code path than `TryPlaySpecificLand`).
+3. Whatever the mechanism: confirm non-flood decks stay byte-identical, A/B burn for
+   the aggregate, rebaseline via the accept flow.
 
 General watch item: cards that grant a **time-boxed play window** for cards outside
 hand (Light Up the Stage, Expressive Iteration, Soulfire Eruption's dig — all share

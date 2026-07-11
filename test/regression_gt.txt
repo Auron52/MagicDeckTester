@@ -1,6 +1,5 @@
-# Regression ground truth -- commit 27dc2ec  date 2026-07-11
+# Regression ground truth -- commit 219ac0d  date 2026-07-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-11): Overnight GT was pre-phase-1-2 stale (35 d0 win->loss prove it; value-leaf is search-only so cannot move d0). 29 searched win->loss decompose via value-off A/B isolation: (a) 21 burn = phase-1-2 burn mulligan-profile change (value-off-vs-value-on shows burn ~0 changed by this agent), non-overnight seeds already tested by the other agent; (b) 8 antilife/TH d5 = value-leaf knife-edge shuffle-variance losses, net-offset (mean overnight dLP value-on vs value-off = +0.0000; antilife +0.0028, burn/knights/slivers/th better, hinata byte-identical). nonconv=0 both arms. 2 severe fd-diverge (seeds 6225/6303) are pre-existing in value-off (phase-1-2, left for other agent). Full rebaseline of the doubly-stale overnight.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -9,8 +8,8 @@ slivers_smoke_d0_s1001=999/4.66266/1cef9308489d08a1
 slivers_smoke_d3_s1001=250/4.292/e02388f36897f9a5
 slivers_smoke_d5_s1001=150/4.22/9b384e55bc69bfbe
 burn_smoke_d0_s1001=990/4.56667/96294120b3c0eab0
-burn_smoke_d3_s1001=298/4.32886/0f92aa5cf08a9937
-burn_smoke_d5_s1001=249/4.33333/41dfd8cb77fcf396
+burn_smoke_d3_s1001=298/4.32886/24cff1ced8cb57ad
+burn_smoke_d5_s1001=249/4.33333/4ee3396924aee168
 th_smoke_d0_s1001=837/5.06213/b63cd4d3a25b8207
 th_smoke_d3_s1001=144/4.125/6b713b943437b49e
 th_smoke_d5_s1001=70/4.08571/f29e2d8fbed6ed81
@@ -31,10 +30,10 @@ slivers_regression_d3_s3003=399/4.25313/ef61bfa5ad77a34b
 slivers_regression_d5_s2002=300/4.28333/57bdc61f9761ac1b
 slivers_regression_d5_s3003=299/4.25084/f69838953ef6fe7c
 burn_regression_d0_s2002=990/4.53636/9cf8c0b8b7ce3777
-burn_regression_d3_s2002=497/4.34004/7f8809720492f836
-burn_regression_d3_s3003=499/4.28457/afd5f237e63c5a04
-burn_regression_d5_s2002=498/4.34538/a534d4b9c06a87b0
-burn_regression_d5_s3003=499/4.28457/3cd07d1d89ad4938
+burn_regression_d3_s2002=497/4.33602/6530ad6fecb4e094
+burn_regression_d3_s3003=499/4.27455/42602fd20889ee61
+burn_regression_d5_s2002=498/4.34137/7418c7b4f256619a
+burn_regression_d5_s3003=499/4.27455/fd948bd21bf6c4e9
 th_regression_d0_s2002=851/5.06463/de85fbad8c7fc9d1
 th_regression_d3_s2002=492/4.12602/5e130da85f7f2aae
 th_regression_d3_s3003=487/4.1191/1b7736bd215c0788
@@ -51,10 +50,10 @@ antilife_regression_d3_s3003=299/4.11371/3b3aa5222c51898c
 antilife_regression_d5_s2002=249/4.14056/f609654a1d0f0582
 antilife_regression_d5_s3003=249/4.1004/2e4f162da5741a94
 hinata_regression_d0_s2002=646/6.64396/a9b7fb31637c4d46
-hinata_regression_d3_s2002=194/5.68557/18e255c09cc04157
-hinata_regression_d3_s3003=191/5.64398/05846eed53055ea7
+hinata_regression_d3_s2002=194/5.68557/684d9be3d0c8d93b
+hinata_regression_d3_s3003=191/5.64398/8df66d6419fce428
 hinata_regression_d5_s2002=98/5.69388/a1a02e4a4289a3f8
-hinata_regression_d5_s3003=97/5.65979/ec97db2930e3edbc
+hinata_regression_d5_s3003=97/5.65979/7615c2352376c332
 
 # --- overnight ---
 slivers_overnight_d0_s4004=1998/4.66917/81443ed4f7c01e43

@@ -2175,11 +2175,25 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    // Prefer an exiled/STAGED copy of `name` (Light Up the Stage -- it expires; a permanent hand copy
+    // keeps), mirroring the rollout's PlayLandByName so the committed line replays EXACTLY. Without
+    // this the executor played the first hand match (a drawn copy) and let the staged copy lapse,
+    // desyncing from the search's committed line -- the burn fd-diverge (the T4 double-Shard-Volley
+    // needs the staged Mountain spent on T3 so the drawn Mountain is free for T4). Byte-identical when
+    // no staged copy of `name` is in hand.
+    auto pick = ap.hand.end();
     for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
     {
         if (it->m_name != name) { continue; }
+        auto d = CardDatabase::Instance().Lookup(it->m_name);
+        if (!d || !d->card.IsLand()) { continue; }
+        if (pick == ap.hand.end()) { pick = it; }
+        if (it->m_is_staged) { pick = it; break; }
+    }
+    if (pick != ap.hand.end())
+    {
+        auto it = pick;
         auto def = CardDatabase::Instance().Lookup(it->m_name);
-        if (!def || !def->card.IsLand()) { continue; }
 
         rollout_touch::Record(it->m_name.str());   // execution-trace: land played on the rollout path
         if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }

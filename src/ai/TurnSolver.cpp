@@ -4116,22 +4116,25 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
 
-    // Choose WHICH copy of `name` to play. Default: the first matching land (autonomous search --
-    // byte-identical). Human play (claude-play): when a land of this name exists BOTH as an
-    // exiled/staged copy (Light Up the Stage -- playable only until end of next turn) AND a regular
-    // hand copy, play the STAGED one. The permanent hand copy keeps for a later turn, so playing it
-    // here would waste the exiled copy (it expires unplayed). Gated on s_human_play (false in the
-    // engine's clairvoyant rollouts, so they pick the autonomous default copy).
-    const bool s_human_play = HumanPlayActive();
+    // Choose WHICH copy of `name` to play. Prefer an exiled/STAGED copy (Light Up the Stage --
+    // playable only until its expiry turn) over a permanent hand copy: the hand copy keeps for a
+    // later turn, so spending it here would WASTE the staged copy (it expires unplayed). Applies in
+    // the autonomous search too (not only human play): the executor's committed-line replay
+    // (AIEngine::TryPlaySpecificLand) prefers the staged copy as well, so keeping the search's own
+    // land pick in lockstep makes the committed line realise exactly. Previously this was gated on
+    // s_human_play and the search took the first hand match, so a committed line built assuming the
+    // staged copy stayed (playing the drawn copy here) desynced from the executor -- the burn
+    // commit-the-line fd-diverge (Light Up stages a Mountain; the T4 double-Shard-Volley line needs
+    // the staged land spent on T3 so the drawn Mountain is free for T4). Byte-identical for decks
+    // that never stage a land (no m_is_staged copy -> falls to first match).
     auto pick = ap.hand.end();
     for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
     {
         if (it->m_name != name) { continue; }
         auto d = CardDatabase::Instance().LookupCached(*it);
         if (!d || !d->card.IsLand()) { continue; }
-        if (pick == ap.hand.end()) { pick = it; }                  // first match
-        if (!s_human_play) { break; }                              // autonomous: take it
-        if (it->m_is_staged) { pick = it; break; }                 // human play: prefer the expiring copy
+        if (pick == ap.hand.end()) { pick = it; }                  // first match (fallback)
+        if (it->m_is_staged) { pick = it; break; }                 // prefer the expiring staged copy
     }
 
     for (auto it = pick; it != ap.hand.end(); ++it)
