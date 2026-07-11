@@ -1339,7 +1339,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         static const bool s_d0_landfold = []{ const char* e = std::getenv("MTG_D0_LANDFOLD");
                                               return e && *e && std::string(e) != "0"; }();
         const bool d0_landfold = s_d0_landfold && m_lookahead_depth == 0
-                              && state.m_value_model && !state.m_value_model->empty();
+                              && ((state.m_value_model && !state.m_value_model->empty())
+                                  || (state.m_dyn_model && !state.m_dyn_model->empty()));
 
         // The land drop is searched (folded into SolveWithLookahead) ONLY for the
         // depth>0 first main. Every other case keeps the pre-fold greedy land play:

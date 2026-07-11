@@ -2300,3 +2300,20 @@ ANTILIFE generalization (fetchland deck -- the land choice matters MORE), held-o
 gain is LARGER where the land decision is richest (fetchlands), closing ~55% of the antilife gap.
 CONCLUSION: land-folding + resulting-state value is a real, non-clairvoyant, cross-deck win over the
 heuristic. Remaining gap to the teacher is a model/approach lever, not data.
+
+### Option 1 (stronger value net + serve-K) -- TH, held-out, NC
+SolveD0LandFold now scores with the DYN net (m_dyn_model, PredictWinTurn) when attached, else the
+MidGameEvaluator (m_value_model). DynModel trained via tools/dyntrain on the RS-value rows (a RANKER over
+resulting states -- grouped by decision). Results:
+| scorer / K                 | NC-LP | note |
+|----------------------------|-------|------|
+| heuristic                  | 5.913 | |
+| GBDT 120/4  K8             | 5.705 | pure-python trainer, plateaus |
+| DynNet T0H128 K8          | 5.595 | MLP beats GBDT (+0.11) |
+| DynNet T0H128 K16         | 5.500 | serve-K sweet spot |
+| DynNet T0H128 K32         | 5.512 | K plateaus at 16 |
+| DynNet T2/T3 (dynamics)    | >=5.615 | dynamics do NOT help; MLP width does |
+Best = DynNet MLP T0H128 @ K16 = **5.500**, closing 37% of the heuristic(5.913)->teacher(4.787) gap, all
+non-clairvoyant. Net > GBDT; serve-K helps (variance reduction) to ~16; dynamics inert (as in the earlier
+sweep). Remaining ~0.71 LP to the teacher = a 1-PLY-vs-search ceiling -> next levers = richer features
+(opt 2) and a shallow NON-CLAIRVOYANT lookahead with the value leaf (opt 3, the real headroom).

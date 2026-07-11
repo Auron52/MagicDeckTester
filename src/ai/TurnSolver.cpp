@@ -5407,8 +5407,13 @@ TurnSolver::Plan TurnSolver::SolveD0LandFold(const GameState& state, bool is_pre
     if (plans.empty()) { return Plan{}; }
     // EnumeratePlansWithLand sorts winning plans first, so a turn-winning plan (if any) is plans[0].
     if (plans.front().wins_this_turn) { return plans.front(); }
-    const MidGameEvaluator* vm = state.m_value_model;
-    if (!vm || vm->empty()) { return plans.front(); }   // caller gates on attachment; safety net
+    // Resulting-state scorer: prefer the DYNAMIC net (m_dyn_model, PredictWinTurn) when attached, else
+    // the static MidGameEvaluator value model (m_value_model, Score). Both return a win turn (lower =
+    // better); only one is active per run so the mixed scales never compare. This is the "stronger
+    // value net" A/B knob -- a DynModel trained on the RS-value rows vs a GBDT/linear MidGameEvaluator.
+    const DynModel*         dm = (state.m_dyn_model   && !state.m_dyn_model->empty())   ? state.m_dyn_model   : nullptr;
+    const MidGameEvaluator* vm = (!dm && state.m_value_model && !state.m_value_model->empty()) ? state.m_value_model : nullptr;
+    if (!dm && !vm) { return plans.front(); }   // caller gates on attachment; safety net
     RevealLogPause _rlp;   // candidate scoring is hypothetical -- suppress reveal/scry logging
 
     // NON-CLAIRVOYANCE (MTG_D0LF_K, default 1): a DRAW plan (Treasure Hunt/Ponder) reveals the real
@@ -5420,12 +5425,12 @@ TurnSolver::Plan TurnSolver::SolveD0LandFold(const GameState& state, bool is_pre
     // fast within-turn-clairvoyant proxy; K>1 is the honest non-clairvoyant policy. See learned-d0-policy.md.
     static const int s_d0lf_k = []{ const char* e = std::getenv("MTG_D0LF_K");
                                     int v = (e && *e) ? std::atoi(e) : 1; return v < 1 ? 1 : v; }();
-    Plan*     best       = &plans.front();
-    long long best_score = std::numeric_limits<long long>::max();   // milliturns, lower = better
+    Plan*  best       = &plans.front();
+    double best_score = std::numeric_limits<double>::max();   // win turn (lower = better)
     for (Plan& p : plans)
     {
         if (p.wins_this_turn) { return p; }   // safety (winners are ordered first)
-        long long score_sum = 0;
+        double score_sum = 0.0;
         for (int k = 0; k < s_d0lf_k; ++k)
         {
             GameState copy = state;
@@ -5440,9 +5445,11 @@ TurnSolver::Plan TurnSolver::SolveD0LandFold(const GameState& state, bool is_pre
                 copy.ActivePlayer().library.Shuffle(rs);
             }
             ApplyPlanDirect(copy, p, is_pre_combat);   // plays the folded land (land_decided) + casts
-            score_sum += vm->Score(ExtractMidGameFeatures(copy, MidGamePlanSummary{}));
+            const std::vector<int> feats = ExtractMidGameFeatures(copy, MidGamePlanSummary{});
+            score_sum += dm ? static_cast<double>(dm->PredictWinTurn(feats))
+                            : static_cast<double>(vm->Score(feats));
         }
-        const long long s = score_sum / s_d0lf_k;
+        const double s = score_sum / s_d0lf_k;
         if (s < best_score) { best_score = s; best = &p; }
     }
     return *best;
