@@ -30,6 +30,8 @@ def run(deck, depth, games, seed, mt, threads, profile, budget, value_on):
     if value_on:
         env["MTG_VALUE_MODEL"] = "1"; env["MTG_VALUE_PROFILE"] = profile
         env["MTG_VALUE_MIN_DEPTH"] = "5"; env["MTG_VALUE_STARTGATE_ALPHA"] = "8"
+    else:
+        env["MTG_VALUE_MODEL"] = "0"   # binary default is now ON; must disable EXPLICITLY for the OFF arm
     cmd = [MTG, deck, "--games", str(games), "--seed", str(seed),
            "--depth", str(depth), "--max-turns", str(mt), "--threads", str(threads)]
     if budget and budget > 0:
@@ -48,6 +50,8 @@ def main():
     ap.add_argument("--games", type=int, default=250)
     ap.add_argument("--seeds", nargs="+", type=int, default=[1001, 2002, 3003])
     ap.add_argument("--depths", nargs="+", type=int, default=[3, 5])
+    ap.add_argument("--budget-override", type=int, default=None,
+                    help="force this budget-ms for all depths (0=unbounded); default uses BUD[depth]")
     ap.add_argument("--threads", type=int, default=6)
     ap.add_argument("--decks", nargs="+", default=list(DECKS))
     ap.add_argument("--out", default="logs/eval/valueleaf_adopt_lp.txt")
@@ -62,7 +66,7 @@ def main():
     for dname in args.decks:
         deck, prof, mt = DECKS[dname]
         for depth in args.depths:
-            b = BUD.get(depth, 0)
+            b = args.budget_override if args.budget_override is not None else BUD.get(depth, 0)
             for seed in args.seeds:
                 try:
                     w0,p0,a0,lp0 = run(deck, depth, args.games, seed, mt, args.threads, prof, b, False)
