@@ -2346,3 +2346,49 @@ IMPLICATIONS / reframe:
 NEXT (post-compact): measure NC-d0/d1 speed+LP as the actual fast-NC deliverable; check whether any deck has
 expensive-enough rollouts that a value leaf wins on the speed-quality frontier; if not, the value-model d0
 line is a negative result (documented) and the fast-NC answer is low-depth NC search.
+
+## 2026-07-11 (later): DECISIVE NEGATIVE — the learned value model is Pareto-DOMINATED by NC-d0 (both decks, clean)
+Re-ran the NC ladder CORRECTLY (the pivotal table above ran NC at `--depth 0`, where the MTG_NC_SEARCH block
+— which lives inside `if (m_lookahead_depth>0)` in AIEngine — never fires, so it silently measured the plain
+heuristic; NC must run at `--depth 1` as the dispatch gate, with MTG_NC_DEPTH the real lookahead). Speeds
+below are CLEAN (one policy at a time; the earlier ladder ran TH+antilife concurrently and inflated ms 4-5x).
+
+TH (held-out 4001/4002/9009, 200g):        | antilife (held-out, 100-150g):
+| policy               | LP    | ms/game |  | policy               | LP    | ms/game |
+|----------------------|-------|---------|  |----------------------|-------|---------|
+| heuristic-d0         | 5.875 |   8.6   |  | heuristic-d0         | 5.533 |  64.4   |
+| NC-K16-d0            | 5.102 |  10.3   |  | NC-K16-d0            | 4.838 |  65.4   |
+| NC-K16-d1            | 4.888 |  29.6   |  | NC-K16-d1            | 4.853 |  77.4   |
+| NC-K16-d2 (teacher)  | 4.853 | (568*)  |  | NC-K16-d2 (teacher)  | 4.890 | (422*)  |
+| landfold-value K16   | 5.613 |   9.1   |  | landfold-value K16   | 5.000 |  98.0   |
+| landfold-dyn  K16    | 5.49  |  ~9     |  | landfold-dyn  K16    | 4.930 |  98.3   |
+(*d2 ms from the contended ladder; still the slow one.) value/dyn use TEACHER-d2-distilled labels (best case).
+
+THREE decisive facts:
+1. **NC-d0 Pareto-dominates the value model on BOTH decks** — faster AND better. TH: NC-d0 5.102@10.3ms vs
+   value 5.613@9.1ms (value is 1ms faster but 0.5 LP worse). Antilife: NC-d0 4.838@65ms vs value 5.000@98ms
+   (value is SLOWER — its land-enumeration explodes on fetchlands — AND worse). There is no regime among our
+   decks where the learned value leaf wins the speed/quality frontier.
+2. **The model is FEATURE/COMPRESSION-bound, not label/data/architecture-bound.** TEACHER-d2-distilled labels
+   (honest MTG_EVAL_ROLLOUT_DEPTH=2 + MTG_EVAL_ROWS_HONEST=1) do NOT move TH (GBDT 5.672 vs old 5.677; DynNet
+   5.488 vs 5.457) and only partly help antilife (5.18→4.93). Combined with the plateaued learning curve
+   (≤80g) and the architecture sweep (T0 MLP won), every lever except the 40 hand-crafted features is
+   exhausted. The features can't reproduce even the teacher's plan RANKING.
+3. **WHY there's no niche: goldfish games are SHORT (~5-8 turns), so a greedy K16 reshuffle rollout (NC-d0)
+   is already near-heuristic-speed** (TH 10.3 vs 8.6ms; antilife 65 vs 64ms — the antilife heuristic itself
+   pays per-plan rollout cost). The teacher's only EXPENSIVE computation is d2 branching, and d2 beats d1 by
+   just 0.007-0.07 LP — nearly worthless. So there is no expensive-but-valuable computation for a value model
+   to cheaply distill: the cheap depths are already near-teacher, and the one costly depth isn't worth it.
+
+**THE FAST NC DELIVERABLE IS NC-d0 (or NC-d1) RUN DIRECTLY, not a learned model.** NC-d1 is essentially AT
+the teacher (TH 4.888 vs 4.853; antilife 4.853 vs 4.890) at 1.2-3.4x heuristic speed; NC-d0 is within
+0.05-0.21 LP at ~heuristic speed. This MEETS the user's stopping condition ("very close to the teacher") —
+but via low-depth NC search, not a value model. The learned value model is a DOCUMENTED NEGATIVE for d0 PLAY
+on short-game decks. Its only viable futures: (a) card-level features (embeddings + set-pooling; big build,
+likely torch-in-docker) to break the compression bound — but even then it caps at ~NC-d1 quality it can't
+beat NC-d0 on speed; (b) a genuinely long-game (15+ turn) grindy deck where the rollout tail is expensive
+and a truncating value LEAF finally wins — we have no such deck; (c) a phase-2 DEEP-search value leaf (a
+different use case from d0 play, where a good value fn accelerates a search that must branch deep).
+Harness: scripts/nc_ladder.py (LP+ms ladder). Knobs: MTG_NC_SEARCH/_K/_DEPTH at --depth 1; MTG_D0_LANDFOLD +
+MTG_VALUE_PROFILE/MTG_DYN_MODEL + MTG_D0LF_K at --depth 0. Teacher labels: MTG_DUMP_RSVALUE_ROWS +
+MTG_EVAL_ROWS_ROLLOUT + MTG_EVAL_ROLLOUT_DEPTH=2 + MTG_EVAL_ROWS_HONEST + MTG_EVAL_ROWS_K=8.
