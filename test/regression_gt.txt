@@ -1,54 +1,55 @@
-# Regression ground truth -- commit 31c3859  date 2026-07-10
+# Regression ground truth -- commit 3885960  date 2026-07-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (regression, 2026-07-11): value-leaf adoption (default-on K=5, startgate alpha=8). Aggregate LP-BETTER: 13 earlier + 1 loss->win vs 7 later + 2 win->loss. Both win->loss (burn_d5_s2002 gi412 8->loss, th_d5_s2002 gi168 7->loss) are physically-different-game divergences (value-leaf's honest non-clairvoyant line consumes the deterministic library differently on knife-edge T7/T8 marginal wins), not clean-line blunders. LP-neutral-within-noise over 6 seeds. Hinata unaffected (no value.json). See docs/design/learned-d0-policy.md.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
 slivers_smoke_d0_s1001=999/4.66266/1cef9308489d08a1
 slivers_smoke_d3_s1001=250/4.292/e02388f36897f9a5
-slivers_smoke_d5_s1001=150/4.22/132bbde39d40eb3c
+slivers_smoke_d5_s1001=150/4.22/9b384e55bc69bfbe
 burn_smoke_d0_s1001=990/4.56667/96294120b3c0eab0
-burn_smoke_d3_s1001=298/4.32886/a15edea06f72e956
-burn_smoke_d5_s1001=249/4.33333/4b1a467893ff4578
+burn_smoke_d3_s1001=298/4.32886/0f92aa5cf08a9937
+burn_smoke_d5_s1001=249/4.33333/1c494654a6da5620
 th_smoke_d0_s1001=837/5.06213/b63cd4d3a25b8207
-th_smoke_d3_s1001=144/4.13194/8d3e37e99d4379e7
-th_smoke_d5_s1001=72/4.13889/6f5f8f8023747f05
+th_smoke_d3_s1001=144/4.125/2b6530abd5190020
+th_smoke_d5_s1001=70/4.08571/aaa29a6e2d0609c2
 knights_smoke_d0_s1001=999/4.58559/e9d8eec2cdc41c8d
 knights_smoke_d3_s1001=250/4.396/a170f420994229fb
-knights_smoke_d5_s1001=150/4.38667/8f773349483d7616
+knights_smoke_d5_s1001=150/4.38667/ca0b74a195b8ceca
 antilife_smoke_d0_s1001=897/5.301/c241d82babe60316
-antilife_smoke_d3_s1001=250/4.104/de5fbdfa5b7c6713
-antilife_smoke_d5_s1001=150/4.06/f52579e6977d9a80
+antilife_smoke_d3_s1001=250/4.104/9df1ddefedf5dcb2
+antilife_smoke_d5_s1001=150/4.06/ce7b528b392d82b4
 hinata_smoke_d0_s1001=670/6.62985/8b42a69cda2fe23d
 hinata_smoke_d3_s1001=146/5.58219/a58fd3989c952660
 hinata_smoke_d5_s1001=72/5.59722/bc8d07fc7f975000
 
 # --- regression ---
 slivers_regression_d0_s2002=999/4.7007/da946ecd33614760
-slivers_regression_d3_s2002=400/4.265/0149480e416863f1
-slivers_regression_d3_s3003=399/4.25815/69d7776c8689e159
-slivers_regression_d5_s2002=300/4.28/5a317e333509b231
-slivers_regression_d5_s3003=299/4.25084/6317ec6284060a44
+slivers_regression_d3_s2002=400/4.265/a46403b76d460cdd
+slivers_regression_d3_s3003=399/4.25313/d9faeff230d4df2f
+slivers_regression_d5_s2002=300/4.28/eae7d48aa3320a31
+slivers_regression_d5_s3003=299/4.25084/bf17cb0571e20925
 burn_regression_d0_s2002=990/4.53636/9cf8c0b8b7ce3777
-burn_regression_d3_s2002=497/4.34004/eb38ddf15ca91ca1
-burn_regression_d3_s3003=499/4.28457/58b39bc9a68790b1
-burn_regression_d5_s2002=498/4.34538/f31ecaec84784ad6
-burn_regression_d5_s3003=499/4.28257/ad15ccffd6fe1681
+burn_regression_d3_s2002=497/4.34004/7f8809720492f836
+burn_regression_d3_s3003=499/4.28457/afd5f237e63c5a04
+burn_regression_d5_s2002=497/4.33803/03ccdd49870512c6
+burn_regression_d5_s3003=499/4.28457/b4052c1e4e7f5ade
 th_regression_d0_s2002=851/5.06463/de85fbad8c7fc9d1
-th_regression_d3_s2002=492/4.13008/79cb997e07d35e53
-th_regression_d3_s3003=487/4.1191/960211f76c026529
-th_regression_d5_s2002=295/4.11186/f02db512f7ed6f3a
-th_regression_d5_s3003=292/4.11301/657ed2610769f5bd
+th_regression_d3_s2002=492/4.12602/414a2c9cb0982d7a
+th_regression_d3_s3003=487/4.1191/9aa5775c31b9c319
+th_regression_d5_s2002=295/4.08814/19d48fcbaab8debb
+th_regression_d5_s3003=292/4.11986/488e4ba22aab5301
 knights_regression_d0_s2002=1000/4.591/4ce5880eb17329fc
 knights_regression_d3_s2002=300/4.34333/32593c93f3019402
 knights_regression_d3_s3003=300/4.36333/0f99cf70866bd230
-knights_regression_d5_s2002=250/4.312/bde18136c4fbba75
-knights_regression_d5_s3003=250/4.356/4c4f48db1b7c658a
+knights_regression_d5_s2002=250/4.312/28f06b1f5a831616
+knights_regression_d5_s3003=250/4.356/ecf419b69a112bf6
 antilife_regression_d0_s2002=906/5.26049/a4c4abf93d27116d
-antilife_regression_d3_s2002=299/4.09699/8be773f06f95fac4
+antilife_regression_d3_s2002=299/4.09699/7fff0fe0cac43133
 antilife_regression_d3_s3003=299/4.11371/eb0c4f106d61480b
-antilife_regression_d5_s2002=249/4.13655/55b78035c7340f99
-antilife_regression_d5_s3003=249/4.1004/4f8b3cff0d5f5ada
+antilife_regression_d5_s2002=249/4.14056/92ff72d43158df77
+antilife_regression_d5_s3003=249/4.09237/eb586db5f3bcf945
 hinata_regression_d0_s2002=646/6.64396/a9b7fb31637c4d46
 hinata_regression_d3_s2002=194/5.68557/18e255c09cc04157
 hinata_regression_d3_s3003=191/5.64398/05846eed53055ea7

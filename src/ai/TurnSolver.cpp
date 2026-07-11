@@ -5986,17 +5986,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
     bool      have_prev = false, have_prev2 = false;
 
-    // Value-leaf start-gate relaxation (MTG_VALUE_STARTGATE_ALPHA, default 1.0 == off): when the CHEAP
-    // value-leaf is driving this search (free leaves), a pass whose estimate slightly overshoots the budget
-    // is still worth FINISHING within this search -- reaching the value-leaf trust depth here avoids the
-    // hybrid's separate (expensive) heuristic redo. A LARGER alpha lets a nearly-affordable transitional
+    // Value-leaf start-gate relaxation (MTG_VALUE_STARTGATE_ALPHA, ADOPTED default 8.0; 1.0 == off): when the
+    // CHEAP value-leaf is driving this search (free leaves), a pass whose estimate slightly overshoots the
+    // budget is still worth FINISHING within this search -- reaching the value-leaf trust depth here avoids
+    // the hybrid's separate (expensive) heuristic redo. A LARGER alpha lets a nearly-affordable transitional
     // pass start (and run over budget, capped by the overrun guard) while a genuinely-explosive pass
-    // (estimate many x remaining, e.g. slivers g4) is still rejected -> no blowup. Byte-identical when the
-    // value-leaf isn't active or the multiplier is 1.0. See learned-d0-policy.md.
+    // (estimate many x remaining, e.g. slivers g4) is still rejected -> no blowup. Only affects runs with the
+    // value leaf active (UseValueModel + attached model); pure-heuristic search is byte-identical.
+    // See learned-d0-policy.md.
     const bool vl_active = (UseValueModel() && !g_force_heuristic_leaf
                             && state.m_value_model && !state.m_value_model->empty());
     static const double s_vl_alpha_mult = []{ const char* e = std::getenv("MTG_VALUE_STARTGATE_ALPHA");
-                                              return (e && *e) ? std::atof(e) : 1.0; }();
+                                              return (e && *e) ? std::atof(e) : 8.0; }();
     const double gate_alpha = (vl_active && s_vl_alpha_mult > 1.0)
                             ? kStartGateAlpha * s_vl_alpha_mult : kStartGateAlpha;
 

@@ -1877,3 +1877,38 @@ more (1.01–1.06×). Data: logs/eval/valueleaf_d3_check.txt.
   their keep; kept the simple ladder redo. logs/eval/valueleaf_surgical.txt.
 - *Mixed value-leaf→heuristic tree* (per-pass leaf switching within one search): same root issue — you'd still have to
   choose the heuristic pass's depth, and the affordable depth is what the ladder already discovers. NOT built.
+
+### ADOPTED default-ON (2026-07-11)
+
+Flipped three defaults so any deck shipping `<deck>.value.json` uses the value-leaf hybrid by default:
+`UseValueModel()` → true (override `MTG_VALUE_MODEL=0/off/no/none/false`), `MTG_VALUE_MIN_DEPTH` → 5,
+`MTG_VALUE_STARTGATE_ALPHA` → 8. Decks without a sidecar (Hinata) are untouched (`m_value_model` empty → plain
+search — verified: all Hinata regression digests byte-identical).
+
+**Decided by the PRIMARY metric — linear loss-penalised avg win turn (loss = max_turns+1), per the user** ("with the
+average, any turn slower is as important as any other" → a win→loss is just +1 turn, not special). Value-off vs
+value-on(K5,α8), 250 g/deck × **6 seeds** (1001/2002/3003/7007/4004/5005):
+
+| deck | net dLP d5 (6 seeds) | per-seed | verdict |
+|------|----------------------|----------|---------|
+| TH       | −0.016 | −0.003 | better |
+| knights  | −0.008 | −0.001 | better |
+| slivers  | −0.004 | −0.001 | better |
+| burn     | +0.008 | +0.001 | ~zero |
+| antilife | +0.012 | +0.002 | ~zero |
+
+No d5 degradation above noise on any deck (the +0.012 antilife/TH lean on the first 3 seeds was seed variance — TH
+even flips net-*better* with 6 seeds). d3 similar (TH −0.012, rest ~0). Data: logs/eval/valueleaf_adopt_lp*.txt,
+scripts/valueleaf_adopt_lp.py.
+
+**Individual win→loss are honest non-clairvoyant lines, not blunders.** Traced TH gi18/gi59 + burn gi412 + th gi168:
+each is a *physically-different-game* divergence — the value-leaf plays a reasonable different dig/land line, which on
+the deterministic library reorders draws and loses a knife-edge T7/T8 marginal win. The heuristic's earlier win
+*exploits its clairvoyant rollout* to sequence cycling/lands against the known deck; the value-leaf's honest line is
+slower/loses there — arguably MORE illuminating of real deck robustness (aligns with the clairvoyance-discounting goal).
+Aggregate regression audit is LP-better: **13 earlier + 1 loss→win vs 7 later + 2 win→loss**.
+
+**GT rebaselined + accepted** (smoke + regression) via `--accept-with-regressions` with the above rationale (the
+harness's hard win→loss gate is over-strict for the linear-LP objective; the 2 accepted flips are +1 turn each, dwarfed
+by the 13 earlier wins). Overnight GT still stale (deferred). Speedup carried over from the hybrid+α measurements
+(1.1–2.7× at the d5=20 gate budget).

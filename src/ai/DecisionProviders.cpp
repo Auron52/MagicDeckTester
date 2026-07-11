@@ -124,7 +124,20 @@ bool UseLearnedEval()
 
 bool UseValueModel()
 {
-    static const bool v = std::getenv("MTG_VALUE_MODEL") != nullptr;
+    // ADOPTED default-ON (2026-07-11): the learned value leaf is LP-neutral-within-noise (6-seed d5, TH even
+    // net-better) + 1.1-2.7x faster once paired with the hybrid redo + start-gate relaxation (see
+    // learned-d0-policy.md). It only engages when a deck ships <deck>.value.json (else m_value_model is
+    // empty -> plain search), so decks without a sidecar (e.g. Hinata) are unaffected. Override OFF with
+    // MTG_VALUE_MODEL=0/off/no/none/false for A/B against the pure heuristic leaf.
+    static const bool v = []{
+        const char* e = std::getenv("MTG_VALUE_MODEL");
+        if (e && *e)
+        {
+            const std::string s = e;
+            if (s == "0" || s == "off" || s == "no" || s == "none" || s == "false") { return false; }
+        }
+        return true;
+    }();
     return v;
 }
 

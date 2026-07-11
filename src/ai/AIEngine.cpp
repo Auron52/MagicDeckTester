@@ -1384,11 +1384,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // table. Either way the greedy tail leaves are now memoized — the
                     // deep search no longer re-rolls identical leaf states. Lossless:
                     // SimulateToEnd is a pure function of its key.
-                    // Hybrid value-leaf (MTG_VALUE_MIN_DEPTH, default 0 => off => plain FullSearchLine,
-                    // byte-identical): run the cheap value-leaf, and only if it commits shallower than the
-                    // trust depth re-run that decision with the exact heuristic leaf. See TurnSolver.
+                    // Hybrid value-leaf (MTG_VALUE_MIN_DEPTH): run the cheap value-leaf, and only if it
+                    // commits shallower than the trust depth K re-run that decision with the exact heuristic
+                    // leaf. ADOPTED default K=5 (2026-07-11) -- the crossover depth where the value leaf
+                    // reaches the heuristic ceiling on every deck; inert unless a value model is attached
+                    // (UseValueModel + <deck>.value.json). MTG_VALUE_MIN_DEPTH=0 restores the pure value-leaf
+                    // (no redo). See TurnSolver / learned-d0-policy.md.
                     static const int s_value_min_depth = []{ const char* e = std::getenv("MTG_VALUE_MIN_DEPTH");
-                                                             return (e && *e) ? std::atoi(e) : 0; }();
+                                                             return (e && *e) ? std::atoi(e) : 5; }();
                     int searched_depth = m_lookahead_depth;
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
