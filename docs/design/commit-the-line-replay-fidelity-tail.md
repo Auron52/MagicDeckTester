@@ -1,10 +1,12 @@
 # Commit-the-line replay-fidelity tail (fd-diverge optimism)
 
-Status: **staged-land class FIXED (2026-07-11); one residual class (6225) deferred.**
-A rare, pre-existing accuracy tail in the commit-the-line engine. Not a card bug.
-The dominant class — the executor lapsing a Light Up the Stage-staged land — is now
-fixed (burn `d3 s6006` fd-diverge 8 → 2). The remaining 6225-class (flood +
-intermediate leaf-estimate optimism) is a separate, murkier residual, deferred.
+Status: **FIXED (2026-07-11) — burn `d3 s6006` fd-diverge 8 → 0.** Two commits, same
+root cause (executor lapsing a Light Up the Stage-staged copy, desyncing from the
+committed line): the **staged LAND** class first, then the **staged SPELL** class
+(6225). Not a card bug. A key gotcha that made 6225 look murky is recorded below:
+`--seed X --games 1` faces opponent **pattern 0** (pure goldfish), but a batch game
+at index `gi` faces `PATTERNS[gi % 10]` — so the real batch game must be reproduced
+with `--game-index gi` or its opponent board (and thus its whole line) differs.
 
 ## What fd-diverge is
 
@@ -51,14 +53,20 @@ burn `d3 s6006` fd-diverge **8 → 2**; **byte-identical on all non-staging deck
 **0 searched win→loss**, no win-turn change. It is strictly-correct MTG play (spend
 the deadline resource first) and generalizes to any staged-land situation.
 
-**REMAINING RESIDUAL — 6225 (deferred, separate class).** After the fix, burn
-`d3 s6006` still shows 2 (6225 severe T4→T6, 6420 T4→T5). 6225 is **not** a
-staged-land case: it is a **flood** hand (4 Mountains kept, draws more Mountains + a
-dead Searing Blood) whose committed *play* line is actually **T5** (Skullcrack ×2 +
-Eidolon + Swiftspear prowess). The `fd_best_win=4` is an **intermediate verified
-estimate** the oracle recorded that is neither committed (T5) nor realized (T6) —
-i.e. a search-consistency / leaf-optimism issue on a flooded draw, with no clean
-single mechanism. Deferred as its own investigation (next after this ships).
+**SECOND FIX — 6225 = the staged-SPELL analog (2026-07-11).** The initial "flood /
+leaf-optimism" read was WRONG: it came from analyzing `--seed 6225 --games 1`, which
+faces **opponent pattern 0** (goldfish). The real batch game 6225 is index 219 →
+`PATTERNS[9]` (creatures), reproduced with `--seed 6225 --game-index 219 --games 1`
+(predict T4, realize T6, `fd_best_win=4` at turn 2, `searched_depth=3` — genuinely
+verified-in-horizon, not a leaf estimate). With opponent creatures present, **Light
+Up the Stage stages a Skullcrack**, and the committed T4 line casts `Searing Blood +
+Skullcrack` (opp 8 → −1). The executor cast the **drawn** Skullcrack on T3, lapsed
+the staged one, and had no Skullcrack for T4 → one Skullcrack total, realize T6 —
+exactly the land bug but for a **cast**. Fix: apply the same staged-copy preference
+to `AIEngine::cast_by_name` (the executor's spell cast). Result: 6225 → T4, 6420 →
+resolved, burn `d3 s6006` fd-diverge **2 → 0**; byte-identical on non-staging decks;
+burn + hinata (Expressive Iteration / Soulfire Eruption stage spells) change to
+faster/neutral lines only (audit: 0 searched win→loss). Smoke+regression rebaselined.
 
 Ruled out as causes:
 
@@ -95,27 +103,22 @@ on average. Commit-the-line is the right default.
 Because the tail is pre-existing and engine-level (identical on both A/B arms), it
 does not bias the burn NEW-vs-OLD keep-profile comparison or any other keep A/B.
 
-## Next: the 6225 residual (flood + intermediate leaf-optimism)
+## Follow-ups (both fd-diverge classes now fixed)
 
-The staged-land class is fixed and shipped. The remaining 6225-class is a separate
-investigation:
-
-1. **Find where `fd_best_win=4` is recorded** for 6225 when the committed line is
-   T5. The oracle updates `m_fd_best_win` at `AIEngine.cpp:~1200` from a
-   `FullSearchLine` result whose `line.win_turn <= turn + searched_depth - 1`
-   (verified-in-horizon). Trace which turn/pass returns win_turn=4 — it is NOT the
-   final committed line (T5), so either an intermediate pass or a sub-branch verified
-   a T4 the top-level selection then discarded. A verified win the engine does not
-   commit is itself suspicious (it should commit the earliest verified win).
-2. **Check for a flood realizability gap.** The committed T5 line assumes casting a
-   **second Skullcrack** (+ prowess) that the flooded real draws (Mountains + a dead
-   Searing Blood) don't deliver by that turn. Determine whether the search's
-   simulated draws diverge from the executor's (Light Up exile shifting the draw
-   order) or whether a staged **spell** (Skullcrack) is being counted past its
-   expiry — the staged-expiry analog of the land fix, but for casts (a different
-   code path than `TryPlaySpecificLand`).
-3. Whatever the mechanism: confirm non-flood decks stay byte-identical, A/B burn for
-   the aggregate, rebaseline via the accept flow.
+- **Remaining staged-copy paths not yet touched.** The fix covers the two paths that
+  the burn games exercised — `PlayLandByName` / `TryPlaySpecificLand` (lands) and
+  `AIEngine::cast_by_name` (spells). For completeness, audit the sibling selectors
+  for the same "prefer the expiring staged copy" rule: `cast_alt`
+  (`AIEngine.cpp:~1658`, alt-cost casts) and any TurnSolver-side spell cast the
+  *search* uses to build the committed line (the executor-only spell fix sufficed for
+  6225 because the search's sim already played staged-first by hand order, but that is
+  luck, not invariant — a shared `PickStagedFirst(hand, name)` helper would remove the
+  latent desync).
+- **Broader reproduction gotcha (write it into any fd-diverge investigation):** a
+  batch game at index `gi` faces `PATTERNS[gi % 10]` opponent creatures
+  (`GoldFishRunner::PopulateOpponentSpawns`); `--seed X --games 1` is always pattern
+  0. Reproduce the exact batch game with `--game-index gi`, else you analyze a
+  different game (this cost real time on 6225).
 
 General watch item: cards that grant a **time-boxed play window** for cards outside
 hand (Light Up the Stage, Expressive Iteration, Soulfire Eruption's dig — all share

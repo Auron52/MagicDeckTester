@@ -1636,8 +1636,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             int crackle_targets = -1)   // -1 = legacy auto-max discount (see Action::crackle_targets)
     {
         Player& ap = state.ActivePlayer();
-        auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
-            [&name](const Card& c) { return c.m_name == name; });
+        // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
+        // committed line that spends the staged copy this turn -- freeing the drawn copy for a later
+        // turn -- replays exactly. Mirrors the land-play fix (TryPlaySpecificLand): the burn 6225
+        // fd-diverge cast the drawn Skullcrack on T3 and lapsed the staged one, so the committed T4
+        // second-Skullcrack line was never realised (predict T4, realise T6). Byte-identical when no
+        // staged copy of `name` is in hand.
+        auto it = ap.hand.end();
+        for (auto c = ap.hand.begin(); c != ap.hand.end(); ++c)
+        {
+            if (c->m_name != name) { continue; }
+            if (it == ap.hand.end()) { it = c; }                 // first match (fallback)
+            if (c->m_is_staged) { it = c; break; }               // prefer the expiring staged copy
+        }
         if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
