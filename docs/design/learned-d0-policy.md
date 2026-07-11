@@ -2317,3 +2317,32 @@ Best = DynNet MLP T0H128 @ K16 = **5.500**, closing 37% of the heuristic(5.913)-
 non-clairvoyant. Net > GBDT; serve-K helps (variance reduction) to ~16; dynamics inert (as in the earlier
 sweep). Remaining ~0.71 LP to the teacher = a 1-PLY-vs-search ceiling -> next levers = richer features
 (opt 2) and a shallow NON-CLAIRVOYANT lookahead with the value leaf (opt 3, the real headroom).
+
+## 2026-07-11: PIVOTAL DIAGNOSTIC -- the learned VALUE model is DOMINATED by a greedy rollout (on TH)
+NC ladder + speed (TH, held-out 4001/9009, 100g):
+| policy                                | NC-LP | ms/game |
+|---------------------------------------|-------|---------|
+| heuristic d0                          | 5.915 | 48.3 |
+| land-fold value-model (DynNet T0H128 K16) | 5.470 | 45.7 |
+| NC teacher K16 d0 (greedy rollout, folds land) | 5.075 | 43.5 |
+| NC teacher K16 d1                     | 4.920 | -- |
+| NC teacher K16 d2 (target)            | 4.885 | -- |
+KEY: NC-teacher-d0 is BOTH FASTER AND BETTER than the learned-value land-fold (5.075 vs 5.470, 43.5 vs
+45.7 ms). Since NC-d0 ALREADY folds the land (same EnumeratePlansWithLand candidates), the ONLY difference
+is the SCORER: an actual K-reshuffle GREEDY ROLLOUT-to-end vs my learned value model. The value model is a
+LOSSY approximation of that rollout (compresses the whole future into 40 features) and loses ~0.4 LP -- and
+on short TH games the rollout is so cheap the value model buys NO speed. So the learned-value d0 policy is
+DOMINATED on TH: the rollout it approximates is both cheaper and more accurate.
+IMPLICATIONS / reframe:
+- The right "fast NON-CLAIRVOYANT policy that's close to the teacher" is likely just NC-teacher at LOW
+  depth (d0 = 5.075 already fast+strong; d2 = 4.885 target), NOT a learned value model.
+- A learned value LEAF only pays off where the ROLLOUT is EXPENSIVE (long games / big decks / deep search)
+  -- untested here; TH games are ~5-8 turns so rollout is cheap. This is the condition to check before
+  more value-model work.
+- What IS validated + kept: (1) the do-nothing SCALE FIX; (2) LAND-FOLDING as the lever (letting the policy
+  decide the land beats a spell-only ranker) -- but the SCORER should be a rollout, not a static value, on
+  cheap-rollout decks. (3) The land-fold value-model still BEATS the heuristic (5.47 vs 5.91) and is a valid
+  fast baseline; it's just dominated by NC-d0.
+NEXT (post-compact): measure NC-d0/d1 speed+LP as the actual fast-NC deliverable; check whether any deck has
+expensive-enough rollouts that a value leaf wins on the speed-quality frontier; if not, the value-model d0
+line is a negative result (documented) and the fast-NC answer is low-depth NC search.
