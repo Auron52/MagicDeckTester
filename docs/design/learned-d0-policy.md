@@ -1866,8 +1866,14 @@ more (1.01–1.06×). Data: logs/eval/valueleaf_d3_check.txt.
   BLOWS UP on high-branching (slivers 0.66–0.84×); bounded (mult 2) re-lands in the inaccurate K-1 regime and HURTS
   quality (antilife +0.020, slivers +0.012); one-short (extend only when committed==K-1) still slivers/TH-slower.
   logs/eval/valueleaf_redo*.txt.
-- *Mixed value-leaf→heuristic tree / surgical redo* (heuristic at only the committed depth, reusing shallow value-leaf
-  structure): the committed-depth heuristic pass is intrinsic (unavoidable for heuristic quality); only the *cheap
-  shallow* passes would be saved, on a d3 that's already winning — low headroom vs. real complexity (per-pass leaf
-  switching + finalize + cache handling). NOT built. The start-gate α already shrinks redo frequency, which is the
-  higher-value lever.
+- *Surgical redo* (skip the redo's intermediate passes — run a SINGLE heuristic pass at the value-leaf's committed
+  depth C instead of the full deepening ladder). Intuition: the low-depth passes are "pure waste." **MEASURED (250g
+  2002, α8): 3–8× SLOWER**, quality-neutral (antilife d3 0.66× / d5 0.74×, slivers **0.13–0.17×**, TH 0.38–0.49×,
+  burn 0.25–0.30×, knights 0.35×). The intuition is INVERTED by the budget dynamics: the heuristic leaf *costs
+  budget*, so heuristic deepening commits at a SHALLOWER, cheaper affordable depth than the free-leaf value-leaf
+  reached — the intermediate passes *find that depth and stop there*. Forcing depth C runs a deeper, exponentially
+  pricier heuristic tree (slivers rides its g4 branching to depth 4 for free under value-leaf, but a *heuristic*
+  depth-4 pass on that explosion is enormous vs. the ladder's wise depth-2 commit). So the intermediate passes earn
+  their keep; kept the simple ladder redo. logs/eval/valueleaf_surgical.txt.
+- *Mixed value-leaf→heuristic tree* (per-pass leaf switching within one search): same root issue — you'd still have to
+  choose the heuristic pass's depth, and the affordable depth is what the ladder already discovers. NOT built.

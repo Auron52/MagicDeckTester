@@ -6213,12 +6213,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     if (do_redo)
     {
         // The value-leaf committed a shallow, ESTIMATE-based line -> re-evaluate with the exact heuristic
-        // rollout leaf on a fresh budget_ms. Reliable at any shallow depth; the rollout is the slow link but
-        // it is BUDGETED so it can't blow up. Fresh line_cache (per FullSearchLine call) is uncontaminated by
-        // value-leaf entries. (The start-gate relaxation MTG_VALUE_STARTGATE_ALPHA makes this redo RARE by
-        // letting the value-leaf probe finish the transitional pass in the first search; pushing the CHEAP
-        // value-leaf into the redo itself was measured WORSE -- an unbudgeted finish blows up on high-branching
-        // states, and a bounded one re-lands in the inaccurate K-1 regime. See learned-d0-policy.md.)
+        // rollout leaf via a full FullSearchLine deepening on a fresh budget_ms. The intermediate passes are
+        // NOT waste: the heuristic leaf COSTS budget, so heuristic deepening commits at a SHALLOWER, cheaper
+        // affordable depth than the free-leaf value-leaf reached -- the intermediate passes FIND that depth
+        // and stop there. (Measured: a "surgical" single heuristic pass at the value-leaf's committed depth C
+        // skips them but forces a deeper, exponentially pricier pass -> 3-8x SLOWER, slivers 0.13-0.17x; see
+        // learned-d0-policy.md.) Fresh line_cache (per call) is uncontaminated by value-leaf entries; the
+        // start-gate relaxation MTG_VALUE_STARTGATE_ALPHA already makes this redo rare.
         ForceHeuristicLeafGuard _fh(true);
         SearchBudget hbud = SearchBudget::FromVirtualMs(budget_ms);
         int rcommitted = depth;
