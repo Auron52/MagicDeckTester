@@ -229,8 +229,9 @@ the ROOT-ranking seam (TurnSolver.cpp:5220) + the eval DUMP made faithful for fu
    1.145→0.947 (−17%) and improved TH **d1** play −0.54 (5.44→4.90). Inert on board-driven aggro (burn/slivers).
    Open: this is the right INPUT for a non-clairvoyant policy (lever 5); a hand-composition variant may extend it.
 3. **★ ADOPTION is now the top lever (needs user sign-off).** Both deliverables GROUNDED (tables above): goal #1
-   (value-leaf d5 beats heur d1 on all 5 decks, held-out) and goals #2/#3/#4 (1.6–25× speedup at near-parity —
-   see the 2026-07-11 CORRECTION below: it is a Pareto *speed* win at ≤0.015 LP residual, NOT exact parity).
+   (value-leaf d5 beats heur d1 on all 5 decks, held-out) and goals #2/#3/#4 (1.6–25× speedup — but see the
+   2026-07-11 CORRECTION below: the raw leaf is a WEAK-but-cheap evaluator, d5≈heuristic-d2; the win comes from
+   the HYBRID taking verified wins fast + redoing the heuristic where the leaf is weak, NOT matched-depth parity).
    Adoption = flip `MTG_VALUE_MODEL` default on-when-present + rebaseline smoke/regression GT to the value-leaf
    lines (NOT byte-identical — same LP, different plans). Deliberate GT change → user decides. Open sub-question:
    what search depth the adopted harness uses (d3 = fast + ties d1-heur; d5 = beats everywhere).
@@ -1791,8 +1792,9 @@ call — report to user). Drivers: scripts/{decouple_test,nc_leak_localize}.py. 
 
 ### Value-leaf HYBRID — a safe default-on vehicle under the NODE budget (2026-07-10)
 
-The clairvoyant value-leaf is ~parity + 2–24× UNBUDGETED at d5 (near-parity, not exact — see the 2026-07-11 CORRECTION
-at the end of this doc). But the regression harness runs a deterministic
+The clairvoyant value-leaf is ~parity + 2–24× UNBUDGETED at d5 (this describes the CLAIRVOYANT leaf; the
+NON-clairvoyant adoption leaf is weak-but-cheap — see the 2026-07-11 CORRECTION at the end of this doc). But the
+regression harness runs a deterministic
 NODE budget (`SearchBudget::FromVirtualMs`, d3=10 / d5=20 virtual-ms; interior nodes + heuristic-rollout leaves consume
 budget, value-leaf leaves are free). Under that budget the value-leaf's cheap leaf buys **no extra search** — the budget
 is spent on interior nodes — so when it commits a SHALLOW pass it plays at the shallow-pass quality where the leaf
@@ -1915,34 +1917,36 @@ harness's hard win→loss gate is over-strict for the linear-LP objective; the 2
 by the 13 earlier wins). Overnight GT still stale (deferred). Speedup carried over from the hybrid+α measurements
 (1.1–2.7× at the d5=20 gate budget).
 
-### CORRECTION: it is NOT "exact parity" — it is a Pareto SPEED win (2026-07-11)
+### CORRECTION: the value-leaf is a WEAK-BUT-CHEAP evaluator (d5 ≈ heuristic-d2), not near-parity (2026-07-11)
 
-The adoption LP table above is measured at the tight **node gate** (d5 = 20 virtual-ms), where the heuristic cannot
-reach depth 5 and the value-leaf's cheap depth compensates — so it reads neutral-or-better. That masked the real
-shape. Testing **unbounded** (budget 0, so every config reaches its nominal depth with no pruning confound) shows the
-value-leaf is *slightly worse at matched depth*, and its win is **wall-time**, not quality:
+An earlier correction here (now removed) claimed "near-parity, depth-insensitive, worse only at d5." That was built on a
+**confounded** matrix that measured the value arm with `MTG_VALUE_MIN_DEPTH=5` — so every committed depth < 5 (unverified)
+secretly **re-ran the heuristic**. V3/V4 were therefore the *hybrid*, not the raw leaf (which is why they equalled H3/H4
+exactly), and the impossible "V4 beats V5" was the giveaway (a deeper search cannot be worse unless d3/d4 were the
+heuristic). Re-measured with the redo DISABLED (`MTG_VALUE_MIN_DEPTH=0`, PURE value-leaf, 1000 g × 4 seeds, unbounded;
+`scripts/valueleaf_depth_matrix.py --value-min-depth 0`, logs/eval/valueleaf_depth_matrix_pure.txt):
 
-- **Quality (mean V5−H5 LP, unbounded, 500 g × 3 seed; negative = value-leaf better):**
-  knights **0.000**, slivers **+0.0007**, burn **+0.0027**, antilife **+0.0067**, TH **+0.0153**. The residual is the
-  learned leaf approximating the heuristic rollout — small but non-zero and deck-dependent.
-- **Cost (V5 vs H5 wall ms/game):** knights **22×**, slivers **32×**, burn **18×**, antilife **4×**, TH **8×** cheaper.
-- **All 5 decks are depth-insensitive unbounded** (H3 ≈ H4 ≈ H5) — deep search buys ~nothing, so the value-leaf's job
-  is "match the converged heuristic quality *cheaply*," not "search deeper."
+- **The pure value-leaf improves MONOTONICALLY with depth** on every deck (the V4>V5 inversion was 100% the hybrid).
+- **It is much WORSE than the heuristic at every matched depth**, catastrophic when shallow — V1−H1: antilife **+1.23**,
+  TH **+1.13**, slivers +0.25, knights +0.18, burn +0.16 (turns). It is a weak leaf that *needs depth* to be usable.
+- **Consistent trust depth: pure value-leaf-d5 ≈ heuristic-d2** on all 5 decks (V5−H2 ≈ 0: antilife −0.003, slivers
+  −0.002, TH −0.009, burn +0.0015, knights −0.0025), and always beats heuristic-d1. A full d5 leaf search buys H2 quality.
+- **Matched-depth residual V5−H5** (the "worse at generous budget"): knights **0.000**, slivers +0.0003, burn +0.0033,
+  antilife +0.009, **TH +0.0165** — TH worst because it is the only deck where depth genuinely helps the heuristic
+  (H3 > H4 > H5). Cost V5 vs H5: 10–38× cheaper.
 
-So "worse at a generous budget" (overnight/budget-80: TH ≈ +0.010, antilife lean) is **the fast end of the
-perf/quality frontier**, not a regression: you pay ≤0.015 LP to save 4–32× wall-time. Budget in this engine is
-VIRTUAL-MS = node count (thread-invariant), *not* wall-ms — that is precisely why value-leaf looked neutral+ at the
-node gate but slightly-worse unbounded (same nodes ≠ same wall-time; the free leaf just packs more real depth per node).
-This supersedes the "exact-parity" framing elsewhere in this doc (§ clairvoyant-leaf sections), which held only for the
-clairvoyant leaf at *matched depth inside a budgeted search* — not for the non-clairvoyant adoption regime.
+**Corrected mental model.** The value-leaf is NOT a matched-depth substitute for the heuristic. The adopted **hybrid** is
+LP-neutral because it (a) takes **verified wins** cheaply — those are decided by real simulation, leaf-independent, so
+exact — and (b) **redoes the heuristic** below `MIN_DEPTH=5`, exactly where the raw leaf is weak. So the value proposition
+is **speed on verified-win games at heuristic quality**, not standalone quality parity. `MIN_DEPTH=5` is the right trust
+threshold: d5 is where the raw leaf finally reaches ≈H2.
 
-**Consequence — the depth-aware fallback (design, being built).** Keep the cheap value-leaf as the default search, and
-fall back to the heuristic *only when the budget can afford a useful depth*: (1) run the cheap value-leaf search;
-(2) estimate the deepest depth **Dh** the heuristic can reach within remaining budget; (3) if Dh is useful, run
-**exactly one** heuristic `FSLineWin` at Dh — no iterative-deepening ladder, no reprocessing earlier depths; (4) compare
-V_Dv vs H_Dh and keep the value-leaf unless H_Dh actually wins (so at tight budgets we keep V at a *deeper* depth even
-when V_d < H_d, because V_d can beat H_(affordable-shallower), e.g. V3 > H2). The per-model **trust depth** — "how many
-extra value-leaf levels this deck needs to match heuristic-at-D" — lives in `<deck>.value.json` (knights/slivers ≈ 0,
-antilife ≈ 2, TH > 2). Explicit depth is preserved for debug interpretability (know exactly which turns were searched).
-Calibration in flight: `scripts/valueleaf_depth_matrix.py` (H1–5 × V3–5 unbounded) resolves the middle decks
-(burn/antilife) and the V3-vs-H2 shallow boundary.
+**The uniform crossover (motivates the fallback).** Across all 5 decks **H3 ≥ V5 ≥ H2**: heuristic-d3 beats or ties
+value-leaf-d5, and value-leaf-d5 beats or ties heuristic-d2. So the trust rule is universal and needs **no per-model
+constant**: keep the value-leaf while the heuristic can only afford ≤ d2; **fall back to the heuristic once it can afford
+d3+**. This is exactly why the overnight (generous budget, heuristic reaches d3+ so it beats the leaf, but the current
+hybrid does NOT redo at committed=5) shows the value-leaf slightly worse. The fallback: after the cheap value-leaf pass,
+if it is not a verified win, run the heuristic on the *remaining* budget and take it iff its start gate commits ≥ d3
+(reusing the existing affordability machinery — no bespoke Dh estimator); otherwise keep the value-leaf (it is ≈ H2, and
+cheaper). A per-model convergence-depth override in `<deck>.value.json` can refine the d3 threshold for future decks
+(all 5 current decks want 3).

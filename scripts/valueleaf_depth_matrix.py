@@ -3,12 +3,22 @@
 leaf is ~EXACT (no heuristic needed) from those that GENUINELY need the heuristic, and (2) calibrate the
 per-model "trust depth": at what value-leaf depth does it match heuristic-at-D?
 
-All UNBOUNDED (budget 0) so each config reaches its nominal depth. Per deck/seed runs heuristic (value OFF)
-at each --hdepths and value-leaf (value ON, K5/a8) at each --vdepths; records LP (loss=mt+1, lower=better)
-and wall ms/game. Prints per-deck means + the Vi-Hj difference matrix (negative = value-leaf better). The
-binary default is value-ON, so the OFF arm sets MTG_VALUE_MODEL=0 EXPLICITLY. See learned-d0-policy.md.
+CRITICAL (2026-07-11 fix): measures the PURE value-leaf by DISABLING the hybrid redo (--value-min-depth 0,
+env MTG_VALUE_MIN_DEPTH=0). The earlier run used MIN_DEPTH=5, which made every committed depth < 5 RE-RUN
+the heuristic -- so V3/V4 were the HYBRID (heuristic on the leaf-dependent games) and only V5 was the raw
+leaf. That confound produced the spurious "value-leaf exact at d3/d4, worse only at d5" + the impossible
+"V4 beats V5" (a deeper search cannot be worse unless d3/d4 were secretly the heuristic). With MIN_DEPTH=0
+every V_d is the raw value-leaf at depth d, so the true crossover (where the heuristic wins) is visible.
 
-    scripts/valueleaf_depth_matrix.py --games 1000 --seeds 4004 5005 6006 7007
+All UNBOUNDED (budget 0) so each config reaches its nominal depth. Per deck/seed runs heuristic (value OFF)
+at each --hdepths and value-leaf (value ON, MIN_DEPTH=<flag>/a8) at each --vdepths; records LP (loss=mt+1,
+lower=better) and wall ms/game. Prints per-deck means + the Vi-Hj difference matrix (negative = value-leaf
+better). The binary default is value-ON, so the OFF arm sets MTG_VALUE_MODEL=0 EXPLICITLY. Include low
+--vdepths (1,2) to see the leaf-dominated regime where the heuristic's full rollout should win.
+See learned-d0-policy.md.
+
+    scripts/valueleaf_depth_matrix.py --games 1000 --seeds 8008 9009 10010 11011 \
+        --hdepths 1 2 3 4 5 --vdepths 1 2 3 4 5 --value-min-depth 0
 """
 import argparse, os, re, subprocess, time
 
@@ -22,14 +32,15 @@ DECKS = {
 }
 
 
-def run(deck, depth, games, seed, mt, threads, profile, value_on):
+def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_depth):
     env = dict(os.environ)
     for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
               "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE","MTG_VALUE_STARTGATE_ALPHA"):
         env.pop(k, None)
     if value_on:
         env["MTG_VALUE_MODEL"]="1"; env["MTG_VALUE_PROFILE"]=profile
-        env["MTG_VALUE_MIN_DEPTH"]="5"; env["MTG_VALUE_STARTGATE_ALPHA"]="8"
+        # MIN_DEPTH=0 => PURE value-leaf (no heuristic redo); the whole point of this matrix.
+        env["MTG_VALUE_MIN_DEPTH"]=str(value_min_depth); env["MTG_VALUE_STARTGATE_ALPHA"]="8"
     else:
         env["MTG_VALUE_MODEL"]="0"
     cmd=[MTG,deck,"--games",str(games),"--seed",str(seed),"--depth",str(depth),
@@ -45,8 +56,10 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--games",type=int,default=1000)
     ap.add_argument("--seeds",nargs="+",type=int,default=[4004,5005,6006,7007])
-    ap.add_argument("--hdepths",nargs="+",type=int,default=[3,4,5])
-    ap.add_argument("--vdepths",nargs="+",type=int,default=[3,4,5])
+    ap.add_argument("--hdepths",nargs="+",type=int,default=[1,2,3,4,5])
+    ap.add_argument("--vdepths",nargs="+",type=int,default=[1,2,3,4,5])
+    ap.add_argument("--value-min-depth",type=int,default=0,
+                    help="MTG_VALUE_MIN_DEPTH for the value arm; 0 = PURE value-leaf (no redo). Default 0.")
     ap.add_argument("--threads",type=int,default=6)
     ap.add_argument("--decks",nargs="+",default=list(DECKS))
     ap.add_argument("--out",default="logs/eval/valueleaf_depth_matrix.txt")
@@ -54,7 +67,9 @@ def main():
     os.makedirs(os.path.dirname(args.out),exist_ok=True)
     of=open(args.out,"a")
     def emit(s): print(s,flush=True); of.write(s+"\n"); of.flush()
-    emit("\n===== DEPTH MATRIX (UNBOUNDED)  games=%d seeds=%s =====" % (args.games,args.seeds))
+    emit("\n===== DEPTH MATRIX (UNBOUNDED)  games=%d seeds=%s value_min_depth=%d%s =====" % (
+        args.games, args.seeds, args.value_min_depth,
+        "  [PURE value-leaf, no redo]" if args.value_min_depth == 0 else "  [HYBRID redo below this]"))
     for dname in args.decks:
         deck,prof,mt=DECKS[dname]
         # accumulate mean LP + ms per config over seeds
@@ -62,9 +77,9 @@ def main():
         for seed in args.seeds:
             try:
                 for d in args.hdepths:
-                    lp,ms=run(deck,d,args.games,seed,mt,args.threads,None,False); H[d][0]+=lp; H[d][1]+=ms
+                    lp,ms=run(deck,d,args.games,seed,mt,args.threads,None,False,args.value_min_depth); H[d][0]+=lp; H[d][1]+=ms
                 for d in args.vdepths:
-                    lp,ms=run(deck,d,args.games,seed,mt,args.threads,prof,True); V[d][0]+=lp; V[d][1]+=ms
+                    lp,ms=run(deck,d,args.games,seed,mt,args.threads,prof,True,args.value_min_depth); V[d][0]+=lp; V[d][1]+=ms
                 n+=1
             except Exception as e:
                 emit("  %s s%d ERROR %s" % (dname,seed,e))
