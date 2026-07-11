@@ -1826,7 +1826,48 @@ plain value-leaf (the redo never fires — everything is either deep or verified
 default-on**: attach `<deck>.value.json` + set `MTG_VALUE_MIN_DEPTH=5` and the budgeted regime gets speedup with no
 quality cost. Drivers: scripts/valueleaf_{adaptive,budget,headroom,adopt}.py. Data: logs/eval/valueleaf_*.txt.
 
-**OPEN (next lever, user-flagged as most important):** the node budget still *rolls back* a value-leaf pass at depth ≥ K
-that runs slightly over budget, even though that pass was cheap to reach — the start-gate/overrun guard doesn't credit
-the value-leaf's low per-node cost. Crediting it (finish a nearly-complete transitional-depth pass instead of rolling
-back) would unlock more budgeted speedup, especially on the heuristic→value-leaf transition depth.
+### Start-gate relaxation — the transitional-depth optimization, DONE + validated (2026-07-11)
+
+The node budget's start gate skips pass K when its estimate exceeds `kStartGateAlpha(=1.10) * remaining`, committing
+K-1 (which then triggers the hybrid's separate, expensive heuristic redo). But a value-leaf pass K is CHEAP (free
+leaves), so a pass that slightly overshoots is worth FINISHING inside the first search rather than rolling back +
+redoing. **`MTG_VALUE_STARTGATE_ALPHA` (default 1.0 = off = byte-identical): when the value-leaf is active, multiply the
+start-gate alpha** so a nearly-affordable transitional pass starts (and runs a little over budget, still capped by the
+overrun guard); a genuinely-explosive pass (estimate many× remaining, e.g. slivers g4) is still rejected → no blowup.
+Determinism preserved (the gate keys on work-units, not the clock). This makes the redo RARE rather than making it
+cheaper (slivers redos 62→26, knights 32→12 at the probe).
+
+Code: `vl_active` + `gate_alpha` in `FullSearchLine`'s deepening loop. Diagnostics: `MTG_HYBRID_STATS` prints the
+value-leaf probe's committed-depth histogram + redo rate at exit (drove the finding that most redos land at K-1).
+
+**MEASURED (250 g/deck, redo stays heuristic; α relaxation is quality-neutral-or-better + faster EVERYWHERE):**
+
+| deck | d5 α8 (train 2002) | d5 α8 (held-out 7007) | d3 α8 (2002) |
+|------|--------------------|------------------------|--------------|
+| antilife | 1.06× / 0.000 | 1.02× / 0.000 | 1.01× / 0.000 |
+| slivers  | ~1.3× / 0.000 | 1.03× / 0.000 | 1.04× / 0.000 |
+| TH       | 1.14× / −0.008 | ~1.0× / −0.008 | 1.04× / 0.000 |
+| burn     | 1.71× / 0.000 | 1.09× / 0.000 (1.41× on 3003) | 1.06× / 0.000 |
+| knights  | 1.19× / 0.000 | 1.11× / 0.000 | 1.02× / 0.000 |
+
+Gains saturate by α5–8 and don't regress up to α12; **α8 chosen** (near-max speed, less over-budget-aggressive than α12,
+overrun guard caps the tail regardless). Held-out 3003/7007 confirm quality-neutral (TH ±0.008 is seed noise) + no
+speed regression. Adopt α8 with the value-leaf default-on package. Drivers: scripts/valueleaf_startgate.py; data:
+logs/eval/valueleaf_startgate*.txt.
+
+**d3 is NOT unhelped (premise refuted).** Even without α, the hybrid at d3 is already 1.02–1.15× faster than plain
+heuristic (H) at equal quality — the majority *verified-win* decisions use the cheap free-leaf probe and skip the redo;
+only unverified ones pay probe+redo. (Ungated value-leaf V0 is far faster but quality-wrecked: slivers 4.332 vs 4.284,
+antilife 4.468 vs 4.156 — the redo repairs that while keeping net speedup.) So d3 already benefits; α8 adds a little
+more (1.01–1.06×). Data: logs/eval/valueleaf_d3_check.txt.
+
+**REJECTED alternatives (measured, kept the simple heuristic full-ladder redo):**
+- *Value-leaf redo* (push the cheap leaf deeper in the redo instead of heuristic): unlimited = quality-neutral but
+  BLOWS UP on high-branching (slivers 0.66–0.84×); bounded (mult 2) re-lands in the inaccurate K-1 regime and HURTS
+  quality (antilife +0.020, slivers +0.012); one-short (extend only when committed==K-1) still slivers/TH-slower.
+  logs/eval/valueleaf_redo*.txt.
+- *Mixed value-leaf→heuristic tree / surgical redo* (heuristic at only the committed depth, reusing shallow value-leaf
+  structure): the committed-depth heuristic pass is intrinsic (unavoidable for heuristic quality); only the *cheap
+  shallow* passes would be saved, on a d3 that's already winning — low headroom vs. real complexity (per-pass leaf
+  switching + finalize + cache handling). NOT built. The start-gate α already shrinks redo frequency, which is the
+  higher-value lever.

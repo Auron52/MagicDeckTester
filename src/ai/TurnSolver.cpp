@@ -7,6 +7,8 @@
 #include "../core/SpellEffects.h"
 #include "../core/Trace.h"
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdint>
@@ -5984,6 +5986,20 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
     bool      have_prev = false, have_prev2 = false;
 
+    // Value-leaf start-gate relaxation (MTG_VALUE_STARTGATE_ALPHA, default 1.0 == off): when the CHEAP
+    // value-leaf is driving this search (free leaves), a pass whose estimate slightly overshoots the budget
+    // is still worth FINISHING within this search -- reaching the value-leaf trust depth here avoids the
+    // hybrid's separate (expensive) heuristic redo. A LARGER alpha lets a nearly-affordable transitional
+    // pass start (and run over budget, capped by the overrun guard) while a genuinely-explosive pass
+    // (estimate many x remaining, e.g. slivers g4) is still rejected -> no blowup. Byte-identical when the
+    // value-leaf isn't active or the multiplier is 1.0. See learned-d0-policy.md.
+    const bool vl_active = (UseValueModel() && !g_force_heuristic_leaf
+                            && state.m_value_model && !state.m_value_model->empty());
+    static const double s_vl_alpha_mult = []{ const char* e = std::getenv("MTG_VALUE_STARTGATE_ALPHA");
+                                              return (e && *e) ? std::atof(e) : 1.0; }();
+    const double gate_alpha = (vl_active && s_vl_alpha_mult > 1.0)
+                            ? kStartGateAlpha * s_vl_alpha_mult : kStartGateAlpha;
+
     for (int pass_depth = (depth >= 1 ? 1 : depth); pass_depth <= depth; ++pass_depth)
     {
         // Start gate: skip (and commit the prior pass) when the next pass clearly
@@ -5995,7 +6011,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                             ? static_cast<double>(c_prev) / static_cast<double>(c_prev2)
                             : kDefaultGrowth;
             double estimate = static_cast<double>(c_prev) * ratio;
-            if (estimate > kStartGateAlpha * static_cast<double>(budget->Remaining()))
+            if (estimate > gate_alpha * static_cast<double>(budget->Remaining()))
             {
                 break;
             }
@@ -6138,6 +6154,38 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 // shallower than the value-leaf trust depth, re-run once with the exact heuristic rollout leaf on a fresh
 // budget (the value-leaf pass was a cheap probe of reachable depth). value_min_depth <= 0 or no value
 // model => plain FullSearchLine (byte-identical).
+// Opt-in hybrid diagnostics (MTG_HYBRID_STATS): per value-leaf probe, record the committed depth and
+// whether the heuristic redo fired, so we can tell WHY a redo happens -- probe landed at depth K-1 (a
+// start-gate nudge could finish it) vs way down at depth 1-2 (interior-node cost alone blows the budget,
+// no nudge helps). Printed once at process exit. Off => zero overhead. See learned-d0-policy.md.
+namespace
+{
+    struct HybridStats
+    {
+        bool enabled = std::getenv("MTG_HYBRID_STATS") != nullptr;
+        std::atomic<long long> decisions{0};
+        std::atomic<long long> redos{0};
+        std::atomic<long long> verified{0};
+        std::array<std::atomic<long long>, 16> probe_depth{};   // histogram of value-leaf committed depth
+        std::array<std::atomic<long long>, 16> redo_depth{};    // committed depth AT the decisions that redid
+        ~HybridStats()
+        {
+            if (!enabled || decisions.load() == 0) { return; }
+            std::cerr << "[hybrid-stats] decisions=" << decisions.load()
+                      << " redos=" << redos.load()
+                      << " verified=" << verified.load() << "\n";
+            std::cerr << "[hybrid-stats] probe committed-depth histogram (d:count / of-which-redid):\n";
+            for (int d = 0; d < 16; ++d)
+            {
+                long long c = probe_depth[d].load();
+                if (c == 0) { continue; }
+                std::cerr << "    d" << d << ": " << c << " / redid " << redo_depth[d].load() << "\n";
+            }
+        }
+    };
+    HybridStats g_hybrid_stats;
+}
+
 TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, int depth,
                                                         int max_turns, bool second_main,
                                                         TranspositionTable* tt, SearchBudget* budget,
@@ -6153,16 +6201,29 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // firing on nearly every game of fast decks and erasing the speedup). Only an UNVERIFIED committed
     // line (its win_turn is a beyond-horizon leaf ESTIMATE) depends on the value-leaf and needs the redo.
     const bool verified = (line.win_turn <= state.turn_number + committed - 1);
-    if (value_min_depth > 0 && value_active && committed < value_min_depth && !verified)
+    const bool do_redo = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified);
+    if (g_hybrid_stats.enabled && value_active)
+    {
+        g_hybrid_stats.decisions.fetch_add(1);
+        int di = (committed >= 0 && committed < 16) ? committed : 15;
+        g_hybrid_stats.probe_depth[di].fetch_add(1);
+        if (verified) { g_hybrid_stats.verified.fetch_add(1); }
+        if (do_redo)  { g_hybrid_stats.redos.fetch_add(1); g_hybrid_stats.redo_depth[di].fetch_add(1); }
+    }
+    if (do_redo)
     {
         // The value-leaf committed a shallow, ESTIMATE-based line -> re-evaluate with the exact heuristic
-        // rollout leaf. Fresh budget (the value-leaf run was a cheap reachability probe); its own
-        // line_cache (fresh per FullSearchLine call) is uncontaminated by value-leaf entries.
+        // rollout leaf on a fresh budget_ms. Reliable at any shallow depth; the rollout is the slow link but
+        // it is BUDGETED so it can't blow up. Fresh line_cache (per FullSearchLine call) is uncontaminated by
+        // value-leaf entries. (The start-gate relaxation MTG_VALUE_STARTGATE_ALPHA makes this redo RARE by
+        // letting the value-leaf probe finish the transitional pass in the first search; pushing the CHEAP
+        // value-leaf into the redo itself was measured WORSE -- an unbudgeted finish blows up on high-branching
+        // states, and a bounded one re-lands in the inaccurate K-1 regime. See learned-d0-policy.md.)
         ForceHeuristicLeafGuard _fh(true);
         SearchBudget hbud = SearchBudget::FromVirtualMs(budget_ms);
-        int hcommitted = depth;
-        line = FullSearchLine(state, depth, max_turns, second_main, tt, &hbud, &hcommitted);
-        committed = hcommitted;
+        int rcommitted = depth;
+        line = FullSearchLine(state, depth, max_turns, second_main, tt, &hbud, &rcommitted);
+        committed = rcommitted;
     }
     if (out_committed_depth) { *out_committed_depth = committed; }
     return line;
