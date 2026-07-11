@@ -1974,3 +1974,329 @@ Calibrator output: **knights = 5, slivers = 5** (verified-win-dominated, V5=H5),
 in the `s_full_depth` branch — `MTG_NC_SEARCH` (`ReshuffleAvgChoosePlan`) is a mutually-exclusive branch and is
 unaffected. On a non-clairvoyant/dynamic-model path the value-leaf is itself the endpoint; the reusable piece is the
 `value_trust_depth` *data* in the profile, not the heuristic escalation. Keep the escalation leaf pluggable.
+
+---
+
+## ▶▶ d0-DYNAMIC-MODEL branch — non-clairvoyant PLAY model (AlphaZero-lite), play-only (2026-07-11)
+
+New serious push (branch `d0-dynamic-model`, off phase-1-2 71d685a): the user's goal #1 — a strong non-clairvoyant
+PLAY policy — via a **richer/dynamic model** where the static ranker plateaus. **Mulligans/bottoming stay on the
+exhaustive table; this model is PLAY-ONLY.** No prior MuZero prototype existed (checked all branches/stash/reflog).
+
+**The framing that matters — we have a perfect simulator, so it's AlphaZero-lite, not latent MuZero.** Generic MuZero
+*learns* dynamics because it has no simulator; we have a fast exact one (a full game sims in ms). So the dynamic model =
+(1) a **value** used as the LEAF of a shallow real-engine NC search + (2) a **policy prior** that prunes the branching
+to top-M plans — keeping the engine as the (free, exact) dynamics. This dodges the static-imitation death: the static
+argmax of the NC ceiling failed (3–11% headroom), but a value used INSIDE a forward search is the tested-good regime,
+and keeping the ceiling's pick in a small top-M is a far easier target than top-1 exact.
+
+### The NC cost/quality FRONTIER — what the model must beat (scripts/nc_frontier.py, 60g × seeds 2002/3003/7007)
+
+Cross-seed means (single-seed reads are UNRELIABLE — seed-to-seed LP swing ~0.3 dwarfs the depth effect; always aggregate):
+
+| deck | static d0-model | NC-d0 | NC-d1 | NC-d2 | NC-K16d2 | value-leaf d5 (clairv.) |
+|---|---|---|---|---|---|---|
+| TH | 5.700 | 5.095 | 4.978 | 4.884 | **4.861/4.867** | 4.250 |
+| antilife | 5.561 | 4.939 | 4.950 | 4.978 | ~5.0 | 4.089 |
+
+**Findings that reshape the plan:**
+1. **The static learned evaluator is STRICTLY DOMINATED by a raw K-averaged rollout at equal-or-less wall-clock**
+   (TH NC-d0 4.900 @31ms beats static 5.700 @34ms; antilife NC-d0 4.667 vs static 5.283 at ~160ms). Forward sim is
+   better *per millisecond* — the static-model path is dead, not merely weaker. Cleanest possible "must simulate forward".
+2. **The model is now a SPEED play, not a quality unlock.** A cheap NC search already reaches the ceiling — so the
+   deliverable is ceiling-quality at sub-NC cost (for high-volume clairvoyance-abuse A/B + phase-2), not a new ceiling.
+3. **Cost is deck-structured:** TH's cost is DEPTH-branching (d0→d1→d2 = 31→77→199ms); antilife's is per-plan
+   ENUMERATION/rollout (flat ~160ms across depths — even the static model pays 161ms to enumerate). → TH wants the
+   **policy-prior** (prune the K×#plans branch); antilife wants the **value leaf** (kill the flat per-plan rollout).
+
+### TEACHER DEPTH pinned = K16 d2 (scripts/nc_teacher_depth.py, d2 vs d3, K8/K16, 3 seeds, 40g)
+
+Cross-seed mean LP: **TH** K8d2 4.942 · K8d3 4.917 (7.7× slower) · **K16d2 4.867** · K16d3 4.883 (*worse* + 8–10×
+slower). **antilife** K8d2 5.008 · K8d3 4.942 · K16d2 5.025 · K16d3 4.842 (all within seed noise, ~flat). **Width (K)
+beats depth past 2 on TH; depth>2 is noise-to-harmful.** Unified teacher = **K16 d2** (best for TH, human-beating for
+antilife). The doc's earlier "K16d3 4.425 improvement" does NOT reproduce robustly across seeds (2002 only).
+
+### TEACHER validated HUMAN-COMPETITIVE on ALL reference decks (scripts/ref_bench.py, K16 d2, tempo on)
+
+Per the user's gate ("if it can't match the human beyond shuffle/risk variance, improve the teacher first"). LP (losses=9),
+identical forced human hands:
+
+| deck | n | human | clairvoyant | **NC teacher (K16d2)** | verdict |
+|---|---|---|---|---|---|
+| antilife | 30 | 4.500 | 4.167 | **4.467** | NC BEATS human, closer to clairvoyant than human |
+| burn | 16 | 4.625 | 4.375 | **4.375** | NC = clairvoyant (EVPI≈0), beats human |
+| slivers | 4 | 4.000 | 4.000 | 4.000 | tie (all easy) |
+| knights | 3 | 4.667 | 4.667 | 4.667 | tie |
+| TH | 2 | 4.000 | 4.000 | 4.000 | tie |
+
+The residual antilife NC-slower games (gi21/gi28/gi1/gi29 +1) are mostly flagged EVPI (clairvoyant sees a draw NC can't)
+= the "explainable variance" to set aside. **Teacher gate PASSED — distill from it.**
+
+### WITHIN-TURN non-clairvoyance RE-VERIFIED (scripts/decouple_test.py, decoupled-A = clean probe)
+
+The decoupled-A probe holds the EXECUTED order fixed (salt 0) and changes only the search-seen order; a clairvoyant
+policy drops, a non-clairvoyant one is flat. (decoupled-B/C also change the executor salt → different games → their +0.2
+is shuffle variance, NOT clairvoyance.) Results:
+- **antilife (fetchlands):** NC-d1, NC-d2, NC-d1-blind all **dLP(A) = +0.000** → fetch-shuffle order not exploited.
+- **TH:** flat (no mid-game shuffle to peek).
+- **Hinata (Ponder):** NC-d1 leaks +0.125 (the known mulligan-BOTTOMER leak); **NC-d1 + `MTG_NC_BLIND_BOTTOM` →
+  coupled 6.533 = decoupled-A 6.533 (byte-identical)** → blind-bottom closes it. So the TURN policy is genuinely NC;
+  profile-less decks (Hinata) must pair NC with blind-bottom.
+
+### BUILD PLAN (the model)
+
+1. **Labels** — reuse `MTG_DUMP_EVAL_ROWS` + `MTG_EVAL_ROWS_ROLLOUT`/`_HONEST`/`_ROLLOUT_DEPTH=2` + `_K=16` while
+   PLAYING with `MTG_NC_SEARCH` K16 d2 (on-policy states, honest reshuffle-avg labels = the teacher's own objective).
+2. **De-clairvoyed VALUE model** — train (fixed-point GBDT/linear infra) toward those NC labels. This is the search LEAF
+   (distinct from the shipped `value.json`, which used CLAIRVOYANT search labels).
+3. **Wire a truncated value LEAF into `ReshuffleAvgChoosePlan`** (replace/супcap the greedy `SimulateToEnd` continuation
+   with a depth-d truncated rollout + V(leaf)) — engine change, env-gated, inert by default.
+4. **Policy-PRIOR** — a plan-ranker for top-M pruning (top-M recall is the target metric, not top-1).
+5. **Measure** the shallow pruned value-leaf NC search vs the K16-d2 teacher: LP parity at what speedup? Non-clairvoyance
+   preserved (decouple probe). Start on TH (biggest depth-branch prize) + antilife (per-plan-rollout prize).
+
+Scripts added this session: `scripts/nc_frontier.py`, `scripts/nc_teacher_depth.py`; `scripts/decouple_test.py`
+extended (antilife deck + NC-d2 + blind variant).
+
+### BUILD progress (2026-07-11, same session)
+
+- **Labels DONE + pipeline validated.** `MTG_DUMP_EVAL_ROWS` + `MTG_DUMP_VALUE_ROWS` + `MTG_EVAL_ROWS_ROLLOUT`
+  `_HONEST` `_ROLLOUT_DEPTH=2` `_K=8` (honest reshuffle-avg = teacher objective), heuristic-d3 state collection
+  (round-0; DAgger to NC-play states later). TH 300g → 13,162 eval / 1,227 value rows; antilife 220g → 5,104 /
+  904. **Labels pass the durdle-trap check**: T1 land-drop beats idle (5.38 vs 6.25), T2 cast beats land beats pass
+  (4.00 < 4.62 < 4.75). Files `logs/eval/{TH,antilife}_ncteach_{eval,value}.rows`.
+- **De-clairvoyed VALUE models fit** (`train_eval_model.py --value`, held-out by seed%5): **TH RMSE 0.878**,
+  **antilife 0.758** turns (vs predict-mean 1.329 / 0.977) — comparable to the shipped CLAIRVOYANT value models
+  (doc's TH ~0.947). So the honest NC labels are learnable to similar fidelity; the value leaf is viable in
+  principle. Linear fit is collinear (intercept −70, library_size +1.16) = a weak STATIC leaf, as expected — it
+  earns its keep only INSIDE the shallow search. GBDT + more value rows (only ~1k now; want ~5k) is the tightening
+  lever, deferred until the wiring proves the approach.
+- **NEXT (the decisive step): wire a truncated value leaf into `ReshuffleAvgChoosePlan`.** Insertion = in
+  `SimulateToEndImpl`'s `g_honest_teacher && depth>0` continuation, add an env-gated horizon H: after H honest
+  turns, return `V(leaf)` (the FSLineWin `depth<=0` value-leaf pattern: `feats=ExtractMidGameFeatures(state,{})`,
+  `w=round(vm.Score/1000)` clamped) instead of playing to the end. Attach a SECOND value sidecar slot (`m_value_model`
+  is the clairvoyant one; the NC leaf needs the de-clairvoyed model — either a new `m_nc_value_model` field or swap by
+  gate). Inert by default. Then measure the shallow pruned value-leaf NC vs the K16-d2 teacher (LP parity at what
+  speedup; decouple-probe intact). Then the policy-prior pruner on the eval rows (top-M recall metric).
+
+### ▶▶▶ DYNAMIC MODEL (d0 replacement) — dynamics helps, but inputs are the ceiling (2026-07-11)
+
+User steered HARD to the d0 replacement (fast one-shot policy, NOT leaf/search). Confirmed decisively a STATIC d0
+policy CANNOT reach the validated NC-K16-d2 teacher: gap **0.80 turns TH, 0.68 antilife** (scripts/d0_policy_ab.py,
+held-out): heuristic-d0 5.643/5.520, best static-d0 5.583/collapse-7.4, teacher 4.787/4.843. Linear+GBDT+v6/v7 feats
+all plateau/collapse; capacity made TH worse. Labels learnable; the DECISION needs a forward rollout static can't do.
+
+**Built the dynamic model in C++** (`tools/dyntrain/{nn.h,main.cpp}`, standalone, reads `.rows`; container has no
+torch/pip/numpy + no net). Latent-rollout net: `h0=tanh(rep(state))`, plan injected step 0, `h_{t+1}=tanh(dyn([h_t;a]))`
+x T, `pred=val(h_T)`; matrix manual backprop + Adam; pairwise-rank + MSE. T=0 = plain MLP over [state;plan] baseline.
+In-process inference free (same C++). torch-in-docker deferred to scale-up.
+
+Held-out PICK-REGRET (avg extra win turns vs teacher's best plan; H=64, 70ep):
+
+| deck | MLP T=0 | dynamic T=2 | T=3 | heuristic-pick | random |
+|---|---|---|---|---|---|
+| TH | 0.241 | **0.203** | 0.216 | 0.423 | 0.559 |
+| antilife | 0.335 | **0.320** | 0.372 | 0.368 | 0.492 |
+
+- **Dynamics (T=2) BEATS MLP (T=0) consistently** (needs capacity; H=32/40ep near-tie was underfit) and both beat the
+  heuristic. Recurrent latent-rollout is a REAL lever — dynamic thesis holds in principle. T=3 overfits small antilife.
+- **BUT absolute regret ~0.20/0.32 is NOT teacher-zero**; dynamics edge over MLP only ~0.02-0.04. Remaining gap points
+  at INPUTS (40 hand-crafted summaries lose card-level structure), not model class. Card-level embeddings + set-pooling
+  = likely next lever (bigger build).
+- Pick-regret is a PROXY (teacher's on-policy states); real d0 PLAY has covariate shift + compounding. True go/no-go =
+  wire NN into engine (Seam A, env-gated) + measure actual d0 play LP vs teacher (DAgger if covariate shift bites).
+
+NEXT: (a) wire NN inference into engine, measure real d0 play; (b) card-level inputs. Scripts: tools/dyntrain/,
+scripts/d0_policy_ab.py, scripts/nc_frontier.py, nc_teacher_depth.py.
+
+### DYNAMIC MODEL wired into the engine — GREAT LEAF, d0 COLLAPSE (covariate shift + myopia) (2026-07-11)
+
+Wired NN inference in-process: `src/ai/DynModel.h` (load + forward), `GameState::m_dyn_model` (fwd-decl + field,
+threaded like m_evaluator), `AIEngine` stamps from `MTG_DYN_MODEL` env (loads once), TurnSolver Seam A serves via
+`DynPlanScore`. Build: `cmake --build build --config Release --target mtg`. Inference parity EXACT
+(tools/dyntrain/infer_test.cpp reproduces the trainer's top1/regret). Fixed a train/serve skew: the dyn Seam-A path
+uses `PlanBaselineEval` (matches the EmitEvalRows dump), not `total_eval`.
+
+**TH d0 play: heuristic 82.5%/5.09 | dyn-d0 17.5%/6.43 (COLLAPSE) | dyn-d3-leaf 100%/4.125 (clairvoyant-search
+quality).** So the model is an EXCELLENT evaluator/leaf but FAILS as a standalone d0 policy. Diagnosis: not a bug
+(d3 perfect), not keep/bottom poisoning (TH exhaustive table; d0 => LookaheadBottoming off), not candidate-ranking
+(TH d0 often has 1 candidate/turn — heuristic faces the same and WINS). It durdles via an early pure-play divergence
+(unpinned). **DAgger round-1 did NOT fix it** (dumped 34k model-own states + teacher labels, retrained, still 17.5%).
+
+Confirms the doc's deepest finding across FOUR model classes now (linear, GBDT, MLP, dynamic NN): a static/one-shot d0
+argmax can't hold multi-turn value; teacher quality needs forward sim at decision time.
+
+**USER DECISION: keep pushing d0 (PRIMARY); the leaf is a detour that falls out for free once d0 trains well.** Resume
+plan (see memory d0-dynamic-model-direction): (1) PIN the divergence (heuristic vs dyn game-log diff on a heur-win/
+dyn-loss game; suspects = t1 land selection, second-main/combat path, multi-candidate cascade); (2) more DAgger rounds;
+(3) card-level inputs (embeddings+set-pool — the likely real lever; may justify torch-in-docker). Files: tools/dyntrain/,
+src/ai/DynModel.h, logs/eval/TH_dyn*.json, scripts/d0_policy_ab.py. Branch d0-dynamic-model, uncommitted.
+
+---
+
+## 2026-07-11 (overnight): d0 COLLAPSE WAS A ONE-LINE SCALE BUG, not model quality
+
+The "dyn model collapses as a standalone d0 policy (10-17%)" finding was **misdiagnosed** as covariate
+shift / combo myopia. It is a wiring/scale bug at Seam A (TurnSolver::Solve):
+
+- `Plan best;` initializes the do-nothing/pass baseline with `value = -1` (TurnSolver.h: `int value = -1;
+  // -1 = nothing castable`), a **total_eval-scale sentinel**. The empty subset is never passed through
+  `consider()` (line ~1874 guards `!sel.empty()`), so do-nothing keeps value = -1.
+- `DynPlanScore` returns predicted-win-turn on an **all-negative scale** (`-pred*1000` ≈ -4000..-6000,
+  higher/less-negative = fewer turns). The compare `rank_value > best.value` is then `-4362 > -1` =>
+  FALSE for every real plan, so the dyn model **can never choose to act** — it passes every main phase
+  and durdles. It only "wins" the ~10% of games where a plan is outright lethal (`wins_this_turn`
+  dominates value). The heuristic path uses `total_eval >= 0 > -1` so it always develops -> no collapse.
+- This also explains: (a) DAgger v1==v2 byte-identical (retraining the value head can't beat a scale
+  wall — pass always wins); (b) infer_test parity was exact (the model ranks fine on teacher states; it
+  just never gets to act in play).
+
+**FIX** (TurnSolver.cpp ~1457, scoped to the dyn path so heuristic/static-eval are byte-identical):
+```cpp
+const bool use_dyn_policy = state.m_dyn_model && !state.m_dyn_model->empty();
+if (use_dyn_policy) { best.value = std::numeric_limits<int>::min(); }
+```
+This floors the do-nothing baseline so any real dyn-scored plan wins the compare — matching the
+heuristic's "always develop if you can" semantics; the model then does its real job (RANK among real
+plans). Winning plans still dominate via wins_this_turn.
+
+### Result (TH, 100g x3 seeds, --depth 0)
+| policy            | win% | LP    |
+|-------------------|------|-------|
+| heuristic d0      | 84.7 | 5.643 |
+| dyn v1 d0 (fixed) | 84.0 | 5.627 |
+| dyn v2 d0 (fixed) | 84.3 | 5.600 |
+| NC teacher K16d2  | 95.3 | 4.787 |
+
+The model went from 10% (collapse) to **heuristic parity**. The 0.85 LP / ~11pp gap to the NC teacher
+is still open. It is NOT a collapse — it is the honest "can a Seam-A d0 spell-ranker beat the heuristic
+toward the teacher?" question.
+
+### Why parity (not teacher) — structural factors
+- **~43%** of real d0 decisions have >=2 candidates (measured, 5 games) -> the ranker DOES act often
+  (not as capped as feared). But its ranking ties the heuristic on its own states.
+- **Train/serve candidate mismatch**: the label dump enumerates 10.73 candidates/decision (incl. land
+  variants); Seam-A Solve at d0 enumerates only spell subsets (land folded via greedy, `land_decided
+  =false`). The land drop — a big part of the teacher's edge — is NOT in the d0 candidate set.
+- **Train/serve continuation mismatch**: teacher labels are the win-turn assuming TEACHER continuation
+  (incl. its land sequencing); serve-time continuation is greedy-land + model-spell. On-policy/DAgger
+  labeling (MTG_EVAL_ROWS_ROLLOUT depth>0) is the lever that reflects the actual serve policy.
+
+### Overnight sweep in flight (scripts/overnight_dyn.sh -> logs/eval/overnight_dyn_findings.txt)
+Trains a (rows{base,pool} x T{0,2,3} x H{64,128}) grid, measures d0 play LP each, then 2 DAgger rounds
+on the best config. Empirically answers: can ANY training push the Seam-A d0 ranker past parity?
+
+### Antilife generalization (100g x3, depth 0) — fix is NOT TH-specific
+| policy            | win% | LP    |
+|-------------------|------|-------|
+| heuristic d0      | 91.0 | 5.520 |
+| dyn T2H64 d0      | 91.0 | 5.450 |
+| NC teacher K16d2  | 95.0 | 4.843 |
+Antilife (fetchland deck) dyn also plays at parity (marginally better LP, 2/3 seeds), NOT collapse.
+Same shape as TH: model ties heuristic, ~0.68 LP gap to teacher remains. Confirms the scale fix is
+deck-agnostic and the "parity, not teacher" ceiling is structural (land-fold + continuation), not a bug.
+
+## 2026-07-11 (overnight): SWEEP VERDICT — training/architecture is exhausted; the cap is STRUCTURAL
+
+Ran scripts/overnight_dyn.sh: a (rows{base=13k teacher, pool=+on-policy} x T{0,2,3} x H{64,128}) config
+grid + 2 DAgger rounds on the best config, each measured on d0 PLAY LP. Results (heuristic d0 = 5.643):
+
+- **All 12 configs cluster at 5.64–5.78 LP** (heuristic parity). Best = pool T0 H128 @100gx3 = 5.557.
+- **T0 (plain MLP) won**, not the dynamic latent-rollout T2/T3 — the "dynamic" machinery is NOT the
+  bottleneck at play time (it had marginally better held-out pick-regret, which did not convert to LP).
+- **Held-out pick-regret (0.17–0.25) does NOT predict play LP** — pool cut regret to 0.17 but stayed at
+  parity. Ranking teacher-states better ≠ playing better (covariate shift + few decisions bind outcome).
+- **DAgger flat**: 5.557 -> 5.620 -> 5.563 across 2 rounds (~1660 on-policy rows/round, noise-level).
+- **Held-out seed check kills the marginal edge**: on fresh seeds (4001/4002/9009/9010; training used
+  seeds 40000+), heuristic 5.913 | best 5.925 | v2 5.888 — all within +-0.03 LP. The 0.09 "win" on the
+  sweep seeds was overfit. The dyn models are statistically indistinguishable from the heuristic at d0.
+
+**Conclusion**: a Seam-A d0 spell-ranker caps at heuristic parity regardless of model class, capacity,
+data pool, or DAgger. Training is not the lever. The 0.85 LP gap to the NC teacher is structural, from
+the two mismatches already identified:
+  1. **Land not in the d0 candidate set** — at d0 `fold_land=false` (AIEngine.cpp:1287), so the land is
+     played greedily by TryPlayLand BEFORE Solve ranks spell subsets. The model never sees/controls the
+     land drop, which is a large part of the teacher's edge on both TH (ramp) and antilife (fetch).
+  2. **Continuation mismatch** — teacher win-turn labels assume teacher land-sequencing continuation;
+     serve is greedy-land + model-spell.
+
+## RECOMMENDATION (needs user sign-off — a scope change): FOLD THE LAND DROP INTO THE d0 dyn CANDIDATE SET
+Make the d0 dyn policy rank (land-choice x spell-subset) plans, not spell-subsets-with-greedy-land. The
+infra exists (Plan.land_decided/land_to_play/fetch_target; EnumeratePlans enumerates land x spell for the
+depth>0 search; fold_land path in AIEngine.cpp:1346-...). Minimal shape: when use_dyn_policy at d0, run a
+land-inclusive enumeration (mirror the depth>0 fold) and score each candidate's resulting state with
+DynPlanScore; play the chosen land + spells. Scope it to the dyn path (byte-identical otherwise). Risks
+to validate with the user's review + regression suite: fetchland targets, Karoo bounce-lands, the
+"TH-before-land-drop" defer special-case, Reliquary Tower. This is the pivotal experiment for whether a
+learned d0 policy can BEAT the heuristic (vs merely match it at d0 speed). Deferred pending sign-off
+because it changes what the policy fundamentally decides (spell-only -> spell+land), which also changes
+the training-data candidate distribution.
+
+### Standing win regardless of land-folding: the SCALE FIX makes dyn-d0 a usable heuristic-parity policy
+at d0 speed (both decks), which already serves the SPEED goal (fast non-clairvoyant play for
+clairvoyance-abuse A/B). It just doesn't yet BEAT the heuristic. Uncommitted on branch d0-dynamic-model.
+
+## 2026-07-11: LAND-FOLDING BEATS THE HEURISTIC (the first real progress past parity)
+
+User approved letting the d0 policy DECIDE THE LAND DROP. Implemented as a 1-ply resulting-state VALUE
+lookahead: enumerate land-inclusive candidate plans (EnumeratePlansWithLand -- each land choice x spell
+subset, + defer/idle), apply each, score the RESULTING board with a value model, pick the best (lethal
+dominates). The land choice / targets / X are all discriminated because they're reflected in the applied
+board -- the Seam-A plan-DIGEST ranker only saw a has-land BIT and couldn't (measured: two land choices
+gave a byte-identical feature vector).
+
+Wiring: TurnSolver::SolveD0LandFold (new) + AIEngine d0 branch (MTG_D0_LANDFOLD gate: skip greedy land,
+use SolveD0LandFold, play its chosen land via the fold path). Byte-identical unless the flag is set AND a
+value model is attached.
+
+KEY OBSTACLE + FIX -- the value model must be trained on the RIGHT distribution. Existing value models
+(trained on VISITED positions only, all "developed") EXTRAPOLATE on the idle/defer resulting states the
+land-fold enumeration scores: the clairvoyant GBDT ranked "do nothing" best and COLLAPSED to 0.7%. Fix =
+a RESULTING-STATE per-candidate row dump (MTG_DUMP_RSVALUE_ROWS): EnumerateEarliestWins captures each
+candidate's post-plan features (SetCaptureResultFeats, gated -> zero cost on the teacher path), EmitEval
+rows emits K-reshuffle-AVERAGED resulting features (marginalises within-turn draws) + the de-clairvoyed
+win-turn label. Trains the value on the exact idle/develop distribution it serves on -> no collapse.
+
+### Result (TH, 100g x3, depth 0; RS-value GBDT trained on 80 games / 424 dec / 4465 candidates seeds 40000+)
+| policy                              | train 2002/3003/7007 | held-out 4001/4002/9009/9010 |
+|-------------------------------------|----------------------|------------------------------|
+| heuristic d0                        | 5.643                | 5.913                        |
+| d0-landfold GBDT K=1 (clairv draws) | 5.390                | 5.450                        |
+| d0-landfold GBDT K=8 (NON-CLAIRV)   | **5.453**            | **5.698**                    |
+| NC teacher K16d2                    | 4.787                | ~4.9                         |
+
+- **The NON-CLAIRVOYANT land-fold policy BEATS the heuristic by 0.19 (train) / 0.22 (held-out) LP** -- the
+  first NC d0 policy to beat the heuristic. Closes ~25% of the heuristic->teacher gap.
+- MTG_D0LF_K averages each plan's resulting-state value over K reshuffles of the UNSEEN library (common
+  random numbers). K=1 = fast within-turn-clairvoyant proxy (0.25-0.46 LP better = an UPPER bound); K=8 =
+  honest NC. The K=1<->K=8 gap (0.06 train / 0.25 held-out) is exactly the within-turn draw clairvoyance.
+- Land discrimination confirmed in the rows: at T1 the enumerated candidates (untapped dual / tapped land
+  / defer) get distinct resulting features AND distinct labels (tapped-first rated best -- real strategy).
+
+### NEXT levers (all NC): more training data; a stronger/dynamic value net; higher serve-K; generalize to
+### antilife (fetchlands -- the land choice matters even more). Tools: MTG_DUMP_RSVALUE_ROWS (dump),
+### scripts/train_eval_gbdt.py --regression (value model), MTG_D0_LANDFOLD + MTG_VALUE_PROFILE + MTG_D0LF_K.
+
+### Learning curve (how much data helps) + antilife generalization
+TH RS-value GBDT, NON-CLAIRVOYANT (K=8), held-out seeds 4001/4002/9009/9010 (heuristic 5.913):
+| games | decisions | NC-LP |
+|-------|-----------|-------|
+| 10    | 52        | 5.967 (WORSE -- overfits) |
+| 20    | 101       | 6.000 (WORSE) |
+| 40    | 202       | 5.717 (crossover) |
+| 80    | 424       | 5.710 |
+| 160   | 833       | 5.705 (PLATEAU) |
+=> ~40 games (~200 decisions) is the crossover; plateaus HARD by ~80. Beyond that, more data does
+nothing (160 == 80). Train-RMSE RISES with data (0.23->0.37) = healthy less-overfit signature. DATA IS
+NOT THE REMAINING LEVER -- the plateau (5.71) is well short of the teacher (~4.9), so model/feature
+quality (or the 1-ply-vs-search ceiling) is what remains.
+
+ANTILIFE generalization (fetchland deck -- the land choice matters MORE), held-out, NC K=8:
+| policy                    | win% | NC-LP |
+|---------------------------|------|-------|
+| heuristic                 | 91.0 | 5.595 |
+| landfold (weak 20-tree)   | 94.0 | 5.180 |
+=> land-fold beats heuristic by 0.42 LP on antilife (vs 0.22 on TH) with only a 20-tree model -- the
+gain is LARGER where the land decision is richest (fetchlands), closing ~55% of the antilife gap.
+CONCLUSION: land-folding + resulting-state value is a real, non-clairvoyant, cross-deck win over the
+heuristic. Remaining gap to the teacher is a model/approach lever, not data.

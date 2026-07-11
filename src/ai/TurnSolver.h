@@ -208,6 +208,14 @@ public:
     // Uses a static evaluation function (no lookahead).
     static Plan Solve(const GameState& state, bool is_pre_combat);
 
+    // d0 land-folded VALUE policy (MTG_D0_LANDFOLD): the model DECIDES the land drop. Enumerates
+    // land-inclusive candidate plans (each land choice x spell subset, plus defer/idle baselines via
+    // EnumeratePlansWithLand) and ranks them by the value of the RESULTING state -- a 1-ply
+    // non-clairvoyant lookahead that discriminates land choices (and targets/X), which the Seam-A
+    // plan-digest ranker cannot. Lethal plans dominate. Requires state.m_value_model attached; the
+    // returned plan carries land_decided/land_to_play so the executor plays the chosen land.
+    static Plan SolveD0LandFold(const GameState& state, bool is_pre_combat);
+
     // Enable per-pass per-candidate trace output for top-level T1 decisions.
     static void SetTraceSolve(bool enable);
     static bool GetTraceSolve();
@@ -432,6 +440,12 @@ public:
         std::string fetch;                     // fetch target if land is a fetchland ("" = n/a)
         bool        searched_order = false;    // true => cast_order is a searched permutation
         int         win_turn       = 0;        // earliest full-game win if this play is committed
+        // RESULTING-state features (ExtractMidGameFeatures of the board AFTER this plan is applied,
+        // pre-combat). Populated ONLY when capture is enabled (SetCaptureResultFeats) -- for the
+        // d0-land-fold value/policy row dump, which needs the post-plan board so the model can rank
+        // land choices/targets it can't see from a pre-state plan digest. Empty otherwise (no cost
+        // to the teacher/search hot path). See learned-d0-policy.md.
+        std::vector<int> result_feats;
     };
     struct EarliestWinReport
     {
@@ -452,6 +466,11 @@ public:
     static EarliestWinReport EnumerateEarliestWins(const GameState& state, int max_turns,
                                                    bool second_main, bool rollout_label = false,
                                                    int rollout_depth = 0, bool honest = false);
+
+    // Enable/disable capturing each candidate's RESULTING-state features in EnumerateEarliestWins
+    // (EarliestWinCandidate::result_feats). Off by default -> zero cost on the teacher/search path;
+    // the d0-land-fold row dump turns it on around its EnumerateEarliestWins calls.
+    static void SetCaptureResultFeats(bool enable);
 
     // Reshuffle-averaged NON-CLAIRVOYANT search as a PLAY policy (ceiling measurement +
     // learned-lookahead training target). Ranks each candidate plan by its win turn AVERAGED over K

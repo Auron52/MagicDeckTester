@@ -1,5 +1,6 @@
 #include "AIEngine.h"
 #include "TurnSolver.h"
+#include "DynModel.h"
 #include "TranspositionTable.h"
 #include "SearchBudget.h"
 #include "Profiler.h"
@@ -69,6 +70,14 @@ static const char* s_eval_rows_path = std::getenv("MTG_DUMP_EVAL_ROWS");
 // is the training target for the value model that replaces the search's horizon rollout with the
 // searched result. Shares the same K-reshuffle loop as the eval dump. See learned-d0-policy.md.
 static const char* s_value_rows_path = std::getenv("MTG_DUMP_VALUE_ROWS");
+// RESULTING-state per-candidate rows for the d0-land-fold policy (MTG_DUMP_RSVALUE_ROWS=<file>): one
+// row per enumerated candidate plan (land choice x spell subset, incl. idle/defer), features = the
+// K-reshuffle-averaged board AFTER the plan is applied (pre-combat), label = the same de-clairvoyed
+// win turn the eval dump uses. Unlike the pre-state plan-digest rows, these let the model rank LAND
+// choices (and targets/X) because the resulting board reflects them -- and, being per-candidate,
+// train the value on the SAME idle/develop distribution it sees at serve (no extrapolation collapse).
+// Grouped by (seed,turn) -> a ranker (dyntrain) trains on them directly. See learned-d0-policy.md.
+static const char* s_rsvalue_rows_path = std::getenv("MTG_DUMP_RSVALUE_ROWS");
 static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_ROWS_K");
                                           int v = (e && *e) ? std::atoi(e) : 8; return v < 1 ? 1 : v; }();
 // MTG_EVAL_ROWS_ROLLOUT: label candidates by a non-clairvoyant greedy d0 rollout instead of the
@@ -89,9 +98,12 @@ static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != n
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
 {
     // Per-candidate accumulator, keyed by a canonical plan string (stable across reshuffles).
-    struct Acc { long long sum = 0; int count = 0; std::vector<std::string> casts, sac; std::string land; };
+    struct Acc { long long sum = 0; int count = 0; std::vector<std::string> casts, sac; std::string land;
+                 std::vector<long long> feat_sum; int feat_n = 0; };   // feat_sum: K-avg resulting features
     std::map<std::string, Acc> acc;
     long long earliest_sum = 0; int earliest_n = 0;   // for the position VALUE label (avg report.earliest)
+    // Capture resulting-state features in EnumerateEarliestWins only when the RS-value dump is active.
+    TurnSolver::SetCaptureResultFeats(s_rsvalue_rows_path != nullptr);
     for (int k = 0; k < s_eval_rows_k; ++k)
     {
         GameState s = state;
@@ -121,8 +133,15 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
             const int wt = (c.win_turn > 0 && c.win_turn <= max_turns) ? c.win_turn : (max_turns + 1);
             a.sum += wt; ++a.count;
             if (a.count == 1) { a.casts = c.cast_order; a.sac = c.sac_casts; a.land = c.land; }
+            if (!c.result_feats.empty())   // K-average the resulting-state features (marginalises draws)
+            {
+                if (a.feat_sum.empty()) { a.feat_sum.assign(c.result_feats.size(), 0); }
+                for (size_t fi = 0; fi < c.result_feats.size(); ++fi) { a.feat_sum[fi] += c.result_feats[fi]; }
+                ++a.feat_n;
+            }
         }
     }
+    TurnSolver::SetCaptureResultFeats(false);
 
     static std::mutex s_mtx;
     std::lock_guard<std::mutex> lk(s_mtx);
@@ -150,12 +169,15 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         }
     }
 
-    if (!s_eval_rows_path || acc.empty()) { return; }
+    if (acc.empty()) { return; }
 
     // Per-candidate eval rows (features reshuffle-invariant -> from the ORIGINAL state).
+    if (s_eval_rows_path)
+    {
     static std::ofstream s_out(s_eval_rows_path, std::ios::app);
     static bool          s_header = false;
-    if (!s_out.good()) { return; }
+    if (s_out.good())
+    {
     if (!s_header)
     {
         s_out << "# label";
@@ -177,6 +199,37 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         s_out << ' ' << state.game_seed << ' ' << state.turn_number << '\n';
     }
     s_out.flush();
+    }
+    }
+
+    // RESULTING-state per-candidate rows: features = K-averaged post-plan board, label = same de-
+    // clairvoyed win turn. Trains the d0-land-fold value/ranker on the exact resulting states it scores
+    // at serve (incl. idle/defer), so it ranks land choices AND avoids the idle-extrapolation collapse.
+    if (s_rsvalue_rows_path)
+    {
+        static std::ofstream rv_out(s_rsvalue_rows_path, std::ios::app);
+        static bool rv_header = false;
+        if (rv_out.good())
+        {
+            if (!rv_header)
+            {
+                rv_out << "# label";
+                for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
+                { rv_out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
+                rv_out << " seed turn\n";
+                rv_header = true;
+            }
+            for (const auto& kv : acc)
+            {
+                const Acc& a = kv.second;
+                if (a.feat_n == 0 || a.feat_sum.empty()) { continue; }   // no captured features
+                rv_out << (static_cast<double>(a.sum) / a.count);
+                for (long long fs : a.feat_sum) { rv_out << ' ' << (static_cast<double>(fs) / a.feat_n); }
+                rv_out << ' ' << state.game_seed << ' ' << state.turn_number << '\n';
+            }
+            rv_out.flush();
+        }
+    }
 }
 
 // Provider cast-order rank for a hand cast by name (lower = cast earlier). MUST stay
@@ -271,6 +324,20 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // ... and the deck's learned leaf value model (replaces the search's horizon rollout when
     // MTG_VALUE_MODEL is set). Same non-owning / deep-copy propagation. See GameState::m_value_model.
     state.m_value_model = m_profile.value_model.empty() ? nullptr : &m_profile.value_model;
+    // ... and the deck's learned DYNAMIC (latent-rollout) d0 policy model, loaded ONCE from the path in
+    // MTG_DYN_MODEL (a float NN that ranks non-lethal plans at Seam A -- the d0-replacement experiment).
+    // Non-owning (static lifetime) + deep-copy propagated. Unset => nullptr => byte-identical default.
+    state.m_dyn_model = []() -> const DynModel* {
+        static const DynModel* m = []() -> const DynModel* {
+            const char* p = std::getenv("MTG_DYN_MODEL");
+            if (!p || !*p) return nullptr;
+            static DynModel dm;
+            if (!dm.Load(p)) { std::cerr << "[dyn] failed to load " << p << "\n"; return nullptr; }
+            std::cerr << "[dyn] loaded " << p << " (T=" << dm.T << " H=" << dm.H << ")\n";
+            return &dm;
+        }();
+        return m;
+    }();
 
     ap.library.DrawN(7, ap.hand);
 
@@ -1155,7 +1222,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
     // Learned-eval / leaf-value label generation (inert unless MTG_DUMP_EVAL_ROWS or MTG_DUMP_VALUE_ROWS
     // set): emit de-clairvoyed per-candidate (eval) and/or per-position (value) rows at this REAL decision.
-    if ((s_eval_rows_path || s_value_rows_path) && !m_in_rollout && is_pre_combat_main)
+    if ((s_eval_rows_path || s_value_rows_path || s_rsvalue_rows_path) && !m_in_rollout && is_pre_combat_main)
     {
         EmitEvalRows(state, m_max_turns, m_search_post_combat);
     }
@@ -1263,13 +1330,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
     if (play_this_phase)
     {
+        // d0 land-folded VALUE policy (MTG_D0_LANDFOLD): at depth 0 with a value model attached, the
+        // learned policy DECIDES the pre-combat land drop by ranking land-inclusive plans on their
+        // resulting-state value (TurnSolver::SolveD0LandFold), instead of the greedy 4-pass land
+        // heuristic + spell-only Solve. Folds the land into the plan exactly like the depth>0 search,
+        // so the same land-execution path runs. Inert (byte-identical) unless the flag is set AND a
+        // value model is attached. See docs/design/learned-d0-policy.md.
+        static const bool s_d0_landfold = []{ const char* e = std::getenv("MTG_D0_LANDFOLD");
+                                              return e && *e && std::string(e) != "0"; }();
+        const bool d0_landfold = s_d0_landfold && m_lookahead_depth == 0
+                              && state.m_value_model && !state.m_value_model->empty();
+
         // The land drop is searched (folded into SolveWithLookahead) ONLY for the
         // depth>0 first main. Every other case keeps the pre-fold greedy land play:
         //   - depth 0 (fast greedy runner): the search needs a rollout, so depth 0
         //     uses the 4-pass heuristic plus the Treasure-Hunt defer special-case;
         //   - the second main at any depth: a land may still be playable post-combat
         //     (e.g. one revealed by Light Up the Stage), played greedily as before.
-        const bool fold_land = (m_lookahead_depth > 0 && is_pre_combat_main);
+        // d0_landfold folds the pre-combat drop into the learned policy (same as depth>0).
+        const bool fold_land = ((m_lookahead_depth > 0 || d0_landfold) && is_pre_combat_main);
 
         if (!fold_land)
         {
@@ -1570,6 +1649,27 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (s_karoo_defer && ld && ld->params.etb_bounce_land)
                 {
                     // Reserve the drop; play it after the main cast loop (see karoo_deferred).
+                    karoo_deferred  = true;
+                    karoo_land_name = plan.land_to_play;
+                    karoo_fetch     = plan.fetch_target;
+                }
+                else
+                {
+                    TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target);
+                }
+            }
+        }
+        else if (d0_landfold && is_pre_combat_main)
+        {
+            // d0 land-folded value policy: the learned policy chose the land drop. Play it here
+            // (mirrors the fold_land block above; the depth>0 land-execution is gated on
+            // m_lookahead_depth>0, which is false at d0), then the main cast loop executes the spells.
+            plan = TurnSolver::SolveD0LandFold(state, is_pre_combat_main);
+            if (plan.land_decided && !plan.land_to_play.empty())
+            {
+                const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
+                if (s_karoo_defer && ld && ld->params.etb_bounce_land)
+                {
                     karoo_deferred  = true;
                     karoo_land_name = plan.land_to_play;
                     karoo_fetch     = plan.fetch_target;

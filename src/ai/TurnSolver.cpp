@@ -1,6 +1,7 @@
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
 #include "KeepModel.h"              // MidGameEvaluator / ExtractMidGameFeatures (learned d0 eval)
+#include "DynModel.h"               // learned DYNAMIC (latent-rollout) d0 policy model (Seam A)
 #include "Profiler.h"
 #include "../core/ManaPool.h"
 #include "../core/EffectHandler.h"
@@ -100,6 +101,7 @@ static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
 }
 
 void TurnSolver::SetTraceSolve(bool enable) { s_trace_solve = enable; }
+void TurnSolver::SetCaptureResultFeats(bool enable) { g_capture_result_feats = enable; }
 bool TurnSolver::GetTraceSolve() { return s_trace_solve; }
 
 static std::string PlanDesc(const TurnSolver::Plan& p)
@@ -1341,6 +1343,14 @@ static int LearnedPlanScore(const GameState& state, const MidGamePlanSummary& su
     return static_cast<int>(std::min(kHi, std::max(kLo, s)));
 }
 
+// Dynamic (latent-rollout) plan score at Seam A -- the d0 replacement. Same feature vector as the static
+// ranker (ExtractMidGameFeatures), fed through the NN's internal forward rollout. Higher = better plan.
+static int DynPlanScore(const GameState& state, const MidGamePlanSummary& sum, const DynModel& dm)
+{
+    const long long s = dm.ScoreHigherBetter(ExtractMidGameFeatures(state, sum));
+    return static_cast<int>(s);   // already clamped to +-1e9
+}
+
 // The plan summary is built by the SHARED name-based SummarizePlanByNames (KeepModel.cpp) so runtime
 // inference (here) and offline label emission (AIEngine's EnumerateEarliestWins dump) compute
 // byte-identical summaries from the same cast names -> no train/serve skew. These helpers just pull
@@ -1444,6 +1454,19 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     int m = static_cast<int>(cands.size());
     Plan best;
     int  best_mask = 0;     // action mask of `best` (0 = the do-nothing default); ties keep min mask
+
+    // Do-nothing baseline scale fix for the DYNAMIC d0 policy (Seam A). The dyn model scores plans by
+    // predicted win-turn -- an ALL-NEGATIVE scale (DynPlanScore -> -pred*1000, higher/less-negative =
+    // fewer turns). The do-nothing default (value = -1, a total_eval-scale sentinel) would out-rank
+    // EVERY such real plan, so the model could never choose to act: it would pass every main phase and
+    // durdle to a loss (measured: TH d0 collapsed to ~10% while the heuristic wins ~84%). The heuristic's
+    // semantics are "always develop if you can" -- any real plan (total_eval >= 0) beats the -1 sentinel.
+    // Match that for the dyn model by flooring the do-nothing baseline to INT_MIN so any real dyn-scored
+    // plan wins the compare; the model then does its actual job (RANK among real plans). Winning plans
+    // still dominate via wins_this_turn regardless of value. Scoped to the dyn path -> the heuristic and
+    // the static learned ranker (total_eval-anchored) are byte-identical. See learned-d0-policy.md.
+    const bool use_dyn_policy = state.m_dyn_model && !state.m_dyn_model->empty();
+    if (use_dyn_policy) { best.value = std::numeric_limits<int>::min(); }
 
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
@@ -1609,16 +1632,35 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // ranks a win). rank_value replaces total_eval in the compare + best.value; it IS total_eval
         // whenever no model is attached / the flag is off -> byte-identical. See learned-d0-policy.md.
         int rank_value = total_eval;
-        if (ev && !wins)
+        const bool use_dyn = state.m_dyn_model && !state.m_dyn_model->empty();
+        if ((ev || use_dyn) && !wins)
         {
             const std::vector<std::string> cnames = PlanCastNames(cands, sel);
             MidGamePlanSummary psum = SummarizePlanByNames(cnames, PlanHasLand(cands, sel));
             // Anchor on the EXACT heuristic ranking key (total_eval) available right here -- this carries
             // Vial/X/ritual evals the name-only PlanBaselineEval can't reconstruct, so a unit-weight model
             // reproduces the heuristic exactly and learns a correction on top. See learned-d0-policy.md.
-            psum.baseline_eval = total_eval;
-            rank_value = LearnedPlanScore(state, psum, *ev);
+            // The DYNAMIC model (latent-rollout d0 policy) takes precedence when attached (the d0
+            // replacement); else the static learned ranker. See GameState::m_dyn_model. NB the dyn
+            // model must be fed the SAME plan_baseline_eval its label DUMP used (EmitEvalRows ->
+            // PlanBaselineEval, the name-based eval), NOT total_eval -- else a standardized NN gets a
+            // many-sigma-off input and collapses. The static ranker keeps its faithful total_eval anchor.
+            if (use_dyn)
+            {
+                psum.baseline_eval = PlanBaselineEval(state, cnames);
+                rank_value = DynPlanScore(state, psum, *state.m_dyn_model);
+            }
+            else
+            {
+                psum.baseline_eval = total_eval;
+                rank_value = LearnedPlanScore(state, psum, *ev);
+            }
         }
+
+        static const bool s_dyn_dbg = std::getenv("MTG_DYN_DEBUG") != nullptr;
+        if (s_dyn_dbg)
+            std::fprintf(stderr, "[dyndbg] t=%d cand nact=%zu land=%d wins=%d rank=%d\n",
+                         state.turn_number, sel.size(), (int)PlanHasLand(cands, sel), (int)wins, rank_value);
 
         bool better;
         if (best.wins_this_turn != wins)   { better = wins; }                    // winning dominates
@@ -5352,6 +5394,60 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     return all;
 }
 
+// d0 land-folded VALUE policy -- see the header. The model DECIDES the land drop by ranking every
+// land-inclusive candidate plan (land choice x spell subset, plus defer/idle) by the value of the
+// RESULTING board after the plan is applied (a 1-ply, non-clairvoyant lookahead: playing a land
+// reveals nothing, so the land choice is judged fairly; draw plans resolve within-turn as the real
+// game would). This discriminates land choices/targets/X because they are reflected in the applied
+// state -- the Seam-A plan-digest ranker only sees a has-land BIT and cannot. Winning plans dominate.
+// The value model's Score is a win-turn x1000 (lower = better).
+TurnSolver::Plan TurnSolver::SolveD0LandFold(const GameState& state, bool is_pre_combat)
+{
+    std::vector<Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    if (plans.empty()) { return Plan{}; }
+    // EnumeratePlansWithLand sorts winning plans first, so a turn-winning plan (if any) is plans[0].
+    if (plans.front().wins_this_turn) { return plans.front(); }
+    const MidGameEvaluator* vm = state.m_value_model;
+    if (!vm || vm->empty()) { return plans.front(); }   // caller gates on attachment; safety net
+    RevealLogPause _rlp;   // candidate scoring is hypothetical -- suppress reveal/scry logging
+
+    // NON-CLAIRVOYANCE (MTG_D0LF_K, default 1): a DRAW plan (Treasure Hunt/Ponder) reveals the real
+    // next cards when applied, so scoring its single resulting state peeks at draws the policy hasn't
+    // committed to yet. Average each plan's resulting-state value over K reshuffles of the UNSEEN
+    // library (common random numbers across candidates -> low-variance, fair) to marginalise that draw,
+    // matching the K-reshuffle-averaged training features. Non-draw plans (incl. every land choice --
+    // playing a land reveals nothing) are reshuffle-invariant, so K=1 is exact for them. K=1 keeps the
+    // fast within-turn-clairvoyant proxy; K>1 is the honest non-clairvoyant policy. See learned-d0-policy.md.
+    static const int s_d0lf_k = []{ const char* e = std::getenv("MTG_D0LF_K");
+                                    int v = (e && *e) ? std::atoi(e) : 1; return v < 1 ? 1 : v; }();
+    Plan*     best       = &plans.front();
+    long long best_score = std::numeric_limits<long long>::max();   // milliturns, lower = better
+    for (Plan& p : plans)
+    {
+        if (p.wins_this_turn) { return p; }   // safety (winners are ordered first)
+        long long score_sum = 0;
+        for (int k = 0; k < s_d0lf_k; ++k)
+        {
+            GameState copy = state;
+            if (s_d0lf_k > 1)
+            {
+                // Reshuffle the unseen library (deterministic per turn+k, PLAN-INDEPENDENT = common
+                // random numbers). On a copy -> the real draw order is untouched; the decision stays
+                // deterministic in (seed, turn).
+                const uint64_t rs = state.game_seed
+                                  + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
+                                  + 1000003ULL * static_cast<uint64_t>(state.turn_number);
+                copy.ActivePlayer().library.Shuffle(rs);
+            }
+            ApplyPlanDirect(copy, p, is_pre_combat);   // plays the folded land (land_decided) + casts
+            score_sum += vm->Score(ExtractMidGameFeatures(copy, MidGamePlanSummary{}));
+        }
+        const long long s = score_sum / s_d0lf_k;
+        if (s < best_score) { best_score = s; best = &p; }
+    }
+    return *best;
+}
+
 // ---- Transposition key over the future-determining state ------------------
 //
 // Folds every game-state field the rollout reads into a 128-bit key, plus the
@@ -6276,6 +6372,12 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         std::vector<Action> bp;
         ApplyPlanDirect(s, p, true, &bp);
 
+        // RESULTING-state features (pre-combat, exactly where SolveD0LandFold scores at serve). Captured
+        // only for the d0-land-fold row dump; the mutation SimulateCombat does below would corrupt them,
+        // so snapshot here before combat. Gated -> no cost on the teacher/search path.
+        std::vector<int> rfeat;
+        if (g_capture_result_feats) { rfeat = ExtractMidGameFeatures(s, MidGamePlanSummary{}); }
+
         int wt;
         if (s.ActivePlayer().life <= 0)                 // self-lethal line -> never a win
         {
@@ -6321,6 +6423,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         c.fetch          = p.fetch_target;
         c.searched_order = p.searched_order;
         c.win_turn       = wt;
+        c.result_feats   = std::move(rfeat);
 
         // Effective cast order, mirroring apply_plan_actions: a searched plan casts in vector
         // order; otherwise the canonical clean-set order (stable-sort by CastRankOf). The

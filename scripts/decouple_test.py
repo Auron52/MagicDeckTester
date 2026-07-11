@@ -13,8 +13,9 @@ import argparse, os, re, subprocess, sys, time
 
 MTG = "build/Release/mtg"
 DECKS = {  # deck, max_turns
-    "Hinata": ("decks/Hinata2.cod", 10),
-    "TH":     ("decks/treasure_hunt.txt", 8),
+    "Hinata":   ("decks/Hinata2.cod", 10),   # Ponder (within-turn shuffle/reorder)
+    "antilife": ("decks/Anti-Lifegain.cod", 8),  # fetchlands (within-turn shuffle); has keep profile
+    "TH":       ("decks/treasure_hunt.txt", 8),
 }
 # (label, executor salt, search-eval salt). None search salt = lockstep (coupled).
 COUPLINGS = [
@@ -24,14 +25,20 @@ COUPLINGS = [
     ("decoupled-C", "9001", "1234"),
 ]
 POLICIES = [
+    # NC turn policy at the candidate teacher depths. A genuinely non-clairvoyant policy is FLAT
+    # coupled->decoupled. blind = also reshuffle the lookahead mulligan bottomer (isolates the turn
+    # policy on profile-less decks like Hinata; inert where a keep profile exists, e.g. antilife).
     ("NC-d1",        5, {"MTG_NC_SEARCH":"1","MTG_NC_K":"8","MTG_NC_DEPTH":"1"}),
+    ("NC-d2",        5, {"MTG_NC_SEARCH":"1","MTG_NC_K":"8","MTG_NC_DEPTH":"2"}),
+    ("NC-d1-blind",  5, {"MTG_NC_SEARCH":"1","MTG_NC_K":"8","MTG_NC_DEPTH":"1","MTG_NC_BLIND_BOTTOM":"1"}),
 ]
 
 
 def run(deck, depth, games, seed, mt, threads, extra, exec_salt, search_salt):
     env = dict(os.environ)
     for k in ("MTG_EVAL_MODEL","MTG_VALUE_MODEL","MTG_NC_SEARCH","MTG_NC_K","MTG_NC_DEPTH",
-              "MTG_NC_TEMPO","MTG_NC_TEMPO_LANDS","MTG_SHUFFLE_SALT","MTG_SHUFFLE_SALT_SEARCH"):
+              "MTG_NC_TEMPO","MTG_NC_TEMPO_LANDS","MTG_SHUFFLE_SALT","MTG_SHUFFLE_SALT_SEARCH",
+              "MTG_NC_BLIND_BOTTOM"):
         env.pop(k, None)
     env["MTG_SHUFFLE_SALT"] = exec_salt
     if search_salt is not None:

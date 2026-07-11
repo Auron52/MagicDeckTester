@@ -55,6 +55,11 @@ struct HonestTeacherGuard
     ~HonestTeacherGuard() { g_honest_teacher = prev; }
 };
 
+// When true, EnumerateEarliestWins captures each candidate's RESULTING-state features
+// (EarliestWinCandidate::result_feats) for the d0-land-fold row dump. Off by default -> the
+// teacher/search hot path pays nothing. Set via TurnSolver::SetCaptureResultFeats.
+inline thread_local bool g_capture_result_feats = false;
+
 // A passive creature that enters the opponent's battlefield at a scheduled turn.
 // Used to provide creature targets for spells like Searing Blood in goldfishing.
 struct OpponentSpawn
@@ -72,6 +77,7 @@ class DecisionProvider;
 // Per-deck learned mid-game PLAY evaluator (defined in ai/KeepModel.h); GameState carries a
 // non-owning pointer, threaded like m_provider. Forward-declared to keep the AI layer out of core.
 struct MidGameEvaluator;
+struct DynModel;
 
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
 enum class Step  { Untap, Upkeep, Draw, MainPhase,
@@ -191,6 +197,12 @@ struct GameState
     // whose Score is higher=better. nullptr / empty / flag-off -> the exact rollout (byte-identical).
     // NEVER folded into BuildSimKey (a per-deck constant). See docs/design/learned-d0-policy.md.
     const MidGameEvaluator* m_value_model = nullptr;
+    // Non-owning pointer to the deck's learned DYNAMIC (latent-rollout) d0 policy model, stamped in
+    // AIEngine and propagated through every deep copy. When set + MTG_DYN_MODEL is on, it RANKS
+    // non-lethal turn-plans in TurnSolver::Solve (Seam A) INSTEAD of the static m_evaluator -- a float
+    // NN doing an internal forward rollout (the d0 replacement). ScoreHigherBetter() is higher=better.
+    // nullptr / flag-off -> heuristic/static ranking. NOT byte-identical (float); NEVER in BuildSimKey.
+    const DynModel* m_dyn_model = nullptr;
 
     Player&       ActivePlayer()       { return players[active_player_index]; }
     const Player& ActivePlayer() const { return players[active_player_index]; }
