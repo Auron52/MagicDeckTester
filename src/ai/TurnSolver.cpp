@@ -6193,39 +6193,48 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         int* out_committed_depth,
                                                         int value_min_depth, int budget_ms)
 {
+    (void)budget_ms;   // escalation now spends the REMAINING shared budget, not a fresh one (see below)
     int committed = depth;
     SearchLine line = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &committed);
 
     const bool value_active = UseValueModel() && state.m_value_model && !state.m_value_model->empty();
     // A VERIFIED win (win_turn within the committed horizon) is decided by real simulation, NOT the leaf
-    // estimate, so the value-leaf can't have mis-ranked it -> never redo it (redoing verified wins was
-    // firing on nearly every game of fast decks and erasing the speedup). Only an UNVERIFIED committed
-    // line (its win_turn is a beyond-horizon leaf ESTIMATE) depends on the value-leaf and needs the redo.
+    // estimate, so the value-leaf can't have mis-ranked it -> keep it (never escalate). Only an UNVERIFIED
+    // committed line (win_turn is a beyond-horizon leaf ESTIMATE) depends on the WEAK value leaf. The raw
+    // value leaf reaches converged-heuristic quality only at ~d5 and is materially worse below it (measured:
+    // value-leaf-d(k) ~= heuristic-d(k-3)); so an unverified line committed below `value_min_depth` (the
+    // per-model trust depth: knights/slivers stop at d5 where their leaf matches, others escalate up to the
+    // user depth) is escalated to the exact heuristic leaf. See learned-d0-policy.md.
     const bool verified = (line.win_turn <= state.turn_number + committed - 1);
-    const bool do_redo = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified);
+    const bool escalate = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified);
     if (g_hybrid_stats.enabled && value_active)
     {
         g_hybrid_stats.decisions.fetch_add(1);
         int di = (committed >= 0 && committed < 16) ? committed : 15;
         g_hybrid_stats.probe_depth[di].fetch_add(1);
-        if (verified) { g_hybrid_stats.verified.fetch_add(1); }
-        if (do_redo)  { g_hybrid_stats.redos.fetch_add(1); g_hybrid_stats.redo_depth[di].fetch_add(1); }
+        if (verified)  { g_hybrid_stats.verified.fetch_add(1); }
+        if (escalate)  { g_hybrid_stats.redos.fetch_add(1); g_hybrid_stats.redo_depth[di].fetch_add(1); }
     }
-    if (do_redo)
+    if (escalate)
     {
-        // The value-leaf committed a shallow, ESTIMATE-based line -> re-evaluate with the exact heuristic
-        // rollout leaf via a full FullSearchLine deepening on a fresh budget_ms. The intermediate passes are
-        // NOT waste: the heuristic leaf COSTS budget, so heuristic deepening commits at a SHALLOWER, cheaper
-        // affordable depth than the free-leaf value-leaf reached -- the intermediate passes FIND that depth
-        // and stop there. (Measured: a "surgical" single heuristic pass at the value-leaf's committed depth C
-        // skips them but forces a deeper, exponentially pricier pass -> 3-8x SLOWER, slivers 0.13-0.17x; see
-        // learned-d0-policy.md.) Fresh line_cache (per call) is uncontaminated by value-leaf entries; the
-        // start-gate relaxation MTG_VALUE_STARTGATE_ALPHA already makes this redo rare.
+        // ONE heuristic search on the REMAINING shared budget (not a fresh one): its start gate commits the
+        // deepest AFFORDABLE depth Hd -- "the best result we can afford", per the fallback design. TAKE it only
+        // if it clears the crossover: value-leaf-d(committed) ~= heuristic-d(committed - kValueTrustOffset), so
+        // heuristic-Hd beats the committed value-leaf line iff Hd > committed - kValueTrustOffset. Otherwise the
+        // affordable heuristic is SHALLOWER than the value leaf is worth (e.g. Hd=1 vs value-leaf-d5 ~= H2) ->
+        // keep the (deeper, cheaper) value-leaf line. The value leaf spent little of the budget (free leaves),
+        // so the remaining budget is nearly the whole decision budget. kValueTrustOffset=3 is uniform across all
+        // measured decks (value-leaf-d5 ~= heuristic-d2). g_force_heuristic_leaf makes FSLineWin use the exact
+        // rollout leaf; the shared tt holds only leaf-independent tail rollouts, so it is uncontaminated.
+        constexpr int kValueTrustOffset = 3;
         ForceHeuristicLeafGuard _fh(true);
-        SearchBudget hbud = SearchBudget::FromVirtualMs(budget_ms);
-        int rcommitted = depth;
-        line = FullSearchLine(state, depth, max_turns, second_main, tt, &hbud, &rcommitted);
-        committed = rcommitted;
+        int hcommitted = depth;
+        SearchLine hline = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &hcommitted);
+        if (hcommitted > committed - kValueTrustOffset)
+        {
+            line      = hline;
+            committed = hcommitted;
+        }
     }
     if (out_committed_depth) { *out_committed_depth = committed; }
     return line;

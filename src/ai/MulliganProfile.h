@@ -99,5 +99,14 @@ struct MulliganProfile
     // Empty => the exact rollout (byte-identical). Its Score() is a WIN TURN (lower = better).
     MidGameEvaluator value_model;
 
+    // Per-model "trust depth" for the value leaf (from the `value_trust_depth` key in <deck>.value.json).
+    // The raw value leaf is a WEAK-but-cheap evaluator: measured, it reaches converged-heuristic quality only
+    // at ~d5, and on an UNVERIFIED committed line below this depth it plays materially worse than the heuristic
+    // (see docs/design/learned-d0-policy.md, 2026-07-11). The hybrid keeps the value-leaf line without the
+    // (clairvoyant) heuristic escalation when its committed depth >= this; below it (and not a verified win) it
+    // escalates to one heuristic search on the remaining budget. 0 (unset) => always eligible to escalate.
+    // Decks whose value-leaf matches the heuristic at d5 (verified-win-dominated: knights/slivers) set 5.
+    int value_trust_depth = 0;
+
     static MulliganProfile DefaultProfile() { return {}; }
 };

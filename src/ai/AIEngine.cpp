@@ -1384,18 +1384,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // table. Either way the greedy tail leaves are now memoized — the
                     // deep search no longer re-rolls identical leaf states. Lossless:
                     // SimulateToEnd is a pure function of its key.
-                    // Hybrid value-leaf (MTG_VALUE_MIN_DEPTH): run the cheap value-leaf, and only if it
-                    // commits shallower than the trust depth K re-run that decision with the exact heuristic
-                    // leaf. ADOPTED default K=5 (2026-07-11) -- the crossover depth where the value leaf
-                    // reaches the heuristic ceiling on every deck; inert unless a value model is attached
-                    // (UseValueModel + <deck>.value.json). MTG_VALUE_MIN_DEPTH=0 restores the pure value-leaf
-                    // (no redo). See TurnSolver / learned-d0-policy.md.
-                    static const int s_value_min_depth = []{ const char* e = std::getenv("MTG_VALUE_MIN_DEPTH");
-                                                             return (e && *e) ? std::atoi(e) : 5; }();
+                    // Hybrid value-leaf: run the cheap value-leaf, and escalate an UNVERIFIED line committed
+                    // below the trust depth to the heuristic (see FullSearchLineHybrid). The escalate-below
+                    // depth is, in priority order: the MTG_VALUE_MIN_DEPTH env override (experiments; 0 =>
+                    // pure value-leaf, no escalation), else the deck's per-model value_trust_depth (knights/
+                    // slivers = 5, where their leaf matches the heuristic -- verified-win-dominated), else
+                    // m_lookahead_depth+1 (escalate at ANY committed depth up to the user depth: the raw leaf
+                    // is weak everywhere below convergence, so default to fixing it whenever affordable).
+                    // Inert unless a value model is attached (UseValueModel + <deck>.value.json).
+                    // See TurnSolver / learned-d0-policy.md.
+                    static const int s_vmd_override = []{ const char* e = std::getenv("MTG_VALUE_MIN_DEPTH");
+                                                          return (e && *e) ? std::atoi(e) : -1; }();
+                    const int escalate_below =
+                        (s_vmd_override >= 0)             ? s_vmd_override
+                      : (m_profile.value_trust_depth > 0) ? m_profile.value_trust_depth
+                                                          : m_lookahead_depth + 1;
                     int searched_depth = m_lookahead_depth;
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
-                        m_shared_tt, &budget, &searched_depth, s_value_min_depth, m_budget_ms);
+                        m_shared_tt, &budget, &searched_depth, escalate_below, m_budget_ms);
 
                     // Oracle: track the EARLIEST win the search actually FOUND this game --
                     // i.e. a win VERIFIED inside the searched horizon (win_turn within

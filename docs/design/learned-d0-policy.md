@@ -1942,11 +1942,35 @@ is **speed on verified-win games at heuristic quality**, not standalone quality 
 threshold: d5 is where the raw leaf finally reaches ≈H2.
 
 **The uniform crossover (motivates the fallback).** Across all 5 decks **H3 ≥ V5 ≥ H2**: heuristic-d3 beats or ties
-value-leaf-d5, and value-leaf-d5 beats or ties heuristic-d2. So the trust rule is universal and needs **no per-model
-constant**: keep the value-leaf while the heuristic can only afford ≤ d2; **fall back to the heuristic once it can afford
-d3+**. This is exactly why the overnight (generous budget, heuristic reaches d3+ so it beats the leaf, but the current
-hybrid does NOT redo at committed=5) shows the value-leaf slightly worse. The fallback: after the cheap value-leaf pass,
-if it is not a verified win, run the heuristic on the *remaining* budget and take it iff its start gate commits ≥ d3
-(reusing the existing affordability machinery — no bespoke Dh estimator); otherwise keep the value-leaf (it is ≈ H2, and
-cheaper). A per-model convergence-depth override in `<deck>.value.json` can refine the d3 threshold for future decks
-(all 5 current decks want 3).
+value-leaf-d5, and value-leaf-d5 beats or ties heuristic-d2. So the escalation rule is near-universal: keep the value-leaf
+while the heuristic can only afford ≤ d2; fall back once it can afford d3+.
+
+### The depth-aware fallback — BUILT + validated (2026-07-11)
+
+`FullSearchLineHybrid` now: run the cheap value-leaf; if the committed line is a **verified win** keep it (leaf-
+independent, exact); else if committed depth ≥ the deck's **`value_trust_depth`** keep it (the leaf matches the heuristic
+there); else **escalate** — one heuristic search on the **remaining** shared budget (its start gate commits the deepest
+affordable Hd), taken only if it clears the crossover `Hd > committed − 3` (value-leaf-d(k) ≈ heuristic-d(k−3), uniform),
+else keep the value-leaf. No bespoke Dh estimator (reuses the start gate); no fresh budget (spends what the value-leaf
+left). `escalate_below` at the call site = env `MTG_VALUE_MIN_DEPTH` override (0 ⇒ pure leaf) → `value_trust_depth` →
+else `user_depth+1` (escalate at every depth).
+
+**`value_trust_depth` is per-model, in `<deck>.value.json`, and DERIVED not hand-set** by
+`scripts/valueleaf_calibrate_trust.py` (run once per value model, ideally at model-creation): it is the shallowest depth
+where the pure leaf reaches converged-heuristic quality (`V_d − min_d H_d ≤ tol=0.002`), else UNSET ⇒ escalate always.
+Calibrator output: **knights = 5, slivers = 5** (verified-win-dominated, V5=H5), **antilife / TH / burn = UNSET**
+(V5 still +0.009 / +0.019 / +0.003 over H_conv).
+
+**Validated (`scripts/valueleaf_fallback_ab.py`, 500 g × 4 seeds; fb − pure-heuristic):**
+- **Unbounded d5:** fb − heuristic = **+0.0000 on every deck** (residual fully closed), at **0.7–0.8×** the heuristic's
+  cost where it escalates (antilife/TH/burn) and **15–32× cheaper** on the trust-marked decks (knights/slivers, zero
+  escalation). Strict Pareto win over the pure heuristic.
+- **Gate d3=10:** the raw leaf is catastrophic (pure − heur: antilife **+0.344**, TH +0.077, knights +0.031); the fallback
+  restores parity (fb − heur ≤ +0.003). So the fallback makes the value-leaf **safe at any depth**, not just a generous-
+  budget polish.
+- **Gate d5=20:** fb − heur ≤ +0.005 (recovers ⅔–all of the residual under the tight node budget).
+
+**NC-path note.** The heuristic escalation leaf is *clairvoyant*, so it is a clairvoyant-path quality lever and lives only
+in the `s_full_depth` branch — `MTG_NC_SEARCH` (`ReshuffleAvgChoosePlan`) is a mutually-exclusive branch and is
+unaffected. On a non-clairvoyant/dynamic-model path the value-leaf is itself the endpoint; the reusable piece is the
+`value_trust_depth` *data* in the profile, not the heuristic escalation. Keep the escalation leaf pluggable.

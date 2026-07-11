@@ -401,11 +401,13 @@ public:
                                      SearchBudget* budget = nullptr,
                                      int* out_committed_depth = nullptr);
 
-    // Hybrid value-leaf search: run FullSearchLine with the cheap learned value-leaf, and if it committed
-    // a pass SHALLOWER than value_min_depth (where the leaf estimate is unreliable) re-run once with the
-    // exact heuristic rollout leaf on a fresh budget_ms budget. Keeps full value-leaf speed whenever the
-    // search reaches the safe depth, falls back to heuristic quality otherwise. value_min_depth <= 0, or
-    // no value model attached/enabled, => identical to FullSearchLine (no redo). See learned-d0-policy.md.
+    // Hybrid value-leaf search: run FullSearchLine with the cheap learned value-leaf; if it committed an
+    // UNVERIFIED pass shallower than value_min_depth (the per-model trust depth, where the WEAK leaf is
+    // unreliable), escalate to ONE heuristic search on the REMAINING budget and take it only if the depth it
+    // can afford clears the crossover (heuristic-Hd beats value-leaf-committed iff Hd > committed-3). A
+    // VERIFIED win, or a line at/above the trust depth, is kept as-is. budget_ms is unused (escalation spends
+    // the remaining shared budget). value_min_depth <= 0, or no value model attached/enabled, => identical to
+    // FullSearchLine (no escalation -- pure value leaf). See learned-d0-policy.md.
     static SearchLine FullSearchLineHybrid(const GameState& state, int depth,
                                            int max_turns, bool second_main,
                                            TranspositionTable* tt, SearchBudget* budget,

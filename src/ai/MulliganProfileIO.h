@@ -743,8 +743,16 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
     {
         std::ifstream f(p);
         if (!f) { return; }
-        try { nlohmann::json j; f >> j; profile.value_model = EvalModelFromJsonObj(j); }
-        catch (...) { profile.value_model = MidGameEvaluator{}; }
+        try
+        {
+            nlohmann::json j; f >> j;
+            profile.value_model = EvalModelFromJsonObj(j);
+            // Optional per-model trust depth (top-level or under the eval_model wrapper). See
+            // MulliganProfile::value_trust_depth.
+            const nlohmann::json& mm = j.contains("eval_model") ? j["eval_model"] : j;
+            profile.value_trust_depth = mm.value("value_trust_depth", j.value("value_trust_depth", 0));
+        }
+        catch (...) { profile.value_model = MidGameEvaluator{}; profile.value_trust_depth = 0; }
     };
 
     if (const char* ov = std::getenv("MTG_VALUE_PROFILE"))
