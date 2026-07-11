@@ -886,6 +886,28 @@ static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"over_by\": " << (static_cast<int>(ap.hand.size()) - 7) << ",\n";
     WriteBoardContext(os, s, 0);
+    // AI's FULL cleanup-discard set (original hand indices), by simulating the shared selector forward
+    // on a state copy: record the pick, erase it from the copy's hand, repeat until at max hand size.
+    // Lets the viewer pre-select and commit the whole set in ONE step instead of one card per engine
+    // round-trip. ai_set[0] equals heuristic_default (same selector, same starting state).
+    std::vector<int> ai_set;
+    {
+        GameState copy = s;
+        Player& cp = copy.players[copy.active_player_index];
+        std::vector<int> orig(cp.hand.size());
+        for (int i = 0; i < static_cast<int>(cp.hand.size()); ++i) { orig[i] = i; }
+        while (static_cast<int>(cp.hand.size()) > 7)
+        {
+            int idx = SelectCleanupDiscardIndex(copy, s.m_required_pieces);
+            if (idx < 0 || idx >= static_cast<int>(cp.hand.size())) { break; }
+            ai_set.push_back(orig[idx]);
+            cp.hand.erase(cp.hand.begin() + idx);
+            orig.erase(orig.begin() + idx);
+        }
+    }
+    os << "  \"ai_set\": [";
+    for (size_t i = 0; i < ai_set.size(); ++i) { if (i) os << ", "; os << ai_set[i]; }
+    os << "],\n";
     os << "  \"heuristic_default\": " << heuristic_default << ",\n";
     os << "  \"options\": [";
     for (size_t i = 0; i < hand_indices.size(); ++i)

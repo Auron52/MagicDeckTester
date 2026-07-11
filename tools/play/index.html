@@ -298,6 +298,12 @@
   #decpanel .tutgrid .cardmini { width:72px; cursor:pointer; border-radius:6px; padding:2px; }
   #decpanel .tutgrid .cardmini:hover { background:#1f2d3a; box-shadow:0 0 0 1px var(--acc); }
   #decpanel .tutgrid .cardmini.def img { box-shadow:0 0 0 2px var(--acc); }
+  /* multi-select discard: a card marked to be discarded (red outline + ✕), distinct from the AI-pick
+     blue. Placed after .def so a card that is both AI-picked and selected reads as selected (red). */
+  #decpanel .tutgrid .cardmini.sel img { box-shadow:0 0 0 3px var(--bad), 0 0 12px rgba(230,105,90,.55); }
+  #decpanel .tutgrid .cardmini.sel::after { content:'\2715'; position:absolute; top:-7px; left:-4px; z-index:2;
+      background:var(--bad); color:#fff; font-size:11px; font-weight:700; width:17px; height:17px; line-height:17px;
+      text-align:center; border-radius:50%; box-shadow:0 0 0 2px #0b0c0e; }
   #decpanel .tutgrid .varpick { position:relative; }
   #decpanel .tutgrid .varbadge { position:absolute; top:-7px; left:50%; transform:translateX(-50%); z-index:2;
       background:var(--acc); color:#0c1116; font-size:11px; font-weight:700; padding:1px 7px; border-radius:8px;
@@ -1171,20 +1177,34 @@ function digPanelHtml(d){
      `<button class="ghost" data-opt="-1">Take nothing</button></div>`;
   return h;
 }
-// Cleanup-discard panel (#2): IMAGE-based central modal. The hand is shown as art; click a card to
-// discard it. Fires once per card over the maximum hand size. The AI's pick is tagged.
+// Cleanup-discard panel (#2): IMAGE-based central modal, MULTI-SELECT. The hand is shown as art; the
+// AI's full discard set (d.ai_set) is preselected and badged. Click to toggle which cards to discard;
+// commit all `over_by` at once (one engine step) instead of one card per round-trip. Falls back to the
+// single AI pick (heuristic_default) if the engine didn't emit ai_set (older binary).
+function aiDiscardSet(d){
+  return (d.ai_set && d.ai_set.length) ? d.ai_set.slice()
+       : (d.heuristic_default!=null ? [d.heuristic_default] : []);
+}
 function discardPanelHtml(d){
   const over=d.over_by||1;
+  // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
+  if (S._discardFor !== d.decision_index){ S._discardFor=d.decision_index; S.discardSel=new Set(aiDiscardSet(d)); }
+  const sel=S.discardSel, aiSet=new Set(aiDiscardSet(d));
   let h=`<h3>Discard to hand size</h3>`;
-  h+=`<div class="sub">Your hand is over the maximum (7). Click a card to discard it${over>1?` — ${over} to go`:''}. The rest stay in your hand.</div>`;
+  h+=`<div class="sub">Your hand is over the maximum (7). Select <b>${over}</b> card${over===1?'':'s'} to discard — the rest stay. The AI’s picks are preselected.</div>`;
   h+=`<div class="tutgrid">`;
   (d.options||[]).forEach(o=>{
-    const def=o.index===d.heuristic_default;
-    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${o.index}" data-name="${esc(o.name)}" title="${esc(o.name)}">`+
+    const isSel=sel.has(o.index), isAI=aiSet.has(o.index);
+    h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${o.index}" data-name="${esc(o.name)}" title="${esc(o.name)}">`+
        `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(o.name)}</em>`+
-       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
   });
-  return h+`</div>`;
+  h+=`</div>`;
+  const n=sel.size, ok=(n===over);
+  h+=`<div class="pbtns"><span class="pcount">${n} / ${over} selected</span>`+
+     `<button class="ghost" id="discardai">Follow AI</button><span class="spacer"></span>`+
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Discard ${over} card${over===1?'':'s'}</button></div>`;
+  return h;
 }
 // Retrace-discard panel (Throes of Chaos): IMAGE-based central modal. Casting a retrace spell from
 // the graveyard costs an extra discarded land; the discardable lands are shown as art, click one to
@@ -1359,8 +1379,11 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>commitVial(d, +b.dataset.v));
   else if (dec==='dig')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDig(d, +b.dataset.opt));
-  else if (dec==='discard')
-    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDiscard(d, +b.dataset.opt));
+  else if (dec==='discard'){
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleDiscard(d, +b.dataset.opt));
+    const ai=panel.querySelector('#discardai'); if (ai) ai.onclick=()=>{ S.discardSel=new Set(aiDiscardSet(d)); renderDecisionPanel(d,'discard'); };
+    const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDiscardBatch(d);
+  }
   else if (dec==='divide')
     { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDivide(d); }
   else if (dec==='expressive_iteration')
@@ -1395,9 +1418,23 @@ function commitDig(d, oi){
   const c=(d.examined||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source}: ${oi<0||!c?'take nothing':'take '+c.name}`);
 }
-function commitDiscard(d, oi){
-  const c=(d.options||[]).find(x=>x.index===oi);
-  pushChoice(d, oi, `discard: ${c?c.name:'card'}`);
+// Multi-select cleanup discard: toggle a card in/out of the discard set (capped at over_by), then
+// commit all at once. The engine still reads one hand-index per discard decision, so we submit the
+// picks in DESCENDING hand-index order -- removing a higher index never shifts a lower one, so each
+// index stays valid at its successive (shrinking-hand) discard decision.
+function toggleDiscard(d, oi){
+  const over=d.over_by||1, sel=S.discardSel||(S.discardSel=new Set());
+  if (sel.has(oi)) { sel.delete(oi); }
+  else { if (sel.size>=over){ flashHint(`Pick exactly ${over} — deselect one first.`); return; } sel.add(oi); }
+  renderDecisionPanel(d,'discard');
+}
+function commitDiscardBatch(d){
+  const over=d.over_by||1, sel=[...(S.discardSel||[])];
+  if (sel.length!==over){ flashHint(`Select exactly ${over} card${over===1?'':'s'} to discard.`); return; }
+  const desc=sel.slice().sort((a,b)=>b-a);   // descending hand-index order (see note above)
+  const names=desc.map(i=>{ const c=(d.options||[]).find(x=>x.index===i); return c?c.name:'card'; });
+  S._discardFor=null; S.discardSel=null;      // clear the per-decision selection guard
+  pushChoices(d, desc, `discard: ${names.join(', ')}`);
 }
 // Divide: send one integer per legal target (in legal order = the order the engine reads them).
 function commitDivide(d){
