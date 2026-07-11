@@ -1,12 +1,12 @@
-# Regression ground truth -- commit e15462d  date 2026-07-11
+# Regression ground truth -- commit 8811707  date 2026-07-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-slivers_smoke_d0_s1001=999/4.66266/1cef9308489d08a1
-slivers_smoke_d3_s1001=250/4.292/e02388f36897f9a5
-slivers_smoke_d5_s1001=150/4.22/9b384e55bc69bfbe
+slivers_smoke_d0_s1001=1000/4.66/82649b079d9c0fd0
+slivers_smoke_d3_s1001=250/4.28/972d62ba34d88f24
+slivers_smoke_d5_s1001=150/4.22/ad3cefccb0c07966
 burn_smoke_d0_s1001=990/4.56465/3f8b9653bbc758cf
 burn_smoke_d3_s1001=298/4.32886/72bde106c5334407
 burn_smoke_d5_s1001=249/4.33333/5272b0bf433bc3ce
@@ -24,11 +24,11 @@ hinata_smoke_d3_s1001=146/5.58219/a58fd3989c952660
 hinata_smoke_d5_s1001=72/5.59722/bc8d07fc7f975000
 
 # --- regression ---
-slivers_regression_d0_s2002=999/4.7007/da946ecd33614760
-slivers_regression_d3_s2002=400/4.265/a46403b76d460cdd
-slivers_regression_d3_s3003=399/4.25313/ef61bfa5ad77a34b
-slivers_regression_d5_s2002=300/4.28333/57bdc61f9761ac1b
-slivers_regression_d5_s3003=299/4.25084/f69838953ef6fe7c
+slivers_regression_d0_s2002=1000/4.694/a83261ffac64a0a7
+slivers_regression_d3_s2002=400/4.22/db8b7386b6bc1c4d
+slivers_regression_d3_s3003=400/4.26/2d9119b7b6ecffd7
+slivers_regression_d5_s2002=300/4.22/fbd1708d8c52759f
+slivers_regression_d5_s3003=300/4.25/3d782d5bcd7847bb
 burn_regression_d0_s2002=990/4.53434/8e3c9e02ba4ba6c7
 burn_regression_d3_s2002=497/4.334/00bd186a1573b0e8
 burn_regression_d3_s3003=499/4.27455/42602fd20889ee61
