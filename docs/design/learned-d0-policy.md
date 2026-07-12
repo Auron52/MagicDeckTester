@@ -2624,3 +2624,15 @@ validated on the standalone model's PLAY. First lever this whole push that moved
 right axis. CONFIRMING at scale + generalizing to slivers/knights (multi-color, expect help) vs burn
 (mono-red control, expect flat): scripts/mana_feature_all.sh -> logs/model_improve/mana_feature_all.out.
 Small-sample caveat (TH n=22 test decisions; standalone play on 320 held-out games is the trustworthy leg).
+
+## 2026-07-12 CORRECTION: the mana-feature TH win did NOT replicate -- it is NEUTRAL at scale
+The TH standalone gain (5.481->5.362) above was n=22-decision small-sample NOISE. Broader A/B
+(scripts/mana_feature_all.sh, 5 decks, 180g dump + 320g held-out play, model H128 e100):
+  TH std 5.403->5.438(worse) | slivers 4.569->4.650(worse) | knights 4.528->4.531(flat) |
+  antilife 5.200->5.131(BETTER -- the 0%-aliased CONTROL, opposite of the prediction) | burn flat.
+  PRIOR top-4 LP flat within +-0.035 everywhere. Mean effect ~0, +-0.08 deck scatter, prediction FAILED.
+=> MTG_MANA_FEATURES is a NEGATIVE (kept inert/off). 7 falsified levers now (depth, DAgger, card-identity,
+policy-CE, capacity, K32-labels, color-features) => the standalone static model is at a robust ~0.5-LP
+ceiling. Measuring the irreducible LABEL-NOISE floor next (MTG_LABEL_SALT, label_noise_floor.sh) to tell
+whether the residual is model-fixable or noise -- if the model's ~0.1-0.17 pick-regret ~= the floor, the
+model is near-optimal and the "gap" is largely an artifact of K=8 label sampling.
