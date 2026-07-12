@@ -2685,3 +2685,24 @@ is reconstruction-as-a-REGULARIZER on antilife's static value (0.183->0.133) but
 and is n=105 (the same small-sample shape that faked the mana-feature win) -> replicating across holdout splits
 before believing it (logs/model_improve/wm_repl.out). Even if real, pick-regret is mostly label noise (floor
 analysis) so it likely won't move PLAY -- would need a serve+play-LP confirmation.
+
+## 2026-07-13 WORLD-MODEL VERDICT: NEGATIVE (8th falsified lever) -- with the ROOT CAUSE
+Replication across 4 holdout splits settles it: world-model (recon.1/boot.5) mean pick-regret = value-only.
+  antilife: value-only 0.1668 vs world-model 0.1655 (identical, +-0.03 split scatter; the 0.133 was ONE split)
+  TH:       value-only 0.2234 vs world-model 0.2272 (slightly worse)
+The bootstrapped forward-simulated value is WORSE everywhere; the recon-regularizer is split-selection NOISE.
+
+ROOT CAUSE (from the training losses): val loss 0.41 (predict current value directly) vs boot loss 1.35
+(predict next value via the learned dynamics) = rolling the value forward ONE step is 3.3x worse. The learned
+dynamics LOSES value-relevant information because the next state depends on the HIDDEN DRAW the model cannot
+predict. This is the entire investigation in one number: forward simulation beats every static/learned predictor
+*because a real rollout SAMPLES actual draws*, and any non-clairvoyant model (static value OR learned world-model)
+cannot. Non-clairvoyance is not a feature/architecture problem -- it is the irreducible structure of the task.
+
+FINAL PICTURE (8 falsified levers: depth, DAgger, card-identity, policy-CE, capacity, K32-labels, color-features,
+world-model): the standalone learned model is a NEAR-OPTIMAL RANKER at the label-noise floor, and it CANNOT reach
+the teacher's PLAY quality because the teacher's edge is forward simulation over sampled draws, which no model can
+internalise. The deliverable that reaches teacher is therefore necessarily hybrid: a near-optimal learned ranker
+(prunes the branch, top-M) + the MINIMAL real rollout that supplies the sampled-draw simulation (the NC prior,
+MTG_NC_TOPM). That is not a fallback -- it is the architecture the evidence forces. Reusable infra kept (inert):
+MTG_DUMP_TRAJ, tools/worldmodel, MTG_MANA_FEATURES, MTG_LABEL_SALT, dyntrain fail-analysis + --gamma.
