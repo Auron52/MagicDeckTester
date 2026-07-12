@@ -4,6 +4,7 @@
 #include <random>
 #include <cstdint>
 #include <stdexcept>
+#include <algorithm>
 
 // Draw-from-top library backed by a single vector with a TOP CURSOR.
 //
@@ -163,6 +164,37 @@ public:
             std::uint64_t off = rng_index(static_cast<std::uint64_t>(i + 1)); // [0, i]
             if (off != i) { std::swap(at(i), at(static_cast<std::size_t>(off))); }
         }
+    }
+
+    // COMMON-RANDOM-NUMBERS reshuffle: order the live library by a per-copy priority
+    // key = splitmix64(seed, m_number). Unlike Shuffle() (a Fisher-Yates whose output
+    // depends on the exact multiset + draw history), each card's rank here depends ONLY
+    // on its own stable m_number (assigned at deck setup, identical across two same-seed
+    // games). So removing a card -- e.g. a fetchland pulling one land out -- leaves every
+    // OTHER card's relative order UNCHANGED. Two games (two policies) that reach this
+    // reshuffle with nearly the same library therefore draw nearly the same cards: they
+    // diverge ONLY by the specifically-different cards each removed, not by a full
+    // re-permutation. That holds the realized future consistent across an A/B while still
+    // being a genuine (non-game-start, non-clairvoyant) reshuffle. m_number is unique per
+    // live card, so the key is a total order (tie-break on m_number for hash collisions).
+    void ShuffleByKey(uint64_t seed)
+    {
+        if (size() < 2) { return; }
+        auto key = [seed](const Card& c) -> std::uint64_t
+        {
+            std::uint64_t x = seed * 0x9E3779B97F4A7C15ull
+                            + (static_cast<std::uint64_t>(c.m_number) + 1) * 0xD1B54A32D192ED03ull;
+            x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ull;
+            x ^= x >> 27; x *= 0x94D049BB133111EBull;
+            x ^= x >> 31;
+            return x;
+        };
+        std::stable_sort(m_cards.begin() + static_cast<std::ptrdiff_t>(m_top), m_cards.end(),
+            [&key](const Card& a, const Card& b)
+            {
+                std::uint64_t ka = key(a), kb = key(b);
+                return ka != kb ? ka < kb : a.m_number < b.m_number;
+            });
     }
 
 private:
