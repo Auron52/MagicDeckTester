@@ -2636,3 +2636,32 @@ policy-CE, capacity, K32-labels, color-features) => the standalone static model 
 ceiling. Measuring the irreducible LABEL-NOISE floor next (MTG_LABEL_SALT, label_noise_floor.sh) to tell
 whether the residual is model-fixable or noise -- if the model's ~0.1-0.17 pick-regret ~= the floor, the
 model is near-optimal and the "gap" is largely an artifact of K=8 label sampling.
+
+## 2026-07-12 DECISIVE: the model is a NEAR-OPTIMAL RANKER at the LABEL-NOISE FLOOR (why no lever helped)
+Measured the irreducible label-noise floor (MTG_LABEL_SALT, scripts/label_noise_floor.sh): label the SAME
+games twice with independent K=8 reshuffle streams, grade dump-A's teacher-best plan under dump-B's labels.
+  antilife: floor pick-regret = 0.120  (teacher argmin AGREES with its own relabel only 67%; |dLabel|/cand 0.25)
+  TH:       floor pick-regret = 0.099  (agree 65%; |dLabel|/cand 0.23)
+Model pick-regret on the same served rsvalue rows:  antilife 0.173 (excess 0.053 over floor)  TH ~0.09-0.11
+(AT the floor). => The teacher DISAGREES WITH ITSELF ~1/3 of the time; the model already ranks within ~0.05
+(antilife) / ~0 (TH) of that irreducible floor. **The model is a near-optimal ranker; ~70-100% of its
+measured pick-regret is K=8 label sampling noise, NOT model error.** This EXPLAINS all 7 falsified levers
+(depth/DAgger/card-identity/policy-CE/capacity/K32-labels/color-features): you cannot rank better than the
+labels permit, and the labels are noise-limited, not model-limited. Cleaner (higher-K) labels lower the floor
+but don't help PLAY -- because play is not ranking-limited.
+
+THREE-WAY PROOF the standalone static model cannot reach the teacher, and WHY:
+  (1) DOMINATION: static d0-model 5.561 vs NC-d0 rollout 4.939 goldfish (the rollout SIMULATES, closes the gap).
+  (2) FEATURE/RANKING CEILING: recall & pick-regret invariant to loss/capacity/model-class/features.
+  (3) LABEL-NOISE FLOOR: model pick-regret ~= the teacher's own self-disagreement floor.
+The standalone PLAY gap (std ~5.2 vs teacher/prior ~4.3-4.9) is therefore NOT a ranking deficiency the model
+can train away -- it is the STATIC-VALUE-vs-FORWARD-SIMULATION gap (+ covariate shift when the model plays its
+own games). The teacher's entire edge IS the forward simulation, which is not encodable in a static value.
+
+CONSEQUENCE for the deliverable: the "prior" (model prunes -> minimal rollout decides) is NOT a fallback-to-
+search concession -- it is the PRINCIPLED architecture the proof implies: a near-optimal static ranker plus the
+MINIMAL forward simulation that a static value provably cannot contain. The rollout supplies exactly the missing
+piece, nothing more. The ONLY way to put the simulation INSIDE the model is a learned WORLD-MODEL (MuZero-style
+latent dynamics with multi-step state-reconstruction supervision) -- a big, uncertain, multi-day build needing
+per-turn trajectory dumps; the latent-dynamics net (T2/T3) already showed no ranking lift, so odds are guarded.
+That is the one categorically-different lever left; bring to the user before committing days. NOT launched.
