@@ -5,8 +5,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #ifdef MTG_HAVE_ZLIB
 #include <zlib.h>
 #endif
@@ -575,6 +577,29 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
 // loaded profile already has an exhaustive block (i.e. --profile pointed straight at it) or the path
 // isn't a `<name>.profile.json`. NOT called by the analyzer's rollout-profile loads (that would be
 // circular during generation) -- only from the game-play entry points.
+// Process-global cache of parsed exhaustive-keep blocks, keyed by resolved sidecar path. The block is
+// large (the committed .gz is ~1-2 MB, ~13 MB raw JSON), and a --batch run loads the SAME deck's sidecar
+// once PER JOB (treasure_hunt x5, Knights x5, ... across the seed/depth matrix). Without this each job
+// re-opens, re-gunzips and re-parses the whole table -- minutes of single-threaded startup before the
+// worker pool even spawns (measured: the batch sat at 1 thread for many minutes on the exhaustive-keep
+// decks). Parse once per path, then hand back a copy: the sidecar file is immutable for a run, so keying
+// on its path is exact. Mutex-guarded because attach can run off any thread (defensive; batch loads jobs
+// on the main thread). Empty policies are cached too (a missing/garbage sidecar isn't retried per job).
+inline const ExhaustiveKeepPolicy& CachedExhaustiveKeep(const std::filesystem::path& path)
+{
+    static std::mutex mtx;
+    static std::unordered_map<std::string, ExhaustiveKeepPolicy> cache;
+    const std::string key = path.string();
+    std::lock_guard<std::mutex> lock(mtx);
+    auto it = cache.find(key);
+    if (it == cache.end())
+    {
+        MulliganProfile exh = LoadDeckProfile(path);
+        it = cache.emplace(key, std::move(exh.exhaustive_keep)).first;
+    }
+    return it->second;
+}
+
 inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
 {
     if (!profile.exhaustive_keep.empty()) { return; }
@@ -590,8 +615,8 @@ inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesys
     {
         const std::string v = ov;
         if (v.empty() || v == "none" || v == "off" || v == "0") { return; }
-        MulliganProfile exh = LoadDeckProfile(v);
-        if (!exh.exhaustive_keep.empty()) { profile.exhaustive_keep = std::move(exh.exhaustive_keep); }
+        const ExhaustiveKeepPolicy& cached = CachedExhaustiveKeep(v);
+        if (!cached.empty()) { profile.exhaustive_keep = cached; }
         return;
     }
 
@@ -606,8 +631,8 @@ inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesys
         const std::filesystem::path cand = dir / (stem + ext);
         if (std::filesystem::exists(cand))
         {
-            MulliganProfile exh = LoadDeckProfile(cand);
-            if (!exh.exhaustive_keep.empty()) { profile.exhaustive_keep = std::move(exh.exhaustive_keep); }
+            const ExhaustiveKeepPolicy& cached = CachedExhaustiveKeep(cand);
+            if (!cached.empty()) { profile.exhaustive_keep = cached; }
             return;
         }
     }
