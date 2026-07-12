@@ -843,6 +843,17 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns, int* lands_out)
     GameLogger* saved = m_logger;
     m_logger          = nullptr;
     m_in_rollout      = true;
+    // Attach the deck's learned play models to the rollout state so a DIRECT rollout (keep/bottom
+    // generator, MULL-EV, Land's Edge probe -- all of which call PlayOut without going through
+    // RunGame::HandleMulligan) plays like the SHIPPED deck. HandleMulligan is the normal hook that
+    // sets these (see there); the rollout bypasses it (the hand is pre-built), so without this the
+    // value/eval model is null throughout the rollout and every full-depth leaf falls back to the
+    // slow SimulateToEnd horizon rollout instead of the O(1) learned value leaf -- a ~train/serve
+    // MISMATCH (the gen played a value-less policy the deck never serves) AND the dominant cost of
+    // the exhaustive-keep generator (measured: the value leaf was 100% inert; MTG_VALUE_MODEL=0 was
+    // byte-for-byte the same speed). Non-owning; m_profile outlives every deep copy the search makes.
+    trial.m_value_model = m_profile.value_model.empty() ? nullptr : &m_profile.value_model;
+    trial.m_evaluator   = m_profile.eval_model.empty()  ? nullptr : &m_profile.eval_model;
     ShuffleEvalGuard  _seg(true);   // decoupling instrument: rollout shuffles use shuffle_salt_search
     // The rollout PlayOut shares this AIEngine by reference, so isolate its committed
     // full-depth line: stash the real game's line, run the rollout on a fresh empty
