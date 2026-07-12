@@ -51,10 +51,11 @@ int main(int argc, char** argv) {
     int nfeat = ncol - 3;                            // minus label, seed, turn
     std::vector<int> is_plan(nfeat, 0);
     int nstate = 0, nplan = 0, base_pidx = -1;   // base_pidx = index of plan_baseline_eval within pfeat
+    std::vector<std::string> state_names, plan_names;   // names in sfeat / pfeat order (for failure analysis)
     for (int j = 0; j < nfeat; ++j) {
         const std::string& nm = hdr[1 + j];
-        if (nm.rfind("plan_", 0) == 0) { if (nm == "plan_baseline_eval") base_pidx = nplan; is_plan[j] = 1; ++nplan; }
-        else ++nstate;
+        if (nm.rfind("plan_", 0) == 0) { if (nm == "plan_baseline_eval") base_pidx = nplan; is_plan[j] = 1; ++nplan; plan_names.push_back(nm); }
+        else { ++nstate; state_names.push_back(nm); }
     }
 
     std::vector<Row> rows;
@@ -254,6 +255,46 @@ int main(int argc, char** argv) {
     };
     eval(train, "train");
     eval(test,  "test ", true);
+
+    // ---- FAILURE ANALYSIS: why does the model mis-rank? (aliasing vs mis-weighting) ----
+    // For every held-out decision the model gets meaningfully wrong (its pick's win-turn is >0.5 worse
+    // than the teacher's best), measure the STANDARDIZED state-feature distance between the model's pick
+    // and the teacher's best. SMALL distance => the two resulting boards look ~identical to the features
+    // yet play out differently = ALIASING (the representation is the wall; add features). LARGE distance
+    // => the features DO separate them and the model just weights them wrong (loss/capacity -- which we've
+    // shown doesn't move). Also report which state features differ MOST on failures (the axes to enrich).
+    {
+        double dist_fail = 0, dist_ok = 0; int nfail = 0, nok = 0, aliased = 0;
+        const double ALIAS = 1.0;   // L2 over standardized state feats; <1 ~= "indistinguishable"
+        std::vector<double> featdiff(nstate, 0.0);
+        for (Group& g : test) {
+            int m = (int)g.idx.size(); if (m < 2) continue;
+            Vec pred(m); Cache c;
+            int bpred = 0, blabel = 0;
+            for (int i = 0; i < m; ++i) { pred[i] = forward(rows[g.idx[i]], c);
+                if (pred[i] < pred[bpred]) bpred = i;
+                if (rows[g.idx[i]].label < rows[g.idx[blabel]].label) blabel = i; }
+            const Vec& a = rows[g.idx[bpred]].sfeat;   // model's pick resulting board
+            const Vec& b = rows[g.idx[blabel]].sfeat;  // teacher's best resulting board
+            double d2 = 0; for (int j = 0; j < nstate; ++j) { double d = a[j]-b[j]; d2 += d*d; }
+            double d = std::sqrt(d2);
+            double mreg = rows[g.idx[bpred]].label - rows[g.idx[blabel]].label;
+            if (mreg > 0.5) { dist_fail += d; ++nfail; if (d < ALIAS) ++aliased;
+                for (int j = 0; j < nstate; ++j) featdiff[j] += std::fabs(a[j]-b[j]); }
+            else { dist_ok += d; ++nok; }
+        }
+        std::fprintf(stderr,
+            "[fail-analysis] failures(mreg>0.5)=%d  aliased(dist<%.1f)=%d (%.0f%%)  "
+            "mean state-dist: fail=%.2f  ok=%.2f\n",
+            nfail, ALIAS, aliased, 100.0*aliased/std::max(1,nfail),
+            dist_fail/std::max(1,nfail), dist_ok/std::max(1,nok));
+        std::vector<int> ord(nstate); for (int j = 0; j < nstate; ++j) ord[j] = j;
+        std::sort(ord.begin(), ord.end(), [&](int x, int y){ return featdiff[x] > featdiff[y]; });
+        std::fprintf(stderr, "  top state feats differing on failures (mean|diff| standardized):\n");
+        for (int r = 0; r < 10 && r < nstate; ++r)
+            std::fprintf(stderr, "    %-22s %.3f\n", state_names[ord[r]].c_str(),
+                         featdiff[ord[r]]/std::max(1,nfail));
+    }
 
     // ---- Serialize the model (dependency-free JSON) for in-engine inference ----
     if (!out_path.empty()) {
