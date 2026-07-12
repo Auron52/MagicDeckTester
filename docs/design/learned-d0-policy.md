@@ -2508,3 +2508,20 @@ would reuse the vocab/dump plumbing). But bag-of-cards is a NEGATIVE, and the ne
 embedding variant would also be marginal (embeddings fix overfit, not absent signal). NET of the whole model
 push: labels, data, capacity, DAgger, generic feature, combo feature, AND card identity ALL fail to robustly
 beat the rollout leaf -> the fast NC policy at human level is NC-d1/d0 (rollout leaf), not the learned net.
+
+## 2026-07-12 KEY DIAGNOSTIC: the model's leak is the OPENING (turns 1-2), NOT the combo -> depth-on-opening
+Added a PER-TURN pick-regret breakdown to the dyntrain eval (regret bucketed by decision turn). On the
+antilife teacher-d2 rows the model's held-out pick-regret is CONCENTRATED in the opening and near-zero late:
+  turn 1: 0.21  turn 2: 0.17  turn 3: 0.09  turn 4: 0.05  turn 5: 0.04  turn 6-8: ~0.05->0.00
+=> turns 1-2 are ~65% of the model's TOTAL pick-regret; the model already plays turns 5-8 (incl. combo/kill
+turns) NEAR-OPTIMALLY. Robust across the card model and a different holdout split (turn-1 0.25-0.35 every time).
+REFRAMES the whole push: the hard part is NOT the complex combo turn (the model + exact-lethal check handle it)
+-- it is the OPENING DEVELOPMENT (which land to fetch / dork to play), whose payoff is many turns away and so is
+hardest for a 1-PLY STATIC value to evaluate (longest horizon). This is exactly where DEPTH/lookahead should
+help, and an opening-specific depth benefit would WASH OUT in the teacher's aggregate d2-vs-d3 tie (d3 could help
+turns 1-2 while neutral/noise elsewhere). 
+NEXT (resume hypothesis): test whether DEPTH helps the OPENING specifically -- (a) NC teacher per-turn win
+contribution at d0/d1/d2/d3 (does deeper search improve turn-1-2 lines?), and (b) a HYBRID fast policy = bounded
+lookahead (depth 1-2) on turns 1-2 where the net is weak + fast net on turns 3+ where it's near-optimal (the
+user's "bolt-on search for the hard turns", applied to the OPENING not the combo). Tooling: dyntrain per-turn
+eval (byturn=true). Rows: logs/model_improve/al_{nocard,cardfeat}.rows (400 teacher-d2 games).

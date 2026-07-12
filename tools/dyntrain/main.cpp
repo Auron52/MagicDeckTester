@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstring>
 #include <map>
+#include <array>
 #include <sstream>
 
 using dyn::Vec; using dyn::Linear; using dyn::Rng;
@@ -187,9 +188,12 @@ int main(int argc, char** argv) {
     }
 
     // ---- Eval on held-out: RMSE, top-1 pick accuracy, pick-regret ----
-    auto eval = [&](std::vector<Group>& gs, const char* tag) {
+    // per_turn: turn -> {sum model-regret, sum heur-regret, count, sum #candidates} to see WHERE the model
+    // ranks badly (the user's question: is the gap concentrated on late/combo turns while setup is near-optimal?)
+    auto eval = [&](std::vector<Group>& gs, const char* tag, bool byturn=false) {
         double se=0; long n=0; int top1=0, ndec=0;
         double regret=0, heur_regret=0, rand_regret=0;
+        std::map<int, std::array<double,4>> per_turn;   // [modelreg, heurreg, count, cand]
         for (Group& g : gs) {
             int m=(int)g.idx.size();
             Vec pred(m); Cache c;
@@ -202,18 +206,24 @@ int main(int argc, char** argv) {
                 if (base_pidx>=0 && rows[g.idx[i]].pfeat[base_pidx] > rows[g.idx[bheur]].pfeat[base_pidx]) bheur=i; }
             if (bpred==blabel) ++top1;
             float bestlab = rows[g.idx[blabel]].label;
-            regret      += rows[g.idx[bpred]].label - bestlab;
-            heur_regret += rows[g.idx[bheur]].label - bestlab;
-            rand_regret += sumlab/m - bestlab;
-            ++ndec;
+            double mreg = rows[g.idx[bpred]].label - bestlab;
+            double hreg = rows[g.idx[bheur]].label - bestlab;
+            regret += mreg; heur_regret += hreg; rand_regret += sumlab/m - bestlab; ++ndec;
+            if (byturn) { auto& a = per_turn[rows[g.idx[0]].turn]; a[0]+=mreg; a[1]+=hreg; a[2]+=1; a[3]+=m; }
         }
         std::fprintf(stderr,
             "[%s] RMSE=%.3f  top1=%.1f%%  pick-regret=%.4f  | heur=%.4f  random=%.4f  (n=%d)\n",
             tag, std::sqrt(se/std::max(1L,n)), 100.0*top1/std::max(1,ndec),
             regret/std::max(1,ndec), heur_regret/std::max(1,ndec), rand_regret/std::max(1,ndec), ndec);
+        if (byturn) {
+            std::fprintf(stderr, "  per-turn regret (model | heur | #decisions | avg#cands):\n");
+            for (auto& kv : per_turn) { double* a = kv.second.data();
+                std::fprintf(stderr, "    turn %d:  model=%.4f  heur=%.4f  (n=%.0f, cands=%.1f)\n",
+                    kv.first, a[0]/std::max(1.0,a[2]), a[1]/std::max(1.0,a[2]), a[2], a[3]/std::max(1.0,a[2])); }
+        }
     };
     eval(train, "train");
-    eval(test,  "test ");
+    eval(test,  "test ", true);
 
     // ---- Serialize the model (dependency-free JSON) for in-engine inference ----
     if (!out_path.empty()) {
