@@ -2440,3 +2440,31 @@ STABLE on gi14. OPEN WRINKLE: the human REFERENCES were recorded under the OLD s
 alignment still needs the human's DECISIONS replayed under STABLE (references are commit-only, can't
 regenerate). Machine-vs-machine A/B (teacher/model/clairvoyant/NC-d0/d1) is now shuffle-clean. DECISION for
 user: make STABLE default (GT rebaseline smoke+regr+overnight) vs keep as a comparison-only flag.
+
+## 2026-07-12 (autonomous): pushing the land-fold MODEL toward human on the antilife ref hands -- every CHEAP lever is dead
+Goal: close the model's gap to human on the 30 antilife reference hands (baseline model 4.933 | human 4.500 |
+teacher 4.467). Ran the levers:
+- **DECISIVE diagnostic -- the 1-ply STRUCTURE is not the limit, the NET-as-leaf is.** NC-K16-d1 is a 1-ply
+  ROLLOUT-leaf policy -- the SAME structure as the land-fold net, only the scorer differs (greedy rollout vs
+  net). On the ref hands NC-d1 = **4.567** (~human), NC-d0 = 4.700. So a good 1-ply leaf REACHES human; the
+  net's 4.933 is entirely "the net is a worse value estimator than a rollout" -- i.e. its INPUTS/compression,
+  not covariate shift and not a horizon ceiling.
+- **DAgger: DEAD.** Round 1 (200 on-policy games, teacher-d2 labels, aggregated + retrained): 4.933 -> 4.967
+  (flat). Round 2 (add 200 more on-policy games): -> 5.500 (WORSE). More on-policy data dilutes the teacher-
+  optimal states / teaches the weak model's habits. Also reconfirmed pick-regret does NOT predict play LP
+  (round-2 train regret 0.09 IMPROVED while play LP got worse).
+- **Capacity: DEAD.** H256/384/512 in the from-scratch C++ trainer are too slow to sweep, and the prior arch
+  sweep already showed H64==H128 (8k rows overfit a bigger net). Not the bottleneck.
+- **Generic feature (v10 our_noncreature_perms): FLAT.** Added enchantment/artifact/PW visibility (Aria of
+  Flame + Tainted Remedy were INVISIBLE to the 48 features -- diagnosed from gi17 where the model cast Aria
+  without Remedy, healing the opp to 26, and durdled to T7 vs human T4). Re-dumped + retrained: 4.933 -> 4.967
+  (flat, within noise). A generic COUNT doesn't help -- the net needs to tell Aria from Remedy from any other
+  enchantment = CARD IDENTITY, not a bucketed count. Reverted (append-only, byte-identical; kept the finding).
+CONCLUSION: the land-fold value net is bound by its INPUTS LACKING CARD IDENTITY. Every cheap/moderate lever
+(labels, data, DAgger, capacity, a generic feature) is exhausted at ~4.93 (0.4 behind human). The ONLY
+remaining lever is CARD-LEVEL features (per-card embeddings + set-pooling over hand/board/library) -- a
+substantial from-scratch build (no torch/pip in the container) with a CAPPED, DOMINATED payoff on these decks:
+even a perfect net caps at the rollout-leaf's 4.567 and stays dominated by NC-d1 (which is cheap on short
+games). Card-level features are only worth it for a FUTURE expensive-rollout regime (phase-2 deep search leaf).
+Tooling added: scripts/model_ref_eval.py (fast MODEL-only ref eval, retry-robust), scripts/nc_ladder.py,
+scripts/nc_teacher_strength.py. Data under logs/model_improve/ (gitignored).
