@@ -2604,3 +2604,23 @@ d5 == d2 within noise (0.008) at 130x the wall-clock. The user's "maybe we need 
 answered: NO. NC depth past 2 buys nothing (deeper plies plan vs imagined reshuffled futures = no signal). The
 label-depth path (MTG_EVAL_DEPTH_SCHEDULE) is confirmed a dead end -- deeper labels only make a better argmax,
 which is dominated, AND depth itself doesn't even improve the rollout it would distill.
+
+## 2026-07-12 MODEL ROUTE THAT WORKS: color-aware castability (MTG_MANA_FEATURES) -- diagnosis-driven
+The failure analysis (dyntrain fail-analysis pass) showed the model's residual mis-ranks are MANA-
+SEQUENCING, and reading the code found the cause: HandCastableNow checks only mv<=untapped_sources --
+BLIND TO COLOR. So two resulting states with the same total mana but different untapped colors are
+feature-identical to it (the src_r/src_u distinction the failures turn on). Added MTG_MANA_FEATURES:
+hand_castable_colored (nonland hand cards whose per-color pip demand the untapped src[] satisfy) +
+hand_colorscrew (affordable by MV, wrong colors). Appended after the enum block (byte-identical off).
+
+A/B (same games+labels, model trained WITH all cols vs WITH the 2 mana cols stripped; held-out):
+  TH   (38% mana-aliased): top1 9.1->22.7%  recall@2 90.9->95.5%  pick-regret 0.074->0.023 (3x)
+                           STANDALONE land-fold play LP 5.481 -> 5.362 (-0.119, a REAL pure-model gain)
+  antilife (0% aliased):   flat (regret 0.105->0.080, play 5.153->5.172) -- feature adds nothing where
+                           color was never the missing signal, exactly as the aliasing diagnosis predicted.
+=> The color feature helps precisely the decks whose failures were mana-aliased. This is a genuine model-
+representation improvement (NOT search): a feature derived from diagnosing WHY the model mis-ranks,
+validated on the standalone model's PLAY. First lever this whole push that moved standalone play on the
+right axis. CONFIRMING at scale + generalizing to slivers/knights (multi-color, expect help) vs burn
+(mono-red control, expect flat): scripts/mana_feature_all.sh -> logs/model_improve/mana_feature_all.out.
+Small-sample caveat (TH n=22 test decisions; standalone play on 320 held-out games is the trustworthy leg).
