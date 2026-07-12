@@ -1,3 +1,4 @@
+#include <cctype>
 #include "AIEngine.h"
 #include "TurnSolver.h"
 #include "DynModel.h"
@@ -95,6 +96,22 @@ static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_E
 // clairvoyant deep search (reads the real future) and is WORSE than greedy. See learned-d0-policy.md.
 static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != nullptr;
 
+// Write the row header's feature-name columns: the fixed MidGameFeature enum block, then (when the
+// MTG_CARD_FEATURES vocab is set) the appended per-card identity columns "hand_<card> bf_<card>". Card
+// names are sanitized to [A-Za-z0-9_] so they survive the whitespace-split row parser. MUST match the
+// column ORDER ExtractMidGameFeatures produces (enum block, then vocab order) -> dump/serve lockstep.
+static void WriteFeatureHeaderCols(std::ostream& out)
+{
+    for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
+    { out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
+    for (const std::string& nm : CardFeatVocabNames())
+    {
+        std::string s = nm;
+        for (char& ch : s) { if (!std::isalnum(static_cast<unsigned char>(ch))) { ch = '_'; } }
+        out << " hand_" << s << " bf_" << s;
+    }
+}
+
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
 {
     // Per-candidate accumulator, keyed by a canonical plan string (stable across reshuffles).
@@ -156,8 +173,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
             if (!v_header)
             {
                 v_out << "# label";
-                for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
-                { v_out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
+                WriteFeatureHeaderCols(v_out);
                 v_out << " seed turn\n";
                 v_header = true;
             }
@@ -181,8 +197,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
     if (!s_header)
     {
         s_out << "# label";
-        for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
-        { s_out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
+        WriteFeatureHeaderCols(s_out);
         s_out << " seed turn\n";
         s_header = true;
     }
@@ -214,8 +229,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
             if (!rv_header)
             {
                 rv_out << "# label";
-                for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
-                { rv_out << ' ' << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
+                WriteFeatureHeaderCols(rv_out);
                 rv_out << " seed turn\n";
                 rv_header = true;
             }

@@ -2480,3 +2480,31 @@ human hands; no robust skill gain (adding input dims to a 4k-row set overfits). 
 byte-identical). FINAL: no cheap/moderate hand-crafted feature robustly moves the net -- generic is too
 coarse, specific overfits the small data. Card-level LEARNED embeddings remain the only real lever, and stay
 dominated by NC-d1 on short-game decks. The fast NC policy at human level is NC-d1/d0 (rollout leaf), not the net.
+
+## 2026-07-12 (autonomous, user greenlit): CARD-IDENTITY features (bag-of-cards) -- NEUTRAL/overfit, not the lever
+Built the card-level infrastructure the earlier findings pointed at (MTG_CARD_FEATURES, OFF by default =>
+byte-identical): a per-deck card VOCABULARY set once at load (SetCardFeatVocab from deck.mainboard), and
+ExtractMidGameFeatures APPENDS, after the 46 fixed enum features, two integer counts per vocab card [copies
+in our hand, copies on our battlefield] -- giving the value net CARD IDENTITY (so it could learn Aria x
+Remedy etc. the coarse aggregates can't express). The trainer auto-detects the wider width + buckets the
+appended (non-"plan_") columns as STATE; DynModel routes by column order; dump + serve use the SAME vocab =>
+lockstep. Antilife vocab = 23 distinct cards -> 46 appended features. Wired end to end (main.cpp vocab,
+KeepModel featurizer, AIEngine dump headers with sanitized card names).
+CLEAN A/B (SAME 400 teacher-d2 games, H96/e45; card model vs the identical rows with card columns stripped):
+| model                | ref-hand LP | goldfish LP (600g) | held-out pick-regret |
+|----------------------|-------------|--------------------|----------------------|
+| no-card (46 enum)    | 4.767       | 5.097              | 0.109                |
+| +card identity (92)  | 4.933       | 5.102              | 0.140                |
+=> Card identity is NEUTRAL on the reliable goldfish sample (5.102 vs 5.097 = noise) and WORSE on the 30 ref
+hands + worse pick-regret = mild OVERFIT (46 independent per-card weights on ~11k rows). It adds no robust
+decision signal: the coarse features already capture what the shallow decision needs, and the ~0.5 LP the net
+trails the ROLLOUT leaf (NC-d1 4.567) is NOT missing card identity -- it is the fundamental gap between a
+STATIC value function and FORWARD SIMULATION. A rollout SIMULATES the combo; a value net (any inputs)
+APPROXIMATES it, and richer inputs don't close a simulation gap. (Also: the 100g->400g "data helped" read on
+ref hands 4.933->4.767 REVERSED on goldfish 5.042->5.097 = ref-hand noise again; data is not the lever.)
+DECISION: kept MTG_CARD_FEATURES as gated, byte-identical, documented infrastructure (repeatable card-level
+experiments; a future learned-EMBEDDING variant -- parameter sharing vs these independent per-card weights --
+would reuse the vocab/dump plumbing). But bag-of-cards is a NEGATIVE, and the neutral signal is evidence an
+embedding variant would also be marginal (embeddings fix overfit, not absent signal). NET of the whole model
+push: labels, data, capacity, DAgger, generic feature, combo feature, AND card identity ALL fail to robustly
+beat the rollout leaf -> the fast NC policy at human level is NC-d1/d0 (rollout leaf), not the learned net.

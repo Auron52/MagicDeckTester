@@ -42,6 +42,7 @@ def main():
     ap.add_argument("--model-dyn", default=None)
     ap.add_argument("--model-value", default=None)
     ap.add_argument("--d0lf-k", type=int, default=16)
+    ap.add_argument("--card-features", action="store_true", help="serve with MTG_CARD_FEATURES=1")
     ap.add_argument("--max-turns", type=int, default=10)
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--quiet", action="store_true")
@@ -50,6 +51,7 @@ def main():
     refs = sorted(glob.glob(os.path.join(refdir, "*.json")))
     mt = args.max_turns; LOSS = mt + 1
     env_extra = {"MTG_D0_LANDFOLD": "1", "MTG_D0LF_K": str(args.d0lf_k)}
+    if args.card_features: env_extra["MTG_CARD_FEATURES"] = "1"
     if args.model_dyn:   env_extra["MTG_DYN_MODEL"] = args.model_dyn
     if args.model_value: env_extra["MTG_VALUE_PROFILE"] = args.model_value
 

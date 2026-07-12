@@ -20,6 +20,7 @@
 #include "core/SpellEffects.h"   // LookKind / TopDisposition / EnumerateTopDispositions for look-top decisions
 #include "core/HardwareConcurrency.h"
 #include "ai/MulliganProfileIO.h"
+#include "ai/KeepModel.h"           // SetCardFeatVocab (MTG_CARD_FEATURES card-identity features)
 #include "ai/Profiler.h"
 #include "ai/DecisionProviders.h"   // SelectDecisionProvider for --scenario
 #include <nlohmann/json.hpp>        // --scenario board spec
@@ -2412,6 +2413,15 @@ int main(int argc, char* argv[])
         }
 
         Decklist deck = DeckLoader::LoadFromFile(deck_path);
+        // CARD-IDENTITY features (MTG_CARD_FEATURES): register this deck's distinct card names as the
+        // per-card feature vocabulary BEFORE any game/worker starts, so the dump and serve-time featurizer
+        // append identical [hand,bf]-count columns per card. Off => empty vocab => byte-identical.
+        if (std::getenv("MTG_CARD_FEATURES"))
+        {
+            std::vector<std::string> names;
+            for (const Card& c : deck.mainboard) { names.push_back(c.m_name.str()); }
+            SetCardFeatVocab(names);
+        }
         std::cout << "Loaded " << deck.mainboard.size() << " mainboard card(s)";
         if (!deck.sideboard.empty())
         {

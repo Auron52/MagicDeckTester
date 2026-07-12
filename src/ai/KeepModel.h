@@ -558,6 +558,19 @@ struct MidGameEvaluator
 // byte-identical features (lockstep). Returns a vector indexed by MidGameFeature (size == Count).
 std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePlanSummary& plan);
 
+// CARD-IDENTITY features (experimental, gated by MTG_CARD_FEATURES + a set vocab). When a per-deck
+// vocabulary is set (once at deck load), ExtractMidGameFeatures APPENDS, after the fixed enum features,
+// two integer counts per vocab card: [copies in our hand, copies on our battlefield]. This gives the
+// value net card identity (so it can learn card-specific interactions -- e.g. Aria of Flame is good only
+// with Tainted Remedy -- that the coarse aggregate features cannot express). The trainer auto-detects the
+// wider row width and buckets the appended (non-"plan_"-prefixed) columns as STATE; DynModel routes by
+// column order, so dump and serve stay in lockstep via the SAME vocabulary. Vocab empty => no appended
+// features => byte-identical. Set ONCE before worker threads spawn; read-only during play. See
+// learned-d0-policy.md (card-level features).
+void        SetCardFeatVocab(const std::vector<std::string>& deck_card_names);
+int         CardFeatVocabSize();                     // 0 => disabled
+const std::vector<std::string>& CardFeatVocabNames();
+
 // Build the plan summary from the cast-spell NAMES + whether a land is played. This is the SINGLE
 // canonical summary builder, used by BOTH runtime inference (the TurnSolver seams) and offline label
 // emission (AIEngine's EnumerateEarliestWins dump) -- so both compute byte-identical summaries from

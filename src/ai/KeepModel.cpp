@@ -4,6 +4,25 @@
 #include "../core/SpellEffects.h"   // EffectiveProducesInHand (Reflecting-Pool-aware colours)
 #include <algorithm>
 #include <map>
+#include <unordered_map>
+
+// ---- CARD-IDENTITY feature vocabulary (MTG_CARD_FEATURES; see KeepModel.h) ----
+// Set ONCE at deck load, before worker threads spawn -> read-only during play (no lock needed).
+namespace {
+    std::vector<std::string>              g_card_vocab;   // sorted distinct deck card names
+    std::unordered_map<std::string, int>  g_card_vocab_idx;
+}
+void SetCardFeatVocab(const std::vector<std::string>& names)
+{
+    std::vector<std::string> v = names;
+    std::sort(v.begin(), v.end());
+    v.erase(std::unique(v.begin(), v.end()), v.end());
+    g_card_vocab = std::move(v);
+    g_card_vocab_idx.clear();
+    for (int i = 0; i < static_cast<int>(g_card_vocab.size()); ++i) { g_card_vocab_idx[g_card_vocab[i]] = i; }
+}
+int CardFeatVocabSize() { return static_cast<int>(g_card_vocab.size()); }
+const std::vector<std::string>& CardFeatVocabNames() { return g_card_vocab; }
 
 // Computes the integer feature vector for a hand, indexed by KeepFeature. Mirrors the quantities the
 // legacy KeepHand derives (land/playable/curve/colour), but as the SINGLE shared definition the
@@ -526,6 +545,26 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
     // v9 plan x board interaction: firing a dig engine into a land-dense library (expected yield).
     const int lib_land_density = lib_size > 0 ? (100 * lib_lands) / lib_size : 0;
     set(MidGameFeature::PlanDigYield, plan.draw_engine ? lib_land_density : 0);
+
+    // CARD-IDENTITY features (MTG_CARD_FEATURES): append [hand copies, battlefield copies] per vocab card
+    // AFTER the fixed enum block, in vocab order. Empty vocab => nothing appended (byte-identical). Own hand
+    // + own board are public => non-clairvoyant. Lockstep with the dump: both use the SAME vocab (set once).
+    if (!g_card_vocab.empty())
+    {
+        const int base = static_cast<int>(MidGameFeature::Count);
+        f.resize(base + 2 * static_cast<int>(g_card_vocab.size()), 0);
+        for (const Card& c : ap.hand)
+        {
+            auto it = g_card_vocab_idx.find(c.m_name.str());
+            if (it != g_card_vocab_idx.end()) { ++f[base + 2 * it->second]; }
+        }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            auto it = g_card_vocab_idx.find(p.card.m_name.str());
+            if (it != g_card_vocab_idx.end()) { ++f[base + 2 * it->second + 1]; }
+        }
+    }
     return f;
 }
 
