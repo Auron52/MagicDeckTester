@@ -2181,6 +2181,27 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
     if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
                             /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
     { commit_leftover(bt_leftover); return true; }
+    // Floating-fed filter retry: a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R}) can be
+    // FED by turn-scoped floating (a ritual's output, a depletion over-tap). SpendFloatingTowardCost
+    // above spent that floating on the cost DIRECTLY, stranding the filter (no feeder left) -- so the
+    // first backtracker, run on the REDUCED cost with an empty float pool, could not chain it. Retry
+    // the backtracker with the ORIGINAL cost and the ORIGINAL reserve as feed, letting it choose
+    // feed-vs-spend. Guarded by a non-empty reserve AND an untapped filter/ramp source, so it is only
+    // reached in exactly that stranded-feeder case: a non-floating or filter-less board never enters it
+    // (byte-identical), and any cast the greedy/first backtracker already paid never reaches a fallback.
+    if (reserve_pre.Total() > 0 && AnyUntappedFilterSource(state))
+    {
+        state.battlefield          = bf_pre;
+        state.players[active].life  = life_pre;
+        ManaPool bt2_leftover;
+        if (TapForCostBacktrack(state, cost_in, for_creature, reserve_pre, nullptr, nullptr,
+                                &bt2_leftover, /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
+        {
+            state.floating_mana = ManaPool{};   // the whole reserve was re-allocated by the backtracker
+            commit_leftover(bt2_leftover);
+            return true;
+        }
+    }
     // Total failure: restore the greedy's exact end-state to match prior behaviour.
     state.battlefield        = bf_greedy_fail;
     state.players[active].life = life_greedy_fail;
@@ -7128,6 +7149,55 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 if (deals_opponent_damage(*pending[k].def)) { spectacle_on = true; }  // enable later spectacle
                 done[k] = true; --remaining; progress = true; break;
             }
+        }
+    }
+
+    // Filter / ramp-filter lands (Ferrous Lake fed by floating: {1},{T}: Add {U}{R}) are not
+    // expressible in the flat BuildPool above, so a legal filter-fed line can leave casts "undone".
+    // Before rejecting, retry the WHOLE set with the real payment engine on a copy (mirrors the
+    // enumerator's SubsetPayableWithFilters): tap actual sources per cast, persisting taps and freshly-
+    // cast rocks across the set, honouring the same rock-first + spectacle ordering. Only runs when the
+    // flat check failed AND such a land is present -> filter-less lines are byte-identical.
+    if (remaining > 0 && AnyUntappedFilterSource(s))
+    {
+        GameState cp = s;
+        std::vector<bool> paid(pending.size(), false);
+        bool spec = s.opponent_lost_life_this_turn;
+        size_t left = pending.size();
+        bool prog = true;
+        while (left > 0 && prog)
+        {
+            prog = false;
+            for (int phase = 0; phase < 2 && !prog; ++phase)
+            {
+                const bool want_rock = (phase == 0);
+                for (size_t k = 0; k < pending.size(); ++k)
+                {
+                    if (paid[k] || pending[k].rock != want_rock) { continue; }
+                    const ManaCost cost = pending[k].alt_free ? ManaCost{}
+                                        : (pending[k].has_spectacle && spec) ? pending[k].spectacle_cost
+                                        : pending[k].full_cost;
+                    const bool for_creature = pending[k].def && pending[k].def->card.IsCreature();
+                    if (cost.ManaValue() > 0 && !TapForCostDirect(cp, cost, for_creature)) { continue; }
+                    if (pending[k].rock && pending[k].def)   // freshly-cast rock funds later casts
+                    {
+                        Permanent perm;
+                        perm.card             = pending[k].def->card;
+                        perm.controller_index = cp.active_player_index;
+                        perm.owner_index      = cp.active_player_index;
+                        cp.battlefield.push_back(perm);
+                    }
+                    if (deals_opponent_damage(*pending[k].def)) { spec = true; }
+                    paid[k] = true; --left; prog = true; break;
+                }
+            }
+        }
+        if (left == 0)
+        {
+            out.verdict = V::LegalNotEnumerated;
+            out.reason  = "rules-legal (a filter-aware affordability simulation can execute it), but "
+                          "the search never enumerated this line";
+            return out;
         }
     }
 

@@ -2867,6 +2867,25 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
     if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
                             /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
     { commit_leftover(bt_leftover); return true; }
+    // Floating-fed filter retry (mirrors TurnSolver::TapForCostDirectOnce byte-for-byte so the rollout
+    // and the real game stay in lockstep): a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R})
+    // can be FED by turn-scoped floating that SpendFloatingTowardCost above spent on the cost directly,
+    // stranding the filter -- so the first backtracker, on the REDUCED cost with an empty float pool,
+    // could not chain it. Retry with the ORIGINAL cost + ORIGINAL reserve as feed. Guarded by a non-empty
+    // reserve AND an untapped filter/ramp source, so a non-floating or filter-less board never enters it.
+    if (reserve_pre.Total() > 0 && AnyUntappedFilterSource(state))
+    {
+        state.battlefield          = bf_pre;
+        state.players[active].life  = life_pre;
+        ManaPool bt2_leftover;
+        if (TapForCostBacktrack(state, cost_in, for_creature, reserve_pre, nullptr, nullptr,
+                                &bt2_leftover, /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
+        {
+            state.floating_mana = ManaPool{};   // the whole reserve was re-allocated by the backtracker
+            commit_leftover(bt2_leftover);
+            return true;
+        }
+    }
     state.battlefield        = bf_greedy_fail;
     state.players[active].life = life_greedy_fail;
     state.floating_mana      = reserve_pre;   // payment failed -> return the reserve untouched
