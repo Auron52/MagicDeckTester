@@ -2537,3 +2537,36 @@ antilife (3 seeds x 40g). IF d5 meaningfully beats d2 -> NC depth DOES help (pri
 mixed-depth deep-opening labels + possibly serve-side bounded lookahead on turns 1-2. IF d5 ~= d2 with a good
 sample -> NC depth is genuinely non-clairvoyance-plateaued and the opening leak is NOT fixable by NC depth (look
 to serve-side clairvoyant-free lookahead or accept the limit). Read depth_test.out on resume.
+
+## 2026-07-12 CRYSTALLIZED: static ranker is DOMINATED -> pivot from "better model" to "model as PRIOR"
+The depth-schedule idea (below) and this whole session's static-model push (card features, DAgger, deeper
+labels) all polish the model's TOP-1 STATIC ARGMAX -- and the frontier data says that is the wrong tool:
+
+  antilife GOLDFISH (scripts/nc_frontier.py, 180g): static d0-model **5.561** vs NC-d0 **4.939** vs NC-d1
+  4.950 vs NC-d2 4.978.  TH: static 5.700 vs NC-d0 5.095 vs NC-d1 4.978 vs NC-d2 4.884.
+
+Two facts, both goldfish-solid (NOT a 30-hand ref artifact -- the earlier "improvements were noise" lesson
+was about ref, this is the 180g frontier):
+  (1) The static evaluator is STRICTLY DOMINATED by a raw K-averaged rollout LEAF at equal-or-less wall
+      clock (0.62 LP on antilife). A better static label/feature can shrink prediction MSE but cannot beat
+      the tool: the rollout closes the gap, the static argmax cannot. => card-features (neutral), DAgger
+      (flat), depth-labels (see d5 test) are all polishing top-1 argmax = the wrong lever for QUALITY.
+  (2) DEPTH is flat on antilife: NC d0~=d1~=d2 (4.939/4.950/4.978), and the running d2-vs-d3 test agrees
+      (5.100 vs 5.108). d5 is the last "don't discount it" check (bg), but the label path is refuted a level
+      DEEPER than depth: even PERFECT deep labels only make a better static argmax, which is dominated.
+
+PIVOT (the doc's own frontier conclusion, line ~1988): the model's value is INSIDE a forward search, as
+(a) a VALUE LEAF of a shallow NC search and/or (b) a POLICY PRIOR that prunes the K x #plans branch to the
+top-M -- keeping the engine's rollout as the free exact dynamics. A naive value-LEAF is refuted for antilife
+(it just reproduces the dominated static 5.561), so the built lever is the PRIOR:
+
+  MTG_NC_TOPM=<M> (TurnSolver::ReshuffleAvgChoosePlan): the model scores every candidate once (K=1, ranking
+  only), only the top-M (plus any this-turn lethal) get the expensive K-reshuffle rollout, the rest are left
+  unrolled (sentinel). Preserves the ROLLOUT that closes the gap, paid on M plans not N -> the "model as a
+  SPEED play" deliverable for antilife's flat per-plan enumeration/rollout cost. Inert/byte-identical unset.
+  Bet: top-M reliably CONTAINS the rollout's true best (far easier than top-1 exact) -> LP ~= NC-d0 at a
+  fraction of the wall-time. RISK (1-game smoke: TOPM=4 moved one game 4->5): M too small can prune the best
+  plan; the sweep finds the crossover. Measured by scripts/nc_topm_sweep.py (auto-chained after d5 frees CPU;
+  results -> logs/model_improve/topm_sweep.out). Also landed inert: MTG_EVAL_DEPTH_SCHEDULE (per-turn label
+  depth ladder "5,4,3,2") kept in case d5 surprises, but see fact (1) -- deep labels only help a dominated
+  argmax, so this is a low-priority fallback.

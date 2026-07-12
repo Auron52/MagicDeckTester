@@ -6488,6 +6488,49 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
     const int turn = state.turn_number;
     std::vector<long long> sum(plans.size(), 0);
 
+    // POLICY-PRIOR PRUNING (MTG_NC_TOPM, default off): the model is a WEAK leaf (a raw static argmax
+    // is strictly dominated by the rollout -- antilife 5.561 vs NC-d0 4.939) but a DECENT ranker: its
+    // top-M plans reliably contain the rollout's true best (top-M is a far easier target than top-1
+    // exact). So use it as a PRIOR, not a policy -- score every candidate once with the value model
+    // (fast, K=1, ranking only), keep the top-M (plus any this-turn lethal) for the expensive
+    // K-reshuffle rollout, and leave the rest unrolled with a sentinel score so they are never picked.
+    // Keeps the ROLLOUT that closes the gap to the ceiling, but pays it on M plans instead of all N --
+    // the "model as speed play" deliverable for antilife's flat per-plan enumeration/rollout cost.
+    // Inert (all plans rolled, byte-identical) when unset or no model attached. See learned-d0-policy.md.
+    std::vector<char> roll(plans.size(), 1);
+    static const int s_nc_topm = []{ const char* e = std::getenv("MTG_NC_TOPM");
+                                     return (e && *e) ? std::atoi(e) : 0; }();
+    const DynModel*         prior_dm = (s_nc_topm > 0 && state.m_dyn_model && !state.m_dyn_model->empty())
+                                     ? state.m_dyn_model : nullptr;
+    const MidGameEvaluator* prior_vm = (s_nc_topm > 0 && !prior_dm && state.m_value_model
+                                        && !state.m_value_model->empty()) ? state.m_value_model : nullptr;
+    if ((prior_dm || prior_vm) && s_nc_topm < static_cast<int>(plans.size()))
+    {
+        std::vector<std::pair<double, size_t>> scored;
+        scored.reserve(plans.size());
+        for (size_t i = 0; i < plans.size(); ++i)
+        {
+            if (plans[i].wins_this_turn) { scored.push_back({ -1e9, i }); continue; }  // always keep a lethal
+            GameState c = state;
+            ApplyPlanDirect(c, plans[i], is_pre_combat);
+            const std::vector<int> feats = ExtractMidGameFeatures(c, MidGamePlanSummary{});
+            const double v = prior_dm ? static_cast<double>(prior_dm->PredictWinTurn(feats))
+                                      : static_cast<double>(prior_vm->Score(feats));
+            scored.push_back({ v, i });
+        }
+        std::stable_sort(scored.begin(), scored.end(),
+                         [](const std::pair<double, size_t>& a, const std::pair<double, size_t>& b)
+                         { return a.first < b.first; });
+        std::fill(roll.begin(), roll.end(), 0);
+        int kept = 0;
+        const long long sentinel = static_cast<long long>(max_turns + 1) * K + 1;  // worse than any rolled sum
+        for (const std::pair<double, size_t>& sc : scored)
+        {
+            if (kept < s_nc_topm || plans[sc.second].wins_this_turn) { roll[sc.second] = 1; ++kept; }
+        }
+        for (size_t i = 0; i < plans.size(); ++i) { if (!roll[i]) { sum[i] = sentinel; } }
+    }
+
     for (int k = 0; k < K; ++k)
     {
         // One sampled future per sample k, SHARED across all candidates (common random numbers).
@@ -6497,6 +6540,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                           + (is_pre_combat ? 0ULL : 7919ULL);   // distinct sample stream per phase
         for (size_t i = 0; i < plans.size(); ++i)
         {
+            if (!roll[i]) { continue; }   // policy-prior pruned this plan (sum already sentinel)
             GameState s = state;
             s.ActivePlayer().library.Shuffle(rs);
             s.shuffle_salt_search = rs;             // honest continuation folds this (varies per k)
