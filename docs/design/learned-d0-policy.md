@@ -2665,3 +2665,23 @@ piece, nothing more. The ONLY way to put the simulation INSIDE the model is a le
 latent dynamics with multi-step state-reconstruction supervision) -- a big, uncertain, multi-day build needing
 per-turn trajectory dumps; the latent-dynamics net (T2/T3) already showed no ranking lift, so odds are guarded.
 That is the one categorically-different lever left; bring to the user before committing days. NOT launched.
+
+## 2026-07-12/13 WORLD-MODEL (the last categorically-different lever): built + tested
+Built the "learn to simulate" model to test whether a learned forward simulator can beat the static-value
+label-noise floor. Foundation: MTG_DUMP_TRAJ (commit) dumps teacher executed trajectories (per game, per
+turn: state feats + turns-to-go). Trainer (tools/worldmodel/): encoder rep + DYNAMICS dyn + DECODER dec +
+VALUE val, dual-dataset -- value head ranks per-candidate rsvalue rows (coverage), dynamics/reconstruction/
+bootstrap learn from trajectories (shared encoder). Serve idea: BOOTSTRAPPED value V(s)=0.5 val(h)+0.5(1+
+val(dyn(h))) averages consistent estimates across the learned trajectory -> the one mechanism that could
+denoise below the per-state floor.
+
+SWEEP (400 antilife + 400 TH trajectory games; rsvalue held-out pick-regret, floor ~0.12/0.10):
+  antilife baseline(value-only) 0.183 | recon.1/boot.5 STATIC 0.133 | recon.5/boot0 boot 0.156 | others 0.16-0.19
+  TH       baseline 0.162 | best static 0.160 (flat) | most configs WORSE
+VERDICT (core mechanism): the BOOTSTRAPPED forward-simulated value is a clear NEGATIVE -- worse EVERYWHERE
+(0.25-0.39 vs 0.16-0.18) because the learned dynamics is too inaccurate (reconstruction error stays high) to
+denoise. The "model simulates forward to a better value" hypothesis is REFUTED on this data. The only flicker
+is reconstruction-as-a-REGULARIZER on antilife's static value (0.183->0.133) but it does NOT replicate on TH
+and is n=105 (the same small-sample shape that faked the mana-feature win) -> replicating across holdout splits
+before believing it (logs/model_improve/wm_repl.out). Even if real, pick-regret is mostly label noise (floor
+analysis) so it likely won't move PLAY -- would need a serve+play-LP confirmation.
