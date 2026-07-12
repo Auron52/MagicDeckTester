@@ -2570,3 +2570,37 @@ top-M -- keeping the engine's rollout as the free exact dynamics. A naive value-
   results -> logs/model_improve/topm_sweep.out). Also landed inert: MTG_EVAL_DEPTH_SCHEDULE (per-turn label
   depth ladder "5,4,3,2") kept in case d5 surprises, but see fact (1) -- deep labels only help a dominated
   argmax, so this is a low-priority fallback.
+
+## 2026-07-12 RESULTS: policy-prior (MTG_NC_TOPM) WORKS with a good ranker + DEPTH is dead (d5 measured)
+Sweep across all 5 decks (scripts/sunday_topm_all.sh, K16 d2, 6 seeds {4001,4002,9009,2002,3003,7007} x40g
+=240g/config). LP (losses=mt+1), dLP vs TOPM=off (pure rollout NC), wall-time for 240g:
+
+  antilife (DYN model):  off 5.083/138s | top8 5.087/133s | top4 5.042/101s | **top2 4.933/83s** | top1 5.412/82s
+  TH       (DYN model):  off 4.858/173s | top8 4.867/140s | **top4 4.896/84s** | top2 5.183/47s | top1 5.375/28s
+  burn     (value GBDT): off 4.454/7s  | top8 4.467/6s | top4 4.487/5s | top2 4.633/4s | top1 5.158/3s
+  knights  (value GBDT): off 4.346/33s | top8 4.400/25s | top4 4.675/22s | top2 5.421 | top1 6.804
+  slivers  (value GBDT): off 4.279/67s | top8 4.392/34s | top4 4.688/21s | top2 5.292 | top1 5.771
+
+INTERPRETATION -- the prior's quality is ENTIRELY the ranker's quality:
+- DYN models (teacher-d2 trained, antilife/TH) are GOOD priors. antilife **top-2 is BETTER AND 40% faster**
+  (4.933 vs 5.083, 235 vs 229 wins -- the regularization effect: the prior prunes plans the 16-sample rollout
+  occasionally mis-ranks as best; validated at 240g, was -0.166 at 120g). TH **top-4 is lossless (+0.037 =
+  noise) at 51% faster** (84s vs 173s) -- the doc's "TH wants the policy-prior" (depth-branch cost) confirmed.
+- value.json GBDTs (burn/knights/slivers, older CLAIRVOYANT-trained MidGameEvaluators) are WEAK priors: burn
+  tolerates top-4 (near-lossless), but knights/slivers regress even at top-8 (+0.054/+0.112). Too weak to prune
+  safely -- but these decks have NO dyn model; a teacher-d2 dyn would likely behave like antilife/TH.
+- top-1 (pure model argmax as "prior") regresses EVERYWHERE (dominated, as established) -- the value is the
+  model PRUNING to a small set the rollout then decides, NOT the model deciding.
+
+=> RESOLUTION of the session: the static model is dominated as a POLICY but VALUABLE as a PRIOR. antilife top-2
+makes the NC search both FASTER and BETTER; TH top-4 lossless + 2x faster. "Model as a speed play" CONFIRMED,
+with a quality bonus on antilife. Per-deck sweet spot: antilife top-2, TH top-4/8, burn top-4/8; knights/slivers
+need a dyn ranker before pruning is safe. ADOPTION = per-deck M in the archetype provider (heuristic-opt skill;
+needs user sign-off + held-out validation -- these 6 seeds mix train/frontier/depth sets).
+
+DEPTH IS DEAD (measured, re-run after the fd-clobber, logs/model_improve/d5_rerun.out):
+  NC-K16 antilife 120g:  d2 5.100/48s | d3 5.108/188s | **d5 5.092/6363s (106 MINUTES)**.
+d5 == d2 within noise (0.008) at 130x the wall-clock. The user's "maybe we need d5/d6" hypothesis is decisively
+answered: NO. NC depth past 2 buys nothing (deeper plies plan vs imagined reshuffled futures = no signal). The
+label-depth path (MTG_EVAL_DEPTH_SCHEDULE) is confirmed a dead end -- deeper labels only make a better argmax,
+which is dominated, AND depth itself doesn't even improve the rollout it would distill.
