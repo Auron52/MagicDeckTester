@@ -30,12 +30,14 @@ int main(int argc, char** argv) {
     if (argc < 2) { std::fprintf(stderr, "usage: dyntrain <rows> [--T n] [--H n] [--epochs n] [--lr f]\n"); return 2; }
     std::string rows_path = argv[1];
     int T = 2, H = 32, epochs = 40; float lr = 3e-3f; int hmod = 5; std::string out_path;
+    float gamma = 0.0f;   // policy cross-entropy weight (train the argmin-of-pred onto the teacher's best plan)
     for (int i = 2; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--T") && i+1<argc) T = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--H") && i+1<argc) H = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--epochs") && i+1<argc) epochs = std::atoi(argv[++i]);
         else if (!std::strcmp(argv[i], "--lr") && i+1<argc) lr = (float)std::atof(argv[++i]);
         else if (!std::strcmp(argv[i], "--holdout-seed-mod") && i+1<argc) hmod = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--gamma") && i+1<argc) gamma = (float)std::atof(argv[++i]);
         else if (!std::strcmp(argv[i], "--out") && i+1<argc) out_path = argv[++i];
     }
 
@@ -179,6 +181,25 @@ int main(int argc, char** argv) {
                 eloss += beta*w*std::log(1.0f+std::exp(pred[i]-pred[j]));
                 dpred[i] += beta*w*s; dpred[j] -= beta*w*s;
             }
+            // POLICY cross-entropy (--gamma): train the argMIN of pred onto the teacher's best plan(s).
+            // The prior only needs the teacher's pick in its top-M -- a listwise target, NOT accurate
+            // win-turns -- so put a softmax POLICY over -pred (lower pred = higher prob) and pull mass
+            // onto the min-label plan(s). Soft target over label-ties (uniform on all plans at the best
+            // label). dL/dpred_i = gamma*(p_i - t_i). Off (gamma=0) => byte-identical to MSE+pairwise.
+            if (gamma > 0.0f && m > 1) {
+                float ymin = rows[g.idx[0]].label; int nties = 0;
+                for (int i = 0; i < m; ++i) ymin = std::min(ymin, rows[g.idx[i]].label);
+                for (int i = 0; i < m; ++i) if (rows[g.idx[i]].label == ymin) ++nties;
+                float smax = -pred[0]; for (int i=0;i<m;++i) smax = std::max(smax, -pred[i]);
+                float Z = 0.0f; std::vector<float> p(m);
+                for (int i = 0; i < m; ++i) { p[i] = std::exp(-pred[i]-smax); Z += p[i]; }
+                for (int i = 0; i < m; ++i) p[i] /= Z;
+                for (int i = 0; i < m; ++i) {
+                    float t = (rows[g.idx[i]].label == ymin) ? (1.0f/nties) : 0.0f;
+                    if (t > 0.0f) eloss += -gamma * t * std::log(std::max(1e-9f, p[i]));
+                    dpred[i] += gamma * (p[i] - t);
+                }
+            }
             zero_grads();
             for (int i = 0; i < m; ++i) backward(rows[g.idx[i]], cs[i], dpred[i]);
             ++step; adam(step); ++recount;
@@ -191,7 +212,7 @@ int main(int argc, char** argv) {
     // per_turn: turn -> {sum model-regret, sum heur-regret, count, sum #candidates} to see WHERE the model
     // ranks badly (the user's question: is the gap concentrated on late/combo turns while setup is near-optimal?)
     auto eval = [&](std::vector<Group>& gs, const char* tag, bool byturn=false) {
-        double se=0; long n=0; int top1=0, ndec=0;
+        double se=0; long n=0; int top1=0, ndec=0, rec2=0, rec4=0;
         double regret=0, heur_regret=0, rand_regret=0;
         std::map<int, std::array<double,4>> per_turn;   // [modelreg, heurreg, count, cand]
         for (Group& g : gs) {
@@ -206,14 +227,23 @@ int main(int argc, char** argv) {
                 if (base_pidx>=0 && rows[g.idx[i]].pfeat[base_pidx] > rows[g.idx[bheur]].pfeat[base_pidx]) bheur=i; }
             if (bpred==blabel) ++top1;
             float bestlab = rows[g.idx[blabel]].label;
+            // top-M RECALL: does the model's top-M (lowest pred) contain a teacher-best plan (label==bestlab)?
+            // This -- not top1 or RMSE -- is what predicts the MTG_NC_TOPM prior's quality at M=2/4.
+            { std::vector<int> ord(m); for (int i=0;i<m;++i) ord[i]=i;
+              std::sort(ord.begin(), ord.end(), [&](int a,int b){ return pred[a]<pred[b]; });
+              bool h2=false,h4=false;
+              for (int r=0;r<m && r<4;++r){ if (rows[g.idx[ord[r]]].label==bestlab){ h4=true; if(r<2) h2=true; } }
+              if (m<=2) h2=true; if (m<=4) h4=true;   // trivially recalled when <=M candidates
+              if (h2) ++rec2; if (h4) ++rec4; }
             double mreg = rows[g.idx[bpred]].label - bestlab;
             double hreg = rows[g.idx[bheur]].label - bestlab;
             regret += mreg; heur_regret += hreg; rand_regret += sumlab/m - bestlab; ++ndec;
             if (byturn) { auto& a = per_turn[rows[g.idx[0]].turn]; a[0]+=mreg; a[1]+=hreg; a[2]+=1; a[3]+=m; }
         }
         std::fprintf(stderr,
-            "[%s] RMSE=%.3f  top1=%.1f%%  pick-regret=%.4f  | heur=%.4f  random=%.4f  (n=%d)\n",
+            "[%s] RMSE=%.3f  top1=%.1f%%  recall@2=%.1f%%  recall@4=%.1f%%  pick-regret=%.4f  | heur=%.4f  random=%.4f  (n=%d)\n",
             tag, std::sqrt(se/std::max(1L,n)), 100.0*top1/std::max(1,ndec),
+            100.0*rec2/std::max(1,ndec), 100.0*rec4/std::max(1,ndec),
             regret/std::max(1,ndec), heur_regret/std::max(1,ndec), rand_regret/std::max(1,ndec), ndec);
         if (byturn) {
             std::fprintf(stderr, "  per-turn regret (model | heur | #decisions | avg#cands):\n");
