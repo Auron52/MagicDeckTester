@@ -222,38 +222,16 @@ if [ -f "$SCEN" ]; then
   fi
 fi
 
-# Viewer sanity gate: guard the play GUI (tools/play) by replaying the saved reference games,
-# in two deck-agnostic layers. A hard FAIL aborts before the (long) batch, like the scenario gate.
-#   * line-build (frontend)   -- viewer_linebuild_check.js drives the REAL browser queue logic
-#     (tools/play/linebuild.js): can the GUI still rebuild every line the user actually played?
-#     Sub-second, no binary -> run in ALL modes. Catches viewer-layer regressions the protocol
-#     check is blind to (e.g. a staged/exiled cast queueCard silently drops).
-#   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
-#     indices through the binary and asserts the decision-JSON contract holds (well-formed, valid
-#     index, clean terminal). It re-invokes the binary per step, so the full reference set is
-#     MULTI-MINUTE (~35min alone) -> SHARDED: regression runs a fast one-ref-per-deck SAMPLE
-#     (--sample: contract sanity across every archetype), and OVERNIGHT runs the FULL sweep. The
-#     contract does not vary by seed set, so the sample loses no coverage the nightly full run
-#     doesn't restore, and regression stays inside its <45min budget. smoke stays binary-free
-#     (line-build only). Run WITHOUT --strict: behaviour drift (won/win_turn changed) is
-#     informational (re-save the reference when satisfied); only a CONTRACT break (exit 1) aborts.
-if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; then
-  log "--- viewer line-build check (frontend) ---"
-  if node "$HERE/viewer_linebuild_check.js" | tee -a "$OUT"; then :; else
-    log "ABORT: viewer line-build check failed (the GUI cannot rebuild a played reference line)."
-    exit 1
-  fi
-fi
-if { [ "$MODE" = regression ] || [ "$MODE" = overnight ]; } && command -v python3 >/dev/null 2>&1 \
-   && [ -f "$HERE/viewer_protocol_check.py" ]; then
-  # regression -> --sample (one ref/deck, fast); overnight -> full sweep (all refs).
-  PROTO_ARGS=""; [ "$MODE" = regression ] && PROTO_ARGS="--sample"
-  log "--- viewer protocol check (engine<->GUI contract${PROTO_ARGS:+, $PROTO_ARGS}) ---"
-  if MTG_BIN="$BIN" python3 "$HERE/viewer_protocol_check.py" $PROTO_ARGS | tee -a "$OUT"; then :; else
-    log "ABORT: viewer protocol check reported a CONTRACT failure (malformed/invalid decision)."
-    exit 1
-  fi
-fi
+# Viewer sanity checks (play-GUI line-build + engine<->GUI protocol contract) are NO LONGER part
+# of the regression flow. They are deck-agnostic, change infrequently, and the protocol layer is
+# multi-minute (it re-invokes the binary per replayed step) -- a poor fit for the per-commit gate,
+# where it dominated the budget and its binary-driven replay could HANG the suite before the deck
+# batch even ran. They now live in a standalone, on-demand script -- run it after touching
+# tools/play/, the decision-JSON emitter, or a saved reference:
+#     bash test/viewer_checks.sh            # full (line-build + protocol, all refs, ~35 min)
+#     bash test/viewer_checks.sh --sample   # fast contract sanity (one ref per deck)
+# See test/viewer_checks.sh. (The cheap scenario-sanity gate above stays -- it is seconds, deck-
+# agnostic, and guards hand-built interaction fixtures.)
 
 # Emit the whole case matrix as one batch manifest. `mtg.exe --batch` pools every
 # game of every case into a single atomic work queue, so the suite pays ONE
