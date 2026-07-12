@@ -151,9 +151,15 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         // Reshuffle the REMAINING library so the label averages over future draw orders (de-clairvoy).
         // Deterministic per (seed, turn, k); k==0 also reshuffles, so the mean is over K independent
         // futures. EnumerateEarliestWins itself sets g_shuffle_eval, so its internal shuffles decouple.
+        // MTG_LABEL_SALT: offsets the reshuffle stream so the SAME games can be labelled TWICE with
+        // INDEPENDENT K-reshuffle draws -> comparing the two labelings measures the irreducible label
+        // NOISE floor (how often the teacher-best plan is noise-determined). Default 0 => byte-identical.
+        static const uint64_t s_label_salt = []{ const char* e = std::getenv("MTG_LABEL_SALT");
+                                                 return (e && *e) ? std::strtoull(e, nullptr, 10) : 0ULL; }();
         const uint64_t rs = state.game_seed
                           + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
-                          + 1000003ULL * static_cast<uint64_t>(state.turn_number);
+                          + 1000003ULL * static_cast<uint64_t>(state.turn_number)
+                          + 0xA5A5F00DULL * s_label_salt;
         s.ActivePlayer().library.Shuffle(rs);
         // Honest-teacher per-turn reshuffle (g_honest_teacher) folds shuffle_salt_search; vary it per
         // k so the K outer samples draw independent decoupled futures (else all k share one future).
