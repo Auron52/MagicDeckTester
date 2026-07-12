@@ -2525,3 +2525,15 @@ contribution at d0/d1/d2/d3 (does deeper search improve turn-1-2 lines?), and (b
 lookahead (depth 1-2) on turns 1-2 where the net is weak + fast net on turns 3+ where it's near-optimal (the
 user's "bolt-on search for the hard turns", applied to the OPENING not the combo). Tooling: dyntrain per-turn
 eval (byturn=true). Rows: logs/model_improve/al_{nocard,cardfeat}.rows (400 teacher-d2 games).
+
+## 2026-07-12 DEPTH investigation (user: don't discount depth for the opening) -- cost + plan
+Cost gauge (antilife): NC-d5 PLAY ~28-140s/game (a single d5 game up to 2min) = ~15-70x NC-d2 (~2s/game).
+=> deep NC PLAY is feasible-but-slow; deep NC LABELS (MTG_EVAL_ROLLOUT_DEPTH=5, a d5 continuation PER candidate
+PER reshuffle) are ~infeasible for a full dump. KEY LEVER: the model's leak is ONLY turns 1-2, so if depth helps
+we only need DEEP labels for the OPENING (2 decisions/game) + keep cheap d2 labels for turns 3+ = a MIXED-DEPTH
+label scheme that makes deep opening labels tractable.
+DECISIVE TEST RUNNING (bg, logs/model_improve/depth_test.{py,out}): NC-K16 d2 vs d3 vs d5 aggregate LP on
+antilife (3 seeds x 40g). IF d5 meaningfully beats d2 -> NC depth DOES help (prior d3=d2 was noise) -> pursue
+mixed-depth deep-opening labels + possibly serve-side bounded lookahead on turns 1-2. IF d5 ~= d2 with a good
+sample -> NC depth is genuinely non-clairvoyance-plateaued and the opening leak is NOT fixable by NC depth (look
+to serve-side clairvoyant-free lookahead or accept the limit). Read depth_test.out on resume.
