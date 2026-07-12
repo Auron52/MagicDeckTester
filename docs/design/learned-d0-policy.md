@@ -2392,3 +2392,28 @@ different use case from d0 play, where a good value fn accelerates a search that
 Harness: scripts/nc_ladder.py (LP+ms ladder). Knobs: MTG_NC_SEARCH/_K/_DEPTH at --depth 1; MTG_D0_LANDFOLD +
 MTG_VALUE_PROFILE/MTG_DYN_MODEL + MTG_D0LF_K at --depth 0. Teacher labels: MTG_DUMP_RSVALUE_ROWS +
 MTG_EVAL_ROWS_ROLLOUT + MTG_EVAL_ROLLOUT_DEPTH=2 + MTG_EVAL_ROWS_HONEST + MTG_EVAL_ROWS_K=8.
+
+## 2026-07-12: IS THE TEACHER CLOSE TO HUMAN? — YES, validated on all 5 ref decks (ref_bench, forced human hands)
+User's concern: "close to the teacher" only matters if the TEACHER is close to HUMAN. Ran scripts/ref_bench.py
+(forces each references/<deck>/*.json's EXACT opening hand into the search via --force-mulligan, compares
+per-game win turns: HUMAN vs CLAIRVOYANT search vs NON-CLAIRVOYANT teacher). LP (losses=max_turns+1):
+| deck     | n  | human | clairvoyant | NC teacher K16 d2 | verdict |
+|----------|----|-------|-------------|-------------------|---------|
+| slivers  |  4 | 4.000 | 4.000       | 4.000             | NC = human = clair (forced line) |
+| knights  |  3 | 4.667 | 4.667       | 4.667             | NC = human = clair |
+| TH       |  2 | 4.000 | 4.000       | 4.000             | NC = human = clair |
+| burn     | 16 | 4.625 | 4.375       | 4.375             | NC = CLAIR, BEATS human |
+| antilife | 30 | 4.500 | 4.167       | 4.467             | NC BEATS human; 0.30 below clair |
+=> The teacher (NC K16 d2) is human-competitive-or-SUPERHUMAN on EVERY reference deck. On forced-line decks it
+exactly equals human=clairvoyant; on burn/antilife it BEATS the human. The ONLY residual is antilife's 0.30 LP
+gap to the CLAIRVOYANT ceiling (4.467 vs 4.167) — the irreducible NON-CLAIRVOYANCE TAX (perfect future
+knowledge), which a human ALSO pays. So the teacher is NOT the weak link; it is the right target.
+
+IS d2 A HIGH ENOUGH SEARCH LEVEL? YES. Goldfish strength sweep (scripts/nc_teacher_strength.py, antilife,
+held-out, 3 seeds so ~0.1 noisy): K16-d2 4.917@281ms | K32-d2 4.879@444ms | K16-d3 4.929@833ms. DEPTH is
+EXHAUSTED past 2 (d3 = 4.929, NO gain over d2, 3x slower) — expected: a non-clairvoyant search's deeper plies
+look ahead against IMAGINED reshuffled futures, which carry no extra signal. WIDTH (K) helps marginally
+(K32 ~0.04 LP, within noise, 1.6x cost) — an optional hair more strength, not a level change. Confirms the
+earlier pin: TEACHER = NC K16 d2 (width>depth past 2, d3 noise-to-harmful).
+NET: fast NC play (NC-d0/d1) ≈ teacher (K16 d2) ≈ human. The whole chain is validated; the teacher is at the
+human ceiling modulo the shared non-clairvoyance tax. Tools: scripts/ref_bench.py, scripts/nc_teacher_strength.py.
