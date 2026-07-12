@@ -521,6 +521,15 @@ int main(int argc, char* argv[])
                 deck_path.parent_path() / (deck_path.stem().string() + ".profile.json");
             MulliganProfile profile = std::filesystem::exists(in_path)
                                     ? LoadDeckProfile(in_path) : MulliganProfile::DefaultProfile();
+            // Attach the deck's learned leaf VALUE sidecar (<deck>.value.json) so the keep/bottom
+            // ROLLOUTS play like the SHIPPED deck: value-leaf is default-ON at the runner (UseValueModel,
+            // 06e6ebe) and lets the fixed-depth search TRUST the value estimate at the leaf instead of
+            // playing out past it -- both the train/serve-correct policy AND the large gen speedup.
+            // Without this the analyzer ran a value-less policy the deck never uses (a latent bug).
+            // Presence-gated (no-op for value-less decks) + runtime-gated by UseValueModel()
+            // (MTG_VALUE_MODEL=0 forces the pure-heuristic leaf for an A/B). RolloutConfigDigest folds
+            // this into the pooling identity, so cross-machine pools stay correct.
+            AttachValueSidecar(profile, in_path);
             ExhaustiveKeepConfig cfg;
             cfg.probes    = env_int("MTG_EQUIV_PROBES", 400, 1);
             cfg.threshold = []{ const char* s = std::getenv("MTG_EQUIV_THRESHOLD");
