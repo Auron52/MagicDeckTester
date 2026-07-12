@@ -2468,3 +2468,15 @@ even a perfect net caps at the rollout-leaf's 4.567 and stays dominated by NC-d1
 games). Card-level features are only worth it for a FUTURE expensive-rollout regime (phase-2 deep search leaf).
 Tooling added: scripts/model_ref_eval.py (fast MODEL-only ref eval, retry-robust), scripts/nc_ladder.py,
 scripts/nc_teacher_strength.py. Data under logs/model_improve/ (gitignored).
+
+### combo-feature attempt (v10b, param-based) -- ref-hand gain was NOISE, reverted
+Followed up the flat generic-count feature with a MOTIVATED param-based pair: remedy_active (is a
+lifegain->loss flip in play, via RemedyActive()) + opp_lifegain_engines (our permanents forcing opp
+lifegain, via etb_opponent_lifegain/verse_damage/tap_opponent_lifegain) -- the exact Aria x Remedy combo an
+MLP hidden layer could learn. Re-dumped (features fire: remedy_active in 32% of rows) + retrained. Result:
+ref hands 4.933 -> **4.867** (looked like a win, worse on 9/30 vs 12/30), BUT antilife GOLDFISH held-out
+(600 games, the larger sample) 5.042 -> **5.137 (WORSE)**. The ref-hand gain was noise/overfit to the 30
+human hands; no robust skill gain (adding input dims to a 4k-row set overfits). Reverted (append-only,
+byte-identical). FINAL: no cheap/moderate hand-crafted feature robustly moves the net -- generic is too
+coarse, specific overfits the small data. Card-level LEARNED embeddings remain the only real lever, and stay
+dominated by NC-d1 on short-game decks. The fast NC policy at human level is NC-d1/d0 (rollout leaf), not the net.
