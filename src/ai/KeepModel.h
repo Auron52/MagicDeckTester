@@ -571,6 +571,15 @@ void        SetCardFeatVocab(const std::vector<std::string>& deck_card_names);
 int         CardFeatVocabSize();                     // 0 => disabled
 const std::vector<std::string>& CardFeatVocabNames();
 
+// MANA-ENABLEMENT features (MTG_MANA_FEATURES): appended AFTER the enum block (and after the card
+// vocab, if any) when the env flag is set. Motivated by the failure analysis -- the model's residual
+// mis-ranks are mana-sequencing, and HandCastableNow ignores COLOR (it checks only MV<=untapped). These
+// add color-aware castability: hand_castable_colored (nonland hand cards whose COLORED cost the untapped
+// sources satisfy) and hand_colorscrew (affordable by MV but wrong colors). Off => nothing appended =>
+// byte-identical. Dump (WriteFeatureHeaderCols) and serve (ExtractMidGameFeatures) stay in lockstep.
+bool        ManaFeaturesEnabled();
+const std::vector<std::string>& ManaFeatureNames();
+
 // Build the plan summary from the cast-spell NAMES + whether a land is played. This is the SINGLE
 // canonical summary builder, used by BOTH runtime inference (the TurnSolver seams) and offline label
 // emission (AIEngine's EnumerateEarliestWins dump) -- so both compute byte-identical summaries from

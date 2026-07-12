@@ -24,6 +24,18 @@ void SetCardFeatVocab(const std::vector<std::string>& names)
 int CardFeatVocabSize() { return static_cast<int>(g_card_vocab.size()); }
 const std::vector<std::string>& CardFeatVocabNames() { return g_card_vocab; }
 
+bool ManaFeaturesEnabled()
+{
+    static const bool on = std::getenv("MTG_MANA_FEATURES") != nullptr;
+    return on;
+}
+const std::vector<std::string>& ManaFeatureNames()
+{
+    static const std::vector<std::string> names = { "hand_castable_colored", "hand_colorscrew" };
+    static const std::vector<std::string> none;
+    return ManaFeaturesEnabled() ? names : none;
+}
+
 // Computes the integer feature vector for a hand, indexed by KeepFeature. Mirrors the quantities the
 // legacy KeepHand derives (land/playable/curve/colour), but as the SINGLE shared definition the
 // generator also calls, so a trained model and the runtime see byte-identical features (lockstep --
@@ -564,6 +576,35 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
             auto it = g_card_vocab_idx.find(p.card.m_name.str());
             if (it != g_card_vocab_idx.end()) { ++f[base + 2 * it->second + 1]; }
         }
+    }
+
+    // MANA-ENABLEMENT features (MTG_MANA_FEATURES): color-aware castability, appended last. HandCastableNow
+    // (above) approximates castable by MV alone (mv <= untapped_sources), so two resulting states with the
+    // same TOTAL mana but different COLORS look identical to it -- exactly the src_r/src_u distinction the
+    // failure analysis found the model mis-ranking. These make the color explicit: hand_castable_colored =
+    // nonland hand cards whose per-color pip demand the untapped colored sources (src[]) satisfy AND whose MV
+    // fits; hand_colorscrew = affordable-by-MV but WRONG colors (the hold-vs-tap signal). Greedy per-color
+    // (a dual counts for each color it makes) -- a feature signal, not a legality check.
+    if (ManaFeaturesEnabled())
+    {
+        int castable_colored = 0, colorscrew = 0;
+        for (const Card& c : ap.hand)
+        {
+            if (c.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            const ManaCost& mc = d ? d->card.m_mana_cost : c.m_mana_cost;
+            const bool mv_ok = mc.ManaValue() <= untapped_sources;
+            if (!mv_ok) { continue; }
+            const bool color_ok =
+                mc.white <= src[static_cast<int>(Color::White)] &&
+                mc.blue  <= src[static_cast<int>(Color::Blue)]  &&
+                mc.black <= src[static_cast<int>(Color::Black)] &&
+                mc.red   <= src[static_cast<int>(Color::Red)]   &&
+                mc.green <= src[static_cast<int>(Color::Green)];
+            if (color_ok) { ++castable_colored; } else { ++colorscrew; }
+        }
+        f.push_back(castable_colored);
+        f.push_back(colorscrew);
     }
     return f;
 }

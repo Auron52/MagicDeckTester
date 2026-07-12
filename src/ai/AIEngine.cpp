@@ -132,6 +132,8 @@ static void WriteFeatureHeaderCols(std::ostream& out)
         for (char& ch : s) { if (!std::isalnum(static_cast<unsigned char>(ch))) { ch = '_'; } }
         out << " hand_" << s << " bf_" << s;
     }
+    // Mana-enablement columns (MTG_MANA_FEATURES), appended last -- same order ExtractMidGameFeatures uses.
+    for (const std::string& nm : ManaFeatureNames()) { out << ' ' << nm; }
 }
 
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
