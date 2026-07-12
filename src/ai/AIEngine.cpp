@@ -79,6 +79,15 @@ static const char* s_value_rows_path = std::getenv("MTG_DUMP_VALUE_ROWS");
 // train the value on the SAME idle/develop distribution it sees at serve (no extrapolation collapse).
 // Grouped by (seed,turn) -> a ranker (dyntrain) trains on them directly. See learned-d0-policy.md.
 static const char* s_rsvalue_rows_path = std::getenv("MTG_DUMP_RSVALUE_ROWS");
+// Executed-TRAJECTORY dump for the learned world-model (MTG_DUMP_TRAJ=<file>): during REAL teacher play
+// (not rollouts) buffer each pre-combat DECISION-state's non-clairvoyant features per turn; at game end
+// flush one row per turn with label = turns-to-go (realised win turn - t, losses => max_turns+1 - t) and a
+// game id. Rows are the teacher's ACTUAL trajectory in turn order, so a sequence/dynamics model can learn to
+// predict s_{t+1} from s_t (+ action) -- the "learn to simulate" signal a static per-candidate dump lacks.
+// Inert unless set. One game per worker thread at a time => a thread_local buffer is race-free. See
+// learned-d0-policy.md (world-model).
+static const char* s_traj_rows_path = std::getenv("MTG_DUMP_TRAJ");
+namespace { thread_local std::vector<std::pair<int, std::vector<int>>> g_traj_buf; }  // (turn, features)
 static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_ROWS_K");
                                           int v = (e && *e) ? std::atoi(e) : 8; return v < 1 ? 1 : v; }();
 // MTG_EVAL_ROWS_ROLLOUT: label candidates by a non-clairvoyant greedy d0 rollout instead of the
@@ -334,6 +343,41 @@ AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int budget_ms)
 
 void AIEngine::OnGameEnd(const GameState& state, int win_turn)
 {
+    // World-model trajectory flush: emit the buffered per-turn decision states with turns-to-go labels
+    // (realised win turn - t; a loss/timeout counts as max_turns+1 - t, matching the LP loss penalty).
+    // A monotone game id (seed*1000 + on_the_play) groups a trajectory; the trainer reads rows in turn
+    // order per game. Mutex-guarded append (workers share the file). Buffer cleared after flush so the
+    // thread's next game starts fresh.
+    if (s_traj_rows_path && !g_traj_buf.empty())
+    {
+        const int realized = win_turn > 0 ? win_turn : m_max_turns + 1;
+        static std::ofstream t_out(s_traj_rows_path, std::ios::app);
+        static std::mutex    t_mtx;
+        static bool          t_header = false;
+        std::lock_guard<std::mutex> lk(t_mtx);
+        if (t_out.good())
+        {
+            if (!t_header)
+            {
+                t_out << "# label";
+                WriteFeatureHeaderCols(t_out);
+                t_out << " game turn won\n";
+                t_header = true;
+            }
+            const long long gid = static_cast<long long>(state.game_seed) * 1000
+                                 + (state.on_the_play ? 1 : 0);
+            for (const auto& tf : g_traj_buf)
+            {
+                const int ttg = realized - tf.first;           // turns-to-go from this decision
+                t_out << ttg;
+                for (int v : tf.second) { t_out << ' ' << v; }
+                t_out << ' ' << gid << ' ' << tf.first << ' ' << (win_turn > 0 ? 1 : 0) << '\n';
+            }
+            t_out.flush();
+        }
+        g_traj_buf.clear();
+    }
+
     if (!s_fd_oracle) { return; }
     // win_turn <= 0 means the game ended without a win (loss / timeout).
     const int realized = win_turn > 0 ? win_turn : m_max_turns + 1;
@@ -1269,6 +1313,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if ((s_eval_rows_path || s_value_rows_path || s_rsvalue_rows_path) && !m_in_rollout && is_pre_combat_main)
     {
         EmitEvalRows(state, m_max_turns, m_search_post_combat);
+    }
+
+    // World-model TRAJECTORY capture: buffer this real pre-combat decision state's features (same
+    // non-clairvoyant representation the model serves on: board, empty plan). Flushed with turns-to-go
+    // labels at OnGameEnd. Inert unless MTG_DUMP_TRAJ set.
+    // Capture ONCE per turn: TakeTurn can be re-entered in the same pre-combat main after a draw engine
+    // fires (GameEngine replays to use drawn cards), so guard on the last buffered turn.
+    if (s_traj_rows_path && !m_in_rollout && is_pre_combat_main
+        && (g_traj_buf.empty() || g_traj_buf.back().first != state.turn_number))
+    {
+        g_traj_buf.emplace_back(state.turn_number, ExtractMidGameFeatures(state, MidGamePlanSummary{}));
     }
 
     // The post-combat (second) main phase does NOTHING unless post-combat search
