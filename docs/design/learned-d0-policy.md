@@ -2417,3 +2417,26 @@ look ahead against IMAGINED reshuffled futures, which carry no extra signal. WID
 earlier pin: TEACHER = NC K16 d2 (width>depth past 2, d3 noise-to-harmful).
 NET: fast NC play (NC-d0/d1) ≈ teacher (K16 d2) ≈ human. The whole chain is validated; the teacher is at the
 human ceiling modulo the shared non-clairvoyance tax. Tools: scripts/ref_bench.py, scripts/nc_teacher_strength.py.
+
+## 2026-07-12: MODEL-vs-human + MTG_STABLE_SHUFFLE (common-random-numbers reshuffle)
+MODEL on the human hands (ref_bench --model-dyn, antilife 30 refs, land-fold DynNet teacher-d2 K16):
+human 4.500 | clairvoyant 4.167 | NC teacher 4.467 | **MODEL 4.933**. The learned model is ~0.45 LP
+(≈half a turn) behind human AND teacher on the exact human hands -> NOT human-level; the off-by-default
+d0 gate (MTG_D0_LANDFOLD) is not ready to turn on. Consistent with the goldfish dominance finding.
+
+WHY a T1 fetch by two policies diverges the draws (user Q): the fetch's post-search reshuffle
+(ShuffleAfterSearch) was a Fisher-Yates keyed on (game_seed, search_count) over the CURRENT library
+contents. Different fetch target (human Overgrown Tomb vs teacher Stomping Ground) => different remaining
+multiset => different order; and search_count differs if fetch counts differ. So win-turn deltas between
+two policies were partly SHUFFLE LUCK, not play. On antilife most human!=teacher games are this
+(fetchland-shuffle draw divergence), NOT mistakes -- matches the user's prior ("neither side misplays").
+FIX (commit 60080b1, OFF by default = byte-identical): Library::ShuffleByKey orders the live library by a
+per-copy key splitmix64(seed, m_number). m_number is a stable deck-setup ID identical across two same-seed
+games, so a card's rank is independent of the multiset / search_count -> removing a card leaves the rest's
+order UNCHANGED. Two policies then draw the same future modulo the one card each removed; only genuine play
+differences move draws. Gated MTG_STABLE_SHUFFLE. Verified: seed22gi21 OFF-diverges/STABLE-aligns (pure
+shuffle luck); seed10gi9 diverges under both (genuine play diff, preserved). NC & CLAIR draw identical under
+STABLE on gi14. OPEN WRINKLE: the human REFERENCES were recorded under the OLD shuffle, so machine-vs-human
+alignment still needs the human's DECISIONS replayed under STABLE (references are commit-only, can't
+regenerate). Machine-vs-machine A/B (teacher/model/clairvoyant/NC-d0/d1) is now shuffle-clean. DECISION for
+user: make STABLE default (GT rebaseline smoke+regr+overnight) vs keep as a comparison-only flag.
