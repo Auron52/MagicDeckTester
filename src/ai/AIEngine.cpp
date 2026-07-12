@@ -90,6 +90,28 @@ static const bool  s_eval_rows_rollout = std::getenv("MTG_EVAL_ROWS_ROLLOUT") !=
 // baseline; >0 distils a stronger policy, for weak-baseline decks like hinata). See learned-d0-policy.md.
 static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_EVAL_ROLLOUT_DEPTH");
                                               return (e && *e) ? std::atoi(e) : 0; }();
+// MTG_EVAL_DEPTH_SCHEDULE: a comma-separated per-turn depth LADDER that overrides the flat
+// MTG_EVAL_ROLLOUT_DEPTH, e.g. "5,4,3,2" => turn 1 labels roll out at d5, turn 2 at d4, turn 3 at
+// d3, turn >=4 at the last entry (d2). Motivated by the per-turn pick-regret diagnostic: the model's
+// leak concentrates in the OPENING (longest horizon), so label those turns with a deeper NC teacher
+// and let the cheap tail run at d2. Affordable because the deep leg only touches the first few turns.
+// Inert (falls back to the flat depth) unless set. Requires MTG_EVAL_ROWS_HONEST for a valid NC label
+// (deep clairvoyant labels teach unreproducible foresight). See docs/design/learned-d0-policy.md.
+static const std::vector<int> s_eval_depth_schedule = []{ std::vector<int> v; const char* e =
+    std::getenv("MTG_EVAL_DEPTH_SCHEDULE"); if (!e || !*e) return v; std::string s(e); size_t i = 0;
+    while (i < s.size()) { size_t j = s.find(',', i); std::string tok = s.substr(i, j == std::string::npos
+        ? std::string::npos : j - i); if (!tok.empty()) v.push_back(std::atoi(tok.c_str()));
+        if (j == std::string::npos) break; i = j + 1; } return v; }();
+// Per-turn rollout depth for label generation: the schedule ladder if set (clamped to its last entry
+// past its length), else the flat s_eval_rollout_depth. turn_number is 1-based.
+static int EvalRolloutDepthForTurn(int turn_number)
+{
+    if (s_eval_depth_schedule.empty()) { return s_eval_rollout_depth; }
+    int idx = turn_number - 1; if (idx < 0) { idx = 0; }
+    if (idx >= static_cast<int>(s_eval_depth_schedule.size()))
+    { idx = static_cast<int>(s_eval_depth_schedule.size()) - 1; }
+    return s_eval_depth_schedule[idx];
+}
 // MTG_EVAL_ROWS_HONEST: with MTG_EVAL_ROLLOUT_DEPTH>0, make the rollout continuation a full-strength
 // NON-clairvoyant teacher -- its per-turn lookahead plans against a reshuffled unseen library and
 // resolves against the true order (see g_honest_teacher). Without this, rollout_depth>0 is a
@@ -137,7 +159,7 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         if (s_eval_rows_honest) { s.shuffle_salt_search = rs; }
         const TurnSolver::EarliestWinReport rep =
             TurnSolver::EnumerateEarliestWins(s, max_turns, second_main, s_eval_rows_rollout,
-                                              s_eval_rollout_depth, s_eval_rows_honest);
+                                              EvalRolloutDepthForTurn(state.turn_number), s_eval_rows_honest);
         const int e = (rep.earliest > 0 && rep.earliest <= max_turns) ? rep.earliest : (max_turns + 1);
         earliest_sum += e; ++earliest_n;
         for (const TurnSolver::EarliestWinCandidate& c : rep.candidates)
