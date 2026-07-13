@@ -2706,3 +2706,17 @@ internalise. The deliverable that reaches teacher is therefore necessarily hybri
 (prunes the branch, top-M) + the MINIMAL real rollout that supplies the sampled-draw simulation (the NC prior,
 MTG_NC_TOPM). That is not a fallback -- it is the architecture the evidence forces. Reusable infra kept (inert):
 MTG_DUMP_TRAJ, tools/worldmodel, MTG_MANA_FEATURES, MTG_LABEL_SALT, dyntrain fail-analysis + --gamma.
+
+## 2026-07-13 SPEED/QUALITY FRONTIER + model-vs-teacher ceiling (answers "how fast can we get near teacher")
+Best STANDALONE model (land-fold d0, no rollout) vs teacher (NC K16 d2), held-out LP:
+  antilife 5.20 vs 4.78 (gap +0.42) | TH 5.40 vs 4.73 (gap +0.67). This is the pure "model policy" ceiling =
+  the irreducible static-vs-simulation gap. As a top-M PRIOR it reaches the teacher (dLP +0.02..0.15 at M=4-8)
+  but the ROLLOUT does the work; the model only trims ~10-25% wall-time, bounded by the small branching N (~5
+  antilife / ~10 TH). M is a WEAK lever -- the cost is the per-plan rollout (K reshuffles x d2), not the plan count.
+NC K x depth frontier (antilife, held-out, ms/game): K16d2 4.78/517ms (teacher) | K8d2 4.82(+0.04)/438ms |
+  K4d2 4.88(+0.10)/408ms | K16d0 4.97(+0.19)/355ms | K8d0 4.95(+0.17)/370ms. => every lever (M/K/depth) gives
+  only a ~15% LOSSLESS trim; 2x+ faster costs 0.1-0.3 LP. THE TEACHER IS ALREADY NEAR THE EFFICIENT NC FRONTIER.
+CONSTRUCTIVE reframe for the goal (clairvoyance-abuse A/B card testing): absolute LP is irrelevant there; only
+whether the standalone model ranks card-swap DELTAS like the teacher. A consistent ~0.5 LP bias cancels in the
+A/B delta -> the fast standalone model may be usable for the intended purpose despite the gap. NEXT (untested,
+the actually-useful question): measure model-vs-teacher agreement on card-swap A/B deltas, not absolute LP.
