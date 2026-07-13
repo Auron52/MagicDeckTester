@@ -502,13 +502,55 @@ static void WriteMulliganDecisionJson(std::ostream& os, const std::vector<Card>&
     os << "}\n";
 }
 
+// The exhaustive table's JOINT bottom recommendation: the hand indices to put on the bottom so the kept
+// subhand matches DecideBottom's optimal (7-count)-keep composition. Bottoming with a table is a single
+// joint decision (evaluate the kept subsets, pick the best), NOT a greedy card-at-a-time search -- so the
+// GUI can show the whole set at once, pre-selected. Members of a bucket are interchangeable (any
+// over-target member is an equally-optimal removal), mirroring AIEngine::BottomCards. Empty when the deck
+// has no bottoming table or the hand isn't tabled (GUI then falls back to the per-step deep hint).
+static std::vector<int> ExhaustiveBottomSet(const std::vector<Card>& hand,
+                                            const ExhaustiveKeepPolicy& ek, int count, bool on_play)
+{
+    std::vector<int> out;
+    if (ek.empty() || !ek.bottoming_enabled || count <= 0) { return out; }
+    std::vector<std::string> names; names.reserve(hand.size());
+    for (const Card& c : hand) { names.push_back(c.m_name.str()); }
+    std::vector<int> target;
+    if (!ek.DecideBottom(names, count, on_play, target)) { return out; }
+    const auto& n2b = ek.name_to_bucket;
+    std::vector<int> comp(ek.buckets.size(), 0);
+    for (const std::string& n : names)
+    { auto it = n2b.find(n); if (it != n2b.end()) { comp[it->second]++; } }
+    std::vector<char> used(hand.size(), 0);
+    for (int k = 0; k < count; ++k)
+    {
+        int pick = -1;
+        for (int j = 0; j < static_cast<int>(hand.size()); ++j)
+        {
+            if (used[j]) { continue; }
+            auto it = n2b.find(names[j]);
+            if (it != n2b.end() && comp[it->second] > target[it->second]) { pick = j; break; }
+        }
+        if (pick < 0) { break; }
+        used[pick] = 1; comp[n2b.at(names[pick])]--; out.push_back(pick);
+    }
+    // Only offer a set that covers ALL `count` bottoms. It under-covers when `count` exceeds the table's
+    // mulligan depth (max_mull): DecideBottom caps its lookup at min(count, max_mull), so the keep-target
+    // is larger than 7-count and fewer than `count` cards are over-target. Return nothing in that case so
+    // the GUI falls back to the per-step deep hint / manual selection rather than pre-selecting too few.
+    if (static_cast<int>(out.size()) != count) { out.clear(); }
+    return out;
+}
+
 // London bottoming decision (claude-play). After keeping at mulligan_count K, the player bottoms K
-// cards one at a time; this fires once per card. The reply is the hand INDEX (0-based) of the card to
-// put on the bottom. `ai_pick` is the hand index the engine would bottom (the "AI would X" hint); each
-// hand card carries `win_optimal` (depth>0: does bottoming it preserve the earliest clairvoyant win?).
+// cards; the engine still reads one hand-index per bottom decision, but the GUI batches them into ONE
+// multi-select dialog. `ai_pick` is the per-step engine pick (the "AI would X" hint); each hand card
+// carries `win_optimal` (depth>0: does bottoming it preserve the earliest clairvoyant win?). `ai_set` is
+// the exhaustive table's JOINT recommended set (all K indices at once) when the deck is tabled, else [].
 static void WriteBottomDecisionJson(std::ostream& os, const std::vector<Card>& hand,
                                     int ai_pick, const std::vector<char>& win_optimal,
-                                    int step, int total, int decision_index)
+                                    int step, int total, int decision_index,
+                                    const std::vector<int>& ai_set)
 {
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
@@ -536,6 +578,9 @@ static void WriteBottomDecisionJson(std::ostream& os, const std::vector<Card>& h
         JsonStr(os, hand[ai_pick].m_name);
     }
     os << " },\n";
+    os << "  \"ai_set\": [";
+    for (size_t i = 0; i < ai_set.size(); ++i) { if (i) { os << ", "; } os << ai_set[i]; }
+    os << "],\n";
     os << "  \"note\": \"reply the hand INDEX (0-based) of the card to put on the bottom (step "
        << (step + 1) << " of " << total << ")\"\n";
     os << "}\n";
@@ -1227,6 +1272,10 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             int step, int total) -> int
         {
             int di = static_cast<int>(cursor);
+            // The exhaustive table's joint recommendation (all K at once) when this deck is tabled -- the
+            // GUI pre-selects it. Empty for a table-less deck (GUI falls back to the per-step deep hint).
+            std::vector<int> ai_set =
+                ExhaustiveBottomSet(hand, profile.exhaustive_keep, total, state.on_the_play);
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -1235,14 +1284,14 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteBottomDecisionJson(ss, hand, ai_pick, win_opt, step, total, di);
+                    WriteBottomDecisionJson(ss, hand, ai_pick, win_opt, step, total, di, ai_set);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return chosen;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteBottomDecisionJson(std::cout, hand, ai_pick, win_opt, step, total, di);
+            WriteBottomDecisionJson(std::cout, hand, ai_pick, win_opt, step, total, di, ai_set);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);

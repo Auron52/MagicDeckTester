@@ -164,6 +164,13 @@
   .hand .thumb.spent { opacity:.42; }
   .hand .thumb .lealloc { position:absolute; bottom:2px; right:2px; background:rgba(255,184,77,.95); color:#0c1116;
       border-radius:4px; font-size:10px; font-weight:700; padding:0 3px; z-index:2; }
+  /* Dig abilities: cycling (a land in HAND) + sacrifice-to-draw (Fiery Islet on the board). Single-click. */
+  .thumb .digbadge { position:absolute; bottom:2px; left:2px; background:rgba(90,200,180,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:pointer; }
+  .thumb.sac-src { cursor:pointer; box-shadow:0 0 0 1px #2f8f7e inset; }
+  .thumb.sac-src:hover { box-shadow:0 0 0 2px #5ac8b4, 0 0 8px rgba(90,200,180,.45); }
+  .hand .thumb.cyc-src { cursor:pointer; }
+  .hand .thumb.cyc-src:hover { box-shadow:0 0 0 2px #5ac8b4, 0 0 8px rgba(90,200,180,.4); }
   .zone.ledrop { border:1px dashed #7a5a1e; border-radius:10px; background:rgba(58,47,27,.35); padding:2px 6px; }
   .zone.ledrop.active { border-color:#ffb84d; background:rgba(58,47,27,.6); }
   /* divided-damage board editor: an inline −[n]+ stepper on each legal target (Fiery Justice / Magma Opus). */
@@ -437,6 +444,34 @@ function floatingManaHtml(me) {
     `<span class="mpip" style="background:${col}" title="${fm[k]} ${esc(nm)} mana">${k==='wild'?'✦':k}${fm[k]>1?'×'+fm[k]:''}</span>`).join('');
   return pips ? `<span class="floatmana" title="floating (unspent) mana in your pool">${pips}</span>` : '';
 }
+// Dig abilities (human play). The engine enumerates cycling (a land in HAND, e.g. Lonely Sandbar /
+// Forgotten Cave) and sac-to-draw (a land in play, e.g. Fiery Islet) as standalone ONE-action plans
+// with actions:[{card, dig:true, dig_sacrifice}]. Surface them as single-click abilities: find the
+// matching plan and commit its index (the engine draws a card and re-prompts). Memoized per decision.
+function digSources() {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return { cyc:{}, sac:{} };
+  if (S._digFor === d) return S._dig;
+  const cyc = {}, sac = {};
+  for (const p of (d.plans || [])) {
+    const a = p.actions || [];
+    if (a.length === 1 && a[0] && a[0].dig) {
+      if (a[0].dig_sacrifice) sac[a[0].card] = p.index; else cyc[a[0].card] = p.index;
+    }
+  }
+  S._digFor = d; S._dig = { cyc, sac };
+  return S._dig;
+}
+// Fire a dig (cycle a hand land / sacrifice a board land to draw). It is a STANDALONE action, so clear
+// any half-built line first -- otherwise applyAccepted's dropped-cast detector would see the queued
+// (uncast) spells and roll the whole thing back. Then advance by the dig plan's index.
+function fireDig(planIndex, label) {
+  if (S.busy || S.over || planIndex == null) return;
+  if (S.plan && S.plan.length) flashHint('Queued line cleared to ' + label + '.');
+  S.plan = []; S.leMode = false; S.vialMode = null;
+  hideVerdict();
+  applyAccepted(planIndex, label);
+}
 function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const land = !!o.is_land;
   const le = !!o.is_le;   // a Land's Edge-style "discard a land: deal N" source
@@ -445,15 +480,19 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const charge = (o.counters||[]).find(c=>c.kind==='charge');
   const isVial = !!charge && !S.over;
   const vialActive = isVial && S.vialMode===charge.count;
-  const cls = le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell');
+  // A land in play with a sacrifice-to-draw ability (Fiery Islet), untapped so it can pay its own {T}.
+  const canSac = land && !le && !isVial && !o.tapped && !S.over && (digSources().sac[o.name] != null);
+  const cls = (le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell')) + (canSac?' sac-src':'');
   const vcls = isVial ? ` vial-src${vialActive?' active':''}` : '';
   const attrs = le ? ' data-le="1" title="click to discard lands to Land’s Edge"'
-              : isVial ? ` data-vial="${charge.count}" title="click to deploy a creature with mana value ${charge.count} via this Vial"` : '';
+              : isVial ? ` data-vial="${charge.count}" title="click to deploy a creature with mana value ${charge.count} via this Vial"`
+              : canSac ? ` data-sacdig="${esc(o.name)}" title="click to sacrifice ${esc(o.name)} to draw a card"` : '';
   const idxAttr = (o.idx!=null) ? ` data-idx="${o.idx}"` : '';
   const tcls = o.tapped ? ' tapped' : '';   // #9: show tapped (used / enters-tapped) permanents
   return `<span class="thumb ${cls}${vcls}${tcls}" data-name="${esc(o.name)}"${idxAttr}${attrs}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
+    (canSac?`<span class="digbadge" title="sacrifice ${esc(o.name)} to draw a card">🩸 sac</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
     counterBadges(o)+
     `<em>${esc(o.name)}</em></span>`;
@@ -675,10 +714,12 @@ function renderHand() {
     const spent = land && (q+leN) >= total;          // every copy is played or discarded -> dim it
     const lehot = land && S.leMode && (q+leN) < total;  // a clickable discard target in active mode
     const vialhot = S.vialMode!=null && c.is_creature && c.mv===S.vialMode;  // deployable via the active Vial
-    html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
+    const canCyc = digSources().cyc[c.name] != null;   // a cycling land in hand -- single-click to cycle
+    html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''} ${canCyc?'cyc-src':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
       `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
       (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
       (c.is_draw?`<span class="draws" title="draws — re-prompts after; commit without a land to play a revealed one">↻ draws</span>`:'')+
+      (canCyc?`<span class="digbadge" title="single-click to cycle — discard to draw a card">↻ cycle</span>`:'')+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
@@ -722,6 +763,10 @@ function wireBoard() {
   // click a Retrace card in the graveyard to cast it from there (discards a land)
   $('board').querySelectorAll('.thumb[data-retrace]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); retraceCard(t.dataset.name); });
+  // click a land with a sacrifice-to-draw ability (Fiery Islet) to sacrifice it for a card
+  $('board').querySelectorAll('.thumb[data-sacdig]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); const nm=t.dataset.sacdig;
+      fireDig(digSources().sac[nm], `sacrifice ${nm} to draw`); });
 }
 
 function renderEffects() {
@@ -809,6 +854,9 @@ function activateAbility(name) {
     flashHint(`Land’s Edge: discarding ${n} land${n>1?'s':''} → ${dmg} damage (opponent to ${(S.decision.opponent.life||0)-dmg}).`);
     renderBoard(); return;
   }
+  // Cycling (a land in HAND, e.g. Lonely Sandbar / Forgotten Cave): single-click discards it to draw.
+  const cycIdx = digSources().cyc[name];
+  if (cycIdx != null) { return fireDig(cycIdx, `cycle ${name} to draw`); }
   flashHint(`“${name}”: double-click or drag to CAST/PLAY it.`+(le?' Click your Land’s Edge to discard lands to it.':''));
 }
 
@@ -1123,7 +1171,8 @@ function renderDecisionPanel(d, dec){
   wireDecisionPanel(d, dec);
   // The bottom decision's AI pick is the DEEP-search pick, fetched async so the modal never blocks on
   // the clairvoyant rollout. Kick it off once per decision (guarded so the repaint-on-arrival doesn't loop).
-  if (dec==='bottom' && d._aiHint===undefined && !d._aiHintPending) fetchBottomHint(d);
+  // Tabled deck already carries the profile's joint ai_set -> skip the deep-hint search (authoritative).
+  if (dec==='bottom' && !(d.ai_set&&d.ai_set.length) && d._aiHint===undefined && !d._aiHintPending) fetchBottomHint(d);
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
 
@@ -1243,24 +1292,41 @@ function mulliganPanelHtml(d){
 // the primary step is deliberately ignored (we want the deep pick, not the greedy one).
 function bottomPanelHtml(d){
   const hand=d.hand||[];
-  const hint=d._aiHint;                         // deep hint: undefined = pending, null = unavailable
-  const ai = (hint && hint.ai_choice) ? hint.ai_choice.index : undefined;
-  const wo = (hint && hint.win_optimal) ? hint.win_optimal : [];
+  const K=d.bottom_total||1;                    // total cards to bottom this keep (London mulligan_count)
+  // Tabled deck: the exhaustive mulligan profile gives the JOINT optimal bottom set (all K at once, a
+  // lookup -- not a card-at-a-time search), emitted as ai_set. Pre-select it. Table-less deck: fall back
+  // to the async per-step deep hint (top pick + win-optimal safe flags).
+  const tabled = Array.isArray(d.ai_set) && d.ai_set.length===K;   // only when it covers ALL K bottoms
+  const aiSet = tabled ? new Set(d.ai_set) : null;
+  const hint=d._aiHint;
+  const ai = (!tabled && hint && hint.ai_choice) ? hint.ai_choice.index : undefined;
+  const wo = (!tabled && hint && hint.win_optimal) ? hint.win_optimal : [];
   const someOpt = wo.length && wo.some(x=>x===true) && wo.some(x=>x===false);
-  const hintTxt = hint===undefined ? `<span class="hint">AI thinking…</span>`
-                : (ai!=null && hand[ai]) ? `AI would bottom <b>${esc(hand[ai].name)}</b> (depth ${hint.depth})`
+  // Init selection once per decision so re-renders on toggle keep the picks; seed with the profile's
+  // joint set when tabled. The engine reads one hand-index per bottom decision, so commitBottomBatch
+  // submits the picks in DESCENDING hand-index order (identical technique to the cleanup-discard panel).
+  if (S._bottomFor !== d.decision_index){ S._bottomFor=d.decision_index; S.bottomSel=new Set(tabled?d.ai_set:[]); }
+  const sel=S.bottomSel;
+  const hintTxt = tabled ? `Mulligan profile’s optimal set is preselected`
+                : hint===undefined ? `<span class="hint">AI thinking…</span>`
+                : (ai!=null && hand[ai]) ? `AI would start with <b>${esc(hand[ai].name)}</b> (depth ${hint.depth})`
                 : `AI pick unavailable`;
-  let h=`<h3>Bottom a card — step ${(d.bottom_step||0)+1} of ${d.bottom_total||1}</h3>`;
-  h+=`<div class="sub">London mulligan: put ${d.bottom_total} card${d.bottom_total===1?'':'s'} on the bottom of your library. `+
-     `Click a card to bottom it${someOpt?' (✓ keeps the earliest win)':''}. ${hintTxt}.</div>`;
+  let h=`<h3>Bottom ${K} card${K===1?'':'s'} — London mulligan</h3>`;
+  h+=`<div class="sub">Keeping a ${hand.length}-card hand: put <b>${K}</b> card${K===1?'':'s'} on the bottom. `+
+     `Click to toggle${tabled?'; AI = the profile’s joint pick':(someOpt?'; ✓ = safe to bottom (keeps the earliest win)':'')}. ${hintTxt}.</div>`;
   h+=`<div class="tutgrid">`;
   hand.forEach((c,i)=>{
-    const def=(i===ai), safe=someOpt&&wo[i]===true;
-    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${i}" data-name="${esc(c.name)}" title="${esc(c.name)}${safe?' — keeps the earliest win':''}">`+
+    const isSel=sel.has(i), isAI=tabled?aiSet.has(i):(i===ai), safe=someOpt&&wo[i]===true;
+    h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${i}" data-name="${esc(c.name)}" title="${esc(c.name)}${safe?' — safe to bottom':''}">`+
        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
-       (def?`<span class="deftag">AI pick</span>`:safe?`<span class="deftag" style="background:#2a7a4a">✓</span>`:``)+`</span>`;
+       (isAI?`<span class="deftag">AI${tabled?'':' top'}</span>`:safe?`<span class="deftag" style="background:#2a7a4a">✓</span>`:``)+`</span>`;
   });
-  return h+`</div>`;
+  h+=`</div>`;
+  const n=sel.size, ok=(n===K);
+  h+=`<div class="pbtns"><span class="pcount">${n} / ${K} selected</span>`+
+     ((tabled||ai!=null||someOpt)?`<button class="ghost" id="bottomai">Follow AI</button>`:'')+`<span class="spacer"></span>`+
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Bottom ${K} card${K===1?'':'s'}</button></div>`;
+  return h;
 }
 // Fetch the deep-search bottom hint in the background (see /api/ai-hint). Fired when a bottom decision
 // is first shown; patches the modal in place when it returns. Never blocks the human — they can bottom
@@ -1392,8 +1458,11 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitRetraceDiscard(d, +b.dataset.opt));
   else if (dec==='mulligan')
     panel.querySelectorAll('button[data-mull]').forEach(b=>b.onclick=()=>commitMulligan(d, +b.dataset.mull));
-  else if (dec==='bottom')
-    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitBottom(d, +b.dataset.opt));
+  else if (dec==='bottom'){
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleBottom(d, +b.dataset.opt));
+    const ai=panel.querySelector('#bottomai'); if (ai) ai.onclick=()=>followAiBottom(d);
+    const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBottomBatch(d);
+  }
   else { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec); }
 }
 function pushChoice(d, oi, lab){ pushChoices(d, [oi], lab); }
@@ -1452,11 +1521,44 @@ function commitRetraceDiscard(d, oi){
   pushChoice(d, oi, `${d.source} (retrace): discard ${c?c.name:'land'}`);
 }
 function commitMulligan(d, k){
-  pushChoice(d, k, k?`Keep (${(d.hand||[]).length}-card hand)`:`Mulligan to ${(d.mulligan_count||0)+1}`);
+  // London: you drew `n` (=7) and will BOTTOM `mc` cards for the mulligans taken. So KEEPING now ends
+  // with n-mc cards, and a further MULLIGAN aims for n-(mc+1). Neither is the mulligan attempt number.
+  const n=(d.hand||[]).length, mc=(d.mulligan_count||0);
+  pushChoice(d, k, k?`Keep (${n-mc}-card hand)`:`Mulligan to ${n-(mc+1)}`);
 }
-function commitBottom(d, i){
-  const c=(d.hand||[])[i];
-  pushChoice(d, i, `Bottom: ${c?c.name:'card'}`);
+// Multi-select London bottoming: toggle a card in/out of the bottom set (capped at K), then commit all
+// at once. The engine reads one hand-index per bottom decision, so we submit the picks in DESCENDING
+// hand-index order -- removing a higher index never shifts a lower one, so each stays valid at its
+// successive (shrinking-hand) bottom decision. (Same technique as commitDiscardBatch.)
+function toggleBottom(d, oi){
+  const K=d.bottom_total||1, sel=S.bottomSel||(S.bottomSel=new Set());
+  if (sel.has(oi)) { sel.delete(oi); }
+  else { if (sel.size>=K){ flashHint(`Pick exactly ${K} — deselect one first.`); return; } sel.add(oi); }
+  renderDecisionPanel(d,'bottom');
+}
+// "Follow AI": seed from the AI's deep top pick, then fill up to K from the win-optimal (safe) cards,
+// then any remaining. This is guidance from the single step-0 deep hint; the exact per-card AI SEQUENCE
+// would need a K-step peek (K deep searches). Non-blocking approximation.
+function followAiBottom(d){
+  const K=d.bottom_total||1, hand=d.hand||[], sel=new Set();
+  if (Array.isArray(d.ai_set) && d.ai_set.length){    // tabled: the profile's joint set
+    d.ai_set.slice(0,K).forEach(i=>sel.add(i)); S.bottomSel=sel; renderDecisionPanel(d,'bottom'); return;
+  }
+  const hint=d._aiHint;                               // table-less: top pick + safe fill
+  const ai=(hint&&hint.ai_choice)?hint.ai_choice.index:undefined;
+  if (ai!=null) sel.add(ai);
+  const wo=(hint&&hint.win_optimal)?hint.win_optimal:[];
+  for (let i=0;i<hand.length && sel.size<K;i++) if (wo[i]===true) sel.add(i);
+  for (let i=0;i<hand.length && sel.size<K;i++) sel.add(i);
+  S.bottomSel=sel; renderDecisionPanel(d,'bottom');
+}
+function commitBottomBatch(d){
+  const K=d.bottom_total||1, sel=[...(S.bottomSel||[])];
+  if (sel.length!==K){ flashHint(`Select exactly ${K} card${K===1?'':'s'} to bottom.`); return; }
+  const desc=sel.slice().sort((a,b)=>b-a);   // descending hand-index order (shrinking-hand safe)
+  const names=desc.map(i=>{ const c=(d.hand||[])[i]; return c?c.name:'card'; });
+  S._bottomFor=null; S.bottomSel=null;
+  pushChoices(d, desc, `bottom: ${names.join(', ')}`);
 }
 function commitBoardSel(d, dec){
   const sel=[...(S.boardSel||[])];
