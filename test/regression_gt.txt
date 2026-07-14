@@ -1,5 +1,6 @@
-# Regression ground truth -- commit 10a4cc9  date 2026-07-12
+# Regression ground truth -- commit 0b55e9e  date 2026-07-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (regression, 2026-07-14): gi163:mulligan keep-divergence (only searched win->loss; depth-invariant gi163 T7->loss at BOTH d3_s2002 & d5_s2002, each paired 1:1 with a loss->win => opening-hand change, not searched-play misplay; wide keep-isolation A/B net-positive dT9=-0.0019, win-count unchanged, avg faster)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -44,11 +45,11 @@ knights_regression_d3_s2002=300/4.34333/32593c93f3019402
 knights_regression_d3_s3003=300/4.36333/0f99cf70866bd230
 knights_regression_d5_s2002=250/4.312/28f06b1f5a831616
 knights_regression_d5_s3003=250/4.356/ecf419b69a112bf6
-antilife_regression_d0_s2002=906/5.26049/a4c4abf93d27116d
-antilife_regression_d3_s2002=299/4.10368/1defc6a0d380defd
-antilife_regression_d3_s3003=299/4.11371/3b3aa5222c51898c
-antilife_regression_d5_s2002=249/4.14056/f609654a1d0f0582
-antilife_regression_d5_s3003=249/4.1004/2e4f162da5741a94
+antilife_regression_d0_s2002=898/5.26169/c6e50beea6866ad7
+antilife_regression_d3_s2002=299/4.09365/ac266f7c9f1d47e4
+antilife_regression_d3_s3003=299/4.09699/2805ea8254813e5f
+antilife_regression_d5_s2002=249/4.1245/15742593def6e672
+antilife_regression_d5_s3003=249/4.09237/13a62057c92032b1
 hinata_regression_d0_s2002=647/6.64451/9e95a83bb95cb45f
 hinata_regression_d3_s2002=194/5.68557/994f7d4779de068c
 hinata_regression_d3_s3003=191/5.64398/d615b2a087636c4a
