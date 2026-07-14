@@ -414,14 +414,38 @@ inline uint64_t SearchShuffleSeed(uint64_t game_seed, uint64_t search_index)
 // search counter (so the NEXT search uses a fresh deterministic seed). No-op when the
 // feature is off. Call AFTER the searched card has been removed from the library and
 // BEFORE any "put on top" placement (rules order: shuffle, then put on top).
+// MTG_STABLE_SHUFFLE (off by default): use the COMMON-RANDOM-NUMBERS reshuffle
+// (Library::ShuffleByKey) instead of the search-index-keyed Fisher-Yates. The CRN order
+// depends only on (game_seed, salt, each card's stable m_number) -- NOT on search_count or
+// the exact multiset -- so two games on one seed reshuffle CONSISTENTLY: a fetch removes its
+// one card and every other card's draw order is unchanged, keeping two policies' realized
+// draws aligned for an A/B (only genuine play differences move the win turn, not shuffle luck).
+// Off => byte-identical to the historical Fisher-Yates. See Library::ShuffleByKey / ref_bench.
+inline bool StableShuffleEnabled()
+{
+    static const bool on = std::getenv("MTG_STABLE_SHUFFLE") != nullptr;
+    return on;
+}
+
 inline void ShuffleAfterSearch(GameState& state, int controller_index)
 {
     if (!SearchShuffleEnabled()) { return; }
     // Decoupling instrument: the SEARCH evaluation shuffles with shuffle_salt_search, the real
     // executor with shuffle_salt. Equal by default -> byte-identical / lockstep. See g_shuffle_eval.
     const uint64_t salt = g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt;
-    state.players[controller_index].library.Shuffle(
-        SaltSeed(SearchShuffleSeed(state.game_seed, state.search_count), salt));
+    if (StableShuffleEnabled())
+    {
+        // search_count is DELIBERATELY excluded from the CRN key so every reshuffle in a game
+        // yields the same canonical order (max consistency across policies that fetch a
+        // different number of times); still bumped below for any non-shuffle bookkeeping.
+        state.players[controller_index].library.ShuffleByKey(
+            SaltSeed(SearchShuffleSeed(state.game_seed, 0), salt));
+    }
+    else
+    {
+        state.players[controller_index].library.Shuffle(
+            SaltSeed(SearchShuffleSeed(state.game_seed, state.search_count), salt));
+    }
     ++state.search_count;
 }
 
