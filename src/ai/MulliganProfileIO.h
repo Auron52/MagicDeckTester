@@ -437,7 +437,12 @@ inline std::string DeckProfileToJson(const MulliganProfile& profile)
     {
         root["exhaustive_keep"] = ExhaustiveKeepToJsonObj(profile.exhaustive_keep);
     }
-    return root.dump(2);
+    // Exhaustive-keep profiles are dominated by a huge dense bottom_keep table (one K-vector per
+    // composition x mulligan-depth). Pretty-printing (one int per line) inflates them ~10x and makes the
+    // load parse minutes-slow -- e.g. a max_mull=6 antilife profile is 1.86 GB pretty vs ~250 MB compact,
+    // 80 s vs a few s to load. Serialize compact when that block is present; small static-only profiles
+    // stay pretty-printed for human readability. Parses identically either way.
+    return profile.exhaustive_keep.empty() ? root.dump(2) : root.dump();
 }
 
 // Returns a default profile if the JSON is malformed or missing expected keys.

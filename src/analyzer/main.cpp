@@ -512,7 +512,9 @@ int main(int argc, char* argv[])
         // distinct bucket-hand for sizes 7..7-max_mull, evaluate each with R reshuffled rollouts,
         // and print the exact optimal keep+bottom policy value vs the static keep rule. Read-only.
         //   MTG_EQUIV_PROBES/_THRESHOLD/_DEPTH (bucketing), MTG_KEEP_ROLLOUTS (R, default 100),
-        //   MTG_KEEP_MAXMULL (deepest mulligan, default 3).
+        //   MTG_KEEP_MAXMULL (deepest mulligan, default 6 = down to keep-1; the terminal keep-1 anchor is
+        //   the only correct forced-keep, so 6 is the uniquely-correct depth. Shallower forced-keeps a hand
+        //   it should ship -- see docs/design/bottomcards-undercount-beyond-maxmull.md).
         if (const char* e = std::getenv("MTG_KEEP_EXHAUSTIVE"); e && *e && std::string(e) != "0")
         {
             auto env_int = [](const char* k, int dflt, int lo)
@@ -546,7 +548,7 @@ int main(int argc, char* argv[])
                                 return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
             cfg.se_prior  = []{ const char* s = std::getenv("MTG_KEEP_SE_PRIOR");
                                 return (s && *s) ? std::max(0.0, std::atof(s)) : 8.0; }();
-            cfg.max_mull  = env_int("MTG_KEEP_MAXMULL", 3, 0);
+            cfg.max_mull  = env_int("MTG_KEEP_MAXMULL", 6, 0);
             cfg.seed      = seed;   // rollout seed base (the run id / seed_base)
             cfg.equiv_seed = []{ const char* s = std::getenv("MTG_EQUIV_SEED");
                                  return (s && *s) ? std::strtoull(s, nullptr, 10) : 20260701ULL; }();

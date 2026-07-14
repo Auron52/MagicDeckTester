@@ -519,6 +519,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     }
     std::vector<std::vector<char>> trace_reuse(tables.size());   // per (H-idx, cell): prior disjoint from changed
     long long n_trace_reuse = 0; bool prior_traced = false;
+    // Set true below when the prior is reused WHOLESALE (identical play_digest). Hoisted to this scope so
+    // Pass A can skip the throwaway floor sample on every reused cell (its value comes from the prior).
+    bool reuse_all_cells = false;
     if (const char* pr = std::getenv("MTG_KEEP_PRIOR_RAW"); pr && *pr)
     {
         std::ifstream prf(pr);
@@ -540,10 +543,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 uint64_t my_deck_fp = 1469598103934665603ULL;
                 for (const std::string& n : dnn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
                 const auto& mm = pj["meta"];
+                // EXTEND-DEPTH: a prior with max_mull <= this run's may seed it. The prior supplies its
+                // sizes 7..7-prior_mm; the DEEPER sizes it lacks are rolled fresh, then BuildPolicy runs at
+                // the run's (deeper) max_mull. A shallower prior is a strict subset (same buckets/deck/
+                // equiv_seed/K), so pooling parity holds. (prior_mm > cfg.max_mull would need DROPPING
+                // sizes and is not supported here.)
+                const int prior_mm = mm.value("max_mull", -1);
                 const bool ok = mm.value("bucket_fp", 0ULL) == my_bucket_fp
                              && mm.value("deck_fp", 0ULL) == my_deck_fp
                              && mm.value("equiv_seed", 0ULL) == cfg.equiv_seed
-                             && mm.value("K", -1) == K && mm.value("max_mull", -1) == cfg.max_mull;
+                             && mm.value("K", -1) == K
+                             && prior_mm >= 0 && prior_mm <= cfg.max_mull;
                 if (!ok)
                 { std::cerr << "[keepgen] PRIOR-RAW: fingerprint mismatch (bucket/deck/equiv_seed/K/max_mull)"
                                " -- REFUSING (a changed decklist needs bucket translation, not yet built)\n" << std::flush; }
@@ -553,6 +563,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 else
                 {
                     prior_traced = mm.value("traced", false);
+                    if (prior_mm < cfg.max_mull)
+                    { std::cerr << "[keepgen] EXTEND-DEPTH: prior max_mull=" << prior_mm << " -> this run "
+                                << cfg.max_mull << "; sizes " << HAND << ".." << (HAND - prior_mm)
+                                << " reuse from prior, sizes " << (HAND - prior_mm - 1)
+                                << "..1 roll fresh\n" << std::flush; }
 
                     // ---- Phase B AUTO-ATTRIBUTION + ENGINE GUARD --------------------------------------
                     // When the operator did NOT declare MTG_KEEP_CHANGED_CARDS, derive the reuse scope
@@ -564,21 +579,27 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     //   3. play_digest changed, engine_fp DIFFERS/unavailable -> engine (shared-code)
                     //      change can move any cell -> REFUSE card-level reuse; statistical only.
                     // A manual MTG_KEEP_CHANGED_CARDS always wins (human-in-the-loop override).
-                    bool reuse_all_cells = false;
                     const bool manual_changed = !changed_cards.empty();
-                    if (!manual_changed && mm.contains("card_defs"))
+                    const std::string prior_pd = mm.value("play_digest", std::string());
+                    // Coarse reuse: play_digest IS the pooling identity, so an identical digest proves
+                    // byte-identical play and every prior cell reproduces exactly on this build -> reuse the
+                    // ENTIRE prior pool (0 fresh rollouts on reused cells). Checked OUTSIDE the card_defs
+                    // guard so a MERGE-output prior (carries play_digest but not card_defs) also qualifies --
+                    // this is what lets it seed a deeper-max_mull EXTEND run.
+                    if (!manual_changed && !prior_pd.empty() && prior_pd == play_digest)
                     {
-                        const std::string prior_pd = mm.value("play_digest", std::string());
+                        reuse_all_cells = true;
+                        std::cerr << "[keepgen] AUTO-ATTRIB: play_digest unchanged -> reuse the ENTIRE"
+                                     " prior pool (0 fresh rollouts on reused cells)\n" << std::flush;
+                    }
+                    // Finer reuse (play_digest DIFFERS): if the engine is unchanged, scope reuse to the cards
+                    // whose defs moved; else fall back to statistical change-detection only.
+                    else if (!manual_changed && mm.contains("card_defs"))
+                    {
                         const std::string prior_efp = mm.value("engine_fp", std::string());
                         const std::string cur_efp   = MTG_ENGINE_FP;
                         const bool engine_ok = !prior_efp.empty() && !cur_efp.empty() && prior_efp == cur_efp;
-                        if (!prior_pd.empty() && prior_pd == play_digest)
-                        {
-                            reuse_all_cells = true;
-                            std::cerr << "[keepgen] AUTO-ATTRIB: play_digest unchanged -> reuse the ENTIRE"
-                                         " prior pool (0 fresh rollouts)\n" << std::flush;
-                        }
-                        else if (engine_ok)
+                        if (engine_ok)
                         {
                             const auto& cd = mm["card_defs"];
                             std::set<std::string> distinct;
@@ -987,6 +1008,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // skip mode: a carried (frozen) size-7 cell gets 0 rollouts -- V preloaded, no samples.
                 // Live/other cells keep their w, so seeds are unperturbed.
                 if (Hw == HAND && frozen7[iw][pd]) { continue; }
+                // Whole-pool reuse (EXTEND-DEPTH / identical play_digest): a cell taken verbatim from the
+                // prior needs NO fresh floor sample -- change-detection marks it `resolved` and
+                // apply_prior_override sets its V from the prior R=40 value regardless. Skipping it spends
+                // the floor pass ONLY on cells the prior lacks (the new deeper sizes), turning a full
+                // re-sample of every reused cell (~94% of the work on a depth extend) into ~zero.
+                if (reuse_all_cells && has_prior[HAND - Hw][iw][pd]) { continue; }
                 long long cell_init = init;
                 // verify mode: a carried confident-mull cell starts at a REDUCED floor so the run skips
                 // most of its floor cost; the adaptive refiner still tops it up if it flipped to keepable
