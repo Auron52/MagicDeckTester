@@ -84,10 +84,45 @@ seed, with shuffle luck removed, so the measured gap is play quality (not who go
   an ideal non-clairvoyant agent.
 - **Existing references were recorded under the OLD (legacy) shuffle.** They reproduce EXACTLY under
   `MTG_LEGACY_SHUFFLE` (commit-only, never regenerate them). Only the **33** games on the two reshuffle
-  decks are "off-shuffle" vs the new default (Anti-Lifegain 30, Hinata2 3); the other **29** (Knights /
-  burn / slivers / treasure_hunt) never reshuffle, so they already match the stable default byte-for-byte.
-  To make an affected reference shuffle-clean vs a stable AI run, **re-play it under the stable default**;
-  the recorded choices cannot be auto-converted (they are indices tied to the old draw order).
+  decks are potentially "off-shuffle" vs the new default (Anti-Lifegain 30, Hinata2 3); the other **29**
+  (Knights / burn / slivers / treasure_hunt) never reshuffle, so they already match the stable default
+  byte-for-byte.
+
+### Recoverability of the 33 — which need re-play
+
+After the opening shuffle (untouched), legacy and stable run **identical code** until the first mid-game
+reshuffle (`ShuffleAfterSearch`). So a reference is **recoverable as-is** (byte-identical under the stable
+default -- no re-play, no flag) **iff no reshuffle precedes a later library draw** in its recorded line.
+Classifying each reference's RECORDED (legacy) decision line -- drift-proof, since it reads the saved game
+rather than re-running it -- gives:
+
+| deck | recoverable as-is | affected (need legacy flag or re-play) |
+|------|-------------------|----------------------------------------|
+| Anti-Lifegain | 4 (`s5_gi4`, `s16_gi15`, `s26_gi25`, `s1_gi0`) | 26 |
+| Hinata2 | 1 (`s1_gi0`) | 2 (`s2_gi1`, `s12_gi11`) |
+| **total** | **5** | **28** |
+
+- The 3 antilife no-trigger games play no fetch/tutor; `s1_gi0` fetches only on its win turn with lethal
+  cast after (no post-shuffle draw). Hinata `s1_gi0`'s only Ponder chose a kept ordering, **not** "shuffle
+  them away", so no reshuffle fired. All five verified from their recorded lines; `s5_gi4` also confirmed
+  byte-identical by a direct legacy-vs-stable replay diff.
+- The full per-game verdict + first-reshuffle turn/trigger is the machine-readable manifest
+  `references/stable_shuffle_recoverability.json` (a **new sidecar** -- reference game files are never
+  edited). This is the "marking" of which refs need the legacy flag; it lives beside the refs, not inside
+  them.
+- **Handling the 28 affected.** Cheapest (zero re-play): compare them against an AI run under
+  `MTG_LEGACY_SHUFFLE=1` -- a blanket, correct rule since every existing reference predates the stable
+  default. Downside: a legacy comparison re-permits the fetch-timing shuffle-exploit this change confounds,
+  so the "ideal search" arm is the clairvoyant-exploiting one. To get a clairvoyance-clean comparison for a
+  specific affected game, **re-play it under the stable default** (recorded choices can't be auto-converted
+  -- their indices are tied to the old draw order, and naive `--choices` replay desyncs on engine drift).
+
+**Caveat on empirical replay (do not trust it for this):** replaying a reference's recorded `--choices`
+under the current engine desyncs badly (the saved indices no longer map to the same decisions), so the
+fallback plays an entirely different line -- often one that fetches when the human didn't -- and a
+legacy-vs-stable diff of *that* line is meaningless. Win-turn "matches" are frequently collisions, not
+faithful replays (verified: `s16_gi15` replay reproduced win T4 but played Wooded Foothills + Marsh Flats,
+not the recorded Stomping Ground + Temple Garden). Classify from the recorded line, never from a replay.
 
 ## Promoting to default
 

@@ -1,0 +1,759 @@
+{
+  "generated_for": "stable-shuffle default (MTG_LEGACY_SHUFFLE reproduces legacy)",
+  "note": "Classification is from each reference's RECORDED (legacy) decision line \u2014 drift-proof. AFTER the opening shuffle, legacy and stable execute identical code until the first mid-game reshuffle (ShuffleAfterSearch). A reference is RECOVERABLE (byte-identical under the stable default) iff no reshuffle precedes a later library draw. AFFECTED refs must be compared under MTG_LEGACY_SHUFFLE, or re-played under the stable default. Antilife fetch = assumed cracked the turn it is played (safe over-approx). Reference game files are never modified.",
+  "decks": {
+    "Anti-Lifegain": {
+      "recoverable": [
+        "claude_s16_gi15.json",
+        "claude_s1_gi0.json",
+        "claude_s26_gi25.json",
+        "claude_s5_gi4.json"
+      ],
+      "affected": [
+        "claude_s10_gi9.json",
+        "claude_s11_gi10.json",
+        "claude_s12_gi11.json",
+        "claude_s13_gi12.json",
+        "claude_s14_gi13.json",
+        "claude_s15_gi14.json",
+        "claude_s18_gi17.json",
+        "claude_s19_gi18.json",
+        "claude_s20_gi19.json",
+        "claude_s21_gi20.json",
+        "claude_s22_gi21.json",
+        "claude_s23_gi22.json",
+        "claude_s24_gi23.json",
+        "claude_s25_gi24.json",
+        "claude_s27_gi26.json",
+        "claude_s28_gi27.json",
+        "claude_s29_gi28.json",
+        "claude_s2_gi1.json",
+        "claude_s30_gi29.json",
+        "claude_s31_gi30.json",
+        "claude_s3_gi2.json",
+        "claude_s4_gi3.json",
+        "claude_s6_gi5.json",
+        "claude_s7_gi6.json",
+        "claude_s8_gi7.json",
+        "claude_s9_gi8.json"
+      ],
+      "detail": [
+        {
+          "ref": "claude_s16_gi15.json",
+          "win": 4,
+          "won": true,
+          "verdict": "RECOVERABLE",
+          "why": "no reshuffle event in recorded line",
+          "events": []
+        },
+        {
+          "ref": "claude_s1_gi0.json",
+          "win": 4,
+          "won": true,
+          "verdict": "RECOVERABLE",
+          "why": "reshuffle only on win-turn with no post-shuffle draw: [(4, 'fetch:Bloodstained Mire', False)]",
+          "events": [
+            [
+              4,
+              "fetch:Bloodstained Mire",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s26_gi25.json",
+          "win": 4,
+          "won": true,
+          "verdict": "RECOVERABLE",
+          "why": "no reshuffle event in recorded line",
+          "events": []
+        },
+        {
+          "ref": "claude_s5_gi4.json",
+          "win": 4,
+          "won": true,
+          "verdict": "RECOVERABLE",
+          "why": "no reshuffle event in recorded line",
+          "events": []
+        },
+        {
+          "ref": "claude_s10_gi9.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              1,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              4,
+              "fetch:Wooded Foothills",
+              false
+            ],
+            [
+              5,
+              "fetch:Marsh Flats",
+              false
+            ],
+            [
+              5,
+              "tutor:Idyllic Tutor",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s11_gi10.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Bloodstained Mire) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Bloodstained Mire",
+          "events": [
+            [
+              1,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              3,
+              "fetch:Marsh Flats",
+              false
+            ],
+            [
+              3,
+              "tutor:Idyllic Tutor",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s12_gi11.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Wooded Foothills) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Wooded Foothills",
+          "events": [
+            [
+              1,
+              "fetch:Wooded Foothills",
+              false
+            ],
+            [
+              2,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              4,
+              "fetch:Bloodstained Mire",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s13_gi12.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              1,
+              "fetch:Windswept Heath",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s14_gi13.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              1,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              2,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              3,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              4,
+              "fetch:Marsh Flats",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s15_gi14.json",
+          "win": 3,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Bloodstained Mire) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Bloodstained Mire",
+          "events": [
+            [
+              1,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              2,
+              "fetch:Windswept Heath",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s18_gi17.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T2 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 2,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              2,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              2,
+              "tutor:Enlightened Tutor",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s19_gi18.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Marsh Flats) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Marsh Flats",
+          "events": [
+            [
+              1,
+              "fetch:Marsh Flats",
+              false
+            ],
+            [
+              2,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              3,
+              "fetch:Wooded Foothills",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s20_gi19.json",
+          "win": 3,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T2 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 2,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              2,
+              "fetch:Windswept Heath",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s21_gi20.json",
+          "win": 6,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T2 (fetch:Wooded Foothills) precedes a later draw",
+          "first_reshuffle_turn": 2,
+          "first_trigger": "fetch:Wooded Foothills",
+          "events": [
+            [
+              2,
+              "fetch:Wooded Foothills",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s22_gi21.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Bloodstained Mire) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Bloodstained Mire",
+          "events": [
+            [
+              1,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              2,
+              "tutor:Idyllic Tutor",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s23_gi22.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Marsh Flats) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Marsh Flats",
+          "events": [
+            [
+              1,
+              "fetch:Marsh Flats",
+              false
+            ],
+            [
+              2,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              3,
+              "fetch:Wooded Foothills",
+              false
+            ],
+            [
+              4,
+              "fetch:Bloodstained Mire",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s24_gi23.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T4 (tutor:Idyllic Tutor) precedes a later draw",
+          "first_reshuffle_turn": 4,
+          "first_trigger": "tutor:Idyllic Tutor",
+          "events": [
+            [
+              4,
+              "tutor:Idyllic Tutor",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s25_gi24.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Wooded Foothills) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Wooded Foothills",
+          "events": [
+            [
+              1,
+              "fetch:Wooded Foothills",
+              false
+            ],
+            [
+              2,
+              "tutor:Idyllic Tutor",
+              false
+            ],
+            [
+              5,
+              "tutor:Idyllic Tutor",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s27_gi26.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Marsh Flats) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Marsh Flats",
+          "events": [
+            [
+              1,
+              "fetch:Marsh Flats",
+              false
+            ],
+            [
+              2,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              3,
+              "fetch:Bloodstained Mire",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s28_gi27.json",
+          "win": 6,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Marsh Flats) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Marsh Flats",
+          "events": [
+            [
+              1,
+              "fetch:Marsh Flats",
+              false
+            ],
+            [
+              2,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              5,
+              "fetch:Windswept Heath",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s29_gi28.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              1,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              3,
+              "fetch:Marsh Flats",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s2_gi1.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T2 (fetch:Wooded Foothills) precedes a later draw",
+          "first_reshuffle_turn": 2,
+          "first_trigger": "fetch:Wooded Foothills",
+          "events": [
+            [
+              2,
+              "fetch:Wooded Foothills",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s30_gi29.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Marsh Flats) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Marsh Flats",
+          "events": [
+            [
+              1,
+              "fetch:Marsh Flats",
+              false
+            ],
+            [
+              1,
+              "tutor:Enlightened Tutor",
+              false
+            ],
+            [
+              2,
+              "fetch:Wooded Foothills",
+              false
+            ],
+            [
+              3,
+              "fetch:Bloodstained Mire",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s31_gi30.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              1,
+              "fetch:Windswept Heath",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s3_gi2.json",
+          "win": 3,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              1,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              2,
+              "fetch:Wooded Foothills",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s4_gi3.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T2 (fetch:Wooded Foothills) precedes a later draw",
+          "first_reshuffle_turn": 2,
+          "first_trigger": "fetch:Wooded Foothills",
+          "events": [
+            [
+              2,
+              "fetch:Wooded Foothills",
+              false
+            ],
+            [
+              3,
+              "tutor:Idyllic Tutor",
+              false
+            ],
+            [
+              4,
+              "fetch:Wooded Foothills",
+              false
+            ],
+            [
+              5,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              5,
+              "tutor:Idyllic Tutor",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s6_gi5.json",
+          "win": 7,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              1,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              2,
+              "fetch:Wooded Foothills",
+              false
+            ],
+            [
+              3,
+              "fetch:Marsh Flats",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s7_gi6.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Bloodstained Mire) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Bloodstained Mire",
+          "events": [
+            [
+              1,
+              "fetch:Bloodstained Mire",
+              false
+            ],
+            [
+              2,
+              "fetch:Marsh Flats",
+              false
+            ],
+            [
+              3,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              4,
+              "fetch:Windswept Heath",
+              false
+            ],
+            [
+              5,
+              "fetch:Windswept Heath",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s8_gi7.json",
+          "win": 6,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (fetch:Windswept Heath) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "fetch:Windswept Heath",
+          "events": [
+            [
+              1,
+              "fetch:Windswept Heath",
+              false
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s9_gi8.json",
+          "win": 4,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T2 (fetch:Bloodstained Mire) precedes a later draw",
+          "first_reshuffle_turn": 2,
+          "first_trigger": "fetch:Bloodstained Mire",
+          "events": [
+            [
+              2,
+              "fetch:Bloodstained Mire",
+              false
+            ]
+          ]
+        }
+      ]
+    },
+    "Hinata2": {
+      "recoverable": [
+        "claude_s1_gi0.json"
+      ],
+      "affected": [
+        "claude_s12_gi11.json",
+        "claude_s2_gi1.json"
+      ],
+      "detail": [
+        {
+          "ref": "claude_s1_gi0.json",
+          "win": 7,
+          "won": true,
+          "verdict": "RECOVERABLE",
+          "why": "no reshuffle event in recorded line",
+          "events": []
+        },
+        {
+          "ref": "claude_s12_gi11.json",
+          "win": 9,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T5 (Ponder:shuffle) precedes a later draw",
+          "first_reshuffle_turn": 5,
+          "first_trigger": "Ponder:shuffle",
+          "events": [
+            [
+              5,
+              "Ponder:shuffle",
+              true
+            ],
+            [
+              5,
+              "Ponder:shuffle",
+              true
+            ],
+            [
+              9,
+              "Ponder:shuffle",
+              true
+            ]
+          ]
+        },
+        {
+          "ref": "claude_s2_gi1.json",
+          "win": 5,
+          "won": true,
+          "verdict": "AFFECTED",
+          "why": "reshuffle T1 (Ponder:shuffle) precedes a later draw",
+          "first_reshuffle_turn": 1,
+          "first_trigger": "Ponder:shuffle",
+          "events": [
+            [
+              1,
+              "Ponder:shuffle",
+              true
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total": 33,
+    "recoverable": 5,
+    "affected": 28
+  }
+}
