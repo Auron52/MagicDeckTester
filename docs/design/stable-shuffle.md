@@ -1,9 +1,9 @@
 # MTG_STABLE_SHUFFLE — common-random-numbers reshuffle for clean policy A/B
 
 **Status:** implemented, opt-in via the `MTG_STABLE_SHUFFLE` env var, **off by default**
-(byte-identical to the historical shuffle when unset). Committed on branch `d0-dynamic-model`
-(commits `60080b1` code, `8a72765` original notes). Not yet promoted to default — that requires a
-ground-truth rebaseline (see [Open decision](#open-decision)).
+(byte-identical to the historical shuffle when unset). Committed + pushed on branch `d0-dynamic-model`
+(commits `60080b1` code, `8a72765` original notes). **Not yet promoted to default** — that is a deferred,
+hand-off-able task with an expensive ground-truth rebaseline (see [Handoff](#handoff--promoting-to-default)).
 
 ## Problem
 
@@ -55,12 +55,40 @@ The saved human reference games were recorded under the **old** shuffle. STABLE 
 regenerated, so this alignment is not available directly — STABLE does not retroactively clean the
 existing human reference draws.
 
-## Open decision
+## Handoff — promoting to default
 
-Make `MTG_STABLE_SHUFFLE` the **default** vs. keep it a **comparison-only flag**. Promoting it to default
-changes the realized draws for every fetch deck, so it requires a ground-truth **rebaseline** across smoke
-+ regression + overnight (`test/regression.sh <mode> --accept`). Until that rebaseline is done and
-accepted, it ships **off by default** and is used only to isolate play from shuffle luck in A/B runs.
+This is the deferred task, ready for another agent/session to pick up. Goal: make the CRN reshuffle the
+**default** so every A/B run is shuffle-clean without needing the env var. It is deferred (not done inline)
+because flipping it changes the realized draws for every **fetchland** deck, which moves those decks'
+ground-truth fingerprints and therefore requires an expensive, commit-bound rebaseline.
+
+**Why it can't just be flipped:** non-fetch decks stay byte-identical, but fetch decks (antilife, and any
+other deck that searches the library) will shift their `games_won / avg_win_turn`. Those shifts are the
+reshuffle *realigning* (correct), not regressions — but the regression harness will still flag them until
+the ground truth is rebaselined.
+
+**Steps for the picking-up agent:**
+1. Read `.claude/skills/regression-testing.md` first (it is authoritative for the harness + the accept flow).
+2. Branch from the tip that carries the code (`origin/d0-dynamic-model`, commit `60080b1`+), or coordinate
+   with the branch owner.
+3. Flip the default in `ShuffleAfterSearch` (`src/core/SpellEffects.h`, the `MTG_STABLE_SHUFFLE` getenv
+   gate): default to `Library::ShuffleByKey`, keeping an escape hatch (e.g. an inverse `MTG_LEGACY_SHUFFLE`)
+   if a fallback is wanted. Rebuild **Release** (`cmake --build build --config Release`).
+4. Run the harness in all three modes (smoke → regression → overnight). Expect **fetch decks to shift,
+   non-fetch decks byte-identical**.
+5. **Inspect** the shifted games and confirm they are shuffle-realignment (per [Verification](#verification):
+   same-seed policies now draw aligned futures), not play regressions — spot-check a couple.
+6. Rebaseline via `test/regression.sh <mode> --accept` (never hand-edit ground truth), for smoke +
+   regression + overnight. Then ship default-on.
+
+**Do NOT:**
+- Touch anything under `references/` — it is commit-only (never revert/regenerate). The human references
+  were recorded under the *old* shuffle; STABLE does **not** clean machine-vs-human (see
+  [Open wrinkle](#open-wrinkle--machine-vs-human)).
+- Hand-edit ground-truth files (use `--accept`).
+
+**Acceptance:** default-on; smoke + regression + overnight rebaselined and accepted; non-fetch decks
+byte-identical; every fetch-deck shift verified as shuffle-clean.
 
 ## References
 
