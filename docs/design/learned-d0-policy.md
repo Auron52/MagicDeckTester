@@ -2418,28 +2418,15 @@ earlier pin: TEACHER = NC K16 d2 (width>depth past 2, d3 noise-to-harmful).
 NET: fast NC play (NC-d0/d1) ≈ teacher (K16 d2) ≈ human. The whole chain is validated; the teacher is at the
 human ceiling modulo the shared non-clairvoyance tax. Tools: scripts/ref_bench.py, scripts/nc_teacher_strength.py.
 
-## 2026-07-12: MODEL-vs-human + MTG_STABLE_SHUFFLE (common-random-numbers reshuffle)
+## 2026-07-12: MODEL-vs-human on the antilife reference hands
 MODEL on the human hands (ref_bench --model-dyn, antilife 30 refs, land-fold DynNet teacher-d2 K16):
 human 4.500 | clairvoyant 4.167 | NC teacher 4.467 | **MODEL 4.933**. The learned model is ~0.45 LP
 (≈half a turn) behind human AND teacher on the exact human hands -> NOT human-level; the off-by-default
 d0 gate (MTG_D0_LANDFOLD) is not ready to turn on. Consistent with the goldfish dominance finding.
 
-WHY a T1 fetch by two policies diverges the draws (user Q): the fetch's post-search reshuffle
-(ShuffleAfterSearch) was a Fisher-Yates keyed on (game_seed, search_count) over the CURRENT library
-contents. Different fetch target (human Overgrown Tomb vs teacher Stomping Ground) => different remaining
-multiset => different order; and search_count differs if fetch counts differ. So win-turn deltas between
-two policies were partly SHUFFLE LUCK, not play. On antilife most human!=teacher games are this
-(fetchland-shuffle draw divergence), NOT mistakes -- matches the user's prior ("neither side misplays").
-FIX (commit 60080b1, OFF by default = byte-identical): Library::ShuffleByKey orders the live library by a
-per-copy key splitmix64(seed, m_number). m_number is a stable deck-setup ID identical across two same-seed
-games, so a card's rank is independent of the multiset / search_count -> removing a card leaves the rest's
-order UNCHANGED. Two policies then draw the same future modulo the one card each removed; only genuine play
-differences move draws. Gated MTG_STABLE_SHUFFLE. Verified: seed22gi21 OFF-diverges/STABLE-aligns (pure
-shuffle luck); seed10gi9 diverges under both (genuine play diff, preserved). NC & CLAIR draw identical under
-STABLE on gi14. OPEN WRINKLE: the human REFERENCES were recorded under the OLD shuffle, so machine-vs-human
-alignment still needs the human's DECISIONS replayed under STABLE (references are commit-only, can't
-regenerate). Machine-vs-machine A/B (teacher/model/clairvoyant/NC-d0/d1) is now shuffle-clean. DECISION for
-user: make STABLE default (GT rebaseline smoke+regr+overnight) vs keep as a comparison-only flag.
+(The fetchland-shuffle A/B-contamination fix that came out of investigating this -- MTG_STABLE_SHUFFLE,
+common-random-numbers reshuffle -- is a general simulator change, not a learned-d0 topic; it now has its
+own standalone reference at docs/design/stable-shuffle.md.)
 
 ## 2026-07-12 (autonomous): pushing the land-fold MODEL toward human on the antilife ref hands -- every CHEAP lever is dead
 Goal: close the model's gap to human on the 30 antilife reference hands (baseline model 4.933 | human 4.500 |
@@ -2785,3 +2772,39 @@ KEY GAP (the one on-target untapped lever): the value leaf is wired into the CLA
    MODEST: the clairvoyant analog is lossless only truncating deep (>=5 passes); on short games that saves little
    (NC d2 adds only ~73ms over the base game on antilife) -> best case ~15% faster teacher. Env-gated build,
    reversible; not yet built. This is the concrete next win-hunt if pursued.
+
+## 2026-07-14 CAN THE NEW MODEL IMPROVE THE VALUE-LEAF FLOW (better leaf / better fallback)? MEASURED NO
+User: value-leaf(pure) ~= heuristic at certain depths on several decks (correct -- that is the per-deck
+value_trust_depth; on those decks the leaf gives its FULL lossless speedup, no fallback tax). So the only way the
+new model helps is if it is a MORE ACCURATE LEAF -> reaches heuristic-parity at a SHALLOWER depth (fallback
+disengages sooner). DECISIVE head-to-head: train DYN (dyntrain MLP) and GBDT (train_eval_gbdt) on the SAME
+teacher-d2 rows, held-out RMSE on the SAME seed%5 split (/tmp/gbdt_eval.py scores the GBDT json by feature-name):
+   antilife: DYN 1.034 vs GBDT 1.068   |   TH: DYN 1.092 vs GBDT 0.927.
+They TRADE PLACES, neither wins (DYN +3% antilife, GBDT +15% TH) -> SAME estimator tier as a value leaf. So the
+DYN would NOT converge to heuristic at a shallower depth = no improvement to the value-leaf/fallback flow. Root
+cause (confirms the 8-lever floor): held-out win-turn RMSE ~0.9-1.1 turns for BOTH -- the residual is draw-driven
+(unseen draws), common to any static estimator; it does not shrink with model class. KEY DISTINCTION: the DYN IS
+a much better RANKER than the heuristic (pick-regret antilife 0.187 vs 0.485, TH 0.175 vs 0.545) -- but ranking
+is the PRIOR/policy role (MTG_NC_TOPM), NOT the leaf-VALUE role. The leaf needs value ACCURACY (RMSE), where DYN
+== GBDT. As a fallback the model is also no good (the fallback IS the rollout, accurate BECAUSE it samples draws;
+a static model is what you escalate away from). Net: the new model does not improve the value-leaf flow, either
+slot. scripts: train_eval_gbdt.py + dyntrain + /tmp/gbdt_eval.py (held-out RMSE by feature-name).
+
+## 2026-07-14 MODEL-BASED LEAF ROLLOUT (MTG_MODEL_ROLLOUT): better than same-depth heuristic, DOMINATED by depth
+User idea: replace the heuristic leaf ROLLOUT with a MODEL rollout. Key insight (correct): a rollout SAMPLES
+the reshuffled library regardless of policy, so -- unlike the O(1) value-net leaf -- it is NOT draw-limited;
+its quality is bounded by the PLAYOUT POLICY, and the model IS a better ranker than the heuristic. BUILT
+MTG_MODEL_ROLLOUT (TurnSolver.cpp SimulateToEndImpl: gated, drives each rollout move with SolveD0LandFold
+[greedy DYN pick, K=1] instead of SolveWithLookahead; byte-identical off; needs m_dyn_model). And it is NOT
+too slow -- the heuristic move policy already enumerates+scores, so swapping the scorer is ~cost-neutral.
+RESULT (K16, 3 seeds, LP @ ms/game):
+   antilife: heur-d0 5.000@159 | MODEL-d0 4.922@169 | heur-d1 4.839@161 | heur-d2 4.878@653
+   TH:       heur-d0 5.183@37  | MODEL-d0 5.000@128 | heur-d1 4.928@44  | heur-d2 4.861@1002
+MODEL-d0 BEATS heur-d0 on both (-0.08/-0.18 LP) at 1.35-3.8x cost = the model is a genuinely better playout
+policy (dodges the draw-wall). BUT the RIGHT baseline is equal-COST, and one ply of CHEAP heuristic depth
+DOMINATES it: heur-d1 is BETTER AND CHEAPER than MODEL-d0 on BOTH decks (antilife 4.839@161 vs 4.922@169;
+TH 4.928@44 vs 5.000@128). => compute is better spent on heuristic DEPTH than on a model playout. Not a
+frontier win. (Teacher-d2 model-leaf test DISCARDED as confounded: the flag bypasses the d2 lookahead ->
+NC_DEPTH2 collapsed to d0, proven by TH d2==d0 byte-identical.) Reason it fails is NOT "too slow" (it isn't)
+but "cheap depth out-competes a better-but-pricier playout" -- the same lesson as the value-leaf (the
+heuristic rollout is so cheap that upgrading it rarely pays). Flag kept inert/gated (reusable knob).

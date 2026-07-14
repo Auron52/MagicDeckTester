@@ -5595,6 +5595,14 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
 {
     const bool trace_pl = g_trace_arm;   // only the outermost diagnostic playout prints
     g_trace_arm = false;
+    // MTG_MODEL_ROLLOUT (experiment, default off): drive the rollout PLAYOUT with the DYN model
+    // (SolveD0LandFold = greedy argmin predicted-win-turn over land-inclusive candidates) instead of the
+    // heuristic (SolveWithLookahead). The rollout still SAMPLES the reshuffled library, so -- unlike the
+    // O(1) value-net LEAF -- it is NOT draw-limited; it tests whether the model is a better PLAYOUT policy
+    // than the heuristic. Requires m_dyn_model attached; byte-identical (heuristic) when off. Cost: a model
+    // pick per rollout turn (vs a cheap heuristic pick). See learned-d0-policy.md.
+    static const bool s_model_rollout = std::getenv("MTG_MODEL_ROLLOUT") != nullptr;
+    const bool model_pl = s_model_rollout && state.m_dyn_model && !state.m_dyn_model->empty();
     while (state.turn_number <= max_turns)
     {
         // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
@@ -5640,7 +5648,14 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
 
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens.
         TurnSolver::Plan pre_plan;
-        if (g_honest_teacher && depth > 0)
+        if (model_pl)
+        {
+            // Model playout: the DYN model picks this turn's plan (land + spells) against the sampled
+            // (already reshuffled) library -- a model-driven rollout step. Non-clairvoyant w.r.t. the
+            // outer decision (the library was reshuffled by the caller); MTG_D0LF_K stays 1 (cheap).
+            pre_plan = TurnSolver::SolveD0LandFold(state, true);
+        }
+        else if (g_honest_teacher && depth > 0)
         {
             // HONEST-TEACHER label: choose this turn's plan against a RESHUFFLED unseen library (a
             // random future), then RESOLVE it against the true order below. The plan references only
