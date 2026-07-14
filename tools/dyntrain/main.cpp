@@ -280,7 +280,14 @@ int main(int argc, char** argv) {
             double d = std::sqrt(d2);
             double mreg = rows[g.idx[bpred]].label - rows[g.idx[blabel]].label;
             if (mreg > 0.5) { dist_fail += d; ++nfail; if (d < ALIAS) ++aliased;
-                for (int j = 0; j < nstate; ++j) featdiff[j] += std::fabs(a[j]-b[j]); }
+                for (int j = 0; j < nstate; ++j) featdiff[j] += std::fabs(a[j]-b[j]);
+                // Inspect ALIASED failures: identical features but different labels => the label gap is
+                // either K-sampling NOISE (small gap, ~indistinguishable states) or a HIDDEN state var
+                // not featurized. Print turn + the two plans' labels + feature dist to tell them apart.
+                if (d < ALIAS && aliased <= 12)
+                    std::fprintf(stderr, "    aliased#%d turn=%d  model-pick label=%.2f  teacher-best label=%.2f  "
+                                 "(gap=%.2f, featdist=%.3f)\n", aliased, rows[g.idx[0]].turn,
+                                 rows[g.idx[bpred]].label, rows[g.idx[blabel]].label, mreg, d); }
             else { dist_ok += d; ++nok; }
         }
         std::fprintf(stderr,
