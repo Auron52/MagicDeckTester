@@ -2720,3 +2720,43 @@ CONSTRUCTIVE reframe for the goal (clairvoyance-abuse A/B card testing): absolut
 whether the standalone model ranks card-swap DELTAS like the teacher. A consistent ~0.5 LP bias cancels in the
 A/B delta -> the fast standalone model may be usable for the intended purpose despite the gap. NEXT (untested,
 the actually-useful question): measure model-vs-teacher agreement on card-swap A/B deltas, not absolute LP.
+
+## 2026-07-14 A/B DELTA-AGREEMENT: the reframe TESTED -> the fast model IS a usable A/B screener
+Answers the question the frontier entry left open. Built scripts/ab_delta.py (deck-parameterized gen/run/
+analyze): 11 legal within-deck swap variants per deck (v00_base + 10 single-axis edits), each played by
+heuristic-d0 / land-fold-DYN-d0 (FIXED = model trained ONCE on the BASE deck, never retrained per variant --
+the realistic "screen a tweak without re-solving" scenario) / NC teacher K16 d2, over 3 held-out seeds x 80
+games (240/variant/policy). Metric = PAIRED-by-seed dLP vs base (seed cancels) + Spearman(delta), sign-agree,
+pairwise-order, best-pick vs teacher. Runner is resumable (results.json cache). NOTE TH teacher is SLOW here
+(~3 min/cell -- Treasure Hunt's huge draws blow up the K16d2 plan tree; whole TH run ~3 h).
+
+RESULT -- the model tracks the teacher's ranking, and the ~0.5 absolute bias cancels as predicted:
+  ANTILIFE (combo):  model rho(delta)=+0.56  pairwise 13/14=93%  sign 2/2   | heuristic rho=+0.18 9/14=64% 1/2
+  TH (land engine):  model rho(delta)=+0.79  pairwise 23/24=96%  sign 3/3 best-pick MATCH | heur rho=+0.89 24/24 best-pick MISS
+Two robust findings across BOTH decks:
+ (1) SMALL (1-2 card) edits -- the realistic A/B case -- are tracked NEAR-EXACTLY: TH v06_fewer_tower model
+     +0.192 vs teacher +0.192, v10_more_islands +0.046 vs +0.046, v05_no_cyclers +0.075 vs +0.083. The model
+     is trustworthy exactly where you'd use it.
+ (2) The model beats the heuristic DECISIVELY on the COMBO deck (0.56 vs 0.18) where hand-tuned play is a poor
+     quality proxy; on mechanically-simple TH even the heuristic screens fine (rho 0.89) BUT misses the best
+     swap while the model nails it (v08_dual_to_island, teacher's only real improvement).
+
+CHANGE-AVERSE BIAS (the one weakness) + its ROOT CAUSE (proven, not intrinsic): the FIXED base-trained model
+OVER-penalizes LARGE (5-6 card) edits -- antilife v08_max_removal model +0.75 vs teacher +0.15; TH v04_max_throes
+model +0.31 vs teacher +0.02. Diagnostic (scripts/ab_confound.py): dump teacher rows for BASE and for v08 with
+an IDENTICAL recipe, train a model on each, measure BOTH on the v08 deck:
+  base.dyn 6.225 | M_baseR (base rows) 6.133 | M_v08R (v08 rows) 5.829 | teacher 4.967.
+M_baseR ~= base.dyn (rules out recipe artifacts); training on the VARIANT's own rows recovers -0.30 LP = ~half
+the +0.60 over-penalty, with only 240 games of rows. => the large-edit bias is a MISPLAY-OF-AN-UNSEEN-DECK
+confound (the base-trained model mis-plays states the edit created), NOT a true quality read. The residual is the
+already-known intrinsic static-vs-simulation absolute bias, which cancels in the delta.
+
+VERDICT (answers "route forward for the model", NOT search-fallback):
+ - USE IT NOW: the fast standalone model is a valid A/B card-swap screener today -- especially for the small
+   swaps you actually test, and especially on non-trivial (combo) decks where the heuristic is a bad proxy. ~10x
+   cheaper than the teacher; absolute bias irrelevant.
+ - IMPROVE IT: to make it robust to LARGE edits, train on a CORPUS SPANNING DECK VARIANTS (not just one base
+   deck) so it stays competent under edits -> flattens change-averse bias to a constant that cancels. Validated
+   in miniature (M_v08R recovered half the bias from a tiny single-variant dataset). This is a concrete model
+   route, distinct from every prior lever (which all targeted absolute rank quality; this targets robustness).
+Artifacts: scripts/ab_delta.py (+ ab_confound.py), logs/model_improve/ab{,_TH,/confound}/, variant .cod files.
