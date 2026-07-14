@@ -59,7 +59,7 @@ is a fresh dimension); 4-ofs self-collapse. Cheap check without a full run:
 ```bash
 # ~1 min: prints the merged buckets so you can read K.
 MTG_EQUIV_DISCOVER=1 MTG_EQUIV_PROBES=400 MTG_EQUIV_THRESHOLD=0.01 \
-  ./build/Release/mtg-analyze decks/<name>.txt --cards-json src/cards/data/cards.json --max-turns 8
+  ./build/Release/mtg-analyze decks/<name>/<name>.txt --cards-json src/cards/data/cards.json --max-turns 8
 ```
 
 Then `hands ≈ C(K+6,7)`, and runtime ≈ `hands × 2(pd) × R / (~110 rollouts/s/core × cores)`. Rough
@@ -78,7 +78,7 @@ MTG_KEEP_EXHAUSTIVE=1 \
   MTG_EQUIV_SEED=20260701 \                                          # FIXED bucket seed (all machines)
   MTG_KEEP_ROLLOUTS=<R> MTG_KEEP_MAXMULL=3 \                         # R = label precision; depth of mull
   MTG_COMMIT="$HASH" \                                               # (bottoming is always on -- no flag)
-  ./build/Release/mtg-analyze decks/<name>.txt --cards-json src/cards/data/cards.json \
+  ./build/Release/mtg-analyze decks/<name>/<name>.txt --cards-json src/cards/data/cards.json \
     --max-turns 8 --seed <SEED_BASE>                                 # SEED_BASE = the rollout run id
 ```
 
@@ -141,7 +141,7 @@ and deck, with **disjoint** rollout streams — the merge tool enforces this via
 **Parity checklist (what makes sidecars poolable):**
 1. **Same build/commit** → identical play logic. Secondary must `git checkout <same commit>` and build;
    `MTG_COMMIT=<hash>` must match (merge rejects mismatch).
-2. **Same `decks/<name>.txt` + `cards.json`** → matching `deck_fp`.
+2. **Same `decks/<name>/<name>.txt` + `cards.json`** → matching `deck_fp`.
 3. **Same buckets** → matching `bucket_fp`. Requires the **same committed base `.profile.json`** and
    the **same pinned discovery params** (`MTG_EQUIV_PROBES/THRESHOLD/DEPTH/BUDGET`, `MTG_EQUIV_SEED`,
    `--max-turns`).
@@ -161,8 +161,8 @@ not the plan.
 
 ```bash
 MTG_KEEP_MERGE=1 \
-  MTG_MERGE_INPUTS="decks/<name>.keepmodel.exhaustive.raw.json,/path/to/secondary.raw.json" \
-  ./build/Release/mtg-analyze decks/<name>.txt --cards-json src/cards/data/cards.json
+  MTG_MERGE_INPUTS="decks/<name>/<name>.keepmodel.exhaustive.raw.json,/path/to/secondary.raw.json" \
+  ./build/Release/mtg-analyze decks/<name>/<name>.txt --cards-json src/cards/data/cards.json
   # (bottoming is always baked on -- no flag)
 ```
 
@@ -177,9 +177,9 @@ one already resolved.
 
 ```bash
 # KEEP: exhaustive keep vs static; bottoming held to lookahead both sides (isolates the keep decision).
-KM_DECK=decks/<name>.txt KM_MODE=keep   bash test/keepmodel_exhaustive_ab.sh
+KM_DECK=decks/<name>/<name>.txt KM_MODE=keep   bash test/keepmodel_exhaustive_ab.sh
 # BOTTOM: exhaustive vs lookahead bottoming; keep held to exhaustive both sides (isolates bottoming).
-KM_DECK=decks/<name>.txt KM_MODE=bottom bash test/keepmodel_exhaustive_ab.sh
+KM_DECK=decks/<name>/<name>.txt KM_MODE=bottom bash test/keepmodel_exhaustive_ab.sh
 ```
 
 Reports per-depth win-turn deltas over 16–24 seeds × depths 0/3/5. Negative = exhaustive wins.
@@ -203,4 +203,6 @@ high R → clairvoyance (acceptable); if blind-*worse* → R-noise (raise R).
 - **Commit** the definitive high-R `.profile.json` (and its `.raw.json` for reproducibility / further
   pooling).
 - **Do NOT commit** throwaway low-R profiles/sidecars — regenerate at the target R.
-- Profiles live under `decks/` (per repo convention); rollout logs/scratch under `logs/`.
+- Profiles live in the deck's folder `decks/<name>/` (per repo convention — the decklist,
+  profile, and all sibling models share one folder); rollout logs/scratch under `logs/`.
+  Commit the gzipped `<name>.keepmodel.exhaustive.raw.json.gz`; the uncompressed raw is gitignored.

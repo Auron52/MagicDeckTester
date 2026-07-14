@@ -14,21 +14,24 @@
 #   smoke      < 15 min   regression < 45 min   overnight < 8 h
 # See test/TIMINGS.md for the measured per-case costs these counts are sized from.
 
+# Per-deck folder layout (docs/design/per-deck-folder-layout.md): each deck's decklist,
+# profile, and sibling models live in decks/<name>/. The engine resolves sibling artifacts
+# (value/eval/constraints/keepmodel.exhaustive) directory-relative off the profile path.
 declare -A DECK_FILE=(
-  [slivers]=decks/slivers_vial.txt
-  [burn]=decks/burn.txt
-  [th]=decks/treasure_hunt.txt
-  [knights]=decks/Knights.cod
-  [antilife]=decks/Anti-Lifegain.cod
-  [hinata]=decks/Hinata2.cod
+  [slivers]=decks/slivers_vial/slivers_vial.txt
+  [burn]=decks/burn/burn.txt
+  [th]=decks/treasure_hunt/treasure_hunt.txt
+  [knights]=decks/Knights/Knights.cod
+  [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
+  [hinata]=decks/Hinata2/Hinata2.cod
 )
 declare -A DECK_PROF=(
-  [slivers]=decks/slivers_vial.profile.json
-  [burn]=decks/burn.profile.json
-  [th]=decks/treasure_hunt.profile.json
-  [knights]=decks/Knights.profile.json
-  [antilife]=decks/Anti-Lifegain.profile.json
-  [hinata]=decks/Hinata2.profile.json
+  [slivers]=decks/slivers_vial/slivers_vial.profile.json
+  [burn]=decks/burn/burn.profile.json
+  [th]=decks/treasure_hunt/treasure_hunt.profile.json
+  [knights]=decks/Knights/Knights.profile.json
+  [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
+  [hinata]=decks/Hinata2/Hinata2.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007

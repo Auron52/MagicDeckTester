@@ -18,12 +18,19 @@ The application is in early development — no build system, test runner, or sou
   `logs_*` directory. This keeps the repo root uncluttered. Both `logs/` and
   `logs_*/` are gitignored, so this is purely about tidiness, not tracking.
 
-- **Deck files live under `decks/`, not the repo root.** Each deck is a
-  decklist (`decks/<name>.txt`) plus its generated profile
-  (`decks/<name>.profile.json`); the analyzer writes the profile next to the
-  deck. Reference decks by their `decks/` path (e.g.
-  `scripts/analyze_deck.py decks/<name>.txt`); the regression harness's
+- **Each deck lives in its own folder under `decks/`, not the repo root.** The
+  per-deck folder layout is `decks/<name>/` holding the decklist
+  (`decks/<name>/<name>.txt` or `.cod`) plus its generated profile
+  (`decks/<name>/<name>.profile.json`) and sibling models (`.value.json`,
+  `.eval.json`, `.keepmodel.exhaustive.profile.json.gz` + `.raw.json.gz`). The
+  analyzer writes the profile next to the deck (directory-relative), and the
+  engine resolves every sibling model directory-relative off the profile path.
+  Reference decks by their folder path (e.g.
+  `scripts/analyze_deck.py decks/<name>/<name>.cod`); the regression harness's
   `DECK_FILE`/`DECK_PROF` maps in `test/regression_cases.sh` already point there.
+  See `docs/design/per-deck-folder-layout.md` for the layout rationale and the
+  raw-artifact policy (commit the gzipped `.raw.json.gz`; never the uncompressed
+  raw — it's gitignored).
 
 - **Reference games under `references/` are COMMIT-ONLY — never revert, discard,
   overwrite, or delete them.** The files in `references/<deck>/claude_s*_gi*.json`

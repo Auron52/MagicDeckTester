@@ -17,7 +17,7 @@
 # w.r.t. deck profiles; all output under logs/keepmodel_exh_<mode>_<stem>/. Requires the exhaustive
 # profile to already exist (generate via MTG_KEEP_EXHAUSTIVE); it is NOT regenerated here.
 #
-#   KM_DECK=decks/slivers_vial.txt KM_MODE=keep bash test/keepmodel_exhaustive_ab.sh
+#   KM_DECK=decks/slivers_vial/slivers_vial.txt KM_MODE=keep bash test/keepmodel_exhaustive_ab.sh
 set -u
 BIN=./build/Release/mtg
 DECK=${KM_DECK:?set KM_DECK=decks/<name>.txt}

@@ -1,6 +1,6 @@
 {
   "_comment": "Guards the pump-target/tap coordination. Tainted Remedy in play flips Aria's ETB 'opponent gains 10' to -10. From opp 16: Aria -> 6; casting Invigorate (free, we control a Forest) adds a verse counter -> Aria pings 1 -> 5, and pumps a dork +4/+4 that swings ALONE for 4 + Ignoble's exalted 1 = 5 -> lethal on turn 4. Aria ({2}{R}) forces tapping ONE of the two dorks, so the kill needs the OTHER (untapped) dork pumped. Filler = Swords to Plowshares (no creature to target -> dead draw, so no 3rd land arrives). PASS = the engine resolves the pump onto the untapped dork (FindBestOwnAttacker skips tapped) and wins T4.",
-  "deck": "decks/Anti-Lifegain.cod",
+  "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
   "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 16,
   "battlefield": [
     { "name": "Mountain" }, { "name": "Forest" }, { "name": "Tainted Remedy" },

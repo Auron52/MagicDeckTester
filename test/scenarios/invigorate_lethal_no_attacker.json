@@ -1,6 +1,6 @@
 {
   "_comment": "Guards the Invigorate lethal-with-no-own-attacker fire (item 4). Tainted Remedy in play flips Invigorate's alt cost 'opponent gains 3' to -3. We control a Forest (alt-cost subtype) but have NO creature of our own -- the opponent controls the only creature (Skyshroud Cutter), which is Invigorate's legal 'target creature'. With opp at 3 and no ready attacker, the pump is moot but the free alt-cost 3 is exactly lethal. PASS = CanAutoFireAltPayload fires Invigorate targeting the opponent's creature for legality, the executor applies the alt-cost with the pump skipped (lockstep with the rollout), opp -> 0, win T4. Before item 4 the own-attacker requirement refused this and the game did not end.",
-  "deck": "decks/Anti-Lifegain.cod",
+  "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
   "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 3,
   "battlefield": [
     { "name": "Forest", "controller": 0 },

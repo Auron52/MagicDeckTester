@@ -92,4 +92,5 @@ __pycache__/
 # Broad glob catches every uncompressed variant (.profile.json, .raw.json, .adaptive.rN.profile.json);
 # the .gz files end in .gz so they are NOT matched, and per-deck <name>.profile.json lacks the
 # "keepmodel.exhaustive" infix so analyzer profiles stay tracked.
-decks/*.keepmodel.exhaustive*.json
+# decks/**/ reaches into per-deck folders (decks/<name>/<name>.keepmodel.exhaustive.*.json).
+decks/**/*.keepmodel.exhaustive*.json

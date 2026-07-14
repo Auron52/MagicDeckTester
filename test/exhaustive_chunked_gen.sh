@@ -33,7 +33,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-DECK=${KM_DECK:-decks/treasure_hunt.txt}
+DECK=${KM_DECK:-decks/treasure_hunt/treasure_hunt.txt}
 CARDS=${KM_CARDS:-src/cards/data/cards.json}
 TARGET_R=${KM_TARGET_R:-40}      # target effective R on the live frontier
 ROUND_R=${KM_ROUND_R:-5}         # R added to every non-frozen cell per round

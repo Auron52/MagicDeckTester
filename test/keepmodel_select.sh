@@ -9,14 +9,14 @@
 # side files. We then A/B every candidate AND the committed static with the real runner, rank by
 # mean in-game win-turn, and report which -- if any -- beats static. NON-DESTRUCTIVE (committed
 # profile read-only; all output under logs/keepmodel_select/).
-#   KM_DECK=decks/slivers_vial.txt KM_ROLLOUTS=8 KM_HANDS=4000 bash test/keepmodel_select.sh
+#   KM_DECK=decks/slivers_vial/slivers_vial.txt KM_ROLLOUTS=8 KM_HANDS=4000 bash test/keepmodel_select.sh
 # =============================================================================================
 set -uo pipefail
 cd "$(dirname "$0")/.."
 BIN=./build/Release/mtg; AN=./build/Release/mtg-analyze
 [ -x "$BIN" ] && [ -x "$AN" ] || { echo "build Release first"; exit 1; }
 
-DECK=${KM_DECK:-decks/slivers_vial.txt}
+DECK=${KM_DECK:-decks/slivers_vial/slivers_vial.txt}
 STEM=$(basename "$DECK"); STEM=${STEM%.*}
 STATIC=decks/$STEM.profile.json
 CARDS=src/cards/data/cards.json

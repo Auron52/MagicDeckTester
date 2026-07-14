@@ -18,12 +18,12 @@ cd "$HERE"
 OUT="$HERE/logs/mulligan_qa"; mkdir -p "$OUT"
 
 declare -A DECK_FILE=(
-  [burn]=decks/burn.txt [slivers]=decks/slivers_vial.txt
-  [th]=decks/treasure_hunt.txt [knights]=decks/Knights.cod [antilife]=decks/Anti-Lifegain.cod)
+  [burn]=decks/burn/burn.txt [slivers]=decks/slivers_vial/slivers_vial.txt
+  [th]=decks/treasure_hunt/treasure_hunt.txt [knights]=decks/Knights/Knights.cod [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod)
 declare -A DECK_PROF=(
-  [burn]=decks/burn.profile.json [slivers]=decks/slivers_vial.profile.json
-  [th]=decks/treasure_hunt.profile.json [knights]=decks/Knights.profile.json
-  [antilife]=decks/Anti-Lifegain.profile.json)
+  [burn]=decks/burn/burn.profile.json [slivers]=decks/slivers_vial/slivers_vial.profile.json
+  [th]=decks/treasure_hunt/treasure_hunt.profile.json [knights]=decks/Knights/Knights.profile.json
+  [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json)
 
 KEYS=("${@:-burn slivers th knights antilife}"); KEYS=(${KEYS[@]})
 

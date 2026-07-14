@@ -10,7 +10,7 @@
 # A/Bs it against the committed profile so we can see the REAL effect.
 #
 # MODE: keep-model-only (loads the COMMITTED profile, fits ONLY the keep tree onto it). NON-
-# DESTRUCTIVE -- the committed decks/slivers_vial.profile.json is the read-only input; output goes
+# DESTRUCTIVE -- the committed decks/slivers_vial/slivers_vial.profile.json is the read-only input; output goes
 # to <deck>.keepmodel.profile.json which we stage under logs/. The A/B isolates exactly the keep
 # model (committed land params on both arms). Nothing is committed or adopted.
 #
@@ -21,7 +21,7 @@
 # so they can be compared directly:
 #     bash test/keepmodel_overnight.sh                  # ~4h -> logs/keepmodel_overnight/slivers_vial/h12000_d5/
 #     KM_HANDS=25000 bash test/keepmodel_overnight.sh   # ~8h -> logs/keepmodel_overnight/slivers_vial/h25000_d5/
-#     KM_DECK=decks/burn.txt bash ...              # another deck (must have a committed profile)
+#     KM_DECK=decks/burn/burn.txt bash ...              # another deck (must have a committed profile)
 #     KM_TAG=myrun   bash test/keepmodel_overnight.sh   # custom output subdir name
 # Each run re-fits the keep model + re-A/Bs committed in its own dir; diff the two REPORT.txt to see
 # whether 2x the hands meaningfully moves the policy/A/B (i.e. whether 4h was already enough).
@@ -47,7 +47,7 @@ FIT_TIMEOUT=${KM_FIT_TIMEOUT:-0}         # seconds; OPTIONAL wall-clock time-box
                             # answer is per-deck time ESTIMATION (plan the window) + perf optimization.
 # ---------------------------------------------------------------------------------------------
 
-DECK=${KM_DECK:-decks/slivers_vial.txt}        # any already-analyzed deck (must have a committed profile)
+DECK=${KM_DECK:-decks/slivers_vial/slivers_vial.txt}        # any already-analyzed deck (must have a committed profile)
 STEM=$(basename "$DECK"); STEM=${STEM%.*}
 COMMITTED=decks/$STEM.profile.json                                         # read-only input
 BASELINE=logs/keepmodel_overnight/baselines/$STEM.committed-baseline.profile.json   # pristine A/B baseline

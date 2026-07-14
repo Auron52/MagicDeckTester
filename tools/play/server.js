@@ -56,15 +56,18 @@ function extractBlock(text, startMarker, endMarker) {
   return text.slice(s + startMarker.length, e).trim();
 }
 
-// Resolve a user-supplied deck name to a safe path inside decks/ plus its sibling profile.
+// Resolve a user-supplied deck name to a safe path inside its per-deck folder plus the sibling
+// profile. Per-deck folder layout: decks/<stem>/<stem>.{txt,cod} + decks/<stem>/<stem>.profile.json
+// (docs/design/per-deck-folder-layout.md). The folder name equals the decklist stem.
 function resolveDeck(deckName) {
   if (typeof deckName !== 'string' || !deckName) throw new Error('deck required');
   const base = path.basename(deckName);                    // strip any path components
-  const deckPath = path.join(DECKS_DIR, base);
-  if (path.dirname(deckPath) !== DECKS_DIR) throw new Error('deck must be under decks/');
-  if (!fs.existsSync(deckPath)) throw new Error('deck not found: ' + base);
   const stem = base.replace(/\.[^.]+$/, '');
-  const profilePath = path.join(DECKS_DIR, stem + '.profile.json');
+  const dir = path.join(DECKS_DIR, stem);                  // per-deck folder
+  const deckPath = path.join(dir, base);
+  if (path.dirname(deckPath) !== dir) throw new Error('deck must be under decks/<name>/');
+  if (!fs.existsSync(deckPath)) throw new Error('deck not found: ' + base);
+  const profilePath = path.join(dir, stem + '.profile.json');
   return { deckPath, profilePath: fs.existsSync(profilePath) ? profilePath : null, stem };
 }
 
@@ -178,12 +181,18 @@ function safeStem(s) { return String(s).replace(/[^A-Za-z0-9_-]+/g, '_'); }
 
 function listDecks() {
   const out = [];
-  for (const f of fs.readdirSync(DECKS_DIR)) {
-    if (!/\.(txt|cod)$/i.test(f)) continue;
-    if (/\.profile\./i.test(f) || /\.constraints\./i.test(f)) continue;
-    const stem = f.replace(/\.[^.]+$/, '');
-    const hasProfile = fs.existsSync(path.join(DECKS_DIR, stem + '.profile.json'));
-    out.push({ deck: f, name: stem, hasProfile });
+  // Per-deck folder layout: one directory per deck (decks/<name>/), each holding <name>.{txt,cod}
+  // plus optional <name>.profile.json and sibling models.
+  for (const name of fs.readdirSync(DECKS_DIR)) {
+    const dir = path.join(DECKS_DIR, name);
+    if (!fs.statSync(dir).isDirectory()) continue;
+    let deckFile = null;
+    for (const ext of ['.cod', '.txt']) {
+      if (fs.existsSync(path.join(dir, name + ext))) { deckFile = name + ext; break; }
+    }
+    if (!deckFile) continue;                                 // folder without a matching decklist
+    const hasProfile = fs.existsSync(path.join(dir, name + '.profile.json'));
+    out.push({ deck: deckFile, name, hasProfile });
   }
   // playable (profiled) decks first, then alpha
   out.sort((a, b) => (b.hasProfile - a.hasProfile) || a.name.localeCompare(b.name));
