@@ -1225,7 +1225,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
     // Resolve each action's card definition ONCE so the per-node subset evaluators read the
     // cached pointer instead of re-hashing card_name. Equivalent to Lookup(card_name) at each
     // use site (every kind's card_name is a real DB name: hand-cast/vial creature/dig source).
-    for (Action& a : actions) { a.def = CardDatabase::Instance().Lookup(a.card_name); }
+    // Fast path: a hand-sourced action's card_name IS ap.hand[hand_index].m_name, so reuse that
+    // card's memoized def (Card::m_def) instead of re-hashing the name string (the by-name Lookup
+    // was ~a third of the string-hash cost in a Hinata gen profile). Byte-identical (same def);
+    // graveyard/other actions (hand_index < 0) fall back to the by-name Lookup.
+    for (Action& a : actions)
+    {
+        a.def = (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+                    ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
+                    : CardDatabase::Instance().Lookup(a.card_name);
+    }
 
     return actions;
 }
@@ -1253,8 +1262,12 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
 {
     if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
     // The provider supplies the breadth policy; the env knob is an engine-side A/B override.
+    // Cache the env read once (this runs per enumeration -- an uncached getenv here was ~1.2% of
+    // rollout time / 212M calls in a Hinata gen profile). -1 = unset. Byte-identical to the read.
+    static const int s_group_cap_override = []{ const char* e = std::getenv("MTG_SOLVE_GROUP_CAP");
+        if (!e) { return -1; } int x = std::atoi(e); return x < 1 ? 1 : x; }();
     int cap = ResolveProvider(state).EnumGroupCap();
-    if (const char* e = std::getenv("MTG_SOLVE_GROUP_CAP")) { int x = std::atoi(e); cap = x < 1 ? 1 : x; }
+    if (s_group_cap_override >= 0) { cap = s_group_cap_override; }
     if (static_cast<int>(groups.size()) <= cap)    { return; }
 
     const DecisionProvider& prov = ResolveProvider(state);
