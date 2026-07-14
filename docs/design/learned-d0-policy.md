@@ -2760,3 +2760,28 @@ VERDICT (answers "route forward for the model", NOT search-fallback):
    in miniature (M_v08R recovered half the bias from a tiny single-variant dataset). This is a concrete model
    route, distinct from every prior lever (which all targeted absolute rank quality; this targets robustness).
 Artifacts: scripts/ab_delta.py (+ ab_confound.py), logs/model_improve/ab{,_TH,/confound}/, variant .cod files.
+
+## 2026-07-14 THE TWO ADOPTION QUESTIONS answered (user: stop reframing, find real wins)
+User named the only two adoptable wins left and asked to measure them head-to-head (speed AND quality, no
+ceiling-philosophy). Both measured ONE-POLICY-AT-A-TIME (honest ms), held-out seeds 11111/22222/33333.
+Q1 -- is the learned d0 SCORER (land-fold DYN, O(1) value leaf) faster AND >= quality than the d0 HEURISTIC
+   ROLLOUT (NC-d0, rollout-to-end)? scripts/d0_model_vs_rollout.py. NO:
+     antilife  NC-d0 5.033@112ms | DYN 5.046@112ms (TIE, no speed gain)
+     TH        NC-d0 5.000@22ms  | DYN 5.275@23ms  (WORSE, no speed gain)
+   Root cause (not a ceiling): on 5-8 turn games the K16 rollout is CHEAP -- per-game time is engine-dominated
+   (plain heuristic-d0 is also 112ms on antilife). The net's O(1) leaf only pays when the rollout is the
+   bottleneck; at d0 it is not. Re-confirms the 2026-07-11 DECISIVE finding with the current DYN.
+Q2 -- is the value net a BETTER SEARCH LEAF than the heuristic rollout? scripts/leaf_ab.py (all 5 decks, d3/d4).
+   YES, and it is ALREADY SHIPPED + DEFAULT-ON (the phase-1-2 hybrid value-leaf, on this branch via 71d685a).
+   EXACTLY lossless (LP identical to the digit, 0 decisions changed on every deck) and strictly FASTER, speedup
+   GROWS with depth: antilife 8/8% (d3/d4), knights 2/18%, slivers 6/11%, burn 4/6%, TH 2/3%. Verified default:
+   antilife d4 MTG_VALUE_MODEL=0 (heuristic) 11.5s vs default 9.4s = ~20% slower with it OFF. => the model's
+   real payoff was never the d0 policy (dominated by the cheap rollout) -- it IS the engine's search leaf today.
+KEY GAP (the one on-target untapped lever): the value leaf is wired into the CLAIRVOYANT search (FSLineWin),
+   NOT the NC teacher (ReshuffleAvgChoosePlan uses SimulateToEnd, which bypasses it). Probe: NC K16 d2 with
+   MTG_VALUE_MODEL 0-vs-1 = identical LP AND wall. So wiring the NC-TRAINED DYN as a truncated NC leaf
+   (SimulateToEndImpl horizon-H -> return V) is the single lever that both uses the model AND targets teacher
+   quality: a faster teacher, or reinvest the savings into K32/d3 for a BETTER teacher at fixed cost. HONEST EV =
+   MODEST: the clairvoyant analog is lossless only truncating deep (>=5 passes); on short games that saves little
+   (NC d2 adds only ~73ms over the base game on antilife) -> best case ~15% faster teacher. Env-gated build,
+   reversible; not yet built. This is the concrete next win-hunt if pursued.
