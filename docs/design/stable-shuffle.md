@@ -1,10 +1,28 @@
 # MTG_STABLE_SHUFFLE — common-random-numbers reshuffle for clean policy A/B
 
-**Status on `phase-1-2-deck-analyzer`:** mechanism applied opt-in via the `MTG_STABLE_SHUFFLE`
-env var, **off by default** (verified byte-identical to the historical shuffle when unset — full
-smoke ALL PASS). Ported from branch `d0-dynamic-model` (origin commit `60080b1`). **Promotion to
-default is pending** a per-game inspection of the shifted decks + a ground-truth rebaseline (see
-[Promoting to default](#promoting-to-default)).
+**Status on `phase-1-2-deck-analyzer`:** the CRN mid-game reshuffle is the **DEFAULT**;
+`MTG_LEGACY_SHUFFLE` forces the historical Fisher–Yates (a byte-identical escape hatch). Ported from
+branch `d0-dynamic-model` (origin commit `60080b1`), then **two corrections over the original port**:
+1. **Re-randomize each reshuffle (bug fix).** The original keyed every reshuffle on a pinned ordinal
+   `0`, so `ShuffleByKey` (a deterministic sort) produced the *same order every time* -> re-shuffling
+   was a no-op (same top) and shuffle-to-dig (Ponder, repeated fetch) was broken. Fixed by keying each
+   reshuffle on `search_count` (the per-game shuffle ORDINAL): the Nth reshuffle re-randomizes vs the
+   (N-1)th, while the Nth reshuffle still ALIGNS across two same-seed playthroughs (CRN benefit from
+   `ShuffleByKey` itself, not from pinning the seed). Verified with standalone proofs.
+2. **Promoted to default** (was opt-in). Rationale below.
+
+**Why default (not opt-in):** the goal is that *any* game be comparable to *any other* by construction,
+without remembering a flag. Keying the reshuffle on (shuffle-ordinal, card-identity) rather than on
+turn/timing **confounds a clairvoyant/searching agent's fetch-timing exploit**: under legacy, fetching
+turn 1 vs turn 2 significantly re-permutes the library, and the search can prefer the luckier line; under
+CRN the first reshuffle is the same order regardless of *when* you fetch, so that edge is gone by
+construction. Measured: hinata's shift grows with depth (d0 −2.5% -> d5 −8%), consistent with the search
+losing exactly that shuffle-divergence advantage.
+
+**Determination — no bug (checked):** ShuffleByKey is a statistically uniform shuffle (top-card and
+per-card-position distributions match Fisher–Yates; no trend). The residual d0 shift (hinata ~−4%,
+antilife ~neutral over 5 seeds) is benign per-deck shuffle-luck from using a different valid shuffle; it
+becomes the new consistent baseline after the one-time rebaseline.
 
 ## Problem
 
@@ -55,12 +73,21 @@ Wired (gated) in `ShuffleAfterSearch` at `src/core/SpellEffects.h`; the CRN rout
   as a loss). Avg win-turn ticks up slightly. Confirm per-game that the shifts are shuffle-realignment,
   not play regressions, before rebaselining.
 
-## Open wrinkle — machine-vs-human
+## References — the motivating use case
 
-The saved human reference games were recorded under the **old** shuffle. STABLE cleans
-**machine-vs-machine** A/B, but a fair **machine-vs-human** comparison would need the human's
-**decisions** replayed under STABLE. The `references/` games are commit-only ground truth and cannot be
-regenerated, so STABLE does not retroactively clean the existing human reference draws.
+The whole point: compare a **human** reference game to the **ideal non-clairvoyant search** on the same
+seed, with shuffle luck removed, so the measured gap is play quality (not who got the luckier reshuffle).
+
+- **New references (played under the stable default) are clean by construction:** the human game and the
+  AI run on that seed reshuffle identically (aligned modulo the specifically-different fetch), so the gap
+  reflects decisions, and the search -- with its fetch-timing shuffle-exploit confounded -- is closer to
+  an ideal non-clairvoyant agent.
+- **Existing references were recorded under the OLD (legacy) shuffle.** They reproduce EXACTLY under
+  `MTG_LEGACY_SHUFFLE` (commit-only, never regenerate them). Only the **33** games on the two reshuffle
+  decks are "off-shuffle" vs the new default (Anti-Lifegain 30, Hinata2 3); the other **29** (Knights /
+  burn / slivers / treasure_hunt) never reshuffle, so they already match the stable default byte-for-byte.
+  To make an affected reference shuffle-clean vs a stable AI run, **re-play it under the stable default**;
+  the recorded choices cannot be auto-converted (they are indices tied to the old draw order).
 
 ## Promoting to default
 

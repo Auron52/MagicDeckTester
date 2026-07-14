@@ -414,17 +414,21 @@ inline uint64_t SearchShuffleSeed(uint64_t game_seed, uint64_t search_index)
 // search counter (so the NEXT search uses a fresh deterministic seed). No-op when the
 // feature is off. Call AFTER the searched card has been removed from the library and
 // BEFORE any "put on top" placement (rules order: shuffle, then put on top).
-// MTG_STABLE_SHUFFLE (off by default): use the COMMON-RANDOM-NUMBERS reshuffle
-// (Library::ShuffleByKey) instead of the search-index-keyed Fisher-Yates. The CRN order
-// depends only on (game_seed, salt, each card's stable m_number) -- NOT on search_count or
-// the exact multiset -- so two games on one seed reshuffle CONSISTENTLY: a fetch removes its
-// one card and every other card's draw order is unchanged, keeping two policies' realized
-// draws aligned for an A/B (only genuine play differences move the win turn, not shuffle luck).
-// Off => byte-identical to the historical Fisher-Yates. See Library::ShuffleByKey / ref_bench.
+// Mid-game reshuffle policy. DEFAULT: the COMMON-RANDOM-NUMBERS reshuffle
+// (Library::ShuffleByKey) -- its order depends only on (game_seed, salt, each card's stable
+// m_number), NOT on search_count or the exact multiset -- so two similar games on one seed
+// reshuffle CONSISTENTLY: a fetch removes its one card and every other card's draw order is
+// unchanged, keeping realized draws aligned across an A/B (only genuine play differences move
+// the win turn, not shuffle luck). Only the mid-game post-search reshuffle is affected; the
+// opening shuffle is untouched, and only decks that fetch/search (antilife, hinata) change.
+//   MTG_LEGACY_SHUFFLE forces the historical search-index-keyed Fisher-Yates -- a
+//   byte-identical escape hatch (the repo's "always keep a legacy A/B toggle" bar).
+//   MTG_STABLE_SHUFFLE is still honoured (no-op now that stable is the default) for scripts
+//   that set it explicitly.
 inline bool StableShuffleEnabled()
 {
-    static const bool on = std::getenv("MTG_STABLE_SHUFFLE") != nullptr;
-    return on;
+    static const bool legacy = std::getenv("MTG_LEGACY_SHUFFLE") != nullptr;
+    return !legacy;
 }
 
 inline void ShuffleAfterSearch(GameState& state, int controller_index)
@@ -435,11 +439,15 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     const uint64_t salt = g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt;
     if (StableShuffleEnabled())
     {
-        // search_count is DELIBERATELY excluded from the CRN key so every reshuffle in a game
-        // yields the same canonical order (max consistency across policies that fetch a
-        // different number of times); still bumped below for any non-shuffle bookkeeping.
+        // Key each reshuffle on search_count (the per-game shuffle ORDINAL, bumped below): the Nth
+        // reshuffle re-randomizes vs the (N-1)th, so a Ponder/repeated fetch that shuffles actually
+        // digs (a fresh top), while still ALIGNING across two same-seed playthroughs at the same
+        // ordinal. The CRN benefit -- removing one card leaves every other card's order unchanged --
+        // comes from ShuffleByKey itself, NOT from pinning the seed. (Pinning the ordinal to 0 made
+        // every reshuffle the same canonical order, so a re-shuffle was a no-op / same top => dig
+        // broken; that penalized dig-reliant decks. See docs/design/stable-shuffle.md.)
         state.players[controller_index].library.ShuffleByKey(
-            SaltSeed(SearchShuffleSeed(state.game_seed, 0), salt));
+            SaltSeed(SearchShuffleSeed(state.game_seed, state.search_count), salt));
     }
     else
     {
