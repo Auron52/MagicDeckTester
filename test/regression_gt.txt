@@ -1,6 +1,6 @@
-# Regression ground truth -- commit 0b55e9e  date 2026-07-14
+# Regression ground truth -- commit a2ba871  date 2026-07-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (regression, 2026-07-14): gi163:mulligan keep-divergence (only searched win->loss; depth-invariant gi163 T7->loss at BOTH d3_s2002 & d5_s2002, each paired 1:1 with a loss->win => opening-hand change, not searched-play misplay; wide keep-isolation A/B net-positive dT9=-0.0019, win-count unchanged, avg faster)
+# accepted-with-regressions (smoke, 2026-07-14): antilife smoke rebaseline to mm6 profile (adopted for regression in ec297a5; smoke GT was missed). d3/d5: 0 searched win->loss (pure play-digest shift, won-set+avg identical); d0 greedy +6 wins/faster. Consistent with mm6 A/B dT9=-0.0019.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -17,9 +17,9 @@ th_smoke_d5_s1001=70/4.08571/277212a7ed696c0f
 knights_smoke_d0_s1001=999/4.58559/e9d8eec2cdc41c8d
 knights_smoke_d3_s1001=250/4.396/a170f420994229fb
 knights_smoke_d5_s1001=150/4.38667/ca0b74a195b8ceca
-antilife_smoke_d0_s1001=897/5.301/c241d82babe60316
-antilife_smoke_d3_s1001=250/4.108/95a12c38f9a78326
-antilife_smoke_d5_s1001=150/4.06667/b7b7a7c4f5fd6c21
+antilife_smoke_d0_s1001=903/5.24474/7b12e367e024fe5e
+antilife_smoke_d3_s1001=250/4.108/468cf4da8a11b372
+antilife_smoke_d5_s1001=150/4.1/02a538bf011a4fbc
 hinata_smoke_d0_s1001=670/6.62537/786ca7eff2526f4d
 hinata_smoke_d3_s1001=145/5.57241/1f4bdfc8c5d45c08
 hinata_smoke_d5_s1001=72/5.59722/fc8a9a7ff8aa28b3
