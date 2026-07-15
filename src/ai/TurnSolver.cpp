@@ -17,6 +17,8 @@
 #include <limits>
 #include <iostream>
 #include <sstream>
+#include <fstream>
+#include <mutex>
 #include <unordered_set>
 #include <utility>
 
@@ -6267,6 +6269,37 @@ namespace
         }
     };
     HybridStats g_hybrid_stats;
+
+    // Escalation-outcome dataset (MTG_ESCALATION_DUMP=<path>, opt-in). One row per escalation:
+    //   <taken> <wt_changed> <turn> <committed> <gap> <est_wt> <midgame-feature vector...>
+    // taken      = the heuristic re-search REPLACED the value-leaf line (cleared the crossover)
+    // wt_changed = ... and it moved win_turn (the objective actually changed)
+    // The "was this escalation worth its cost" label is (taken && wt_changed); the features are all
+    // observable BEFORE the escalation runs, so a classifier can decide to SKIP predicted no-ops. The
+    // point is to test whether rich features separate no-ops BETTER than committed-depth alone (which is
+    // just value_trust_depth) -- if not, the gate collapses to the trust-depth rule we already ship.
+    // Inert (no rows, byte-identical) when unset. See docs/design/escalation-and-rollout-cost.md.
+    struct EscalationDump
+    {
+        std::ofstream out;
+        std::mutex    mu;
+        bool          enabled = false;
+        EscalationDump()
+        {
+            const char* p = std::getenv("MTG_ESCALATION_DUMP");
+            if (p && *p) { out.open(p, std::ios::app); enabled = out.is_open(); }
+        }
+        void row(const std::vector<int>& feats, int taken, int wt_changed,
+                 int turn, int committed, int gap, int est_wt)
+        {
+            std::lock_guard<std::mutex> lk(mu);
+            out << taken << ' ' << wt_changed << ' ' << turn << ' ' << committed
+                << ' ' << gap << ' ' << est_wt;
+            for (int f : feats) { out << ' ' << f; }
+            out << '\n';
+        }
+    };
+    EscalationDump g_escalation_dump;
 }
 
 TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, int depth,
@@ -6309,10 +6342,21 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // measured decks (value-leaf-d5 ~= heuristic-d2). g_force_heuristic_leaf makes FSLineWin use the exact
         // rollout leaf; the shared tt holds only leaf-independent tail rollouts, so it is uncontaminated.
         constexpr int kValueTrustOffset = 3;
+        const int old_wt = line.win_turn;
         ForceHeuristicLeafGuard _fh(true);
         int hcommitted = depth;
         SearchLine hline = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &hcommitted);
-        if (hcommitted > committed - kValueTrustOffset)
+        const bool taken      = (hcommitted > committed - kValueTrustOffset);
+        const bool wt_changed = taken && (hline.win_turn != old_wt);
+        // Opt-in escalation-outcome dump (byte-identical when MTG_ESCALATION_DUMP unset). All features are
+        // observed BEFORE the escalation ran, so they can gate a future confidence-skip. See the doc.
+        if (g_escalation_dump.enabled)
+        {
+            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+            g_escalation_dump.row(feats, taken ? 1 : 0, wt_changed ? 1 : 0,
+                                  state.turn_number, committed, value_min_depth - committed, old_wt);
+        }
+        if (taken)
         {
             line      = hline;
             committed = hcommitted;
