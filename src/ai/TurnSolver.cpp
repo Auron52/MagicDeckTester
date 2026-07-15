@@ -19,6 +19,7 @@
 #include <sstream>
 #include <fstream>
 #include <mutex>
+#include <cmath>
 #include <unordered_set>
 #include <utility>
 
@@ -6300,6 +6301,70 @@ namespace
         }
     };
     EscalationDump g_escalation_dump;
+
+    // --- Escalation confidence-GATE (MTG_ESCALATION_GATE=<gate.json>, opt-in) -------------------
+    // Serves the logistic trained by scripts/esc_train_gate.py: predicts P(NO-OP) for an escalation
+    // from features observed BEFORE it runs, so the engine can SKIP predicted no-op escalations
+    // (the ~82% of Hinata escalations that re-search to the same win_turn). Skip iff P(no-op) >
+    // threshold (MTG_ESCALATION_GATE_T, default 0.5); a skipped escalation keeps the value-leaf line.
+    // Off (unset / unreadable / malformed) => never skips => byte-identical. This is a SPEED/quality
+    // lever, NOT lossless -- validate LP on held-out play before adoption. See the levers doc.
+    std::vector<double> ParseJsonNumArray(const std::string& s, const std::string& key)
+    {
+        std::vector<double> out;
+        auto kp = s.find("\"" + key + "\"");
+        if (kp == std::string::npos) { return out; }
+        auto lb = s.find('[', kp);
+        auto rb = (lb == std::string::npos) ? std::string::npos : s.find(']', lb);
+        if (lb == std::string::npos || rb == std::string::npos) { return out; }
+        std::stringstream ss(s.substr(lb + 1, rb - lb - 1));
+        std::string tok;
+        while (std::getline(ss, tok, ',')) { try { out.push_back(std::stod(tok)); } catch (...) {} }
+        return out;
+    }
+    struct EscalationGate
+    {
+        std::vector<double> mean, sd, w;      // w[0]=bias, w[1..]=standardized-feature coefs
+        double threshold = 0.5;
+        bool   enabled   = false;
+        std::atomic<long long> seen{0}, skipped{0};
+        EscalationGate()
+        {
+            const char* p = std::getenv("MTG_ESCALATION_GATE");
+            if (!p || !*p) { return; }
+            std::ifstream in(p);
+            if (!in) { return; }
+            std::stringstream buf; buf << in.rdbuf();
+            const std::string s = buf.str();
+            mean = ParseJsonNumArray(s, "mean");
+            sd   = ParseJsonNumArray(s, "std");
+            w    = ParseJsonNumArray(s, "w");
+            if (mean.empty() || sd.size() != mean.size() || w.size() != mean.size() + 1) { return; }
+            const char* t = std::getenv("MTG_ESCALATION_GATE_T");
+            if (t && *t) { try { threshold = std::stod(t); } catch (...) {} }
+            enabled = true;
+        }
+        // raw feature order MUST match the trainer: [committed, gap, turn, est_wt] + 46 midgame feats.
+        double PNoOp(const std::vector<double>& raw) const
+        {
+            double z = w[0];
+            for (std::size_t k = 0; k < raw.size() && k < mean.size(); ++k)
+            { z += w[k + 1] * (raw[k] - mean[k]) / sd[k]; }
+            if (z > 30) { z = 30; } else if (z < -30) { z = -30; }
+            return 1.0 / (1.0 + std::exp(-z));
+        }
+        ~EscalationGate()
+        {
+            if (enabled && seen.load() > 0)
+            {
+                std::cerr << "[escalation-gate] seen=" << seen.load()
+                          << " skipped=" << skipped.load()
+                          << " (" << (100.0 * skipped.load() / seen.load()) << "%)"
+                          << " threshold=" << threshold << "\n";
+            }
+        }
+    };
+    EscalationGate g_escalation_gate;
 }
 
 TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, int depth,
@@ -6343,6 +6408,26 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // rollout leaf; the shared tt holds only leaf-independent tail rollouts, so it is uncontaminated.
         constexpr int kValueTrustOffset = 3;
         const int old_wt = line.win_turn;
+        // Confidence-gate: skip escalations predicted to be no-ops (byte-identical when unset). The gate
+        // scores the SAME features the dump records -- all observed BEFORE the re-search -- so it can
+        // bypass the expensive heuristic search entirely. A skip keeps the value-leaf line + committed.
+        if (g_escalation_gate.enabled)
+        {
+            g_escalation_gate.seen.fetch_add(1);
+            std::vector<double> raw;
+            raw.reserve(4 + 46);
+            raw.push_back(committed);
+            raw.push_back(value_min_depth - committed);   // gap
+            raw.push_back(state.turn_number);
+            raw.push_back(old_wt);                          // est_wt
+            for (int f : ExtractMidGameFeatures(state, MidGamePlanSummary{})) { raw.push_back(f); }
+            if (g_escalation_gate.PNoOp(raw) > g_escalation_gate.threshold)
+            {
+                g_escalation_gate.skipped.fetch_add(1);
+                if (out_committed_depth) { *out_committed_depth = committed; }
+                return line;   // skip: trust the value-leaf line, save the full re-search
+            }
+        }
         ForceHeuristicLeafGuard _fh(true);
         int hcommitted = depth;
         SearchLine hline = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &hcommitted);
