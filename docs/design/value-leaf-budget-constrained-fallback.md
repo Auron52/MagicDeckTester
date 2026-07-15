@@ -37,3 +37,33 @@ Any change must A/B on the suite (train seeds) and hold-out (overnight): the win
 that Hinata (and other value-leaf decks) are no worse at suite budget AND unchanged at ample
 budget. Confirm a chosen fix makes `hinata_smoke_d5_s1001 gi20` win at 20 ms without regressing
 other decks. See the regression-testing skill for the budget-churn classification this addresses.
+
+## IMPLEMENTATION + EMPIRICAL FINDING (2026-07-15)
+
+Implemented fix #1 as a **fallback budget reserve** (option 2 in spirit): env `MTG_VALUE_FALLBACK_RESERVE`
+(fraction, default 0 = OFF = byte-identical), gated to `consistent_fallback` decks (`value_trust_depth==0`:
+Hinata/burn/TH/antilife; Slivers/Knights untouched). In `FullSearchLineHybrid` the value-leaf probe runs on
+a capped budget `Limit - reserve` (a separate `SearchBudget` sharing the used baseline), and its spend is
+folded back so the heuristic escalation redo runs on `Remaining >= reserve`. Verified OFF = 18/18 smoke
+byte-identical (all six value decks). Files: `src/ai/TurnSolver.{h,cpp}` (FullSearchLineHybrid), caller
+`src/ai/AIEngine.cpp` (~1409). **UNCOMMITTED** as of 2026-07-15 (held — see dependency below).
+
+**What the A/B showed (per-game, decisive):**
+- The value-leaf probe naturally consumes **50–90%** of the per-decision budget, so a *moderate* reserve
+  **doesn't bind** (`MTG_HYBRID_STATS` identical at reserve 0 and 0.5; only ≥0.9 changes the probe depth).
+- At reserve **≥0.9** all four reproducing Hinata win→loss games recover — and recover to **exactly the
+  pure-heuristic win turns** (117→T6, 248→T6, 84→T8, 180→T8, matching `MTG_VALUE_MODEL=0`). Even 6006+84,
+  earlier misread as a "genuine" loss (lost at 1280 ms with value on), is fallback starvation — it recovers.
+- **BUT** reserve ≥0.9 ≈ disabling the value leaf in play (probe gets ~1 ms). Since value-leaf-vs-pure-
+  heuristic is avg9-**neutral** on these decks (overnight +0.0006/10.8k), recovering the churn *this way* is
+  just a neutral revert to pure heuristic — it gives back the loss→win games. There is **no moderate reserve
+  that is net-positive as-is**, because the heuristic fallback needs ~the whole budget to find the win.
+
+**Root blocker + the unlock (coordination, 2026-07-15):** the reserve is the right lever but **budget-blocked
+on the cost of the heuristic fallback rollout**. A separate workstream is **pruning the leaves the heuristic
+rolls out on fallback**. If the fallback rollout gets materially cheaper, it finds the win with far less
+budget → a **moderate** reserve (probe keeps its cheap verified wins, fallback still finishes) becomes viable
+and potentially **net-positive**, not a neutral revert. So: **hold the reserve change** (keep it OFF/uncommitted
+to avoid conflicting with the fallback-leaf-pruning edits in the same `FullSearchLineHybrid`/`FSLineWin` path),
+then re-run the reserve fraction sweep once cheaper fallback rollouts land. Target: a fraction where Hinata
+avg9 goes **negative** (net better), not just back to pure-heuristic-neutral.
