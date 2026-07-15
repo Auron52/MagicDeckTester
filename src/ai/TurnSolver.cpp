@@ -55,6 +55,28 @@ static thread_local bool g_trace_arm = false;
 static const char* s_fd_leaf_depth_env = std::getenv("MTG_FD_LEAF_DEPTH");
 static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_leaf_depth_env) : 1;
 
+// Deterministic rollout-cost telemetry (MTG_ROLLOUT_STATS): total SimulateToEnd calls + simulated
+// turn-steps this process. A CONTENTION-PROOF measure of rollout work (wall-clock is not, under shared
+// machine load), so truncated-rollout (MTG_ROLLOUT_HORIZON) speedups can be read as a step-count ratio.
+// Flag-gated so the shared counters never touch the rollout hot loop (cross-thread atomic contention) when off.
+static const bool             s_rollout_stats = std::getenv("MTG_ROLLOUT_STATS") != nullptr;
+static std::atomic<long long> g_rollout_calls{0};
+static std::atomic<long long> g_rollout_steps{0};
+namespace
+{
+    struct RolloutStatsReporter
+    {
+        ~RolloutStatsReporter()
+        {
+            if (!s_rollout_stats) { return; }
+            const long long c = g_rollout_calls.load(), s = g_rollout_steps.load();
+            std::cerr << "[rollout-stats] calls=" << c << " turn_steps=" << s
+                      << " steps_per_call=" << (c ? static_cast<double>(s) / c : 0.0) << "\n";
+        }
+    };
+    RolloutStatsReporter g_rollout_stats_reporter;
+}
+
 // Mana-dork ramp value (EvalCard). A 0-power mana dork (Ignoble Hierarch, Birds) scores 0 in the
 // per-turn combat eval, so the greedy Solve rollout NEVER deploys one (casting it ties the
 // do-nothing plan and loses the smallest-mask tie-break). Ramp is invisible to a per-turn eval, so
@@ -5529,6 +5551,15 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
 {
     const bool trace_pl = g_trace_arm;   // only the outermost diagnostic playout prints
     g_trace_arm = false;
+    // TRUNCATED ROLLOUT (MTG_ROLLOUT_HORIZON=K, default -1 = unlimited/off): after K simulated turns with
+    // no win yet, cap the tail with the O(1) value-leaf estimate instead of playing greedily to game end.
+    // Bridges the pure value leaf (K=0) and the full rollout (K=inf), cutting the dominant per-leaf cost --
+    // especially the escalation's many rollouts. A fidelity trade (NOT byte-identical when on) -> sweep K
+    // for quality vs speed. Only caps when a value model is attached; value-less decks run the full rollout.
+    static const int s_roll_horizon = []{ const char* e = std::getenv("MTG_ROLLOUT_HORIZON");
+                                          return (e && *e) ? std::atoi(e) : -1; }();
+    const int roll_start = state.turn_number;
+    if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
     while (state.turn_number <= max_turns)
     {
         // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
@@ -5536,6 +5567,19 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // Abort only AFTER cutoff_turn so a win exactly on cutoff_turn still
         // registers for the value tiebreak.
         if (state.turn_number > cutoff_turn) { return max_turns + 1; }
+
+        // Truncated-rollout cap: K turns simulated with no win yet -> hand the tail to the cheap value leaf
+        // (see MTG_ROLLOUT_HORIZON above). Fires only for lines that DON'T win fast (the expensive ones);
+        // fast wins are fully simulated and never reach here.
+        if (s_roll_horizon >= 0 && (state.turn_number - roll_start) >= s_roll_horizon
+            && state.m_value_model && !state.m_value_model->empty())
+        {
+            const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+            int w = static_cast<int>((state.m_value_model->Score(feats) + 500) / 1000);
+            if (w < state.turn_number) { w = state.turn_number; }
+            if (w > max_turns)         { w = max_turns + 1; }
+            return w;
+        }
 
         // Count one work unit per simulated turn-step. The rollout normally never self
         // truncates on the budget — it only consumes; the top-level decision decides when
@@ -5546,6 +5590,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // unless armed (m_overrun_limit==0 on the baseline path / normal decisions), so this
         // is byte-identical for every non-pathological rollout.
         if (budget) { budget->Consume(1); }
+        if (s_rollout_stats) { g_rollout_steps.fetch_add(1, std::memory_order_relaxed); }   // one simulated turn-step
         if (budget && budget->Overrun()) { return max_turns + 1; }
 
         // Expire staged (Light Up the Stage) cards whose play window has passed,
