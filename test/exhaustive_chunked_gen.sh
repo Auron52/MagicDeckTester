@@ -45,7 +45,12 @@ ROUND_SEED_BASE=${KM_ROUND_SEED_BASE:-30001000}   # distinct from the base chunk
 BIN=./build/Release/mtg-analyze
 
 # Pinned discovery params (identical across every chunk/round -> same bucket_fp; never change mid-target).
-export MTG_EQUIV_PROBES=400 MTG_EQUIV_THRESHOLD=0.01 MTG_EQUIV_DEPTH=5 MTG_EQUIV_SEED=20260701
+# Env-overridable with the SAME defaults as before (so other decks are unchanged); a deck that needs a
+# different rollout regime (e.g. Hinata's d3/b10) sets MTG_EQUIV_DEPTH / MTG_EQUIV_BUDGET in the launch
+# env -- pin them in a wrapper so RESUME reuses the identical values (else bucket_fp drifts, merge rejects).
+export MTG_EQUIV_PROBES=${MTG_EQUIV_PROBES:-400} MTG_EQUIV_THRESHOLD=${MTG_EQUIV_THRESHOLD:-0.01} \
+       MTG_EQUIV_DEPTH=${MTG_EQUIV_DEPTH:-5} MTG_EQUIV_SEED=${MTG_EQUIV_SEED:-20260701}
+[ -n "${MTG_EQUIV_BUDGET:-}" ] && export MTG_EQUIV_BUDGET   # unset -> analyzer's own default (20); other decks unchanged
 
 [ -x "$BIN" ] || { echo "ERROR: build Release first ($BIN missing)"; exit 1; }
 [ -f "$DECK" ] || { echo "ERROR: deck not found: $DECK"; exit 1; }
