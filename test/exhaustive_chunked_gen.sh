@@ -38,7 +38,7 @@ CARDS=${KM_CARDS:-src/cards/data/cards.json}
 TARGET_R=${KM_TARGET_R:-40}      # target effective R on the live frontier
 ROUND_R=${KM_ROUND_R:-5}         # R added to every non-frozen cell per round
 CHUNK_R=${KM_CHUNK_R:-5}         # R of each pre-existing uniform base chunk (for BASE_R accounting)
-MAXMULL=${KM_MAXMULL:-3}
+MAXMULL=${KM_MAXMULL:-6}         # "all the way" — mulligan to the floor (was 3; mm6 is now the standard)
 PRUNE_EPS=${KM_PRUNE_EPS:-0.005} # freeze gate: smaller = stricter (freeze fewer, safer)
 CKPT_SEC=${KM_CKPT_SEC:-1800}
 ROUND_SEED_BASE=${KM_ROUND_SEED_BASE:-30001000}   # distinct from the base chunks' seed space
