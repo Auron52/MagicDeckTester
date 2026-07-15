@@ -933,6 +933,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // machine does not need. sumsq is included for a future resume-continuation path.
     const long long checkpoint_sec = []{ const char* s = std::getenv("MTG_KEEP_CHECKPOINT_SEC");
         return (s && *s) ? std::max<long long>(0, std::strtoll(s, nullptr, 10)) : 1800LL; }();
+    // Floor-pass checkpoint granularity: the floor pass (Pass A) is split into this many task GROUPS,
+    // with a (throttled) checkpoint written at each group barrier -- so a crash mid-floor loses at most
+    // one group + one checkpoint interval, not the whole pass (the ~day-long full-pass was previously a
+    // single all-or-nothing unit). Race-free (the barrier joins all workers before the atomic write).
+    // A resumed run reloads the checkpoint and skips already-sampled cells (see RESUME below). Default
+    // 32 (~1/32 of the floor per group); combined with MTG_KEEP_CHECKPOINT_SEC to bound write frequency.
+    const long long floor_groups = []{ const char* s = std::getenv("MTG_KEEP_FLOOR_GROUPS");
+        return (s && *s) ? std::max<long long>(1, std::strtoll(s, nullptr, 10)) : 32LL; }();
     auto write_raw_atomic = [&](const std::string& path) -> bool
     {
         using json = nlohmann::json;
@@ -988,6 +996,79 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   << "  (" << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
     };
 
+    // ---- RESUME-CONTINUATION of an interrupted floor pass (crash safety) ------------------------
+    // If cfg.out_raw already EXISTS, a prior invocation of THIS same round wrote a floor checkpoint
+    // before being killed. Reload its per-cell sum/sumsq/count into the accumulators so Pass A skips
+    // cells already sampled to their floor -- turning a killed floor pass from "restart from scratch"
+    // into "continue from the last checkpoint". Correctness: seeds are a pure function of
+    // (seed_base,r,w,pd) and the accumulators use += only, so a reloaded cell holds byte-identical
+    // samples to an uninterrupted run and the remaining cells draw the identical rollouts -> the
+    // completed profile is byte-identical whether or not the run was interrupted. Fingerprints
+    // (bucket/deck/seed/K/max_mull/R) MUST match, else the partial indexes a different table -> ignore
+    // it and start fresh (loud warning; never mis-apply). Disjoint from PRIOR_RAW change-detection
+    // (that loads pri_V for a DIFFERENT commit; this reloads live accumulators for the SAME run).
+    long long resume_loaded = 0;
+    if (!cfg.out_raw.empty() && std::filesystem::exists(cfg.out_raw))
+    {
+        std::ifstream rf(cfg.out_raw);
+        nlohmann::json rj; bool ok_parse = true;
+        try { rf >> rj; } catch (...) { ok_parse = false; }
+        if (ok_parse && rj.contains("meta") && rj.contains("sizes"))
+        {
+            uint64_t r_bucket_fp = 1469598103934665603ULL;
+            for (int b = 0; b < K; ++b)
+            { r_bucket_fp = Fnv("|", r_bucket_fp);
+              for (const std::string& n : eq.classes[b].members) { r_bucket_fp = Fnv(n + ",", r_bucket_fp); } }
+            std::vector<std::string> rdn;
+            for (const Card& c : deck.mainboard) { rdn.push_back(c.m_name.str()); }
+            std::sort(rdn.begin(), rdn.end());
+            uint64_t r_deck_fp = 1469598103934665603ULL;
+            for (const std::string& n : rdn) { r_deck_fp = Fnv(n + ",", r_deck_fp); }
+            const auto& rm = rj["meta"];
+            const bool match = rm.value("bucket_fp", 0ULL) == r_bucket_fp
+                            && rm.value("deck_fp", 0ULL) == r_deck_fp
+                            && rm.value("seed_base", ~0ULL) == cfg.seed
+                            && rm.value("K", -1) == K
+                            && rm.value("max_mull", -1) == cfg.max_mull
+                            && rm.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                            && rm.value("R", -1LL) == static_cast<long long>(cfg.rollouts);
+            if (match)
+            {
+                for (const auto& sz : rj["sizes"])
+                {
+                    const int H = sz.value("H", 0);
+                    if (H > HAND || H < min_size) { continue; }
+                    SizeTable& t = tables[HAND - H];
+                    for (const auto& e : sz["entries"])
+                    {
+                        auto it = t.index.find(e["comp"].get<std::vector<int>>());
+                        if (it == t.index.end()) { continue; }
+                        const int i = it->second;
+                        for (int pd = 0; pd < 2; ++pd)
+                        {
+                            const long long c = e["count"][pd].get<long long>();
+                            if (c <= 0) { continue; }
+                            t.sum[i][pd]   = e["sum"][pd].get<double>();
+                            t.sumsq[i][pd] = e["sumsq"][pd].get<double>();
+                            t.cnt[i][pd]   = c;
+                            ++resume_loaded;
+                        }
+                    }
+                }
+                recompute();
+                std::cerr << "[keepgen] RESUME: reloaded " << resume_loaded << " sampled cell-sides from the "
+                             "floor checkpoint " << cfg.out_raw << " -> continuing (already-sampled cells skipped)\n"
+                          << std::flush;
+            }
+            else
+            {
+                std::cerr << "[keepgen] RESUME: existing " << cfg.out_raw << " fingerprints MISMATCH -- "
+                             "IGNORING it and starting fresh (it will be overwritten by the next checkpoint)\n"
+                          << std::flush;
+            }
+        }
+    }
+
     // Sub-tables may start at the floor for adaptive keep-only profiles. With bottoming enabled the argmin
     // (which subhand to keep) normally needs the WHOLE sub-table accurate -- a true-argmin cell noisily-
     // high at the floor would never be marked -- so bottoming forces sub-tables to the cap up front. The
@@ -1020,10 +1101,36 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // on the new deck/commit. Adaptive only -- a uniform run has no refiner, so sample in full.
                 if (Hw == HAND && carry_lowfloor7[iw][pd] && adaptive)
                 { cell_init = std::min(cell_init, carry_floor); }
+                // RESUME: a cell already sampled to its floor in a reloaded checkpoint needs no re-run
+                // (its accumulators are already correct; += would double-count). Guarded on resume_loaded
+                // so a normal (non-resumed) run is byte-identical.
+                if (resume_loaded > 0 && tables[HAND - Hw].cnt[iw][pd] >= cell_init) { continue; }
                 tasks.push_back({ w, pd, 0, cell_init });
             }
         }
-        process_tasks(tasks, adaptive ? "floor-pass" : "full-pass");
+        // Split the floor pass into groups so we can checkpoint at barriers (race-free) -- a crash mid-
+        // floor then loses at most one group + one checkpoint interval, not the whole ~day-long pass.
+        // Splitting is result-invariant (each task is independent; seeds are per-(w,pd,r)), and the whole
+        // scheme is inert unless a raw path + checkpointing are set -> the plain path stays byte-identical.
+        const char* lbl = adaptive ? "floor-pass" : "full-pass";
+        if (cfg.out_raw.empty() || checkpoint_sec <= 0 || tasks.size() <= 1)
+        {
+            process_tasks(tasks, lbl);
+        }
+        else
+        {
+            const std::size_t groups = std::min<std::size_t>(tasks.size(),
+                                                             static_cast<std::size_t>(floor_groups));
+            const std::size_t chunk  = (tasks.size() + groups - 1) / groups;
+            for (std::size_t off = 0; off < tasks.size(); off += chunk)
+            {
+                const std::size_t end = std::min(tasks.size(), off + chunk);
+                std::vector<Task> grp(tasks.begin() + static_cast<long>(off),
+                                      tasks.begin() + static_cast<long>(end));
+                process_tasks(grp, lbl);
+                maybe_checkpoint();   // throttled by MTG_KEEP_CHECKPOINT_SEC; race-free (barrier above)
+            }
+        }
         recompute();
     }
 
