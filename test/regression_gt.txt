@@ -1,6 +1,6 @@
-# Regression ground truth -- commit 305fb0e  date 2026-07-15
+# Regression ground truth -- commit b81402d  date 2026-07-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (regression, 2026-07-15): TH mm6 max_mull=6 adoption (305fb0e): 8 searched win->loss (6 unique TH games: s2002 gi147/gi167/gi301/gi308/gi455, s3003 gi165) = new profile mulls deeper (to 1-3 card hands) or bottoms differently and loses that realization; play-engine/binary UNCHANGED (profile-only), all legal play to loss, not phantoms. Net strongly positive (searched 33 loss->win vs 8 win->loss; 239 earlier vs 171 later; full 40k A/B TH -0.13, Slivers -0.005, Knights -0.015). Knights net -0.011/case here; burn/antilife/hinata byte-identical PASS.
+# accepted-with-regressions (overnight, 2026-07-15): TH mm6 max_mull=6 adoption (305fb0e): 37 searched win->loss (all TH, 19 unique games) verified as keep/bottom divergences (recovered OLD profile from 1b3c94f, ran each gi under OLD vs NEW: NEW mulligans deeper, often to 1-2 card hands, and loses that realization; binary/play-engine UNCHANGED, burn/antilife/hinata byte-identical PASS so no play regression possible). Net strongly positive: TH avg9 d3/d5 -0.149/-0.150; Knights -0.019/-0.018 (better all 12 cases); Slivers ~flat +0.002 (noise, true effect -0.005). Searched 205 loss->win vs 37 win->loss. NOTE under investigation: table sometimes mulligans keepable TH hands (e.g. s5005 gi1 kept-7 w/ Treasure Hunt) -- net-positive but examining why.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -57,18 +57,18 @@ hinata_regression_d5_s2002=90/5.87778/36fde9fa46956e7b
 hinata_regression_d5_s3003=89/5.70787/82692f48e952b07a
 
 # --- overnight ---
-slivers_overnight_d0_s4004=1997/4.64146/fd3dae24c6f98825
-slivers_overnight_d0_s5005=2000/4.642/979e803b0041d0e1
-slivers_overnight_d0_s6006=1999/4.65583/de54325bac9634bd
-slivers_overnight_d0_s7007=1999/4.65483/cf4eb57f414a0078
-slivers_overnight_d3_s4004=998/4.21242/747916eb32b7782b
-slivers_overnight_d3_s5005=1000/4.204/0a69ff9f0e658bd6
-slivers_overnight_d3_s6006=1000/4.234/16be78d8b1ed9849
-slivers_overnight_d3_s7007=999/4.22122/ea38e800ad38a641
-slivers_overnight_d5_s4004=998/4.21042/70ea3bf3ad5de1ee
-slivers_overnight_d5_s5005=1000/4.204/b3a13fda89f4c956
-slivers_overnight_d5_s6006=1000/4.234/07ebebe55749c798
-slivers_overnight_d5_s7007=999/4.22022/7669a84b261e79fd
+slivers_overnight_d0_s4004=2000/4.6445/85f8eec58d440e26
+slivers_overnight_d0_s5005=2000/4.6365/ea1897be4509b03f
+slivers_overnight_d0_s6006=2000/4.644/717afd050027adb1
+slivers_overnight_d0_s7007=2000/4.6395/8aa90495e8d696b8
+slivers_overnight_d3_s4004=1000/4.235/9431a5e0920f9d2e
+slivers_overnight_d3_s5005=1000/4.206/c051488eacb334e4
+slivers_overnight_d3_s6006=1000/4.238/f21d061dd1278ebb
+slivers_overnight_d3_s7007=1000/4.215/db2e055080d0b338
+slivers_overnight_d5_s4004=1000/4.233/865f8340db91af4a
+slivers_overnight_d5_s5005=1000/4.207/3482783e8d56161c
+slivers_overnight_d5_s6006=1000/4.237/a4a93c4c110d61c6
+slivers_overnight_d5_s7007=1000/4.214/d4ea975122d94b27
 burn_overnight_d0_s4004=1978/4.5728/db5c122956f887c1
 burn_overnight_d0_s5005=1980/4.57071/3405ff1babe1ef36
 burn_overnight_d0_s6006=1976/4.57136/eddf500a9e87c108
@@ -81,30 +81,30 @@ burn_overnight_d5_s4004=992/4.33871/20f19ea499121231
 burn_overnight_d5_s5005=994/4.34004/359c54436d69235e
 burn_overnight_d5_s6006=996/4.34739/c05fda85fffc6d99
 burn_overnight_d5_s7007=992/4.3619/bb2e9a891f6df389
-th_overnight_d0_s4004=1668/5.04676/181b85af2e76f9f7
-th_overnight_d0_s5005=1702/5.03584/0d4ae8e372ee4e15
-th_overnight_d0_s6006=1717/5.02213/24e895a0829e496f
-th_overnight_d0_s7007=1719/5.0349/2a2f6adf5bfcd9f8
-th_overnight_d3_s4004=970/4.12784/575946b417f97076
-th_overnight_d3_s5005=976/4.11168/bc447c0140117622
-th_overnight_d3_s6006=969/4.08669/50ded6c8fa1b3c6f
-th_overnight_d3_s7007=978/4.17485/f86ed4c525a01074
-th_overnight_d5_s4004=970/4.12165/2d54e687819a9b6a
-th_overnight_d5_s5005=975/4.10462/1163d2144956725f
-th_overnight_d5_s6006=970/4.09072/dbd0a688b8816c6e
-th_overnight_d5_s7007=979/4.1716/9cd8ff136ce58650
-knights_overnight_d0_s4004=2000/4.5715/00696d327aad96a9
-knights_overnight_d0_s5005=2000/4.587/cbe3801872cf14f4
-knights_overnight_d0_s6006=2000/4.5705/096ecfdce76d552b
-knights_overnight_d0_s7007=2000/4.566/3371c30ece917af8
-knights_overnight_d3_s4004=1000/4.358/581a57b43d7ae896
-knights_overnight_d3_s5005=1000/4.393/3cb71bc0c8649c27
-knights_overnight_d3_s6006=1000/4.358/9a94af71dae22d99
-knights_overnight_d3_s7007=1000/4.365/9a3d49a79ce14603
-knights_overnight_d5_s4004=1000/4.356/b26c56bbe137e4a3
-knights_overnight_d5_s5005=1000/4.389/9ed4698849153f2e
-knights_overnight_d5_s6006=1000/4.356/5664b08151e5ed40
-knights_overnight_d5_s7007=1000/4.365/6c7ebfec95eef25b
+th_overnight_d0_s4004=1709/5.01697/bf0cef2deac64047
+th_overnight_d0_s5005=1740/5.00402/6d4e2cbbb83c97fc
+th_overnight_d0_s6006=1746/4.97308/6f0dfdf870d3ce2c
+th_overnight_d0_s7007=1733/4.96538/434d7a233b0af780
+th_overnight_d3_s4004=993/4.08963/88d0d81d20d443d8
+th_overnight_d3_s5005=993/4.0715/674867c594d68b9b
+th_overnight_d3_s6006=993/4.04935/7f5ba58cf31e7b87
+th_overnight_d3_s7007=996/4.09337/9060e87cd49167c9
+th_overnight_d5_s4004=992/4.07863/f0c599737ef05848
+th_overnight_d5_s5005=992/4.06048/4f63d1742d478f07
+th_overnight_d5_s6006=994/4.05131/eacabd2082e812e9
+th_overnight_d5_s7007=996/4.08835/fac8a519e0cbfcd3
+knights_overnight_d0_s4004=2000/4.5505/5e62b0a58a498232
+knights_overnight_d0_s5005=2000/4.5675/e0969656ad74960d
+knights_overnight_d0_s6006=2000/4.556/8407507ca942245b
+knights_overnight_d0_s7007=2000/4.5505/5dc1aba29410dafa
+knights_overnight_d3_s4004=1000/4.333/0d718911d96557ea
+knights_overnight_d3_s5005=1000/4.367/0ea436cae6f7a47c
+knights_overnight_d3_s6006=1000/4.352/8df52f05183fc806
+knights_overnight_d3_s7007=1000/4.346/25e70017175aca26
+knights_overnight_d5_s4004=1000/4.333/191e4df28103feeb
+knights_overnight_d5_s5005=1000/4.365/54eda9780cbc701a
+knights_overnight_d5_s6006=1000/4.351/0c77a9aba6ddfcf7
+knights_overnight_d5_s7007=1000/4.346/8408ac7f2655f6d2
 antilife_overnight_d0_s4004=1809/5.29409/77087f6ea6955b00
 antilife_overnight_d0_s5005=1831/5.32824/2c886daa8eb8b3ee
 antilife_overnight_d0_s6006=1851/5.34576/9fcf648e636fdc38
