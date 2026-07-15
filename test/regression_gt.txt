@@ -1,6 +1,6 @@
-# Regression ground truth -- commit f39da69  date 2026-07-15
+# Regression ground truth -- commit 52d0a58  date 2026-07-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-15): Hinata value.json(490745c) shifts play at search leaves; avg9-NEUTRAL (overnight +0.0006/10.8k games, regression +0.0031/1.6k). Flips=value-model churn+line-changes: smoke gi20 recovers T6@1280ms; overnight 16 win->loss mostly recover @160-640ms (>=1 genuine 6006+84) offset by 11 loss->win; no play benefit (gen speedup only). Recovery follow-up (gen-only gate / budget fallback) planned.
+# accepted-with-regressions (overnight, 2026-07-15): Burn mm6 (max_mull=6, R=60) exhaustive profile adoption. NEW-vs-OLD A/B: -0.0192 avg9, NEW better 8/8 seeds both depths (win% up 99.48->99.71 d3, 99.49->99.75 d5). PROFILE-ONLY change: binary unchanged (OLD mm3 reproduces committed overnight GT 12/12 byte-identical incl digests), so ALL searched win->loss are necessarily keep/bottom divergences (verified gi241: OLD kept-5-won vs NEW mull-to-2-lost; deeper-mulligan tradeoff). Net-positive every mode: searched loss->win outnumber win->loss (smoke 3-0, regression 5-2, overnight 47-22) + earlier>later. Not pushed.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -8,9 +8,9 @@
 slivers_smoke_d0_s1001=1000/4.651/b124e94aec32e323
 slivers_smoke_d3_s1001=250/4.252/d19b6ec822deaa3e
 slivers_smoke_d5_s1001=150/4.19333/ddb0e63765f8fe35
-burn_smoke_d0_s1001=990/4.56465/3f8b9653bbc758cf
-burn_smoke_d3_s1001=298/4.32886/72bde106c5334407
-burn_smoke_d5_s1001=249/4.33333/5272b0bf433bc3ce
+burn_smoke_d0_s1001=996/4.56526/0b956ec5daa4df47
+burn_smoke_d3_s1001=300/4.35333/bb9a8d183efd44ab
+burn_smoke_d5_s1001=250/4.364/f36731530674ec0e
 th_smoke_d0_s1001=845/4.99053/a6de09bce64a136f
 th_smoke_d3_s1001=148/4.04054/3026ba622aabe69d
 th_smoke_d5_s1001=74/3.97297/113fe4b3b9b353ad
@@ -30,11 +30,11 @@ slivers_regression_d3_s2002=400/4.2175/4df81e0140e224d0
 slivers_regression_d3_s3003=400/4.245/57a3df2dfaf284e7
 slivers_regression_d5_s2002=300/4.22333/960d153cbb0ab4c5
 slivers_regression_d5_s3003=300/4.25/0a595956e1d35a3c
-burn_regression_d0_s2002=990/4.53434/8e3c9e02ba4ba6c7
-burn_regression_d3_s2002=497/4.334/00bd186a1573b0e8
-burn_regression_d3_s3003=499/4.27455/42602fd20889ee61
-burn_regression_d5_s2002=498/4.33936/16330c60abcd65a6
-burn_regression_d5_s3003=499/4.27455/fd948bd21bf6c4e9
+burn_regression_d0_s2002=995/4.53065/be195be31edf57bc
+burn_regression_d3_s2002=498/4.33333/4ace8fa294195ebe
+burn_regression_d3_s3003=500/4.25/870436a32ab8e61e
+burn_regression_d5_s2002=498/4.33333/4ace8fa294195ebe
+burn_regression_d5_s3003=500/4.25/7d036154803d6ec4
 th_regression_d0_s2002=855/5.09474/b7a3872fcf6dd49d
 th_regression_d3_s2002=495/4.13333/1a38f9b49284b481
 th_regression_d3_s3003=499/4.00401/bb444d9285d78df6
@@ -69,18 +69,18 @@ slivers_overnight_d5_s4004=1000/4.233/865f8340db91af4a
 slivers_overnight_d5_s5005=1000/4.207/3482783e8d56161c
 slivers_overnight_d5_s6006=1000/4.237/a4a93c4c110d61c6
 slivers_overnight_d5_s7007=1000/4.214/d4ea975122d94b27
-burn_overnight_d0_s4004=1978/4.5728/db5c122956f887c1
-burn_overnight_d0_s5005=1980/4.57071/3405ff1babe1ef36
-burn_overnight_d0_s6006=1976/4.57136/eddf500a9e87c108
-burn_overnight_d0_s7007=1980/4.55505/e9ff2cd4f0702a0e
-burn_overnight_d3_s4004=992/4.34073/bd93df6f5503520b
-burn_overnight_d3_s5005=994/4.34205/11b0ee5a83390055
-burn_overnight_d3_s6006=995/4.34372/53ad60af38e8a9bf
-burn_overnight_d3_s7007=992/4.36492/546d4cfc245468c1
-burn_overnight_d5_s4004=992/4.33871/20f19ea499121231
-burn_overnight_d5_s5005=994/4.34004/359c54436d69235e
-burn_overnight_d5_s6006=996/4.34739/c05fda85fffc6d99
-burn_overnight_d5_s7007=992/4.3619/bb2e9a891f6df389
+burn_overnight_d0_s4004=1989/4.54952/41af88b5d7795f95
+burn_overnight_d0_s5005=1989/4.546/cee2e9cce2f7c6b0
+burn_overnight_d0_s6006=1984/4.55242/f2aa90a5610b56c9
+burn_overnight_d0_s7007=1993/4.53136/527231f25ce2da14
+burn_overnight_d3_s4004=997/4.33501/382570568a0045cd
+burn_overnight_d3_s5005=999/4.33333/c3eedc2e5d15401d
+burn_overnight_d3_s6006=996/4.33333/0e384925a30314e0
+burn_overnight_d3_s7007=994/4.34809/a151b1a395751da9
+burn_overnight_d5_s4004=997/4.33501/382570568a0045cd
+burn_overnight_d5_s5005=999/4.33133/9352c155ef841bd3
+burn_overnight_d5_s6006=996/4.33333/a0b5bec6dbaa4bbc
+burn_overnight_d5_s7007=994/4.34809/57e9b85bbed256fc
 th_overnight_d0_s4004=1709/5.01697/bf0cef2deac64047
 th_overnight_d0_s5005=1740/5.00402/6d4e2cbbb83c97fc
 th_overnight_d0_s6006=1746/4.97308/6f0dfdf870d3ce2c
