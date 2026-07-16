@@ -14,6 +14,7 @@ thread_local DigChooser*     g_play_dig_chooser    = nullptr;
 thread_local DiscardChooser* g_play_discard_chooser = nullptr;
 thread_local EIChooser*      g_play_ei_chooser      = nullptr;
 thread_local RetraceDiscardChooser* g_play_retrace_chooser = nullptr;
+thread_local ReplicateChooser* g_play_replicate_chooser = nullptr;
 thread_local SoulfireTargetChooser* g_play_soulfire_chooser = nullptr;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;

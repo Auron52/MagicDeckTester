@@ -3101,14 +3101,32 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (CanReplicate(def, state.battlefield, state.active_player_index))
             {
                 ManaCost rep_cost = def.card.m_mana_cost;
+                // Heuristic default: replicate GREEDILY (as many times as leftover mana allows).
+                // Human play (g_play_replicate_chooser set, nulled during search/rollout) may choose
+                // FEWER: count the max affordable first on a scratch copy so we can offer 0..max, then
+                // cap the real loop. cap < 0 => uncapped => byte-identical to the greedy default.
+                int cap = -1;
+                if (g_play_replicate_chooser)
+                {
+                    int max_count = 0;
+                    GameState scratch = state;
+                    ManaPool rem = BuildPool(scratch);
+                    while (rem.CanPay(rep_cost) && TapForCostDirect(scratch, rep_cost, true))
+                    { ++max_count; rem = BuildPool(scratch); }
+                    int k = (*g_play_replicate_chooser)(state, state.active_player_index,
+                                                        def.card.m_name.str(), max_count);
+                    cap = k < 0 ? 0 : (k > max_count ? max_count : k);
+                }
+                int made = 0;
                 ManaPool remaining = BuildPool(state);
-                while (remaining.CanPay(rep_cost))
+                while ((cap < 0 || made < cap) && remaining.CanPay(rep_cost))
                 {
                     if (!TapForCostDirect(state, rep_cost, true)) { break; }
                     Permanent token = perm;
                     token.card.m_number = 0;
                     state.battlefield.push_back(token);
                     remaining = BuildPool(state);
+                    ++made;
                 }
             }
         }

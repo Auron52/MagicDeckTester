@@ -321,6 +321,19 @@ using RetraceDiscardChooser = std::function<int(const GameState& state, int cont
                                                 int heuristic_pick)>;
 extern thread_local RetraceDiscardChooser* g_play_retrace_chooser;
 
+// ---- Human-play Replicate chooser (how many times to replicate a Sliver spell on cast) --------
+// Hatchery Sliver has Replicate {1}{G} and grants replicate to every Sliver spell you cast (see
+// CanReplicate). On cast you may pay the replicate cost any number of additional times, each making
+// a token copy. Autonomously (and in every search rollout) the engine replicates GREEDILY -- as many
+// times as leftover mana allows -- which is the heuristic default. Under --claude-play the human picks
+// how many copies to make (0..max_count, default = max_count). The chooser receives the spell's name
+// and the max affordable count; it returns the chosen count. Nulled by RevealLogPause for every
+// search/rollout/enumeration scope, so it fires only for the REAL cast and the greedy heuristic stands
+// there -> autonomous play and the search stay byte-identical. Inert (greedy) unless set.
+using ReplicateChooser = std::function<int(const GameState& state, int controller,
+                                           const std::string& source, int max_count)>;
+extern thread_local ReplicateChooser* g_play_replicate_chooser;
+
 // ---- Human-play Soulfire own-target chooser (WHICH of your creatures the dig also targets) ------
 // Soulfire Eruption targets the face + opponent creatures + (optionally) you + a SEARCHED COUNT of
 // your OWN creatures (each = a deeper dig + a bigger Hinata discount, but takes a random exiled
@@ -386,22 +399,26 @@ struct RevealLogPause
     std::vector<std::pair<int, std::string>>* saved_drawsink;
     std::vector<PlayEvent>* saved_evsink;
     BounceChooser* saved_sacchooser;
+    ReplicateChooser* saved_repchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
                        saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
-                       saved_evsink(g_play_event_sink), saved_sacchooser(g_play_sacrifice_chooser)
+                       saved_evsink(g_play_event_sink), saved_sacchooser(g_play_sacrifice_chooser),
+                       saved_repchooser(g_play_replicate_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
-      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_sacrifice_chooser = nullptr; }
+      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_sacrifice_chooser = nullptr;
+      g_play_replicate_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
-                        g_play_event_sink = saved_evsink; g_play_sacrifice_chooser = saved_sacchooser; }
+                        g_play_event_sink = saved_evsink; g_play_sacrifice_chooser = saved_sacchooser;
+                        g_play_replicate_chooser = saved_repchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

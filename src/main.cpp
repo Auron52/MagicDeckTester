@@ -1044,6 +1044,26 @@ static void WriteRetraceDiscardDecisionJson(std::ostream& os, const GameState& s
     os << "}\n";
 }
 
+// Replicate decision (Hatchery Sliver, and any Sliver spell it grants replicate to): the player picks
+// HOW MANY times to pay the replicate cost when casting, each making a token copy. The AI default is
+// greedy (max affordable). The reply is the chosen count in [0, max_count]; one decision fires per
+// replicate-eligible cast that can afford at least one extra copy.
+static void WriteReplicateDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                       int max_count, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"replicate\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"max_count\": " << max_count << ",\n";
+    os << "  \"heuristic_default\": " << max_count << ",\n";
+    os << "  \"note\": \"reply how many times to replicate this Sliver spell (0.." << max_count
+       << "); each pays the replicate cost again to make a token copy. Default = replicate the maximum.\"\n";
+    os << "}\n";
+}
+
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
@@ -1662,6 +1682,37 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_retrace_chooser = &retrace_chooser;
 
+    // Replicate: the player picks how many times to replicate a Sliver spell on cast (each pays the
+    // replicate cost again to make a token copy). Shares the --choices stream; the reply is the count in
+    // [0, max_count]. Default (out-of-range or absent) = the engine's greedy heuristic (max affordable).
+    ReplicateChooser replicate_chooser =
+        [&](const GameState& s, int controller, const std::string& source, int max_count) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen > max_count) { chosen = max_count; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteReplicateDecisionJson(ss, s, source, max_count, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteReplicateDecisionJson(std::cout, s, source, max_count, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_replicate_chooser = &replicate_chooser;
+
     // Soulfire Eruption targeting: the player picks the FULL target set on the board, exactly like
     // Crackle. `legal` is the canonical target order (sentinels for the faces + battlefield indices);
     // `min_targets` is the affordability floor (the count the cast already paid the discount for). We
@@ -1745,6 +1796,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_dig_chooser = nullptr;
     g_play_discard_chooser = nullptr;
     g_play_ei_chooser = nullptr;
+    g_play_retrace_chooser = nullptr;
+    g_play_replicate_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;

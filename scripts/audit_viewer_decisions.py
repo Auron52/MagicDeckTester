@@ -76,6 +76,8 @@ MANIFEST = {
     "etb_dig_count":         ("dig",                  positive),
     "upkeep_adds_charge":    ("vial_charge",          truthy),
     "retrace":               ("retrace_discard",      truthy),
+    "has_replicate":              ("replicate",       truthy),   # Hatchery Sliver's own replicate
+    "grants_replicate_to_subtypes": ("replicate",     truthy),   # + grants it to Sliver spells
     "etb_bounce_land":       ("bounce",               truthy),
     "sacrifice_land":        ("sacrifice",            truthy),
     "expressive_iteration":  ("expressive_iteration", truthy),

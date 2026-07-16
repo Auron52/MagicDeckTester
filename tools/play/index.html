@@ -508,7 +508,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','mulligan','bottom'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1157,7 +1157,7 @@ function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
-                || dec==='mulligan' || dec==='bottom'; // centered card-image modals
+                || dec==='replicate' || dec==='mulligan' || dec==='bottom'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1165,6 +1165,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='discard' ? discardPanelHtml(d)
                   : dec==='expressive_iteration' ? eiPanelHtml(d)
                   : dec==='retrace_discard' ? retraceDiscardPanelHtml(d)
+                  : dec==='replicate' ? replicatePanelHtml(d)
                   : dec==='mulligan' ? mulliganPanelHtml(d)
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
@@ -1268,6 +1269,20 @@ function retraceDiscardPanelHtml(d){
        `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(o.name)}</em>`+
        (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
   });
+  return h+`</div>`;
+}
+// Replicate panel (Hatchery Sliver, and Sliver spells it enables): IMAGE-based central modal. The spell
+// being cast is shown as art; a row of ×0…×max buttons picks how many extra token copies to make (each
+// pays the replicate cost again). The AI default is greedy (×max) and is tagged. Fires once per cast that
+// can afford at least one copy.
+function replicatePanelHtml(d){
+  const max=d.max_count||0, def=(d.heuristic_default==null?max:d.heuristic_default);
+  let h=`<h3>Replicate — ${esc(d.source||'')}</h3>`;
+  h+=`<div class="sub">Casting <b>${esc(d.source||'this Sliver')}</b> — pay its replicate cost extra times to make token copies. Pick how many (you can afford up to <b>${max}</b>). The AI replicates the maximum.</div>`;
+  h+=`<div class="tutgrid">`+cardMini(d.source||'')+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  for (let k=0;k<=max;k++)
+    h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
   return h+`</div>`;
 }
 // Mulligan panel: IMAGE-based central modal, shown once per London-mulligan attempt BEFORE the game
@@ -1456,6 +1471,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitEI(d, +b.dataset.opt));
   else if (dec==='retrace_discard')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitRetraceDiscard(d, +b.dataset.opt));
+  else if (dec==='replicate')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitReplicate(d, +b.dataset.opt));
   else if (dec==='mulligan')
     panel.querySelectorAll('button[data-mull]').forEach(b=>b.onclick=()=>commitMulligan(d, +b.dataset.mull));
   else if (dec==='bottom'){
@@ -1519,6 +1536,9 @@ function commitEI(d, oi){
 function commitRetraceDiscard(d, oi){
   const c=(d.options||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source} (retrace): discard ${c?c.name:'land'}`);
+}
+function commitReplicate(d, n){
+  pushChoice(d, n, `${d.source}: replicate ×${n}`);
 }
 function commitMulligan(d, k){
   // London: you drew `n` (=7) and will BOTTOM `mc` cards for the mulligans taken. So KEEPING now ends
