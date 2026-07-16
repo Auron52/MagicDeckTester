@@ -1,0 +1,213 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [56] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 54, "name": "Striking Sliver" }, { "num": 28, "name": "Muscle Sliver" }, { "num": 34, "name": "Plated Sliver" }, { "num": 14, "name": "Crystalline Sliver" }, { "num": 46, "name": "Sinew Sliver" }, { "num": 26, "name": "Leeching Sliver" }, { "num": 5, "name": "Ancient Ziggurat" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 54, "name": "Striking Sliver" }, { "num": 3, "name": "Aether Vial" }, { "num": 43, "name": "Secluded Courtyard" }, { "num": 56, "name": "Thrumming Hivepool" }, { "num": 53, "name": "Sliver Hive" }, { "num": 30, "name": "Muscle Sliver" }, { "num": 47, "name": "Sinew Sliver" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 54, "name": "Striking Sliver", "win_optimal": true }, { "num": 3, "name": "Aether Vial", "win_optimal": true }, { "num": 43, "name": "Secluded Courtyard", "win_optimal": true }, { "num": 56, "name": "Thrumming Hivepool", "win_optimal": true }, { "num": 53, "name": "Sliver Hive", "win_optimal": true }, { "num": 30, "name": "Muscle Sliver", "win_optimal": true }, { "num": 47, "name": "Sinew Sliver", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 56, "name": "Thrumming Hivepool" },
+  "ai_set": [5],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Sinew Sliver" }],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 30, "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Striking Sliver", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Striking Sliver", "land": "Secluded Courtyard", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 1, "summary": "land=Sliver Hive; cast: Striking Sliver", "land": "Sliver Hive", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Aether Vial", "land": "Secluded Courtyard", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 3, "summary": "land=Sliver Hive; cast: Aether Vial", "land": "Sliver Hive", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Sliver Hive; cast: (nothing)", "land": "Sliver Hive", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 2,
+  "heuristic_default": 1,
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 30, "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Striking Sliver", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Sliver Hive" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 30, "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Striking Sliver", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sliver Hive; cast: Striking Sliver (vial), Muscle Sliver", "land": "Sliver Hive", "casts": ["Striking Sliver", "Muscle Sliver"], "actions": [{ "card": "Striking Sliver" }, { "card": "Muscle Sliver" }] },
+    { "index": 1, "summary": "land=Sliver Hive; cast: Striking Sliver (vial), Sinew Sliver", "land": "Sliver Hive", "casts": ["Striking Sliver", "Sinew Sliver"], "actions": [{ "card": "Striking Sliver" }, { "card": "Sinew Sliver" }] },
+    { "index": 2, "summary": "land=Sliver Hive; cast: Striking Sliver", "land": "Sliver Hive", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 3, "summary": "land=Sliver Hive; cast: Striking Sliver (vial)", "land": "Sliver Hive", "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 4, "summary": "land=Sliver Hive; cast: Muscle Sliver", "land": "Sliver Hive", "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 5, "summary": "land=Sliver Hive; cast: Sinew Sliver", "land": "Sliver Hive", "casts": ["Sinew Sliver"], "actions": [{ "card": "Sinew Sliver" }] },
+    { "index": 6, "summary": "land=none; cast: Striking Sliver", "land": null, "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 7, "summary": "land=none; cast: Striking Sliver (vial)", "land": null, "casts": ["Striking Sliver"], "actions": [{ "card": "Striking Sliver" }] },
+    { "index": 8, "summary": "land=Sliver Hive; cast: (nothing)", "land": "Sliver Hive", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 2,
+  "heuristic_default": 1,
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }, { "name": "Sinew Sliver", "idx": 5, "is_land": false }, { "name": "Sliver Hive", "idx": 3, "is_land": true }, { "name": "Striking Sliver", "idx": 4, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 30, "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Cloudshredder Sliver" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }, { "name": "Sinew Sliver", "idx": 5, "is_land": false }, { "name": "Sliver Hive", "idx": 3, "is_land": true }, { "name": "Striking Sliver", "idx": 4, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 11, "name": "Cloudshredder Sliver", "cost": "{W}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sinew Sliver", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sliver Hive; cast: Muscle Sliver (vial), Cloudshredder Sliver", "land": "Sliver Hive", "casts": ["Muscle Sliver", "Cloudshredder Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Cloudshredder Sliver" }] },
+    { "index": 1, "summary": "land=Sliver Hive; cast: Sinew Sliver (vial), Cloudshredder Sliver", "land": "Sliver Hive", "casts": ["Sinew Sliver", "Cloudshredder Sliver"], "actions": [{ "card": "Sinew Sliver" }, { "card": "Cloudshredder Sliver" }] },
+    { "index": 2, "summary": "land=Sliver Hive; cast: Muscle Sliver, Cloudshredder Sliver (vial)", "land": "Sliver Hive", "casts": ["Muscle Sliver", "Cloudshredder Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Cloudshredder Sliver" }] },
+    { "index": 3, "summary": "land=Sliver Hive; cast: Sinew Sliver, Cloudshredder Sliver (vial)", "land": "Sliver Hive", "casts": ["Sinew Sliver", "Cloudshredder Sliver"], "actions": [{ "card": "Sinew Sliver" }, { "card": "Cloudshredder Sliver" }] },
+    { "index": 4, "summary": "land=none; cast: Muscle Sliver (vial), Cloudshredder Sliver", "land": null, "casts": ["Muscle Sliver", "Cloudshredder Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Cloudshredder Sliver" }] },
+    { "index": 5, "summary": "land=none; cast: Sinew Sliver (vial), Cloudshredder Sliver", "land": null, "casts": ["Sinew Sliver", "Cloudshredder Sliver"], "actions": [{ "card": "Sinew Sliver" }, { "card": "Cloudshredder Sliver" }] },
+    { "index": 6, "summary": "land=none; cast: Muscle Sliver, Cloudshredder Sliver (vial)", "land": null, "casts": ["Muscle Sliver", "Cloudshredder Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Cloudshredder Sliver" }] },
+    { "index": 7, "summary": "land=none; cast: Sinew Sliver, Cloudshredder Sliver (vial)", "land": null, "casts": ["Sinew Sliver", "Cloudshredder Sliver"], "actions": [{ "card": "Sinew Sliver" }, { "card": "Cloudshredder Sliver" }] },
+    { "index": 8, "summary": "land=Sliver Hive; cast: Muscle Sliver (vial), Sinew Sliver", "land": "Sliver Hive", "casts": ["Muscle Sliver", "Sinew Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Sinew Sliver" }] },
+    { "index": 9, "summary": "land=Sliver Hive; cast: Muscle Sliver, Sinew Sliver (vial)", "land": "Sliver Hive", "casts": ["Muscle Sliver", "Sinew Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Sinew Sliver" }] },
+    { "index": 10, "summary": "land=none; cast: Muscle Sliver (vial), Sinew Sliver", "land": null, "casts": ["Muscle Sliver", "Sinew Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Sinew Sliver" }] },
+    { "index": 11, "summary": "land=none; cast: Muscle Sliver, Sinew Sliver (vial)", "land": null, "casts": ["Muscle Sliver", "Sinew Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Sinew Sliver" }] },
+    { "index": 12, "summary": "land=Sliver Hive; cast: Cloudshredder Sliver", "land": "Sliver Hive", "casts": ["Cloudshredder Sliver"], "actions": [{ "card": "Cloudshredder Sliver" }] },
+    { "index": 13, "summary": "land=Sliver Hive; cast: Cloudshredder Sliver (vial)", "land": "Sliver Hive", "casts": ["Cloudshredder Sliver"], "actions": [{ "card": "Cloudshredder Sliver" }] },
+    { "index": 14, "summary": "land=none; cast: Cloudshredder Sliver", "land": null, "casts": ["Cloudshredder Sliver"], "actions": [{ "card": "Cloudshredder Sliver" }] },
+    { "index": 15, "summary": "land=none; cast: Cloudshredder Sliver (vial)", "land": null, "casts": ["Cloudshredder Sliver"], "actions": [{ "card": "Cloudshredder Sliver" }] },
+    { "index": 16, "summary": "land=Sliver Hive; cast: Muscle Sliver", "land": "Sliver Hive", "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 17, "summary": "land=Sliver Hive; cast: Muscle Sliver (vial)", "land": "Sliver Hive", "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 18, "summary": "land=Sliver Hive; cast: Sinew Sliver", "land": "Sliver Hive", "casts": ["Sinew Sliver"], "actions": [{ "card": "Sinew Sliver" }] },
+    { "index": 19, "summary": "land=Sliver Hive; cast: Sinew Sliver (vial)", "land": "Sliver Hive", "casts": ["Sinew Sliver"], "actions": [{ "card": "Sinew Sliver" }] },
+    { "index": 20, "summary": "land=none; cast: Muscle Sliver", "land": null, "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 21, "summary": "land=none; cast: Muscle Sliver (vial)", "land": null, "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 22, "summary": "land=none; cast: Sinew Sliver", "land": null, "casts": ["Sinew Sliver"], "actions": [{ "card": "Sinew Sliver" }] },
+    { "index": 23, "summary": "land=none; cast: Sinew Sliver (vial)", "land": null, "casts": ["Sinew Sliver"], "actions": [{ "card": "Sinew Sliver" }] },
+    { "index": 24, "summary": "land=Sliver Hive; cast: (nothing)", "land": "Sliver Hive", "casts": [], "actions": [] },
+    { "index": 25, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Striking Sliver (3), Sinew Sliver (3), Cloudshredder Sliver (3), Sinew Sliver (3) — 12 to opponent (20→8)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Cloudshredder Sliver", "idx": 6, "tapped": true, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "tapped": true, "is_land": true }, { "name": "Sinew Sliver", "idx": 5, "tapped": true, "is_land": false }, { "name": "Sinew Sliver", "idx": 7, "tapped": true, "is_land": false }, { "name": "Sliver Hive", "idx": 3, "tapped": true, "is_land": true }, { "name": "Striking Sliver", "idx": 4, "tapped": true, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 30, "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sliver Hive; cast: (nothing)", "land": "Sliver Hive", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 2,
+  "perm_index": 2,
+  "heuristic_default": 0,
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Cloudshredder Sliver", "idx": 6, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }, { "name": "Sinew Sliver", "idx": 5, "is_land": false }, { "name": "Sinew Sliver", "idx": 7, "is_land": false }, { "name": "Sliver Hive", "idx": 3, "is_land": true }, { "name": "Striking Sliver", "idx": 4, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 30, "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Leeching Sliver" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Cloudshredder Sliver", "idx": 6, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "is_land": true }, { "name": "Sinew Sliver", "idx": 5, "is_land": false }, { "name": "Sinew Sliver", "idx": 7, "is_land": false }, { "name": "Sliver Hive", "idx": 3, "is_land": true }, { "name": "Striking Sliver", "idx": 4, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 27, "name": "Leeching Sliver", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Muscle Sliver", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Sliver Hive", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sliver Hive; cast: Muscle Sliver (vial), Leeching Sliver", "land": "Sliver Hive", "casts": ["Muscle Sliver", "Leeching Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Leeching Sliver" }] },
+    { "index": 1, "summary": "land=Sliver Hive; cast: Muscle Sliver, Leeching Sliver (vial)", "land": "Sliver Hive", "casts": ["Muscle Sliver", "Leeching Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Leeching Sliver" }] },
+    { "index": 2, "summary": "land=none; cast: Muscle Sliver (vial), Leeching Sliver", "land": null, "casts": ["Muscle Sliver", "Leeching Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Leeching Sliver" }] },
+    { "index": 3, "summary": "land=none; cast: Muscle Sliver, Leeching Sliver (vial)", "land": null, "casts": ["Muscle Sliver", "Leeching Sliver"], "actions": [{ "card": "Muscle Sliver" }, { "card": "Leeching Sliver" }] },
+    { "index": 4, "summary": "land=Sliver Hive; cast: Muscle Sliver", "land": "Sliver Hive", "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 5, "summary": "land=Sliver Hive; cast: Muscle Sliver (vial)", "land": "Sliver Hive", "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 6, "summary": "land=Sliver Hive; cast: Leeching Sliver", "land": "Sliver Hive", "casts": ["Leeching Sliver"], "actions": [{ "card": "Leeching Sliver" }] },
+    { "index": 7, "summary": "land=Sliver Hive; cast: Leeching Sliver (vial)", "land": "Sliver Hive", "casts": ["Leeching Sliver"], "actions": [{ "card": "Leeching Sliver" }] },
+    { "index": 8, "summary": "land=none; cast: Muscle Sliver", "land": null, "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 9, "summary": "land=none; cast: Muscle Sliver (vial)", "land": null, "casts": ["Muscle Sliver"], "actions": [{ "card": "Muscle Sliver" }] },
+    { "index": 10, "summary": "land=none; cast: Leeching Sliver", "land": null, "casts": ["Leeching Sliver"], "actions": [{ "card": "Leeching Sliver" }] },
+    { "index": 11, "summary": "land=none; cast: Leeching Sliver (vial)", "land": null, "casts": ["Leeching Sliver"], "actions": [{ "card": "Leeching Sliver" }] },
+    { "index": 12, "summary": "land=Sliver Hive; cast: (nothing)", "land": "Sliver Hive", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
