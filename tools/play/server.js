@@ -28,6 +28,10 @@ const DECKS_DIR = path.join(ROOT, 'decks');
 const CARDS_JSON = path.join(ROOT, 'src', 'cards', 'data', 'cards.json');
 const BIN = process.env.MTG_BIN || path.join(ROOT, 'build', 'Release', 'mtg');
 const PORT = parseInt(process.env.PORT || '8080', 10);
+// Bind host: defaults to loopback (single-user local tool), but PLAY_HOST=0.0.0.0 lets a
+// devcontainer/WSL forward the port to the host browser (a 127.0.0.1 bind inside a container
+// often can't be auto-forwarded).
+const HOST = process.env.PLAY_HOST || '127.0.0.1';
 const STEP_TIMEOUT_MS = 120000;   // generous: late-turn replays + opponent AI
 const HINT_DEPTH = parseInt(process.env.HINT_DEPTH || '5', 10);   // deep-search depth for async AI hints
 
@@ -316,8 +320,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`MagicDeckTester play GUI: http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`MagicDeckTester play GUI: http://localhost:${PORT}  (bound ${HOST}:${PORT})`);
   console.log(`  binary: ${BIN} ${fs.existsSync(BIN) ? '(found)' : '(MISSING — build Release first)'}`);
   console.log(`  decks:  ${DECKS_DIR}`);
 });
