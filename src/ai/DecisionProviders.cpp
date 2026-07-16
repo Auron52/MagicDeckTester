@@ -951,6 +951,58 @@ bool THStrictFlood()
 // the Throes only when it foresees the Land's-Edge hit). The current conservative gate is correct;
 // see docs/design/th-keep-model-overmulligans-th-hands.md for the measurements.
 
+// Treasure Hunt keep-floor (heuristic-optimization skill; A/B behind MTG_TH_KEEPFLOOR, default OFF ->
+// byte-identical). The exhaustive keep table trains each bucket-comp at only R=41 rollouts; on hands
+// that sit right at the keep/mull threshold that is enough noise to land on MULLIGAN. The floor
+// force-keeps exactly the ONE over-mull that survives the honest test: a CASTABLE Treasure Hunt hand
+// ({1}{U} -> >=2 lands incl. a blue source) that ALSO holds a Reliquary Tower. Measured against the
+// realistic baseline -- NC blind play, keep vs the table's own RECURSIVE mulligan, on exactly the
+// hands the table mulls -- TH+Reliquary Tower is -0.737 avg (t=-4.17, n=137): a strong, significant
+// keep the table wrongly mulls. RT's "no maximum hand size" is a PASSIVE payoff (stops the
+// flood-discards) that pays off under blind play. Saprazzan Skerry was DROPPED: same test gives it
+// +0.232 (t=+1.40, mildly keep-worse), and the table already keeps every Skerry+2TH hand, so a
+// Skerry clause would only ever touch Skerry+1TH -- where the table's re-mull is ~correct. (The user,
+// an expert blind player, still suspects Skerry+TH is a keep; the data doesn't clear the bar vs the
+// table's smart mull, so we take the safe RT-only bet -- see the design doc's "revisit Skerry"
+// tooling note.) Only the initial 7 (mulligan_count 0); everything else falls through to the table.
+// See docs/design/th-keep-model-overmulligans-th-hands.md.
+KeepGuard TreasureHuntProvider::KeepFloor(const std::vector<Card>& hand, int mulligan_count,
+                                          bool /*on_the_play*/) const
+{
+    static const bool on = []{ const char* e = std::getenv("MTG_TH_KEEPFLOOR");
+                               return !(e && std::string(e) == "0"); }();   // default ON; =0 -> legacy (off)
+    if (!on || mulligan_count != 0) { return KeepGuard::Undecided; }
+
+    int th = 0, lands = 0, blue_sources = 0;
+    bool has_rt = false;
+    for (const Card& c : hand)
+    {
+        if (c.m_name == "Treasure Hunt")   { ++th; continue; }
+        if (c.m_name == "Reliquary Tower") { has_rt = true; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        const bool is_land = def ? def->card.IsLand() : c.IsLand();
+        if (!is_land) { continue; }
+        ++lands;
+        if (def) { for (Color col : def->params.produces) { if (col == Color::Blue) { ++blue_sources; break; } } }
+    }
+    // Require RELIQUARY TOWER specifically -- not Skerry, not bare >=2 TH. Measured against the REALISTIC
+    // baseline (NC blind play, keep vs the table's own RECURSIVE mulligan -- the thing this floor actually
+    // replaces), on exactly the hands the table mulls:
+    //   * TH+Reliquary Tower  n=137  delta -0.737 (t=-4.17)  -- strong, significant keep. The genuine
+    //     over-mull: RT's "no maximum hand size" stops the flood-discards, a PASSIVE payoff that pays off
+    //     blind. Adopt.
+    //   * TH+Saprazzan Skerry n=168  delta +0.232 (t=+1.40)  -- mildly keep-WORSE. And the table already
+    //     KEEPS every Skerry+2TH hand (0 mulled in a 12k-game scan), so a Skerry clause would only ever
+    //     change Skerry+1TH hands, where the table's re-mull is ~correct. So Skerry is dropped: the
+    //     "Skerry+TH is a good keep" intuition is true, but the table agrees and keeps them already.
+    // (Earlier composition tests showed Skerry/2TH strongly "keep" only vs a WEAK mull-once-to-a-random-6
+    // baseline; that answered the wrong question -- keep vs random-6, not keep vs the table's smart mull.)
+    // blue_sources>=1 keeps out uncastable (colour-screwed) hands. Only the initial 7 (mulligan_count 0).
+    const bool castable_th = (th >= 1 && lands >= 2 && blue_sources >= 1);
+    if (castable_th && has_rt) { return KeepGuard::ForceKeep; }
+    return KeepGuard::Undecided;
+}
+
 bool TreasureHuntProvider::DiscardLandsFirst(const GameState& s) const
 {
     // Land's Edge land outlet (discard_land_damage) in hand or in play -> lands are

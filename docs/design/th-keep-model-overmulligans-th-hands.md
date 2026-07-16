@@ -1,5 +1,42 @@
 # TH keep model over-mulligans Reliquary-Tower + TH hands (INVESTIGATED 2026-07-15)
 
+## 2026-07-16 (session 4) — RESOLVED + ADOPTED: RT-only keep-floor (`MTG_TH_KEEPFLOOR`, default ON)
+
+The over-mull is fixed by a **keep-floor**: a `DecisionProvider::KeepFloor` hook (new Hook 26; base returns
+`Undecided` → every non-TH deck byte-identical) that `AIEngine::HandleMulligan` consults before the exhaustive
+keep table. `TreasureHuntProvider::KeepFloor` **force-keeps a castable Treasure Hunt hand ({1}{U} → ≥2 lands
+incl. a blue source) that also holds a Reliquary Tower**, at the initial 7 only. Behind `MTG_TH_KEEPFLOOR`
+(default **ON**; `=0` → legacy). Adopted; TH GT (smoke/regression/overnight) rebaselined.
+
+**Scope = RT-only, decided by data.** Measured keep vs the table's own RECURSIVE mulligan (the thing the floor
+replaces), under NON-CLAIRVOYANT blind play (the real-opponent proxy), on exactly the hands the table mulls:
+
+| composition (table-mulled) | n | delta avg9 (neg = keep better) | verdict |
+|---|---|---|---|
+| **TH + Reliquary Tower** | 137 | **−0.737 (t=−4.17)** | strong, significant keep — the genuine over-mull. **ADOPT.** |
+| TH + Saprazzan Skerry | 168 | +0.232 (t=+1.40) | mildly keep-*worse*, not significant. **DROPPED.** |
+| TH + Skerry, ≥2 TH | 0 | — | table **never mulls** these (already keeps them) → a Skerry clause would only ever touch Skerry+1TH |
+| 1-TH-plain (control) | 1096 | +0.276 (t=+4.55) | correctly keep-worse (harness discriminates) |
+
+Why RT and not Skerry: RT's payoff ("no maximum hand size" → stops the flood-discards) is **passive and
+blind-robust** — it doesn't need clairvoyant draw-knowledge or a particular matchup, which is what a *hard*
+force-keep (no search deviation) requires. Skerry's clause only ever changed Skerry+1TH hands (the table
+already keeps every Skerry+2TH), and those are ~correct to mull. Earlier "Skerry/2TH strongly keep" numbers
+(−0.8…−1.2) were measured vs a WEAK `--force-mulligan "1:"` baseline (mull once to a random 6), which answered
+the wrong question (keep vs random-6, not keep vs the table's smart recursive mull).
+
+All three metrics agree keep-better with **0 searched win→loss**: NC −0.737; goldfish regression neutral-to-+
+(3/5 cases better); goldfish overnight held-out clearly + (searched earlier 52 vs later 24, mean ≈ −0.006).
+Every rebaselined game is a TH+RT seven the table used to mull (structural: the floor's only behavior).
+
+**USER RESERVATION (revisit Skerry):** the user (expert blind player) still suspects TH+Skerry is a keep; the
+data doesn't clear the hard-override bar vs the table's smart mull, so we took the safe RT-only bet. Not
+refuted — to revisit cleanly, build an **exact-hand recursive-mull eval**: construct a named hand, NC-rollout
+`V_keep(hand)` vs `V_mull(deck, recursive)` directly (the current force-keep-`0:`-vs-force-mull-`1:` harness
+uses a pessimistic single-mull baseline that inflates keep deltas). Full state: memory
+`th-keepfloor-inflight-2026-07-16`.
+
+
 ## 2026-07-15 (session 2) CORRECTION — the "over-mull" is a NEAR-TIE, not a confirmed loss
 
 A game-level keep-vs-mull A/B on the EXACT mulled hands (force-keep at mull 0 vs let the table mull,

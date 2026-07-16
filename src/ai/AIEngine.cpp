@@ -289,10 +289,24 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     {
         // Forced-mulligan replay (see SetForcedMulligan): keep at EXACTLY the recorded depth,
         // ignoring the keep heuristic, so the reconstructed hand is engine-version-independent.
-        bool keep = m_forced_mull_active
-                  ? (mulligan_count >= m_forced_mull_count)
-                  : (static_cast<int>(ap.hand.size()) <= m_profile.stop_at
-                     || KeepHand(ap.hand, mulligan_count, state.on_the_play));
+        // Otherwise the play path first consults the archetype keep-floor (DecisionProvider::KeepFloor,
+        // e.g. the TH payoff-hand force-keep behind MTG_TH_KEEPFLOOR): a ForceKeep/ForceMulligan there
+        // overrides the exhaustive table, Undecided (the default for every deck) falls through to the
+        // stop_at floor + table unchanged, so this is byte-identical wherever no provider opts in.
+        bool keep;
+        if (m_forced_mull_active)
+        {
+            keep = (mulligan_count >= m_forced_mull_count);
+        }
+        else
+        {
+            const KeepGuard floor =
+                ResolveProvider(state).KeepFloor(ap.hand, mulligan_count, state.on_the_play);
+            keep = (floor == KeepGuard::ForceKeep)     ? true
+                 : (floor == KeepGuard::ForceMulligan) ? false
+                 : (static_cast<int>(ap.hand.size()) <= m_profile.stop_at
+                    || KeepHand(ap.hand, mulligan_count, state.on_the_play));
+        }
 
         // External controller (claude-play / human-play) may keep/mulligan differently. It sees the
         // engine's own decision (`keep`) as the AI hint and returns its own keep/mulligan. Never

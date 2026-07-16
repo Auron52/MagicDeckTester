@@ -147,6 +147,7 @@ public:
     bool        HasExtraLethalModel() const override;
     int         ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
     bool        ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
+    KeepGuard   KeepFloor(const std::vector<Card>&, int, bool) const override;
 };
 
 // Aether Vial decks (Slivers, Knights): the hand-aware vial charge policy.

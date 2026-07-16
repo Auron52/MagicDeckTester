@@ -25,6 +25,7 @@
 #include "../core/GameState.h"
 #include "../core/ManaPool.h"
 #include "../cards/CardDatabase.h"
+#include "KeepModel.h"   // KeepGuard (Undecided / ForceKeep / ForceMulligan) for the keep-floor hook
 #include <string>
 #include <vector>
 
@@ -302,4 +303,15 @@ public:
     // Default false. NOTE: the rules-level lifegain->loss reversal in OpponentGainsLife stays keyed on
     // RemedyActive -- that is a FACT about the board, not a decision, so it is not routed through here.
     virtual bool OpponentLifegainUseful(const GameState& /*s*/, int /*controller*/) const { return false; }
+
+    // Hook 26 -- keep-floor: an archetype override that can FORCE the mulligan keep decision for a
+    // hand the exhaustive keep table (or static rule) would otherwise misjudge. Consulted in the play
+    // path (AIEngine::HandleMulligan) BEFORE the table, so ForceKeep overrides a table mulligan and
+    // ForceMulligan overrides a table keep; Undecided (the default) falls through unchanged. This is a
+    // provider HEURISTIC (empirically-backed, not a rules fact) -- e.g. the Treasure Hunt archetype
+    // force-keeps a castable-TH hand that also holds a flood payoff. Base returns Undecided so every
+    // deck (and the analyzer's reference/static keep path, which never consults a provider) is
+    // byte-identical; only an overriding archetype changes any decision.
+    virtual KeepGuard KeepFloor(const std::vector<Card>& /*hand*/, int /*mulligan_count*/,
+                                bool /*on_the_play*/) const { return KeepGuard::Undecided; }
 };

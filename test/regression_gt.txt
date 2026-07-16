@@ -1,6 +1,5 @@
-# Regression ground truth -- commit 0fc6cc1  date 2026-07-16
+# Regression ground truth -- commit a4f2be7  date 2026-07-16
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-16): TH strict-flood gate (MTG_TH_STRICT_FLOOD default-on) rebaseline. 4 searched win->loss (gi376 4->loss + gi725 8->loss, each @d3&d5 seed 7007) are BOTH clairvoyance-signature spent-drop floods the gate correctly refuses: gi376 = legacy plays land+Treasure Hunt on T2/T3/T4 (triple spent-drop flood) winning T4 only by clairvoyantly chaining the Land's Edge kill; gi725 = legacy casts a spent-drop Throes on T7 (~80%-to-flood: T7 library had 1 Land's Edge vs 4 Treasure Hunt cascade targets), cascade reshuffle then diverges draws. Real-metric (d0 non-clairvoyant) IMPROVES on all 4 seeds (~-0.08 avg); clairvoyant d3/d5 +0.13 is fake known-draw speed. loss->win=2 offsets, later=1030/earlier=18 = clairvoyance slowdown. Escape hatch MTG_TH_STRICT_FLOOD=0 = byte-identical legacy.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -11,9 +10,9 @@ slivers_smoke_d5_s1001=4.1933/ddb0e63765f8fe35
 burn_smoke_d0_s1001=4.5830/0b956ec5daa4df47
 burn_smoke_d3_s1001=4.3533/bb9a8d183efd44ab
 burn_smoke_d5_s1001=4.3640/f36731530674ec0e
-th_smoke_d0_s1001=5.4890/b25d6dcb0b98a74e
-th_smoke_d3_s1001=4.2333/d91251b41a77dc0b
-th_smoke_d5_s1001=4.1600/c5aa5bda998aeef8
+th_smoke_d0_s1001=5.4780/7002fb9b8668e9f4
+th_smoke_d3_s1001=4.2333/627e6309bbf0db5e
+th_smoke_d5_s1001=4.1600/517986b1d2158201
 knights_smoke_d0_s1001=4.5440/64a5e5e0f971def6
 knights_smoke_d3_s1001=4.3960/4e9b5299124799f3
 knights_smoke_d5_s1001=4.4000/89c1dfe9c1053a05
@@ -35,11 +34,11 @@ burn_regression_d3_s2002=4.3520/4ace8fa294195ebe
 burn_regression_d3_s3003=4.2500/870436a32ab8e61e
 burn_regression_d5_s2002=4.3520/4ace8fa294195ebe
 burn_regression_d5_s3003=4.2500/7d036154803d6ec4
-th_regression_d0_s2002=5.5000/31378dc35fe36983
-th_regression_d3_s2002=4.2980/ce16928748b96e1d
-th_regression_d3_s3003=4.1380/59ef5e0ad0223242
-th_regression_d5_s2002=4.2567/1eff2fb38b3c5d34
-th_regression_d5_s3003=4.1467/a85a134c3e0c8eaf
+th_regression_d0_s2002=5.4830/11498d43d5590831
+th_regression_d3_s2002=4.3040/6252c526057cea12
+th_regression_d3_s3003=4.1300/8a3a158361251fe6
+th_regression_d5_s2002=4.2600/c8eadd0a717b7f93
+th_regression_d5_s3003=4.1400/51be3fec6d1d414d
 knights_regression_d0_s2002=4.5700/3a303a978c265350
 knights_regression_d3_s2002=4.3133/4c0ecd2ead2bbfd2
 knights_regression_d3_s3003=4.3667/7c2f32b76edec7f3
@@ -81,18 +80,18 @@ burn_overnight_d5_s4004=4.3490/382570568a0045cd
 burn_overnight_d5_s5005=4.3360/9352c155ef841bd3
 burn_overnight_d5_s6006=4.3520/a0b5bec6dbaa4bbc
 burn_overnight_d5_s7007=4.3760/57e9b85bbed256fc
-th_overnight_d0_s4004=5.4850/38902dc5de0e75db
-th_overnight_d0_s5005=5.4520/cd62207c005d46d1
-th_overnight_d0_s6006=5.4240/94565cd3a3021446
-th_overnight_d0_s7007=5.4390/5ea21461bfc2221b
-th_overnight_d3_s4004=4.2650/bde94969113283f5
-th_overnight_d3_s5005=4.2270/09b1fb2be3c12ad1
-th_overnight_d3_s6006=4.2170/f218a0b395fc16d8
-th_overnight_d3_s7007=4.2350/9d5036e4a9945a96
-th_overnight_d5_s4004=4.2660/3168c47c95e05583
-th_overnight_d5_s5005=4.2240/852f48ab88333c7c
-th_overnight_d5_s6006=4.2160/6a2caf08ce12eac1
-th_overnight_d5_s7007=4.2360/a17ae38962b50ea8
+th_overnight_d0_s4004=5.4705/197facc003721b38
+th_overnight_d0_s5005=5.4455/5faf5a4e7567ee0c
+th_overnight_d0_s6006=5.4245/a465ead01e9d7381
+th_overnight_d0_s7007=5.4410/b6fb18dc4df609f4
+th_overnight_d3_s4004=4.2540/80c661690ee9d9b1
+th_overnight_d3_s5005=4.2170/afcedf716f783e63
+th_overnight_d3_s6006=4.2180/480362c97fa0b842
+th_overnight_d3_s7007=4.2300/2cf98fbae58fb9ff
+th_overnight_d5_s4004=4.2550/b89b76dc4f25abe6
+th_overnight_d5_s5005=4.2140/c476df99629607b6
+th_overnight_d5_s6006=4.2170/15f27877760fcbe7
+th_overnight_d5_s7007=4.2310/fa234538cc8d2e6d
 knights_overnight_d0_s4004=4.5505/5e62b0a58a498232
 knights_overnight_d0_s5005=4.5675/e0969656ad74960d
 knights_overnight_d0_s6006=4.5560/8407507ca942245b
