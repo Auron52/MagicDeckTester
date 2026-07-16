@@ -56,7 +56,7 @@ Bridges the pure value leaf (K=0) and the full rollout (K=∞). Only caps when a
   ones. Validate on YOUR deck with `MTG_ROLLOUT_STATS` + a multi-seed LP check before adopting.
 - Adopt per-deck (archetype provider / a profile knob), not the root, once validated.
 
-### 2. Confidence-gated escalation — deck-dependent, needs a model, quality risk
+### 2. Confidence-gated escalation — deck-dependent, needs a model, quality risk — SERVED + adopted for Hinata GEN
 Skip escalations predicted to be *no-ops* (the heuristic re-search won't change the pick). Dataset via
 `MTG_ESCALATION_DUMP=<path>` (one row per escalation: taken, wt_changed, turn, committed, gap, est_wt,
 +46 midgame features); analyze with `scripts/esc_analyze.py` (logistic + rank-AUC + precision-at-skip).
@@ -64,6 +64,22 @@ Skip escalations predicted to be *no-ops* (the heuristic re-search won't change 
 - **burn: dead** (AUC 0.49 = chance; its no-op escalations are irreducibly unpredictable).
 - So a per-deck lever, not universal; and it *skips* escalations (quality risk) rather than cheapening
   them. Not a fit for budget starvation where you still want the escalation's answer.
+
+**Served gate (shipped, byte-identical off):** `MTG_ESCALATION_GATE=<json>` loads a trained logistic
+({mean,std,w}); `MTG_ESCALATION_GATE_T=<t>` is the skip threshold (`FullSearchLineHybrid` computes the
+pre-escalation feature row and `return line`s when `P(no-op) > t`). Train with `scripts/esc_train_gate.py`.
+Unset ⇒ off ⇒ byte-identical.
+
+**Adopted for Hinata mulligan GENERATION (env-only accelerator; shipped play stays gate-off).** Because
+`ExhaustiveKeep` rolls out at d5/budget20, the gate fires during generation, so its wall saving transfers
+to the multi-week job. Threshold **T=0.70** (−18% wall on the gen config): decision-safe because combo/fast
+hands are *verified* (never escalate) so the gate structurally can't touch their keep/bottom rankings —
+all degradation lands in slow/grindy games (~+0.02t agg). T=0.50 (−28%) is near-pure value-leaf (skip
+96.8% = escalation effectively off); T=0.90 is the lossless floor (−6.6%). Frozen config
+`decks/Hinata2/Hinata2.escgate.json`. **Full decision, data tables, and the regeneration runbook (freeze →
+determinism handshake → discard gate-off work → confounded A/B backstop): `hinata-gate-generation.md`.**
+CAVEAT: the gate is env-only, NOT in `MTG_COMMIT` — the determinism handshake is the only cross-machine
+mismatch catch.
 
 ### 3. Warm-start B&B cutoff — DEAD (measured), reverted
 Seed the escalation's B&B with the value-leaf's committed win turn as an initial cutoff. Measured
