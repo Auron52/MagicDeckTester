@@ -2304,14 +2304,18 @@ int main(int argc, char* argv[])
             // buffered until the whole batch ends.
             auto on_job_done = [&](const BatchJobResult& r)
             {
-                double pct = r.games_played > 0
-                             ? 100.0 * r.games_won / r.games_played : 0.0;
+                // Goldfish metric = avg (mean turn-to-win; an unwon game is scored max_turns+1).
+                // Win/loss is NOT reported: a goldfishing loss is an arbitrary "no lethal by
+                // max_turns" threshold, and reporting it makes readers treat it as the priority
+                // metric. avg (to 4 dp) + the play digest are the case fingerprint. (games_won lives
+                // in the result for a future 1v1 mode.) See ComputeAvgTurns / docs metric-avg-loss-as-9.
                 char dbuf[17];
                 std::snprintf(dbuf, sizeof(dbuf), "%016llx",
                               static_cast<unsigned long long>(r.case_digest));
+                char avgbuf[32];
+                std::snprintf(avgbuf, sizeof(avgbuf), "%.4f", r.avg_turns);
                 std::cout << r.name << ": played=" << r.games_played
-                          << " won=" << r.games_won << " (" << pct << "%)"
-                          << " avg=" << r.average_win_turn
+                          << " avg=" << avgbuf
                           << " digest=" << dbuf << "\n" << std::flush;
                 if (!game_log_dir.empty())
                 {
@@ -2605,23 +2609,23 @@ int main(int argc, char* argv[])
                                        base_game_index, lookahead_depth, timeout_ms, num_threads,
                                        fm_count, std::move(fm_bottom));
 
-        std::cout << "Seed         : " << result.seed << "\n";
-        std::cout << "Games played : " << result.games_played << "\n";
-        std::cout << "Games won    : " << result.games_won
-                  << " (" << (100.0 * result.games_won / result.games_played) << "%)\n";
-        if (result.games_won > 0)
-        {
-            std::cout << "Avg win turn : " << result.average_win_turn << "\n";
-        }
-        else
-        {
-            std::cout << "No wins recorded.\n";
-        }
+        // Goldfish metric = avg (mean turn-to-win; an unwon game is scored max_turns+1). Win/loss is
+        // not reported here: a goldfishing loss is an arbitrary "no lethal by max_turns" threshold,
+        // and reporting it makes readers treat it as the priority metric. Lower avg is better.
+        // Win/loss reporting belongs to a future 1v1 mode, where it is a real outcome. See ComputeAvgTurns.
+        char avgline[32];
+        std::snprintf(avgline, sizeof(avgline), "%.4f", result.avg_turns);
+        std::cout << "Seed          : " << result.seed << "\n";
+        std::cout << "Games played  : " << result.games_played << "\n";
+        std::cout << "avg (turns)   : " << avgline
+                  << "    [mean turn-to-win, unwon = max_turns+1; lower is better]\n";
 
-        int losses = result.games_played - result.games_won;
-        if (losses > 0)
+        // Unwon games (no lethal by max_turns) listed as a REPRO aid -- game index + seed to replay
+        // and inspect the slow line -- not as a win/loss metric (which goldfishing does not report).
+        int unwon = result.games_played - result.games_won;
+        if (unwon > 0)
         {
-            std::cout << "Losses (" << losses << "):\n";
+            std::cout << "Unwon games (repro: --seed <s> --game-index <i> --games 1):\n";
             for (int i = 0; i < static_cast<int>(result.win_turns.size()); ++i)
             {
                 if (result.win_turns[i] <= 0)

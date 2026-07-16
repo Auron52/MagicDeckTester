@@ -11,11 +11,26 @@
 struct RunResult
 {
     uint64_t seed          = 0;     // base seed used; pass to --seed to reproduce this run
-    double average_win_turn = 0.0;
+    double average_win_turn = 0.0;  // mean over WINS only (internal / future 1v1)
+    double avg_turns        = 0.0;  // THE goldfish metric: mean turn-to-win, unwon = max_turns+1
     int    games_won        = 0;
     int    games_played     = 0;
     std::vector<int> win_turns;  // per-game result; -1 = did not win within max_turns
 };
+
+// avg (turns): the goldfish success metric -- mean turn-to-win, where an unwon game (no lethal by
+// max_turns) is scored as max_turns+1. Win/loss is never reported on its own: a goldfishing loss is
+// an ARBITRARY horizon threshold, and reporting it makes readers treat it as the priority metric.
+// Folding unwon games in at the horizon (max_turns+1) keeps it on the turn scale. Lower is better.
+// This matches the long-standing convention (PlayOutWinTurn returns max_turns+1 for an unwon game).
+inline double ComputeAvgTurns(const std::vector<int>& win_turns, int max_turns)
+{
+    if (win_turns.empty()) { return 0.0; }
+    const double loss_turns = static_cast<double>(max_turns + 1);
+    double sum = 0.0;
+    for (int wt : win_turns) { sum += (wt > 0) ? static_cast<double>(wt) : loss_turns; }
+    return sum / static_cast<double>(win_turns.size());
+}
 
 class GoldFishRunner
 {

@@ -324,6 +324,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     {
         result.average_win_turn = static_cast<double>(sum) / result.games_won;
     }
+    result.avg_turns = ComputeAvgTurns(result.win_turns, max_turns);
 
     if (logging)
     {

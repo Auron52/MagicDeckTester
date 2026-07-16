@@ -223,6 +223,7 @@ public:
     // every non-marginal TH turn) develops the drop byte-identically. The engine keeps the land-play
     // MECHANISM and the open-drop precondition; only this hold decision is provider-owned.
     virtual bool HoldDeferredDropForLethal(const GameState& s, int controller) const { return false; }
+
     // Hook 22 -- NON-CLAIRVOYANT search tempo bonus (avg win-turns) for MAKING a land drop this turn.
     // The reshuffle-averaged NC search (TurnSolver::ReshuffleAvgChoosePlan) is mana-OPTIMISTIC: it
     // shuffles the true library away, so its mean future has normal land density and it undervalues a

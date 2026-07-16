@@ -5275,7 +5275,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         }
         add_for_land(ln, "");   // ordinary land, or fetchland with <=1 candidate (heuristic)
     }
-    add_for_land("", "");   // defer: play no land this turn
+    // Defer: play no land pre-main. On a flood-engine turn the strict gate (ShouldCastDrawEngine,
+    // MTG_TH_STRICT_FLOOD) suppresses "play land THEN cast Treasure Hunt/Throes" in the per-land
+    // plans above, so the ONLY way to cast the flood engine with no outlet is via this defer plan
+    // (drop still open) -- the search then decides, at the post-draw breakpoint, whether to play the
+    // drawn Reliquary as the drop, play a hand land, cast Land's Edge for the win, or nothing. That
+    // is the whole of "don't play a land before TH/Throes"; nothing here dictates the after-play.
+    add_for_land("", "");
 
     // Land's Edge activation as a PICKABLE plan action (human play only) -- see the helper. Applied
     // here for the land-drop-available path; the !drop_available early-return applies it too.

@@ -919,6 +919,38 @@ int TreasureHuntProvider::LandsEdgeFireCount(const GameState& s, int rate) const
     return ::LandsEdgeHeuristicFireCount(s, rate);
 }
 
+// Strict flood-engine sequencing for the Treasure Hunt archetype (ADOPTED 2026-07-16, default ON;
+// MTG_TH_STRICT_FLOOD=0 restores the legacy spent-drop clause as a byte-identical A/B escape hatch).
+// The ShouldCastDrawEngine gate drops the spent-drop "dig anyway" clause (condition (3) becomes a
+// still-OPEN land drop only). That single change realises the user's force-defer design rule: "don't
+// play a land BEFORE Treasure Hunt/Throes" -- because the flood-engine gate is consulted inside the
+// per-land enumeration (EnumeratePlansWithLand -> EnumeratePlans), so once a land is played the drop
+// is spent and the gate refuses the flood engine; the ONLY way to cast it with no outlet is via the
+// defer plan (drop still open). What happens AFTER (play the drawn Reliquary, play a hand land, cast
+// Land's Edge for the win, or nothing) is left to the search's post-draw breakpoint re-solve -- the
+// gate says nothing about the after-play. Only the TreasureHuntProvider gates the flood engine
+// (GenericProvider returns true), so this is TH-archetype-only; other decks are byte-identical.
+//
+// Adoption evidence (avg = mean turn-to-win, unwon = max_turns+1): non-clairvoyant play is BETTER --
+// d0 greedy -0.123, reshuffle-avg NC search -0.034. Clairvoyant search is +0.11..+0.125 WORSE, but
+// that is FAKE known-draw speed: all 1012 clairvoyantly-slower games across 4 seeds carry the
+// clairvoyance signature (legacy spends the drop, casts the flood, discards the overflow it only
+// tolerates because it foresees the kill; the gate defers and keeps the enabler) -- 0 real regressions.
+bool THStrictFlood()
+{
+    static const bool on = []{ const char* e = std::getenv("MTG_TH_STRICT_FLOOD");
+                               return !(e && std::string(e) == "0"); }();   // default ON; =0 -> legacy
+    return on;
+}
+
+// NOTE (2026-07-16): a "favorable-Throes" refinement was proposed and A/B-tested here -- allow a
+// spent-drop Throes when the library makes the cascade likely to hit Land's Edge rather than a
+// Treasure Hunt (variants: 0 TH left / #LE>=#TH / any LE). It was REJECTED: all variants improved
+// CLAIRVOYANT avg but were NC-NEUTRAL (8-seed NC ge vs off = +0.006, ge better on only 2/8; the
+// 4-seed -0.017 was noise) -- i.e. the clairvoyant gain was a clairvoyance artifact (the search casts
+// the Throes only when it foresees the Land's-Edge hit). The current conservative gate is correct;
+// see docs/design/th-keep-model-overmulligans-th-hands.md for the measurements.
+
 bool TreasureHuntProvider::DiscardLandsFirst(const GameState& s) const
 {
     // Land's Edge land outlet (discard_land_damage) in hand or in play -> lands are
@@ -987,17 +1019,27 @@ bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controll
         if (d->params.discard_land_damage > 0) { return true; }                 // (1) LE in play
         if (d->params.no_max_hand_size && d->card.IsLand()) { return true; }    // never floods
     }
-    // (3) a land drop THIS TURN -> either still open (defer it to play a drawn Reliquary Tower
-    //     / Land's-Edge enabler), OR already spent developing a real land this turn (in which
-    //     case digging alongside is still fine -- the drop was used productively).
-    //     IMPORTANT: the land-fold enumeration (add_for_land) plays the candidate land into the
-    //     trial state BEFORE this gate runs, so a "play a land AND cast Treasure Hunt" plan
-    //     shows lands_played_this_turn==1 here. Crediting a just-played land keeps that line
-    //     legal -- otherwise the gate deletes Treasure Hunt from every play-a-land branch and
-    //     forces deferring the land, which then gets discarded in the flood (gi=881). Whiffing
-    //     the drawn payoff and bricking is an acceptable real game.
-    if (ap.lands_played_this_turn > 0
-        || ap.lands_played_this_turn < ap.LandDropsAvailable()) { return true; }   // (3)
+    // (3) a land drop THIS TURN -> the drop is still OPEN, so a deferred Treasure Hunt can play a
+    //     drawn Reliquary Tower / Land's-Edge enabler as the drop and keep the flood. This is the
+    //     ONLY no-payoff justification: an open drop is the mechanism that prevents the cleanup
+    //     discard (design rule 2026-07-15). If Treasure Hunt draws no enabler the deferred drop
+    //     still develops the best normal land (ApplyPlanDirect, gi=881) -- a whiff-and-develop, not
+    //     a waste.
+    //
+    //     The land-fold enumeration (add_for_land) plays the candidate land into the trial state
+    //     BEFORE this gate runs, so a "play a land AND cast Treasure Hunt" plan shows
+    //     lands_played_this_turn==1 here. b4f2a3a credited that (`lands_played_this_turn > 0`) to
+    //     keep the play-a-land+dig branch legal -- but with the drop already SPENT and no enabler
+    //     out, a Reliquary/Land's-Edge the dig reveals CANNOT be played this turn, so the flood is
+    //     discarded to cleanup. That "dig anyway once the drop is spent" line only ever looks safe
+    //     under CLAIRVOYANT lookahead (it knows the flood is harmless); a real pilot would hold
+    //     Treasure Hunt. Strict flood (THStrictFlood, ADOPTED default ON) drops this spent-drop
+    //     clause: with the drop spent, this gate refuses the flood engine, so the ONLY way to cast it
+    //     with no outlet is the defer plan (drop still open). That IS the user's force-defer ("don't
+    //     play a land before TH/Throes") -- nothing else forces it, and the after-play stays a search
+    //     decision. MTG_TH_STRICT_FLOOD=0 restores the b4f2a3a spent-drop clause (byte-identical A/B).
+    const bool drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
+    if (drop_open || (!THStrictFlood() && ap.lands_played_this_turn > 0)) { return true; }   // (3)
 
     // (2) -- find a Land's Edge cost from any zone (it is usually still in the library, since
     // the engine is what draws it), then check the same-turn combo affordability.

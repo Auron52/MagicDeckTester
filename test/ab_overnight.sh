@@ -19,28 +19,26 @@ echo "[ab] CTL done $(date -u +%H:%M:%S); comparing"
 
 python3 - "$OUT/base.log" "$OUT/ctl.log" <<'PY'
 import re, sys
+# Metric = avg (mean turn-to-win, unwon = max_turns+1); lower is better. Win/loss is not reported --
+# avg already folds an unwon game in at the horizon, so it is the single comparable number per case.
 def parse(p):
     d={}
     for ln in open(p):
-        m=re.match(r'(\S+): played=(\d+) won=(\d+).*avg=([0-9.]+)', ln)
-        if m: d[m.group(1)]=(int(m.group(3)), float(m.group(4)))
+        m=re.match(r'(\S+): played=(\d+) avg=([0-9.]+)', ln)
+        if m: d[m.group(1)]=float(m.group(3))
     return d
 base, ctl = parse(sys.argv[1]), parse(sys.argv[2])
 worse=[]; better=0; same=0
-print(f"{'case':28} {'base won/avg':>16} {'ctl won/avg':>16}  verdict")
+print(f"{'case':28} {'base avg':>10} {'ctl avg':>10}  {'delta':>8}  verdict")
 for k in sorted(base):
     if k not in ctl: print(f"{k:28}  MISSING in ctl"); worse.append(k); continue
-    bw,ba=base[k]; cw,ca=ctl[k]
-    # CTL worse if fewer wins, or (equal wins and slower avg by > rounding)
-    if cw < bw or (cw==bw and ca > ba + 1e-6):
-        verdict="WORSE"; worse.append(k)
-    elif cw > bw or ca < ba - 1e-6:
-        verdict="better"; better+=1
-    else:
-        verdict="same"; same+=1
-    print(f"{k:28} {bw:6d}/{ba:<9.4f} {cw:6d}/{ca:<9.4f}  {verdict}")
-print(f"\nSUMMARY: {better} better, {same} same, {len(worse)} WORSE")
-print("PASS: commit-the-line >= baseline on every case" if not worse
-      else "FAIL: commit-the-line regressed on: " + ", ".join(worse))
+    ba=base[k]; ca=ctl[k]; d=ca-ba
+    if   d >  1e-6: verdict="WORSE"; worse.append(k)
+    elif d < -1e-6: verdict="better"; better+=1
+    else:           verdict="same"; same+=1
+    print(f"{k:28} {ba:10.4f} {ca:10.4f}  {d:+8.4f}  {verdict}")
+print(f"\nSUMMARY: {better} better, {same} same, {len(worse)} WORSE  (metric=avg, lower better)")
+print("PASS: commit-the-line <= baseline avg on every case" if not worse
+      else "FAIL: commit-the-line regressed (higher avg) on: " + ", ".join(worse))
 PY
 echo "[ab] DONE $(date -u +%H:%M:%S)"

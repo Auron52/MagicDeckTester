@@ -170,6 +170,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         long long sum = 0;
         for (int wt : win_turns[j]) { if (wt > 0) { ++r.games_won; sum += wt; } }
         if (r.games_won > 0) { r.average_win_turn = static_cast<double>(sum) / r.games_won; }
+        r.avg_turns = ComputeAvgTurns(win_turns[j], jobs[j].max_turns);
         // Case digest: FNV-1a fold of the per-game digests in game (gi) order -- a single
         // fingerprint of the whole case's play. Games in gi order (the vector index), so it is
         // deterministic and order-stable regardless of the pool's execution interleave.

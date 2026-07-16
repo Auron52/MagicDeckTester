@@ -12,7 +12,8 @@ struct BatchJobResult
     std::string name;
     int    games_played     = 0;
     int    games_won        = 0;
-    double average_win_turn = 0.0;
+    double average_win_turn = 0.0;   // mean over WINS only (internal / future 1v1)
+    double avg_turns        = 0.0;   // THE goldfish metric: mean turn-to-win, unwon = max_turns+1
     std::vector<int>      win_turns;   // per-game; <=0 = no win within max_turns
     std::vector<uint64_t> digests;     // per-game play digest (GameLogger::Digest), 0 if unavailable
     uint64_t              case_digest = 0;  // fold of per-game digests in game order (a case fingerprint)

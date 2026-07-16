@@ -25,7 +25,7 @@ declare -A PROF=( [burn]=decks/burn.profile.json [slivers]=decks/slivers_vial.pr
 SUM="$OUT/summary.txt"
 : > "$SUM"
 echo "d5 budget sweep | engine=commit-the-line (default) | games=$GAMES seed=$SEED | $(date -u +%H:%M:%S)" | tee -a "$SUM"
-printf "%-9s %-7s %-9s %-7s %-9s %-8s\n" deck budget wall_s won avg_turn vs_b200 | tee -a "$SUM"
+printf "%-9s %-7s %-9s %-9s %-8s\n" deck budget wall_s avg vs_b200 | tee -a "$SUM"
 
 for d in $DECKS; do
   base_t=""
@@ -35,11 +35,11 @@ for d in $DECKS; do
           --depth 5 --budget-ms "$b" --threads 0 --lookahead-bottoming 2>"$OUT/${d}_b${b}.err")
     E=$(date +%s)
     wall=$(( E - S ))
-    won=$(echo "$out" | grep -i "Games won" | grep -oE "[0-9]+" | head -1)
-    avg=$(echo "$out" | grep -i "Avg win" | grep -oE "[0-9.]+" | head -1)
+    # Metric = avg (mean turn-to-win, unwon = max_turns+1; lower is better). Win/loss not reported.
+    avg=$(echo "$out" | grep -i "avg (turns)" | grep -oE "[0-9.]+" | head -1)
     [ -z "$base_t" ] && base_t=$wall
     if [ "$base_t" -gt 0 ] 2>/dev/null; then mult=$(awk "BEGIN{printf \"%.1fx\", $wall/$base_t}"); else mult="-"; fi
-    printf "%-9s %-7s %-9s %-7s %-9s %-8s\n" "$d" "$b" "$wall" "$won" "$avg" "$mult" | tee -a "$SUM"
+    printf "%-9s %-7s %-9s %-9s %-8s\n" "$d" "$b" "$wall" "$avg" "$mult" | tee -a "$SUM"
   done
 done
 echo "DONE $(date -u +%H:%M:%S)" | tee -a "$SUM"

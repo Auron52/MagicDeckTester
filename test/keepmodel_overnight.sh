@@ -82,10 +82,11 @@ ab(){ # $1=profile  $2=tag
         > "$OUT/agg_${tag}_d${d}_s${s}.txt" 2> "$OUT/dump_${tag}_d${d}_s${s}.err"
       grep -oE 'gi=[0-9]+ wt=-?[0-9]+' "$OUT/dump_${tag}_d${d}_s${s}.err" \
         | sed -E 's/gi=([0-9]+) wt=(-?[0-9]+)/\1 \2/' | sort -n > "$OUT/wins_${tag}_d${d}_s${s}.wins"
-      local won avg
-      won=$(grep -oE 'Games won *: *[0-9]+' "$OUT/agg_${tag}_d${d}_s${s}.txt"|grep -oE '[0-9]+$')
-      avg=$(grep -oE 'Avg win turn *: *[0-9.]+' "$OUT/agg_${tag}_d${d}_s${s}.txt"|grep -oE '[0-9.]+$')
-      log "    d$d s$s: won=${won:-?} avg=${avg:-?}"
+      # Metric = avg (mean turn-to-win, unwon = max_turns+1; lower is better). Win/loss not reported;
+      # the per-game .wins dump above still drives the flip classification (a debug diagnostic).
+      local avg
+      avg=$(grep -oE 'avg \(turns\) *: *[0-9.]+' "$OUT/agg_${tag}_d${d}_s${s}.txt"|grep -oE '[0-9.]+$')
+      log "    d$d s$s: avg=${avg:-?}"
     done
   done
 }

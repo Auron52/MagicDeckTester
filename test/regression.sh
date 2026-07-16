@@ -13,8 +13,8 @@
 # so the suite pays one load-imbalance tail instead of one per case (results are
 # byte-identical to per-case runs -- see docs/design/batch-runner.md). We then:
 #   * write the manifest and full batch output to test/logs/<mode>/ (+ batch.err),
-#   * record each case's fingerprint "<games_won>/<avg_win_turn>" to
-#     test/results/<mode>.env,
+#   * record each case's fingerprint "<avg>[/<play_digest>]" to test/results/<mode>.env
+#     (avg = mean turn-to-win, an unwon game scored max_turns+1; win/loss is not reported),
 #   * compare that fingerprint to the committed ground truth in regression_gt.txt
 #     (keyed <deck>_<mode>_d<depth>_s<seed>).
 # The won-count catches win<->loss flips that barely move the avg win turn
@@ -136,7 +136,7 @@ if [ "$ACCEPT" = 1 ]; then
     echo "# Regression ground truth -- commit $(git rev-parse --short HEAD 2>/dev/null || echo unknown)  date $(date +%Y-%m-%d)"
     echo "# Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit."
     [ -n "$ACCEPT_ACK" ] && echo "# accepted-with-regressions ($MODE, $(date +%Y-%m-%d)): $ACCEPT_ACK"
-    echo "# Key: <deck>_<mode>_d<depth>_s<seed> = <games_won>/<avg_win_turn>[/<play_digest>]"
+    echo "# Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)"
     echo "# Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint."
     emit_mode smoke      SMOKE_CASES
     emit_mode regression REGRESSION_CASES
@@ -282,8 +282,10 @@ BATCH_OUT=$(cat "$LOGDIR/batch.log")
 # of the mandatory pre-accept per-game analysis (no rebuilding the old binary).
 GTLOGS=test/gt_logs
 
-# Parse one "<name>: played=P won=W (pct%) avg=A" line per job into the existing
-# won/avg fingerprint, in matrix order, and compare to ground truth.
+# Parse one "<name>: played=P avg=A digest=D" line per job into the avg/digest fingerprint,
+# in matrix order, and compare to ground truth. avg = mean turn-to-win with an unwon game scored
+# max_turns+1 (the goldfish metric); win/loss is intentionally NOT reported (see ComputeAvgTurns /
+# main.cpp) because a goldfishing loss is an arbitrary horizon threshold agents wrongly prioritize.
 CUR_DECK=""
 for spec in "${CASES[@]}"; do
   # shellcheck disable=SC2086
@@ -291,30 +293,27 @@ for spec in "${CASES[@]}"; do
   if [ "$deck" != "$CUR_DECK" ]; then CUR_DECK="$deck"; log ""; log "-- $CUR_DECK --"; fi
   key="${deck}_${MODE}_d${depth}_s${seed}"
   line=$(printf '%s\n' "$BATCH_OUT" | grep "^${key}: ")
-  won=$(printf '%s\n' "$line" | sed -nE 's/.*won=([0-9]+).*/\1/p')
-  awt=$(printf '%s\n' "$line" | sed -nE 's/.*avg=([0-9.]+).*/\1/p')
+  avg=$(printf '%s\n' "$line" | sed -nE 's/.*[^a-z]avg=([0-9.]+).*/\1/p')
   dg=$(printf '%s\n' "$line" | sed -nE 's/.*digest=([0-9a-f]+).*/\1/p')
   expected="${!key-}"
-  if [ -z "$won" ] || [ -z "$awt" ]; then
+  if [ -z "$avg" ]; then
     status="FAIL"; got="(no output)"; FAIL=$((FAIL+1))
   else
-    # Fingerprint = won/avg/play-digest. The digest makes a play change that keeps the same
-    # win counts/turns still FAIL (the coarse won/avg cannot see it). Backward-compat: a legacy
-    # 2-field GT (no digest baselined yet) matches on won/avg alone -- PASS, and --accept records
-    # the digest so subsequent runs gate on it too.
-    got="${won}/${awt}${dg:+/$dg}"
+    # Fingerprint = avg/play-digest. avg (to 4 dp) catches outcome/turn shifts; the digest catches a
+    # play change that keeps the same avg. Backward-compat: a GT without a digest matches on avg alone.
+    got="${avg}${dg:+/$dg}"
     echo "$key=$got" >> "$RESULTS"           # record for a later --accept
     if [ -z "$expected" ]; then
       status="NEW "; expected="<none>"; NEW=$((NEW+1))
     elif [ "$expected" = "$got" ]; then
       status="PASS"; PASS=$((PASS+1))
-    elif [ "$expected" = "${won}/${awt}" ]; then
-      status="PASS"; PASS=$((PASS+1))        # legacy GT without a digest: won/avg match
+    elif [ "$expected" = "${avg}" ]; then
+      status="PASS"; PASS=$((PASS+1))        # GT without a digest: avg matches
     else
       status="FAIL"; FAIL=$((FAIL+1))
     fi
   fi
-  log "$(printf '  %s  %-26s exp=%-12s got=%-12s' "$status" "$key" "$expected" "$got")"
+  log "$(printf '  %s  %-26s exp=%-16s got=%-16s' "$status" "$key" "$expected" "$got")"
 
   # Per-game diff against committed ground-truth logs. Lists every game whose win
   # turn moved (old -> new), so changed games can be inspected before --accept.
