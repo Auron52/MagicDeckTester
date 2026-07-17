@@ -85,10 +85,18 @@ while read -r cidr; do
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]')
 
 # --- Extra allowlisted hosts (resolved to current IPs). ---
+# NOTE on CDN-fronted hosts (api.scryfall.com is entirely behind Cloudflare):
+# a one-shot resolve is a *snapshot* of a rotating pool. Cloudflare hands out a
+# different subset of edge IPs over time and serves IPv6 (AAAA) first, so at
+# runtime a client would (a) resolve to an IP never added below -> dropped, or
+# (b) try an AAAA address -> hit the IPv6 REJECT. To make the allowlist actually
+# usable we resolve a few times (to widen the ipset), then PIN the host to one
+# allowlisted IPv4 in /etc/hosts so runtime resolution is deterministic and v4.
 for host in "${ALLOWED_HOSTS[@]:-}"; do
   [ -z "$host" ] && continue
   echo "[firewall] resolving $host..."
-  ips="$(dig +short A "$host" | grep -E '^[0-9.]+$' || true)"
+  # Resolve a few times; Cloudflare rotates, so this captures more of the pool.
+  ips="$(for _ in 1 2 3 4; do dig +short A "$host"; done | grep -E '^[0-9.]+$' | sort -u || true)"
   if [ -z "$ips" ]; then
     echo "[firewall]   WARN: could not resolve $host (skipping)"
     continue
@@ -96,6 +104,15 @@ for host in "${ALLOWED_HOSTS[@]:-}"; do
   for ip in $ips; do
     add_cidr "$ip"
   done
+  # Pin the host to the first allowlisted IPv4 so the client never resolves to a
+  # non-allowlisted (rotated) IP or an AAAA record. Guarded with || true so a
+  # hosts-file hiccup can't trip the fail-closed ERR trap.
+  pin_ip="$(echo "$ips" | head -1)"
+  if [ -n "$pin_ip" ]; then
+    sed -i "\#[[:space:]]${host}\$#d" /etc/hosts 2>/dev/null || true
+    echo "$pin_ip $host" >> /etc/hosts 2>/dev/null || true
+    echo "[firewall]   pinned $host -> $pin_ip in /etc/hosts"
+  fi
 done
 
 # Permit traffic to everything in the allowlist, then deny the rest.

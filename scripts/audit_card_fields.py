@@ -205,7 +205,9 @@ def main():
     ap = argparse.ArgumentParser(description="Audit cards.json fields vs an authoritative Scryfall snapshot.")
     ap.add_argument("--cards", default=str(CARDS))
     ap.add_argument("--update", action="store_true", help="(network) refresh the Scryfall snapshot")
-    ap.add_argument("--throttle", type=float, default=0.1, help="seconds between API calls (--update)")
+    ap.add_argument("--throttle", type=float, default=0.25,
+                    help="seconds between API calls (--update). Default 0.25s: Scryfall 429-throttles "
+                         "a sustained 100ms burst partway through ~100 cards, so stay well under its limit.")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
