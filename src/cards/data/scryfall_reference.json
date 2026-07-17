@@ -1,0 +1,970 @@
+{
+  "Acclaimed Contender": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "When this creature enters, if you control another Knight, look at the top five cards of your library. You may reveal a Knight, Aura, Equipment, or legendary artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Human Knight"
+  },
+  "Adeline, Resplendent Cathar": {
+    "cmc": 3.0,
+    "keywords": [
+      "Vigilance"
+    ],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "Vigilance\nAdeline's power is equal to the number of creatures you control.\nWhenever you attack, for each opponent, create a 1/1 white Human creature token that's tapped and attacking that player or a planeswalker they control.",
+    "power": "*",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Human Knight"
+  },
+  "Aether Vial": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{1}",
+    "oracle_text": "At the beginning of your upkeep, you may put a charge counter on this artifact.\n{T}: You may put a creature card with mana value equal to the number of charge counters on this artifact from your hand onto the battlefield.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
+  "Ancient Ziggurat": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add one mana of any color. Spend this mana only to cast a creature spell.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Aria of Flame": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "When this enchantment enters, each opponent gains 10 life.\nWhenever you cast an instant or sorcery spell, put a verse counter on this enchantment, then it deals damage equal to the number of verse counters on it to target player or planeswalker.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
+  "Benalish Marshal": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{W}{W}{W}",
+    "oracle_text": "Other creatures you control get +1/+1.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Human Knight"
+  },
+  "Birds of Paradise": {
+    "cmc": 1.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{G}",
+    "oracle_text": "Flying\n{T}: Add one mana of any color.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Creature — Bird"
+  },
+  "Blood Crypt": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {B} or {R}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Swamp Mountain"
+  },
+  "Bloodstained Mire": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Mountain card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Cascade Bluffs": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{U/R}, {T}: Add {U}{U}, {U}{R}, or {R}{R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Cavern of Souls": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type, and that spell can't be countered.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Cloudshredder Sliver": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{R}{W}",
+    "oracle_text": "Sliver creatures you control have flying and haste.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Sliver"
+  },
+  "Crackle with Power": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{X}{X}{X}{R}{R}",
+    "oracle_text": "Crackle with Power deals five times X damage to each of up to X targets.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Crystalline Sliver": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{U}",
+    "oracle_text": "All Slivers have shroud. (They can't be the targets of spells or abilities.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Sliver"
+  },
+  "Dauntless Bodyguard": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "As this creature enters, choose another creature you control.\nSacrifice this creature: The chosen creature gains indestructible until end of turn.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Knight"
+  },
+  "Distorting Wake": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{X}{U}{U}{U}",
+    "oracle_text": "Return X target nonland permanents to their owners' hands.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Eidolon of the Great Revel": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{R}{R}",
+    "oracle_text": "Whenever a player casts a spell with mana value 3 or less, this creature deals 2 damage to that player.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Enchantment Creature — Spirit"
+  },
+  "Enlightened Tutor": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Expressive Iteration": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{U}{R}",
+    "oracle_text": "Look at the top three cards of your library. Put one of them into your hand, put one of them on the bottom of your library, and exile one of them. You may play the exiled card this turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Ferrous Lake": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{1}, {T}: Add {U}{R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Fiery Islet": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life: Add {U} or {R}.\n{1}, {T}, Sacrifice this land: Draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Fiery Justice": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{R}{G}{W}",
+    "oracle_text": "Fiery Justice deals 5 damage divided as you choose among any number of targets. Target opponent gains 5 life.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Forbidden Orchard": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add one mana of any color.\nWhenever you tap this land for mana, target opponent creates a 1/1 colorless Spirit creature token.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Forest": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {G}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Land — Forest"
+  },
+  "Forgotten Cave": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {R}.\nCycling {R} ({R}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Frostboil Snarl": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "As this land enters, you may reveal an Island or Mountain card from your hand. If you don't, this land enters tapped.\n{T}: Add {U} or {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Galerider Sliver": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Sliver creatures you control have flying.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Sliver"
+  },
+  "Gamble": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Search your library for a card, put that card into your hand, discard a card at random, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Goblin Guide": {
+    "cmc": 1.0,
+    "keywords": [
+      "Haste"
+    ],
+    "mana_cost": "{R}",
+    "oracle_text": "Haste\nWhenever this creature attacks, defending player reveals the top card of their library. If it's a land card, that player puts it into their hand.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Goblin Scout"
+  },
+  "Godless Shrine": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {W} or {B}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Plains Swamp"
+  },
+  "Grove of the Burnwillows": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add {R} or {G}. Each opponent gains 1 life.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Hatchery Sliver": {
+    "cmc": 2.0,
+    "keywords": [
+      "Replicate"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Replicate {1}{G} (When you cast this spell, copy it for each time you paid its replicate cost.)\nEach Sliver spell you cast has replicate. The replicate cost is equal to its mana cost. (A copy of a permanent spell becomes a token.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Sliver"
+  },
+  "Haytham Kenway": {
+    "cmc": 4.0,
+    "keywords": [
+      "Protection"
+    ],
+    "mana_cost": "{2}{W}{U}",
+    "oracle_text": "Protection from Assassins\nOther Knights you control get +2/+2 and have protection from Assassins.\nWhen Haytham Kenway enters, for each opponent, exile up to one target creature that player controls until Haytham Kenway leaves the battlefield.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Human Knight"
+  },
+  "Hibernation Sliver": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{U}{B}",
+    "oracle_text": "All Slivers have \"Pay 2 life: Return this permanent to its owner's hand.\"",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Sliver"
+  },
+  "Hinata, Dawn-Crowned": {
+    "cmc": 4.0,
+    "keywords": [
+      "Flying",
+      "Trample"
+    ],
+    "mana_cost": "{1}{U}{R}{W}",
+    "oracle_text": "Flying, trample\nSpells you cast cost {1} less to cast for each target.\nSpells your opponents cast cost {1} more to cast for each target.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Kirin Spirit"
+  },
+  "Icy Blast": {
+    "cmc": 1.0,
+    "keywords": [
+      "Ferocious"
+    ],
+    "mana_cost": "{X}{U}",
+    "oracle_text": "Tap X target creatures.\nFerocious — If you control a creature with power 4 or greater, those creatures don't untap during their controllers' next untap steps.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Idyllic Tutor": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Search your library for an enchantment card, reveal it, put it into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Ignoble Hierarch": {
+    "cmc": 1.0,
+    "keywords": [
+      "Exalted"
+    ],
+    "mana_cost": "{G}",
+    "oracle_text": "Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)\n{T}: Add {B}, {R}, or {G}.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Creature — Goblin Shaman"
+  },
+  "Inspiring Veteran": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{R}{W}",
+    "oracle_text": "Other Knights you control get +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Knight"
+  },
+  "Invigorate": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have an opponent gain 3 life.\nTarget creature gets +4/+4 until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Irencrag Feat": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}{R}{R}",
+    "oracle_text": "Add seven {R}. You can cast only one more spell this turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Island": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Land — Island"
+  },
+  "Izzet Boilerworks": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {U}{R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Izzet Signet": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "{1}, {T}: Add {U}{R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
+  "Knight Exemplar": {
+    "cmc": 3.0,
+    "keywords": [
+      "First strike"
+    ],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "First strike (This creature deals combat damage before creatures without first strike.)\nOther Knight creatures you control get +1/+1 and have indestructible. (Damage and effects that say \"destroy\" don't destroy them.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Knight"
+  },
+  "Land's Edge": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}{R}",
+    "oracle_text": "Discard a card: If the discarded card was a land card, this enchantment deals 2 damage to target player or planeswalker. Any player may activate this ability.",
+    "power": null,
+    "toughness": null,
+    "type_line": "World Enchantment"
+  },
+  "Leeching Sliver": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "Whenever a Sliver you control attacks, defending player loses 1 life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Sliver"
+  },
+  "Light Up the Stage": {
+    "cmc": 3.0,
+    "keywords": [
+      "Spectacle"
+    ],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Spectacle {R} (You may cast this spell for its spectacle cost rather than its mana cost if an opponent lost life this turn.)\nExile the top two cards of your library. Until the end of your next turn, you may play those cards.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Lightning Bolt": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Lightning Bolt deals 3 damage to any target.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Lonely Sandbar": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {U}.\nCycling {U} ({U}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Magma Opus": {
+    "cmc": 8.0,
+    "keywords": [
+      "Treasure"
+    ],
+    "mana_cost": "{6}{U}{R}",
+    "oracle_text": "Magma Opus deals 4 damage divided as you choose among any number of targets. Tap two target permanents. Create a 4/4 blue and red Elemental creature token. Draw two cards.\n{U/R}{U/R}, Discard this card: Create a Treasure token.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Marsh Flats": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Swamp card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Marshal of Zhalfir": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{U}",
+    "oracle_text": "Other Knights you control get +1/+1.\n{W}{U}, {T}: Tap another target creature.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Knight"
+  },
+  "Memory Lapse": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Counter target spell. If that spell is countered this way, put it on top of its owner's library instead of into that player's graveyard.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Monastery Swiftspear": {
+    "cmc": 1.0,
+    "keywords": [
+      "Haste",
+      "Prowess"
+    ],
+    "mana_cost": "{R}",
+    "oracle_text": "Haste\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Human Monk"
+  },
+  "Mountain": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {R}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Land — Mountain"
+  },
+  "Muscle Sliver": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "All Sliver creatures get +1/+1.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Sliver"
+  },
+  "Mutavault": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{1}: This land becomes a 2/2 creature with all creature types until end of turn. It's still a land.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Mystic Monastery": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {U}, {R}, or {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Ornithopter of Paradise": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{2}",
+    "oracle_text": "Flying\n{T}: Add one mana of any color.",
+    "power": "0",
+    "toughness": "2",
+    "type_line": "Artifact Creature — Thopter"
+  },
+  "Overgrown Tomb": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {B} or {G}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Swamp Forest"
+  },
+  "Plague Drone": {
+    "cmc": 4.0,
+    "keywords": [
+      "Flying",
+      "Rot Fly"
+    ],
+    "mana_cost": "{3}{B}",
+    "oracle_text": "Flying\nRot Fly — If an opponent would gain life, that player loses that much life instead.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Demon"
+  },
+  "Plains": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {W}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Land — Plains"
+  },
+  "Plated Sliver": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "All Sliver creatures get +0/+1.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Sliver"
+  },
+  "Ponder": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Look at the top three cards of your library, then put them back in any order. You may shuffle.\nDraw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Predatory Sliver": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Sliver creatures you control get +1/+1.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Sliver"
+  },
+  "Preordain": {
+    "cmc": 1.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Scry 2, then draw a card. (To scry 2, look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Reality Spasm": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{X}{U}{U}",
+    "oracle_text": "Choose one —\n• Tap X target permanents.\n• Untap X target permanents.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Reflecting Pool": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add one mana of any type that a land you control could produce.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Reliquary Tower": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "You have no maximum hand size.\n{T}: Add {C}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Remand": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Counter target spell. If that spell is countered this way, put it into its owner's hand instead of into that player's graveyard.\nDraw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Remote Isle": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {U}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Reverent Silence": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have each other player gain 6 life.\nDestroy all enchantments.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Sandstone Needle": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped with two depletion counters on it.\n{T}, Remove a depletion counter from this land: Add {R}{R}. If there are no depletion counters on this land, sacrifice it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Saprazzan Skerry": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped with two depletion counters on it.\n{T}, Remove a depletion counter from this land: Add {U}{U}. If there are no depletion counters on this land, sacrifice it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Searing Blaze": {
+    "cmc": 2.0,
+    "keywords": [
+      "Landfall"
+    ],
+    "mana_cost": "{R}{R}",
+    "oracle_text": "Searing Blaze deals 1 damage to target player or planeswalker and 1 damage to target creature that player or that planeswalker's controller controls.\nLandfall — If you had a land enter the battlefield under your control this turn, Searing Blaze deals 3 damage to that player or planeswalker and 3 damage to that creature instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Searing Blood": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{R}{R}",
+    "oracle_text": "Searing Blood deals 2 damage to target creature. When that creature dies this turn, Searing Blood deals 3 damage to the creature's controller.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Secluded Courtyard": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Shard Volley": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nShard Volley deals 3 damage to any target.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Sinew Sliver": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "All Sliver creatures get +1/+1.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Sliver"
+  },
+  "Skullcrack": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Players can't gain life this turn. Damage can't be prevented this turn. Skullcrack deals 3 damage to target player or planeswalker.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Skyshroud Cutter": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have each other player gain 5 life.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Beast"
+  },
+  "Sliver Hive": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a Sliver spell.\n{5}, {T}: Create a 1/1 colorless Sliver creature token. Activate only if you control a Sliver.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Sol Ring": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{1}",
+    "oracle_text": "{T}: Add {C}{C}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
+  "Soulfire Eruption": {
+    "cmc": 9.0,
+    "keywords": [],
+    "mana_cost": "{6}{R}{R}{R}",
+    "oracle_text": "Choose any number of target creatures, planeswalkers, and/or players. For each of them, exile the top card of your library, then Soulfire Eruption deals damage equal to that card's mana value to that permanent or player. You may play the exiled cards until the end of your next turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Steam Vents": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U} or {R}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Mountain"
+  },
+  "Stomping Ground": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {R} or {G}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Mountain Forest"
+  },
+  "Striking Sliver": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Sliver creatures you control have first strike. (They deal combat damage before creatures without first strike.)",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Sliver"
+  },
+  "Swords to Plowshares": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Exile target creature. Its controller gains life equal to its power.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Tainted Remedy": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "If an opponent would gain life, that player loses that much life instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
+  "Temple Garden": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {G} or {W}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Forest Plains"
+  },
+  "Temple of Epiphany": {
+    "cmc": 0.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)\n{T}: Add {U} or {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Throes of Chaos": {
+    "cmc": 4.0,
+    "keywords": [
+      "Cascade",
+      "Retrace"
+    ],
+    "mana_cost": "{3}{R}",
+    "oracle_text": "Cascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.)\nRetrace (You may cast this card from your graveyard by discarding a land card in addition to paying its other costs.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Thrumming Hivepool": {
+    "cmc": 6.0,
+    "keywords": [
+      "Affinity"
+    ],
+    "mana_cost": "{6}",
+    "oracle_text": "Affinity for Slivers (This spell costs {1} less to cast for each Sliver you control.)\nSlivers you control have double strike and haste.\nAt the beginning of your upkeep, create two 1/1 colorless Sliver creature tokens.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
+  "Thundering Falls": {
+    "cmc": 0.0,
+    "keywords": [
+      "Surveil"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U} or {R}.)\nThis land enters tapped.\nWhen this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Mountain"
+  },
+  "Tournament Grounds": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add {R}, {W}, or {B}. Spend this mana only to cast a Knight or Equipment spell.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Treasure Hunt": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Reveal cards from the top of your library until you reveal a nonland card, then put all cards revealed this way into your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Unclaimed Territory": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Venerable Knight": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "When this creature dies, put a +1/+1 counter on target Knight you control.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Knight"
+  },
+  "Windswept Heath": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Wooded Foothills": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Forest card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Worthy Knight": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Whenever you cast a Knight spell, create a 1/1 white Human creature token.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Knight"
+  }
+}
