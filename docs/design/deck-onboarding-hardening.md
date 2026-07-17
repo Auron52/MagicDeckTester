@@ -321,8 +321,13 @@ autonomous fraction and hand the user a clean, disclosed residual, not to feign 
   are irrelevant (user directive) and scrubbed; slower games = the issue cases, faster games = a
   BUG-check (esp. early), not a clairvoyance hunt (the search is clairvoyant by default). One run per
   variant is a full A/B (harness prints exp=baseline vs got=variant). Verified all 4 verdict paths +
-  a real tap_order run (legacy tap → reject_regression, kept scarcity default). REMAINING: author real
-  heuristic experiments + the winner-activation (flip-to-live-default) mechanism.
+  a real tap_order run (legacy tap → reject_regression, kept scarcity default). (c) Winner-ACTIVATION
+  built (`1ffe241`): `src/core/HeuristicDefaults.h` + `ApplyHeuristicDefaults()` at the top of both
+  main()s reads committed `src/ai/data/heuristic_defaults.env` and `setenv(overwrite=0)` each KEY=VALUE
+  → an adopted heuristic is the LIVE default with no rebuild, env var still overrides (= disable/A-B).
+  Byte-identical when empty (smoke 18/18, play-changed=0); verified live. **Autonomous loop COMPLETE:
+  measure→decide→adopt(activate)→report.** REMAINING ⑤: author real heuristic experiments (genuine
+  ordering/weight variants) for the loop to optimize.
 - 2026-07-17: **④ BUILT (`0bcdfcd`).** Replaced the `claude_play` SKIP stub with two gates.
   **4a `play_invariants`** (`scripts/play_invariants.py`, LIVE blocking, `--no-sweep`-skippable):
   drives the claude-play protocol auto-following engine defaults, asserts determinism + integrity +
