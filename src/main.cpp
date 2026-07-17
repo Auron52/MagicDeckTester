@@ -2259,9 +2259,14 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     { profile_path = deck_path.parent_path() / (deck_path.stem().string() + ".profile.json"); }
     MulliganProfile profile;
     if (std::filesystem::exists(profile_path)) { profile = LoadDeckProfile(profile_path); }
-    AttachExhaustiveSidecar(profile, profile_path);  // play uses the deck's exhaustive sidecar if present
-    AttachEvalSidecar(profile, profile_path);        // ... and its learned mid-game eval sidecar if present
-    AttachValueSidecar(profile, profile_path);       // ... and its learned leaf value sidecar if present
+    // NOTE: a scenario is a FIXED mid-game board -- it never makes a mulligan/keep decision, so
+    // the exhaustive KEEP sidecar (mulligan policy only) is never consulted. Parsing it is pure
+    // waste: the 11 MB Anti-Lifegain sidecar took ~67 s (60% of it nlohmann json::parse) and
+    // dominated every regression run's scenario-sanity gate; skipping it drops the scenario to
+    // ~0.08 s with a byte-identical result. (Mirrors the claude-play sidecar skip.) The eval +
+    // value sidecars ARE consulted at search leaves, are small, and stay.
+    AttachEvalSidecar(profile, profile_path);        // learned mid-game eval sidecar (search leaves)
+    AttachValueSidecar(profile, profile_path);       // learned leaf value sidecar (search leaves)
 
     const int depth     = j.value("depth", 5);
     const int budget_ms = j.value("budget_ms", 100);
