@@ -207,6 +207,29 @@ competitive but rarely faster (the first 30-game sweep found 0 misplay candidate
 The oracle's proven worth is **bug-finding**, not beating the AI. Treat win-turn
 comparisons as a weak signal and the invariant/legality flags as the strong one.
 
+### Recording a sweep for the `claude_sweep` gate
+
+`verify_deck.py` (the enforcement spine) has a `claude_sweep` gate that enforces this
+step is done and clean. After a sweep, verify every flag against cards.json + the rules
+skill, fix the real ones via the analyze-deck loop, then record the outcome in the
+per-deck ledger `docs/design/analysis-<deck>.md` under a user-owned heading (OUTSIDE the
+generated `verify_deck:begin/end` block), e.g.:
+
+```
+## Claude-play sweep
+- commit: `<git sha the sweep ran at>`
+- seeds: <base> games: <N>
+- flags: 0 unresolved      # or N; list each unresolved one as a bullet below
+```
+
+The gate reads the `flags: N unresolved` line: **0 → PASS**, **≥1 → blocking FAIL**,
+**absent → disclosed SKIP** (run the sweep). A recorded commit different from HEAD is
+disclosed as a staleness note (re-run if play changed — the mechanical `play_invariants`
+gate + the smoke digests track whether play changed live, so a doc-only commit needn't
+trigger a re-sweep). The mechanical determinism/integrity/progress half is ALWAYS
+enforced by `play_invariants` (`scripts/play_invariants.py`); this judgment half is what
+the record covers.
+
 ---
 
 ## Known gaps / improvements

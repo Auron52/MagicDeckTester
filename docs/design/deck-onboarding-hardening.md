@@ -141,9 +141,23 @@ Each lands behind the guiding principle; ③ ties them into one un-skippable gat
   FAILs on the unbracketed Ignoble Hierarch exalted trigger; a sign-off downgrades it to DEFER +
   PASS.)
 
-### ④ Autonomous play — enforce + broaden
-- The claude-play correctness sweep becomes a **required gated step** (in ③), not optional prose;
-  broaden past main-phase where feasible; disclose what's unexercised.
+### ④ Autonomous play — enforce + broaden  ✅ BUILT (2026-07-17)
+- The claude-play correctness sweep is now a **gated step** in ③, split into its two halves:
+- **4a `play_invariants` (mechanical, LIVE blocking)** — `scripts/play_invariants.py` drives the
+  claude-play stateless-replay protocol auto-following the engine's own defaults (develop-greedy at
+  `main_phase`, where the protocol exposes no engine plan-pick) and asserts the invariants the
+  autonomous smoke can't: **determinism** (same CSV → byte-identical decision block), **integrity**
+  (valid JSON, known decision type, contiguous plan indices, exit 70/0), **progress** (di/turn
+  non-decreasing, reaches a result within a cap). Cast-availability is ADVISORY (cascade/vial/staged
+  legitimately cast a name not in hand — false positives are the skill's warned failure mode).
+  Validated across all 6 smoke decks; negative-tested (an unwired type HARD-flags). Skipped with
+  `--no-sweep` (a runtime sweep, like `mismatch`).
+- **4b `claude_sweep` (judgment, artifact-ledger)** — the expensive Claude-DRIVEN sweep stays
+  user-initiated (analyze-deck 5d / Workflow, one agent per game); its result is RECORDED in the
+  per-deck ledger under `## Claude-play sweep` (commit / seeds / `flags: N unresolved`). Gate:
+  absent → disclosed SKIP; ≥1 unresolved flag → blocking FAIL; clean → PASS (staleness vs HEAD
+  disclosed). Matches the "expensive step = user-initiated, result enforced" philosophy (cf.
+  mulligan-profile). Record format documented in `.claude/skills/claude-play.md`.
 
 ### ⑤ Heuristics + profiling — close the loop
 - `scripts/auto_heuristics.py`: mine (exists) → **mechanically encode the unambiguous classes**
@@ -292,7 +306,21 @@ autonomous fraction and hand the user a clean, disclosed residual, not to feign 
   omissions — all reviewed, bracket-noted, never silent, STALE-detected). Negative-tested (real P/T
   / missing-keyword / un-allowlisted faults still HARD-caught). `card_fields` gate → **PASS** with 7
   disclosed allowlisted + 57 oracle advisories. **② fully closed.**
-- 2026-07-17: **③ enforcement spine BUILT** (`scripts/verify_deck.py`). One green gate over the
+- 2026-07-17: **② tribal subtypes: faithful fix (`f105f1c`).** Added the real Scryfall creature
+  subtypes to Swiftspear (Human Monk) / Goblin Guide (Goblin Scout) / Eidolon (Spirit) in cards.json
+  instead of allowlisting the omission (future-proofs a Goblins deck); allowlist down to 4. Byte-
+  identical: cards.json is runtime-loaded, sidecar keys on play_digest not per-card DefHash, nothing
+  in the frozen decks keys on those types — smoke 18/18 exact-digest PASS, play-changed=0.
+- 2026-07-17: **④ BUILT (`0bcdfcd`).** Replaced the `claude_play` SKIP stub with two gates.
+  **4a `play_invariants`** (`scripts/play_invariants.py`, LIVE blocking, `--no-sweep`-skippable):
+  drives the claude-play protocol auto-following engine defaults, asserts determinism + integrity +
+  progress; advisory cast-availability (cascade/vial/staged). Validated on all 6 smoke decks; the
+  develop-policy exercises target+divide (divide = the only multi-consume decision, supplied from
+  `legal_targets` defaults); negative-tested. **4b `claude_sweep`** (artifact-ledger): the expensive
+  Claude-driven judgment sweep stays user-initiated, recorded under `## Claude-play sweep` in the
+  per-deck ledger (commit/seeds/`flags: N unresolved`); absent→SKIP, unresolved→FAIL, clean→PASS,
+  staleness disclosed. Record format documented in the claude-play skill. **Note:** the claude-play
+  skill's "api.scryfall.com is reachable through the egress firewall" is TRUE again post-firewall-fix.
   battery; exit non-zero unless every blocking gate is green or signed off in the per-deck ledger
   `docs/design/analysis-<deck>.md`. Closes the "partials exit 0" hole (coverage now hard-fails on
   `partial`) and adds the static sites-3&4 `viewer_wiring` check (emitter + GUI branch per the
