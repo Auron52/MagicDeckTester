@@ -11,14 +11,5 @@
   },
   "Haytham Kenway": {
     "keywords": "'Protection from Assassins' is a real keyword but inert in goldfishing (no Assassins in play); the protection-to-other-Knights is an anthem grant, not an innate keyword Scryfall would list on this card's other Knights."
-  },
-  "Monastery Swiftspear": {
-    "subtypes": "Creature subtypes (Human Monk) omitted: no payoff in the current card pool keys on Human/Monk. ADD to cards.json if a Human/Monk-tribal deck ever uses this card."
-  },
-  "Goblin Guide": {
-    "subtypes": "Creature subtypes (Goblin Scout) omitted: no payoff in the current Burn pool keys on Goblin/Scout. ADD to cards.json when the Goblins deck (which needs Goblin tribal) is onboarded with this card."
-  },
-  "Eidolon of the Great Revel": {
-    "subtypes": "Creature subtype (Spirit) omitted: no payoff in the current card pool keys on Spirit. ADD to cards.json if a Spirit-tribal deck ever uses this card."
   }
 }
