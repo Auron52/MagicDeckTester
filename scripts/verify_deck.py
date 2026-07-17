@@ -16,7 +16,10 @@ a silent skip reads as "covered" when it isn't.
 Gates (blocking unless noted):
   coverage      -- scripts/analyze_deck.py --coverage-only, HARD on missing OR partial gaps
   card_costs    -- scripts/audit_card_costs.py (Scryfall); skipped with --no-network
-  card_fields   -- workstream 2 (P/T, keywords vs Scryfall): NOT BUILT -> disclosed skip
+  card_fields   -- workstream 2: offline diff of cards.json vs committed Scryfall snapshot
+                   (mana_cost/P-T/types/keywords HARD; oracle_text advisory). Systematic
+                   divergences stripped in-code; intentional per-card ones allowlisted
+                   (scryfall_divergences.json). Blocking FAIL on any un-allowlisted mismatch.
   clause_ledger -- workstream 2 (every oracle clause accounted): NOT BUILT -> disclosed skip
   viewer        -- scripts/audit_viewer_decisions.py (self-guard + surface sweep)
   viewer_wiring -- every decision type the deck uses has an emitter (main.cpp) AND a GUI
@@ -144,8 +147,15 @@ def gate_card_fields():
                               "populated. Run `python scripts/audit_card_fields.py --update` on a "
                               "networked machine, commit the snapshot, then this becomes a live gate "
                               "(P/T, types, keywords, oracle-text reality-diff)."])
-    disclose = [f"oracle_text advisory -- {a['name']}: {a['detail'][:160]}"
-                for a in data.get("oracle_advisories", [])]
+    # Intentional per-card divergences are ALLOWLISTED (scryfall_divergences.json), not
+    # silently dropped -- surface each so the ledger stays honest. A stale allowlist entry
+    # (no longer mismatches) is disclosed for cleanup. Neither blocks.
+    disclose = [f"allowlisted divergence -- {a['name']} [{a['field']}]: {a['reason'][:150]}"
+                for a in data.get("allowlisted", [])]
+    disclose += [f"STALE allowlist entry -- {s['name']} [{s['field']}] no longer mismatches; "
+                 f"remove from scryfall_divergences.json" for s in data.get("stale_allowlist", [])]
+    disclose += [f"oracle_text advisory -- {a['name']}: {a['detail'][:160]}"
+                 for a in data.get("oracle_advisories", [])]
     findings = [(f"card_fields:{m['name']}", f"{m['name']}: {'; '.join(m['issues'])}")
                 for m in data.get("mismatches", [])]
     if findings:
@@ -157,8 +167,10 @@ def gate_card_fields():
                     disclose=disclose + [f"card_fields snapshot INCOMPLETE -- {len(unfetched)} card(s) not "
                                          f"in the snapshot; run --update to reality-check them: "
                                          f"{', '.join(unfetched[:8])}{'...' if len(unfetched) > 8 else ''}"])
+    n_allow = len(data.get("allowlisted", []))
     return Gate("card_fields", PASS, True,
-                f"{data.get('checked', 0)} cards match snapshot (cost/PT/types/keywords)", disclose=disclose)
+                f"{data.get('checked', 0)} cards match snapshot (cost/PT/types/keywords)"
+                + (f"; {n_allow} allowlisted divergence(s)" if n_allow else ""), disclose=disclose)
 
 
 def gate_clause_ledger():

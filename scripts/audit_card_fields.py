@@ -33,9 +33,32 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CARDS = ROOT / "src/cards/data/cards.json"
 REFERENCE = ROOT / "src/cards/data/scryfall_reference.json"
+DIVERGENCES = ROOT / "src/cards/data/scryfall_divergences.json"
 
 SUPERTYPES = {"Legendary", "Basic", "Snow", "World", "Ongoing", "Host", "Elite"}
 ORACLE_SIMILARITY_MIN = 0.80   # below this, the oracle text is flagged (advisory)
+
+# --- Systematic (non-per-card) divergences: stripped in-code, NOT allowlisted ---
+# Scryfall reports these in `keywords`, but the engine intentionally does NOT tag
+# them in cards.json's `keywords` field -- they are either ability words (italic,
+# no inherent rules meaning) or keyword abilities modeled STRUCTURALLY via params /
+# oracle logic (confirmed: these cards work in their adopted decks). Stripping them
+# from the Scryfall side avoids false HARD mismatches while STILL catching a
+# genuinely-missing combat/evasion keyword (flying, trample, deathtouch, lifelink,
+# first strike, double strike, vigilance, reach, menace, hexproof, indestructible...).
+MODELED_ELSEWHERE_KEYWORDS = {
+    # Ability words -- never real keywords:
+    "landfall", "ferocious", "spectacle", "rot fly", "constellation", "addendum",
+    "revolt", "raid", "delirium", "threshold", "hellbent", "morbid",
+    # Keyword abilities this engine models via params / oracle logic, not a tag:
+    "cycling", "scry", "surveil", "cascade", "retrace", "replicate",
+    "affinity", "treasure",
+}
+# Supertypes the engine does NOT model because they are inert in goldfishing:
+# Basic-ness is derived from the card name; the World rule never fires (one
+# permanent). Legendary (legend rule) and Snow (snow mana) ARE modeled, so they
+# stay HARD-checked and are deliberately absent here.
+IGNORED_SUPERTYPES = {"Basic", "World"}
 
 
 # ------------------------------------------------------------------ normalisation
@@ -107,35 +130,66 @@ def as_int_str(v):
     return None if v is None else str(v).strip()
 
 
-def diff_card(local, ref):
-    """Return (hard_findings, oracle_advisory|None) comparing one card to its snapshot."""
+def pt_component_mismatch(a, b):
+    """True if two P/T components differ AND neither is a CDA placeholder ('*').
+    Adeline's power is '*' (a characteristic-defining ability computed at runtime),
+    so cards.json's numeric base is a modeling placeholder, not a real mismatch --
+    but we still catch a genuinely-wrong toughness on such a card (component-wise)."""
+    if a is None and b is None:
+        return False
+    if (a and "*" in a) or (b and "*" in b):
+        return False
+    return a != b
+
+
+def diff_card(local, ref, allow):
+    """Compare one card to its snapshot. Returns (hard, allowlisted, oracle_advisory):
+       hard        = ["<field> <detail>", ...]   -- real, un-allowlisted mismatches
+       allowlisted = [(field, detail, reason), ...] -- intentional per-card divergences
+       oracle_advisory = str|None."""
     name = local.get("name")
-    hard = []
+    findings = []  # (field, detail)
 
     lc, rc = norm_cost(local.get("mana_cost")), norm_cost(ref.get("mana_cost"))
     if lc != rc:
-        hard.append(f"mana_cost local={local.get('mana_cost')!r} scryfall={ref.get('mana_cost')!r}")
+        findings.append(("mana_cost", f"local={local.get('mana_cost')!r} scryfall={ref.get('mana_cost')!r}"))
 
     lp, rp = as_int_str(local.get("power")), as_int_str(ref.get("power"))
     lt, rt = as_int_str(local.get("toughness")), as_int_str(ref.get("toughness"))
-    if lp != rp or lt != rt:
-        hard.append(f"P/T local={lp}/{lt} scryfall={rp}/{rt}")
+    if pt_component_mismatch(lp, rp) or pt_component_mismatch(lt, rt):
+        findings.append(("P/T", f"local={lp}/{lt} scryfall={rp}/{rt}"))
 
     r_supers, r_types, r_subs = parse_type_line(ref.get("type_line", ""))
+    r_supers = [s for s in r_supers if s not in IGNORED_SUPERTYPES]        # Basic/World inert
     l_types = sorted(local.get("types", []))
     l_subs = sorted(local.get("subtypes", []))
-    l_supers = sorted(local.get("supertypes", []))
+    l_supers = sorted(s for s in local.get("supertypes", []) if s not in IGNORED_SUPERTYPES)
+    # The engine leaves a land's printed subtypes empty and derives them at runtime
+    # (SpellEffects.h: "the land's printed m_subtypes is empty"), so land subtype
+    # diffs are systematic, not per-card. Creature/other subtypes stay checked.
+    is_land = "Land" in l_types
     if l_types != r_types:
-        hard.append(f"types local={l_types} scryfall={r_types}")
-    if l_subs != r_subs:
-        hard.append(f"subtypes local={l_subs} scryfall={r_subs}")
+        findings.append(("types", f"local={l_types} scryfall={r_types}"))
+    if not is_land and l_subs != r_subs:
+        findings.append(("subtypes", f"local={l_subs} scryfall={r_subs}"))
     if l_supers != r_supers:
-        hard.append(f"supertypes local={l_supers} scryfall={r_supers}")
+        findings.append(("supertypes", f"local={l_supers} scryfall={r_supers}"))
 
     l_kw = sorted(k.lower() for k in local.get("keywords", []))
-    r_kw = sorted(k.lower() for k in ref.get("keywords", []))
+    r_kw = sorted(k for k in (kw.lower() for kw in ref.get("keywords", []))
+                  if k not in MODELED_ELSEWHERE_KEYWORDS)
     if l_kw != r_kw:
-        hard.append(f"keywords local={l_kw} scryfall={r_kw}")
+        findings.append(("keywords", f"local={l_kw} scryfall={r_kw}"))
+
+    # Split findings by the per-card allowlist.
+    card_allow = allow.get(name, {})
+    hard, allowlisted = [], []
+    for field, detail in findings:
+        reason = card_allow.get(field)
+        if reason:
+            allowlisted.append((field, detail, reason))
+        else:
+            hard.append(f"{field} {detail}")
 
     advisory = None
     lo, ro = norm_oracle(local.get("oracle_text"), name), norm_oracle(ref.get("oracle_text"), name)
@@ -143,7 +197,15 @@ def diff_card(local, ref):
         sim = difflib.SequenceMatcher(None, lo, ro).ratio()
         if sim < ORACLE_SIMILARITY_MIN:
             advisory = f"oracle_text diverges (similarity {sim:.2f}); scryfall={ref.get('oracle_text')!r}"
-    return hard, advisory
+    return hard, allowlisted, advisory
+
+
+def load_allowlist():
+    """Per-card intentional divergences (card -> field -> reason). Missing file = {}."""
+    if not DIVERGENCES.exists():
+        return {}
+    raw = json.loads(DIVERGENCES.read_text())
+    return {k: v for k, v in raw.items() if not k.startswith("_")}  # drop _README
 
 
 def do_audit(cards, as_json):
@@ -156,7 +218,9 @@ def do_audit(cards, as_json):
             print("FAIL (fails closed): " + msg)
         return 1
     ref = json.loads(REFERENCE.read_text())
-    mismatches, unfetched, advisories, checked = [], [], [], 0
+    allow = load_allowlist()
+    mismatches, unfetched, advisories, allowed_all, checked = [], [], [], [], 0
+    used_allow = set()  # (card, field) allowlist entries that actually fired
     for c in cards:
         name = c.get("name")
         if not name or not norm_cost(c.get("mana_cost")) and not c.get("types"):
@@ -165,11 +229,18 @@ def do_audit(cards, as_json):
             unfetched.append(name)
             continue
         checked += 1
-        hard, adv = diff_card(c, ref[name])
+        hard, allowlisted, adv = diff_card(c, ref[name], allow)
         if hard:
             mismatches.append((name, hard))
+        for field, detail, reason in allowlisted:
+            allowed_all.append((name, field, detail, reason))
+            used_allow.add((name, field))
         if adv:
             advisories.append((name, adv))
+
+    # Stale allowlist entries: a card+field is allowlisted but no longer mismatches
+    # (e.g. cards.json was fixed). Report so the ledger stays honest -- non-blocking.
+    stale = [(n, f) for n, fields in allow.items() for f in fields if (n, f) not in used_allow]
 
     if as_json:
         print(json.dumps({
@@ -177,6 +248,9 @@ def do_audit(cards, as_json):
             "checked": checked,
             "mismatches": [{"name": n, "issues": h} for n, h in mismatches],
             "unfetched": unfetched,
+            "allowlisted": [{"name": n, "field": f, "detail": d, "reason": r}
+                            for n, f, d, r in allowed_all],
+            "stale_allowlist": [{"name": n, "field": f} for n, f in stale],
             "oracle_advisories": [{"name": n, "detail": a} for n, a in advisories],
         }, indent=2))
         return 1 if (mismatches or unfetched) else 0
@@ -189,7 +263,18 @@ def do_audit(cards, as_json):
             for i in issues:
                 print(f"      {i}")
     else:
-        print("All hard fields (cost, P/T, types, keywords) match the snapshot.")
+        print("All hard fields (cost, P/T, types, keywords) match the snapshot "
+              "(after systematic + allowlisted divergences).")
+    if allowed_all:
+        print(f"\nALLOWLISTED DIVERGENCES ({len(allowed_all)}) -- intentional, "
+              f"see {DIVERGENCES.relative_to(ROOT)}:")
+        for n, f, d, r in allowed_all:
+            print(f"  {n} [{f}]: {d}\n      reason: {r}")
+    if stale:
+        print(f"\nSTALE ALLOWLIST ({len(stale)}) -- entry no longer mismatches; "
+              f"remove it from {DIVERGENCES.relative_to(ROOT)}:")
+        for n, f in stale:
+            print(f"  {n} [{f}]")
     if unfetched:
         print(f"\nUNFETCHED ({len(unfetched)}) -- not in the snapshot; run --update (fails closed):")
         for n in unfetched:
