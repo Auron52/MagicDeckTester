@@ -311,6 +311,18 @@ autonomous fraction and hand the user a clean, disclosed residual, not to feign 
   instead of allowlisting the omission (future-proofs a Goblins deck); allowlist down to 4. Byte-
   identical: cards.json is runtime-loaded, sidecar keys on play_digest not per-card DefHash, nothing
   in the frozen decks keys on those types — smoke 18/18 exact-digest PASS, play-changed=0.
+- 2026-07-17: **⑤ started — perf hotspot fixed + auto_heuristics loop built.** (a) Profiled the
+  "slow search hotspot" scenario `invigorate_not_lethal_no_fire`: it was NOT the search — perf showed
+  60% nlohmann json::parse; RunScenario eagerly parsed the 11 MB exhaustive KEEP sidecar a fixed board
+  never consults. Fixed `5289775` (skip it) → 67s → 0.08s, byte-identical; scenario-sanity gate ~200s →
+  0.33s per regression run. (b) `scripts/auto_heuristics.py` BUILT (`136cc51`): the measure→decide→
+  **auto-adopt**→report loop (user model = adopt-then-review: adopt autonomously on passing tests,
+  report at end for veto, behind a disable toggle). **Metric = avg-9 ONLY** — win→loss game-flip counts
+  are irrelevant (user directive) and scrubbed; slower games = the issue cases, faster games = a
+  BUG-check (esp. early), not a clairvoyance hunt (the search is clairvoyant by default). One run per
+  variant is a full A/B (harness prints exp=baseline vs got=variant). Verified all 4 verdict paths +
+  a real tap_order run (legacy tap → reject_regression, kept scarcity default). REMAINING: author real
+  heuristic experiments + the winner-activation (flip-to-live-default) mechanism.
 - 2026-07-17: **④ BUILT (`0bcdfcd`).** Replaced the `claude_play` SKIP stub with two gates.
   **4a `play_invariants`** (`scripts/play_invariants.py`, LIVE blocking, `--no-sweep`-skippable):
   drives the claude-play protocol auto-following engine defaults, asserts determinism + integrity +
