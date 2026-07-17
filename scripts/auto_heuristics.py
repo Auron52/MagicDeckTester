@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""AI-driven heuristic optimization loop (workstream 5): measure -> decide -> report.
+"""AI-driven heuristic optimization loop (workstream 5): measure -> decide -> adopt -> report.
 
 Runs a registered "heuristic experiment" -- a runtime selector (an MTG_* env var) with a
 baseline value and one or more AI-authored variant values -- through the regression harness,
 scores each variant AGAINST THE COMMITTED BASELINE, applies a strict noise-aware bar, and
-emits a verdict + report. The user reviews AFTER the fact (adopt-then-veto): a winning
-variant is recorded for adoption behind its toggle, so it can be disabled by setting the env
-var back. This does NOT gate the loop on pre-approval.
+emits a verdict. Adopt-then-review (the user vetoes AFTER, not before): a variant that passes
+the bar on train AND held-out seeds is AUTONOMOUSLY ADOPTED -- its winning value is written into
+the committed defaults file (src/ai/data/heuristic_defaults.env) the engine reads at startup, so
+it becomes the LIVE default with no rebuild, and it is logged to a review ledger
+(docs/design/heuristic-adoptions.md). Reversible: set the env var to baseline (an explicit env
+var overrides the file), or delete the line. Nothing is gated on pre-approval. After an adoption
+the loop prints a reminder to REBASELINE ground truth (the new default changes play).
 
 Why one run per variant is enough: the committed gt_logs / test/results/<mode>.env ARE the
 baseline, so `test/regression.sh <mode>` prints `exp=<baseline_avg>[/<baseline_digest>]` vs
@@ -55,6 +59,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ADOPTION_LEDGER = ROOT / "docs/design/heuristic-adoptions.md"
+# The committed defaults file the engine reads at startup (src/core/HeuristicDefaults.h). Writing a
+# KEY=VALUE line here makes an adopted variant the LIVE default without a rebuild; an explicit env var
+# still overrides it (= the disable / A-B lever). Empty => stock behavior (byte-identical).
+DEFAULTS_FILE = ROOT / "src/ai/data/heuristic_defaults.env"
 
 # avg-turn deltas smaller than this (summed / per-deck) are inside run-to-run noise, not a result.
 NOISE_EPS = 0.02
@@ -242,6 +250,22 @@ def render_report(exp_name, exp, results):
     return "\n".join(out), adopted
 
 
+def activate_adoption(env_var, env_val):
+    """Make an adopted variant the LIVE default: write its KEY=VALUE line into the committed defaults
+    file the engine reads at startup. Idempotent (replaces any prior line for this key). Reversible:
+    remove the line, or set the env var to baseline (an explicit env var overrides the file). A
+    baseline value ("") just removes the line (deactivate). Returns True if the file changed."""
+    lines = DEFAULTS_FILE.read_text().splitlines() if DEFAULTS_FILE.exists() else []
+    kept = [ln for ln in lines if not re.match(rf"\s*{re.escape(env_var)}\s*=", ln)]
+    changed = (len(kept) != len(lines))
+    if env_val:                                  # non-baseline -> set/replace; baseline -> just remove
+        kept.append(f"{env_var}={env_val}")
+        changed = True
+    DEFAULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    DEFAULTS_FILE.write_text("\n".join(kept).rstrip("\n") + "\n")
+    return changed
+
+
 def record_adoption(exp_name, exp, label, r):
     """Append an adoption record to the review ledger (adopt-then-veto: the user reviews AFTER).
     Recording != activating: making the winner the live default (behind its toggle) is a separate
@@ -292,8 +316,16 @@ def main():
     parse_text = Path(args.parse_file).read_text() if args.parse_file else None
     results = evaluate(exp, args.mode, args.holdout, parse_text=parse_text)
     report, adopted = render_report(args.experiment, exp, results)
-    for label in adopted:                       # record autonomous adoptions for after-the-fact review
+    for label in adopted:                       # autonomous adoption: activate (live default) + record
+        if parse_text is None:                  # offline scoring never mutates the live defaults
+            activate_adoption(exp["env"], results[label]["env_val"])
         record_adoption(args.experiment, exp, label, results[label])
+    if adopted and not args.json:
+        print(f"\n>> ADOPTED {adopted}: wrote the winning default into "
+              f"{DEFAULTS_FILE.relative_to(ROOT)} (active now; disable by setting "
+              f"`{exp['env']}={exp['baseline'] or '<unset>'}`). Recorded in "
+              f"{ADOPTION_LEDGER.relative_to(ROOT)} for review. NOW REBASELINE GT: inspect, then "
+              f"`bash test/regression.sh --{args.mode} --accept` so ground truth reflects the new default.")
 
     if args.json:
         print(json.dumps({"experiment": args.experiment, "adopted": adopted,

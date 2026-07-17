@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
+#include "core/HeuristicDefaults.h"
 #include "runner/GoldFishRunner.h"
 #include "runner/BatchRunner.h"
 #include "ai/AIEngine.h"
@@ -2369,6 +2370,8 @@ static int RunScenario(const std::filesystem::path& scenario_path)
 
 int main(int argc, char* argv[])
 {
+    // Apply committed heuristic defaults BEFORE anything reads a toggle (env vars still override).
+    ApplyHeuristicDefaults();
     if (argc < 2)
     {
         PrintUsage(argv[0]);

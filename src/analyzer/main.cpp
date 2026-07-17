@@ -5,6 +5,7 @@
 #include <random>
 #include "AnalyzerEngine.h"
 #include "KeepModelTrainer.h"
+#include "../core/HeuristicDefaults.h"
 #include "EquivalenceDiscovery.h"
 #include "ExhaustiveKeep.h"
 #include "../ai/AIEngine.h"
@@ -37,6 +38,8 @@ static void PrintUsage(const char* prog)
 
 int main(int argc, char* argv[])
 {
+    // Apply committed heuristic defaults BEFORE anything reads a toggle (env vars still override).
+    ApplyHeuristicDefaults();
     if (argc < 2)
     {
         PrintUsage(argv[0]);
