@@ -100,10 +100,105 @@ NAME_CHOICES = {
     "Soulfire Eruption": "target",
 }
 
-# Every param key that CAN carry a player choice. The self-guard fails if a deck card has
-# one of these but it is absent from MANIFEST (new mechanic wired into cards.json but not
-# the viewer/manifest). Superset of MANIFEST keys; extend when a new choice param lands.
-CHOICE_PARAM_KEYS = set(MANIFEST.keys())
+# ---------------------------------------------------------------------------
+# INERT param registry: cards.json params that create NO interactive player choice, each with
+# the reason. Together with MANIFEST (decision params) + NAME_CHOICES, this must cover EVERY
+# param key any deck card uses. The self-guard (below) hard-fails on a param in NEITHER set --
+# so a NEW mechanic added to cards.json cannot pass until it is explicitly classified as a
+# decision (mapped to a type + wired per DECISIONS.md) OR as inert (added here, with the user's
+# OK). This INVERTS the old default: the previous `CHOICE_PARAM_KEYS = set(MANIFEST.keys())`
+# made the guard's `elif` unreachable (any unmapped param fell through silently -- exactly how
+# `has_replicate` slipped). Now every potential decision is mapped by default; an unclassified
+# param stops the gate for the user's call.
+#
+# SAFETY BIAS: when unsure whether a param creates a choice, do NOT list it here -- leave it
+# unclassified so the guard surfaces it. Over-listing (marking a real decision inert) is the
+# one dangerous error; under-listing just yields a longer, safe review list.
+# ---------------------------------------------------------------------------
+INERT_PARAMS = {
+    # stats / computed values
+    "damage": "damage amount", "draw": "draw count", "cast_draw": "draw count",
+    "power_bonus": "stat bonus", "tough_bonus": "stat bonus",
+    "power_equals_creature_count": "computed P/T", "damage_equals_top_mv": "computed damage",
+    "verse_damage": "damage detail", "x_damage_multiplier": "X-spell damage scale ({X}->main_phase)",
+    "animate_power": "animated P/T", "animate_toughness": "animated P/T",
+    "attack_token_power": "token P/T", "attack_token_toughness": "token P/T",
+    "attack_token_subtypes": "token subtypes", "cast_token_power": "token P/T",
+    "cast_token_toughness": "token P/T", "cast_token_subtypes": "token subtypes",
+    "cast_trigger_subtype": "token subtype detail", "tap_token_power": "token P/T",
+    "tap_token_toughness": "token P/T", "tap_token_subtypes": "token subtypes",
+    "tap_token_requires_subtypes": "token gating detail", "upkeep_token_power": "token P/T",
+    "upkeep_token_toughness": "token P/T", "upkeep_token_subtypes": "token subtypes",
+    # automatic triggers / static effects (no choice)
+    "affects_all_creatures": "board-wide static, no target",
+    "attack_creates_tokens": "automatic attack trigger",
+    "attack_trigger_life_loss": "automatic attack trigger",
+    "cast_trigger_creates_tokens": "automatic on-cast trigger",
+    "controller_lifegain_equals_power": "automatic lifegain",
+    "death_trigger_damage": "automatic death trigger, no target in goldfish",
+    "destroy_all_enchantments": "destroy-all, no target choice",
+    "etb_opponent_lifegain": "automatic ETB", "opponent_lifegain": "automatic",
+    "lifegain_to_loss": "automatic replacement", "on_cast_trigger_damage": "automatic on-cast self-damage",
+    "on_cast_trigger_max_mv": "trigger threshold", "tap_opponent_lifegain": "automatic on tap",
+    "tap_self_damage": "automatic on tap", "taps_spawn_opp_token": "automatic on tap (Forbidden Orchard)",
+    "upkeep_creates_tokens": "automatic upkeep trigger", "landfall_damage": "damage modifier (rides `targeting`)",
+    "grants_double_strike": "static grant", "grants_haste": "static grant",
+    "lord_excludes_self": "lord effect detail", "affinity_for_subtype": "cost reduction",
+    "hinata_cost_reducer": "cost reduction", "no_max_hand_size": "static (Reliquary Tower)",
+    "max_casts_after": "spell-count restriction, no choice", "creature_mana_only": "mana-usage restriction",
+    "discard_random_after_tutor": "random discard, no choice",
+    # targeting/dig/tutor DETAIL params that ride an already-mapped decision
+    "discount_max_targets": "targeting detail (rides `targeting`)",
+    "discount_self_safe": "targeting-safety detail", "discount_targets_permanents": "targeting detail",
+    "discount_targets_scale_x": "targeting/X detail", "etb_dig_requires_subtypes": "dig detail (rides etb_dig_count)",
+    "etb_dig_subtypes": "dig detail (rides etb_dig_count)", "tutor_heuristic": "tutor ranking detail (rides tutor)",
+    "tutor_types": "tutor detail (rides tutor)", "subtypes_affected": "lord/replicate subtype list",
+    # mana production (color/source auto-resolved in the payment engine, not a surfaced choice today)
+    "produces": "mana production (color auto-resolved in payment)", "produces_amount": "mana amount",
+    "mana_rock": "mana source (color auto-resolved)", "is_filter": "mana filter (color auto-resolved)",
+    "ramp_filter": "mana filter (color auto-resolved)", "reflecting": "Reflecting-Pool mana (auto-resolved)",
+    "ritual_floating_mana": "ritual mana added",
+    # lands: static enter-state
+    "enters_tapped": "static land property", "enters_tapped_with_depletion": "static land property",
+    # targeting MODIFIER -- the target choice surfaces via `targeting` (already mapped). NB the card
+    # CAN target an opponent creature (real line: Invigorate + Swords to Plowshares); the goldfish
+    # model picks own best attacker only because the passive opponent has no board -> a disclosed
+    # (2) card-modeling limitation, NOT a viewer restriction.
+    "target_own_creature": "targeting modifier; choice rides `targeting` (can also hit opponent creatures)",
+    # self-declared
+    "goldfish_inert": "self-declared inert marker",
+}
+
+# Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
+# activation -- surfaced, but not as a distinct verifiable decision `type`. Classified as
+# MAPPED (they pass the guard); the per-deck obligation is that every legal variant/activation
+# is OFFERED (unpruned) in the plan list -- verified in the sweep, not by a distinct type.
+MAINPHASE_PARAMS = {
+    "discard_land_damage": "Land's Edge discard-a-land activation (board-click source, main.cpp:100)",
+    "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
+    "sacrifice_draw_cost": "Fiery Islet sac-to-draw activation (main_phase play)",
+    "stages_cards":        "Light Up the Stage: staged cards become castable (main_phase plays)",
+    "tap_token_cost":      "Sliver Hive activated token ability (main_phase play)",
+    "alt_cost_requires_subtype": "free-pitch alt cost = a distinct cast plan variant",
+    "alt_lifegain_cost":   "free-pitch alt cost (opponent-lifegain half is goldfish-inert)",
+    "animate_cost":        "animate = main_phase activation",
+    "can_animate":         "capability flag; animate rides main_phase",
+}
+
+# DEFAULT after onboarding = SURFACE every decision (user 2026-07-17). "Let the AI decide" is a
+# per-decision USER opt-in added later for convenience (e.g. shocklands, where constant prompting
+# gets annoying) -- NOT a process default, so there is no auto-default category. A real decision
+# not yet surfaced (shockland pay-life `etb_pay_life_to_untap`, Snarl reveal
+# `etb_untap_reveal_subtypes`) stays UNCLASSIFIED so the guard FAILS until it is wired to surface
+# (or the user signs off a deferral). And targets are NEVER restricted in human-play: the target
+# dialog offers every legal target (own AND opponent), per the "provider must not narrow in
+# human-play" invariant -- a truncated target list is a surfacing bug, not a heuristic.
+
+# Known unwired decision gaps, DEFERRED with the user's sign-off (disclosed in Stage 6a).
+DEFERRED_PARAMS = {
+    "cascade_max_mv":       "cascade SEARCH target -- heuristic-picked (DECISIONS.md known gap)",
+    "untap_x_mana_sources": "Reality Spasm untap mode -- needs an engine-model change (phase-2 gap)",
+}
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\n(.*?)\n<<<END_DECISION>>>", re.S)
 RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
@@ -142,8 +237,10 @@ def expected_for_card(card):
             dtype, pred = MANIFEST[key]
             if pred(val):
                 exp.add(dtype)
-        elif key in CHOICE_PARAM_KEYS:
-            unmapped.add(key)   # in the choice set but no manifest row -> guard trips
+        elif key in INERT_PARAMS or key in MAINPHASE_PARAMS or key in DEFERRED_PARAMS:
+            pass  # classified: inert / main_phase-ride / user-approved deferral
+        else:
+            unmapped.add(key)   # UNCLASSIFIED -> unmapped decision (wire it to surface) or new param -> guard trips
     # X spells: {X} in the mana cost -> chosen_x plan variant (rides main_phase)
     if "{X}" in (card.get("mana_cost") or ""):
         exp.add("main_phase")
@@ -432,11 +529,17 @@ def main():
 
     # ---- self-guard: unmapped choice params are a hard fail -----------------
     if guard_fail:
-        print("\nSELF-GUARD FAILURE -- choice-bearing param(s) with no manifest row "
-              "(mechanic in cards.json but not wired/mapped to a viewer decision):")
+        params_to_cards = collections.defaultdict(list)
         for nm, keys in guard_fail.items():
-            print(f"  {nm}: {sorted(keys)}")
-        print("Add each to MANIFEST in this script (and wire it per tools/play/DECISIONS.md).")
+            for k in keys:
+                params_to_cards[k].append(nm)
+        print("\nSELF-GUARD FAILURE -- UNCLASSIFIED cards.json param(s): present on a deck card but "
+              "in NEITHER the decision MANIFEST nor INERT_PARAMS. Each MUST be classified before the "
+              "viewer gate can pass -- either it creates a player decision (map it to a type in "
+              "MANIFEST + wire it per tools/play/DECISIONS.md), or it creates no choice (add it to "
+              "INERT_PARAMS with a reason -- which needs the user's OK):")
+        for k in sorted(params_to_cards):
+            print(f"  {k}: on {sorted(set(params_to_cards[k]))}")
         return 1
 
     if no_sweep:
