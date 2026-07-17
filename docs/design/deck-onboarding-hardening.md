@@ -92,18 +92,25 @@ Each lands behind the guiding principle; ③ ties them into one un-skippable gat
 - Acceptance: an unmapped choice-param cannot pass; a mapped type with no emitter/GUI branch
   cannot pass; the replicate class is closed for the *next* mechanic, not just replicate.
 
-### ② Card text — mechanical clause reconciliation  ✅ MOSTLY BUILT (2026-07-17)
+### ② Card text — mechanical clause reconciliation  ✅ DONE (2026-07-17)
 - **DONE — authoritative Scryfall snapshot + oracle/field diff (`scripts/audit_card_fields.py`).**
-  The authoritative data is a **committed** snapshot `src/cards/data/scryfall_reference.json`,
-  fetched deliberately with `--update` where the network exists; the default (offline) mode diffs
-  cards.json against it — **mana_cost, P/T, types/subtypes/supertypes, keywords HARD** (exit 1);
+  The authoritative data is a **committed** snapshot `src/cards/data/scryfall_reference.json`
+  (102 cards), fetched deliberately with `--update`; the default (offline) mode diffs cards.json
+  against it — **mana_cost, P/T, types/subtypes/supertypes, keywords HARD** (exit 1);
   **oracle_text ADVISORY** (normalised similarity, catches the Irencrag "Add six {R}"
   fabrication/drift). Fails **CLOSED** if the snapshot is missing/incomplete (a disclosed pending,
   never a silent pass). Offline-diff-against-committed-snapshot beats live-fetching every gate run
-  (slow + flaky — Scryfall is unreachable in the sandbox). Diff engine validated on a synthetic
-  reference (clean cards pass; injected P/T + keyword + oracle faults all caught). **Remaining: run
-  `--update` on a networked machine + commit the snapshot** — then `card_fields` goes from
-  SKIP-disclosed to a live blocking gate.
+  (slow + flaky). **`card_fields` is now a LIVE BLOCKING gate** (was SKIP-disclosed).
+- **DONE — gate calibrated (strip systematic noise + per-card allowlist).** The first live run
+  flagged 25 "hard mismatches", but ~18 were Scryfall-taxonomy artifacts, not bugs. Two-layer fix:
+  (1) **systematic noise stripped in-code** — `MODELED_ELSEWHERE_KEYWORDS` (ability words + keyword
+  abilities this engine models via params, not tags: cycling/scry/surveil/cascade/retrace/replicate/
+  affinity/treasure), land subtypes (derived at runtime), Basic/World supertypes (inert; Legendary/
+  Snow still checked), CDA `*` P/T component-wise; (2) **intentional per-card divergences** →
+  `src/cards/data/scryfall_divergences.json` (card→field→reason; reviewed, never silent; STALE-entry
+  detection): 3 keyword-lord Slivers, Haytham (protection, inert), 3 tribal-subtype omissions.
+  Negative-tested: corrupt P/T, a genuinely-missing keyword, and an un-allowlisted divergence are all
+  still HARD-caught. Result: **0 hard mismatches, 7 disclosed allowlisted, 57 oracle advisories**.
 - **DONE — `--coverage-only` hard-stops on partial gaps** (`analyze_deck.py`): missing OR `partial`
   (an implementable clause with no deferral bracket note) → exit 1. A genuine deferral is a bracket
   note (status stays `full`), so signing one off keeps it green. Closes "partials exit 0 and still
@@ -272,6 +279,19 @@ autonomous fraction and hand the user a clean, disclosed residual, not to feign 
   Only remaining ② step: run `audit_card_fields.py --update` on a networked machine + commit
   `scryfall_reference.json` (Scryfall is unreachable in this sandbox — diff engine validated
   synthetically instead).
+- 2026-07-17: **② DONE — snapshot committed + gate calibrated + card_fields LIVE.** Root-caused the
+  "Scryfall unreachable" block: `.devcontainer/init-firewall.sh` allowlisted api.scryfall.com but by
+  a **one-shot `dig` snapshot** pinned into an ipset — Scryfall is 100% Cloudflare (rotates IPs,
+  serves AAAA first), so runtime resolved to a rotated IPv4 (never in the ipset → SYN dropped) or
+  IPv6 (REJECTed). Fixed (`0748cff`): firewall now **pins each allowlisted host to an allowlisted
+  IPv4 in `/etc/hosts`** + widens the ipset with a few resolves. Built the 102-card snapshot
+  (`25ecda2`; default 0.1s throttle 429-throttled 24 cards → bumped to 0.25s + gentle re-fetch).
+  Calibrated the gate (`80f1b11`): systematic noise stripped in-code (ability-word/keyword-ability
+  set, land subtypes, Basic/World supertypes, CDA `*` component-wise) + per-card allowlist
+  `scryfall_divergences.json` (3 keyword-lord Slivers, Haytham protection, 3 tribal-subtype
+  omissions — all reviewed, bracket-noted, never silent, STALE-detected). Negative-tested (real P/T
+  / missing-keyword / un-allowlisted faults still HARD-caught). `card_fields` gate → **PASS** with 7
+  disclosed allowlisted + 57 oracle advisories. **② fully closed.**
 - 2026-07-17: **③ enforcement spine BUILT** (`scripts/verify_deck.py`). One green gate over the
   battery; exit non-zero unless every blocking gate is green or signed off in the per-deck ledger
   `docs/design/analysis-<deck>.md`. Closes the "partials exit 0" hole (coverage now hard-fails on
