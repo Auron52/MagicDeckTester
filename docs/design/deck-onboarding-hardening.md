@@ -103,12 +103,25 @@ Each lands behind the guiding principle; ③ ties them into one un-skippable gat
   account for each" into a checkable artifact.
 - Make `--coverage-only` **hard-stop on partial gaps**; stop bracket-notes from silencing checks.
 
-### ③ Enforcement spine — one green gate
+### ③ Enforcement spine — one green gate  ✅ BUILT (2026-07-17)
 - `scripts/verify_deck.py <deck>` runs the whole battery (coverage[hard-on-partial], cost+field
   audit, viewer audit[fixed], clause ledger, claude-play flags, nonconv/fd-diverge), emits the
   Stage-6a disclosure, and records results + approved-deferrals to the per-deck ledger
   (`docs/design/analysis-<deck>.md`). **Non-zero unless every check is green or every exception is
   a recorded user sign-off.** This is what lets the viewer session be a sanity check.
+- **Built:** gate model (PASS/FAIL/SKIP/DEFERRED/ERROR, each with sign-off-able finding keys).
+  Gates wired: `coverage` (parses the coverage JSON, **hard-fails on `partial` — closing the
+  "partials exit 0" hole**), `card_costs` (Scryfall, `--no-network` skips), `viewer` (the fixed
+  auditor), `viewer_wiring` (**static sites 3 & 4** — every decision type the deck uses has an
+  emitter in `main.cpp` + a GUI branch in `index.html`, resolved via the DECISIONS.md registry),
+  `mismatch` (engine `MTG_FLAG_NONCONV` + `MTG_FD_ORACLE` across seeds). **Not-yet-built checks are
+  DISCLOSED skips, never silent:** `card_fields`/`clause_ledger` (②), `claude_play` broadened sweep
+  (④). Ledger: a user-owned `## Approved deferrals` section signs off findings by key
+  (`gate:key`); a blocking FAIL whose every finding is approved downgrades to DEFERRED (disclosed,
+  non-blocking) — the generated block is rewritten in place, the approvals section never touched.
+  Exit non-zero on any un-approved blocking FAIL/ERROR. (Validated on Anti-Lifegain: coverage
+  FAILs on the unbracketed Ignoble Hierarch exalted trigger; a sign-off downgrades it to DEFER +
+  PASS.)
 
 ### ④ Autonomous play — enforce + broaden
 - The claude-play correctness sweep becomes a **required gated step** (in ③), not optional prose;
@@ -239,6 +252,15 @@ autonomous fraction and hand the user a clean, disclosed residual, not to feign 
   to `claude-play-mulligan-latency.md`); the wiring is structurally identical to the proven
   `replicate`/`retrace` types. **① effectively closed** modulo the latent 2nd greedy replicate loop
   (`AIEngine.cpp:3200`) + static emitter/GUI-branch checks, which fold into ③.
+- 2026-07-17: **③ enforcement spine BUILT** (`scripts/verify_deck.py`). One green gate over the
+  battery; exit non-zero unless every blocking gate is green or signed off in the per-deck ledger
+  `docs/design/analysis-<deck>.md`. Closes the "partials exit 0" hole (coverage now hard-fails on
+  `partial`) and adds the static sites-3&4 `viewer_wiring` check (emitter + GUI branch per the
+  DECISIONS.md registry). Disclosed skips for the not-yet-built ② (card_fields, clause_ledger) and
+  ④ (broadened claude-play sweep) — visible, never silent. Sign-off = user-owned `## Approved
+  deferrals`; a fully-approved FAIL → DEFERRED. Validated on Anti-Lifegain (coverage catches the
+  unbracketed Ignoble Hierarch exalted; sign-off → PASS). NOTE: the viewer/mismatch runtime gates
+  are now cheap because claude-play skips the exhaustive sidecar (`48c5a51`).
 - 2026-07-17: **Pipeline-ordering policy added** (user): mulligan-profile generation is pulled OUT
   of initial analyze; gated on play-correctness-shown + performance-optimized. See the new
   "Pipeline ordering" section above and `claude-play-mulligan-latency.md`. Implication for ⑤/③: the

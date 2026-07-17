@@ -333,6 +333,18 @@ profile is written.
 
 ## Stage 5 — Verify: mismatch harnesses + multi-depth sanity (loop to convergence)
 
+**One-command gate: `python3 scripts/verify_deck.py <deck>` (the enforcement spine, workstream ③).**
+It runs the whole battery as a single green gate — coverage (**hard-fails on partial gaps**, not
+just missing), Scryfall cost audit, the viewer decision auditor, a static sites-3&4
+`viewer_wiring` check (every decision type the deck uses has an emitter in `main.cpp` + a GUI branch
+in `index.html`), and the `nonconv`/`fd-diverge` mismatch harnesses — and **exits non-zero unless
+every blocking check is green or its failure is signed off** in the per-deck ledger
+`docs/design/analysis-<deck>.md` (`## Approved deferrals`). Not-yet-built checks (② field/clause
+audit, ④ broadened claude-play sweep) are reported as **disclosed skips, never silently omitted**.
+Use it as the Stage-5→6 gate; the sub-stages below are what it invokes and how to trace a failure it
+reports. (`--no-network` skips the Scryfall audit; `--no-sweep` skips the runtime gates for a fast
+static pre-check; `--write-ledger` records the run + Stage-6a disclosure.)
+
 A clean coverage check and a generated profile do NOT mean the deck is correctly modelled or correctly played. Stage 5 runs the deck through the verification harnesses and a multi-depth sanity sweep, and **reads the actual games**. Run everything at depth > 0 (the harnesses and the interesting decisions only exist when the search runs). Results are deterministic and thread-invariant (see the regression-testing skill), so every flagged seed/turn reproduces exactly for tracing — use `--threads 1` for ordered output.
 
 ### 5a. Mismatch harnesses (env-gated, inert by default)
