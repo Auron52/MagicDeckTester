@@ -25,7 +25,10 @@ Gates (blocking unless noted):
   viewer_wiring -- every decision type the deck uses has an emitter (main.cpp) AND a GUI
                    branch (index.html), per the DECISIONS.md registry (sites 3 & 4, static)
   mismatch      -- engine MTG_FLAG_NONCONV + MTG_FD_ORACLE across seeds (no [nonconv]/[fd-diverge])
-  claude_play   -- workstream 4 broadened correctness sweep: NOT BUILT -> disclosed skip
+  play_invariants -- workstream 4a: drive the claude-play protocol auto-following engine
+                   defaults; assert determinism + integrity + progress (runtime; --no-sweep skips)
+  claude_sweep  -- workstream 4b: the Claude-DRIVEN judgment sweep, recorded in the per-deck
+                   ledger ('## Claude-play sweep'); absent->SKIP, unresolved flags->FAIL, clean->PASS
 
 Sign-off: the ledger's "## Approved deferrals" section (user-owned) lists keys like
 `coverage:Ignoble Hierarch` or `viewer_wiring:land_entry`. A blocking failure whose every
@@ -288,12 +291,97 @@ def gate_mismatch(deck_path, profile, seeds, games, no_sweep):
     return Gate("mismatch", PASS, True, f"no nonconv/fd-diverge across seeds {seeds} x {games} games")
 
 
-def gate_claude_play():
-    return Gate("claude_play", SKIP, True, "NOT ENFORCED (workstream 4)",
-                disclose=["claude_play SKIPPED -- the broadened Claude-driven correctness sweep "
-                          "(.claude/skills/claude-play.md, analyze-deck 5d) is workstream 4, not yet a "
-                          "gated step. The viewer gate above verifies surfacing; PLAY correctness "
-                          "beyond nonconv/fd-diverge is still a manual sweep."])
+def gate_play_invariants(deck_path, profile, seeds, games, no_sweep):
+    """workstream 4a (mechanical half): drive the claude-play stateless-replay protocol
+    auto-following the engine's own defaults and assert protocol/engine INVARIANTS the
+    autonomous smoke can't -- determinism (same CSV -> byte-identical decision block),
+    integrity (valid JSON, known decision type, contiguous plan indices, clean 70/0 exit
+    codes), progress (reaches a result, no runaway). A HARD violation is a real oracle/
+    engine regression; cast-availability notes are advisory (cascade/vial/staged-from-exile
+    legitimately cast a name not in hand)."""
+    if no_sweep:
+        return Gate("play_invariants", SKIP, True, "skipped (--no-sweep)",
+                    disclose=["play_invariants SKIPPED (--no-sweep) -- claude-play protocol "
+                              "determinism/integrity/progress not exercised"])
+    if not Path(BIN).exists():
+        return Gate("play_invariants", ERROR, True, f"claude-play binary not built at {BIN}")
+    prof = ["--profile", str(profile)] if profile and Path(profile).exists() else []
+    n_games = min(games, 4)   # a few game-indices/seed is plenty; keep the gate fast (~1s/game)
+    rc, out, err = run([sys.executable, str(ROOT / "scripts/play_invariants.py"), deck_path, *prof,
+                        "--seeds", ",".join(str(s) for s in seeds), "--games", str(n_games), "--json"],
+                       timeout=900)
+    try:
+        data = json.loads(out[out.index("{"):out.rindex("}") + 1])
+    except (ValueError, json.JSONDecodeError):
+        return Gate("play_invariants", ERROR, True, f"tool error (rc={rc}): {(err or out).strip()[:200]}")
+    disclose = [f"play advisory -- seed {s} gi {gi}: {a[:150]}" for s, gi, a in data.get("advisories", [])]
+    hard = data.get("hard", [])
+    if hard:
+        findings = [(f"play_invariants:s{s}g{gi}", f"seed {s} gi {gi}: {f}") for s, gi, f in hard]
+        return Gate("play_invariants", FAIL, True, f"{len(hard)} invariant violation(s)", findings, disclose)
+    return Gate("play_invariants", PASS, True,
+                f"{data.get('games', 0)} game(s)/{data.get('decisions', 0)} decisions: "
+                f"determinism+integrity+progress hold", disclose=disclose)
+
+
+def _ledger_section(deck_path, heading):
+    """Lines of a user-owned '## <heading>' section (outside the generated block), or None."""
+    p = ledger_path(deck_path)
+    if not p.exists():
+        return None
+    text = re.sub(re.escape(LEDGER_BEGIN) + r".*?" + re.escape(LEDGER_END), "", p.read_text(), flags=re.S)
+    out, in_sec = [], False
+    for ln in text.splitlines():
+        if re.match(r"^##\s+" + re.escape(heading), ln, re.I):
+            in_sec = True
+            continue
+        if in_sec and ln.startswith("## "):
+            break
+        if in_sec:
+            out.append(ln)
+    return out if in_sec else None
+
+
+def _git_head():
+    rc, out, _ = run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], timeout=30)
+    return out.strip() if rc == 0 else ""
+
+
+def gate_claude_sweep(deck_path):
+    """workstream 4b (judgment half): the Claude-DRIVEN play sweep (analyze-deck 5d /
+    Workflow, one agent per game) is an expensive, user-initiated step whose result is
+    RECORDED in the per-deck ledger under '## Claude-play sweep' (commit / seeds / flags).
+    This gate enforces the record: absent -> disclosed SKIP (run it); >=1 unresolved flag
+    -> blocking FAIL; clean -> PASS (staleness vs HEAD disclosed -- the live play_invariants
+    gate + smoke digests track whether play changed, so the user re-runs when it does)."""
+    sec = _ledger_section(deck_path, "Claude-play sweep")
+    if sec is None:
+        return Gate("claude_sweep", SKIP, True, "no Claude-play sweep recorded",
+                    disclose=["claude_sweep SKIPPED -- no '## Claude-play sweep' section in "
+                              f"{ledger_path(deck_path).relative_to(ROOT)}. Run the Claude-driven sweep "
+                              "(.claude/skills/claude-play.md, analyze-deck 5d; fan game-indices out with "
+                              "the Workflow engine), verify any flags against cards.json + the rules skill, "
+                              "then record `commit:` / `seeds:` / `games:` / `flags: N unresolved` under "
+                              "that heading. play_invariants (above) already guards the protocol mechanically."])
+    body = "\n".join(sec)
+    mflags = re.search(r"flags:\s*(\d+)\s*unresolved", body, re.I)
+    mcommit = re.search(r"commit:\s*`?([0-9a-f]{7,40})`?", body, re.I)
+    commit = mcommit.group(1) if mcommit else ""
+    head = _git_head()
+    disclose = []
+    if commit and head and not head.startswith(commit):
+        disclose.append(f"claude_sweep recorded at commit {commit} (HEAD {head[:12]}); re-run if play "
+                        "changed since (play_invariants + smoke digests track play live).")
+    if mflags is None:
+        return Gate("claude_sweep", SKIP, True, "sweep record present but flag count unparseable",
+                    disclose=disclose + ["claude_sweep record found but no 'flags: N unresolved' line -- "
+                                         "add one so the gate can enforce cleanliness."])
+    unresolved_n = int(mflags.group(1))
+    if unresolved_n > 0:
+        return Gate("claude_sweep", FAIL, True, f"{unresolved_n} unresolved play flag(s)",
+                    [("claude_sweep:unresolved", f"{unresolved_n} unresolved flag(s) in the recorded sweep")],
+                    disclose)
+    return Gate("claude_sweep", PASS, True, "Claude-play sweep recorded, 0 unresolved flags", disclose=disclose)
 
 
 # --------------------------------------------------------------------------- ledger
@@ -415,7 +503,8 @@ def main():
         gate_viewer(deck, profile, args.no_sweep),
         gate_viewer_wiring(deck),
         gate_mismatch(deck, profile, seeds, args.games, args.no_sweep),
-        gate_claude_play(),
+        gate_play_invariants(deck, profile, seeds, args.games, args.no_sweep),
+        gate_claude_sweep(deck),
     ]
 
     approved = read_approved(deck)
