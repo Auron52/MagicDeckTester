@@ -81,6 +81,11 @@ MANIFEST = {
     "etb_bounce_land":       ("bounce",               truthy),
     "sacrifice_land":        ("sacrifice",            truthy),
     "expressive_iteration":  ("expressive_iteration", truthy),
+    # "pay a cost, or the land enters tapped" -- shock lands (pay life) + reveal lands (Frostboil
+    # Snarl, reveal a matching land). One shared `land_entry` binary modal. SURFACED, but repetitive:
+    # default-OFF in the viewer options menu (let-AI-decide), per the user 2026-07-17.
+    "etb_pay_life_to_untap":      ("land_entry",       positive),  # shock land: pay N life to untap
+    "etb_untap_reveal_subtypes":  ("land_entry",       truthy),    # reveal land (Frostboil Snarl)
     # plan-variant sub-decisions -- surfaced inside the main_phase plan list, not their own
     # type. Verified by "does the deck offer >1 plan variant", not a distinct decision type;
     # listed here so the self-guard treats them as MAPPED (not unknown choice params).
@@ -186,13 +191,15 @@ MAINPHASE_PARAMS = {
 }
 
 # DEFAULT after onboarding = SURFACE every decision (user 2026-07-17). "Let the AI decide" is a
-# per-decision USER opt-in added later for convenience (e.g. shocklands, where constant prompting
-# gets annoying) -- NOT a process default, so there is no auto-default category. A real decision
-# not yet surfaced (shockland pay-life `etb_pay_life_to_untap`, Snarl reveal
-# `etb_untap_reveal_subtypes`) stays UNCLASSIFIED so the guard FAILS until it is wired to surface
-# (or the user signs off a deferral). And targets are NEVER restricted in human-play: the target
-# dialog offers every legal target (own AND opponent), per the "provider must not narrow in
-# human-play" invariant -- a truncated target list is a surfacing bug, not a heuristic.
+# per-decision USER opt-in in the viewer's options menu for convenience (e.g. shocklands, where
+# constant prompting gets annoying). It lives in the VIEWER (localStorage-backed), not here: the
+# engine still ALWAYS emits every decision, so surfacing is never silently skipped at the engine
+# level. The two land-entry choices (shockland pay-life `etb_pay_life_to_untap`, Snarl reveal
+# `etb_untap_reveal_subtypes`) are now MAPPED to the `land_entry` type (wired per DECISIONS.md);
+# they ship default-OFF in that menu (the heuristic pays/reveals only when it benefits you). And
+# targets are NEVER restricted in human-play: the target dialog offers every legal target (own AND
+# opponent), per the "provider must not narrow in human-play" invariant -- a truncated target list
+# is a surfacing bug, not a heuristic.
 
 # Known unwired decision gaps, DEFERRED with the user's sign-off (disclosed in Stage 6a).
 DEFERRED_PARAMS = {

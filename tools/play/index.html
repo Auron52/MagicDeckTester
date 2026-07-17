@@ -264,6 +264,15 @@
   #decpanel.prompt { left:50%; bottom:18px; transform:translateX(-50%); width:min(620px,90vw); }
   #decpanel h3 { margin:0 0 4px; font-size:14px; color:var(--acc); }
   #decpanel .sub { color:var(--muted); font-size:12px; margin-bottom:10px; }
+  /* Persistent decision-options menu (gear in the header). */
+  #optmenu { position:fixed; z-index:30; right:14px; top:52px; width:min(420px,92vw);
+      background:var(--panel); border:1px solid var(--acc); border-radius:12px;
+      box-shadow:0 14px 44px rgba(0,0,0,.6); padding:14px 16px; }
+  #optmenu h3 { margin:0 0 4px; font-size:14px; color:var(--acc); }
+  #optmenu .sub { color:var(--muted); font-size:12px; margin-bottom:10px; }
+  #optmenu .optrow { display:flex; align-items:flex-start; gap:8px; font-size:12px;
+      padding:5px 0; cursor:pointer; }
+  #optmenu .optrow input { margin-top:2px; }
   #decpanel .revealrow { display:flex; gap:10px; flex-wrap:wrap; margin:8px 0 12px; justify-content:center; }
   #decpanel .reveal-card { width:96px; text-align:center; position:relative; }
   #decpanel .reveal-card img { width:100%; border-radius:7px; background:#0b0c0e; min-height:70px; box-shadow:0 0 0 1px var(--line); }
@@ -361,6 +370,7 @@
   <button id="newgame" class="primary">New game</button>
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
   <button id="undo" disabled>Undo</button>
+  <button id="optbtn" title="Decision options — pick which decisions to surface vs. let the AI decide">⚙ Options</button>
   <span id="refnote" class="refnote" style="display:none"></span>
   <span class="hint">no clairvoyance — your win-turn is a ground-truth bound</span>
 </header>
@@ -381,6 +391,7 @@
 </main>
 <div id="decback"></div>
 <div id="decpanel"></div>
+<div id="optmenu" style="display:none"></div>
 
 <!-- Shared, DOM-free line-building logic (also require()d by test/viewer_linebuild_check.js). -->
 <script src="/linebuild.js"></script>
@@ -1157,7 +1168,7 @@ function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
-                || dec==='replicate' || dec==='mulligan' || dec==='bottom'; // centered card-image modals
+                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1166,6 +1177,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='expressive_iteration' ? eiPanelHtml(d)
                   : dec==='retrace_discard' ? retraceDiscardPanelHtml(d)
                   : dec==='replicate' ? replicatePanelHtml(d)
+                  : dec==='land_entry' ? landEntryPanelHtml(d)
                   : dec==='mulligan' ? mulliganPanelHtml(d)
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
@@ -1284,6 +1296,25 @@ function replicatePanelHtml(d){
   for (let k=0;k<=max;k++)
     h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
   return h+`</div>`;
+}
+// Land-entry panel (shock lands, and reveal lands like Frostboil Snarl): IMAGE-based central modal. The
+// land is shown as art; two buttons pick whether it enters UNTAPPED (pay `pay_life` life, or reveal a
+// matching land) or tapped. The AI's default (pay iff mana is needed / reveal iff able) is tagged.
+// Repetitive, so the options menu can set this to "let AI decide" (default) — see AUTO_RESOLVABLE.
+function landEntryPanelHtml(d){
+  const def = d.heuristic_default===1;                      // 1 = enter untapped, 0 = tapped
+  const pay = d.pay_life||0, reveal = d.reveal_types||[];
+  const untapLabel = pay>0 ? `Pay ${pay} life — untapped`
+                   : `Reveal ${reveal.length?('a '+reveal.join(' / ')):'a matching land'} — untapped`;
+  let h=`<h3>Land enters — ${esc(d.source||'')}</h3>`;
+  h+=`<div class="sub">${esc(d.source||'This land')} can enter <b>untapped</b> by `+
+     `${pay>0?('paying <b>'+pay+' life</b>'):('revealing '+(reveal.length?('an '+reveal.map(esc).join(' / ')):'a matching land')+' from your hand')}, `+
+     `or enter <b>tapped</b> for free. The AI ${def?(pay>0?'pays':'reveals'):'declines'} here.</div>`;
+  h+=`<div class="tutgrid">`+cardMini(d.source||'')+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+     `<button class="${def?'primary':'ghost'}" data-le="1">${esc(untapLabel)}${def?'  ·  AI':''}</button>`+
+     `<button class="${def?'ghost':'primary'}" data-le="0">Enter tapped${def?'':'  ·  AI'}</button></div>`;
+  return h;
 }
 // Mulligan panel: IMAGE-based central modal, shown once per London-mulligan attempt BEFORE the game
 // starts. The 7-card hand is art; Keep / Mulligan buttons decide. The AI's own keep/mulligan (from the
@@ -1473,6 +1504,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitRetraceDiscard(d, +b.dataset.opt));
   else if (dec==='replicate')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitReplicate(d, +b.dataset.opt));
+  else if (dec==='land_entry')
+    panel.querySelectorAll('button[data-le]').forEach(b=>b.onclick=()=>commitLandEntry(d, +b.dataset.le));
   else if (dec==='mulligan')
     panel.querySelectorAll('button[data-mull]').forEach(b=>b.onclick=()=>commitMulligan(d, +b.dataset.mull));
   else if (dec==='bottom'){
@@ -1539,6 +1572,9 @@ function commitRetraceDiscard(d, oi){
 }
 function commitReplicate(d, n){
   pushChoice(d, n, `${d.source}: replicate ×${n}`);
+}
+function commitLandEntry(d, v){
+  pushChoice(d, v, landEntryLabel(d, v));
 }
 function commitMulligan(d, k){
   // London: you drew `n` (=7) and will BOTTOM `mc` cards for the mulligans taken. So KEEPING now ends
@@ -1645,6 +1681,57 @@ function logEventList(events) {
   }
 }
 function logEvents(dec) { if (dec) logEventList(dec.events); }
+// ---- Persistent decision-surface options (localStorage) --------------------------------------
+// The engine ALWAYS emits every decision (it is never silently skipped at the engine level); this
+// menu only controls whether the VIEWER surfaces a modal or auto-replies the AI's heuristic default.
+// Default: surface everything except the repetitive land-entry choice (shock lands / Frostboil
+// Snarl), which starts on "let AI decide" (its heuristic = pay/reveal only when it benefits you).
+// Only single-int decisions whose answer is exactly `heuristic_default` are auto-resolvable here.
+const AUTO_RESOLVABLE = {
+  land_entry:      'Shock / reveal lands — pay life (or reveal) vs. enter tapped',
+  replicate:       'Replicate — how many token copies to make',
+  retrace_discard: 'Retrace — which land to discard',
+  vial_charge:     'Aether Vial — add a counter',
+};
+const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry']);
+function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
+function surfaceStore(){ try { return JSON.parse(localStorage.getItem('mdt_surface')||'{}'); } catch(e){ return {}; } }
+function surfaceEnabled(type){ const s=surfaceStore(); return (type in s) ? !!s[type] : surfaceDefault(type); }
+function setSurface(type, on){ const s=surfaceStore(); s[type]=!!on; try { localStorage.setItem('mdt_surface', JSON.stringify(s)); } catch(e){} }
+function toggleOptMenu(){ const m=$('optmenu'); if (m.style.display==='block'){ m.style.display='none'; return; } renderOptMenu(); m.style.display='block'; }
+function renderOptMenu(){
+  const m=$('optmenu');
+  let h=`<h3>Decisions to surface</h3>`+
+    `<div class="sub">Checked = ask me (show the modal). Unchecked = let the AI decide with its heuristic default, no prompt. The engine still evaluates every decision either way — this only hides the prompt for repetitive choices.</div>`;
+  Object.keys(AUTO_RESOLVABLE).forEach(t=>{
+    h+=`<label class="optrow"><input type="checkbox" data-t="${t}" ${surfaceEnabled(t)?'checked':''}/><span>${esc(AUTO_RESOLVABLE[t])}</span></label>`;
+  });
+  h+=`<div class="pbtns" style="margin-top:12px"><span class="spacer"></span><button id="optclose" class="ghost">Close</button></div>`;
+  m.innerHTML=h;
+  m.querySelectorAll('input[data-t]').forEach(cb=>cb.onchange=()=>setSurface(cb.dataset.t, cb.checked));
+  const c=m.querySelector('#optclose'); if (c) c.onclick=()=>{ m.style.display='none'; };
+}
+// History label for a land-entry answer (v: 1 = untapped/pay, 0 = tapped).
+function landEntryLabel(d, v){
+  const pay=d.pay_life||0;
+  if (!v) return `${d.source}: enters tapped`;
+  return `${d.source}: ${pay>0?('pay '+pay+' — untapped'):'reveal — untapped'}`;
+}
+// Auto-resolve a decision the user has toggled to "let AI decide": reply the single heuristic-default
+// int without surfacing the modal. Returns true if it handled (and re-stepped) the decision. Behaves
+// exactly like the user instantly clicking the AI default, so the checkpoint/steps stay 1:1.
+function autoResolveDecision(dec){
+  if (!dec || !(dec.type in AUTO_RESOLVABLE)) return false;
+  if (surfaceEnabled(dec.type)) return false;
+  const def = (dec.heuristic_default==null ? 0 : dec.heuristic_default);
+  const lab = dec.type==='land_entry' ? landEntryLabel(dec, def)+' · auto'
+            : dec.type==='replicate'  ? `${dec.source}: replicate ×${def} · auto`
+            : dec.type==='retrace_discard' ? (()=>{ const c=(dec.options||[]).find(x=>x.index===def); return `${dec.source} (retrace): discard ${c?c.name:'land'} · auto`; })()
+            : dec.type==='vial_charge' ? `Vial: ${def?'+counter':'hold'} · auto`
+            : `${dec.source||dec.type}: auto`;
+  pushChoice(dec, def, lab);   // appends the choice, records history, hides the panel, re-steps
+  return true;
+}
 function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
   // Undo checkpoint: snapshot the history length + graveyard/hand diff state BEFORE this decision's
   // draws/gy are logged. A single forward step appends a VARIABLE number of history lines (draw
@@ -1653,6 +1740,9 @@ function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=
   (S.checkpoints=S.checkpoints||[]).push({ histLen:S.history.length, lastGy:Object.assign({},S.lastGy||{}),
     lastCasts:new Set(S.lastCasts||[]), handOrder:S.handOrder?S.handOrder.slice():undefined });
   if (dec && dec.type==='main_phase') { logDraws(dec); logEvents(dec); logGyAdds(dec.me); renderHistory(); }
+  // Options-menu "let AI decide": auto-reply the heuristic default without surfacing the modal
+  // (default for the repetitive shock/reveal land-entry choice). Short-circuits before rendering.
+  if (autoResolveDecision(dec)) return;
   $('endcontrols').style.display='none'; renderBoard();
   // Game already decided: the lethal spell/combat dropped the opponent to <=0 life, but the engine
   // still offers another main-phase decision (a post-combat Main 2, or a post-lethal draw-breakpoint
@@ -1832,6 +1922,7 @@ async function loadDecks() {
 })();
 
 $('newgame').onclick=newGame; $('nextgame').onclick=nextGame; $('undo').onclick=undo;
+$('optbtn').onclick=toggleOptMenu;
 $('saveref').onclick=()=>saveRef(false); $('saveref-sub').onclick=()=>saveRef(true);
 // Refresh the reference badge whenever the game selector changes.
 $('deck').addEventListener('change', checkReference);

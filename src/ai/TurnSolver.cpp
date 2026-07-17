@@ -4233,8 +4233,25 @@ static bool PlayLandByName(GameState& state, const std::string& name,
             return true;
         }
 
-        // Resolve "as this land enters" choices while the card is still in hand.
-        bool tapped = LandEntersTapped(state, *def, allow_shock_pay);
+        // Resolve "as this land enters" choices while the card is still in hand. Human play
+        // (g_play_land_entry_chooser set, and a real choice present) lets the user pick whether to
+        // pay the shock life / reveal to enter untapped; otherwise the autonomous heuristic stands
+        // (byte-identical for the search, which nulls the chooser via RevealLogPause).
+        bool tapped;
+        if (g_play_land_entry_chooser && LandEntryHasChoice(state, *def))
+        {
+            bool heur_untapped = !LandWouldEnterTapped(state, *def, allow_shock_pay);
+            bool untapped = (*g_play_land_entry_chooser)(
+                state, state.active_player_index, def->card.m_name.str(),
+                def->params.etb_pay_life_to_untap,
+                def->params.etb_untap_reveal_subtypes, heur_untapped);
+            if (untapped) { ApplyLandUntapPayment(state, *def); }
+            tapped = !untapped;
+        }
+        else
+        {
+            tapped = LandEntersTapped(state, *def, allow_shock_pay);
+        }
         Permanent perm;
         perm.card              = def->card;
         perm.controller_index  = state.active_player_index;

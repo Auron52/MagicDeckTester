@@ -334,6 +334,25 @@ using ReplicateChooser = std::function<int(const GameState& state, int controlle
                                            const std::string& source, int max_count)>;
 extern thread_local ReplicateChooser* g_play_replicate_chooser;
 
+// ---- Human-play land-entry chooser (enter a "pay a cost, or the land enters tapped" land) ------
+// Two lands present this choice as they enter: a shock land (etb_pay_life_to_untap -> pay N life to
+// enter untapped) and a reveal land like Frostboil Snarl (etb_untap_reveal_subtypes -> reveal a
+// matching land in hand to enter untapped). Both collapse to one binary decision: enter UNTAPPED by
+// paying the cost, or enter tapped. Autonomously (and in every search rollout) the engine takes the
+// heuristic (shock: pay iff mana is needed this turn; reveal: reveal iff able) -- `heuristic_untapped`
+// carries that default. `pay_life` is the shock life cost (0 for a reveal land); `reveal_types` names
+// the subtypes a reveal land wants (empty for a shock land, e.g. {"Island","Mountain"} for a Snarl).
+// The chooser returns true to enter untapped (pay the cost), false to enter tapped. Fires only when
+// there is a REAL choice (shock: affordable; reveal: a matching card is in hand) -- see
+// LandEntryHasChoice. Nulled by RevealLogPause for every search/rollout/enumeration scope, so it fires
+// only on the REAL land drop and the heuristic stands there -> autonomous play and the search stay
+// byte-identical. Inert (heuristic) unless set.
+using LandEntryChooser = std::function<bool(const GameState& state, int controller,
+                                            const std::string& source, int pay_life,
+                                            const std::vector<std::string>& reveal_types,
+                                            bool heuristic_untapped)>;
+extern thread_local LandEntryChooser* g_play_land_entry_chooser;
+
 // ---- Human-play Soulfire own-target chooser (WHICH of your creatures the dig also targets) ------
 // Soulfire Eruption targets the face + opponent creatures + (optionally) you + a SEARCHED COUNT of
 // your OWN creatures (each = a deeper dig + a bigger Hinata discount, but takes a random exiled
@@ -400,25 +419,26 @@ struct RevealLogPause
     std::vector<PlayEvent>* saved_evsink;
     BounceChooser* saved_sacchooser;
     ReplicateChooser* saved_repchooser;
+    LandEntryChooser* saved_lechooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
                        saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
                        saved_evsink(g_play_event_sink), saved_sacchooser(g_play_sacrifice_chooser),
-                       saved_repchooser(g_play_replicate_chooser)
+                       saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
       g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_sacrifice_chooser = nullptr;
-      g_play_replicate_chooser = nullptr; }
+      g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
                         g_play_event_sink = saved_evsink; g_play_sacrifice_chooser = saved_sacchooser;
-                        g_play_replicate_chooser = saved_repchooser; }
+                        g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

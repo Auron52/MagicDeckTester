@@ -60,6 +60,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `expressive_iteration` | `g_play_ei_chooser` (`EIChooser`) | Expressive Iteration resolution | `WriteEIDecisionJson` | `eiPanelHtml` | modal |
 | `retrace_discard` | `g_play_retrace_chooser` (`RetraceDiscardChooser`) | `ApplyPlan` `apply_one` retrace | `WriteRetraceDiscardDecisionJson` | `retraceDiscardPanelHtml` | modal |
 | `replicate` | `g_play_replicate_chooser` (`ReplicateChooser`) | `ApplyPlan` `apply_one` replicate loop | `WriteReplicateDecisionJson` | `replicatePanelHtml` | modal |
+| `land_entry` | `g_play_land_entry_chooser` (`LandEntryChooser`) | `TurnSolver::PlayLandByName` (shared land drop) | `WriteLandEntryDecisionJson` | `landEntryPanelHtml` | modal |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
 
 **Soulfire Eruption / Crackle with Power full-board targeting** does NOT use a distinct type:
@@ -76,6 +77,20 @@ Plan-variant sub-decisions ride the `main_phase` plan list rather than their own
 `soulfire_own_targets` (count). For these the only per-deck work is confirming the provider's
 `*Candidates` hook returns **every** legal option (human-play runs unpruned), so each legal
 option appears as a distinct plan variant.
+
+## Surfacing options (viewer "⚙ Options" menu)
+
+The engine **always emits** every decision it can (the chooser is installed unconditionally in
+`RunClaudePlay`); whether a modal is *shown* is a **viewer** concern. The play viewer's persistent
+options menu (localStorage `mdt_surface`, `AUTO_RESOLVABLE` in `index.html`) lets the user set any
+listed decision to **"let AI decide"**, in which case `advanceTo` auto-replies the decision's single
+`heuristic_default` int without surfacing the modal (it behaves exactly like instantly clicking the
+AI default, so undo/checkpoints stay 1:1). Only single-int decisions whose answer *is*
+`heuristic_default` are auto-resolvable this way. **Default is surface-on for everything except
+`land_entry`** (shock lands / Frostboil Snarl), which ships default-**off** because the choice is
+repetitive and its heuristic (pay life / reveal only when it benefits you) is usually right. This is
+a convenience toggle, never an engine-level skip — the audit gate still requires the decision be
+fully wired (all four sites) regardless of the menu default.
 
 ## Known gaps (not yet a type — see analyze-deck Stage 6a)
 

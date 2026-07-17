@@ -2317,50 +2317,69 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost)
     drain(cost.generic, reserve.green);
 }
 
-// Decides whether a land enters tapped and applies any "as this land enters"
-// payments/choices made on entry. Call while the land card is still in the player's
-// hand (the reveal check scans the hand). Returns true if the land enters tapped.
-//   - Shock land (etb_pay_life_to_untap): the AI pays the life to enter untapped
-//     whenever it can keep at least 1 life — early speed dominates in a goldfish.
-//   - Reveal land (etb_untap_reveal_subtypes): enters untapped iff a card of a listed
-//     subtype (e.g. Island/Mountain) is in hand (Frostboil Snarl).
-//   - Otherwise: the plain enters_tapped flag.
-inline bool LandEntersTapped(GameState& state, const CardDefinition& def, bool allow_pay_life = true)
+// True iff the active player's hand holds a card of a subtype this reveal land wants
+// (e.g. Island/Mountain for Frostboil Snarl) -- i.e. it CAN reveal to enter untapped.
+inline bool LandCanReveal(const GameState& state, const CardDefinition& def)
 {
     const CardParams& pp = def.params;
+    const Player& ap = state.ActivePlayer();
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+        const SubtypeSet& subs = cdef ? cdef->card.m_subtypes : c.m_subtypes;
+        for (const std::string& cs : subs)
+            for (const std::string& want : pp.etb_untap_reveal_subtypes)
+                if (cs == want) { return true; }
+    }
+    return false;
+}
 
+// Pure heuristic predicate: would this land enter tapped under autonomous play? Does NOT mutate
+// state (no life payment). Call while the card is still in hand (the reveal check scans the hand).
+//   - Shock land (etb_pay_life_to_untap): enters untapped iff the AI pays the life -- it does so
+//     whenever it can keep at least 1 life AND `allow_pay_life` (mana is actually needed this turn).
+//   - Reveal land (etb_untap_reveal_subtypes): enters untapped iff a matching card is in hand.
+//   - Otherwise: the plain enters_tapped flag.
+inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& def, bool allow_pay_life = true)
+{
+    const CardParams& pp = def.params;
     if (pp.etb_pay_life_to_untap > 0)
-    {
-        Player& ap = state.ActivePlayer();
-        // allow_pay_life=false (human play, no mana needed this turn) -> take the free tapped
-        // entry instead of paying the shock life for mana you would not use.
-        if (allow_pay_life && ap.life > pp.etb_pay_life_to_untap)
-        {
-            ap.life -= pp.etb_pay_life_to_untap;
-            return false;
-        }
-        return true;
-    }
-
+        return !(allow_pay_life && state.ActivePlayer().life > pp.etb_pay_life_to_untap);
     if (!pp.etb_untap_reveal_subtypes.empty())
-    {
-        const Player& ap = state.ActivePlayer();
-        for (const Card& c : ap.hand)
-        {
-            const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-            const SubtypeSet& subs = cdef ? cdef->card.m_subtypes : c.m_subtypes;
-            for (const std::string& cs : subs)
-            {
-                for (const std::string& want : pp.etb_untap_reveal_subtypes)
-                {
-                    if (cs == want) { return false; }
-                }
-            }
-        }
-        return true;
-    }
-
+        return !LandCanReveal(state, def);
     return pp.enters_tapped;
+}
+
+// Is there a real "enter untapped by paying a cost" CHOICE to surface for this land (human play)?
+//   - Shock land: yes iff the player can afford the life (life > cost) -- the human may pay even when
+//     the mana-needed heuristic wouldn't, or decline even when it would.
+//   - Reveal land: yes iff a matching card is in hand (otherwise it is forced tapped).
+inline bool LandEntryHasChoice(const GameState& state, const CardDefinition& def)
+{
+    const CardParams& pp = def.params;
+    if (pp.etb_pay_life_to_untap > 0) return state.ActivePlayer().life > pp.etb_pay_life_to_untap;
+    if (!pp.etb_untap_reveal_subtypes.empty()) return LandCanReveal(state, def);
+    return false;
+}
+
+// Apply the on-entry cost for a land the controller chose to enter UNTAPPED. Only a shock land has a
+// payable cost (its life); a reveal land pays nothing (revealing is free); a plain land is a no-op.
+inline void ApplyLandUntapPayment(GameState& state, const CardDefinition& def)
+{
+    if (def.params.etb_pay_life_to_untap > 0)
+        state.ActivePlayer().life -= def.params.etb_pay_life_to_untap;
+}
+
+// Decides whether a land enters tapped and applies any "as this land enters" payment (shock life).
+// The autonomous / rollout path -- takes the heuristic (LandWouldEnterTapped) and pays the cost when
+// it enters untapped. Human play routes the land drop through PlayLandByName, which consults the
+// g_play_land_entry_chooser at the shared call site before paying; this helper stays byte-identical
+// for the search and every other caller. Returns true if the land enters tapped.
+inline bool LandEntersTapped(GameState& state, const CardDefinition& def, bool allow_pay_life = true)
+{
+    bool tapped = LandWouldEnterTapped(state, def, allow_pay_life);
+    if (!tapped) { ApplyLandUntapPayment(state, def); }
+    return tapped;
 }
 
 // Shared "dig when stuck" gate (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar,

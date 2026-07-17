@@ -1064,6 +1064,33 @@ static void WriteReplicateDecisionJson(std::ostream& os, const GameState& s, con
     os << "}\n";
 }
 
+// Land-entry decision (shock lands, and reveal lands like Frostboil Snarl): as the land enters you may
+// pay a cost to have it enter UNTAPPED, or let it enter tapped. Shock lands pay `pay_life` life; reveal
+// lands reveal a matching land (`reveal_types`) already in hand -- free, but shown as a choice. The AI
+// default (heuristic_default = 1 untapped / 0 tapped) is: shock -> pay iff mana is needed this turn;
+// reveal -> reveal iff able. The reply is 1 (enter untapped, pay the cost) or 0 (enter tapped).
+static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                       int pay_life, const std::vector<std::string>& reveal_types,
+                                       bool heuristic_untapped, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"land_entry\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"pay_life\": " << pay_life << ",\n";
+    os << "  \"reveal_types\": [";
+    for (size_t i = 0; i < reveal_types.size(); ++i) { if (i) os << ", "; JsonStr(os, reveal_types[i]); }
+    os << "],\n";
+    os << "  \"heuristic_default\": " << (heuristic_untapped ? 1 : 0) << ",\n";
+    os << "  \"note\": \"reply 1 to enter UNTAPPED (";
+    if (pay_life > 0) { os << "pay " << pay_life << " life"; }
+    else              { os << "reveal a matching land"; }
+    os << "), or 0 to enter tapped. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
@@ -1713,6 +1740,38 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_replicate_chooser = &replicate_chooser;
 
+    // Land entry (shock lands / Frostboil Snarl): the player chooses whether the land enters untapped
+    // (paying its life / revealing a matching land) or tapped. Shares the --choices stream; the reply
+    // is 1 (untapped, pay) or 0 (tapped). Default (out-of-range or absent) = the engine's heuristic.
+    LandEntryChooser land_entry_chooser =
+        [&](const GameState& s, int controller, const std::string& source, int pay_life,
+            const std::vector<std::string>& reveal_types, bool heuristic_untapped) -> bool
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen != 0 && chosen != 1) { chosen = heuristic_untapped ? 1 : 0; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteLandEntryDecisionJson(ss, s, source, pay_life, reveal_types, heuristic_untapped, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen == 1;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteLandEntryDecisionJson(std::cout, s, source, pay_life, reveal_types, heuristic_untapped, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_land_entry_chooser = &land_entry_chooser;
+
     // Soulfire Eruption targeting: the player picks the FULL target set on the board, exactly like
     // Crackle. `legal` is the canonical target order (sentinels for the faces + battlefield indices);
     // `min_targets` is the affordability floor (the count the cast already paid the discount for). We
@@ -1798,6 +1857,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_ei_chooser = nullptr;
     g_play_retrace_chooser = nullptr;
     g_play_replicate_chooser = nullptr;
+    g_play_land_entry_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
