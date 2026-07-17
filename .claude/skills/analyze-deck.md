@@ -293,19 +293,36 @@ Apply the same bracket-note classification from Stage 1. If any gaps remain — 
 
 ---
 
-## Stage 4 — Generate the Profile
+## Stage 4 — Generate the *baseline* Profile (NO mulligan-profile generation)
 
 ```
 python scripts/analyze_deck.py <deck_path> --no-rebuild
 ```
 
-The analyzer is a fixed-recipe **profile generator** — it produces the deck's
-`<deck>.profile.json` (optimised mulligan + per-card scores) and takes no
-game-count/depth/budget knobs. It does NOT report win-rate; **evaluation is the
-regression suite's job** (see the regression-testing skill / `test/regression.sh`).
+**Policy (user, 2026-07-17): mulligan-profile generation is NOT part of analyze.** Stage 4 only
+produces the **baseline** `<deck>.profile.json` needed to *run and play* the deck — per-card scores
++ **defaults / static keep** (`bottoming_enabled` off). The expensive, commit-bound mulligan
+work — the exhaustive keep/bottom generation of the separate `mulligan-profile.md` skill, and any
+mulligan *optimisation* (grid search / threshold tuning) — is the **LAST stage and the USER kicks
+it off**, only after performance is optimised, play correctness is validated, AND the user's own
+feedback loop (perf discussion + viewer testing) has settled. See the "Pipeline ordering" section
+of [docs/design/deck-onboarding-hardening.md](../../docs/design/deck-onboarding-hardening.md) and
+`mulligan-profile.md`. Rationale: mulligan generation has **two independent showstoppers** — it is
+(1) **incorrect if play is wrong** (it optimises against whatever the engine does) and (2)
+**infeasible if the engine is slow** (generation is expensive; cf. the ~68–82 s claude-play
+mulligan keep-eval). Either alone kills it. It is also commit-bound, so any later engine change — a
+perf fix, a validation fix, or an issue the user finds in the viewer — invalidates it; paying for
+it before the engine is frozen is wasted work.
+
+The analyzer is a fixed-recipe **profile generator** — it produces the deck's baseline
+`<deck>.profile.json` and takes no game-count/depth/budget knobs. It does NOT report win-rate;
+**evaluation is the regression suite's job** (see the regression-testing skill /
+`test/regression.sh`).
 
 Parse the JSON output:
-- `analysis.mulligan_profile`: the optimised mulligan settings (also written to disk)
+- `analysis.mulligan_profile`: the **baseline** mulligan settings (defaults/static; also written to
+  disk). Do NOT drive exhaustive keep/bottom generation or threshold optimisation here — that is
+  the deferred, user-initiated final stage.
 - `analysis.card_scores` / `analysis.hand_score_threshold`: per-card keep values
 - `analysis.mulligan_flags`: required-piece flags worth reviewing with the user
 
@@ -455,11 +472,15 @@ This generalizes beyond ordering: the same oracle-diff → classify → derive �
 with/without-validate loop applies to dig-source selection, targeting, and tutor/fetch
 narrowing. Each heuristic added this way is disclosed in Stage 6a.
 
-### 5f. Runtime-reducing heuristics (branching pruning that funds better mulligan opt)
+### 5f. Runtime-reducing heuristics (branching pruning — a performance GATE)
 
-5e keeps heuristics *accurate*; this sub-stage uses the same machinery to make the analyzer
-**cheaper to run** so it fits an overnight window and the freed budget buys a better mulligan
-profile (more `GRID_GAMES`, more threshold candidates, deeper optimisation). The analyzer's
+5e keeps heuristics *accurate*; this sub-stage uses the same machinery to make the engine
+**cheaper to run**. Under the pipeline-ordering policy (Stage 4) performance is a hard **gate** the
+deck must clear *before* the deferred, user-initiated mulligan stage — because slow generation is
+one of that stage's two showstoppers. So the freed budget here is not spent on inline mulligan
+optimisation (that no longer happens during analyze); it makes the *later* user-kicked-off
+mulligan generation feasible (fits an overnight window; more `GRID_GAMES`, threshold candidates,
+deeper optimisation *when the user runs it*). The analyzer's
 cost is dominated by the per-node search rollout (the land×gate grid alone is hundreds of
 thousands of d5 games), and that cost scales with the **branching factor** — how many actions
 `CollectActions` emits per node and how wide each candidate set is (subset enumeration is

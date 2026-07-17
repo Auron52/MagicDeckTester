@@ -133,6 +133,47 @@ checks) and close the replicate class immediately — NOT because it's the top p
 clause correctness) and ④ (enforced, broader play sweep) together attack the play-bug drain, and
 ⑤ attacks the optimizing drain; each gets equal weight, not leftover attention.
 
+## Pipeline ordering — mulligan profile is the LAST, USER-INITIATED stage (user, 2026-07-17)
+
+**Why this order is crucial (user):** mulligan-profile generation has **two independent
+showstoppers**, and either one alone kills it:
+
+1. **Incorrect due to play errors** — the profile bakes in whatever the engine *does*; if play is
+   wrong, the profile optimises against wrong play and is invalid.
+2. **Unreasonably slow due to performance issues** — generation is expensive; if the engine is
+   slow (e.g. the ~68–82 s claude-play mulligan keep-eval), generation is infeasible to even run.
+
+So generation must wait until BOTH are resolved — play validated *and* performance optimised. It is
+also commit-bound (the raw sidecar's `commit` fingerprint gates cross-machine pooling; *any* later
+engine change — a perf fix, a validation fix, OR an issue the user finds in the viewer —
+invalidates every sidecar), which is why it only pays off once **everything that could still change
+the engine is frozen**.
+
+**Mulligan-profile generation happens LAST, and the USER kicks it off** — never during initial
+analyze, and never automatically. The full ordering:
+
+1. **Initial analyze** — cards + coverage + autonomous play + viewer wiring. Ships the deck on
+   **defaults / static keep** (no exhaustive profile; `bottoming_enabled` off). Its job is to make
+   play *correct* and the viewer *complete*, NOT to generate a profile.
+2. **Performance work** — optimize the deck's hotspots (profiling → hotspot is the autonomous win)
+   AND the interactive path (e.g. the ~68–82 s claude-play mulligan keep-eval,
+   `claude-play-mulligan-latency.md`, which blocks both profile gen and cheap viewer verification).
+3. **Validation** — automated: mismatch harnesses, multi-depth, budget-starvation, the claude-play
+   correctness sweep, regression.
+4. **The user's own feedback loop** — this is an explicit gate, not an afterthought: the user
+   talking with the AI about performance, surfacing potential issues, and issues they find **using
+   the viewer**. These get fixed. This is the "sanity-check" phase the whole effort is built to
+   enable — and because it can still change the engine, it must **settle before** step 5.
+5. **THEN — and only then — the user manually kicks off mulligan generation** on the frozen commit
+   (the separate `mulligan-profile.md` workflow: defaults → low-R exhaustive keep → high-R;
+   `bottoming_enabled` ships off until a validated high-R run).
+
+This means the earlier `analyze-deck` "Stage 4 = build & run" **must not** include
+exhaustive-profile generation; that moves out to step 5 above. (Reinforces, and is stricter than,
+`mulligan-profile.md` Rule 0 — which says "generate late on a frozen commit"; this adds that the
+user's hands-on perf+viewer feedback is *part of* what must freeze first, and that the user, not
+the process, initiates it.)
+
 ## Difficulty calibration (user, 2026-07-17)
 Ordered by how much manual effort remains achievable-to-remove: **viewer (easiest — a
 completeness check over a finite param set) < card bugs (middle — "stamp down most" via
@@ -172,3 +213,34 @@ autonomous fraction and hand the user a clean, disclosed residual, not to feign 
   (6 shocklands, "pay 2 life or enter tapped") and `etb_untap_reveal_subtypes` (Frostboil Snarl,
   "reveal a land or enter tapped"). NEXT: wire a shared yes/no modal for these; then the
   per-decision auto opt-in (separate, later).
+
+- 2026-07-17: **① land-entry decision WIRED + persistent options menu (default-off/auto).** New
+  shared `land_entry` decision type covers BOTH bucket-B lands (shock: pay life; reveal: Frostboil
+  Snarl) as one binary "enter untapped (pay the cost) / enter tapped" modal. Four wiring sites:
+  (1) `LandEntryChooser` typedef + `g_play_land_entry_chooser` in `GameLogger.h/.cpp`, nulled in
+  `RevealLogPause`; (2) shared call site `TurnSolver::PlayLandByName` (the real-game land drop that
+  `ApplyPlan` runs) — gated on the pointer + `LandEntryHasChoice`, heuristic fallback when null
+  (refactored `LandEntersTapped` into pure `LandWouldEnterTapped` + `LandEntryHasChoice` +
+  `ApplyLandUntapPayment` — **byte-identical** for the search / analyzer, which never sets the
+  chooser); (3) emitter `WriteLandEntryDecisionJson` in `main.cpp` + installed lambda; (4) GUI
+  `landEntryPanelHtml` + dispatch/wire/`commitLandEntry` in `index.html`. MANIFEST maps both params
+  → `land_entry`; auditor self-guard now **passes** (Anti-Lifegain: expected types `divide`,
+  `land_entry`, `target`, 0 unclassified). **Persistent options menu** (`⚙ Options`,
+  localStorage `mdt_surface`): per-decision "surface vs. let-AI-decide" toggles for the repetitive
+  single-int classes (`land_entry`, `replicate`, `retrace_discard`, `vial_charge`); `land_entry`
+  ships **default-OFF (auto)** — `advanceTo` auto-replies `heuristic_default` (shock: pay iff mana
+  needed; reveal: reveal iff able) without a modal, keeping checkpoints/steps 1:1. Engine still
+  ALWAYS emits the decision (never an engine-level skip); the menu is viewer-only convenience.
+  DECISIONS.md updated (registry row + "Surfacing options" section). Validated: both binaries
+  build clean; **smoke 18/18 exact-digest PASS → analyzer/search path byte-identical** (0 win→loss,
+  0 play-changed); auditor **self-guard passes** (Anti-Lifegain expected: `divide`, `land_entry`,
+  `target`; 0 unclassified). Live runtime surface-check via claude-play was **deferred to indirect
+  proof** because each stateless-replay launch costs ~68–82 s (mulligan keep-eval — separated out
+  to `claude-play-mulligan-latency.md`); the wiring is structurally identical to the proven
+  `replicate`/`retrace` types. **① effectively closed** modulo the latent 2nd greedy replicate loop
+  (`AIEngine.cpp:3200`) + static emitter/GUI-branch checks, which fold into ③.
+- 2026-07-17: **Pipeline-ordering policy added** (user): mulligan-profile generation is pulled OUT
+  of initial analyze; gated on play-correctness-shown + performance-optimized. See the new
+  "Pipeline ordering" section above and `claude-play-mulligan-latency.md`. Implication for ⑤/③: the
+  perf-optimization workstream now also owns the claude-play mulligan latency, since it blocks both
+  the profile stage and cheap viewer verification.
