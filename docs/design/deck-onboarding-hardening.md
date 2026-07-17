@@ -92,16 +92,27 @@ Each lands behind the guiding principle; ③ ties them into one un-skippable gat
 - Acceptance: an unmapped choice-param cannot pass; a mapped type with no emitter/GUI branch
   cannot pass; the replicate class is closed for the *next* mechanic, not just replicate.
 
-### ② Card text — mechanical clause reconciliation
-- Store the **authoritative Scryfall `oracle_text` verbatim** (separate field / sidecar) and diff
-  the working entry against it in the gate — catches fabrication/drift (the Irencrag
-  "Add six {R}" class).
-- Extend the reality-diff to **P/T, keywords, and other Scryfall-checkable fields**
-  (`audit_card_fields.py`), not just cost.
-- Per-card **clause ledger**: each oracle clause marked `modeled(param)` / `inert(reason)` /
-  `deferred(user-approved)`; gate fails on any unaccounted clause. Turns "split into clauses and
-  account for each" into a checkable artifact.
-- Make `--coverage-only` **hard-stop on partial gaps**; stop bracket-notes from silencing checks.
+### ② Card text — mechanical clause reconciliation  ✅ MOSTLY BUILT (2026-07-17)
+- **DONE — authoritative Scryfall snapshot + oracle/field diff (`scripts/audit_card_fields.py`).**
+  The authoritative data is a **committed** snapshot `src/cards/data/scryfall_reference.json`,
+  fetched deliberately with `--update` where the network exists; the default (offline) mode diffs
+  cards.json against it — **mana_cost, P/T, types/subtypes/supertypes, keywords HARD** (exit 1);
+  **oracle_text ADVISORY** (normalised similarity, catches the Irencrag "Add six {R}"
+  fabrication/drift). Fails **CLOSED** if the snapshot is missing/incomplete (a disclosed pending,
+  never a silent pass). Offline-diff-against-committed-snapshot beats live-fetching every gate run
+  (slow + flaky — Scryfall is unreachable in the sandbox). Diff engine validated on a synthetic
+  reference (clean cards pass; injected P/T + keyword + oracle faults all caught). **Remaining: run
+  `--update` on a networked machine + commit the snapshot** — then `card_fields` goes from
+  SKIP-disclosed to a live blocking gate.
+- **DONE — `--coverage-only` hard-stops on partial gaps** (`analyze_deck.py`): missing OR `partial`
+  (an implementable clause with no deferral bracket note) → exit 1. A genuine deferral is a bracket
+  note (status stays `full`), so signing one off keeps it green. Closes "partials exit 0 and still
+  produce a profile."
+- **Clause ledger — deferred (disclosed).** Its function (every oracle clause
+  modeled/inert/deferred) is now covered mechanically by the combination of: coverage
+  (partial hard-stop) + bracket-note deferrals + the viewer auditor's oracle-text cross-check +
+  `audit_card_fields` oracle-diff. A dedicated hand-populated per-clause artifact adds marginal
+  rigor at a high per-card cost, so it is a disclosed deferral, not a silent gap.
 
 ### ③ Enforcement spine — one green gate  ✅ BUILT (2026-07-17)
 - `scripts/verify_deck.py <deck>` runs the whole battery (coverage[hard-on-partial], cost+field
@@ -252,6 +263,15 @@ autonomous fraction and hand the user a clean, disclosed residual, not to feign 
   to `claude-play-mulligan-latency.md`); the wiring is structurally identical to the proven
   `replicate`/`retrace` types. **① effectively closed** modulo the latent 2nd greedy replicate loop
   (`AIEngine.cpp:3200`) + static emitter/GUI-branch checks, which fold into ③.
+- 2026-07-17: **② card-text reconciliation MOSTLY BUILT.** `scripts/audit_card_fields.py` (offline
+  diff of cards.json vs a committed Scryfall snapshot: cost/PT/types/keywords HARD, oracle_text
+  advisory; fails closed when the snapshot is missing) replaces the spine's `card_fields`
+  disclosed-skip; `analyze_deck.py --coverage-only` now hard-stops on partial gaps; the spine's
+  `card_fields` gate interprets snapshot-missing → SKIP-disclosed (run `--update`), mismatches →
+  FAIL. Clause ledger deferred (function covered by coverage-partial + bracket-notes + oracle-diff).
+  Only remaining ② step: run `audit_card_fields.py --update` on a networked machine + commit
+  `scryfall_reference.json` (Scryfall is unreachable in this sandbox — diff engine validated
+  synthetically instead).
 - 2026-07-17: **③ enforcement spine BUILT** (`scripts/verify_deck.py`). One green gate over the
   battery; exit non-zero unless every blocking gate is green or signed off in the per-deck ledger
   `docs/design/analysis-<deck>.md`. Closes the "partials exit 0" hole (coverage now hard-fails on

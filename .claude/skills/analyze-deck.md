@@ -268,6 +268,13 @@ python scripts/audit_card_costs.py
 
 It fetches every costed `cards.json` entry's `mana_cost`/`cmc` from Scryfall and reports any divergence (and cross-checks `cascade_max_mv == cmc`), exiting non-zero on a mismatch. **Fix every mismatch by pasting the Scryfall value — do not rationalise a difference.** Only proceed when it reports "All mana costs match Scryfall" (cards that 429 are rate-limit transients, not failures; re-run or verify them by hand). Treat a non-zero exit as a hard stop, exactly like a build error.
 
+**Also reconcile the non-cost fields (`scripts/audit_card_fields.py`, workstream ②).** The cost audit only checks cost/cmc; `audit_card_fields.py` extends the same reality-diff to **P/T, types/subtypes/supertypes, keywords (all HARD)** and the **verbatim `oracle_text` (advisory — catches the Irencrag "Add six {R}" fabrication class)**. It diffs cards.json against a **committed** Scryfall snapshot (`src/cards/data/scryfall_reference.json`), so it is fast, offline, and deterministic once the snapshot exists:
+```
+python scripts/audit_card_fields.py --update    # (network) refresh the snapshot, then commit it
+python scripts/audit_card_fields.py             # offline diff -- run this in the gate
+```
+Run `--update` (and commit the snapshot) whenever you add/edit cards; the offline diff (and `verify_deck.py`'s `card_fields` gate) then reality-checks every field. It **fails closed** if a card is missing from the snapshot — an unfetched card is a pending item, never a silent pass.
+
 ### 2e. Rebuild after all cards
 
 Once all cards in `missing` and all `gaps` are resolved:

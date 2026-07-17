@@ -337,7 +337,14 @@ def Main():
 
     if args.coverage_only:
         print(json.dumps(report, indent=2))
-        sys.exit(0)
+        # HARD-STOP on missing OR partial gaps (workstream 2 / verify_deck.py 3). A `partial`
+        # is an implemented clause the coverage scan could not confirm and that carries NO
+        # deferral bracket note -- exactly the "hand-waved the gist" gap the process must not let
+        # exit 0. A genuine deferral is reclassified `deferred` (status stays `full`) by a bracket
+        # note, so signing one off keeps this green. This aligns the tool with the spine, which
+        # already treats `partial` as a blocking finding.
+        partial = [c for c in coverage if c.get("status") == "partial"]
+        sys.exit(1 if (missing or partial) else 0)
 
     # 3. Block on missing cards
     if missing:
