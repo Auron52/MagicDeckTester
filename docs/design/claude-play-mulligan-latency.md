@@ -1,45 +1,60 @@
-# claude-play mulligan latency (separated-out investigation)
+# claude-play startup latency — exhaustive keep sidecar parse (ROOT-CAUSED + fixed)
 
-**Status:** OPEN observation, not being worked on now. Split out from the deck-onboarding
-`land_entry` wiring (2026-07-17) so the two don't get conflated. This is a **performance**
-concern, NOT mulligan-profile generation and NOT caused by the `land_entry` change (smoke is
-byte-identical).
+**Status (2026-07-17):** ROOT-CAUSED and fixed for the claude-play path. Split out from the
+`land_entry` viewer work so the two don't get conflated. This is a **performance** finding, NOT
+mulligan-profile generation and NOT caused by the `land_entry` change (smoke byte-identical).
 
-## Observation
+## Symptom
 
-A single `--claude-play` launch spends **~68–82 s before it even returns the first decision**,
-and the cost is dominated by the **mulligan keep-evaluation** (the `KeepHand` decision the viewer
-shows as the opening Keep/Mulligan modal). Measured 2026-07-17 driving Anti-Lifegain:
+A single `--claude-play` launch spent **~68–82 s before it even returned the first decision**, and
+because the stateless-replay protocol relaunches the binary *per decision*, a whole game walk was
+`O(decisions) × ~70 s` — making the viewer hang on "New game" and making Stage-5h sweeps /
+in-session live verification impractical.
 
-- step 0 (mulligan) ≈ 68 s **with no `--profile`** and ≈ 82 s with the exhaustive profile — so the
-  bulk is the base keep-rollout eval, not the profile.
-- every later step is also ≈ 68 s because the **stateless replay re-runs the mulligan eval from
-  scratch on each launch** (the auditor / viewer relaunch the binary per decision), i.e. the whole
-  game walk is `O(decisions) × 68 s`.
+## Root cause (perf, 2026-07-17)
 
-## Why it matters
+Profiled one launch (`perf record -g`, Anti-Lifegain). **91 % of wall time is
+`AttachExhaustiveSidecar` → `CachedExhaustiveKeep` → `LoadDeckProfile` → `DeckProfileFromJson`**,
+i.e. `nlohmann::json::parse` of the deck's **exhaustive keep sidecar** (a large JSON;
+`json::parse` alone is 60 %+). It is loaded at startup — even without `--profile` (the sidecar path
+is auto-derived) — purely for the opening mulligan keep decision. The actual keep eval, `KeepHand`,
+and gameplay are negligible (< 1 %). So it was never the "mulligan keep-eval"; it is
+**deserialization of the keep table**.
 
-1. **Viewer UX:** "New game" appears to hang for over a minute on the opening mulligan modal.
-2. **Verification cost:** the Stage-5h viewer auditor and any stateless-replay sweep pay ~68 s
-   *per decision per game*, which makes a 10-game sweep take ~an hour and makes in-session
-   live-surface checks of a new decision type impractical. (This is why the `land_entry` runtime
-   surface-check was deferred to indirect proof: builds clean + smoke byte-identical + self-guard
-   maps the type + wiring structurally identical to `replicate`/`retrace`.)
+## Fix (shipped)
 
-## Leads to investigate (unverified)
+**claude-play skips the exhaustive keep sidecar by default.** `main.cpp` gates
+`AttachExhaustiveSidecar` on `!claude_play || --exhaustive-keep`. The deck's **base** `.profile.json`
+still loads (small/fast) and supplies the static keep (`min_lands`/`max_lands`/`stop_at`), so
+**mulligans still happen and still toss 0-land / flood / all-land junk** — they're just not the
+exhaustive-optimal table. `--exhaustive-keep` opts back into loading it when the optimal mulligan
+hint is wanted. Autonomous / batch (`--batch` → `BatchRunner`) / scenario paths are **unchanged**
+(they always load it), so regression fingerprints are byte-identical.
 
-- What is the mulligan keep-eval actually doing for ~68 s? Likely full keep-rollouts at the
-  claude-play depth/budget for every keep bucket / London size. Profile it (`MTG_BRANCH_STATS`,
-  a perf build) and find the hotspot.
-- Is the eval redundant with what the viewer needs? The viewer only needs the **AI's keep/mull
-  recommendation** (`ai_choice`) to tag the modal — a much cheaper single evaluation than a full
-  clairvoyant keep search may be enough for the human-facing hint.
-- Can claude-play **cache** the opening keep eval across the stateless replays of the same
-  (seed, game-index)? The replay is deterministic, so the mulligan result is identical every
-  launch — a memoized decision cache keyed by the choice-prefix would collapse the `O(n) × 68 s`
-  replay cost. (This helps every decision type, not just the mulligan.)
-- Separately, an env knob to **cap the mulligan eval budget in claude-play** would make
-  verification sweeps tractable without changing the shipped autonomous path.
+Measured: default claude-play launch **~70 s → < 1 s**; `--exhaustive-keep` reproduces the ~74 s
+load (confirming the sidecar is the entire cost).
+
+### Why skipping is correct here (user, 2026-07-17)
+
+claude-play in this process is a **play-verification tool**: can a human/Claude *out-play* the
+engine AI, or find bugs in its play? ("play" = card implementation + AI heuristics + search.) If it
+can, the engine's play has a gap to fix. Mulligan **optimality is irrelevant** to that — we only
+need reasonable (not-junk) opening hands to test play on, which the static default keep provides.
+And the governing principle: **"if play is fully reliable, so will the mulligan table"** — mulligan
+quality is downstream of play, so the expensive keep table is exactly the thing you do NOT need
+while still validating play. (This is also why mulligan-profile generation is the last,
+user-initiated stage — see `deck-onboarding-hardening.md` "Pipeline ordering".)
+
+## Deeper follow-up (deferred) — reuse the parsed sidecar between instances
+
+If we ever want *sidecar-quality* mulligan hints in the viewer without the reload cost, the
+per-launch JSON re-parse is the thing to kill (the stateless protocol reloads it every launch).
+Options, unbuilt:
+- **Parse-once binary cache:** on first load, parse the JSON and write a fast-loading binary blob
+  (keyed by content hash); later launches `mmap`/load it in ms. Helps every deck with a sidecar.
+- **Stateful play server:** hold the parsed `ExhaustiveKeepPolicy` in a long-lived process the
+  viewer talks to, instead of relaunching the stateless binary per decision.
+Neither is needed for play verification; only for a fast *and* optimal viewer mulligan experience.
 
 ## Non-goals
 

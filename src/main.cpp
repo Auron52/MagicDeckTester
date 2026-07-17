@@ -39,6 +39,9 @@ static void PrintUsage(const char* prog)
               << "  --threads N     Worker threads (default: 0 = auto, affinity-based CPU count)\n"
               << "  --profile P     Path to a .profile.json file (default: auto-detect deckname.profile.json)\n"
               << "  --log-dir P     Write one JSON game log per game into this directory\n"
+              << "  --exhaustive-keep  Load the exhaustive keep sidecar under --claude-play too\n"
+              << "                  (claude-play skips it by default; it costs ~68s/launch to parse\n"
+              << "                  and mulligan optimality is irrelevant to play verification)\n"
               << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n";
 }
 
@@ -2480,6 +2483,8 @@ int main(int argc, char* argv[])
     bool     diag_depth     = false;
     bool     trace_t1       = false;
     bool        claude_play = false;
+    bool        force_exhaustive_keep = false;  // --exhaustive-keep: load the exhaustive keep sidecar
+                                                // even under claude-play (which skips it by default)
     std::string choices_str;          // comma-separated plan indices for --claude-play
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
     std::string validate_line;        // --validate-line "<spec>": human-play line to reconcile
@@ -2502,6 +2507,7 @@ int main(int argc, char* argv[])
         if (flag == "--diag-depth")          { diag_depth = true; continue; }
         if (flag == "--trace")               { trace_t1 = true; continue; }
         if (flag == "--claude-play")         { claude_play = true; continue; }
+        if (flag == "--exhaustive-keep")     { force_exhaustive_keep = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
         try
         {
@@ -2620,7 +2626,17 @@ int main(int argc, char* argv[])
             profile = LoadDeckProfile(profile_path);
             std::cerr << "Loaded profile from " << profile_path.string() << "\n";
         }
-        AttachExhaustiveSidecar(profile, profile_path);  // play uses the deck's exhaustive sidecar if present
+        // The exhaustive keep sidecar is a large JSON that costs ~68s to parse per launch and
+        // dominates claude-play's stateless-replay cost. claude-play is a PLAY-verification tool
+        // (can a human out-play the engine / are there play bugs?) where mulligan optimality is
+        // irrelevant -- the base profile's static keep still tosses 0-land/flood hands, which is all
+        // this needs ("if play is reliable, so is the mulligan table"). So skip the sidecar under
+        // claude-play by default; --exhaustive-keep opts back in for the optimal keep hint. The
+        // autonomous / batch / scenario paths always load it (unchanged, byte-identical).
+        if (!claude_play || force_exhaustive_keep)
+        {
+            AttachExhaustiveSidecar(profile, profile_path);  // play uses the deck's exhaustive sidecar if present
+        }
         AttachEvalSidecar(profile, profile_path);        // ... and its learned mid-game eval sidecar if present
         AttachValueSidecar(profile, profile_path);       // ... and its learned leaf value sidecar if present
 
