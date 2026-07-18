@@ -495,3 +495,40 @@ on new params so every other deck is byte-identical. Faithful to the oracle + th
       **Reality Spasm is trickier** (float must track the untapped sources' colors, not a flat red) — real
       de-abstraction, its own step.
 - [ ] Stage 3 re-coverage, Stage 4 baseline profile, Stage 5 verify → converge.
+
+## Stage 5a fd-diverge root-cause (2026-07-18) — Medallion executor bug FIXED (13→2), firebreathing residual reported
+Sweep `MTG_FULL_DEPTH=1 MTG_FD_ORACLE=1 ... --games 50 --seed 1001 --depth 5 --budget-ms 20 --lookahead-bottoming --threads 1`.
+- **PRIMARY (11 of 13) — Ruby Medallion executor-vs-rollout cost divergence (CARD-IMPL BUG, FIXED).**
+  `AIEngine::EffectiveCost` (the EXECUTOR) was MISSING the `reduces_spell_color` Medallion block that
+  `TurnSolver::EffectiveCost` (the PLANNER/ROLLOUT) has (~lines 619-639). The planner projected reduced
+  red-spell costs (e.g. seed=1024: rituals `{1}{R}`+`{R}`, Dragonstorm `{7}{R}` → a T3 storm-3 win), but
+  the executor paid FULL cost (`{2}{R}`+`{1}{R}`), ran ~2 mana short, could NOT cast Dragonstorm → the
+  committed win never realized → fd-diverge (seed=1024 projected T3 from turn 1, realized 9/unwon;
+  manaPaid log showed the full un-reduced ritual costs and Dragonstorm still in hand). **FIX:** added the
+  identical Medallion block to `AIEngine::EffectiveCost` (src/ai/AIEngine.cpp), placed after copies-scale
+  + affinity, before Hinata — single `std::max(0, generic - color_reduction)` floor, so the copies-scale-
+  before-floor splice+Medallion invariant holds ({2}{R}{R}→{1}{R}{R} at one Medallion, {R}{R} at two;
+  also brings the executor's spliced-Desperate-Ritual cast into lockstep, which was ALSO un-reduced before).
+  Inherently gated on a `reduces_spell_color` permanent in play → every non-Medallion deck byte-identical.
+  **Verified:** full smoke 18/18 ALL PASS 0 new (exact digests); seed=1024 now wins T3; nonconv=0; deck
+  avg 50g d5/b20 = 6.36. The ledger's "Ruby Medallion done" claim + the impl-hooks "AIEngine.cpp:2987"
+  site were never actually wired in the executor — byte-identity smoke could not catch it (no OTHER deck
+  runs a Medallion, so the executor-vs-rollout divergence is Dragonstorm-internal).
+- **RESIDUAL (2 of 13) — firebreathing leftover-mana over-projection (SEARCH-QUALITY, distinct, REPORTED
+  not fixed).** seed=1021 (real=8 pred=7 proven=7) + seed=1041 (real=7 pred=6 proven=5). NOT budget
+  (persists at b200), NOT Medallion, NOT summoning-sickness (both worlds use `CanAttackFull`). The
+  rollout's `SimulateCombat` firebreathing pool (`BuildPool` on the post-`ApplyPlanDirect` state) credits
+  1-2 more leftover mana than the executor's `AIEngine::Firebreathe` (`BuildAvailableMana` on the
+  post-`TapForCost` state) — instrumented: seed=1041 executor delivers T5=8 + T6=10 = 18 face (rollout
+  projected ≥19 = 1 more firebreathing mana at T6, Mercadian Bazaar sc=1→2 timing); seed=1021 T7 executor
+  firebreathing pool = 1 R (2 Mercadian Bazaars burst to sc=0 paying the Scourge cast + 1 untapped
+  Mountain), rollout projected ≥3 (it preserved storage/leftover the executor spent on the cast). Root
+  cause: the rollout's payment path (`apply_one`/`ApplyPlanDirect`) and the executor's (`TapForCost`) tap
+  DIFFERENT sources for the same casts (storage-land burst allocation + ritual-float ordering), leaving
+  different untapped mana for firebreathing → `BuildPool` > `BuildAvailableMana` at combat. This is the
+  ledger's pre-flagged "kill-engine win over-projection" Stage-5 item. **Proposed fix (needs review — a
+  shared-combat-code change, so gate on a firebreathing param):** make the rollout's per-turn payment tap
+  the SAME sources the executor's `TapForCost` would (identical `ManaSourceRank`/reservation order incl.
+  storage burst), so the combat leftover pool matches; OR have the executor's `Firebreathe` and the
+  rollout's `SimulateCombat` recompute the leftover pool via one shared post-payment routine. Left unfixed
+  to avoid risking byte-identity in shared combat/payment code without an A/B.

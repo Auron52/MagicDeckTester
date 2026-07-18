@@ -3069,6 +3069,30 @@ ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& sta
         }
         cost.generic = std::max(0, cost.generic - reduction);
     }
+    // Ruby Medallion-style colour cost reduction (LOCKSTEP with TurnSolver::EffectiveCost lines
+    // ~619-639): each permanent you control whose reduces_spell_color matches a colour in THIS
+    // spell's printed cost reduces its GENERIC by 1 (floored at 0, stacks per copy). Without this,
+    // the EXECUTOR over-paid red spells relative to the planner/rollout (which DOES apply it), so a
+    // committed Medallion-funded combo line (e.g. T3 Dragonstorm) was unpayable at execution ->
+    // fd-diverge. Gated on a reducer being in play (only Ruby Medallion sets reduces_spell_color, and
+    // only the Dragonstorm deck runs it), so every non-Medallion deck is byte-identical (reduction 0).
+    {
+        int color_reduction = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || pd->params.reduces_spell_color.empty()) { continue; }
+            const std::string& rc = pd->params.reduces_spell_color;
+            const ManaCost&    mc = def.card.m_mana_cost;   // printed pips (colour unchanged by discounts)
+            const bool spell_has_color =
+                  (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
+                || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
+                || (rc == "G" && mc.green > 0);
+            if (spell_has_color) { ++color_reduction; }
+        }
+        cost.generic = std::max(0, cost.generic - color_reduction);
+    }
     // Hinata per-target reduction for fixed-cost spells (mirrors TurnSolver::EffectiveCost;
     // {X} spells apply it where the chosen X is added to generic, in CastSpellFromHand).
     if (!def.card.m_mana_cost.has_x)
