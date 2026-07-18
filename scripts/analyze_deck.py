@@ -300,9 +300,21 @@ def RunAnalyzer(deck_path: Path, cards_json: Path) -> dict:
         str(deck_path),
         "--cards-json", str(cards_json),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    # Capture ONLY stdout (the AnalysisResultToJson we must parse); let the analyzer's
+    # stderr INHERIT our stderr so its phase-by-phase progress ("Analysing required
+    # pieces...", "Computing card scores...", "Grid-searching...", "Done.") streams LIVE.
+    # std::cerr is unbuffered, so with a plain redirect (`2> run.log`) a long run's
+    # progress is visible via `tail -f`. Previously capture_output=True buffered stderr
+    # until the process exited, so a multi-hour run (the land grid) looked hung with no
+    # signal of which phase it was in. stdout stays piped so the JSON is unpolluted.
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"Analyzer failed:\n{result.stderr}")
+        # The analyzer's stderr already streamed live (above / to the redirect log),
+        # so point there rather than re-printing a captured copy we no longer hold.
+        raise RuntimeError(
+            f"Analyzer exited {result.returncode} — see its stderr above "
+            f"(or the run log) for the failing phase."
+        )
     return json.loads(result.stdout)
 
 # ---------------------------------------------------------------------------
