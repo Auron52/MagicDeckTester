@@ -408,11 +408,21 @@ public:
     // VERIFIED win, or a line at/above the trust depth, is kept as-is. budget_ms is unused (escalation spends
     // the remaining shared budget). value_min_depth <= 0, or no value model attached/enabled, => identical to
     // FullSearchLine (no escalation -- pure value leaf). See learned-d0-policy.md.
+    // value_fallback_take_at: the table-driven per-committed-depth take-crossover (MulliganProfile::
+    // value_fallback_take_at, index = committed depth, hc*[c]). When non-empty it REPLACES the uniform
+    // "committed-3" crossover: take the escalation iff hcommitted >= hc*[clamp(committed)]. Empty => legacy
+    // uniform offset + value_no_fallback.
     static SearchLine FullSearchLineHybrid(const GameState& state, int depth,
                                            int max_turns, bool second_main,
                                            TranspositionTable* tt, SearchBudget* budget,
                                            int* out_committed_depth,
-                                           int value_min_depth, int budget_ms);
+                                           int value_min_depth, int budget_ms,
+                                           bool value_no_fallback = false,
+                                           const std::vector<int>& value_fallback_take_at = {},
+                                           // Per-deck escalation budget renewal (value_play.escalation_fresh_frac).
+                                           // Sentinel <= -1.5 (default) => use the MTG_ESCALATION_FRESH_FRAC env
+                                           // static (byte-identical). -1 => legacy shared budget; >=0 => fresh frac.
+                                           double escalation_fresh_frac = -2.0);
 
     // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic) -------------------
     // For the CURRENT pre-combat main, score EVERY candidate top-level play (the same

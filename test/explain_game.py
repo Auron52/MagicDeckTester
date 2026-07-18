@@ -69,11 +69,14 @@ def resolve(mode, key, cfg):
 def run_game(binary, r, gi):
     tmp = tempfile.mkdtemp(prefix="explain_")
     try:
+        # Replay the case at its explicit depth/budget. --ignore-play-profile bypasses the deck's enabled
+        # value_play block (which otherwise OWNS the play depth and would reject an explicit --depth); the
+        # diagnostic wants to reproduce the exact case the manifest ran, so it pins depth/budget directly.
         cmd = [binary, os.path.join(ROOT, r["deckfile"]),
                "--profile", os.path.join(ROOT, r["profile"]), "--games", "1",
                "--seed", str(r["seed"] + gi), "--game-index", str(gi),
                "--depth", str(r["depth"]), "--budget-ms", str(r["budget"]),
-               "--log-dir", tmp]
+               "--ignore-play-profile", "--log-dir", tmp]
         subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600)
         logs = glob.glob(os.path.join(tmp, "*.json"))
         if not logs:

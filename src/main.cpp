@@ -34,9 +34,13 @@ static void PrintUsage(const char* prog)
               << "  --games N       Number of games to simulate (default: 10000)\n"
               << "  --seed S        Base RNG seed (omit to generate randomly)\n"
               << "  --max-turns T   Maximum turns before declaring no-win (default: 20)\n"
-              << "  --depth D       Lookahead depth (default: 0; higher = stronger but slower)\n"
+              << "  --depth D       Lookahead depth (higher = stronger but slower). Omit --depth AND\n"
+              << "                  --budget-ms to use the deck's value_play play policy (or the built-in\n"
+              << "                  d5/budget-20 default). Passing either reproduces the old CLI behavior.\n"
               << "  --budget-ms M   Per-decision search budget in deterministic 'virtual ms';\n"
               << "                  0 = unlimited (default: 0). Alias: --timeout-ms\n"
+              << "  --ignore-play-profile  Bypass a deck's derived value_play lock so an explicit\n"
+              << "                  --depth/--budget-ms can be used for A/B (else that combination errors)\n"
               << "  --threads N     Worker threads (default: 0 = auto, affinity-based CPU count)\n"
               << "  --profile P     Path to a .profile.json file (default: auto-detect deckname.profile.json)\n"
               << "  --log-dir P     Write one JSON game log per game into this directory\n"
@@ -2485,6 +2489,9 @@ int main(int argc, char* argv[])
     int      base_game_index = 0;
     int      lookahead_depth = 0;
     int      timeout_ms     = 0;
+    bool     depth_provided  = false;      // --depth explicitly given (vs the default 0); feeds ResolvePlaySettings
+    bool     budget_provided = false;      // --budget-ms/--timeout-ms explicitly given
+    bool     ignore_play_profile = false;  // --ignore-play-profile: bypass a derived value_play lock
     int      num_threads    = 0;
     uint64_t seed           = 0;
     bool     seed_provided  = false;
@@ -2516,6 +2523,7 @@ int main(int argc, char* argv[])
         if (flag == "--trace")               { trace_t1 = true; continue; }
         if (flag == "--claude-play")         { claude_play = true; continue; }
         if (flag == "--exhaustive-keep")     { force_exhaustive_keep = true; continue; }
+        if (flag == "--ignore-play-profile") { ignore_play_profile = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
         try
         {
@@ -2576,12 +2584,14 @@ int main(int argc, char* argv[])
                 else if (flag == "--depth")
                 {
                     lookahead_depth = std::stoi(argv[++i]);
+                    depth_provided  = true;
                 }
                 else if (flag == "--timeout-ms" || flag == "--budget-ms")
                 {
                     // Deterministic search budget in "virtual ms" (see SearchBudget).
                     // --timeout-ms kept as a back-compat alias for the same knob.
-                    timeout_ms = std::stoi(argv[++i]);
+                    timeout_ms      = std::stoi(argv[++i]);
+                    budget_provided = true;
                 }
                 else if (flag == "--threads")
                 {
@@ -2740,6 +2750,23 @@ int main(int argc, char* argv[])
                 while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fm_bottom.push_back(std::stoi(tok)); } }
             }
         }
+
+        // Resolve the effective play settings from the CLI request + the deck's value_play (auto-attached
+        // above). Byte-identical whenever --depth or --budget-ms is given (explicit mode reproduces the old
+        // CLI defaults); the built-in d5/20 default applies only to a fully-bare run. Prints the resolved
+        // (depth,budget,source) to stderr so the play policy is never hidden. See ResolvePlaySettings.
+        try
+        {
+            PlaySettings ps = ResolvePlaySettings(profile,
+                depth_provided  ? lookahead_depth : -1,
+                budget_provided ? timeout_ms      : -1,
+                ignore_play_profile);
+            lookahead_depth = ps.depth;
+            timeout_ms      = ps.budget_ms;
+            std::cerr << "[play] depth=" << ps.depth << " budget=" << ps.budget_ms
+                      << "ms source=" << ps.source << "\n";
+        }
+        catch (const std::exception& e) { std::cerr << "Error: " << e.what() << "\n"; return 1; }
 
         GoldFishRunner runner;
         RunResult result = runner.Run(deck, num_games, seed, max_turns, profile, log_dir,

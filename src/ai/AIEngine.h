@@ -5,6 +5,8 @@
 #include "../cards/CardDatabase.h"
 #include "MulliganProfile.h"
 #include "TurnSolver.h"
+#include "TranspositionTable.h"
+#include <cstdlib>
 #include <deque>
 #include <functional>
 #include <map>
@@ -219,6 +221,15 @@ private:
     // no rollout can ever draw the differing card. Validated by a byte-identical
     // regression check. See project-cross-turn-reuse / project-search-optimizations.
     TranspositionTable*      m_shared_tt           = nullptr;
+
+    // Game-persistent LEAF cache (MTG_LEAF_CACHE, opt-in; default off => byte-identical).
+    // Shares SimulateToEnd rollout results across a game's decisions (not just per-call).
+    // Cleared per game in HandleMulligan; used only on the real top-level path (not the
+    // bottoming loop / rollout). A prior build produced stale cross-decision hits (hinata
+    // work rose) -- the MTG_LEAF_VERIFY harness recomputes each hit to find/confirm the
+    // key-completeness bug. See docs/design/escalation-interior-reuse.md.
+    TranspositionTable       m_leaf_cache;
+    const bool               m_leaf_cache_enabled  = std::getenv("MTG_LEAF_CACHE") != nullptr;
 
     // --- Full-depth commit-the-line (env-gated by MTG_FULL_DEPTH) ---
     // The remaining phases of the optimal line found by the last FullSearchLine, in

@@ -65,8 +65,10 @@ fi
 # pattern with --game-index gi (see GoldFishRunner::Run -- SetupGame(base_seed+gi), spawn uses
 # base_game_index+gi). MTG_DUMP_WINS prints "[win] gi=0 wt=<N>" without perturbing play.
 run_wt() { # deck_file game_seed gi depth budget -> win turn (or -1 loss)
-  MTG_DUMP_WINS=1 "$BIN" "$1" --seed "$2" --game-index "$3" --games 1 --depth "$4" --budget-ms "$5" 2>&1 \
-    | grep -oP 'wt=\K-?[0-9]+' | head -1
+  # --ignore-play-profile: replay at the EXPLICIT depth/budget past the deck's enabled value_play depth-lock
+  # (the classifier deliberately re-runs the case's own depth at 4x/16x budget).
+  MTG_DUMP_WINS=1 "$BIN" "$1" --seed "$2" --game-index "$3" --games 1 --depth "$4" --budget-ms "$5" \
+    --ignore-play-profile 2>&1 | grep -oP 'wt=\K-?[0-9]+' | head -1
 }
 
 echo "=== classify searched turn-later ($MODE) -- re-run each at 4x and 16x its case budget ==="

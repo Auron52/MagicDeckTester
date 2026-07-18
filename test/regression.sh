@@ -261,8 +261,19 @@ MANIFEST="$LOGDIR/manifest.json"
     weight=0
     if [ "$deck" = "hinata" ] && [ "$depth" -gt 0 ]; then weight=$((depth * 1000 + bud)); fi
     [ $first -eq 1 ] && first=0 || printf ',\n'
-    printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "depth": %s, "budget_ms": %s, "weight": %s }' \
-      "$name" "$file" "$prof" "$games" "$seed" "$depth" "$bud" "$weight"
+    # value_play integration (docs/design/value-leaf-fallback-table.md): every deck ships an ENABLED value_play
+    # block that OWNS the play depth. The depth-5 case is the "value_play-driven" case -- we DROP the depth key
+    # so the block decides the depth (burn=6, all others=5) and KEEP budget_ms as the resource knob (gate=20 ==
+    # block default => byte-identical for the d5 decks; overnight keeps its generous per-deck budget, e.g.
+    # burn/th=80, so burn runs d6 under deep search). The d0/d3 coverage cases PIN their explicit shallow depth,
+    # which conflicts with the enabled block's depth lock, so they carry ignore_play_profile:true to bypass it.
+    if [ "$depth" -eq 5 ]; then
+      printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "budget_ms": %s, "weight": %s }' \
+        "$name" "$file" "$prof" "$games" "$seed" "$bud" "$weight"
+    else
+      printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "depth": %s, "budget_ms": %s, "ignore_play_profile": true, "weight": %s }' \
+        "$name" "$file" "$prof" "$games" "$seed" "$depth" "$bud" "$weight"
+    fi
   done
   printf '\n] }\n'
 } > "$MANIFEST"

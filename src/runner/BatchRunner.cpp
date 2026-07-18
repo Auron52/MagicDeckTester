@@ -88,6 +88,23 @@ Job ParseJob(const json& jspec)
     AttachEvalSidecar(j.profile, profile_path);   // ... and its learned mid-game eval sidecar if present
     AttachValueSidecar(j.profile, profile_path);  // ... and its learned leaf value sidecar if present
 
+    // Resolve the effective play settings from the manifest's explicit depth/budget + the deck's value_play.
+    // A case that OMITS both depth and budget_ms falls to value_play (or the built-in d5/20 default); a case
+    // that pins them uses them (byte-identical). ParseJob throwing on a lock-conflict aborts the batch loudly.
+    {
+        const bool depth_given  = jspec.contains("depth");
+        const bool budget_given = jspec.contains("budget_ms");
+        const bool ignore_play  = jspec.value("ignore_play_profile", false);
+        PlaySettings ps = ResolvePlaySettings(j.profile,
+                                              depth_given  ? j.depth     : -1,
+                                              budget_given ? j.budget_ms : -1,
+                                              ignore_play);
+        j.depth     = ps.depth;
+        j.budget_ms = ps.budget_ms;
+        std::cerr << "[play] " << j.name << " depth=" << ps.depth << " budget=" << ps.budget_ms
+                  << "ms source=" << ps.source << "\n";
+    }
+
     j.second_main = GoldFishRunner::DeckUsesSecondMain(j.deck);
     return j;
 }

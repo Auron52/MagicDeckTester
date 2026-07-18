@@ -781,8 +781,65 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
             // MulliganProfile::value_trust_depth.
             const nlohmann::json& mm = j.contains("eval_model") ? j["eval_model"] : j;
             profile.value_trust_depth = mm.value("value_trust_depth", j.value("value_trust_depth", 0));
+            profile.value_no_fallback = mm.value("value_no_fallback", j.value("value_no_fallback", false));
+            // Table-driven take-crossover (see MulliganProfile::value_fallback_take_at). Build a by-committed-
+            // depth lookup from the (committed_depths, take_heuristic_at_hdepth) pair; presence of this table
+            // makes the hybrid use the measured per-depth crossover instead of the uniform offset.
+            profile.value_fallback_take_at.clear();
+            profile.value_fallback_max_depth = 0;
+            const nlohmann::json& xo = mm.contains("value_fallback_crossover") ? mm["value_fallback_crossover"]
+                                     : j.value("value_fallback_crossover", nlohmann::json::object());
+            if (xo.contains("committed_depths") && xo.contains("take_heuristic_at_hdepth"))
+            {
+                const auto& cds = xo["committed_depths"];
+                const auto& tks = xo["take_heuristic_at_hdepth"];
+                int maxc = 0;
+                for (const auto& c : cds) { maxc = std::max(maxc, c.get<int>()); }
+                if (maxc > 0 && cds.size() == tks.size())
+                {
+                    profile.value_fallback_take_at.assign(static_cast<std::size_t>(maxc) + 1, 0);
+                    for (std::size_t i = 0; i < cds.size(); ++i)
+                    {
+                        const int c = cds[i].get<int>();
+                        if (c >= 1 && c <= maxc) { profile.value_fallback_take_at[static_cast<std::size_t>(c)] = tks[i].get<int>(); }
+                    }
+                    // Fill any unmeasured interior committed depths from the nearest lower measured one (monotone
+                    // step), so every c in [1,maxc] has a defined crossover.
+                    for (int c = 1; c <= maxc; ++c)
+                    {
+                        if (profile.value_fallback_take_at[static_cast<std::size_t>(c)] == 0)
+                        { profile.value_fallback_take_at[static_cast<std::size_t>(c)] =
+                              (c > 1) ? profile.value_fallback_take_at[static_cast<std::size_t>(c) - 1] : 1; }
+                    }
+                    profile.value_fallback_max_depth = xo.value("max_table_depth", maxc);
+                }
+            }
+
+            // Per-deck play policy (see MulliganProfile::ValuePlay). Absent => value_play stays unset
+            // (present()==false). An UNENABLED block (enabled=false, the default) is a recorded recommendation
+            // that ResolvePlaySettings IGNORES -- only enabled=true drives/locks play. Cost arrays are
+            // informative-only, parsed defensively (null/index-0 -> 0) so a malformed curve can't wipe the model.
+            const nlohmann::json& vp = mm.contains("value_play") ? mm["value_play"]
+                                     : j.value("value_play", nlohmann::json::object());
+            if (vp.is_object() && vp.contains("target_depth"))
+            {
+                profile.value_play.target_depth = vp.value("target_depth", 0);
+                profile.value_play.budget_ms    = vp.value("budget_ms", 0);
+                profile.value_play.enabled      = vp.value("enabled", false);
+                profile.value_play.escalation_fresh_frac = vp.value("escalation_fresh_frac", -1.0);
+                profile.value_play.regime       = vp.value("regime", std::string(""));
+                auto parse_costs = [](const nlohmann::json& arr) {
+                    std::vector<double> v;
+                    if (arr.is_array()) { for (const auto& e : arr) { v.push_back(e.is_number() ? e.get<double>() : 0.0); } }
+                    return v;
+                };
+                if (vp.contains("leaf_cost_ms")) { profile.value_play.leaf_cost_ms = parse_costs(vp["leaf_cost_ms"]); }
+                if (vp.contains("heur_cost_ms")) { profile.value_play.heur_cost_ms = parse_costs(vp["heur_cost_ms"]); }
+            }
         }
-        catch (...) { profile.value_model = MidGameEvaluator{}; profile.value_trust_depth = 0; }
+        catch (...) { profile.value_model = MidGameEvaluator{}; profile.value_trust_depth = 0;
+                      profile.value_no_fallback = false; profile.value_fallback_take_at.clear();
+                      profile.value_fallback_max_depth = 0; profile.value_play = ValuePlay{}; }
     };
 
     if (const char* ov = std::getenv("MTG_VALUE_PROFILE"))

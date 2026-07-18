@@ -26,12 +26,14 @@ model is created (e.g. from analyze-deck / the training pipeline). LP = loss-pen
 import argparse, collections, json, os, re, subprocess
 
 MTG = "build/Release/mtg"
+# Per-deck folder layout (decks/<name>/<name>...). Earlier flat paths (decks/<name>.value.json) are stale.
 DECKS = {
-    "antilife": ("decks/Anti-Lifegain.cod", "decks/Anti-Lifegain.value.json", 8),
-    "slivers":  ("decks/slivers_vial.txt",  "decks/slivers_vial.value.json",  8),
-    "TH":       ("decks/treasure_hunt.txt", "decks/treasure_hunt.value.json", 8),
-    "burn":     ("decks/burn.txt",          "decks/burn.value.json",          8),
-    "knights":  ("decks/Knights.cod",       "decks/Knights.value.json",       8),
+    "antilife": ("decks/Anti-Lifegain/Anti-Lifegain.cod", "decks/Anti-Lifegain/Anti-Lifegain.value.json", 8),
+    "slivers":  ("decks/slivers_vial/slivers_vial.txt",   "decks/slivers_vial/slivers_vial.value.json",   8),
+    "TH":       ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.value.json", 8),
+    "burn":     ("decks/burn/burn.txt",                   "decks/burn/burn.value.json",                   8),
+    "knights":  ("decks/Knights/Knights.cod",             "decks/Knights/Knights.value.json",             8),
+    "hinata":   ("decks/Hinata2/Hinata2.cod",             "decks/Hinata2/Hinata2.value.json",             8),
 }
 
 

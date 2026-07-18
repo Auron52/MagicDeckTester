@@ -283,6 +283,10 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     m_fd_best_win  = max_turns + 1;
     m_fd_best_turn = 0;
 
+    // New game: reset the game-persistent leaf cache (MTG_LEAF_CACHE) so a reused batch
+    // worker's AIEngine does not accumulate/cross-hit across games. See m_leaf_cache.
+    if (m_leaf_cache_enabled) { m_leaf_cache.Clear(); }
+
     m_last_bottomed_numbers.clear();
     int mulligan_count = 0;
     while (true)
@@ -1425,9 +1429,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                       : (m_profile.value_trust_depth > 0) ? m_profile.value_trust_depth
                                                           : m_lookahead_depth + 1;
                     int searched_depth = m_lookahead_depth;
+                    // Leaf-cache source (MTG_LEAF_CACHE): the game-persistent rollout cache on the real
+                    // top-level path (never in a rollout PlayOut or the bottoming loop). nullptr (flag off)
+                    // => per-call local_table, byte-identical. See m_leaf_cache.
+                    TranspositionTable* fd_tt =
+                        (m_leaf_cache_enabled && !m_in_rollout && m_shared_tt == nullptr)
+                            ? &m_leaf_cache : m_shared_tt;
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
-                        m_shared_tt, &budget, &searched_depth, escalate_below, m_budget_ms);
+                        fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,
+                        m_profile.value_no_fallback, m_profile.value_fallback_take_at,
+                        // Per-deck escalation budget renewal; only an ENABLED value_play (adopted policy)
+                        // overrides the env static (-2.0 sentinel => use env => byte-identical otherwise).
+                        m_profile.value_play.drives() ? m_profile.value_play.escalation_fresh_frac : -2.0);
 
                     // Oracle: track the EARLIEST win the search actually FOUND this game --
                     // i.e. a win VERIFIED inside the searched horizon (win_turn within

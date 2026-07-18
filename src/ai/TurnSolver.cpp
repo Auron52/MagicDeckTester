@@ -65,6 +65,32 @@ static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_le
 static const bool             s_rollout_stats = std::getenv("MTG_ROLLOUT_STATS") != nullptr;
 static std::atomic<long long> g_rollout_calls{0};
 static std::atomic<long long> g_rollout_steps{0};
+// Interior-node telemetry (same MTG_ROLLOUT_STATS gate): the number of full-depth search
+// interior nodes = plans applied (EnumeratePlansWithLand + ApplyPlanDirect + a GameState
+// copy per node). Reported next to turn_steps so the interior fraction
+// = interior / (interior + turn_steps) bounds how much any interior-reuse cache could
+// save on the escalation. See docs/design/escalation-interior-reuse.md.
+static std::atomic<long long> g_interior_nodes{0};
+static std::atomic<long long> g_interior_nodes_esc{0};   // interior nodes done under the heuristic escalation
+// Matched-depth escalation measurement (MTG_ESC_MEASURE): per escalation, the ladder's work units
+// (budget->Used() delta) vs a COLD single pass at the ladder's ACTUAL committed depth (fresh caches).
+// This is the apples-to-apples "skip earlier depths" test -- same target depth, ladder vs single-pass.
+static const bool             s_esc_measure = std::getenv("MTG_ESC_MEASURE") != nullptr;
+static std::atomic<long long> g_esc_ladder_units{0};
+static std::atomic<long long> g_esc_single_units{0};
+static std::atomic<long long> g_esc_measure_n{0};
+// K-predictor telemetry (MTG_ESC_PREDICT_STATS): predictions, fallbacks (K aborted -> shallower), and the
+// predicted-K vs committed-depth histograms. A high fallback rate => the estimate is poor (wasted abort work).
+static const bool             s_esc_predict_stats = std::getenv("MTG_ESC_PREDICT_STATS") != nullptr;
+static std::atomic<long long> g_pred_n{0};
+static std::atomic<long long> g_pred_fallback{0};
+static std::array<std::atomic<long long>, 16> g_pred_K{};
+static std::array<std::atomic<long long>, 16> g_pred_committed{};
+// LOSSLESS audit (MTG_ESC_PREDICT_AUDIT): per escalation, shadow-run the ladder and compare its committed
+// depth to the predictor's -- count LOSSY (predict shallower = quality risk) vs deeper vs exact, and dump the
+// first few lossy cases so we can see WHY the estimate under-shot. Doubles escalation work (audit only).
+static const bool             s_esc_predict_audit = std::getenv("MTG_ESC_PREDICT_AUDIT") != nullptr;
+static std::atomic<long long> g_pred_audit_n{0}, g_pred_lossy{0}, g_pred_deeper{0}, g_pred_lossy_dumped{0};
 namespace
 {
     struct RolloutStatsReporter
@@ -73,11 +99,60 @@ namespace
         {
             if (!s_rollout_stats) { return; }
             const long long c = g_rollout_calls.load(), s = g_rollout_steps.load();
+            const long long in = g_interior_nodes.load(), ine = g_interior_nodes_esc.load();
+            const long long tot = in + s;
             std::cerr << "[rollout-stats] calls=" << c << " turn_steps=" << s
                       << " steps_per_call=" << (c ? static_cast<double>(s) / c : 0.0) << "\n";
+            std::cerr << "[rollout-stats] interior_nodes=" << in
+                      << " interior_frac=" << (tot ? static_cast<double>(in) / tot : 0.0)
+                      << " (of interior+turn_steps)\n";
+            std::cerr << "[rollout-stats] interior_esc=" << ine
+                      << " esc_share=" << (in ? static_cast<double>(ine) / in : 0.0)
+                      << " (interior nodes re-traversed by the heuristic escalation)\n";
         }
     };
     RolloutStatsReporter g_rollout_stats_reporter;
+
+    struct EscPredictReporter
+    {
+        ~EscPredictReporter()
+        {
+            if (!s_esc_predict_stats || g_pred_n.load() == 0) { return; }
+            std::cerr << "[esc-predict] predictions=" << g_pred_n.load()
+                      << " fallbacks=" << g_pred_fallback.load()
+                      << " (" << (100.0 * g_pred_fallback.load() / g_pred_n.load()) << "% aborted K)\n";
+            if (g_pred_audit_n.load() > 0)
+            {
+                const long long an = g_pred_audit_n.load(), lo = g_pred_lossy.load(), dp = g_pred_deeper.load();
+                std::cerr << "[esc-predict] AUDIT vs ladder: n=" << an
+                          << " lossy(shallower)=" << lo << " (" << (100.0 * lo / an) << "%)"
+                          << " deeper=" << dp << " exact=" << (an - lo - dp) << "\n";
+            }
+            std::cerr << "[esc-predict] predicted-K / committed-depth:\n";
+            for (int d = 0; d < 16; ++d)
+            {
+                long long pk = g_pred_K[d].load(), pc = g_pred_committed[d].load();
+                if (pk == 0 && pc == 0) { continue; }
+                std::cerr << "    d" << d << ": predictedK=" << pk << " committed=" << pc << "\n";
+            }
+        }
+    };
+    EscPredictReporter g_esc_predict_reporter;
+
+    struct EscMeasureReporter
+    {
+        ~EscMeasureReporter()
+        {
+            if (!s_esc_measure) { return; }
+            const long long n = g_esc_measure_n.load();
+            const long long L = g_esc_ladder_units.load(), S = g_esc_single_units.load();
+            std::cerr << "[esc-measure] escalations=" << n
+                      << " ladder_units=" << L << " single_at_committed_units=" << S
+                      << " single/ladder=" << (L ? static_cast<double>(S) / static_cast<double>(L) : 0.0)
+                      << " (matched-depth: cold single pass vs the d1..K ladder)\n";
+        }
+    };
+    EscMeasureReporter g_esc_measure_reporter;
 }
 
 // Mana-dork ramp value (EvalCard). A 0-power mana dork (Ignoble Hierarch, Birds) scores 0 in the
@@ -5777,7 +5852,34 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         key = BuildSimKey(state, depth, max_turns, second_main);
         PROF_INC(tt_lookups);
         const int* cached = tt->Lookup(key);
-        if (cached != nullptr) { PROF_INC(tt_hits); return *cached; }
+        if (cached != nullptr)
+        {
+            PROF_INC(tt_hits);
+            // SOUNDNESS HARNESS (MTG_LEAF_VERIFY): recompute this hit fresh (loose cutoff, no tt/budget so it
+            // fully resolves) and compare. A mismatch means two states shared a BuildSimKey but roll out
+            // differently => the key omits some rollout-determining state. Counts mismatches + dumps the first.
+            static const bool s_leaf_verify = std::getenv("MTG_LEAF_VERIFY") != nullptr;
+            if (s_leaf_verify)
+            {
+                GameState copy = state;
+                const int fresh = SimulateToEndImpl(copy, depth, max_turns, nullptr, max_turns + 1,
+                                                    second_main, nullptr);
+                // Only REAL wins are cached, so compare the cached real win to a fresh real win. A fresh no-win
+                // (max_turns+1) at a cached real win is also a mismatch (the cache claims a win that isn't).
+                if (fresh != *cached)
+                {
+                    static std::atomic<long long> s_mm{0};
+                    const long long n = s_mm.fetch_add(1) + 1;
+                    if (n <= 8)
+                    {
+                        std::cerr << "[leaf-verify] STALE HIT #" << n << " turn=" << state.turn_number
+                                  << " depth=" << depth << " cached=" << *cached << " fresh=" << fresh
+                                  << " (key collides two different-rollout states)\n";
+                    }
+                }
+            }
+            return *cached;
+        }
     }
 
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
@@ -5823,6 +5925,33 @@ struct ForceHeuristicLeafGuard
     explicit ForceHeuristicLeafGuard(bool v) : prev(g_force_heuristic_leaf) { g_force_heuristic_leaf = v; }
     ~ForceHeuristicLeafGuard() { g_force_heuristic_leaf = prev; }
 };
+
+// K-predictor state (MTG_ESC_PREDICT). The PROBE ladders d1..committed for free (cheap value leaf) and, per
+// depth, reveals the leaf count -- the quantity the escalation's dominant rollout cost scales with. The
+// escalation reuses that MEASURED structure to predict its own deepest affordable depth K, runs ONE pass at
+// K (which IS the committed pass when the estimate is right), and only falls back to K-1 if K's actual cost
+// aborts. Thread_local: each worker pairs its own probe->escalation, and the values depend only on the
+// current decision's search (deterministic). g_fs_leaf_evals is a running counter; per-pass deltas are the
+// per-depth leaf counts, snapshotted by FullSearchLine into g_probe_leaves while g_probe_recording is set.
+inline thread_local long long g_fs_leaf_evals   = 0;
+inline thread_local long long g_probe_leaves[16] = {0};   // probe leaf count at each pass depth (0 = unmeasured)
+inline thread_local long long g_probe_cost[16]   = {0};   // probe budget-work at each pass depth
+inline thread_local bool       g_probe_recording = false; // set while the probe's FullSearchLine ladders
+// AUDIT-only: the HEURISTIC ladder's per-pass INCREMENTAL cost (what the start-gate actually consumes -- the
+// memo makes this much less than a cold pass). Recorded around the audit shadow ladder to reveal the true
+// commit recurrence. Not on the hot path (only when g_hlad_recording is set inside the audit block).
+inline thread_local long long g_hlad_cost[16]   = {0};
+inline thread_local long long g_hlad_leaves[16] = {0};
+inline thread_local bool       g_hlad_recording = false;
+// AMORTIZED per-leaf ROLLOUT cost (MTG_ESC_PREDICT): a running estimate learned from each escalation's actual
+// cold pass at its committed depth. Persisting it across escalations (a) removes the per-escalation d1
+// calibration pass (whose cost ~= the shallow pass we skip, erasing the saving for shallow commits), and (b)
+// FIXES the depth-decay bias -- R learned from DEEP committed passes reflects deep-leaf rollout cost (~125),
+// not the inflated d1 cost (~194). Seeded lazily on the first escalation. 0 = uninitialized.
+inline thread_local double g_esc_R = 0.0;
+// AUDIT-only: the climb's per-depth MEASURED pass costs + start depth, for the lossy-case dump.
+inline thread_local double    g_climb_cmeas[16] = {0};
+inline thread_local int       g_climb_start = 0;
 
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
@@ -5933,6 +6062,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (budget && budget->Overrun())   { return { max_turns + 1, {} }; }
     if (depth <= 0)
     {
+        ++g_fs_leaf_evals;   // count leaf evaluations (value-leaf or rollout) for the K-predictor's leaf-count model
         // Learned leaf VALUE (MTG_VALUE_MODEL): distil the deep search into an O(1) win-turn estimate
         // that REPLACES the horizon rollout -- the rollout is the weak, slow link (greedy play-out, not
         // searched). The model's Score is a fixed-point WIN TURN (x1000); round + clamp to the legal
@@ -5983,6 +6113,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     for (const TurnSolver::Plan& p : pre)
     {
         if (budget) { budget->Consume(1); }   // one interior node (plan applied)
+        if (s_rollout_stats)
+        {
+            g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
+            if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
+        }
         GameState s = state;
         std::vector<Action> bp;
         ApplyPlanDirect(s, p, true, &bp);
@@ -6127,6 +6262,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     const double gate_alpha = (vl_active && s_vl_alpha_mult > 1.0)
                             ? kStartGateAlpha * s_vl_alpha_mult : kStartGateAlpha;
 
+    // JUMP-LADDER (MTG_ESC_JUMP): heuristic-escalation only. The escalation's shallow ladder passes are
+    // ~pure overhead -- they almost never find a verified win (measured 1/966) and, at matched committed
+    // depth, a single cold pass is ~18% cheaper than d1..K (the memo does NOT pay for the shallow passes).
+    // So after two completed passes give a growth ratio, extrapolate the start-gate to the deepest AFFORDABLE
+    // depth K and jump straight there, skipping d(pass+1)..d(K-1). The jumped pass still runs under the
+    // overrun guard. Byte-identical when off; gated to the escalation so the probe's ladder is untouched.
+    static const bool s_esc_jump_env = std::getenv("MTG_ESC_JUMP") != nullptr;
+    const bool s_esc_jump = s_esc_jump_env && g_force_heuristic_leaf;
+
     for (int pass_depth = (depth >= 1 ? 1 : depth); pass_depth <= depth; ++pass_depth)
     {
         // Start gate: skip (and commit the prior pass) when the next pass clearly
@@ -6145,6 +6289,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         }
 
         long long used_before = budget ? budget->Used() : 0;
+        long long leaves_before = g_fs_leaf_evals;   // K-predictor: per-pass leaf-count delta (probe recording)
         // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost
         // blows past kOverrunBeta x the whole decision budget it is pathological -- abort
         // and keep the last completed pass. Normal passes finish far under this ceiling, so
@@ -6173,12 +6318,48 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         line = attempt;
         committed_depth = pass_depth;
         prev_line = line; prev_committed = committed_depth;   // this pass completed
+        // K-predictor: record the PROBE's leaf count at this depth (leaf-independent structure the escalation
+        // reuses to predict its own affordable depth). Only while the probe records; index guarded.
         long long cost = (budget ? budget->Used() : 0) - used_before;
+        if (g_probe_recording && pass_depth >= 0 && pass_depth < 16)
+        {
+            g_probe_leaves[pass_depth] = g_fs_leaf_evals - leaves_before;
+            g_probe_cost[pass_depth]   = cost;
+        }
+        if (g_hlad_recording && pass_depth >= 0 && pass_depth < 16)
+        {
+            g_hlad_leaves[pass_depth] = g_fs_leaf_evals - leaves_before;
+            g_hlad_cost[pass_depth]   = cost;
+        }
         TRACE("search", "T%d pass=%d done win=%d cost=%lld used=%lld",
               state.turn_number, pass_depth, line.win_turn, cost, budget ? budget->Used() : 0);
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
+
+        // Jump-ladder: with a measured growth ratio, extrapolate to the deepest affordable K and skip the
+        // intermediate passes d(pass+1)..d(K-1) -- go straight to K. K is chosen by the SAME start-gate math
+        // (est <= gate_alpha * remaining), so it lands where the full ladder would have committed, at ~18%
+        // less work. If no intermediate passes exist (K <= pass+1) this is a no-op and the normal ladder runs.
+        if (s_esc_jump && have_prev2 && c_prev2 > 0 && budget != nullptr && pass_depth + 1 < depth)
+        {
+            // CONSERVATIVE growth: the escalation's rollout cost ACCELERATES with depth, so the shallow d1->d2
+            // ratio under-estimates deep-pass cost and a naive extrapolation predicts too-deep K (measured: it
+            // converts cheap h2/h3-committing escalations into full d5 searches, +130% work). Floor the ratio
+            // at kDefaultGrowth so the estimate grows at least as fast as the ladder's bootstrap assumption --
+            // this predicts SHALLOWER (safe: under-prediction just resumes laddering; over-prediction overshoots).
+            double r = static_cast<double>(c_prev) / static_cast<double>(c_prev2);
+            if (r < kDefaultGrowth) { r = kDefaultGrowth; }
+            double est = static_cast<double>(c_prev);
+            int K = pass_depth;
+            for (int d = pass_depth + 1; d <= depth; ++d)
+            {
+                est *= r;
+                if (est <= gate_alpha * static_cast<double>(budget->Remaining())) { K = d; }
+                else { break; }
+            }
+            if (K > pass_depth + 1) { pass_depth = K - 1; }   // loop ++ -> K, skipping the intermediates
+        }
 
         // Stop at the first VERIFIED win (within this pass's searched horizon). A
         // deeper pass only extends the horizon to LATER turns, so it can never find
@@ -6295,18 +6476,43 @@ namespace
         std::atomic<long long> verified{0};
         std::array<std::atomic<long long>, 16> probe_depth{};   // histogram of value-leaf committed depth
         std::array<std::atomic<long long>, 16> redo_depth{};    // committed depth AT the decisions that redid
+        std::array<std::atomic<long long>, 16> redo_hdepth{};   // heuristic-escalation ACHIEVED depth (hcommitted)
+        std::atomic<long long> redo_short{0};                   // escalations whose heuristic pass fell short of user depth
+        std::atomic<long long> esc_verified{0};                 // escalations that COMMITTED a verified win (win <= turn+hcommitted-1)
+        std::atomic<long long> esc_verified_short{0};           // ... AND at hcommitted < probe committed (verified win the probe pruned)
+        std::array<std::atomic<long long>, 16> esc_ver_hdepth{}; // achieved-depth histogram of the VERIFIED-win escalations
         ~HybridStats()
         {
             if (!enabled || decisions.load() == 0) { return; }
             std::cerr << "[hybrid-stats] decisions=" << decisions.load()
                       << " redos=" << redos.load()
-                      << " verified=" << verified.load() << "\n";
+                      << " verified=" << verified.load()
+                      << " redo_short=" << redo_short.load()
+                      << " (escalations that did NOT reach user depth)\n";
+            std::cerr << "[hybrid-stats] esc_verified=" << esc_verified.load()
+                      << " (escalations committing a VERIFIED win) of which at depth < probe: "
+                      << esc_verified_short.load()
+                      << " (verified wins the value-leaf probe PRUNED)\n";
+            std::cerr << "[hybrid-stats] verified-escalation ACHIEVED-depth histogram:\n";
+            for (int d = 0; d < 16; ++d)
+            {
+                long long c = esc_ver_hdepth[d].load();
+                if (c == 0) { continue; }
+                std::cerr << "    hv" << d << ": " << c << "\n";
+            }
             std::cerr << "[hybrid-stats] probe committed-depth histogram (d:count / of-which-redid):\n";
             for (int d = 0; d < 16; ++d)
             {
                 long long c = probe_depth[d].load();
                 if (c == 0) { continue; }
                 std::cerr << "    d" << d << ": " << c << " / redid " << redo_depth[d].load() << "\n";
+            }
+            std::cerr << "[hybrid-stats] escalation ACHIEVED-depth histogram (heuristic pass hcommitted):\n";
+            for (int d = 0; d < 16; ++d)
+            {
+                long long c = redo_hdepth[d].load();
+                if (c == 0) { continue; }
+                std::cerr << "    h" << d << ": " << c << "\n";
             }
         }
     };
@@ -6368,6 +6574,13 @@ namespace
         std::vector<double> mean, sd, w;      // w[0]=bias, w[1..]=standardized-feature coefs
         double threshold = 0.5;
         bool   enabled   = false;
+        // Budget-ADAPTIVE threshold (MTG_ESCALATION_GATE_T_LOW + _BUDGET_CUT, opt-in): use the base (higher,
+        // conservative) `threshold` when the escalation still has budget headroom, and t_low (lower, more
+        // aggressive skip) when the probe already spent most of it. Enabled only when T_LOW is set; otherwise
+        // EffectiveThreshold == threshold (fixed, unchanged). See hinata-escalation-budget-restore memory.
+        double t_low      = -1.0;
+        double budget_cut = 0.5;
+        bool   adaptive   = false;
         std::atomic<long long> seen{0}, skipped{0};
         EscalationGate()
         {
@@ -6383,7 +6596,19 @@ namespace
             if (mean.empty() || sd.size() != mean.size() || w.size() != mean.size() + 1) { return; }
             const char* t = std::getenv("MTG_ESCALATION_GATE_T");
             if (t && *t) { try { threshold = std::stod(t); } catch (...) {} }
+            const char* tl = std::getenv("MTG_ESCALATION_GATE_T_LOW");
+            if (tl && *tl) { try { t_low = std::stod(tl); adaptive = true; } catch (...) {} }
+            const char* bc = std::getenv("MTG_ESCALATION_GATE_BUDGET_CUT");
+            if (bc && *bc) { try { budget_cut = std::stod(bc); } catch (...) {} }
             enabled = true;
+        }
+        // Effective skip threshold for THIS escalation: adaptive lowers it (skip more) once the remaining
+        // decision budget falls below budget_cut of its limit. Fixed == threshold when not adaptive.
+        double EffectiveThreshold(const SearchBudget* b) const
+        {
+            if (!adaptive || b == nullptr || b->Unlimited()) { return threshold; }
+            const double rf = static_cast<double>(b->Remaining()) / static_cast<double>(b->Limit());
+            return (rf >= budget_cut) ? threshold : t_low;
         }
         // raw feature order MUST match the trainer: [committed, gap, turn, est_wt] + 46 midgame feats.
         double PNoOp(const std::vector<double>& raw) const
@@ -6412,11 +6637,48 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         int max_turns, bool second_main,
                                                         TranspositionTable* tt, SearchBudget* budget,
                                                         int* out_committed_depth,
-                                                        int value_min_depth, int budget_ms)
+                                                        int value_min_depth, int budget_ms,
+                                                        bool value_no_fallback,
+                                                        const std::vector<int>& value_fallback_take_at,
+                                                        double escalation_fresh_frac)
 {
-    (void)budget_ms;   // escalation now spends the REMAINING shared budget, not a fresh one (see below)
+    // --- Escalation budget shaping (all opt-in; ALL unset => byte-identical to the shared-budget hybrid) ---
+    // MTG_ESC_SPLIT=c   : CAP the value-leaf probe to c*budget_ms so the probe cannot eat the whole decision
+    //                     budget; the remaining (1-c) is RESERVED for the heuristic escalation. No total
+    //                     budget increase -- pure reservation (the user's "don't let the value-leaf eat it all").
+    // MTG_ESC_RESTORE=f : ADD a fresh f*budget_ms to the escalation on top of the reserve (a partial restore;
+    //                     THIS is the part that costs extra time -- keep it small).
+    // MTG_ESC_SINGLE    : the escalation runs ONE heuristic pass at a single target depth (committed-offset),
+    //                     not FullSearchLine's 1..depth ladder -- "only do one depth", concentrating the
+    //                     reserved budget and skipping the shallow-pass rework. MTG_ESC_SINGLE_OFFSET=k picks
+    //                     the depth = clamp(committed-k, 1, depth); k=2 targets the crossover-min depth
+    //                     (heuristic-d(committed-2) is the shallowest that beats value-leaf-d(committed)), and
+    //                     the single pass's overrun-abort then acts as the crossover-skip (an unaffordable
+    //                     escalation is dropped, keeping the value-leaf line, instead of committing a partial).
+    // See docs/design/escalation-and-rollout-cost.md + hinata-escalation-budget-restore memory.
+    static const double s_esc_split   = []{ const char* e = std::getenv("MTG_ESC_SPLIT");
+                                            return (e && *e) ? std::atof(e) : -1.0; }();
+    static const double s_esc_restore = []{ const char* e = std::getenv("MTG_ESC_RESTORE");
+                                            return (e && *e) ? std::atof(e) : 0.0; }();
+    SearchBudget  probe_cap_budget;
+    SearchBudget* probe_budget = budget;
+    if (s_esc_split >= 0.0 && budget_ms > 0)
+    {
+        probe_cap_budget = SearchBudget::FromVirtualMs(
+            std::max(1, static_cast<int>(std::lround(s_esc_split * budget_ms))));
+        probe_budget = &probe_cap_budget;
+    }
+    // K-predictor (MTG_ESC_PREDICT): record the probe's per-depth leaf counts so the escalation can predict
+    // its own affordable depth from this MEASURED structure. Cleared before the probe; recorded during it.
+    static const bool s_esc_predict = std::getenv("MTG_ESC_PREDICT") != nullptr;
+    if (s_esc_predict)
+    {
+        for (int d = 0; d < 16; ++d) { g_probe_leaves[d] = 0; g_probe_cost[d] = 0; }
+        g_probe_recording = true;
+    }
     int committed = depth;
-    SearchLine line = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &committed);
+    SearchLine line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
+    g_probe_recording = false;
 
     const bool value_active = UseValueModel() && state.m_value_model && !state.m_value_model->empty();
     // A VERIFIED win (win_turn within the committed horizon) is decided by real simulation, NOT the leaf
@@ -6447,7 +6709,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // so the remaining budget is nearly the whole decision budget. kValueTrustOffset=3 is uniform across all
         // measured decks (value-leaf-d5 ~= heuristic-d2). g_force_heuristic_leaf makes FSLineWin use the exact
         // rollout leaf; the shared tt holds only leaf-independent tail rollouts, so it is uncontaminated.
-        constexpr int kValueTrustOffset = 3;
+        // MTG_VALUE_TRUST_OFFSET overrides the crossover offset (experiments): a LARGE value => always TAKE the
+        // escalation (never fall back to the value-leaf line) = "never trust the leaf once we've escalated";
+        // useful to test whether the crossover is what leaks value-leaf quality on a deck (e.g. hinata).
+        static const int s_vto_override = []{ const char* e = std::getenv("MTG_VALUE_TRUST_OFFSET");
+                                              return (e && *e) ? std::atoi(e) : -1; }();
+        const int kValueTrustOffset = (s_vto_override >= 0) ? s_vto_override : 3;
         const int old_wt = line.win_turn;
         // Confidence-gate: skip escalations predicted to be no-ops (byte-identical when unset). The gate
         // scores the SAME features the dump records -- all observed BEFORE the re-search -- so it can
@@ -6462,17 +6729,361 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             raw.push_back(state.turn_number);
             raw.push_back(old_wt);                          // est_wt
             for (int f : ExtractMidGameFeatures(state, MidGamePlanSummary{})) { raw.push_back(f); }
-            if (g_escalation_gate.PNoOp(raw) > g_escalation_gate.threshold)
+            if (g_escalation_gate.PNoOp(raw) > g_escalation_gate.EffectiveThreshold(budget))
             {
                 g_escalation_gate.skipped.fetch_add(1);
                 if (out_committed_depth) { *out_committed_depth = committed; }
                 return line;   // skip: trust the value-leaf line, save the full re-search
             }
         }
+        // Escalation budget source. DEFAULT IS OFF (-1 == legacy shared REMAINING budget) so this refactor is
+        // BYTE-IDENTICAL to the committed regression GT with no env set. The FRESH-FULL budget below is an
+        // UNADOPTED candidate: it fixes the value-leaf budget-exhaustion regression (the probe spends most of
+        // the shared decision budget reaching committed depth, starving the heuristic re-search to ~d1 so it
+        // mis-commits a hair shallower on knife-edge games -> antilife regression, overnight-audit-2026-07-11)
+        // and a fresh budget recovers those wins. But it is a genuine QUALITY *and* PERFORMANCE tradeoff, not a
+        // free win: single-seed A/B shows antilife/hinata better (+~0.01-0.02 LP) BUT TH slightly worse
+        // (4.11037->4.11371) and ~+16% wall on hinata. Adopting it requires a full-regression A/B (train+held-
+        // out) + perf measurement + user approval + a deliberate GT rebaseline -- do NOT flip the default back
+        // to 1.0 without that. Turn it on for that A/B with MTG_ESCALATION_FRESH_FRAC=1.0. See hinata-
+        // escalation-budget-restore + docs/design/escalation-refactor-drift.md. Overrides:
+        //   MTG_ESC_SPLIT set              -> reserve: cap probe, dedicated ((1-split)+restore)*budget_ms
+        //   MTG_ESCALATION_FRESH_FRAC=f>=0 -> fresh f*budget_ms (f=1.0 == full fresh budget, the candidate)
+        //   MTG_ESCALATION_FRESH_FRAC=-1   -> LEGACY shared REMAINING budget (DEFAULT; == committed GT)
+        static const bool   s_fresh_frac_env_set = std::getenv("MTG_ESCALATION_FRESH_FRAC") != nullptr;
+        static const double s_fresh_frac = []{ const char* e = std::getenv("MTG_ESCALATION_FRESH_FRAC");
+                                               return (e && *e) ? std::atof(e) : -1.0; }();  // default OFF (legacy)
+        // Precedence: an EXPLICITLY-SET env (MTG_ESCALATION_FRESH_FRAC, the experiment/A-B override) wins over
+        // everything -- needed so the env-based A/B still works once a deck ships an enabled value_play block
+        // carrying its own escalation_fresh_frac. Else the per-deck value_play value (a real number, i.e. not
+        // the -2.0 sentinel) wins; else legacy -1. Env UNSET + block sentinel/-1 => -1 == byte-identical.
+        const double eff_fresh_frac = s_fresh_frac_env_set
+                                    ? s_fresh_frac
+                                    : (escalation_fresh_frac <= -1.5 ? s_fresh_frac : escalation_fresh_frac);
+        static const bool   s_esc_single = std::getenv("MTG_ESC_SINGLE") != nullptr;
+        static const int    s_esc_single_off = []{ const char* e = std::getenv("MTG_ESC_SINGLE_OFFSET");
+                                                   return (e && *e) ? std::atoi(e) : 0; }();
         ForceHeuristicLeafGuard _fh(true);
         int hcommitted = depth;
-        SearchLine hline = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &hcommitted);
-        const bool taken      = (hcommitted > committed - kValueTrustOffset);
+        SearchBudget  esc_alloc_budget;
+        SearchBudget* esc_budget = budget;   // legacy shared REMAINING budget (only when fresh_frac < 0)
+        if (s_esc_split >= 0.0 && budget_ms > 0)
+        {
+            const double frac = std::max(0.0, 1.0 - s_esc_split) + std::max(0.0, s_esc_restore);
+            esc_alloc_budget = SearchBudget::FromVirtualMs(
+                std::max(1, static_cast<int>(std::lround(frac * budget_ms))));
+            esc_budget = &esc_alloc_budget;
+        }
+        else if (eff_fresh_frac >= 0.0 && budget_ms > 0)
+        {
+            esc_alloc_budget = SearchBudget::FromVirtualMs(
+                std::max(1, static_cast<int>(std::lround(eff_fresh_frac * budget_ms))));
+            esc_budget = &esc_alloc_budget;
+        }
+        SearchLine hline;
+        static const bool s_esc_predict_warm = std::getenv("MTG_ESC_PREDICT_WARM") != nullptr;
+        if (s_esc_predict && (tt == nullptr || s_esc_predict_warm))
+        {
+            // K-PREDICTOR (MTG_ESC_PREDICT): reproduce the ladder's committed depth D by running the REAL ladder
+            // start-gate on MEASURED pass costs (not a cheap prediction, which was too irregular on hinata),
+            // starting two below a rough guess so the boundary gate has both adjacent costs measured (exact), and
+            // skipping the cheap passes below. FSLineWin is a pure function of state+depth, so matching D exactly
+            // is byte-identical to the ladder. The climb MEASURES real costs, so it is robust to a WARM shared tt
+            // too (bottoming lookahead) -- MTG_ESC_PREDICT_WARM lifts the cold-only restriction; the climb then
+            // uses the SAME shared tt the ladder would, so its measured costs match. See escalation-interior-reuse.
+            TranspositionTable  pred_tt_local;
+            TranspositionTable* pred_tt = (tt != nullptr) ? tt : &pred_tt_local;   // warm shared tt when present
+            FSLineCache pred_cache;
+            const long long esc_units = (esc_budget && !esc_budget->Unlimited())
+                                      ? esc_budget->Limit()
+                                      : SearchBudget::FromVirtualMs(std::max(1, budget_ms)).Limit();
+            const int pred_max = std::min(depth, std::max(1, committed));
+            // Optional alpha multiplier (MTG_ESC_PREDICT_MULT, default 1.0 == exact ladder). A small >1 lets
+            // the replay commit one deeper (bias toward "never below the ladder") at a tuning cost.
+            static const double s_pred_mult = []{ const char* e = std::getenv("MTG_ESC_PREDICT_MULT");
+                                                  return (e && *e) ? std::atof(e) : 1.0; }();
+            const double gate_alpha = kStartGateAlpha * s_pred_mult;
+            // EMA weight for the amortized R update (MTG_ESC_PREDICT_RALPHA, default 0.4).
+            static const double s_r_alpha = []{ const char* e = std::getenv("MTG_ESC_PREDICT_RALPHA");
+                                                return (e && *e) ? std::atof(e) : 0.4; }();
+            // 1) Rough GUESS D0 of the committed depth from the free probe structure + amortized R. This only
+            //    picks WHERE to start the real ladder (efficiency); correctness comes from the MEASURED costs
+            //    below, not this estimate. No separate d1 seed pass (it polluted the climb's memo -> cmeas[1]=0);
+            //    a default R bootstraps the first guess and the climb learns R from its own passes.
+            if (g_esc_R <= 0.0) { g_esc_R = 120.0; }   // deck-agnostic prior; refined by the first measured pass
+            const double R = g_esc_R;
+            double chat[16] = {0};
+            for (int d = 1; d <= pred_max; ++d)
+            {
+                chat[d] = static_cast<double>(std::max<long long>(0, g_probe_cost[d]))
+                        + R * static_cast<double>(std::max<long long>(0, g_probe_leaves[d]));
+            }
+            const long long esc_c1 = static_cast<long long>(chat[1]);   // audit-dump naming
+            int D0 = 1;
+            {
+                double rem = static_cast<double>(esc_units) - chat[1];
+                double cprev = chat[1], cprev2 = 0.0; bool haveprev2 = false;
+                for (int d = 2; d <= pred_max; ++d)
+                {
+                    const double ratio = haveprev2 ? cprev / std::max(1.0, cprev2) : kDefaultGrowth;
+                    if (cprev * ratio > gate_alpha * std::max(0.0, rem)) { break; }
+                    D0 = d; rem -= chat[d]; cprev2 = cprev; cprev = chat[d]; haveprev2 = true;
+                }
+            }
+            const int K = D0;   // stats/audit naming (the pre-measurement guess)
+            // 2) Run the REAL ladder starting at lo = D0-2 (two below the guess, so the guess boundary's gate has
+            //    both adjacent costs MEASURED = exact) and CLIMB. The gate fires ONLY where it is exact: a
+            //    MEASURED cprev/cprev2 ratio, or the pass-2 kDefaultGrowth bootstrap the real ladder itself uses.
+            //    Where neither holds (the very bottom of the measured range), the pass is BELOW the boundary for
+            //    a decent guess, so we run it WITHOUT gating (never stop early on an estimate = never lossy). A
+            //    too-shallow guess just climbs more measured passes (still exact); a too-deep guess runs one
+            //    extra (deeper, never shallower). Skips only the cheap passes below lo (small cumulative, est).
+            hline = { max_turns + 1, {} };
+            hcommitted = 1;
+            int aborts = 0;
+            double cmeas[16] = {0};          // measured pass costs (budget units); 0 = not measured
+            double Rl = std::max(1.0, R);    // local per-leaf rollout cost, refined by each measured pass
+            auto run_meas = [&](int t) -> bool
+            {
+                t = std::max(1, t);
+                SearchBudget vb(esc_units);
+                vb.SetOverrunLimit(std::max<long long>(
+                    static_cast<long long>(kOverrunBeta * static_cast<double>(esc_units)), kOverrunFloor));
+                const long long lv0 = g_fs_leaf_evals;
+                SearchLine r = FSLineWin(state, t, max_turns, max_turns + 1, second_main,
+                                         pred_tt, &pred_cache, &vb);
+                if (vb.Overrun()) { return false; }
+                hline = r; hcommitted = t; cmeas[std::clamp(t, 0, 15)] = static_cast<double>(vb.Used());
+                g_climb_cmeas[std::clamp(t, 0, 15)] = static_cast<double>(vb.Used());
+                const double lv = static_cast<double>(std::max<long long>(1, g_fs_leaf_evals - lv0));
+                if (t >= 2)   // learn R only from >=d2 passes (d1's per-leaf cost is the inflated one)
+                {
+                    const double roll = std::max(0.0, static_cast<double>(vb.Used())
+                        - static_cast<double>(std::max<long long>(0, g_probe_cost[std::clamp(t, 0, 15)])));
+                    if (roll > 0.0) { Rl = std::max(1.0, roll / lv);
+                                      g_esc_R = (1.0 - s_r_alpha) * g_esc_R + s_r_alpha * Rl; }
+                }
+                return true;
+            };
+            // Estimate the (small) cumulative budget consumed by the SKIPPED passes below `s`, from probe struct.
+            auto cum_below = [&](int s) -> double
+            {
+                double c = 0.0;
+                for (int k = 1; k < s; ++k)
+                {
+                    c += static_cast<double>(std::max<long long>(0, g_probe_cost[std::clamp(k, 0, 15)]))
+                       + Rl * static_cast<double>(std::max<long long>(0, g_probe_leaves[std::clamp(k, 0, 15)]));
+                }
+                return c;
+            };
+            static const int s_lookback = []{ const char* e = std::getenv("MTG_ESC_PREDICT_LOOKBACK");
+                                               return (e && *e) ? std::max(1, std::atoi(e)) : 2; }();
+            const int lo = std::clamp(D0 - s_lookback, 1, pred_max);
+            for (int d = 0; d < 16; ++d) { g_climb_cmeas[d] = 0; }
+            g_climb_start = lo;
+            if (!run_meas(lo))
+            {
+                ++aborts; (void)run_meas(std::max(1, lo - 1));   // lo pass overran -> one shallower
+            }
+            else
+            {
+                double cum = cum_below(lo) + cmeas[std::clamp(lo, 0, 15)];
+                for (int t = lo + 1; t <= pred_max; ++t)
+                {
+                    // Gate only where EXACT: measured cprev AND cprev2, or the pass-2 kDefaultGrowth bootstrap
+                    // (which the real ladder also uses). Otherwise (bottom of range, cprev2 unmeasured) do NOT
+                    // gate -> run the pass (it is below the boundary for a decent guess; never stop on an estimate).
+                    const bool have_ratio = (t >= 3) && (t - 2 >= lo) && (cmeas[std::clamp(t - 2, 0, 15)] > 0.0);
+                    const bool bootstrap  = (t == 2) && (lo == 1);
+                    double est = -1.0;
+                    if (have_ratio)
+                    {
+                        const double cprev = cmeas[std::clamp(t - 1, 0, 15)];
+                        const double cprev2 = cmeas[std::clamp(t - 2, 0, 15)];
+                        est = cprev * (cprev / std::max(1.0, cprev2));
+                    }
+                    else if (bootstrap)
+                    {
+                        est = cmeas[1] * kDefaultGrowth;
+                    }
+                    if (est >= 0.0)
+                    {
+                        const double rem = static_cast<double>(esc_units) - cum;
+                        if (est > gate_alpha * std::max(0.0, rem)) { break; }   // exact gate stops -> commit t-1
+                    }
+                    if (!run_meas(t)) { break; }                                // overran -> keep last completed
+                    cum += cmeas[std::clamp(t, 0, 15)];
+                }
+            }
+            if (s_esc_predict_stats)
+            {
+                g_pred_n.fetch_add(1, std::memory_order_relaxed);
+                g_pred_K[std::clamp(K, 0, 15)].fetch_add(1, std::memory_order_relaxed);
+                g_pred_committed[std::clamp(hcommitted, 0, 15)].fetch_add(1, std::memory_order_relaxed);
+                if (aborts > 0) { g_pred_fallback.fetch_add(1, std::memory_order_relaxed); }
+            }
+            if (s_esc_predict_audit)
+            {
+                // Shadow-run the true ladder (from d1) and compare its committed depth to the predictor's.
+                // predict < ladder = LOSSY (the estimate under-shot -> quality risk). Audit only; result unused.
+                TranspositionTable  audit_tt_local;
+                TranspositionTable* audit_tt = (tt != nullptr) ? tt : &audit_tt_local;
+                SearchBudget audit_budget(esc_units);
+                int ladder_committed = depth;
+                for (int d = 0; d < 16; ++d) { g_hlad_cost[d] = 0; g_hlad_leaves[d] = 0; }
+                g_hlad_recording = true;
+                (void)FullSearchLine(state, depth, max_turns, second_main, audit_tt, &audit_budget,
+                                     &ladder_committed);
+                g_hlad_recording = false;
+                g_pred_audit_n.fetch_add(1, std::memory_order_relaxed);
+                const int delta = hcommitted - ladder_committed;
+                if (delta < 0)
+                {
+                    g_pred_lossy.fetch_add(1, std::memory_order_relaxed);
+                    if (g_pred_lossy_dumped.fetch_add(1) < 12)
+                    {
+                        std::cerr << "[esc-predict-audit] LOSSY turn=" << state.turn_number
+                                  << " predicted_K=" << K << " predict_committed=" << hcommitted
+                                  << " ladder_committed=" << ladder_committed
+                                  << " (probe committed=" << committed << ", esc_c1=" << esc_c1
+                                  << ", esc_units=" << esc_units
+                                  << ", probe_leaves d1.." << depth << "=";
+                        for (int d = 1; d <= depth; ++d) { std::cerr << g_probe_leaves[d] << (d<depth?"/":""); }
+                        std::cerr << ")\n";
+                        std::cerr << "    [hladder] incremental cost d1.." << depth << "=";
+                        for (int d = 1; d <= depth; ++d) { std::cerr << g_hlad_cost[d] << (d<depth?"/":""); }
+                        std::cerr << " (start-gate consumes THESE; ladder_committed=" << ladder_committed << ")\n";
+                        std::cerr << "    [climb] start=" << g_climb_start << " measured cmeas d1.." << depth << "=";
+                        for (int d = 1; d <= depth; ++d) { std::cerr << g_climb_cmeas[d] << (d<depth?"/":""); }
+                        std::cerr << " (mine; compare to hladder incremental)\n";
+                        // COST-CURVE probe (MTG_ESC_PREDICT_COSTCURVE): run a COLD single heuristic pass at
+                        // each depth 1..committed and dump the actual cost so we can see the real per-depth
+                        // cost vs the leaf-count model and the rollout-length-decay model. Expensive; only on
+                        // the first few lossy cases. H = horizon turns from now (rollout-length scale).
+                        if (std::getenv("MTG_ESC_PREDICT_COSTCURVE"))
+                        {
+                            const int H = max_turns - state.turn_number;
+                            std::cerr << "    [costcurve] H=" << H << " (max_turns=" << max_turns
+                                      << " turn=" << state.turn_number << ")\n";
+                            for (int d = 1; d <= committed; ++d)
+                            {
+                                TranspositionTable cc_tt;
+                                FSLineCache        cc_cache;
+                                SearchBudget       cc_budget;   // unlimited: just count Used()
+                                (void)FSLineWin(state, d, max_turns, max_turns + 1, second_main,
+                                                &cc_tt, &cc_cache, &cc_budget);
+                                long long cumL_d = 0;
+                                for (int k = 1; k <= d; ++k) { cumL_d += std::max<long long>(0, g_probe_leaves[k]); }
+                                std::cerr << "      d" << d << " cold_cost=" << cc_budget.Used()
+                                          << " leaves(d)=" << g_probe_leaves[d]
+                                          << " cumL=" << cumL_d
+                                          << " probe_cost=" << g_probe_cost[d]
+                                          << " H-d=" << (H - d) << "\n";
+                            }
+                        }
+                    }
+                }
+                else if (delta > 0) { g_pred_deeper.fetch_add(1, std::memory_order_relaxed); }
+            }
+        }
+        else if (s_esc_single)
+        {
+            // ONE heuristic pass at a single target depth (= clamp(committed - offset, 1, depth)), not the
+            // 1..depth ladder -- concentrate the reserved budget on the one depth that decides the crossover
+            // and skip the shallow-pass rework. Overrun-guarded: a pass that cannot complete in budget ABORTS
+            // and is treated as NOT taken (hcommitted=0) -> keep the value-leaf line. That abort IS the
+            // crossover-skip: an unaffordable escalation is dropped, never partially committed.
+            const int target = std::clamp(committed - s_esc_single_off, 1, depth);
+            FSLineCache single_cache;
+            // BUGFIX: FSLineWin memoizes leaf rollouts only through a non-null tt. In normal play the
+            // hybrid's `tt` is nullptr (m_shared_tt is set only during bottoming), so passing it straight
+            // through gave the single pass NO leaf cache -- while the ladder path (FullSearchLine) always
+            // owns a local_table. That made "single-depth" re-roll every transposed leaf and falsely look
+            // more expensive than the ladder. Give the single pass the same per-call leaf cache the ladder
+            // has, so the skip-earlier-depths comparison is apples-to-apples.
+            TranspositionTable single_tt_local;
+            TranspositionTable* single_tt = (tt != nullptr) ? tt : &single_tt_local;
+            const long long ub = esc_budget ? esc_budget->Used() : 0;
+            if (esc_budget && !esc_budget->Unlimited())
+            {
+                // Bound the single pass by the RESERVED budget itself (not the 1M runaway floor): the point is
+                // to spend the reserve on one depth and, if the pass does not fit, ABORT = crossover-skip. A
+                // generous 2x headroom lets an "almost done" pass finish while still capping the cost, so this
+                // is the performance guard the user asked for (no unbounded d5 heuristic per escalation).
+                const long long ceil = 2 * esc_budget->Limit();
+                esc_budget->SetOverrunLimit(ub + std::max<long long>(ceil, 1));
+            }
+            // DIAGNOSTIC (MTG_ESC_SINGLE_WARM): seed the single pass's B&B cutoff with the value-leaf's
+            // committed win turn instead of the loose max_turns+1. If this collapses the work toward the
+            // ladder's, the ladder's advantage is the INCUMBENT (cheap to reuse); if work stays high, it's
+            // the cross-pass MEMO (needs structural reuse). May over-prune (value-leaf optimism) -> only a
+            // work-diagnostic, not a shippable config.
+            static const bool s_esc_single_warm = std::getenv("MTG_ESC_SINGLE_WARM") != nullptr;
+            const int single_cut = s_esc_single_warm ? old_wt : (max_turns + 1);
+            hline = FSLineWin(state, target, max_turns, single_cut, second_main, single_tt, &single_cache, esc_budget);
+            const bool aborted = (esc_budget && esc_budget->Overrun());
+            if (esc_budget) { esc_budget->SetOverrunLimit(0); }
+            hcommitted = aborted ? 0 : target;
+        }
+        else
+        {
+            const long long used_before = (s_esc_measure && esc_budget) ? esc_budget->Used() : 0;
+            hline = FullSearchLine(state, depth, max_turns, second_main, tt, esc_budget, &hcommitted);
+            if (s_esc_measure && esc_budget && hcommitted >= 1)
+            {
+                // Ladder work for this escalation (interior + rollout units).
+                const long long ladder_units = esc_budget->Used() - used_before;
+                // COLD single pass at the ladder's ACTUAL committed depth (fresh leaf cache + interior memo +
+                // an unlimited budget so it completes -- we only want its work count). Same target depth as the
+                // ladder committed to, so this is the fair "skip earlier depths" comparison. Result discarded.
+                TranspositionTable meas_tt;
+                FSLineCache        meas_cache;
+                SearchBudget       meas_budget;   // default: unlimited (no overrun), just counts Used()
+                (void)FSLineWin(state, hcommitted, max_turns, max_turns + 1, second_main,
+                                &meas_tt, &meas_cache, &meas_budget);
+                g_esc_ladder_units.fetch_add(ladder_units, std::memory_order_relaxed);
+                g_esc_single_units.fetch_add(meas_budget.Used(), std::memory_order_relaxed);
+                g_esc_measure_n.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        if (g_hybrid_stats.enabled)
+        {
+            int hi = (hcommitted >= 0 && hcommitted < 16) ? hcommitted : 15;
+            g_hybrid_stats.redo_hdepth[hi].fetch_add(1);
+            // Did the escalation COMMIT a verified win (lethal within its searched horizon)? If so and at a
+            // depth < the probe's committed depth, it's a verified win the value-leaf probe PRUNED (leaf-driven
+            // B&B cutoff differs) -- proving the shallow escalation passes are NOT skippable.
+            const bool esc_ver = (hcommitted > 0)
+                              && (hline.win_turn <= state.turn_number + hcommitted - 1);
+            if (esc_ver)
+            {
+                g_hybrid_stats.esc_verified.fetch_add(1);
+                g_hybrid_stats.esc_ver_hdepth[hi].fetch_add(1);
+                if (hcommitted < committed) { g_hybrid_stats.esc_verified_short.fetch_add(1); }
+            }
+            if (hcommitted < depth) { g_hybrid_stats.redo_short.fetch_add(1); }
+        }
+        // Decide whether to TAKE the heuristic escalation or fall back to the value-leaf line.
+        //  (1) Table-driven crossover (preferred): the measured per-committed-depth fall-back level
+        //      hc*[committed] from value_fallback_take_at -- take iff the escalation reached it. This replaces
+        //      the uniform "committed-3" assumption (different committed depths fall back at DIFFERENT levels;
+        //      weak-leaf decks sooner, strong-leaf decks never). Clamp committed to the measured range.
+        //  (2) Legacy uniform offset (no table): value-leaf-d(committed) ~= heuristic-d(committed-offset), plus
+        //      the value_no_fallback override (always take).
+        // The env override MTG_VALUE_TRUST_OFFSET (s_vto_override>=0) forces the uniform crossover for A/B.
+        bool taken;
+        if (!value_fallback_take_at.empty() && s_vto_override < 0)
+        {
+            const int hi = static_cast<int>(value_fallback_take_at.size()) - 1;   // max measured committed depth
+            const int c  = committed < 1 ? 1 : (committed > hi ? hi : committed);
+            taken = (hcommitted >= value_fallback_take_at[static_cast<std::size_t>(c)]);
+        }
+        else
+        {
+            const bool no_fallback = value_no_fallback && (s_vto_override < 0);
+            taken = no_fallback ? (hcommitted >= 1)
+                                : (hcommitted > committed - kValueTrustOffset);
+        }
         const bool wt_changed = taken && (hline.win_turn != old_wt);
         // Opt-in escalation-outcome dump (byte-identical when MTG_ESCALATION_DUMP unset). All features are
         // observed BEFORE the escalation ran, so they can gate a future confidence-skip. See the doc.

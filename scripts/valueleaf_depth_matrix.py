@@ -23,12 +23,18 @@ See learned-d0-policy.md.
 import argparse, os, re, subprocess, time
 
 MTG = "build/Release/mtg"
+# Per-deck folder layout (decks/<name>/<name>...): the analyzer writes the profile/value next to the deck
+# and the engine resolves siblings directory-relative. (Earlier flat paths decks/<name>.value.json are stale.)
 DECKS = {
-    "antilife": ("decks/Anti-Lifegain.cod", "decks/Anti-Lifegain.value.json", 8),
-    "slivers":  ("decks/slivers_vial.txt",  "decks/slivers_vial.value.json",  8),
-    "TH":       ("decks/treasure_hunt.txt", "decks/treasure_hunt.value.json", 8),
-    "burn":     ("decks/burn.txt",          "decks/burn.value.json",          8),
-    "knights":  ("decks/Knights.cod",       "decks/Knights.value.json",       8),
+    "antilife": ("decks/Anti-Lifegain/Anti-Lifegain.cod", "decks/Anti-Lifegain/Anti-Lifegain.value.json", 8),
+    "slivers":  ("decks/slivers_vial/slivers_vial.txt",   "decks/slivers_vial/slivers_vial.value.json",   8),
+    "TH":       ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.value.json", 8),
+    "burn":     ("decks/burn/burn.txt",                   "decks/burn/burn.value.json",                   8),
+    "knights":  ("decks/Knights/Knights.cod",             "decks/Knights/Knights.value.json",             8),
+    # hinata (combo): heuristic is EXPENSIVE at deep depths (H5 ~4.8 s/game vs H2 ~0.1 s) while the value
+    # leaf is cheap at every depth. Use separate --hdepths (cap at 3) / --vdepths (1..5) to keep it tractable;
+    # the fallback decision only needs V5-vs-H2 and H_conv (heuristic converges by d3). See value.json note.
+    "hinata":   ("decks/Hinata2/Hinata2.cod",             "decks/Hinata2/Hinata2.value.json",             8),
 }
 
 
@@ -55,6 +61,17 @@ def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_dept
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--games",type=int,default=1000)
+    ap.add_argument("--hgames",type=int,default=None,
+                    help="games for the EXPENSIVE heuristic arm (combo decks: H4/H5 cost seconds/game). Default "
+                         "= --games. Cost-sample it; the derivation's monotone-H envelope guards a noisy deep H.")
+    ap.add_argument("--vgames",type=int,default=None,
+                    help="games for the CHEAP value-leaf arm (O(1) leaf). Default = --games. Keep this full: the "
+                         "value-leaf-by-depth is the useful, decision-setting side of the table.")
+    ap.add_argument("--hgames-depth",nargs="+",default=[],metavar="D:G",
+                    help="per-heuristic-depth games override for the SLOW cells only (e.g. 3:500 4:200 5:100 on a "
+                         "combo deck). Depths not listed use --hgames/--games. Cut games ONLY where the heuristic "
+                         "is genuinely expensive -- cheap decks (slivers/knights/burn/TH) keep FULL games at every "
+                         "depth incl. H5; do not pass this for them.")
     ap.add_argument("--seeds",nargs="+",type=int,default=[4004,5005,6006,7007])
     ap.add_argument("--hdepths",nargs="+",type=int,default=[1,2,3,4,5])
     ap.add_argument("--vdepths",nargs="+",type=int,default=[1,2,3,4,5])
@@ -64,12 +81,19 @@ def main():
     ap.add_argument("--decks",nargs="+",default=list(DECKS))
     ap.add_argument("--out",default="logs/eval/valueleaf_depth_matrix.txt")
     args=ap.parse_args()
+    hgames = args.hgames if args.hgames is not None else args.games
+    vgames = args.vgames if args.vgames is not None else args.games
+    hgd = {}
+    for spec in args.hgames_depth:
+        k, v = spec.split(":"); hgd[int(k)] = int(v)
     os.makedirs(os.path.dirname(args.out),exist_ok=True)
     of=open(args.out,"a")
     def emit(s): print(s,flush=True); of.write(s+"\n"); of.flush()
-    emit("\n===== DEPTH MATRIX (UNBOUNDED)  games=%d seeds=%s value_min_depth=%d%s =====" % (
-        args.games, args.seeds, args.value_min_depth,
-        "  [PURE value-leaf, no redo]" if args.value_min_depth == 0 else "  [HYBRID redo below this]"))
+    # Header's `games=` carries VGAMES (the full value arm -> the writer's provenance); heuristic games trail it.
+    hnote = ("hgames=%d" % hgames) + ("" if not hgd else " hgames_depth=" + ",".join("%d:%d" % (d, hgd[d]) for d in sorted(hgd)))
+    emit("\n===== DEPTH MATRIX (UNBOUNDED)  games=%d seeds=%s value_min_depth=%d%s  %s =====" % (
+        vgames, args.seeds, args.value_min_depth,
+        "  [PURE value-leaf, no redo]" if args.value_min_depth == 0 else "  [HYBRID redo below this]", hnote))
     for dname in args.decks:
         deck,prof,mt=DECKS[dname]
         # accumulate mean LP + ms per config over seeds
@@ -77,9 +101,10 @@ def main():
         for seed in args.seeds:
             try:
                 for d in args.hdepths:
-                    lp,ms=run(deck,d,args.games,seed,mt,args.threads,None,False,args.value_min_depth); H[d][0]+=lp; H[d][1]+=ms
+                    g = hgd.get(d, hgames)   # per-depth games: cut only the slow heuristic cells
+                    lp,ms=run(deck,d,g,seed,mt,args.threads,None,False,args.value_min_depth); H[d][0]+=lp; H[d][1]+=ms
                 for d in args.vdepths:
-                    lp,ms=run(deck,d,args.games,seed,mt,args.threads,prof,True,args.value_min_depth); V[d][0]+=lp; V[d][1]+=ms
+                    lp,ms=run(deck,d,vgames,seed,mt,args.threads,prof,True,args.value_min_depth); V[d][0]+=lp; V[d][1]+=ms
                 n+=1
             except Exception as e:
                 emit("  %s s%d ERROR %s" % (dname,seed,e))
