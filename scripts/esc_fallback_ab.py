@@ -42,17 +42,24 @@ AVG = re.compile(r"avg \(turns\)\s*:\s*([0-9.]+)")  # merged metric (was "Avg wi
 # TRUE pre-adoption baseline, force legacy via env (MTG_ESC_BEAM=0 disables the beam; FRESH_FRAC=-1 = legacy
 # shared budget). Every variant sets both envs explicitly so the comparison is clean regardless of the JSON.
 _OFF = {"MTG_ESC_BEAM": "0", "MTG_ESCALATION_FRESH_FRAC": "-1"}
-def _v(beam=0, ld=None, fresh="-1"):
+def _v(beam=0, ld=None, fresh="-1", static=False):
     e = {"MTG_ESC_BEAM": str(beam), "MTG_ESCALATION_FRESH_FRAC": str(fresh)}
     if ld is not None: e["MTG_ESC_BEAM_LEAFDEPTH"] = str(ld)
+    if static: e["MTG_ESC_BEAM_STATIC"] = "1"   # prune by static MoveOrder (no value reorder)
     return e
+# WIDTH sweep (ld1 = protect top plies): find the beam width that preserves quality at d3, where the shallow
+# value-leaf is a weaker ranking proxy so the heuristic-best line can fall outside a narrow top-W.
+# VALUE-RANKED vs STATIC beam at d3: does pruning by static MoveOrder (no value reorder) avoid the shallow-leaf
+# reorder drift? (v = value-ranked = current adopted; s = static.)
+# HINATA d3 width ladder: the leaf beam hurts hinata quality (+0.006..+0.010); W7 was less-bad than W3/W5,
+# so the winning combo line is often ranked outside top-W at the leaf. Does WIDER recover quality (and at what
+# speed cost)? If even W20 stays worse, the beam fundamentally mis-prunes hinata's deep combo at d3.
+# ADOPTION A/B (2026-07-18): measure the SHIPPED depth-adaptive beam vs beam-off, at d3 (the only depth it now
+# bites -- production d5/d6 is byte-identical). "baseline" = MTG_ESC_BEAM=0 => beam OFF. "adopted" = a BARE run
+# (no MTG_ESC_BEAM env) so the per-deck depth-adaptive beam drives (shallow regime = static W20 ld1 at d3).
 VARIANTS = {
-    "baseline":         dict(_OFF),                        # true pre-adoption (no beam, legacy budget)
-    "beam2_ld2":        _v(2, 2, "-1"),                    # beam only (isolate)
-    "fresh0.5":         _v(0, None, "0.5"),                # fresh only (isolate)
-    "beam2_ld2_fresh":  _v(2, 2, "0.5"),                   # SHIPPED combo
-    "beam2_ld3_fresh":  _v(2, 3, "0.5"),                   # more play-protection (deeper leafdepth)
-    "beam3_ld2_fresh":  _v(3, 2, "0.5"),                   # wider beam
+    "baseline": dict(_OFF),   # MTG_ESC_BEAM=0 => escalation beam OFF (legacy frontier)
+    "adopted":  {},           # bare => per-deck depth-adaptive beam fires (d3 => static W20 ld1)
 }
 # Legacy variants (budget-renewal / cold single-depth fallback) — kept for reference, not in the default sweep:
 #   "fresh1.0":       {"MTG_ESCALATION_FRESH_FRAC": "1.0"}
@@ -73,10 +80,20 @@ def run(deck_file, seed, games, env_extra):
     env = dict(os.environ)
     env.update(env_extra)
     # BARE run: no --depth/--budget so the deck's enabled value_play block drives play (heavy decks: d5/b20).
+    # ESC_AB_DEPTH=D overrides to an explicit depth (+ --ignore-play-profile to bypass the block's depth lock),
+    # e.g. ESC_AB_DEPTH=3 to study the beam where every deck escalates heavily (~30-58%).
+    cmd = [BIN, deck_file, "--seed", str(seed), "--games", str(games), "--max-turns", "8", "--threads", "1"]
+    _depth = os.environ.get("ESC_AB_DEPTH")
+    if _depth:
+        cmd += ["--depth", _depth, "--ignore-play-profile"]
+    # ESC_AB_BUDGET=M pairs the depth override with a real virtual-ms budget cap (else budget=0=unlimited).
+    # The PRODUCTION d3 config caps at budget 10, so measure the beam against a budgeted baseline, not an
+    # uncapped one -- with a cap the beam can spend the same budget on fewer/deeper lines (quality) vs frontier.
+    _budget = os.environ.get("ESC_AB_BUDGET")
+    if _budget:
+        cmd += ["--budget-ms", _budget]
     t0 = time.time()
-    out = subprocess.run([BIN, deck_file, "--seed", str(seed), "--games", str(games),
-                          "--max-turns", "8", "--threads", "1"],
-                         capture_output=True, text=True, env=env)
+    out = subprocess.run(cmd, capture_output=True, text=True, env=env)
     wall = time.time() - t0
     m = AVG.search(out.stdout)
     lp = float(m.group(1)) if m else None

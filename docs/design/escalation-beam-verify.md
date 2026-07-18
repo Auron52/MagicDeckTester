@@ -51,6 +51,185 @@ d0/d3/light byte-identical). Overnight A/B + GT rebaseline in flight. Not yet co
   antilife d5 s1001 byte-identical to legacy, hinata d5 −0.04, 0 win->loss. beam3 overnight A/B in flight.
 
 ---
+## D3 AT PRODUCTION BUDGET 10 (2026-07-18) — the adoption-relevant measurement
+The earlier d3 study was UNBOUNDED (budget 0); production d3 uses **budget 10**. Re-ran the 6-deck sweep at
+`--depth 3 --budget-ms 10` (6 seeds 4004/5005/6006/7007/10010/11011 x 300 games) via `esc_fallback_ab.py`
+(`ESC_AB_DEPTH=3 ESC_AB_BUDGET=10`). dLP vs the no-beam d3 baseline (neg = better; loss=9):
+
+| deck | baseline LP (ms) | sbeam5_ld1 | sbeam7_ld1 | vbeam3_ld1 |
+|---|---|---|---|---|
+| antilife | 4.6494 (83) | +0.0000 faster | −0.0006 (0w) slower | **−0.0050 (4b/1w) slower** |
+| hinata   | 6.1994 (1403)| +0.0105 worse | +0.0061 worse | +0.0100 worse, −443ms |
+| th       | 4.2506 (29)  | +0.0011 faster| +0.0006 ~neut | +0.0039 worse |
+| slivers  | 4.2350 (36)  | −0.0017 (3b/0w)| −0.0011 (0w) | −0.0011 (0w) faster |
+| knights  | 4.3389 (35)  | −0.0006 (0w)  | +0.0000 (0w)  | −0.0011 (0w) faster |
+| burn     | 4.3439 (32)  | +0.0000 (0w)  | +0.0000 (0w)  | +0.0011 (2w) |
+
+**Findings (log: `logs/eval/beam_d3_b10_full.out`):**
+- On **5 of 6 decks the beam is quality-safe at d3 AND faster** — deltas tiny (±0.001–0.005 on a ~4.4 base).
+  At a real budget the beam is essentially a **speed lever with quality preserved**.
+- **Static W7 ld1 is the safest single shallow config** (quality-neutral-or-better on 5/6, 0 worse-seeds on
+  antilife/slivers/knights/burn). Static W5 ld1 nearly as safe with more speedup.
+- **Value-ranked (W3) wins quality on antilife** (−0.0050) but costs speed; its antilife *speed sign flipped*
+  vs the 4-seed partial → seed-noisy. Value also best on slivers/knights, worse on th/burn.
+- **Hinata is the exception**: d3 beam is +0.006–0.010 WORSE but hugely faster. d3 isn't a clean operating
+  point for hinata — but hinata ships at d5, so this only affects off-policy d3 cases, not production.
+- **Conclusion**: d3 is "generally supported" enough for a depth-adaptive beam. Shallow config = **static
+  W5–W7 ld1** (safe), deep (d5) stays the adopted **value W3 ld2** (byte-identical). Hinata d3 = documented
+  speed/quality trade, not a blocker (off-policy).
+
+## D3 OPEN ISSUES + WIDTH-LADDER INVESTIGATION (2026-07-18, RESUME HERE after compaction)
+
+**User goal: a d3 config that is quality NEUTRAL-OR-BETTER on EVERY deck while staying faster (the adoption
+bar). Address ALL d3 shortfalls, not just hinata.** At budget 10 the small quality shortfalls are:
+- **hinata**: +0.006–0.010 WORSE on all beam configs (W7 least-bad); big speedup. The real issue.
+- **th**: slightly worse on every beam config (sbeam7 +0.0006 best; vbeam3 +0.0039).
+- **burn**: NEUTRAL on static W5/W7 (+0.0000, 0 worse); only the VALUE variant is worse (+0.0011). User still
+  wants it addressed / confirmed.
+- antilife/slivers/knights: already neutral-or-better on static W5–W7.
+
+**Hypothesis:** the leaf beam (ld1 = prune only the leaf ply, already the least-aggressive setting) sometimes
+ranks the winning line outside the top-W at the leaf; **WIDER width = less pruning = closer to baseline**
+(W7 already less-bad than W3/W5 on hinata). The lever for ALL the shortfalls is likely WIDTH. Question: is
+there a width that makes every deck neutral-or-better AND still faster? If the neutral-making width kills the
+speedup, the beam isn't a clean d3 win for that deck.
+
+**WIDTH-LADDER RESULT — RESOLVED. The wide leaf beam fixes every d3 shortfall.** Logs:
+`beam_d3_light_width.out` (th/slivers/knights/burn, 6x300), `beam_d3_hinata_width.out` (hinata, 4x200),
+`beam_d3_antilife_width.out` (antilife, 6x300). At **static W20 ld1, ALL 6 decks are quality-NEUTRAL
+(+0.0000, 0 worse-seeds) and faster on 5/6:**
+
+| deck | dLP @ W20 ld1 | speed | note |
+|---|---|---|---|
+| antilife | +0.0000 (0w) | ~neutral | value W12 = −0.0006 & −17ms if per-deck tuning wanted |
+| hinata | +0.0000 (0w) | **−275ms (~23%)** | W7 +0.0112 → W12 +0.0050 → W20 +0.0000 (monotone) |
+| th | +0.0000 (0w) | faster | was +0.0006 at W7 |
+| slivers | +0.0000 (0w) | faster | |
+| knights | +0.0000 (0w) | faster | |
+| burn | +0.0000 (0w) | faster | |
+
+**Mechanism:** W20 keeps the top-20 plans at the leaf ply, so it prunes ONLY the very widest leaf nodes — never
+drops a winning line (neutral quality everywhere) yet still trims the escalation frontier. The speedup lands
+where it's needed (hinata, the slow combo deck) and is negligible on the already-fast light decks. **The narrow
+beam (W3–W7) was the whole problem; wide (W20) at ld1 is the d3 answer.**
+
+**CONCLUSION: shallow (d<=4) config = static W20 ld1.** Deep (d>=5) stays the adopted value W3 ld2
+(byte-identical). Next = build the DEPTH-ADAPTIVE beam (below) with these two regimes.
+
+## DEPTH-ADAPTIVE BEAM — BUILT + VALIDATED (2026-07-18)
+Implemented the two-regime auto-select in `FullSearchLineHybrid` (`src/ai/TurnSolver.cpp`) + broadened the
+AIEngine beam gate (`vp_beam = value_play.drives()`, so the beam fires at ANY depth, not only on-policy; fresh
+renewal stays on-policy-only via `vp_here`):
+- **deep (depth >= 5)**: value-ranked, the deck's own `beam_width`/`beam_leafdepth` (== the ADOPTED d5 config).
+- **shallow (depth 3..4)**: STATIC, width 20, leafdepth 1 (the width-ladder answer above).
+- **d0/d1/d2**: too shallow to protect >= 2 top plies (`depth < eff_leafdepth+2`) => beam OFF => byte-identical.
+- The env path (`MTG_ESC_BEAM` set) stays literal (research tool, no depth adaptation).
+
+**Validation (smoke s1001 + regression s2002/s3003, read-only vs committed GT):**
+- **ALL 24 d0 + d5/d6 (production) cases BYTE-IDENTICAL** — adoption does not touch shipped play at all.
+- **16 of 18 d3 cases BYTE-IDENTICAL** (the light decks' d3 frontier is < 20 wide, so W20 keeps everything).
+- **Only 2 hinata d3 cases moved** (smoke s1001 gi134, regression s2002 gi15) and both are **QUALITY-NEUTRAL**:
+  avg unchanged (6.0267=6.0267, 6.2150=6.2150), **win turn unchanged** (T6/T5 both ways), and across the whole
+  audit **0 win->loss, 0 loss->win, 0 later, 0 earlier**. The beam pruned a different leaf line -> a later
+  fetch/shuffle resolved to a different draw -> physically different but same-win-turn game.
+- **Beam fires + faster at d3** (hinata d3 s4004 120g: beam-on 6.1000 / 95.9s vs beam-off `MTG_ESC_BEAM=0`
+  6.1000 / 101.5s = quality-identical, ~5.5% faster this seed; the 4-seed width study measured up to ~23%).
+
+**GT impact:** rebaseline the 2 moved hinata d3 digests only (avg unchanged) via `regression.sh --accept` for
+smoke + regression. Overnight has hinata d3 cases too -> its GT goes stale (quality-neutral), defer its
+rebaseline (contained change, production byte-identical). **PENDING USER APPROVAL of the GT accept.**
+
+### SCOPE: shallow beam is d3-ONLY (2026-07-18, user-directed conservative rollout)
+The shallow regime fires at **depth == 3 ONLY** -- the sole validated + suite-covered off-policy depth. d1/d2/d4
+keep the beam **OFF = byte-identical to pre-adoption** (empirically confirmed: a bare adopted run vs
+`MTG_ESC_BEAM=0` is digest-IDENTICAL at d1/d2/d4 on hinata/antilife/burn). **d4 is a deliberate hole**: same
+W20/ld1 mechanism as d3 so plausibly neutral, but UNMEASURED -> left off until a d4 sweep confirms it (user:
+"leave it off on those depths to start and see whether it makes sense to turn on after"). Widening to d4 later
+is a one-line change (`else if (depth == 3)` -> `(depth == 3 || depth == 4)`) + a d4 A/B.
+
+### ADOPTION A/B NUMBERS (d3, 4 held-out seeds 4004/5005/6006/7007 x 200g, budget 10; adopted bare vs beam-off)
+Log `logs/eval/esc_fallback_ab.log`. dLP = quality (loss=9, lower=better); dms/game = speed (lower=faster):
+| deck | baseline LP (ms/g) | dLP (worse-seeds) | dms/game (faster-seeds) |
+|---|---|---|---|
+| antilife | 4.7363 (83.6) | **+0.0000 (0)** | +1.71 (0/4) -- beam bookkeeping overhead, W20 rarely prunes a fast deck |
+| hinata   | 6.2363 (954.7)| **+0.0000 (0)** | **-38.38 (4/4)** -- the real win (the slow combo deck) |
+| th       | 4.2637 (23.8) | **+0.0000 (0)** | +0.27 (2/4) noise |
+| slivers  | 4.2525 (28.0) | **+0.0000 (0)** | -0.59 (2/4) noise |
+| knights  | 4.3513 (26.5) | **+0.0000 (0)** | +0.29 (1/4) noise |
+| burn     | 4.3150 (24.4) | **+0.0000 (0)** | -0.82 (4/4) |
+**Read:** quality is PERFECTLY NEUTRAL (+0.0000, 0 worse-seeds) on all 6. The wall-clock ms/game was measured
+under 12 parallel workers, so the sub-ms deltas (antilife +1.71, th +0.27, knights +0.29) are CONTENTION noise,
+not real work -- see the CPU-operation measurement below.
+
+### CONTENTION-FREE CPU-WORK MEASUREMENT (`MTG_ROLLOUT_STATS`, d3, seed 4004; deterministic, thread-invariant)
+Wall-clock under parallel load is contention-noisy; deterministic rollout counts are the true cost. Adopted
+(bare) vs beam-off (`MTG_ESC_BEAM=0`), rollout `calls` (SimulateToEnd, ~94% of escalation cost) + `turn_steps`:
+| deck | Δcalls | Δturn_steps | note |
+|---|---|---|---|
+| hinata  | **-105085 (-3.9%)** | **-190178 (-3.8%)** | the real win (slow combo deck) |
+| slivers | -6512 (-2.4%) | -8172 (-1.8%) | less work |
+| knights | -1621 (-0.6%) | -2763 (-0.6%) | less work |
+| th      | -1122 (-0.4%) | -1203 (-0.3%) | less work |
+| antilife| -29 (-0.01%)  | -31 (-0.007%) | ~identical (narrow d3 frontier -> W20 prunes ~nothing) |
+| burn    | 0             | 0             | EXACTLY identical (frontier always < 20) |
+**The beam does LESS-OR-EQUAL CPU work on EVERY deck -- never more.** The earlier wall-clock "antilife +1.71ms /
+th +0.27ms slower" was pure scheduler contention (antilife's real delta = 29 fewer rollout calls out of 229k).
+So by CPU operations the adoption is neutral-to-better ACROSS THE BOARD (strictly less on hinata/slivers/knights/
+th, ~0 antilife, 0 burn), quality perfectly neutral, production d5/d6 + d1/d2/d4 byte-identical. Log:
+`MTG_ROLLOUT_STATS=1 ... --depth 3` prints `[rollout-stats] calls=.. turn_steps=.. interior_esc=..`.
+
+## DEPTH-ADAPTIVE BEAM (build after the width question is settled)
+
+**Task: build a DEPTH-ADAPTIVE beam so d3 (and any depth) is generally supported.**
+
+### Why: the beam's optimal ordering/width is depth-dependent
+Escalation is *verification* at deep search (value leaf reliable) but *primary* at shallow search (leaf weak).
+Measured d3 (all decks escalate 30-58% at d3 vs 2-8% at d5 -- escalation fires on UNVERIFIED decisions, and a
+shallow search verifies far fewer):
+| deck | best d3 config | quality Δ (loss=9) | speedup |
+|---|---|---|---|
+| hinata | static W5 ld1 | 0.000 (EQUAL; value-ranked = WORSE 6.53 vs 6.40) | ~2x (5.2->2.6 s/game) |
+| slivers | value W3 ld1 | 0.000 (equal) | 83% |
+| knights | value W3 ld1 | 0.000 (equal) | 78% |
+| antilife | static W5 ld1 | +0.0017 | 51% |
+| burn | static W5 ld1 | +0.0013 | 59% |
+| th | static W5 ld1 | +0.0006 (value W3 was +0.0069) | 37% |
+Two lessons: (1) **STATIC MoveOrder pruning beats value-ranked at d3** -- the shallow leaf is a bad ranking
+proxy so the value reorder picks worse lines (hinata d3 value 6.53 vs static/baseline 6.40; TH static +0.0037 vs
+value +0.0069). Even at no-prune width the value reorder alone drifts quality. (2) **ld1 is essential at d3**
+(only 3 plies; ld2 protects just the root -> +0.0175 on TH); wider width (W5) recovers most residual. hinata d3
+legacy is impractically slow (5.2 s/game) -> the beam is ~required there.
+
+### The design to build
+Beam settings should auto-select by SEARCH DEPTH (the FullSearchLineHybrid `depth` param), removing per-depth
+tuning:
+- **deep (depth >= 5)**: value-ranked, width 3, leafdepth 2  (== the ADOPTED d5 config, unchanged/byte-identical)
+- **shallow (depth <= 4)**: STATIC, width 5, leafdepth 1
+Implementation sketch: in FullSearchLineHybrid, when the per-deck beam drives (vp_here / eff_beam>0), pick
+(width, leafdepth, static) from `depth` instead of fixed values -- OR add value_play fields for a shallow
+profile. Keep the existing d5 path byte-identical (regression/overnight GT must not move). Then A/B at d3 across
+all decks (static W5 ld1) confirming equal-or-near-equal quality + big speedup, and re-confirm d5 byte-identical.
+Optional follow-up: shrink the TH/burn/antilife d3 residual (+0.0006..+0.0017) via wider width or per-game look.
+
+### Build state for resume
+- **COMMITTED + PUSHED**: `f517bb3` = beam3_ld2_fresh adoption (antilife+hinata) + GT rebaseline. On
+  `phase-1-2-deck-analyzer`.
+- **UNCOMMITTED (byte-identical off, safe)**:
+  - `src/ai/TurnSolver.cpp`: `MTG_ESC_BEAM_STATIC` toggle (`g_esc_beam_static`, gates the value reorder off ->
+    static MoveOrder pruning). Built + in the current binary. This is the shallow-depth ordering lever.
+  - `scripts/esc_fallback_ab.py`: `ESC_AB_DEPTH=D` (runs `--depth D --ignore-play-profile`); `_v(...,static=)`;
+    `_OFF` baseline forces true legacy (`MTG_ESC_BEAM=0 FRESH=-1`).
+- **Env knobs**: `MTG_ESC_BEAM=W`, `MTG_ESC_BEAM_LEAFDEPTH=D` (INT_MAX=uniform), `MTG_ESC_BEAM_STATIC=1`,
+  `MTG_ESCALATION_FRESH_FRAC=f`. Env-path beam is literal (no depth guard); the per-deck path has the
+  `depth >= beam_leafdepth+2` guard + the AIEngine `vp_here` (depth==target) gate.
+- **d3 study logs**: `logs/eval/beam_d3_light.out` (th/slivers/knights/burn), `beam_d3_width.out` (width sweep),
+  `beam_d3_static.out` (static vs value), `beam_d3_antilife.out`, `beam_d3_hinata.out` (partial; baseline slow).
+- **Pending (separate, user wants fixed independently)**: the batch per-thread-AIEngine knife-edge -- games are
+  not independent because GoldFishRunner.cpp:262 reuses one AIEngine per thread across games; a game deep in a
+  batch differs from its `--game-index` isolated replay. This is what makes the residual overnight win->loss
+  (both win in isolation). Pre-existing, not beam-caused.
+
+---
 ## (original investigation notes below)
 
 ## The goal (user-directed)

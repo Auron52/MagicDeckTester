@@ -5949,13 +5949,18 @@ inline thread_local int g_esc_beam_width = 0;
 // MTG_ESC_BEAM_LEAFDEPTH is unset) => beam every node (uniform beam, the original behavior). See the
 // depth-aware-beam work.
 inline thread_local int g_esc_beam_leafdepth = 2147483647;
+// STATIC beam (MTG_ESC_BEAM_STATIC): keep the beam's WIDTH cap but DON'T reorder `pre` by the probe's value
+// ranking -- prune by the static MoveOrderPlans order instead. Diagnostic for shallow searches, where the
+// value leaf is a weak ranking proxy so the value reorder can perturb which line commits (measured d3 quality
+// drift even at no-prune width). 0 = value-ranked (default, the adopted behavior).
+inline thread_local bool g_esc_beam_static = false;
 struct EscBeamGuard
 {
-    int prev_w, prev_ld;
-    EscBeamGuard(int w, int ld)
-        : prev_w(g_esc_beam_width), prev_ld(g_esc_beam_leafdepth)
-    { g_esc_beam_width = w; g_esc_beam_leafdepth = ld; }
-    ~EscBeamGuard() { g_esc_beam_width = prev_w; g_esc_beam_leafdepth = prev_ld; }
+    int prev_w, prev_ld; bool prev_st;
+    EscBeamGuard(int w, int ld, bool st)
+        : prev_w(g_esc_beam_width), prev_ld(g_esc_beam_leafdepth), prev_st(g_esc_beam_static)
+    { g_esc_beam_width = w; g_esc_beam_leafdepth = ld; g_esc_beam_static = st; }
+    ~EscBeamGuard() { g_esc_beam_width = prev_w; g_esc_beam_leafdepth = prev_ld; g_esc_beam_static = prev_st; }
 };
 // VALUE-RANKED BEAM reuse: when the beam is enabled, the probe (value-leaf) pass RECORDS, per interior node,
 // the value-win-turn each MoveOrderPlans-ordered plan produced (indexed by its position in the ordered `pre`).
@@ -6160,7 +6165,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // probe recorded this node; otherwise (incl. beam off) `pre` keeps the static order == byte-identical.
     // Gated to depth <= g_esc_beam_leafdepth so the top plies (the committed play) keep the exact static order.
     const bool beam_here = (g_esc_beam_width > 0 && depth <= g_esc_beam_leafdepth);
-    if (beam_here && g_probe_plan_vals != nullptr && lc != nullptr)
+    if (beam_here && !g_esc_beam_static && g_probe_plan_vals != nullptr && lc != nullptr)
     {
         ProbePlanVals::const_iterator pit = g_probe_plan_vals->find(key);
         if (pit != g_probe_plan_vals->end() && !pit->second.empty())
@@ -6775,21 +6780,46 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // exploration so the committed PLAY is never beamed out). Unset => INT_MAX => uniform beam (original).
     static const int s_esc_beam_leafdepth = []{ const char* e = std::getenv("MTG_ESC_BEAM_LEAFDEPTH");
                                                 return (e && *e) ? std::atoi(e) : 2147483647; }();
-    // Precedence (mirrors escalation_fresh_frac): an EXPLICITLY-SET MTG_ESC_BEAM env wins (keeps env A/B working
-    // + its uniform-beam semantics when LEAFDEPTH is unset). Else the per-deck value_play beam (beam_width >= 0
-    // when an enabled block drives; beam_leafdepth its protection depth). beam_width < 0 => off => byte-identical.
-    // DEPTH GUARD (per-deck path only): the beam is validated for the deck's deep PRODUCTION search; disable it
-    // when the search is too shallow to leave >= 2 protected top plies (depth < beam_leafdepth+2). Else a shallow
-    // search (e.g. the suite's d3 engine-sanity case) would beam all-but-the-root and over-prune (measured d3
-    // win->loss). The env path stays literal (a research tool). So a deck playing at d5 gets the beam; its d3/d0
-    // sanity cases stay byte-identical.
-    const bool beam_deep_enough  = (depth >= beam_leafdepth + 2);
-    const int eff_beam           = s_esc_beam_env_set ? s_esc_beam
-                                 : (beam_width >= 0 && beam_deep_enough ? beam_width : 0);
-    const int eff_beam_leafdepth = s_esc_beam_env_set ? s_esc_beam_leafdepth : beam_leafdepth;
+    static const bool s_esc_beam_static = std::getenv("MTG_ESC_BEAM_STATIC") != nullptr;  // prune by static order
+    // DEPTH-ADAPTIVE BEAM (per-deck path). Precedence (mirrors escalation_fresh_frac): an EXPLICITLY-SET
+    // MTG_ESC_BEAM env wins (keeps env A/B working + its literal uniform-beam semantics -- a research tool, no
+    // depth adaptation). Else the per-deck value_play beam (beam_width >= 0 whenever an enabled block drives,
+    // passed at ANY depth; beam_width < 0 => no block => off => byte-identical).
+    //
+    // The value_play block configures the DEEP (production) beam; at a shallower search depth the value leaf is a
+    // weaker ranking proxy, so a NARROW value-ranked beam mis-prunes the winning line (measured d3 quality loss).
+    // Measured answer (escalation-beam-verify.md, width ladder): a WIDE STATIC leaf beam is quality-neutral at d3
+    // on all 6 decks and faster. So auto-select the regime by SEARCH DEPTH:
+    //   deep    (depth >= 5): value-ranked, the deck's own width/leafdepth == the ADOPTED d5 config -> BYTE-
+    //                         IDENTICAL (antilife/hinata W3 ld2; light decks beam_width 0 = off; burn at d5 off).
+    //   shallow (depth == 3): STATIC, width 20, leafdepth 1 (MEASURED neutral+faster; overrides the deck config).
+    //   d1/d2/d4 + all else : beam OFF -> BYTE-IDENTICAL to pre-adoption. d3 is the ONLY shallow depth turned on
+    //                         (the sole validated + suite-covered off-policy depth). d4 is a deliberate hole:
+    //                         plausibly neutral (same W20/ld1 mechanism) but UNMEASURED, so it stays off until a
+    //                         d4 sweep confirms it -- see escalation-beam-verify.md "d4 widening (deferred)".
+    // (The escalation-budget renewal / fresh_frac stays on-policy-only in AIEngine, so a shallow beam runs on the
+    // legacy budget as measured.)
+    int  eff_beam;
+    int  eff_beam_leafdepth;
+    bool eff_beam_static;
+    if (s_esc_beam_env_set)
+    {
+        eff_beam           = s_esc_beam;
+        eff_beam_leafdepth = s_esc_beam_leafdepth;
+        eff_beam_static    = s_esc_beam_static;
+    }
+    else if (beam_width >= 0)   // an enabled value_play block drives (any depth); pick the regime by depth
+    {
+        if (depth >= 5)      { eff_beam = beam_width; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
+        else if (depth == 3) { eff_beam = 20;         eff_beam_leafdepth = 1;              eff_beam_static = true;  }
+        else                 { eff_beam = 0;          eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
+    }
+    else { eff_beam = 0; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
     ProbePlanVals beam_vals_map;
-    ProbeValsGuard _pvg(eff_beam > 0 ? &beam_vals_map : nullptr);
-    if (eff_beam > 0) { g_probe_val_recording = true; }
+    // Value recording is consumed only by the VALUE-ranked reorder; the static beam ignores it, so arm it only
+    // for the value regime (deep). Off/static => null map => no recording overhead => byte-identical.
+    ProbeValsGuard _pvg((eff_beam > 0 && !eff_beam_static) ? &beam_vals_map : nullptr);
+    if (eff_beam > 0 && !eff_beam_static) { g_probe_val_recording = true; }
     int committed = depth;
     SearchLine line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
     g_probe_recording = false;
@@ -6885,7 +6915,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // cap, so the kept W lines are the value pass's best -- only their rollouts are new work. s_esc_beam was
         // read + recording armed at the top of the hybrid (before the probe). 0 = unlimited = byte-identical.
         // eff_beam_leafdepth restricts the beam to near-leaf nodes (protects the top plies / committed play).
-        EscBeamGuard _beam(eff_beam, eff_beam_leafdepth);
+        EscBeamGuard _beam(eff_beam, eff_beam_leafdepth, eff_beam_static);
         int hcommitted = depth;
         SearchBudget  esc_alloc_budget;
         SearchBudget* esc_budget = budget;   // legacy shared REMAINING budget (only when fresh_frac < 0)

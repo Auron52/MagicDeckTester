@@ -1,6 +1,5 @@
-# Regression ground truth -- commit d5cbba9  date 2026-07-18
+# Regression ground truth -- commit 1e386f4  date 2026-07-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-18): beam3_ld2_fresh escalation adoption (antilife+hinata d5): better avg win-turn on ALL 8 heavy d5 cases; 2 searched win->loss (hinata s4004 gi135, s7007 gi247) both WIN in isolation via --game-index (beam-off AND beam-on) = pre-existing batch per-thread-AIEngine knife-edge, not a beam misplay; net +10 wins +26 faster wins
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -21,7 +20,7 @@ antilife_smoke_d0_s1001=5.5990/b83c527a9a3d91b8
 antilife_smoke_d3_s1001=4.6480/006e946f202f5bee
 antilife_smoke_d5_s1001=4.6333/891f3a25b588dd60
 hinata_smoke_d0_s1001=7.4900/411d5a9ac022d9bf
-hinata_smoke_d3_s1001=6.0267/3984f9586e74aa05
+hinata_smoke_d3_s1001=6.0267/0a34f24e1cdf3ed5
 hinata_smoke_d5_s1001=6.0400/48fdc6b05c4df359
 
 # --- regression ---
@@ -51,7 +50,7 @@ antilife_regression_d3_s3003=4.7433/4d574926d3f3b42d
 antilife_regression_d5_s2002=4.7240/b6ce3bd20d37b474
 antilife_regression_d5_s3003=4.7880/aaca06af7b15ea8d
 hinata_regression_d0_s2002=7.5530/9941d35b65b88554
-hinata_regression_d3_s2002=6.2150/3a609e2138797c54
+hinata_regression_d3_s2002=6.2150/9ef1b48f69d46bf6
 hinata_regression_d3_s3003=6.1800/b85c3d74273ecebf
 hinata_regression_d5_s2002=6.1800/7178de2f1a42c61a
 hinata_regression_d5_s3003=6.0700/aa06d9aa946304f9
