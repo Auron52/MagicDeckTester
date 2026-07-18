@@ -890,6 +890,58 @@ static bool SubsetHasIllegalSplice(const GameState& state,
     return false;
 }
 
+// Generate-time, BYTE-IDENTICAL analogue of SubsetHasIllegalSplice applied to the odometer's GROUP
+// selection (Solve's default enumeration). Splice bases are CastFromHand actions (hand_index >= 0), so
+// they always live in a group -- never in the independent 2^num_ind set -- which means the group choice
+// ALONE determines splice legality (an imask extension adds only non-splice-base actions, so it can
+// never make an over-splice legal). Rejecting an over-splicing group choice before its inner imask loop
+// therefore skips exactly the subsets consider()'s SubsetHasIllegalSplice already discards -> identical
+// `best`. This prunes the illegal-over-splice majority the Dragonstorm go-off hand generates (N copies
+// of Desperate Ritual -> N groups x (N options) -> most k-assignments violate the triangular N-1-j
+// bound) before paying the per-subset cost. Mirrors SubsetHasIllegalSplice exactly; gate the call on a
+// one-time any_splice flag so every non-splice deck skips it entirely (byte-identical, zero overhead).
+static bool GroupChoiceOverSplices(const GameState& state,
+                                   const std::vector<Action>& cands,
+                                   const std::vector<std::vector<int>>& groups,
+                                   const std::vector<int>& choice)
+{
+    auto sel_base = [&](size_t g, int* out_j) -> bool {
+        if (choice[g] <= 0) { return false; }
+        int j = groups[g][choice[g] - 1];
+        const CardDefinition* d = cands[j].def;
+        bool is_base = d && d->params.splice_onto_arcane && cands[j].kind == Action::Kind::CastFromHand;
+        if (is_base) { *out_j = j; }
+        return is_base;
+    };
+    std::vector<std::string> names;
+    for (size_t g = 0; g < groups.size(); ++g)
+    {
+        int j;
+        if (!sel_base(g, &j)) { continue; }
+        if (std::find(names.begin(), names.end(), cands[j].card_name) == names.end())
+        { names.push_back(cands[j].card_name); }
+    }
+    if (names.empty()) { return false; }
+    const Player& ap = state.ActivePlayer();
+    for (const std::string& nm : names)
+    {
+        std::vector<int> ks;
+        for (size_t g = 0; g < groups.size(); ++g)
+        {
+            int j;
+            if (sel_base(g, &j) && cands[j].card_name == nm) { ks.push_back(cands[j].splice_count); }
+        }
+        int N = 0;
+        for (const Card& c : ap.hand) { if (c.m_name == nm) { ++N; } }
+        std::sort(ks.begin(), ks.end(), std::greater<int>());
+        for (size_t j = 0; j < ks.size(); ++j)
+        {
+            if (ks[j] > N - 1 - static_cast<int>(j)) { return true; }
+        }
+    }
+    return false;
+}
+
 // Candidate single COLOURS for a "add N mana of ONE chosen colour" float (Lotus Bloom's SacForMana
 // and Apex of Power's 10-of-one-colour). The set = every colour appearing in the active player's
 // NONLAND spell costs across hand / library / graveyard / battlefield (so an off-colour combo line
@@ -1825,6 +1877,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // Any splice-onto-Arcane base among the candidates? Gates the odometer's generate-time over-splice
+    // skip (GroupChoiceOverSplices) so every non-splice deck pays nothing and stays byte-identical.
+    bool any_splice = false;
+    for (const Action& ra : cands) { if (ra.def && ra.def->params.splice_onto_arcane) { any_splice = true; break; } }
     // Filter/ramp land present? Enables the real-payment affordability fallback (color conversion
     // the flat pool can't model). False for every deck without such a land -> byte-identical.
     const bool any_filter = HasUntappedFilterSource(state);
@@ -2245,7 +2301,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         int gcost = 0;
         for (int g = 0; g < num_groups; ++g)
         { if (choice[g] > 0) { gcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
-        if (gcost <= mana_bound)
+        // Likewise skip an over-splicing group choice (byte-identical: consider()'s SubsetHasIllegalSplice
+        // would reject every extension anyway; splice legality is fixed by the group selection). any_splice
+        // gates it off for every non-splice deck. Kills the Dragonstorm illegal-over-splice majority.
+        const bool splice_ok = !any_splice || !GroupChoiceOverSplices(state, cands, groups, choice);
+        if (gcost <= mana_bound && splice_ok)
         {
             for (int imask = 0; imask < (1 << num_ind); ++imask)
             {
@@ -4973,6 +5033,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // Any splice-onto-Arcane base? Gates the over-splice odometer skip (mirrors Solve); non-splice decks
+    // pay nothing and stay byte-identical.
+    bool any_splice = false;
+    for (const Action& ra : cands) { if (ra.def && ra.def->params.splice_onto_arcane) { any_splice = true; break; } }
     // Filter/ramp land present? (mirrors Solve) Enables the real-payment affordability fallback.
     const bool any_filter = HasUntappedFilterSource(state);
 
@@ -5247,7 +5311,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int gcost = 0;
         for (int g = 0; g < num_groups; ++g)
         { if (choice[g] > 0) { gcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
-        if (gcost <= mana_bound)
+        // Over-splice group choices are likewise skipped (byte-identical: eval_and_push()'s
+        // SubsetHasIllegalSplice rejects every extension; splice legality is fixed by the group choice).
+        const bool splice_ok = !any_splice || !GroupChoiceOverSplices(state, cands, groups, choice);
+        if (gcost <= mana_bound && splice_ok)
         {
             for (int imask = 0; imask < (1 << num_ind); ++imask)
             {
