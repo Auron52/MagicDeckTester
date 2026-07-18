@@ -20,7 +20,8 @@ See learned-d0-policy.md.
     scripts/valueleaf_depth_matrix.py --games 1000 --seeds 8008 9009 10010 11011 \
         --hdepths 1 2 3 4 5 --vdepths 1 2 3 4 5 --value-min-depth 0
 """
-import argparse, os, re, subprocess, time
+import argparse, json, os, re, subprocess, threading, time
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 MTG = "build/Release/mtg"
 # Per-deck folder layout (decks/<name>/<name>...): the analyzer writes the profile/value next to the deck
@@ -63,6 +64,140 @@ def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_dept
     return lp, 1000.0*dt/p
 
 
+# ==================== INCREMENTAL / TRACTABILITY-AWARE MODE (--incremental) ====================
+# The way to build a depth table on decks with a heavy search tail (antilife unbounded deep search has games
+# that explode into multi-hour trees). Instead of one monolithic run per (seed,depth) that only reports at the
+# very END, sweep EVERY cell in small (50-game) BATCHES, round-robin / breadth-first, so the WHOLE table exists
+# at 50 games, then 100, ... Each batch is written the instant it lands (resumable, stoppable, ZERO loss).
+#   - TRACTABILITY as we go: from a cell's first (and each) batch, if it is too slow to be production-usable at
+#     that depth (sec/game over a threshold), mark it INTRACTABLE and cap it at a small REFERENCE sample -- it
+#     still gets a table value, we just don't burn compute pushing an unusable cell to the full target.
+#   - WORK-STEALING pool: a cell stuck on a long-tail game ties up ONE core while the rest keep churning other
+#     cells' batches, so the box stays full and results keep streaming.
+# Batches reproduce a full run EXACTLY: games [off,off+batch) via `--seed (seed+off) --game-index off` (seed_gi
+# = seed+global_i, spawn = global_i), verified batched==monolithic. NOTE each concurrent worker is a SEPARATE
+# mtg process that loads the deck's keep model; antilife is ~1GB/process (post the share+stream-parse memory
+# fix, 82859f7), so --workers 24 ~ 24GB -- was ~6GB/proc before the fix (would OOM). Tune --workers to RAM.
+
+def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_depth, prof):
+    """Run global games [offset, offset+batch) for this cell's base `seed`. Returns (lp, wall_s, games)."""
+    env = dict(os.environ)
+    for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
+              "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE","MTG_VALUE_STARTGATE_ALPHA"):
+        env.pop(k, None)
+    if value_on:
+        env["MTG_VALUE_MODEL"]="1"; env["MTG_VALUE_PROFILE"]=prof
+        env["MTG_VALUE_MIN_DEPTH"]=str(value_min_depth); env["MTG_VALUE_STARTGATE_ALPHA"]="8"
+    else:
+        env["MTG_VALUE_MODEL"]="0"
+    cmd=[MTG, deck_file, "--seed", str(seed+offset), "--game-index", str(offset), "--games", str(batch),
+         "--max-turns", str(mt), "--threads", "1", "--ignore-play-profile", "--depth", str(depth)]
+    t0=time.time(); out=subprocess.run(cmd,capture_output=True,text=True,env=env).stdout; wall=time.time()-t0
+    pm=re.search(r"Games played\s*:\s*(\d+)",out); p=int(pm.group(1)) if pm else 0
+    m=re.search(r"avg \(turns\)\s*:\s*([\d.]+)",out); lp=float(m.group(1)) if m else float("nan")
+    return lp, wall, p
+
+
+def _cell_key(c): return "%s|%s|%d|%d" % (c["deck"], c["arm"], c["depth"], c["seed"])
+
+
+def emit_table(cells, args):
+    """Parser-compatible legacy table (mean over seeds) + per-cell game counts, rewritten each batch."""
+    L=["",
+       "===== DEPTH MATRIX (UNBOUNDED, INCREMENTAL)  games=%d seeds=%s value_min_depth=%d  %s  hgames=%d =====" % (
+         args.target, args.seeds, args.value_min_depth,
+         "[PURE value-leaf, no redo]" if args.value_min_depth==0 else "[HYBRID redo]", args.target)]
+    for dname in args.decks:
+        dc=[c for c in cells if c["deck"]==dname]
+        nseed=len(set(c["seed"] for c in dc if c["batches"]>0))
+        L.append("---- %s (mean over %d seeds) ----" % (dname, nseed))
+        def row(arm, depths, label):
+            parts=[]; ann=[]
+            for d in depths:
+                cs=[c for c in dc if c["arm"]==arm and c["depth"]==d and c["batches"]>0]
+                if not cs: continue
+                lp=sum(c["lp_sum"]/c["batches"] for c in cs)/len(cs)
+                ms=sum(c["ms"]/max(c["games"],1)*1000 for c in cs)/len(cs)
+                g=min(c["games"] for c in cs)
+                tag="*" if any(c["intractable"] for c in cs) else ""
+                parts.append("%s%d=%.4f[%.1fms]%s"%(arm,d,lp,ms,tag)); ann.append("%s%d:%dg"%(arm,d,g))
+            if parts:
+                L.append("  %s %s"%(label,"   ".join(parts)))
+                L.append("    # games/cell: %s   (*=intractable=reference-only)"%("  ".join(ann)))
+        row("H", args.hdepths, "heuristic: ")
+        row("V", args.vdepths, "value-leaf:")
+    open(args.out,"w").write("\n".join(L)+"\n")
+
+
+def run_incremental(args):
+    cells=[]
+    for dname in args.decks:
+        for seed in args.seeds:
+            for d in args.hdepths: cells.append(dict(deck=dname,arm="H",depth=d,seed=seed))
+            for d in args.vdepths: cells.append(dict(deck=dname,arm="V",depth=d,seed=seed))
+    for c in cells:
+        c.update(games=0, lp_sum=0.0, batches=0, ms=0.0, intractable=False, running=False, first_wall=None)
+    state_path=args.out+".cells.json"
+    if os.path.exists(state_path):                       # resume: skip already-committed batches
+        try:
+            saved={_cell_key(x):x for x in json.load(open(state_path))}
+            for c in cells:
+                s=saved.get(_cell_key(c))
+                if s: c.update(games=s["games"],lp_sum=s["lp_sum"],batches=s["batches"],ms=s["ms"],
+                               intractable=s["intractable"],first_wall=s.get("first_wall"))
+        except Exception: pass
+        print("resumed %d cells from %s" % (sum(1 for c in cells if c["batches"]), state_path))
+
+    lock=threading.Lock()
+    def target(c): return min(args.reference_target,args.target) if c["intractable"] else args.target
+    def needs(c):  return (not c["running"]) and c["games"] < target(c)
+
+    def write_state():
+        tmp=state_path+".tmp"
+        json.dump([{k:c[k] for k in ("deck","arm","depth","seed","games","lp_sum","batches","ms",
+                                     "intractable","first_wall")} for c in cells], open(tmp,"w"))
+        os.replace(tmp,state_path)
+        emit_table(cells,args)
+
+    ex=ThreadPoolExecutor(max_workers=args.workers)
+    futs={}
+    def submit_next():
+        cand=[c for c in cells if needs(c)]
+        if not cand: return False
+        c=min(cand,key=lambda x:(x["games"],x["depth"]))    # breadth-first: fewest games first
+        c["running"]=True
+        off=c["batches"]*args.batch
+        deck_file,prof,mt=DECKS[c["deck"]]
+        futs[ex.submit(run_batch,deck_file,mt,c["depth"],c["seed"],off,args.batch,
+                       c["arm"]=="V",args.value_min_depth,prof)]=c
+        return True
+
+    while len(futs)<args.workers and submit_next(): pass
+    done_batches=0
+    while futs:
+        done,_=wait(list(futs),return_when=FIRST_COMPLETED)
+        for fut in done:
+            c=futs.pop(fut)
+            try: lp,wall,p=fut.result()
+            except Exception: lp,wall,p=float("nan"),0.0,0
+            with lock:
+                c["running"]=False
+                if p>0 and lp==lp:
+                    c["games"]+=p; c["lp_sum"]+=lp; c["batches"]+=1; c["ms"]+=wall
+                    if c["first_wall"] is None: c["first_wall"]=wall
+                    if wall/max(p,1) > args.intractable_sec_per_game:    # tractability, checked every batch
+                        c["intractable"]=True
+                done_batches+=1
+                write_state()
+                if done_batches % 10 == 0:
+                    tot=sum(c["games"] for c in cells); ic=sum(1 for c in cells if c["intractable"])
+                    print("... %d batches, %d games total, %d cells intractable" % (done_batches,tot,ic),flush=True)
+        while len(futs)<args.workers and submit_next(): pass
+    ex.shutdown(); write_state()
+    print("=== incremental generation complete: %d batches, %d cells (%d intractable) ===" % (
+        done_batches, len(cells), sum(1 for c in cells if c["intractable"])))
+
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--games",type=int,default=1000)
@@ -85,7 +220,28 @@ def main():
     ap.add_argument("--threads",type=int,default=6)
     ap.add_argument("--decks",nargs="+",default=list(DECKS))
     ap.add_argument("--out",default="logs/eval/valueleaf_depth_matrix.txt")
+    # --- incremental / tractability-aware mode ---
+    ap.add_argument("--incremental",action="store_true",
+                    help="Round-robin 50-game BATCHES across every cell (breadth-first), written incrementally, "
+                         "with per-cell tractability marking + cross-cell work-stealing. The way to build a "
+                         "table on decks whose deep unbounded search has a heavy tail (antilife). Resumable.")
+    ap.add_argument("--batch",type=int,default=50,help="games per incremental batch (default 50)")
+    ap.add_argument("--target",type=int,default=None,help="full-sample target games/cell (default = --games)")
+    ap.add_argument("--reference-target",type=int,default=100,
+                    help="games/cell to stop at once a cell is marked INTRACTABLE (a slow, not-production-usable "
+                         "cell still gets a reference value; default 100)")
+    ap.add_argument("--intractable-sec-per-game",type=float,default=2.0,
+                    help="a batch slower than this (wall sec / game, single-threaded) marks its cell intractable "
+                         "-> capped at --reference-target. Checked on every batch (first batch is the main signal).")
+    ap.add_argument("--workers",type=int,default=(os.cpu_count() or 8),
+                    help="concurrent single-threaded batch processes (work-stealing pool). Each is a separate "
+                         "process loading the keep model (~1GB for antilife); size to RAM. Default = CPU count.")
     args=ap.parse_args()
+    if args.incremental:
+        args.target = args.target if args.target is not None else args.games
+        os.makedirs(os.path.dirname(args.out),exist_ok=True)
+        run_incremental(args)
+        return
     hgames = args.hgames if args.hgames is not None else args.games
     vgames = args.vgames if args.vgames is not None else args.games
     hgd = {}
