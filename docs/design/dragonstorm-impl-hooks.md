@@ -16,14 +16,18 @@ remaining spell mechanics and the mid-build resume state so a compaction/handoff
   Medallion cost-reduction lockstep fix.
 - **DATA AUDIT GREEN:** `audit_card_fields` ok=True, 0 hard mismatches (Storm keyword tag added, inert like
   Suspend/Splice); oracle-text divergences are advisory (our entries carry bracket impl notes). Snapshot committed.
-- **STAGE 5a (correctness):** nonconv=**0**. fd-diverge **13→2**. PRIMARY cause FIXED+committed (`dfe3fff`):
+- **STAGE 5a (correctness) — CONVERGED: nonconv=0, fd-diverge 13→0.** PRIMARY cause FIXED+committed (`dfe3fff`):
   `AIEngine::EffectiveCost` (executor) was MISSING the Ruby Medallion `reduces_spell_color` reduction that
   `TurnSolver::EffectiveCost` (planner) had → executor over-paid Medallion-funded combos → unpayable → win
-  never realized. Fix mirrors the block (copies-scale-before single floor). **RESIDUAL 2** (seed 1021/1041) =
-  firebreathing payment-path lockstep: rollout `SimulateCombat`/`BuildPool` leftover-mana pool exceeds executor
-  `Firebreathe`/`BuildAvailableMana` by 1–2 (storage-burst + ritual-float tap different sources) → projects a
-  combat kill 1 turn early. **GUARDED SUBAGENT FIXING** (firebreathing-gated shared leftover-pool; byte-identity
-  0-new REQUIRED else report). This is the ledger-pre-flagged "kill-engine win over-projection."
+  never realized. Fix mirrors the block (copies-scale-before single floor). **RESIDUAL 2 FIXED+committed
+  (`b169781`):** NOT the hypothesized payment-path divergence (instrumentation REFUTED it — untapped sources
+  matched). Real cause: `TurnSolver::BuildPool`/`BuildNonCreaturePool` credited **storage lands** (Mercadian
+  Bazaar / Dwarven Hold) at their STATIC per-tap yield instead of the **LIVE** `storage_counters` the executor
+  uses via `PermanentManaYield` → a dead `sc=0` storage land added phantom firebreathing mana in the rollout →
+  combat kill projected a turn early. Fix: pass `PermanentManaYield(p,*def)` to `AddSourceToPool` at both
+  `BuildPool`-family sites (as `BuildAvailableMana` already does); gated by `storage_land` (Dragonstorm-only) →
+  byte-identical for every non-storage deck. Verified: fd-diverge 2→0, nonconv 0, smoke 18/0/0 exact digests,
+  goldfish avg 6.36→6.12, won 41→43, 0 win→loss. See ledger "RESIDUAL FIXED" section.
 - **VERIFIED (user-flagged):** spliced Desperate Ritual cost = **{1}{R}{R}** with one Ruby Medallion, **{R}{R}**
   with two — correct in BOTH EffectiveCost fns after `dfe3fff` (copies-scale then single floor).
 - **PERF FINDING:** full baseline profile gen ran **4.5 h / ~67 core-hours** (STOPPED). Not a hang — per-game
@@ -32,16 +36,17 @@ remaining spell mechanics and the mid-build resume state so a compaction/handoff
   `MTG_UNPRUNED`) is the gate before the deferred mulligan stage. Likely branch drivers: Lotus/Apex color-float
   variants + splice-count + storage-burst. NUANCE: Apex's black float CAN legitimately hard-cast a drawn
   Kolaghan, so naive color-pruning isn't safe — propose to user, don't auto-adopt.
-- **CARD-SCORES-ONLY PLAN (user proposal, NEXT after fd-diverge converges):** card_scores are the CHEAP part
-  (`AnalyzerEngine::ComputeCardScores`, `AnalyzerEngine.cpp:656`, ~2000 games) and used ONLY in the mulligan
-  path (`ComputeHandScore`→KeepHand gate; `HeuristicBottomPick`→BottomCards, a tertiary tiebreak among
-  search-win-equal cards — NOT the in-turn play search). `GridSearchLands` (`AnalyzerEngine.cpp:680`) is the
-  EXPENSIVE grid and its output (tuned keep predicate) is superseded by the deferred exhaustive mulligan
-  profile. **PLAN:** add an `MTG_SKIP_GRID` env gate around the `GridSearchLands` call (return `working_profile`
-  + `card_scores` + `recommended_thr` + default land params), generate the card-scores-only profile on the
-  CONVERGED engine (~minutes), commit. Open question for user: make card-scores-only the Stage-4 DEFAULT (skill
-  update) vs Dragonstorm-only. (User "thinks card scores may be used in d0" — grep found only mulligan
-  consumers; unresolved, but moot since we generate them regardless.)
+- **CARD-SCORES-ONLY (user proposal) — GATE BUILT, GEN RUNNING.** `MTG_SKIP_GRID` env gate added in
+  `AnalyzerEngine.cpp` (default OFF → byte-identical): skips `GridSearchLands` (Phase 3b, the ~4.5h grid) and
+  emits `working_profile` (default land window + the DISCOVERED `required_pieces` + `min_color_sources` from
+  Phases 1/2b, which still run) + the cheap `card_scores` + `hand_score_threshold=NO_GATE`. NO_GATE is
+  deliberate: absent the joint grid we do NOT ship an unvalidated keep gate (the bolt-on gate was the old
+  over-mulligan regression; the grid itself always included NO_GATE as the "decline" option). card_scores still
+  drive the threshold-independent `HeuristicBottomPick` bottoming tiebreak. Runtime consumers confirmed by grep:
+  `ComputeHandScore`→KeepHand gate (`AIEngine.cpp:539-542`) + `HeuristicBottomPick`→BottomCards (551-606) —
+  both mulligan-only; NOT the in-turn play search. Gen running: `MTG_SKIP_GRID=1 analyze_deck.py --no-rebuild`
+  (bg `be8nuwobn`, log `logs/dragonstorm_cardscores/`), ~1–3h. On done: verify profile + commit gate+profile.
+  Open question for user: make card-scores-only the Stage-4 DEFAULT (skill update) vs Dragonstorm-only.
 - **REMAINING Stage 5 (after fd-diverge=0 + card_scores):** multi-depth sanity (5b) + `verify_deck.py Dragonstorm`
   gate + reduced claude-play legality backstop (5d, sized down from 100 — disclose) + viewer-decision audit
   (`audit_viewer_decisions.py`, 5h).
@@ -49,12 +54,11 @@ remaining spell mechanics and the mid-build resume state so a compaction/handoff
   recorded-not-wired — Scourge ETB `target`, Lotus/Apex color, Dragonstorm tutor multi-pick, splice count,
   firebreathing count, storage burst — a substantial build; present as a decision list. (b) Irencrag Feat +
   Reality Spasm float-color fidelity (wild→colored; may rebaseline Hinata — verify impact FIRST, scope, flag).
-  (c) Stage-5f pruning proposal (above). (d) Whether to keep the 2 residual fd-diverges if the firebreathing
-  fix can't be made byte-identical.
+  (c) Stage-5f pruning proposal (above). (d) [RESOLVED — firebreathing fix `b169781` IS byte-identical, fd=0.]
 - **FLOW PREFS:** user reviews closely + corrects by TYPING (Stop cancels subagents — memory
   `user-stop-cancels-subagents`); relay corrections to running agents via SendMessage; autonomous overnight;
   mulligan generation is a SEPARATE deferred user-initiated stage (NOT part of analyze). Nothing at risk — all
-  work committed. Running subagent: firebreathing payment-lockstep fix (`a630aff7163b2a0e3`).
+  work committed. No subagents running; bg card-scores gen `be8nuwobn` in flight.
 
 ## Desperate Ritual — SPLICE (search-chosen count k) hook map
 - **Plan variant:** add `int splice_count` to the `Action` struct (`src/ai/TurnSolver.h`, sibling to

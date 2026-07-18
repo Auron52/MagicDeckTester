@@ -532,3 +532,23 @@ Sweep `MTG_FULL_DEPTH=1 MTG_FD_ORACLE=1 ... --games 50 --seed 1001 --depth 5 --b
   storage burst), so the combat leftover pool matches; OR have the executor's `Firebreathe` and the
   rollout's `SimulateCombat` recompute the leftover pool via one shared post-payment routine. Left unfixed
   to avoid risking byte-identity in shared combat/payment code without an A/B.
+
+## Stage 5a fd-diverge RESIDUAL FIXED (2026-07-18) — storage-land yield in BuildPool (2→0); hypothesis above REFUTED
+Commit `b169781`. The residual-2 hypothesis above ("payment path taps DIFFERENT sources → different leftover
+pool") was **REFUTED by instrumentation** (`MTG_FB_TRACE` at both firebreathing sites): the untapped-source
+SETS were IDENTICAL in rollout vs executor. The pools disagreed for a simpler reason — `TurnSolver::BuildPool`
+/ `BuildNonCreaturePool` credited **storage lands** (Mercadian Bazaar / Dwarven Hold) at their STATIC per-tap
+yield (1) via the default `AddSourceToPool`, while the executor's `AIEngine::BuildAvailableMana` credits their
+**LIVE** `storage_counters` via `PermanentManaYield`. So a dead `sc=0` storage land added a phantom 1 mana to
+the rollout's firebreathing pool but 0 to the executor's (seed=1021 T7: rollout buildpool=3 vs executor
+avail=1, two dead Bazaars over-credited; seed=1041 T5: 5 vs 4). That phantom firebreathing damage made the
+search project the combo kill a turn early → fd-diverge. **FIX (cleaner than the proposal above — no
+payment-path change):** pass `PermanentManaYield(p, *def)` to `AddSourceToPool` at both `BuildPool`-family
+sites, exactly as `BuildAvailableMana`/`SpareUntappedMana` already do, making the rollout pool byte-identical
+to the executor's. `PermanentManaYield == ManaProducedPerTap` for every non-storage source, and `storage_land`
+exists ONLY on Mercadian Bazaar / Dwarven Hold (Dragonstorm-only), so every non-storage deck is byte-identical.
+**Verified:** fd-diverge 2→0 (seeds 1021/1041 clear), nonconv 0, full smoke 18/0/0 with exact digests across
+all 6 GT decks; Dragonstorm goldfish 50g/seed1001 avg 6.36→6.12, won 41→43, **0 win→loss flips** (post-fix
+unwon set ⊂ baseline). The fix cannot reduce real executor wins (its own `BuildAvailableMana` is unchanged);
+it only makes the rollout projection accurate, so the search stopped committing phantom firebreathing kills.
+**→ ENGINE CONVERGED: fd-diverge 13→0, nonconv 0.**
