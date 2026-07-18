@@ -45,6 +45,7 @@ static void CollectBoardState(const GameState& state,
         }
         if (p.charge_counters != 0) { snap.counters.push_back({ "charge", p.charge_counters }); }
         if (p.verse_counters  != 0) { snap.counters.push_back({ "verse",  p.verse_counters  }); }
+        if (p.storage_counters != 0) { snap.counters.push_back({ "storage", p.storage_counters }); }
 
         if (p.controller_index == state.active_player_index) { battlefield_out.push_back(std::move(snap)); }
         else { opp_battlefield_out.push_back(std::move(snap)); }  // Forbidden Orchard tokens / spawns
@@ -188,6 +189,12 @@ void GameEngine::UntapStep(GameState& state)
 void GameEngine::UpkeepStep(GameState& state)
 {
     state.step = Step::Upkeep;
+
+    // Suspend (Lotus Bloom): at the controller's upkeep, remove one time counter from each suspended
+    // card and CAST off suspend any whose last counter is now gone (arrive_turn <= this turn). Runs
+    // after UntapStep, so the arrived artifact is untapped and available this turn. Mirrors the rollout
+    // (SimulateEndAndStartNextTurn) -> lockstep. No-op for every deck without a suspended card.
+    ProcessSuspendArrivals(state, state.active_player_index);
 
     // Aether Vial: add a charge counter each upkeep using an AI heuristic.
     // Stop adding when the counter count reaches the most common creature MV in hand,
@@ -345,6 +352,12 @@ void GameEngine::CombatPhase(GameState& state)
         }
     }
 
+    // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
+    // combat mana on attacker pumps BEFORE the damage loop reads their power. Delegated to the
+    // AIEngine (it owns BuildAvailableMana/TapForCost); the shared ApplyFirebreathing reads a pool
+    // byte-identical to the rollout's BuildPool -> lockstep. Inert without a firebreathing param.
+    m_ai.Firebreathe(state, atk_idx);
+
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, state.active_player_index) : 0;
@@ -394,6 +407,12 @@ void GameEngine::CombatPhase(GameState& state)
         total_combat_dmg += trigger_life_loss;
         state.opponent_lost_life_this_turn = true;
     }
+
+    // Utvara Hellkite: per attacking Dragon, create a 6/6 Dragon token (untapped, summoning-sick;
+    // NOT added to this combat). Each token entering fires OnDragonEnters (Scourge ping / Lathliss
+    // token) via CreateToken. Mirrors TurnSolver::SimulateCombat (rollout). attacker_ptrs still
+    // holds the pre-token attacker pointers (read before any CreateToken).
+    FireUtvaraAttackTokens(state, state.active_player_index, attacker_ptrs);
 
     if (m_logger && total_combat_dmg > 0)
     {
@@ -489,6 +508,21 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
         p.is_animated           = false;
+    }
+
+    // Storage-counter lands (Dwarven Hold, Mercadian Bazaar): a storage land left UNTAPPED this turn
+    // (i.e. NOT tapped for a burst -- and not just-entered, which enters tapped) banks one storage
+    // counter at end of turn. This is the faithful goldfish model of BOTH charge modes -- Dwarven's
+    // "hold tapped, +1 at upkeep" and Mercadian's "{T}: put a counter" (its tap makes no other mana) --
+    // which are both weakly-dominant "charge while idle" and reproduce the SAME +1-per-idle-turn
+    // accumulation and any-turn burst availability (verified equal to literal play, off-by-one and
+    // earliest-burst turn). A tapped storage land was burst (or entered) this turn -> no charge (you
+    // never charge the turn you burst). Lockstep with the rollout (TurnSolver::SimulateEndAndStartNextTurn).
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.storage_land) { ++p.storage_counters; }
     }
 }
 

@@ -107,6 +107,13 @@ struct StackEntry
                                                // call. ResolveDrawSpell passes it to
                                                // ReorderTopOrShuffle so the executor matches the
                                                // rollout (lockstep). Unset for non-reorder spells.
+    std::optional<int>  splice_count;          // Desperate Ritual "Splice onto Arcane": the searched #
+                                               // of OTHER copies spliced onto this base cast. The
+                                               // executor stamps it (CastSpellFromHand) so EffectHandler's
+                                               // ApplyRitualFloat floats (splice_count+1)*{R}{R}{R},
+                                               // matching the cost CastSpellFromHand already scaled by
+                                               // (k+1) and the rollout's apply_one (lockstep). Unset
+                                               // (== 0 splices) for every non-splice spell.
     std::string         tutor_target;   // for a tutor spell: the specific library card to fetch
                                         // (searched choice). Empty -> PerformTutor uses the
                                         // heuristic's top pick.

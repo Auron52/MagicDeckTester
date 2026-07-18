@@ -69,6 +69,14 @@ public:
     // Returns pointers to battlefield permanents that will attack this turn.
     std::vector<Permanent*> DeclareAttackers(GameState& state);
 
+    // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend the
+    // active player's LEFTOVER combat mana on attacker pumps, converting mana into face damage.
+    // Called from GameEngine::CombatPhase after attackers are finalized and before combat damage.
+    // Builds the leftover pool via BuildAvailableMana (byte-identical to the rollout's BuildPool)
+    // and applies the shared ApplyFirebreathing so the executor and rollout pump identically.
+    // Inert (no attacker carries a firebreathing param) for every non-Dragonstorm deck.
+    void Firebreathe(GameState& state, const std::vector<int>& attacker_indices);
+
     // Returns a pointer to a card in the active player's hand to discard.
     Card* ChooseDiscard(GameState& state);
 

@@ -137,6 +137,13 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
 
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&);
+// Forward declaration: the Dragonstorm-engine cascade (Scourge ping + Lathliss token) is
+// mutually recursive with CreateToken (a Lathliss 5/5 token entering re-fires the cascade).
+// Defined after CreateToken; called from CreateToken so EVERY token dragon enter also pings.
+inline void OnDragonEnters(GameState&, int controller, int entered_index);
+// Forward declaration: the reusable chosen-colour float (defined in the ritual section below) is
+// called by ApplySacForMana (Lotus Bloom), which is defined above that section.
+inline void AddChosenColorFloat(GameState& state, const std::string& col, int amt);
 
 // ---- Anti-Lifegain (Tainted Remedy / Aria of Flame) shared helpers ----------
 //
@@ -1020,7 +1027,395 @@ inline void CreateToken(
     token.controller_index = controller_index;
     token.owner_index      = controller_index;
     token.entered_this_turn = true;
+    token.is_token          = true;   // Lathliss "nontoken Dragon" gate reads this (loop-safe)
     state.battlefield.push_back(token);
+    // A token Dragon (Lathliss 5/5, Utvara 6/6) entering also fires the Dragonstorm cascade: it
+    // re-pings every Scourge (via OnDragonEnters step 2) but, being a token, never re-triggers
+    // Lathliss (nontoken gate). No-op for every non-Dragon token (early subtype return) -> all
+    // existing token-making decks (Adeline, Forbidden Orchard, Sliver Hive) are byte-identical.
+    OnDragonEnters(state, controller_index, static_cast<int>(state.battlefield.size()) - 1);
+}
+
+// ---- Dragonstorm kill-engine shared helpers (Scourge / Lathliss / Utvara) -----------
+// One cascade + one attack-token maker + one firebreathing routine, called IDENTICALLY from the
+// executor (EffectHandler / GameEngine / AIEngine) and the rollout (TurnSolver) so the ETB ping
+// chain, token generation, and mana->power conversion stay lockstep (Stage-5 fd-diverge otherwise).
+
+inline bool CardHasSubtype(const Card& c, const std::string& sub)
+{
+    for (const std::string& s : c.m_subtypes) { if (s == sub) { return true; } }
+    return false;
+}
+
+// Number of Dragons `controller` controls (by printed/token subtype "Dragon"). Counts tokens
+// (they carry subtype "Dragon"); animated lands are ignored (never Dragons in these decks).
+inline int CountControlledDragons(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && CardHasSubtype(p.card, "Dragon")) { ++n; }
+    }
+    return n;
+}
+
+// A Dragon just entered under `controller` at battlefield slot `entered_index`. Drives BOTH
+// Scourge of Valkas ("this or another Dragon enters -> deal X = Dragons you control to any
+// target", modelled as opponent life loss) and Lathliss ("another NONTOKEN Dragon enters ->
+// 5/5 Dragon token"). Deterministic token-first ordering (the unambiguously optimal goldfish
+// line): create Lathliss's token FIRST (it re-pings Scourge via the recursive CreateToken at the
+// new, higher count), THEN resolve the newcomer's own Scourge pings at that higher count.
+//
+// Loop-safety: a Scourge ping creates no permanents (can't loop); a Lathliss token is is_token so
+// step 1 skips it (never re-triggers Lathliss) though it still re-pings Scourge (correct).
+inline void OnDragonEnters(GameState& state, int controller, int entered_index)
+{
+    if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    // Early out for every non-Dragon enter (keeps all other token/creature decks byte-identical).
+    if (!CardHasSubtype(state.battlefield[entered_index].card, "Dragon")) { return; }
+    const bool entered_is_token = state.battlefield[entered_index].is_token;
+    // Copy the newcomer's subtypes: CreateToken below push_backs and may reallocate the vector,
+    // which would dangle a reference (entered_index itself stays valid -- tokens only append).
+    const Card entered_card = state.battlefield[entered_index].card;
+
+    // STEP 1 -- Lathliss tokens (created first). Each Lathliss makes a 5/5 for the newcomer if it
+    // is a NONTOKEN Dragon that is not the Lathliss itself and matches the required subtype.
+    if (!entered_is_token)
+    {
+        struct Spec { int p, t; std::vector<std::string> subs; };
+        std::vector<Spec> specs;
+        const int bf_size = static_cast<int>(state.battlefield.size());
+        for (int i = 0; i < bf_size; ++i)
+        {
+            if (i == entered_index) { continue; }                 // "another Dragon" -- not the source
+            const Permanent& src = state.battlefield[i];
+            if (src.controller_index != controller) { continue; }
+            const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src.card);
+            if (!sdef || !sdef->params.etb_other_subtype_creates_tokens) { continue; }
+            if (!sdef->params.etb_token_requires_subtype.empty()
+                && !CardHasSubtype(entered_card, sdef->params.etb_token_requires_subtype)) { continue; }
+            specs.push_back({ sdef->params.etb_created_token_power,
+                              sdef->params.etb_created_token_toughness,
+                              sdef->params.etb_created_token_subtypes });
+        }
+        for (const Spec& s : specs)
+        {
+            CreateToken(state, controller, s.p, s.t, s.subs);      // recursively re-pings Scourge
+        }
+    }
+
+    // STEP 2 -- Scourge pings for the newcomer at the CURRENT Dragon count (now includes any
+    // token created in step 1). Life loss to the opponent's face, the same sink combat / direct
+    // damage use for the win projection -> a Dragonstorm/hard-cast wave shows up as lethal in the
+    // rollout (opp.life <= 0). Multiple Scourges each ping.
+    const int dragon_count = CountControlledDragons(state, controller);
+    if (dragon_count <= 0) { return; }
+    const int opp = 1 - controller;
+    const int bf_now = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < bf_now; ++i)
+    {
+        const Permanent& src = state.battlefield[i];
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src.card);
+        if (!sdef || !sdef->params.dragon_ping_on_enter) { continue; }
+        const int before = state.players[opp].life;
+        state.players[opp].life -= dragon_count;
+        state.opponent_lost_life_this_turn = true;
+        if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
+        {
+            EmitPlayEvent(state.turn_number, "damage",
+                          "\xF0\x9F\x90\x89 " + src.card.m_name.str() + " ("
+                          + std::to_string(dragon_count) + " Dragons): "
+                          + std::to_string(dragon_count) + " to opponent ("
+                          + std::to_string(before) + "\xE2\x86\x92"
+                          + std::to_string(before - dragon_count) + ")");
+        }
+    }
+}
+
+// Utvara Hellkite: "Whenever a Dragon you control attacks, create a 6/6 Dragon token." Per
+// ATTACKING matching creature. Called at declare-attackers with the finalized `attackers`. Tokens
+// enter UNTAPPED + summoning-sick via CreateToken (so each fires OnDragonEnters: Scourge ping /
+// Lathliss token) and are NOT returned to this combat. Counts are gathered BEFORE any CreateToken
+// (which invalidates the `attackers` pointers). Distinct from the flat tapped-and-attacking
+// FireAttackCreateTokens (Adeline).
+inline void FireUtvaraAttackTokens(GameState& state, int controller,
+                                   const std::vector<const Permanent*>& attackers)
+{
+    if (attackers.empty()) { return; }
+    struct Spec { int n, p, t; std::vector<std::string> subs; };
+    std::vector<Spec> specs;
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < bf_size; ++i)
+    {
+        const Permanent& src = state.battlefield[i];
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src.card);
+        if (!sdef || sdef->params.attack_per_matching_creates_tokens <= 0) { continue; }
+        int matching = 0;
+        for (const Permanent* atk : attackers)
+        {
+            if (sdef->params.attack_token_requires_subtypes.empty()) { ++matching; continue; }
+            bool m = atk->is_animated;   // animated land = every creature type
+            for (const std::string& req : sdef->params.attack_token_requires_subtypes)
+            {
+                if (m) { break; }
+                if (CardHasSubtype(atk->card, req)) { m = true; }
+            }
+            if (m) { ++matching; }
+        }
+        if (matching <= 0) { continue; }
+        specs.push_back({ sdef->params.attack_per_matching_creates_tokens * matching,
+                          sdef->params.attack_per_token_power,
+                          sdef->params.attack_per_token_toughness,
+                          sdef->params.attack_per_token_subtypes });
+    }
+    for (const Spec& s : specs)
+    {
+        for (int k = 0; k < s.n; ++k)
+        {
+            CreateToken(state, controller, s.p, s.t, s.subs);   // untapped; pings via OnDragonEnters
+        }
+    }
+}
+
+// Consume `cost` from a flat ManaPool (assumes pool.CanPay(cost) is true). Colored pips are paid
+// from their own colour first (wild covers a shortfall); generic is paid from off-colours / wild
+// first, red last, so scarce coloured mana is preserved for coloured firebreathing pips.
+inline void PayFromPool(ManaPool& pool, const ManaCost& cost)
+{
+    auto pay_colored = [&](int need, int& src)
+    {
+        int use = std::min(need, src); src -= use; need -= use;
+        if (need > 0) { pool.wild -= need; }   // CanPay guaranteed wild covers the remainder
+    };
+    pay_colored(cost.white,     pool.white);
+    pay_colored(cost.blue,      pool.blue);
+    pay_colored(cost.black,     pool.black);
+    pay_colored(cost.red,       pool.red);
+    pay_colored(cost.green,     pool.green);
+    pay_colored(cost.colorless, pool.colorless);
+    int gen = cost.generic;
+    int* order[] = { &pool.colorless, &pool.wild, &pool.white, &pool.blue,
+                     &pool.black, &pool.green, &pool.red };
+    for (int* src : order)
+    {
+        if (gen <= 0) { break; }
+        int use = std::min(gen, *src); *src -= use; gen -= use;
+    }
+}
+
+// Firebreathing: spend LEFTOVER combat mana on activated +power pumps of the ATTACKERS, turning
+// mana into face damage. `pool` is the leftover mana built by the caller (BuildPool in the
+// rollout / AIEngine::BuildAvailableMana in the executor -- byte-identical for the same state, so
+// both worlds pump identically = lockstep). In a goldfish every point of attacker power is +1 to
+// the face and combat is the last mana use for these decks, so spending all affordable mana on the
+// most damage-efficient activation is the search-optimal, deterministic resolution (not a quality
+// heuristic; the params exist only on Scourge/Lathliss so every other deck is byte-identical). The
+// real mana sources are NOT tapped (no post-combat mana sink for firebreathing decks). Pump lands
+// as temp_power_bonus so the combat damage loop and the win projection both see the extra power.
+// Cheap pre-scan so non-firebreathing decks skip the leftover-pool build entirely (zero overhead
+// -> byte-identical AND no perf cost). True iff `controller` controls a firebreathing source.
+inline bool ControlsFirebreathingSource(const GameState& state, int controller)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (d->params.firebreathing_cost.has_value() || d->params.team_pump_cost.has_value()))
+        { return true; }
+    }
+    return false;
+}
+
+inline void ApplyFirebreathing(GameState& state, int controller,
+                               const std::vector<int>& attacker_indices, ManaPool pool)
+{
+    if (attacker_indices.empty()) { return; }
+    for (;;)
+    {
+        int    best_kind = 0;      // 1 = self (pump one attacker), 2 = team (pump matching attackers)
+        int    best_self_idx = -1;
+        int    best_src_idx  = -1;
+        double best_ratio = 0.0;   // damage per mana-value
+
+        // Self firebreathing (Scourge {R}: this creature gets +1/+0).
+        for (int idx : attacker_indices)
+        {
+            const Permanent& p = state.battlefield[idx];
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || !d->params.firebreathing_cost.has_value() || d->params.firebreathing_power <= 0)
+            { continue; }
+            const ManaCost& c = d->params.firebreathing_cost.value();
+            if (!pool.CanPay(c)) { continue; }
+            double ratio = static_cast<double>(d->params.firebreathing_power)
+                         / std::max(1, c.ManaValue());
+            if (ratio > best_ratio + 1e-9)
+            { best_ratio = ratio; best_kind = 1; best_self_idx = idx; }
+        }
+
+        // Team firebreathing (Lathliss {1}{R}: Dragons you control get +1/+0). Damage = power x
+        // (attacking creatures matching team_pump_subtypes). The Lathliss itself need not attack.
+        const int bf_size = static_cast<int>(state.battlefield.size());
+        for (int si = 0; si < bf_size; ++si)
+        {
+            const Permanent& src = state.battlefield[si];
+            if (src.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+            if (!d || !d->params.team_pump_cost.has_value() || d->params.team_pump_power <= 0)
+            { continue; }
+            const ManaCost& c = d->params.team_pump_cost.value();
+            if (!pool.CanPay(c)) { continue; }
+            int matching = 0;
+            for (int idx : attacker_indices)
+            {
+                const Permanent& a = state.battlefield[idx];
+                if (a.controller_index != controller) { continue; }
+                bool m = d->params.team_pump_subtypes.empty();
+                for (const std::string& sub : d->params.team_pump_subtypes)
+                { if (a.is_animated || CardHasSubtype(a.card, sub)) { m = true; break; } }
+                if (m) { ++matching; }
+            }
+            if (matching <= 0) { continue; }
+            double ratio = static_cast<double>(d->params.team_pump_power * matching)
+                         / std::max(1, c.ManaValue());
+            if (ratio > best_ratio + 1e-9)
+            { best_ratio = ratio; best_kind = 2; best_src_idx = si; }
+        }
+
+        if (best_kind == 0) { break; }
+        if (best_kind == 1)
+        {
+            const CardDefinition* d =
+                CardDatabase::Instance().LookupCached(state.battlefield[best_self_idx].card);
+            PayFromPool(pool, d->params.firebreathing_cost.value());
+            state.battlefield[best_self_idx].temp_power_bonus += d->params.firebreathing_power;
+        }
+        else
+        {
+            const CardDefinition* d =
+                CardDatabase::Instance().LookupCached(state.battlefield[best_src_idx].card);
+            PayFromPool(pool, d->params.team_pump_cost.value());
+            for (int idx : attacker_indices)
+            {
+                Permanent& a = state.battlefield[idx];
+                if (a.controller_index != controller) { continue; }
+                bool m = d->params.team_pump_subtypes.empty();
+                for (const std::string& sub : d->params.team_pump_subtypes)
+                { if (a.is_animated || CardHasSubtype(a.card, sub)) { m = true; break; } }
+                if (m) { a.temp_power_bonus += d->params.team_pump_power; }
+            }
+        }
+    }
+}
+
+// ---- Suspend: cast off suspend (the SHARED free-cast site) ----------------------------------
+// When a suspended card's last time counter is removed at upkeep (CR 702.62e), it is CAST off
+// suspend WITHOUT paying its mana cost -- a real SPELL CAST. This one helper is that cast site, called
+// IDENTICALLY from the executor (GameEngine::UpkeepStep) and the rollout (SimulateEndAndStartNextTurn)
+// so the two worlds enter the permanent in lockstep. Routing the arrival through here (not a side path
+// that just push_backs a Permanent) is deliberate: it is the SINGLE place Dragonstorm's future
+// spells_cast_this_turn increment will live, so an off-suspend arrival automatically counts +1 toward
+// storm. Suspending (paying {0}) and sacrificing are NOT casts and do NOT come through here. The card
+// enters as its permanent; a Dragon fires OnDragonEnters (Lotus Bloom is a colourless artifact -> no-op).
+inline void CastOffSuspend(GameState& state, int controller, const Card& card)
+{
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
+    if (!def) { return; }
+    // NOTE (storm, Dragonstorm owns it): the off-suspend cast is the point a future
+    // ++state.spells_cast_this_turn increment belongs -- keep this the arrival's only path.
+    Permanent perm;
+    perm.card              = def->card;
+    perm.card.m_number     = card.m_number;   // preserve the per-copy id for logging/state key
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    state.battlefield.push_back(perm);
+    if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
+    {
+        EmitPlayEvent(state.turn_number, "suspend",
+                      "\xE2\x8C\x9B " + card.m_name.str() + " -- cast off suspend (enters play)");
+    }
+    OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+}
+
+// Apply a SUSPEND action ({0}): move the first matching in-hand card to Player::suspended_cards with
+// arrive_turn = turn + its suspend_time_counters. Shared by the rollout (ApplyPlanDirect) and the
+// executor (AIEngine::TakeTurn) so the two worlds exile the card identically (lockstep). No-op if the
+// card isn't in hand / isn't suspendable.
+inline void ApplySuspend(GameState& state, int controller, const std::string& name)
+{
+    Player& pl = state.players[controller];
+    for (auto it = pl.hand.begin(); it != pl.hand.end(); ++it)
+    {
+        if (it->m_name != name) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
+        if (!d || d->params.suspend_time_counters <= 0) { continue; }
+        SuspendedCard sc;
+        sc.card        = *it;
+        sc.arrive_turn = state.turn_number + d->params.suspend_time_counters;
+        pl.suspended_cards.push_back(std::move(sc));
+        if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
+        {
+            EmitPlayEvent(state.turn_number, "suspend",
+                          "\xE2\x8C\x9B " + name + " -- suspended (arrives T"
+                          + std::to_string(sc.arrive_turn) + ")");
+        }
+        pl.hand.erase(it);
+        return;
+    }
+}
+
+// Apply a SacForMana ability: find the untapped source in play by its per-instance id, float `amount`
+// mana of `color` into the turn-scoped reserve (AddChosenColorFloat), then SACRIFICE the source (to the
+// graveyard). Shared by the rollout and the executor (lockstep). No-op if the source is gone/tapped.
+inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
+                            const std::string& color, int amount)
+{
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller || p.tapped) { continue; }
+        if (p.card.m_number != sac_source_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.sac_for_mana_amount <= 0) { continue; }
+        AddChosenColorFloat(state, color, amount);   // float the chosen colour into state.floating_mana
+        if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
+        {
+            EmitPlayEvent(state.turn_number, "mana",
+                          "\xF0\x9F\xAA\xB7 " + p.card.m_name.str() + " -- tap, sacrifice: add "
+                          + std::to_string(amount) + " " + (color.empty() ? "wild" : color));
+        }
+        state.players[controller].graveyard.push_back(p.card);   // sacrifice -> graveyard
+        state.battlefield.erase(state.battlefield.begin() + i);
+        return;
+    }
+}
+
+// Process the controller's SUSPEND arrivals at the start of their turn (upkeep): remove one time
+// counter from each suspended card (modelled by arrive_turn) and cast any whose last counter is now
+// gone. Called from BOTH GameEngine::UpkeepStep (executor) and SimulateEndAndStartNextTurn (rollout)
+// AFTER untap, so the arrived permanent is untapped and available this turn. Empty suspended list ->
+// no-op -> byte-identical for every deck without a suspend card.
+inline void ProcessSuspendArrivals(GameState& state, int controller)
+{
+    Player& pl = state.players[controller];
+    if (pl.suspended_cards.empty()) { return; }
+    std::vector<SuspendedCard> remaining;
+    remaining.reserve(pl.suspended_cards.size());
+    // Snapshot then clear so a re-entrant OnDragonEnters (a suspended Dragon would ping/spawn) cannot
+    // observe a half-processed list; arrivals are cast in the order they were suspended.
+    std::vector<SuspendedCard> snap = std::move(pl.suspended_cards);
+    pl.suspended_cards.clear();
+    for (SuspendedCard& sc : snap)
+    {
+        if (sc.arrive_turn <= state.turn_number) { CastOffSuspend(state, controller, sc.card); }
+        else                                     { remaining.push_back(std::move(sc)); }
+    }
+    // Re-attach anything an arrival's cascade may have added, plus the not-yet-arrived remainder.
+    for (SuspendedCard& sc : pl.suspended_cards) { remaining.push_back(std::move(sc)); }
+    pl.suspended_cards = std::move(remaining);
 }
 
 // Forbidden Orchard: "{T}: Add one mana of any color. Whenever you tap this land for mana, target
@@ -1329,6 +1724,25 @@ inline int ManaProducedPerTap(const CardDefinition& def)
     return std::max(1, def.params.produces_amount);
 }
 
+// Per-permanent mana yield for a single tap. A storage-counter land (Dwarven Hold, Mercadian
+// Bazaar) bursts its CURRENT storage_counters worth of {R} in one tap (0 when uncharged -> not a
+// live source); every other source is its static per-tap amount. Threaded through every mana-
+// accounting site (BuildPool / BuildAvailableMana / greedy tap / backtracker) so the executor,
+// rollout, and planner all see the same variable burst. For non-storage sources this equals
+// ManaProducedPerTap(def), so passing it everywhere is byte-identical for every non-storage deck.
+inline int PermanentManaYield(const Permanent& perm, const CardDefinition& def)
+{
+    if (def.params.storage_land) { return perm.storage_counters; }
+    return ManaProducedPerTap(def);
+}
+
+// A storage land is a live mana source only while charged (>= 1 counter). Non-storage sources are
+// always "live" here (their usability is decided by the usual template/tap checks).
+inline bool StorageSourceLive(const Permanent& perm, const CardDefinition& def)
+{
+    return def.params.storage_land ? (perm.storage_counters > 0) : true;
+}
+
 // Mana value of the top card of the active player's library (0 if empty). Soulfire Eruption's
 // clairvoyant face damage = this. Read identically by the planner, rollout, and executor.
 inline int TopLibraryMV(const GameState& state)
@@ -1516,7 +1930,8 @@ inline int SoulfireOwnTargetDiscount(const CardDefinition& def, const GameState&
 // null chooser) leaves the autonomous default untouched.
 inline int SpareUntappedMana(const GameState& state, int controller);   // defined below (mana helpers)
 inline bool ConsumeFloatingAny(ManaPool& floating, Color& took);        // defined below (mana helpers)
-inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def);  // below
+inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
+                            int yield_override = -1);  // below
 inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targets = 0,
                                   const CardDefinition* def = nullptr)
 {
@@ -1744,19 +2159,53 @@ inline bool IsManaRitual(const CardDefinition& def)
 inline int RitualFloatAmount(const GameState& state, const CardDefinition& def, int chosen_x)
 {
     if (def.params.untap_x_mana_sources) { return RitualRefloatMana(state, chosen_x); }
-    if (def.params.ritual_floating_mana > 0) { return def.params.ritual_floating_mana; }
+    if (def.params.ritual_floating_mana > 0)
+    {
+        int amt = def.params.ritual_floating_mana;
+        if (def.params.ritual_float_gy_self_bonus)
+        {
+            // Rite of Flame: +1 per card with THIS name in any graveyard, counted at resolution so a
+            // same-turn chain escalates (each prior copy is already in the graveyard when the next resolves).
+            for (const Player& pl : state.players)
+            {
+                for (const Card& c : pl.graveyard)
+                {
+                    if (c.m_name == def.card.m_name) { ++amt; }
+                }
+            }
+        }
+        return amt;
+    }
     return 0;
 }
 
+// Reusable "add `amt` mana of ONE chosen colour to the turn-scoped reserve" dimension. `col` is a
+// one-letter colour ("W"/"U"/"B"/"R"/"G"/"C"); EMPTY = WILD (any single pip). This is the single
+// colour->field switch shared by BOTH the ritual float (ApplyRitualFloat) and the chosen-colour
+// floats -- Lotus Bloom's SacForMana and (next) Apex of Power's "add ten of one colour" -- so all
+// three route colour identically and stay lockstep. Floats (not a literal tap): the planner credits
+// the same gross amount, so the search's projected combo and the executed combo never diverge.
+inline void AddChosenColorFloat(GameState& state, const std::string& col, int amt)
+{
+    if (amt <= 0) { return; }
+    if (col.empty())      { state.floating_mana.wild      += amt; }
+    else if (col == "W")  { state.floating_mana.white     += amt; }
+    else if (col == "U")  { state.floating_mana.blue      += amt; }
+    else if (col == "B")  { state.floating_mana.black     += amt; }
+    else if (col == "R")  { state.floating_mana.red       += amt; }
+    else if (col == "G")  { state.floating_mana.green     += amt; }
+    else if (col == "C")  { state.floating_mana.colorless += amt; }
+    else                  { state.floating_mana.wild      += amt; }  // unknown -> wild
+}
+
 // Apply a ritual's floating mana ON RESOLUTION (shared by EffectHandler -- the real executor --
-// and the rollout's apply_one). Adds the gross float as WILD to the turn-scoped reserve
-// (state.floating_mana) so a later same-turn cast (Crackle) can spend it. Modelled as floating,
-// NOT a literal untap: the planner credits this exact amount, so the search's predicted combo
-// and the executed combo never diverge. No-op for non-ritual cards.
+// and the rollout's apply_one). Adds the gross float to the turn-scoped reserve (state.floating_mana)
+// so a later same-turn cast (Crackle) can spend it. Default (empty ritual_float_color) = WILD,
+// preserving byte-identity for Irencrag Feat / Reality Spasm; a specific colour (the Dragonstorm
+// rituals set "R") floats real coloured mana that cannot pay off-colour pips. No-op for non-ritual cards.
 inline void ApplyRitualFloat(GameState& state, const CardDefinition& def, int chosen_x)
 {
-    const int amt = RitualFloatAmount(state, def, chosen_x);
-    if (amt > 0) { state.floating_mana.wild += amt; }
+    AddChosenColorFloat(state, def.params.ritual_float_color, RitualFloatAmount(state, def, chosen_x));
 }
 
 // Forward decl: HinataInPlay (defined just below). Used by HinataRitualNetBonus.
@@ -2205,7 +2654,11 @@ inline bool AnyUntappedFilterSource(const GameState& state)
     return false;
 }
 
-inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def)
+// `yield_override` (>= 0) supplies the source's per-tap amount when the caller has the PERMANENT
+// (e.g. a storage land's live counter count via PermanentManaYield); -1 falls back to the static
+// per-tap yield, keeping every existing caller byte-identical.
+inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
+                            int yield_override)
 {
     if (def.params.is_filter)
     {
@@ -2220,7 +2673,7 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         if (HasUntappedRampFeeder(state)) { ++pool.wild; }
         return;
     }
-    int amt = ManaProducedPerTap(def);
+    int amt = (yield_override >= 0) ? yield_override : ManaProducedPerTap(def);
     // Reflecting Pool: its colours are the union of the controller's other lands (empty -> adds
     // nothing, the solo-RP dead case). For every normal source this is the static produces[].
     const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
@@ -2243,7 +2696,7 @@ inline int SpareUntappedMana(const GameState& state, int controller)
         const bool is_land = (d->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
-        AddSourceToPool(pool, state, *d);
+        AddSourceToPool(pool, state, *d, PermanentManaYield(p, *d));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool.Total();
@@ -3041,6 +3494,16 @@ inline int SourceMaxNet(const CardDefinition& def)
     return ManaProducedPerTap(def);
 }
 
+// Per-permanent bound: a storage land's max net = its live counter count (the whole burst); every
+// other source falls back to the static SourceMaxNet(def). Used by the backtracker's B&B gate,
+// which has the PERMANENT in scope -- a static bound would under-count a charged storage land and
+// wrongly prune a payable cost (losslessness violation), so the counter count must be threaded in.
+inline int SourceMaxNet(const Permanent& perm, const CardDefinition& def)
+{
+    if (def.params.storage_land) { return perm.storage_counters; }
+    return SourceMaxNet(def);
+}
+
 // Reservation audit (see ReserveEnabled): the bitmask of the active player's untapped SPECIAL mana
 // sources worth "leaving up" -- ones whose non-mana value (attacking, or a preserved depletion
 // counter) is lost the moment they tap. The tap functions try to pay while holding these back and
@@ -3087,6 +3550,10 @@ inline std::uint64_t ReservableSpecialMask(const GameState& state)
         else if (d->params.enters_tapped_with_depletion > 0)
         {
             reserve = true;                                   // depletion land -> conserve the counter
+        }
+        else if (d->params.storage_land && p.storage_counters > 0)
+        {
+            reserve = true;   // storage battery -> hold the burst; don't spend counters unless needed
         }
         if (reserve) { mask |= (1ull << i); }
     }
@@ -3187,7 +3654,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                  || d->params.mana_rock;
                 if (!is_src) { continue; }
                 if (d->params.creature_mana_only && !for_creature) { continue; }
-                untapped_max += SourceMaxNet(*d);
+                if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
+                untapped_max += SourceMaxNet(p, *d);
             }
         }
         if (floating.Total() + untapped_max < cost.ManaValue())
@@ -3223,6 +3691,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                          || def->params.mana_rock;
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }
+        if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
 
         // Reflecting Pool -> the shared, hoisted union (empty = solo RP = no mana); every other
         // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)
@@ -3246,6 +3715,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         const bool has_counters = !state.battlefield[i].counters.empty();
         std::vector<Counter> counters_snap;
         if (has_counters) { counters_snap = state.battlefield[i].counters; }
+        const int storage_snap = state.battlefield[i].storage_counters;   // burst zeroes it (undo below)
+        const int src_max_net  = SourceMaxNet(state.battlefield[i], *def); // captured pre-tap (storage_snap-aware)
         const int life_snap = state.players[active].life;
         const int opp_life_snap = state.players[1 - active].life;   // for tap_opponent_lifegain undo
         const bool oll_snap = state.opponent_lost_life_this_turn;
@@ -3253,10 +3724,13 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         // Physically tap source i, recurse with `next` floating, undo on failure. `drip_ok` is
         // false for a Grove-style drip land's painless "{T}: Add {C}" branch (a generic pip absent
         // a Remedy) so it does not pay the opponent life; its {R}/{G} branches leave it true.
-        auto activate = [&](const ManaPool& next, bool drip_ok = true) -> bool
+        // `storage_burn` (> 0 only for a storage-counter land) is how many counters this tap removes:
+        // the PARTIAL shortfall, not all of them, so the rest persist (mirrors the greedy tap_source).
+        auto activate = [&](const ManaPool& next, bool drip_ok = true, int storage_burn = 0) -> bool
         {
             state.battlefield[i].tapped = true;
             DecrementDepletionOnTap(state.battlefield[i]);
+            if (def->params.storage_land) { state.battlefield[i].storage_counters -= storage_burn; }
             if (def->params.tap_self_damage > 0)
             { state.players[active].life -= def->params.tap_self_damage; }
             // Grove of the Burnwillows drip (opponent gains -> loses with Remedy). Restored
@@ -3265,10 +3739,11 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
             if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
                                     tapped_mask | (1ull << i),
-                                    untapped_max < 0 ? -1 : untapped_max - SourceMaxNet(*def),
+                                    untapped_max < 0 ? -1 : untapped_max - src_max_net,
                                     reserved_mask, out_full_pool)) { return true; }
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
+            state.battlefield[i].storage_counters = storage_snap;
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;
             state.opponent_lost_life_this_turn  = oll_snap;
@@ -3303,7 +3778,14 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         }
         else
         {
-            const int amt = ManaProducedPerTap(*def);
+            // Storage-counter land: burst only the PARTIAL shortfall (cost minus what this branch has
+            // already floated), removing that many counters; the rest persist. Every other source uses
+            // its static per-tap yield. `storage_burn` tells activate how many counters to remove.
+            const int storage_burn = def->params.storage_land
+                ? std::min(state.battlefield[i].storage_counters,
+                           std::max(1, cost.ManaValue() - floating.Total()))
+                : 0;
+            const int amt = def->params.storage_land ? storage_burn : ManaProducedPerTap(*def);
             if (produces.empty())
             {
                 // Empty colours: a {C}-only source taps for colourless. A reflecting source with
@@ -3320,9 +3802,9 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 // useful (OpponentLifegainUseful) the drip is +1 value, so skip {C} mode and keep only
                 // the coloured branches (matches the TapDripLandsIfUseful sweep). Inert for non-drip lands.
                 if (def->params.tap_opponent_lifegain > 0 && !ResolveProvider(state).OpponentLifegainUseful(state, active))
-                { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f, /*drip_ok=*/false)) { return true; } }
+                { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f, /*drip_ok=*/false, storage_burn)) { return true; } }
                 for (Color c : produces)
-                { ManaPool f = floating; f.Add(c, amt); if (activate(f)) { return true; } }
+                { ManaPool f = floating; f.Add(c, amt); if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; } }
             }
         }
     }

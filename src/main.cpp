@@ -130,6 +130,7 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (dep)                { cs.push_back({ "depletion", "depletion", dep }); }
         if (p.charge_counters)  { cs.push_back({ "charge",    "charge",    p.charge_counters }); }
         if (p.verse_counters)   { cs.push_back({ "verse",     "verse",     p.verse_counters }); }
+        if (p.storage_counters) { cs.push_back({ "storage",   "storage",   p.storage_counters }); }
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped });
     }
     std::sort(rows.begin(), rows.end(),

@@ -48,6 +48,8 @@ enum class UnprunedGate
     SearchOrder,  // cast/resolve ordering search enabled
     Redirect,     // pump-then-Swords redirect heuristic disabled (search owns the target)
     DrawEngine,   // draw-engine (flood) cast gate ungated -- always a cast choice
+    SacColor,     // Lotus Bloom SacForMana / Apex colour: open ALL five colours instead of the
+                  // deck's spell-cost colours (the narrowed default candidate set)
     _Count
 };
 

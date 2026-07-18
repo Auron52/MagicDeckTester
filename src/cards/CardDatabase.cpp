@@ -180,6 +180,8 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Menace")        { return Keyword::Menace; }
     if (s == "Prowess")       { return Keyword::Prowess; }
     if (s == "Exalted")       { return Keyword::Exalted; }
+    if (s == "Suspend")       { return Keyword::Suspend; }   // inert tag; mechanic is param-modelled
+    if (s == "Splice")        { return Keyword::Splice;  }   // inert tag; mechanic is param-modelled
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -360,6 +362,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.sacrifice_draw_cost = ManaCostFromString(params["sacrifice_draw_cost"].get<std::string>());
     p.enters_tapped_with_depletion = params.value("enters_tapped_with_depletion", 0);
     p.produces_amount = params.value("produces_amount", 1);
+    p.storage_land         = params.value("storage_land", false);
+    p.storage_charge_mode  = params.value("storage_charge_mode", std::string());
     p.is_filter       = params.value("is_filter", false);
     p.ramp_filter     = params.value("ramp_filter", false);
 
@@ -380,6 +384,30 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attack_token_toughness       = params.value("attack_token_toughness", 0);
     for (const std::string& s : params.value("attack_token_subtypes", json::array()))
         p.attack_token_subtypes.push_back(s);
+
+    // --- Dragonstorm kill-engine (Scourge / Lathliss / Utvara) ---
+    p.dragon_ping_on_enter             = params.value("dragon_ping_on_enter", false);
+    p.etb_other_subtype_creates_tokens = params.value("etb_other_subtype_creates_tokens", false);
+    p.etb_token_requires_subtype       = params.value("etb_token_requires_subtype", std::string{});
+    p.etb_created_token_power           = params.value("etb_created_token_power", 0);
+    p.etb_created_token_toughness       = params.value("etb_created_token_toughness", 0);
+    for (const std::string& s : params.value("etb_created_token_subtypes", json::array()))
+        p.etb_created_token_subtypes.push_back(s);
+    p.attack_per_matching_creates_tokens = params.value("attack_per_matching_creates_tokens", 0);
+    p.attack_per_token_power             = params.value("attack_per_token_power", 0);
+    p.attack_per_token_toughness         = params.value("attack_per_token_toughness", 0);
+    for (const std::string& s : params.value("attack_per_token_subtypes", json::array()))
+        p.attack_per_token_subtypes.push_back(s);
+    for (const std::string& s : params.value("attack_token_requires_subtypes", json::array()))
+        p.attack_token_requires_subtypes.push_back(s);
+    if (params.contains("firebreathing_cost"))
+        p.firebreathing_cost = ManaCostFromString(params["firebreathing_cost"].get<std::string>());
+    p.firebreathing_power = params.value("firebreathing_power", 0);
+    if (params.contains("team_pump_cost"))
+        p.team_pump_cost = ManaCostFromString(params["team_pump_cost"].get<std::string>());
+    p.team_pump_power = params.value("team_pump_power", 0);
+    for (const std::string& s : params.value("team_pump_subtypes", json::array()))
+        p.team_pump_subtypes.push_back(s);
 
     p.etb_dig_count                = params.value("etb_dig_count", 0);
     for (const std::string& s : params.value("etb_dig_subtypes", json::array()))
@@ -422,6 +450,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.damage_equals_top_mv      = params.value("damage_equals_top_mv", false);
     p.untap_x_mana_sources      = params.value("untap_x_mana_sources", false);
     p.ritual_floating_mana      = params.value("ritual_floating_mana", 0);
+    p.ritual_float_color        = params.value("ritual_float_color", std::string());
+    p.ritual_float_gy_self_bonus= params.value("ritual_float_gy_self_bonus", false);
+    p.splice_onto_arcane        = params.value("splice_onto_arcane", false);
+    p.suspend_time_counters     = params.value("suspend_time_counters", 0);
+    p.sac_for_mana_amount       = params.value("sac_for_mana_amount", 0);
+    p.reduces_spell_color       = params.value("reduces_spell_color", std::string());
     p.max_casts_after           = params.value("max_casts_after", -1);
     p.taps_spawn_opp_token      = params.value("taps_spawn_opp_token", false);
     p.expressive_iteration      = params.value("expressive_iteration", false);

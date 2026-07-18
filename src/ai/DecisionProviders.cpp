@@ -43,7 +43,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"xspell",     UnprunedGate::XSpell},     {"ponder",    UnprunedGate::Ponder},
     {"groupcap",   UnprunedGate::GroupCap},   {"comboline", UnprunedGate::ComboLine},
     {"searchorder",UnprunedGate::SearchOrder},{"redirect",  UnprunedGate::Redirect},
-    {"drawengine", UnprunedGate::DrawEngine},
+    {"drawengine", UnprunedGate::DrawEngine}, {"saccolor", UnprunedGate::SacColor},
 };
 
 const char* GateName(UnprunedGate g)
@@ -354,6 +354,11 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
         for (Color c : mprod) { if (c != Color::Colorless) { has_colored = true; break; } }
         if (!has_colored) { return 60; }
     }
+    // Storage-counter land (Dwarven Hold, Mercadian Bazaar): tap it LAST of all sources. Its burst is
+    // a partial one -- it removes only the payment's remaining shortfall (see tap_source), so tapping
+    // it after every basic/depletion source makes that shortfall MINIMAL, conserving the battery and
+    // banking the rest. (The reserve already holds it entirely when the cost is payable without it.)
+    if (def.params.storage_land) { return 62; }
     // Depletion lands (Saprazzan Skerry, Sandstone Needle) are deliberately NOT reserved: they are
     // RAMP you normally want to spend, so blanket-conserving them via the ordering would misfire far
     // more often than the rare "wasted a counter" case helps. They rank by colour like any land.

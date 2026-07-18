@@ -14,7 +14,15 @@ enum class Color { White, Blue, Black, Red, Green, Colorless };
 enum class Keyword
 {
     Haste, Flying, Trample, Deathtouch, Lifelink, FirstStrike, DoubleStrike,
-    Vigilance, Reach, Defender, Indestructible, Flash, Menace, Prowess, Exalted
+    Vigilance, Reach, Defender, Indestructible, Flash, Menace, Prowess, Exalted,
+    // Suspend (Lotus Bloom): an INERT keyword-ability tag -- the mechanic is modelled structurally via
+    // CardParams::suspend_time_counters (Action::Kind::Suspend + CastOffSuspend), not by this enum. Kept
+    // only so the Scryfall keywords field ["Suspend"] stays faithful; no engine code reads it.
+    Suspend,
+    // Splice (Desperate Ritual): an INERT keyword-ability tag -- the "Splice onto Arcane {1}{R}" mechanic
+    // is modelled structurally via CardParams::splice_onto_arcane (Action::splice_count scaling cost+float),
+    // not by this enum. Kept only so the Scryfall keywords field ["Splice"] stays faithful; no code reads it.
+    Splice
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 

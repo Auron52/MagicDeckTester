@@ -67,6 +67,11 @@ struct CardParams
     // Affinity for subtype: reduce this card's generic mana cost by 1 per matching
     // permanent you control (e.g. Thrumming Hivepool — Affinity for Slivers).
     bool affinity_for_subtype = false;
+    // Medallion static cost reducer: a permanent (e.g. Ruby Medallion = "R") that reduces the
+    // GENERIC cost of every spell of this colour YOU cast by 1 (floored at 0, stacks per copy).
+    // Empty = not a reducer. Applied in EffectiveCost off permanents already in play; a Medallion
+    // cast the SAME turn as the spell it discounts is handled by the ManaPruneBound bail.
+    std::string reduces_spell_color;
 
     // Aether Vial: if true, this permanent gains a charge counter each upkeep (with
     // AI heuristic to stop at the optimal count), and can tap to put a creature from
@@ -175,6 +180,21 @@ struct CardParams
     // a local floating pool during a single cost payment.
     int produces_amount = 1;
 
+    // Storage-counter land (Dwarven Hold, Mercadian Bazaar): a battery that accumulates
+    // storage counters over turns, then a single tap removes ANY NUMBER of counters to add
+    // that many {R} (a VARIABLE-size burst; produces[0] is the burst colour). Distinct from a
+    // depletion land: it is NOT sacrificed and its per-tap yield = the PERMANENT's current
+    // storage_counters (not the static produces_amount). Both cards enter tapped. The per-tap
+    // burst amount is read per-permanent via PermanentManaYield; storage_land gates every
+    // storage path so a false value is byte-identical. false = not a storage land.
+    bool storage_land = false;
+    // How the battery charges: "upkeep_if_tapped" (Dwarven Hold: +1 at upkeep while held tapped)
+    // or "tap" (Mercadian Bazaar: {T} main-phase action banking +1, no mana). Both are modelled
+    // by the same weakly-dominant "charge an idle storage land at end of turn" rule (a storage
+    // land left untapped this turn banks +1 counter), which reproduces the optimal +1/idle-turn
+    // accumulation of BOTH modes for goldfish; the mode string is recorded for future fidelity.
+    std::string storage_charge_mode;
+
     // Filter land (e.g. Cascade Bluffs): "{T}: Add {C}. {U/R}, {T}: Add {U}{U}/{U}{R}/
     // {R}{R}." Modelled as color-fixing, not ramp: a filter tap is fed one mana of a
     // `produces` colour from another source, then yields two of `produces`. It can only
@@ -230,6 +250,57 @@ struct CardParams
     int                      attack_token_power     = 0;
     int                      attack_token_toughness = 0;
     std::vector<std::string> attack_token_subtypes;
+
+    // --- Dragonstorm kill-engine (Scourge of Valkas / Lathliss / Utvara Hellkite) ---
+    // All new paths are gated on these params, so decks that never set them are byte-identical.
+
+    // Scourge of Valkas: "Whenever this creature or another Dragon you control enters, it deals
+    // X damage to any target, where X is the number of Dragons you control." Modelled as
+    // opponent LIFE LOSS of (Dragons you control, INCLUDING the just-entered one). Fired from
+    // OnDragonEnters (SpellEffects.h) at EVERY dragon-enter site -- executor EnterBattlefield,
+    // rollout creature-enter, and every CreateToken (so a Lathliss/Utvara token also pings).
+    // Multiple Scourges each ping. "Any target" collapses to the opponent's face (optimal /
+    // byte-identical in a passive goldfish). Firebreathing "{R}: +1/+0" via firebreathing_* below.
+    bool                     dragon_ping_on_enter = false;
+
+    // Lathliss, Dragon Queen: "Whenever another nontoken Dragon you control enters, create a
+    // 5/5 red Dragon creature token with flying." When set, OnDragonEnters creates the token for
+    // each NONTOKEN Dragon (Permanent::is_token == false) that enters, is not this Lathliss
+    // itself, and whose subtypes include etb_token_requires_subtype. Token-first ordering: the
+    // 5/5 is created (and re-pings Scourge via CreateToken) BEFORE the newcomer's own Scourge
+    // ping resolves, so both see the higher Dragon count. The token is is_token=true so it never
+    // re-triggers Lathliss (loop-safe). Team firebreathing "{1}{R}:" via team_pump_* below.
+    bool                     etb_other_subtype_creates_tokens = false;
+    std::string              etb_token_requires_subtype;      // "Dragon"
+    int                      etb_created_token_power     = 0;
+    int                      etb_created_token_toughness = 0;
+    std::vector<std::string> etb_created_token_subtypes;
+
+    // Utvara Hellkite: "Whenever a Dragon you control attacks, create a 6/6 red Dragon creature
+    // token with flying." PER attacking matching creature (not the flat tapped-and-attacking
+    // Adeline shape above). Fired at declare-attackers (SimulateCombat / GameEngine::CombatPhase):
+    // for each source, count declared attackers matching attack_token_requires_subtypes (empty =
+    // any; animated land = all types) and create N x count tokens that enter UNTAPPED and
+    // summoning-sick -- they do NOT join this combat (they attack next turn, or this turn only if
+    // a haste-lord grants their "Dragon" subtype haste). Each token entering fires OnDragonEnters
+    // (Scourge ping / Lathliss token) via CreateToken.
+    int                      attack_per_matching_creates_tokens = 0;
+    int                      attack_per_token_power       = 0;
+    int                      attack_per_token_toughness   = 0;
+    std::vector<std::string> attack_per_token_subtypes;
+    std::vector<std::string> attack_token_requires_subtypes;  // attacker subtypes counted (empty = any)
+
+    // Firebreathing (activated pump; converts LEFTOVER combat mana -> attacker power = face
+    // damage). Applied in the combat step of BOTH worlds (ApplyFirebreathing, SpellEffects.h) so
+    // the win projection sees the extra damage and the search pumps for lethal. Self: Scourge
+    // "{R}: this creature gets +1/+0 until end of turn" (firebreathing_cost {R}, power 1). Team:
+    // Lathliss "{1}{R}: Dragons you control get +1/+0 until end of turn" (team_pump_cost {1}{R},
+    // power 1, subtypes ["Dragon"]). Empty cost -> inert (other decks byte-identical).
+    std::optional<ManaCost>  firebreathing_cost;
+    int                      firebreathing_power = 0;
+    std::optional<ManaCost>  team_pump_cost;
+    int                      team_pump_power = 0;
+    std::vector<std::string> team_pump_subtypes;
 
     // ETB library dig (e.g. Acclaimed Contender: "When this enters, if you control another
     // Knight, look at the top five cards of your library. You may reveal a Knight ... and
@@ -428,6 +499,43 @@ struct CardParams
     // Irencrag Feat: a fixed mana-burst RITUAL -- on resolution, add this much mana to the
     // turn-scoped reserve (state.floating_mana) for a same-turn payoff. 0 for non-ritual cards.
     int  ritual_floating_mana = 0;
+    // Colour the ritual_floating_mana burst is added in ("R"/"U"/"B"/"G"/"W"/"C"). Empty = WILD
+    // (the legacy default -- Irencrag Feat / Reality Spasm, which stay wild to preserve Hinata's
+    // byte-identity). The Dragonstorm rituals set "R" so the burst is real RED mana that cannot
+    // pay the off-colour {B}/{G} pips of dragons that only arrive via Dragonstorm.
+    std::string ritual_float_color;
+    // Rite of Flame: "then add {R} for each card named Rite of Flame in each graveyard." When true,
+    // the resolution float = ritual_floating_mana + (count of cards with THIS card's name across all
+    // graveyards at resolution) -- so a same-turn chain escalates (2,3,4,... as each prior copy hits
+    // the graveyard). The planner credits the same escalation via a triangular term in Solve::consider.
+    bool ritual_float_gy_self_bonus = false;
+    // Desperate Ritual: "Splice onto Arcane {1}{R}." When you cast ONE copy you may reveal + splice k
+    // OTHER copies from hand onto it, paying this card's splice cost ({1}{R}, == its own printed cost)
+    // per spliced copy and adding their ritual float too -- the spliced copies STAY IN HAND (not cast,
+    // not exiled), so they can be spliced again onto another base or hard-cast later the same/a future
+    // turn. A search-chosen splice_count k (0..#other splice copies in hand) rides on the Action /
+    // StackEntry; every cast path scales cost AND float by (k+1) in lockstep (see SpliceCopies /
+    // AddSpliceExtraCost / ApplyRitualFloat's splice_mult in SpellEffects.h). Cost/float derive from
+    // the card's own {1}{R} + ritual_floating_mana:3 (+ ritual_float_color) -- no extra cost/float
+    // params. False = not a splice card -> every non-splice deck is byte-identical.
+    bool splice_onto_arcane = false;
+
+    // --- Lotus Bloom (Suspend 3-{0}; {T},Sacrifice: add 3 mana of ONE chosen color) ---
+    // Suspend: the number of time counters the card is exiled with by the {0} suspend action (3 for
+    // Lotus Bloom). > 0 gates the WHOLE suspend mechanic (a {0} main-phase action moves the card from
+    // hand to Player::suspended_cards with arrive_turn = turn + this; at that upkeep the last time
+    // counter is removed and the card is cast off suspend into play). 0 = not suspendable -> every
+    // other deck is byte-identical.
+    int suspend_time_counters = 0;
+    // Sac-for-mana: "{T}, Sacrifice this artifact: Add N mana of any one color." N (3 for Lotus). > 0
+    // gates a battlefield-activated ability enumerated as an Action::Kind::SacForMana (one variant per
+    // candidate colour): it taps + SACRIFICES the permanent and floats N mana of a SEARCH-CHOSEN single
+    // colour into state.floating_mana.<colour> (NOT wild -- wild could illegally pay a multicolour mix).
+    // The chosen colour rides on Action::chosen_float_color and resolves via AddChosenColorFloat (the
+    // reusable colour-float dimension Apex of Power's "add ten mana of one colour" shares). 0 = not a
+    // sac-for-mana source -> byte-identical for every other deck.
+    int sac_for_mana_amount = 0;
+
     // Irencrag Feat: "You can cast only one more spell this turn." After this spell resolves, the
     // controller may cast at most this many MORE spells this turn. -1 = no restriction (default).
     // Enforced in Solve::consider (reject a subset with > this many spells ordered AFTER it by

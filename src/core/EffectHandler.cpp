@@ -19,6 +19,12 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     perm.owner_index       = entry.controller_index;
     perm.entered_this_turn = true;
     state.battlefield.push_back(perm);
+
+    // Dragonstorm kill-engine (executor side): a Dragon entering fires the shared cascade --
+    // Scourge's ETB ping + Lathliss's 5/5 token. No-op for every non-Dragon permanent (early
+    // subtype return) so all other decks are byte-identical. Mirrors the rollout's creature-enter
+    // site in TurnSolver::ApplyPlanDirect (lockstep).
+    OnDragonEnters(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1);
 }
 
 void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)

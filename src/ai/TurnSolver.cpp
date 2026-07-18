@@ -601,6 +601,27 @@ static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state)
         }
         cost.generic = std::max(0, cost.generic - reduction);
     }
+    // Ruby Medallion-style colour cost reduction: each permanent you control whose
+    // reduces_spell_color matches a colour in THIS spell's printed cost reduces its GENERIC by 1
+    // (floored at 0, stacks per copy). Gated on a reducer being in play, so decks without one are
+    // byte-identical. (Same-turn-cast Medallions are handled by ManaPruneBound's bail.)
+    {
+        int color_reduction = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || pd->params.reduces_spell_color.empty()) { continue; }
+            const std::string& rc = pd->params.reduces_spell_color;
+            const ManaCost&    mc = def.card.m_mana_cost;   // printed pips (colour unchanged by discounts)
+            const bool spell_has_color =
+                  (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
+                || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
+                || (rc == "G" && mc.green > 0);
+            if (spell_has_color) { ++color_reduction; }
+        }
+        cost.generic = std::max(0, cost.generic - color_reduction);
+    }
     // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
     // sites where the whole generic, incl. X, is known -- see the X-enumeration / apply_one).
     if (!def.card.m_mana_cost.has_x)
@@ -784,6 +805,24 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
     return !has_enabler;   // removal present, no enabler live and none cast this turn -> unbacked
 }
 
+// Reject a subset that selects two SacForMana actions for the SAME source (its colour variants are
+// mutually exclusive -- a given Lotus can be tapped+sacrificed for exactly one colour, once). The
+// colour variants are enumerated as independent actions, so this is the analogue of the Vial per-charge
+// capacity cap. Inert (returns false) for every deck without a SacForMana action -> byte-identical.
+static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    for (size_t a = 0; a < sel.size(); ++a)
+    {
+        if (cands[sel[a]].kind != Action::Kind::SacForMana) { continue; }
+        for (size_t b = a + 1; b < sel.size(); ++b)
+        {
+            if (cands[sel[b]].kind == Action::Kind::SacForMana
+                && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+        }
+    }
+    return false;
+}
+
 // ---- CollectActions ------------------------------------------------------
 //
 // The single enumeration of action SOURCES, shared by Solve and EnumeratePlans.
@@ -814,6 +853,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         // offered as an action -> they sit in hand as faithful dead draws. Gated off for
         // every existing deck.
         if (def.params.goldfish_inert) { continue; }
+        // Suspend-only cards (Lotus Bloom, mana_cost "") have NO normal cost -- they can ONLY be
+        // suspended, never hard-cast from hand. Skip the cast enumeration; the {0} Suspend action is
+        // emitted in its own block below. Gated on suspend_time_counters -> other decks byte-identical.
+        if (def.params.suspend_time_counters > 0) { continue; }
         // Sorceries/non-flash spells require an empty stack and a main phase.
         bool timing_ok = def.card.IsInstant()
                       || def.card.HasKeyword(Keyword::Flash)
@@ -1322,6 +1365,111 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         }
     }
 
+    // --- Suspend (Lotus Bloom "Suspend 3-{0}") ---
+    // A {0} main-phase action: exile the card from hand with suspend_time_counters time counters (it
+    // arrives, cast off suspend, turn+N). NOT a cast -- adds no storm and no board THIS turn. eval 0:
+    // the future mana is realised by the rollout (SimulateEndAndStartNextTurn brings it into play at
+    // the arrival upkeep), so the multi-turn search values the suspend, not a d0 eval. One per copy in
+    // hand. Emitted only when suspend_time_counters > 0 -> every other deck is byte-identical.
+    for (int i = 0; i < n; ++i)
+    {
+        auto sdef = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (!sdef || sdef->params.suspend_time_counters <= 0) { continue; }
+        Action a;
+        a.kind           = Action::Kind::Suspend;
+        a.card_name      = ap.hand[i].m_name;
+        a.hand_index     = i;
+        a.cost           = ManaCost{};      // {0}
+        a.eval           = 0;
+        a.is_noncreature = true;
+        actions.push_back(std::move(a));
+    }
+
+    // --- SacForMana (Lotus Bloom "{T}, Sacrifice this artifact: Add three mana of any one color") ---
+    // A battlefield-activated mana ability: tap + SACRIFICE an untapped source in play, floating N of a
+    // single SEARCH-CHOSEN colour. Enumerated as one Action per (source, candidate colour); the colour
+    // rides on chosen_float_color and is credited as ritual_float (wild) in the subset math, then floated
+    // as the real colour at apply (AddChosenColorFloat). Candidate colours = the colours appearing in the
+    // deck's spell costs (so an off-colour line stays reachable), opened to all five under
+    // MTG_UNPRUNED(SacColor). The colour variants of ONE source are mutually exclusive (sac_source_id);
+    // the subset evaluators reject selecting two of them. Emitted only when sac_for_mana_amount > 0.
+    {
+        bool have_sac_source = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd && pd->params.sac_for_mana_amount > 0) { have_sac_source = true; break; }
+        }
+        if (have_sac_source)
+        {
+            // Candidate colours: the colours in the active player's nonland spell costs across all zones
+            // (order-independent set), or all five under the SacColor unpruned gate. Not hardcoded red.
+            const bool open_all = DecisionUnpruned(UnprunedGate::SacColor);
+            bool present[5] = { false, false, false, false, false };   // W,U,B,R,G
+            if (open_all) { present[0] = present[1] = present[2] = present[3] = present[4] = true; }
+            else
+            {
+                auto scan_zone = [&](auto begin_it, auto end_it)
+                {
+                    for (auto it = begin_it; it != end_it; ++it)
+                    {
+                        const CardDefinition* cd = CardDatabase::Instance().LookupCached(*it);
+                        if (!cd || cd->card.IsLand()) { continue; }
+                        const ManaCost& mc = cd->card.m_mana_cost;
+                        if (mc.white > 0) { present[0] = true; }
+                        if (mc.blue  > 0) { present[1] = true; }
+                        if (mc.black > 0) { present[2] = true; }
+                        if (mc.red   > 0) { present[3] = true; }
+                        if (mc.green > 0) { present[4] = true; }
+                    }
+                };
+                scan_zone(ap.hand.begin(), ap.hand.end());
+                scan_zone(ap.library.begin(), ap.library.end());
+                scan_zone(ap.graveyard.begin(), ap.graveyard.end());
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
+                    if (!cd || cd->card.IsLand()) { continue; }
+                    const ManaCost& mc = cd->card.m_mana_cost;
+                    if (mc.white > 0) { present[0] = true; }
+                    if (mc.blue  > 0) { present[1] = true; }
+                    if (mc.black > 0) { present[2] = true; }
+                    if (mc.red   > 0) { present[3] = true; }
+                    if (mc.green > 0) { present[4] = true; }
+                }
+            }
+            static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
+            std::vector<std::string> colors;
+            for (int c = 0; c < 5; ++c) { if (present[c]) { colors.push_back(kColorLetters[c]); } }
+            // Degenerate all-colourless deck (no coloured pip anywhere): still allow a red float so the
+            // source is usable (mono-red decks always hit red above, so this is a defensive fallback).
+            if (colors.empty()) { colors.push_back("R"); }
+
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                if (!pd || pd->params.sac_for_mana_amount <= 0) { continue; }
+                for (const std::string& col : colors)
+                {
+                    Action a;
+                    a.kind              = Action::Kind::SacForMana;
+                    a.card_name         = p.card.m_name;
+                    a.hand_index        = -1;                       // battlefield-sourced (independent)
+                    a.cost              = ManaCost{};               // {0}: the cost is tap + sacrifice
+                    a.ritual_float      = pd->params.sac_for_mana_amount;   // credited as wild (Solve)
+                    a.chosen_float_color= col;                      // floated as this real colour at apply
+                    a.sac_source_id     = p.card.m_number;          // per-instance id (mutual exclusion)
+                    a.eval              = 0;
+                    a.is_noncreature    = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+        }
+    }
+
     // Resolve each action's card definition ONCE so the per-node subset evaluators read the
     // cached pointer instead of re-hashing card_name. Equivalent to Lookup(card_name) at each
     // use site (every kind's card_name is a real DB name: hand-cast/vial creature/dig source).
@@ -1437,6 +1585,10 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     // sum(cost.ManaValue()) overstates the true cost -> disable the prune to stay byte-identical.
     for (const Action& a : cands)
     { if (a.def && a.def->params.affinity_for_subtype) { return std::numeric_limits<int>::max(); } }
+    // A Medallion cast THIS turn discounts later same-colour spells in the subset -- a reduction the
+    // scalar bound cannot see (like a same-turn affinity enabler), so bail when one is among the cands.
+    for (const Action& a : cands)
+    { if (a.def && !a.def->params.reduces_spell_color.empty()) { return std::numeric_limits<int>::max(); } }
     long long b = pool.Total();
     for (const Action& a : cands) { b += a.ritual_float; b += a.rock_mana.Total(); }
     return (b >= std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max() : static_cast<int>(b);
@@ -1579,6 +1731,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
+        // without a SacForMana action (Lotus Bloom) -> byte-identical.
+        if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
 
@@ -1643,6 +1798,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         {
             int ritual_credit = 0;
             for (int j : sel) { ritual_credit += cands[j].ritual_float; }
+            // Rite-of-Flame graveyard self-scaling: k copies cast this turn escalate (+0,+1,...,+k-1)
+            // as each prior copy hits the graveyard; the flat per-cast stamp misses that triangular
+            // term. Single self-scaling name in-deck, so count-by-flag == count-by-name.
+            int gy_self = 0;
+            for (int j : sel) { if (cands[j].def && cands[j].def->params.ritual_float_gy_self_bonus) { ++gy_self; } }
+            ritual_credit += gy_self * (gy_self - 1) / 2;
             if (ritual_credit > 0) { eff.wild += ritual_credit; eff_nc.wild += ritual_credit; credited = true; }
         }
         if (any_rock)
@@ -1989,6 +2150,7 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
 {
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed
+    int      produced_total = 0;  // running total produced by taps (storage partial-burst shortfall)
 
     // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
     // empty -> byte-identical for non-ritual decks. Mirrors AIEngine::TapForCost so the rollout
@@ -2009,6 +2171,7 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
                    || def.params.mana_rock;
         if (!is_src) { return false; }
         if (def.params.creature_mana_only && !for_creature) { return false; }
+        if (!StorageSourceLive(p, def)) { return false; }   // uncharged storage land makes no mana
         return true;
     };
 
@@ -2031,7 +2194,20 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
         // so the floating pool actually holds {U}{R}. Single-colour sources (incl. single-tap duals,
         // amt 1) keep `amt` of the matched colour -> every deck without such a land is byte-identical.
         // Mirrored in AIEngine::tap_source -- keep the two in lockstep.
-        int amt = ManaProducedPerTap(def);
+        //
+        // Storage-counter land (Dwarven Hold / Mercadian Bazaar) PARTIAL BURST: one tap removes only
+        // the payment's remaining shortfall (cost - produced_total) worth of counters, adding that
+        // many {R}; the rest PERSIST for a later turn. ManaSourceRank taps storage LAST so the
+        // shortfall is minimal. See AIEngine::tap_source -- kept byte-for-byte in lockstep.
+        int amt;
+        if (def.params.storage_land)
+        {
+            const int need = std::max(1, cost.ManaValue() - produced_total);
+            amt = std::min(p.storage_counters, need);
+            p.storage_counters -= amt;
+        }
+        else { amt = ManaProducedPerTap(def); }
+        produced_total += amt;
         const std::vector<Color>& prod = EffectiveProduces(state, active, def);
         if (amt > 1 && prod.size() > 1) { for (Color c : prod) { floating.Add(c, 1); } }
         else                            { floating.Add(col, amt); }
@@ -3151,6 +3327,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             perm.entered_this_turn = true;
             state.battlefield.push_back(perm);
 
+            // Dragonstorm kill-engine (rollout side): a Dragon entering fires the shared cascade
+            // (Scourge ETB ping -> opponent life loss + Lathliss 5/5 token). Mirrors the executor's
+            // EffectHandler::EnterBattlefield (lockstep) so the search's win projection counts the
+            // ping toward lethal. No-op for every non-Dragon creature -> other decks byte-identical.
+            OnDragonEnters(state, state.active_player_index,
+                           static_cast<int>(state.battlefield.size()) - 1);
+
             // ETB library dig (Acclaimed Contender): performed inline so the clairvoyant
             // rollout sees the dug card in hand for later turns. The real game does the
             // SAME deterministic dig at resolution (EffectHandler), reaching identical
@@ -3791,6 +3974,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Sum every mana-paying hand cast's cost into audit_combined and snapshot the pre-cast board.
     // Skip entirely if any planned action PRODUCES mana (ritual/rock): those break the "all sources
     // simultaneously available" assumption the combined-sum feasibility test relies on.
+    // Lotus Bloom: apply SacForMana (float the chosen colour into the reserve) and Suspend BEFORE the
+    // batch pre-pay / casts, so the floated mana funds this turn's payoff. BatchPrepay declines when any
+    // action produces float (a.ritual_float > 0, which SacForMana sets), so the greedy per-cast path --
+    // which spends floating first -- realises the combo. Mirrors AIEngine::TakeTurn (lockstep). Both
+    // loops are empty for every deck without a Lotus (no SacForMana/Suspend action) -> byte-identical.
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::SacForMana)
+        { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float); }
+        else if (a.kind == Action::Kind::Suspend)
+        { ApplySuspend(state, state.active_player_index, a.card_name); }
+    }
+
     // Whole-turn batch pre-payment: tap for the combined cost of the main hand casts and pre-load
     // floating (see BatchPrepayMainCasts). The main casts below then drain the pool -- scarce colours
     // allocated jointly, filters fed, unneeded sources left up -- instead of the stranding per-cast
@@ -4009,6 +4205,13 @@ static void SimulateCombat(GameState& state)
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, active) : 0;
 
+    // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
+    // combat mana on attacker pumps BEFORE the damage loop reads their power. Shared with the
+    // executor (AIEngine::Firebreathe) on the byte-identical BuildAvailableMana pool -> lockstep.
+    // Inert unless a firebreathing param is present -> other decks byte-identical.
+    if (!atk_idx.empty() && ControlsFirebreathingSource(state, active))
+    { ApplyFirebreathing(state, active, atk_idx, BuildPool(state)); }
+
     std::vector<const Permanent*> attackers;
     attackers.reserve(atk_idx.size());
     for (int idx : atk_idx)
@@ -4040,6 +4243,12 @@ static void SimulateCombat(GameState& state)
         state.players[opp_idx].life -= trigger_life_loss;
         state.opponent_lost_life_this_turn = true;
     }
+
+    // Utvara Hellkite: per attacking Dragon, create a 6/6 Dragon token (untapped, summoning-sick;
+    // NOT added to this combat). Each token entering fires OnDragonEnters (Scourge ping / Lathliss
+    // token) via CreateToken. Mirrors GameEngine::CombatPhase (executor). `attackers` still holds
+    // the pre-token attacker pointers (FireUtvaraAttackTokens reads them before any CreateToken).
+    FireUtvaraAttackTokens(state, active, attackers);
 }
 
 
@@ -4165,6 +4374,16 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.is_animated           = false;
     }
 
+    // Storage-counter lands (Dwarven Hold, Mercadian Bazaar): bank +1 on any storage land left UNTAPPED
+    // this turn (idle = not burst). Faithful goldfish model of both charge modes; mirrors the executor
+    // (GameEngine::CleanupStep) exactly so the rollout's accumulated burst matches the real game (lockstep).
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.storage_land) { ++p.storage_counters; }
+    }
+
     // Start of next turn
     ++state.turn_number;
     state.opponent_lost_life_this_turn = false;
@@ -4222,6 +4441,12 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // (assume each is tapped for mana). Mirrors GameEngine (executor) at the same turn-start point
     // -> lockstep. Gated by s_fd_opp_spawns so MTG_LEGACY_SEARCH stays byte-identical to the old model.
     if (s_fd_opp_spawns) { SpawnForbiddenOrchardTokensTurnStart(state); }
+
+    // Suspend (Lotus Bloom): cast off suspend any card whose last time counter is removed at THIS
+    // upkeep (arrive_turn <= turn). Runs after untap so the arrived artifact is untapped and available
+    // this turn; placed here to mirror GameEngine::UpkeepStep's arrival-before-vial ordering (lockstep).
+    // No-op for every deck without a suspended card -> byte-identical.
+    ProcessSuspendArrivals(state, state.active_player_index);
 
     Player& ap_upkeep = state.ActivePlayer();
     for (Permanent& p : state.battlefield)
@@ -4637,6 +4862,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
+        // without a SacForMana action -> byte-identical.
+        if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
         for (int j : sel)
         {
@@ -4706,6 +4934,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         {
             int ritual_credit = 0;
             for (int j : sel) { ritual_credit += cands[j].ritual_float; }
+            // Rite-of-Flame graveyard self-scaling: k copies cast this turn escalate (+0,+1,...,+k-1)
+            // as each prior copy hits the graveyard; the flat per-cast stamp misses that triangular
+            // term. Single self-scaling name in-deck, so count-by-flag == count-by-name.
+            int gy_self = 0;
+            for (int j : sel) { if (cands[j].def && cands[j].def->params.ritual_float_gy_self_bonus) { ++gy_self; } }
+            ritual_credit += gy_self * (gy_self - 1) / 2;
             if (ritual_credit > 0) { eff.wild += ritual_credit; eff_nc.wild += ritual_credit; credited = true; }
         }
         if (any_rock)
@@ -4944,7 +5178,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const bool s_human_play_sig = HumanPlayActive();
     auto plan_signature = [s_human_play_sig](const TurnSolver::Plan& p) -> std::string
     {
-        std::vector<std::string> v, s, a, g, l;
+        std::vector<std::string> v, s, a, g, l, u, msf;
         for (const Action& act : p.actions)
         {
             switch (act.kind)
@@ -4955,6 +5189,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
+                case Action::Kind::Suspend:  u.push_back(act.card_name); break;
+                // SacForMana: distinct colours are DISTINCT plans (different floated colour); keep the
+                // colour in the signature so the dedup never collapses the colour decision (core invariant).
+                case Action::Kind::SacForMana:
+                    msf.push_back(act.card_name + "#" + act.chosen_float_color
+                                  + "#" + std::to_string(act.sac_source_id)); break;
+                case Action::Kind::DigDraw:  break;  // human-play only; not a plan.actions signature key
                 case Action::Kind::PlayLand: break;  // never appears in plan.actions
             }
         }
@@ -4963,12 +5204,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         std::sort(a.begin(), a.end());
         std::sort(g.begin(), g.end());
         std::sort(l.begin(), l.end());
+        std::sort(u.begin(), u.end());
+        std::sort(msf.begin(), msf.end());
         std::string sig;
         for (const std::string& n : v) { sig += 'V'; sig += n; }
         for (const std::string& n : s) { sig += 'S'; sig += n; }
         for (const std::string& n : a) { sig += 'A'; sig += n; }
         for (const std::string& n : g) { sig += 'G'; sig += n; }
         for (const std::string& n : l) { sig += 'L'; sig += n; }
+        for (const std::string& n : u)   { sig += 'U'; sig += n; }
+        for (const std::string& n : msf) { sig += 'M'; sig += n; }
         if (s_human_play_sig)
         {
             // Per-action sub-decisions, order-independent; plus the land/fetch the plan commits.
@@ -5611,6 +5856,21 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         {
             Fold(k, sc.card.m_name_hash);
             Fold(k, static_cast<uint64_t>(sc.expiry_turn));
+        }
+
+        // Suspended cards (Lotus Bloom): a future-determining zone (they arrive on later turns), so it
+        // MUST be folded or two states differing only in their suspend timers would collide in the TT.
+        // Folded ONLY when non-empty (like the graveyard fold below), so a deck that never suspends keeps
+        // the EXACT key -- and identical TT/budget behaviour -- it had before this change (byte-identical).
+        if (!p.suspended_cards.empty())
+        {
+            Fold(k, 0x5C5D + static_cast<uint64_t>(pi)); // sub-section: suspended cards
+            Fold(k, static_cast<uint64_t>(p.suspended_cards.size()));
+            for (const SuspendedCard& sc : p.suspended_cards)
+            {
+                Fold(k, sc.card.m_name_hash);
+                Fold(k, static_cast<uint64_t>(sc.arrive_turn));
+            }
         }
 
         // Graveyard: the rollout reads it only via Retrace, so fold it ONLY when it

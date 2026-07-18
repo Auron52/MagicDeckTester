@@ -10,6 +10,17 @@ struct StagedCard
     int  expiry_turn = 0; // last turn on which this card may be played
 };
 
+// A card exiled with time counters by SUSPEND (Lotus Bloom: "Suspend 3-{0}"). Unlike a StagedCard
+// it is NOT playable while it waits; at each of the controller's upkeeps a time counter is removed,
+// and when the last is removed the card is CAST off suspend (arrive_turn = suspend_turn + counters).
+// See CardParams::suspend_time_counters, GameEngine::UpkeepStep / SimulateEndAndStartNextTurn (the
+// arrival), and CastOffSuspend (the shared free-cast site).
+struct SuspendedCard
+{
+    Card card;
+    int  arrive_turn = 0; // the upkeep turn on which the last time counter is removed -> cast off suspend
+};
+
 struct Player
 {
     int life                       = 20;
@@ -22,6 +33,10 @@ struct Player
 
     // Cards exiled by "Light Up the Stage" and similar; playable until their expiry turn.
     std::vector<StagedCard> staged_cards;
+
+    // Cards exiled by SUSPEND (Lotus Bloom); each is cast off suspend at arrive_turn's upkeep.
+    // Empty for every deck without a suspend card -> byte-identical.
+    std::vector<SuspendedCard> suspended_cards;
 
     bool HasLost() const { return life <= 0 || poison_counters >= 10; }
 

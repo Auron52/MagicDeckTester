@@ -28,7 +28,15 @@ struct Permanent
     int       temp_tough_bonus     = 0;
     int       charge_counters      = 0;    // Aether Vial charge counter count
     int       verse_counters       = 0;    // Aria of Flame verse counter count
+    int       storage_counters     = 0;    // storage-counter land battery (Dwarven Hold, Mercadian
+                                           // Bazaar): accumulated over idle turns; an untapped charged
+                                           // storage land taps to burst {R} x storage_counters (zeroing
+                                           // them), NOT sacrificed. See CardParams::storage_land.
     bool      is_animated          = false; // land animated as a creature (e.g. Mutavault); reset each cleanup
+    bool      is_token             = false; // created by a token-making effect (CreateToken). Lathliss's
+                                            // "nontoken Dragon" gate reads this so a created 5/5 Dragon
+                                            // token re-pings Scourge but never re-triggers Lathliss
+                                            // (loop-safe). Set true in every CreateToken path.
 
     int  EffectivePower()     const;
     int  EffectiveToughness() const;

@@ -32,6 +32,15 @@ struct Action
                              // {cost},{T},Sacrifice a land in play (dig_sacrifice=true). Draws one
                              // card, then re-solves the phase exactly like a DrawUntilNonland draw
                              // engine, so a dug Treasure Hunt is cast the same turn.
+        Suspend,             // Lotus Bloom "Suspend 3-{0}": pay {0} and move card_name from hand to
+                             // Player::suspended_cards with three time counters (arrives turn+3). NOT
+                             // a cast; adds no storm, no mana this turn. hand_index = the card's hand
+                             // slot. cost = {0}. Emitted only when suspend_time_counters > 0.
+        SacForMana,          // Lotus Bloom "{T}, Sacrifice: add 3 of one color": tap + SACRIFICE the
+                             // battlefield source (sac_source_id = its card.m_number) and float
+                             // ritual_float mana of chosen_float_color into state.floating_mana. cost
+                             // = {0} (the cost is tap+sac). Emitted only when sac_for_mana_amount > 0;
+                             // one variant per candidate colour (mutually exclusive per source).
     };
 
     Kind        kind           = Kind::CastFromHand;
@@ -73,6 +82,29 @@ struct Action
                                        // picks. cost already includes the X generic; chosen_x is
                                        // carried so the cast (rollout AND executor) scales the
                                        // effect (X damage) identically. 0 = not an X spell.
+    int         splice_count   = 0;    // Desperate Ritual "Splice onto Arcane {1}{R}": the SEARCHED
+                                       // number of OTHER splice_onto_arcane copies revealed + spliced
+                                       // onto THIS base cast (0..#other copies in hand). CollectActions
+                                       // emits one variant per k (sharing hand_index -> mutually
+                                       // exclusive) so the search picks. cost AND float are scaled by
+                                       // (k+1) at enumeration (a.cost/a.ritual_float) and re-scaled
+                                       // IDENTICALLY at apply (rollout apply_one + executor
+                                       // CastSpellFromHand/EffectHandler) off this same k -> lockstep.
+                                       // The spliced copies STAY IN HAND (never removed) -> reusable.
+                                       // 0 for every non-splice action (all other decks). A per-plan
+                                       // legality guard (SubsetHasIllegalSplice) rejects the physically
+                                       // impossible over-splice combinations.
+    std::string chosen_float_color;    // The REUSABLE "N mana of one CHOSEN colour" dimension
+                                       // (Lotus Bloom's SacForMana; Apex of Power's "add ten of one
+                                       // colour" will reuse it). CollectActions emits one plan VARIANT
+                                       // per candidate colour ("W"/"U"/"B"/"R"/"G"); the chosen colour
+                                       // is stamped here and read at resolution by AddChosenColorFloat
+                                       // (which routes to state.floating_mana.<colour>). Empty = no
+                                       // chosen-colour float (every non-Lotus/Apex action).
+    int         sac_source_id  = 0;    // SacForMana: the sacrificed battlefield source's card.m_number
+                                       // (a stable per-instance id). Used to keep the colour variants
+                                       // of ONE source mutually exclusive in the subset enumeration
+                                       // (you can sac a given Lotus only once). 0 for every other kind.
     int         soulfire_own_targets = 0;
                                        // Soulfire Eruption: searched COUNT of own creatures to add
                                        // as extra targets (0..#own creatures). CollectActions emits

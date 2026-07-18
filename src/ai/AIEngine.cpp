@@ -1992,6 +1992,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
     }
+    // Lotus Bloom: apply SacForMana (float the chosen colour) and Suspend BEFORE the batch pre-pay /
+    // casts, exactly as the rollout's ApplyPlanDirect does at this same logical point -> lockstep. Both
+    // loops are empty for every deck without a Lotus (no SacForMana/Suspend action) -> byte-identical.
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::SacForMana)
+        { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float); }
+        else if (a.kind == Action::Kind::Suspend)
+        { ApplySuspend(state, state.active_player_index, a.card_name); }
+    }
     // Whole-turn batch pre-payment -- mirror of ApplyPlanDirect (lockstep): tap for the combined
     // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
     // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
@@ -2516,6 +2526,19 @@ void AIEngine::AnimateLands(GameState& state, ManaPool& available)
     }
 }
 
+// ---- Firebreathing (Scourge / Lathliss) ----
+// Build the leftover-combat-mana pool (byte-identical to TurnSolver::BuildPool used by the
+// rollout's SimulateCombat) and hand it to the shared ApplyFirebreathing so the executor pumps
+// exactly as the rollout projected. The pool is only READ (real sources are not tapped -- goldfish
+// combat is the last mana use for firebreathing decks), so both worlds see the same leftover mana.
+void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    if (!ControlsFirebreathingSource(state, state.active_player_index)) { return; }
+    ApplyFirebreathing(state, state.active_player_index, attacker_indices,
+                       BuildAvailableMana(state));
+}
+
 // ---- Tap-and-pay token abilities (e.g. Sliver Hive) ----
 
 void AIEngine::ActivateTapTokens(GameState& state, ManaPool& available)
@@ -2579,8 +2602,9 @@ ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
         if (!is_land && !is_dork) { continue; }
 
         // Depletion lands contribute 2; multi-color lands contribute 1 wild; filter
-        // lands (Cascade Bluffs) contribute wild iff fed, else {C}. See AddSourceToPool.
-        AddSourceToPool(pool, state, *def);
+        // lands (Cascade Bluffs) contribute wild iff fed, else {C}. Storage lands burst their
+        // live counter count (PermanentManaYield). See AddSourceToPool.
+        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
     }
     // Turn-scoped reserve (ritual float + retained over-production) is spendable on later
     // same-phase casts -- mirror TurnSolver::BuildPool so the executor's planner and the
@@ -2600,6 +2624,8 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
     Player&  ap     = state.ActivePlayer();
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed (held locally)
+    int      produced_total = 0;  // running total of mana produced by taps this payment (for the
+                                  // storage-counter partial-burst shortfall; 0 for every other source)
 
     // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
     // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
@@ -2619,6 +2645,7 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
                    || def.params.mana_rock;
         if (!is_src) { return false; }
         if (def.params.creature_mana_only && !for_creature) { return false; }
+        if (!StorageSourceLive(p, def)) { return false; }   // uncharged storage land makes no mana
         return true;
     };
 
@@ -2639,12 +2666,32 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
         // promised. AddSourceToPool credited it as `amt` wild, so decrement `available.wild`.
         // Single-colour sources keep `amt` of the matched colour (byte-identical). Mirrored in
         // TurnSolver::tap_source -- keep the two in lockstep.
-        int amt = ManaProducedPerTap(def);
+        //
+        // `amt` = mana produced into floating; `consumed` = mana removed from this-turn's `available`
+        // pool. They differ ONLY for a STORAGE-COUNTER land (Dwarven Hold / Mercadian Bazaar): its
+        // single tap bursts a PARTIAL, search-driven amount = the payment's remaining shortfall
+        // (cost minus what's already been produced), removing exactly that many counters -- the rest
+        // PERSIST on the land for a later turn ("burst some now, bank the rest"). `consumed` is its
+        // FULL pre-tap counter count because the land is now tapped, so its leftover counters are
+        // unavailable THIS turn (but not lost). ManaSourceRank taps storage LAST so the shortfall is
+        // minimal. Non-storage sources keep amt == consumed == the static per-tap yield -> byte-
+        // identical for every non-storage deck. Mirrored in TurnSolver::tap_source (lockstep).
+        int amt, consumed;
+        if (def.params.storage_land)
+        {
+            const int had  = p.storage_counters;
+            const int need = std::max(1, cost.ManaValue() - produced_total);
+            amt = std::min(had, need);
+            consumed = had;
+            p.storage_counters -= amt;
+        }
+        else { amt = consumed = ManaProducedPerTap(def); }
+        produced_total += amt;
         const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
         if (amt > 1 && prod.size() > 1)
-        { for (Color c : prod) { floating.Add(c, 1); } available.wild -= amt; }
+        { for (Color c : prod) { floating.Add(c, 1); } available.wild -= consumed; }
         else
-        { floating.Add(col, amt); available.Add(col, -amt); }
+        { floating.Add(col, amt); available.Add(col, -consumed); }
     };
 
     // Ensure floating can satisfy one pip: `any` = generic, else specific colour

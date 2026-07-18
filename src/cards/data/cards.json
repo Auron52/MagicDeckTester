@@ -369,6 +369,26 @@
             "parameters": { "produces": ["R"], "enters_tapped": true, "enters_tapped_with_depletion": 2, "produces_amount": 2 }
         },
         {
+            "name": "Dwarven Hold",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "This land enters tapped.\nYou may choose not to untap this land during your untap step.\nAt the beginning of your upkeep, if this land is tapped, put a storage counter on it.\n{T}, Remove any number of storage counters from this land: Add {R} for each storage counter removed this way. [STORAGE-COUNTER BATTERY (storage_land, storage_charge_mode:upkeep_if_tapped; NOT a depletion land -- never sacrificed). CHARGE: modelled as +1 storage counter at the END of any turn the land is left UNTAPPED (idle -- not burst; it enters tapped so its play turn banks nothing). This weakly-dominant 'charge while idle' rule reproduces the LITERAL 'hold tapped -> +1 at upkeep' accumulation EXACTLY -- same counter count per turn and same earliest useful burst (turn played + 2), verified off-by-one -- without modelling the hold-tapped board state or an untap-step branch. BURST: an untapped charged storage land is a VARIABLE red mana source (per-permanent yield = Permanent.storage_counters, threaded through BuildPool/BuildAvailableMana/greedy tap/backtracker). A single tap performs a PARTIAL burst: it removes only the payment's remaining shortfall worth of counters (adding that many {R}) and the REST PERSIST on the land for a later turn ('burst some now, bank the rest'); ManaSourceRank taps storage LAST so the shortfall is minimal. How much to burst is a real SEARCH decision -- it falls out of which plan the search commits to (a cheap play bursts a few, the big Dragonstorm/Apex turn bursts many), and the reserve holds the battery untapped whenever the cost is payable without it. Lockstep executor (GameEngine)/rollout (TurnSolver)/planner; every storage path is gated on storage_land so non-storage decks are byte-identical. SIMPLIFICATION: a single tap never bursts MORE counters than the plan needs (goldfish-dominated -- wasted counters), and the rare filter-chain backtracker fallback path is not exercised by this mono-red deck.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["R"], "enters_tapped": true, "storage_land": true, "storage_charge_mode": "upkeep_if_tapped" }
+        },
+        {
+            "name": "Mercadian Bazaar",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "This land enters tapped.\n{T}: Put a storage counter on this land.\n{T}, Remove any number of storage counters from this land: Add {R} for each storage counter removed this way. [STORAGE-COUNTER BATTERY (storage_land, storage_charge_mode:tap; NOT a depletion land -- never sacrificed). Shares the same engine mechanic as Dwarven Hold. CHARGE: '{T}: Put a storage counter' (its charge tap makes no other mana) is modelled as +1 storage counter at the END of any turn the land is left UNTAPPED (idle) -- weakly dominant (an idle Mercadian never wants to sit un-charged), reproducing the literal +1-per-idle-turn accumulation and earliest useful burst (turn played + 2) EXACTLY. BURST: identical to Dwarven Hold -- an untapped charged storage land is a VARIABLE red source; one tap PARTIAL-bursts only the payment's remaining shortfall (the rest persist for a later turn), search-driven via plan choice, tapped LAST, reserved when unneeded, NOT sacrificed. Lockstep executor/rollout/planner; gated on storage_land -> byte-identical for non-storage decks.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["R"], "enters_tapped": true, "storage_land": true, "storage_charge_mode": "tap" }
+        },
+        {
             "name": "Cascade Bluffs",
             "mana_cost": "",
             "types": ["Land"],
@@ -1510,6 +1530,242 @@
             "parameters": {
                 "ritual_floating_mana": 7,
                 "max_casts_after": 1
+            }
+        },
+        {
+            "name": "Pyretic Ritual",
+            "mana_cost": "{1}{R}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Add {R}{R}{R}. [Burst-mana RITUAL: pay {1}{R} (2), add {R}{R}{R} = GROSS 3 RED to the turn-scoped reserve (state.floating_mana.red), net +1. Modelled via ritual_floating_mana:3 + ritual_float_color:R (colored-float variant so the red can't pay the off-color {B}/{G} pips of the Dragonstorm-only dragons; Irencrag Feat/Reality Spasm keep the default wild). Instant speed is inert in the single-player goldfish. No drawback, so no max_casts_after.]",
+            "template": "custom",
+            "parameters": {
+                "ritual_floating_mana": 3,
+                "ritual_float_color": "R"
+            }
+        },
+        {
+            "name": "Seething Song",
+            "mana_cost": "{2}{R}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Add {R}{R}{R}{R}{R}. [Burst-mana RITUAL: pay {2}{R} (3), add {R}{R}{R}{R}{R} = GROSS 5 RED to the turn-scoped reserve (state.floating_mana.red), net +2. Modelled via ritual_floating_mana:5 + ritual_float_color:R (colored-float variant so the red can't pay the off-color {B}/{G} pips of the Dragonstorm-only dragons; Irencrag Feat/Reality Spasm keep the default wild). Instant speed is inert in the single-player goldfish. No drawback, so no max_casts_after.]",
+            "template": "custom",
+            "parameters": {
+                "ritual_floating_mana": 5,
+                "ritual_float_color": "R"
+            }
+        },
+        {
+            "name": "Desperate Ritual",
+            "mana_cost": "{1}{R}",
+            "types": [
+                "Instant"
+            ],
+            "subtypes": [
+                "Arcane"
+            ],
+            "keywords": [
+                "Splice"
+            ],
+            "oracle_text": "Add {R}{R}{R}.\nSplice onto Arcane {1}{R} (As you cast an Arcane spell, you may reveal this card from your hand and pay its splice cost. If you do, add this card's effects to that spell.) [Burst-mana RITUAL: pay {1}{R} (2), add {R}{R}{R} = GROSS 3 RED to the turn-scoped reserve (state.floating_mana.red), net +1. Modelled via ritual_floating_mana:3 + ritual_float_color:R (colored so the red can't pay the off-colour {B}/{G} pips of the Dragonstorm-only dragons; matches Pyretic/Seething). SPLICE onto Arcane (splice_onto_arcane:true): when you cast ONE copy you may reveal + splice k OTHER Desperate Rituals from hand onto it, paying the splice cost {1}{R} (== its own printed cost) and adding {R}{R}{R} PER spliced copy -- and the spliced copies STAY IN HAND (not cast, not exiled), so each can be spliced again onto another base and/or hard-cast later (its effect is REUSED). Cast #1 splicing #2 = pay 4, add 6; #2 stays in hand, hard-cast later for +3 = net +3 vs the +2 of two plain casts, with NO storm-count loss (#2 still cast separately). Modelled as a SEARCH-chosen splice_count k (0..#other Desperate Rituals in hand): cost = (k+1)*{1}{R}, float = (k+1)*3 RED, scaled by (k+1) in LOCKSTEP across enum (CollectActions), rollout (apply_one), and executor (CastSpellFromHand + EffectHandler). A subset legality guard rejects physically-impossible over-splicing (a copy can only be spliced while still in hand; the maximal legal chain is triangular k=N-1,N-2,...,0). The only Arcane spell in the deck is Desperate Ritual, so bases and splice targets are the same card. Instant speed is inert in the single-player goldfish. STORM: the (future) spells_cast_this_turn increment fires ONCE per base cast, NOT per (k+1). VIEWER: splice_count is a Bucket-A plan variant (emitted in main.cpp).]",
+            "template": "custom",
+            "parameters": {
+                "ritual_floating_mana": 3,
+                "ritual_float_color": "R",
+                "splice_onto_arcane": true
+            }
+        },
+        {
+            "name": "Dragonlord Kolaghan",
+            "mana_cost": "{4}{B}{R}",
+            "types": [
+                "Creature"
+            ],
+            "supertypes": [
+                "Legendary"
+            ],
+            "subtypes": [
+                "Elder",
+                "Dragon"
+            ],
+            "keywords": [
+                "Flying",
+                "Haste"
+            ],
+            "power": 6,
+            "toughness": 5,
+            "oracle_text": "Flying, haste\nOther creatures you control have haste.\nWhenever an opponent casts a creature or planeswalker spell with the same name as a card in their graveyard, that player loses 10 life. [Self flying (inert: no blockers) + haste (live). 'Other creatures you control have haste' modelled via grants_haste to Dragons -- exact for this deck (every other creature/token it makes is a Dragon). The same-name life-loss trigger is inert (the passive goldfish opponent never casts). Legend rule modelled but inert (deck runs 1 copy).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "grants_haste": true,
+                "subtypes_affected": [
+                    "Dragon"
+                ]
+            }
+        },
+        {
+            "name": "Karrthus, Tyrant of Jund",
+            "mana_cost": "{4}{B}{R}{G}",
+            "types": [
+                "Creature"
+            ],
+            "supertypes": [
+                "Legendary"
+            ],
+            "subtypes": [
+                "Dragon"
+            ],
+            "keywords": [
+                "Flying",
+                "Haste"
+            ],
+            "power": 7,
+            "toughness": 7,
+            "oracle_text": "Flying, haste\nWhen Karrthus, Tyrant of Jund enters, gain control of all Dragons, then untap all Dragons.\nOther Dragon creatures you control have haste. [Self flying (inert: no blockers) + haste (live). Haste-lord modelled via grants_haste to Dragons (the deck's key enabler for same-turn Dragonstorm attacks). ETB 'gain control of all Dragons' inert (passive opponent controls no Dragons). ETB 'untap all Dragons' DEFERRED to phase 2 -- no live goldfish case (your Dragons are already untapped at the main phase where Karrthus enters). Legend rule modelled but inert (1 copy).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "grants_haste": true,
+                "subtypes_affected": [
+                    "Dragon"
+                ]
+            }
+        },
+        {
+            "name": "Ruby Medallion",
+            "mana_cost": "{2}",
+            "types": [
+                "Artifact"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Red spells you cast cost {1} less to cast. [Static colour cost reducer: each Ruby Medallion you control reduces the GENERIC cost of your red spells by 1 (floored at 0, stacks per copy). Modelled via reduces_spell_color:R applied in EffectiveCost from Medallions already in play; a Medallion cast the SAME turn as a spell it discounts is handled by the ManaPruneBound bail. Only the generic portion is reduced (colour pips are never), matching 'cost {1} less'.]",
+            "template": "custom",
+            "parameters": {
+                "reduces_spell_color": "R"
+            }
+        },
+        {
+            "name": "Lotus Bloom",
+            "mana_cost": "",
+            "types": [
+                "Artifact"
+            ],
+            "subtypes": [],
+            "keywords": [
+                "Suspend"
+            ],
+            "oracle_text": "Suspend 3—{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\n{T}, Sacrifice this artifact: Add three mana of any one color. [Lotus Bloom has NO normal mana cost -- it can ONLY enter via SUSPEND, never be hard-cast. SUSPEND (suspend_time_counters:3): a {0} main-phase action (Action::Kind::Suspend) exiles it from hand with three time counters; a counter is removed at each of your upkeeps and when the last is removed it is CAST off suspend into play (arrive_turn = suspend_turn + 3, i.e. suspend T1 -> arrive T4). The off-suspend cast is routed through the shared CastOffSuspend site (the single home for Dragonstorm's future storm increment, so an off-suspend arrival will count +1 storm); paying {0} to suspend and sacrificing for mana are NOT casts and add no storm. WHEN to suspend is a real SEARCH decision (the multi-turn rollout brings it into play and sees the future mana). SAC-FOR-MANA (sac_for_mana_amount:3): once in play it is a one-shot battlefield ability (Action::Kind::SacForMana) -- tap + SACRIFICE it and float THREE mana of ONE search-chosen color into the turn-scoped reserve (state.floating_mana.<color>), NOT wild (wild could illegally pay a multicolor {B}{R}{G} mix). The chosen color is a plan VARIANT (chosen_float_color): candidate colors = the colors in the deck's spell costs, opened to all five under MTG_UNPRUNED(saccolor); the same reusable colored-float dimension (AddChosenColorFloat) Apex of Power's 'add ten of one color' shares. Modelled lockstep across executor (GameEngine::UpkeepStep arrival + AIEngine::TakeTurn sac) / rollout (SimulateEndAndStartNextTurn arrival + ApplyPlanDirect sac) / planner (credited as ritual_float). 'Any target' collapse: none (it produces mana, no target). VIEWER 5h TODO: suspend timing surfaces as a plan variant (Bucket A); the sac COLOR is a new small chooser (Bucket B) -- recorded, not wired.]",
+            "template": "custom",
+            "parameters": {
+                "suspend_time_counters": 3,
+                "sac_for_mana_amount": 3
+            }
+        },
+        {
+            "name": "Rite of Flame",
+            "mana_cost": "{R}",
+            "types": [
+                "Sorcery"
+            ],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Add {R}{R}, then add {R} for each card named Rite of Flame in each graveyard. [Burst-mana RITUAL: pay {R} (1), add {R}{R} base = GROSS 2 RED (ritual_floating_mana:2 + ritual_float_color:R), net +1. The graveyard scaling '+{R} per Rite of Flame in each graveyard' is modelled faithfully via ritual_float_gy_self_bonus: at RESOLUTION the float = 2 + (copies of Rite of Flame already in graveyards), so a same-turn chain escalates 2,3,4,... (1 Mountain + 3 copies -> 7 red vs a flat 4). The planner credits the same escalation via a triangular term in Solve::consider so the search sees the combo mana.]",
+            "template": "custom",
+            "parameters": {
+                "ritual_floating_mana": 2,
+                "ritual_float_color": "R",
+                "ritual_float_gy_self_bonus": true
+            }
+        },
+        {
+            "name": "Scourge of Valkas",
+            "mana_cost": "{2}{R}{R}{R}",
+            "types": [
+                "Creature"
+            ],
+            "subtypes": [
+                "Dragon"
+            ],
+            "keywords": [
+                "Flying"
+            ],
+            "power": 4,
+            "toughness": 4,
+            "oracle_text": "Flying\nWhenever this creature or another Dragon you control enters, it deals X damage to any target, where X is the number of Dragons you control.\n{R}: This creature gets +1/+0 until end of turn. [Flying inert (no blockers). ETB Dragon-count ping via dragon_ping_on_enter: whenever this or any Dragon you control enters, deal X = (Dragons you control, COUNTING the newcomer) to the opponent's face ('any target' collapses to the face -- optimal/byte-identical vs a passive opponent). Fired from the shared OnDragonEnters cascade at EVERY dragon-enter site (hard-cast, Dragonstorm put, Lathliss/Utvara token), so a wave of Dragons pings sequentially and multiple Scourges each ping; the ping is opponent LIFE LOSS so the rollout's win projection counts it toward lethal. Firebreathing '{R}: +1/+0' via firebreathing_cost/power -- spent with LEFTOVER combat mana to convert mana into face damage, so the search pumps for lethal.]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "dragon_ping_on_enter": true,
+                "firebreathing_cost": "{R}",
+                "firebreathing_power": 1
+            }
+        },
+        {
+            "name": "Lathliss, Dragon Queen",
+            "mana_cost": "{4}{R}{R}",
+            "types": [
+                "Creature"
+            ],
+            "supertypes": [
+                "Legendary"
+            ],
+            "subtypes": [
+                "Dragon"
+            ],
+            "keywords": [
+                "Flying"
+            ],
+            "power": 6,
+            "toughness": 6,
+            "oracle_text": "Flying\nWhenever another nontoken Dragon you control enters, create a 5/5 red Dragon creature token with flying.\n{1}{R}: Dragons you control get +1/+0 until end of turn. [Flying inert (no blockers). ETB-other-nontoken-Dragon token via etb_other_subtype_creates_tokens: each OTHER NONTOKEN Dragon (Permanent.is_token gate) that enters makes a 5/5 red Dragon token; it fires once PER subsequent nontoken Dragon (not just once). The token carries subtype 'Dragon' (so haste-lords Kolaghan/Karrthus grant it haste) and is is_token, so it re-pings Scourge (via OnDragonEnters-from-CreateToken) but never re-triggers Lathliss (loop-safe). Token-first ordering: the 5/5 is created before the newcomer's own Scourge ping so both see the higher Dragon count. Team firebreathing '{1}{R}: Dragons +1/+0' via team_pump_cost/power/subtypes -- spent with leftover combat mana for lethal. Legend rule modelled but inert (deck runs 1 copy).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "etb_other_subtype_creates_tokens": true,
+                "etb_token_requires_subtype": "Dragon",
+                "etb_created_token_power": 5,
+                "etb_created_token_toughness": 5,
+                "etb_created_token_subtypes": [
+                    "Dragon"
+                ],
+                "team_pump_cost": "{1}{R}",
+                "team_pump_power": 1,
+                "team_pump_subtypes": [
+                    "Dragon"
+                ]
+            }
+        },
+        {
+            "name": "Utvara Hellkite",
+            "mana_cost": "{6}{R}{R}",
+            "types": [
+                "Creature"
+            ],
+            "subtypes": [
+                "Dragon"
+            ],
+            "keywords": [
+                "Flying"
+            ],
+            "power": 6,
+            "toughness": 6,
+            "oracle_text": "Flying\nWhenever a Dragon you control attacks, create a 6/6 red Dragon creature token with flying. [Flying inert (no blockers). Per-attacking-Dragon token via attack_per_matching_creates_tokens (attack_token_requires_subtypes=['Dragon']): at declare-attackers, for EACH attacking Dragon create one 6/6 red Dragon token. Distinct from the flat tapped-and-attacking attack_creates_tokens (Adeline) -- these tokens enter UNTAPPED and summoning-sick, so they do NOT join this combat (they attack next turn, or this turn only if a haste-lord grants their 'Dragon' subtype haste). Each token entering fires the shared OnDragonEnters cascade (Scourge ping / Lathliss 5/5). Token carries subtype 'Dragon' so lords/haste match it.]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "attack_per_matching_creates_tokens": 1,
+                "attack_per_token_power": 6,
+                "attack_per_token_toughness": 6,
+                "attack_per_token_subtypes": [
+                    "Dragon"
+                ],
+                "attack_token_requires_subtypes": [
+                    "Dragon"
+                ]
             }
         }
     ]
