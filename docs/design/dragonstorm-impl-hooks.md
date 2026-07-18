@@ -4,31 +4,57 @@ Companion to `analysis-Dragonstorm.md` (the ledger). Captures the research hook-
 remaining spell mechanics and the mid-build resume state so a compaction/handoff loses nothing.
 **Line numbers drift** (concurrent edits) — anchors below are by FUNCTION/PATTERN, which are stable.
 
-## Session resume state (2026-07-18) — READ FIRST on resume
-- **Progress: 12/16 Dragonstorm cards implemented, build green, byte-identity hinata/slivers/th = ALL PASS.**
-  DONE: Pyretic+Seething (Tier1 cards.json), Kolaghan+Karrthus (Tier2 cards.json), `ritual_float_color`
-  (rituals→red), Ruby Medallion (`reduces_spell_color`), Rite of Flame (gy self-scaling + triangular
-  planner credit), **kill-engine** (Scourge ping / Lathliss ETB token / Utvara attack tokens /
-  firebreathing / `is_token`; shared `OnDragonEnters`; token-first ping verified 3+3+5+5=16), **storage
-  lands** (variable PARTIAL burst + exact-off-by-one charge; template `basic_land`).
-- **REMAINING (4):** Lotus Bloom (agent RUNNING as of this note), Desperate Ritual splice, **Dragonstorm**
-  (storm counter + tutor-to-battlefield + shuffle + provider heuristic), Apex of Power. Coverage: 4 missing.
-- **CRITICAL Dragonstorm wiring:** the tutor-to-battlefield PUT must route each Dragon through the shared
-  `OnDragonEnters` (or the same `EffectHandler::EnterBattlefield` the executor uses) so put-in Dragons ping
-  Scourge / trigger Lathliss. Hook exists, wired only at hard-cast + `CreateToken` today. Provider put-order
-  + selection heuristic is fully spec'd in the ledger ("DRAGONSTORM tutor-to-battlefield SELECTION HEURISTIC"
-  + "ORDER RULE": Lathliss → Scourges → other Dragons; Karrthus>Kolaghan; the no-Lathliss / no-haste cases).
-- **Servers:** isolated play server on **:8081** using `logs/play_snapshot/mtg` (a FROZEN copy of the
-  kill-engine binary — insulated from agent rebuilds of `build/Release/mtg`). A second, collision-prone
-  server on **:8080** uses the live `build/Release/mtg` (likely user-launched). Snapshot = `logs/play_snapshot/mtg`.
-- **Flow prefs:** user reviews closely + corrects mid-flight by TYPING (pressing Stop cancels running
-  subagents — see memory `user-stop-cancels-subagents`). Relay user corrections to running agents via
-  SendMessage. Keep momentum (don't halt the build), stay light/responsive.
-- **End-of-build follow-ups:** Irencrag Feat + Reality Spasm float-color fidelity (wild→red/colored; would
-  rebaseline Hinata — do scoped, after convergence); `scripts/audit_card_fields.py --update` + commit the
-  scryfall snapshot for the new cards; **Stage 5** (nonconv/fd-diverge, multi-depth, 100-game claude-play,
-  5h viewer surface) + full smoke; wire 5h viewer choosers (Scourge ETB `target`, firebreathing count,
-  storage burst confirmed Bucket-A, Lotus/Apex color, splice count Bucket-A).
+## Session resume state (2026-07-18, updated) — READ FIRST on resume
+- **BUILD COMPLETE: all 16 cards implemented, full coverage (`missing=[]`), byte-identity clean (full smoke
+  18 passed / 0 new / EXACT digests).** Branch `phase-1-2-deck-analyzer`. Commits (in order):
+  `f50de75` Knights references · `ea2c3cb` 12 cards + inert splice scaffolding · `5529bfb` Desperate Ritual
+  splice (search-chosen k, copies-scale-before-floor) · `406966f` Dragonstorm engine (storm counter
+  `spells_cast_this_turn` + `PerformTutorToBattlefield` + shuffle; OnDragonEnters wired for puts) ·
+  `5437427` DragonstormProvider (selection + single deterministic put-order; A/B 7.20 vs 7.40 library-order) ·
+  `4483f9f` Apex of Power (impulse-exile-7 + cast-from-hand 10-color float, staged-land block `m_impulse_no_land`) ·
+  `ccb578e` Storm keyword tag + refreshed Scryfall snapshot (`scryfall_reference.json`) · `dfe3fff` executor
+  Medallion cost-reduction lockstep fix.
+- **DATA AUDIT GREEN:** `audit_card_fields` ok=True, 0 hard mismatches (Storm keyword tag added, inert like
+  Suspend/Splice); oracle-text divergences are advisory (our entries carry bracket impl notes). Snapshot committed.
+- **STAGE 5a (correctness):** nonconv=**0**. fd-diverge **13→2**. PRIMARY cause FIXED+committed (`dfe3fff`):
+  `AIEngine::EffectiveCost` (executor) was MISSING the Ruby Medallion `reduces_spell_color` reduction that
+  `TurnSolver::EffectiveCost` (planner) had → executor over-paid Medallion-funded combos → unpayable → win
+  never realized. Fix mirrors the block (copies-scale-before single floor). **RESIDUAL 2** (seed 1021/1041) =
+  firebreathing payment-path lockstep: rollout `SimulateCombat`/`BuildPool` leftover-mana pool exceeds executor
+  `Firebreathe`/`BuildAvailableMana` by 1–2 (storage-burst + ritual-float tap different sources) → projects a
+  combat kill 1 turn early. **GUARDED SUBAGENT FIXING** (firebreathing-gated shared leftover-pool; byte-identity
+  0-new REQUIRED else report). This is the ledger-pre-flagged "kill-engine win over-projection."
+- **VERIFIED (user-flagged):** spliced Desperate Ritual cost = **{1}{R}{R}** with one Ruby Medallion, **{R}{R}**
+  with two — correct in BOTH EffectiveCost fns after `dfe3fff` (copies-scale then single floor).
+- **PERF FINDING:** full baseline profile gen ran **4.5 h / ~67 core-hours** (STOPPED). Not a hang — per-game
+  ~1.45 s at d5 (combo-high), and the analyzer's land×threshold grid = hundreds-of-thousands of games. This is
+  the "engine too slow → mulligan infeasible" showstopper → a **Stage-5f pruning heuristic** (behind
+  `MTG_UNPRUNED`) is the gate before the deferred mulligan stage. Likely branch drivers: Lotus/Apex color-float
+  variants + splice-count + storage-burst. NUANCE: Apex's black float CAN legitimately hard-cast a drawn
+  Kolaghan, so naive color-pruning isn't safe — propose to user, don't auto-adopt.
+- **CARD-SCORES-ONLY PLAN (user proposal, NEXT after fd-diverge converges):** card_scores are the CHEAP part
+  (`AnalyzerEngine::ComputeCardScores`, `AnalyzerEngine.cpp:656`, ~2000 games) and used ONLY in the mulligan
+  path (`ComputeHandScore`→KeepHand gate; `HeuristicBottomPick`→BottomCards, a tertiary tiebreak among
+  search-win-equal cards — NOT the in-turn play search). `GridSearchLands` (`AnalyzerEngine.cpp:680`) is the
+  EXPENSIVE grid and its output (tuned keep predicate) is superseded by the deferred exhaustive mulligan
+  profile. **PLAN:** add an `MTG_SKIP_GRID` env gate around the `GridSearchLands` call (return `working_profile`
+  + `card_scores` + `recommended_thr` + default land params), generate the card-scores-only profile on the
+  CONVERGED engine (~minutes), commit. Open question for user: make card-scores-only the Stage-4 DEFAULT (skill
+  update) vs Dragonstorm-only. (User "thinks card scores may be used in d0" — grep found only mulligan
+  consumers; unresolved, but moot since we generate them regardless.)
+- **REMAINING Stage 5 (after fd-diverge=0 + card_scores):** multi-depth sanity (5b) + `verify_deck.py Dragonstorm`
+  gate + reduced claude-play legality backstop (5d, sized down from 100 — disclose) + viewer-decision audit
+  (`audit_viewer_decisions.py`, 5h).
+- **USER-REVIEW ITEMS (for the wake-up report; do NOT silently resolve):** (a) VIEWER-WIRING Bucket-B choosers
+  recorded-not-wired — Scourge ETB `target`, Lotus/Apex color, Dragonstorm tutor multi-pick, splice count,
+  firebreathing count, storage burst — a substantial build; present as a decision list. (b) Irencrag Feat +
+  Reality Spasm float-color fidelity (wild→colored; may rebaseline Hinata — verify impact FIRST, scope, flag).
+  (c) Stage-5f pruning proposal (above). (d) Whether to keep the 2 residual fd-diverges if the firebreathing
+  fix can't be made byte-identical.
+- **FLOW PREFS:** user reviews closely + corrects by TYPING (Stop cancels subagents — memory
+  `user-stop-cancels-subagents`); relay corrections to running agents via SendMessage; autonomous overnight;
+  mulligan generation is a SEPARATE deferred user-initiated stage (NOT part of analyze). Nothing at risk — all
+  work committed. Running subagent: firebreathing payment-lockstep fix (`a630aff7163b2a0e3`).
 
 ## Desperate Ritual — SPLICE (search-chosen count k) hook map
 - **Plan variant:** add `int splice_count` to the `Action` struct (`src/ai/TurnSolver.h`, sibling to
