@@ -1403,7 +1403,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         ek.commit      = cfg.commit;
         ek.play_digest = play_digest;
         MulliganProfile out = profile;
-        out.exhaustive_keep = std::move(ek);
+        out.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek));
         if (SaveDeckProfile(cfg.out_profile, out))
         { os << "\nexhaustive keep policy written to " << cfg.out_profile << "\n"; }
         else
@@ -1771,7 +1771,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     if (!out_profile.empty())
     {
         MulliganProfile out = profile;
-        out.exhaustive_keep = ek;
+        out.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(ek);
         if (SaveDeckProfile(out_profile, out)) { os << "merged keep policy -> " << out_profile << "\n"; }
         else { os << "WARNING: failed to write " << out_profile << "\n"; }
     }

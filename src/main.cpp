@@ -1329,8 +1329,10 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             int di = static_cast<int>(cursor);
             // The exhaustive table's joint recommendation (all K at once) when this deck is tabled -- the
             // GUI pre-selects it. Empty for a table-less deck (GUI falls back to the per-step deep hint).
-            std::vector<int> ai_set =
-                ExhaustiveBottomSet(hand, profile.exhaustive_keep, total, state.on_the_play);
+            static const ExhaustiveKeepPolicy kNoExhaustive;   // fallback when the deck has no sidecar
+            std::vector<int> ai_set = ExhaustiveBottomSet(
+                hand, profile.exhaustive_keep ? *profile.exhaustive_keep : kNoExhaustive,
+                total, state.on_the_play);
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];

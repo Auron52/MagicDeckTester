@@ -377,13 +377,13 @@ bool AIEngine::KeepHand(const std::vector<Card>& hand, int mulligan_count, bool 
     // composition, it is the EXACT optimal keep decision for the objective and overrides everything
     // below. A composition not in the table (or an unbucketed card) leaves present=false and falls
     // through to the keep_model / static path, so decks without an exhaustive table are unaffected.
-    if (!m_profile.exhaustive_keep.empty())
+    if (m_profile.HasExhaustiveKeep())
     {
         std::vector<std::string> names;
         names.reserve(hand.size());
         for (const Card& c : hand) { names.push_back(c.m_name.str()); }
         bool present = false;
-        bool keep = m_profile.exhaustive_keep.Decide(names, mulligan_count, on_the_play, present);
+        bool keep = m_profile.exhaustive_keep->Decide(names, mulligan_count, on_the_play, present);
         if (present) { return keep; }
     }
 
@@ -936,27 +936,27 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     { const char* e = std::getenv("MTG_EXHAUSTIVE_BOTTOM");
       if (!e || !*e) { return -1; } return std::string(e) == "0" ? 0 : 1; }();
     const bool exhaustive_bottom = (bottom_override >= 0) ? (bottom_override == 1)
-                                                          : m_profile.exhaustive_keep.bottoming_enabled;
+                                        : (m_profile.exhaustive_keep && m_profile.exhaustive_keep->bottoming_enabled);
     // Defer to a forced-mulligan replay (must bottom the EXACT recorded cards) and to an external
     // bottom chooser (claude-play / human-play drives the pick) -- the exhaustive table is an
     // AUTONOMOUS bottomer, so it stands down whenever a replay or a human is in control, exactly as the
     // lookahead/heuristic path below guards itself with !m_forced_mull_active.
-    if (exhaustive_bottom && !m_profile.exhaustive_keep.empty()
+    if (exhaustive_bottom && m_profile.HasExhaustiveKeep()
         && !m_forced_mull_active && !m_external_bottom_chooser)
     {
         std::vector<std::string> names;
         names.reserve(ap.hand.size());
         for (const Card& c : ap.hand) { names.push_back(c.m_name.str()); }
         std::vector<int> target;
-        if (m_profile.exhaustive_keep.DecideBottom(names, count, state.on_the_play, target))
+        if (m_profile.exhaustive_keep->DecideBottom(names, count, state.on_the_play, target))
         {
             // Bottom `count` cards, each time removing one physical card from a bucket that is over
             // its target count. Members of a bucket are equivalent by construction, so any over-target
             // card is an equally-optimal removal; picking the first is deterministic.
-            const auto& n2b = m_profile.exhaustive_keep.name_to_bucket;
+            const auto& n2b = m_profile.exhaustive_keep->name_to_bucket;
             for (int i = 0; i < count && !ap.hand.empty(); ++i)
             {
-                std::vector<int> comp(m_profile.exhaustive_keep.buckets.size(), 0);
+                std::vector<int> comp(m_profile.exhaustive_keep->buckets.size(), 0);
                 for (const Card& c : ap.hand)
                 { auto it = n2b.find(c.m_name.str()); if (it != n2b.end()) { comp[it->second]++; } }
                 int pick = -1;

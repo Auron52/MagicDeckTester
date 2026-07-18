@@ -433,16 +433,16 @@ inline std::string DeckProfileToJson(const MulliganProfile& profile)
     {
         root["keep_model"] = KeepModelToJsonObj(profile.keep_model);
     }
-    if (!profile.exhaustive_keep.empty())
+    if (profile.HasExhaustiveKeep())
     {
-        root["exhaustive_keep"] = ExhaustiveKeepToJsonObj(profile.exhaustive_keep);
+        root["exhaustive_keep"] = ExhaustiveKeepToJsonObj(*profile.exhaustive_keep);
     }
     // Exhaustive-keep profiles are dominated by a huge dense bottom_keep table (one K-vector per
     // composition x mulligan-depth). Pretty-printing (one int per line) inflates them ~10x and makes the
     // load parse minutes-slow -- e.g. a max_mull=6 antilife profile is 1.86 GB pretty vs ~250 MB compact,
     // 80 s vs a few s to load. Serialize compact when that block is present; small static-only profiles
     // stay pretty-printed for human readability. Parses identically either way.
-    return profile.exhaustive_keep.empty() ? root.dump(2) : root.dump();
+    return profile.HasExhaustiveKeep() ? root.dump() : root.dump(2);
 }
 
 // Returns a default profile if the JSON is malformed or missing expected keys.
@@ -450,7 +450,58 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
 {
     using json = nlohmann::json;
 
-    json root = json::parse(json_str);
+    // STREAMING siphon of exhaustive_keep.entries[] (the bulk -- antilife is 366k entries / 242MB JSON).
+    // A full DOM parse of that array balloons to ~5GB of nlohmann value-nodes; instead a parse callback
+    // extracts each entry into the compact map AS IT COMPLETES and returns false to drop it from the DOM,
+    // so the DOM never holds more than one entry at a time. Everything else parses to DOM as before, so
+    // the resulting profile is IDENTICAL -- only the transient load peak changes. A stack of container-
+    // opener keys robustly identifies an entry (an array element of exhaustive_keep.entries) without any
+    // fragile depth arithmetic. Decks with no exhaustive_keep never match => byte-identical for them too.
+    ExhaustiveKeepPolicy ek_stream;
+    std::vector<std::string> kstack;   // key that opened each open container ("" for array elements)
+    std::string pending_key;
+    auto cb = [&](int /*depth*/, json::parse_event_t event, json& parsed) -> bool
+    {
+        switch (event)
+        {
+        case json::parse_event_t::key:
+            pending_key = parsed.get<std::string>();
+            return true;
+        case json::parse_event_t::object_start:
+        case json::parse_event_t::array_start:
+            kstack.push_back(pending_key);
+            pending_key.clear();
+            return true;
+        case json::parse_event_t::object_end:
+        {
+            const size_t n = kstack.size();
+            const bool is_entry = (n >= 3 && kstack[n - 2] == "entries" && kstack[n - 3] == "exhaustive_keep");
+            if (is_entry)
+            {
+                std::vector<int> comp = parsed["comp"].get<std::vector<int>>();
+                std::vector<char> flags;
+                for (const json& v : parsed["keep"]) { flags.push_back(static_cast<char>(v.get<int>())); }
+                ek_stream.keep[comp] = std::move(flags);
+                if (parsed.contains("bottom_keep"))
+                {
+                    std::vector<std::vector<int>> bk;
+                    for (const json& sub : parsed["bottom_keep"]) { bk.push_back(sub.get<std::vector<int>>()); }
+                    ek_stream.bottom_keep[comp] = std::move(bk);
+                }
+                kstack.pop_back();
+                return false;   // drop the entry from the DOM (already captured)
+            }
+            kstack.pop_back();
+            return true;
+        }
+        case json::parse_event_t::array_end:
+            kstack.pop_back();
+            return true;
+        default:
+            return true;
+        }
+    };
+    json root = json::parse(json_str, cb);
     MulliganProfile profile;
 
     if (!root.contains("mulligan")) { return profile; }
@@ -515,7 +566,15 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
         profile.keep_model = KeepModelFromJsonObj(root["keep_model"]);
 
     if (root.contains("exhaustive_keep"))
-        profile.exhaustive_keep = ExhaustiveKeepFromJsonObj(root["exhaustive_keep"]);
+    {
+        // Buckets + scalars come from the DOM; the entries were siphoned into ek_stream during parse
+        // (root["exhaustive_keep"]["entries"] is now empty). Merge the two into the final policy.
+        ExhaustiveKeepPolicy ek = ExhaustiveKeepFromJsonObj(root["exhaustive_keep"]);
+        ek.keep        = std::move(ek_stream.keep);
+        ek.bottom_keep = std::move(ek_stream.bottom_keep);
+        ek.Index();
+        profile.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek));
+    }
 
     return profile;
 }
@@ -590,16 +649,19 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
 // decks). Parse once per path, then hand back a copy: the sidecar file is immutable for a run, so keying
 // on its path is exact. Mutex-guarded because attach can run off any thread (defensive; batch loads jobs
 // on the main thread). Empty policies are cached too (a missing/garbage sidecar isn't retried per job).
-inline const ExhaustiveKeepPolicy& CachedExhaustiveKeep(const std::filesystem::path& path)
+// Returns a SHARED handle to the cached policy (or nullptr if the path has none). The one loaded instance
+// is shared by every profile that attaches it, so a THREADS=N batch holds 1 copy, not N. Read-only after
+// load (Index() ran in the loader), so concurrent readers are safe.
+inline std::shared_ptr<const ExhaustiveKeepPolicy> CachedExhaustiveKeep(const std::filesystem::path& path)
 {
     static std::mutex mtx;
-    static std::unordered_map<std::string, ExhaustiveKeepPolicy> cache;
+    static std::unordered_map<std::string, std::shared_ptr<const ExhaustiveKeepPolicy>> cache;
     const std::string key = path.string();
     std::lock_guard<std::mutex> lock(mtx);
     auto it = cache.find(key);
     if (it == cache.end())
     {
-        MulliganProfile exh = LoadDeckProfile(path);
+        MulliganProfile exh = LoadDeckProfile(path);   // exh.exhaustive_keep is already a shared_ptr<const>
         it = cache.emplace(key, std::move(exh.exhaustive_keep)).first;
     }
     return it->second;
@@ -607,7 +669,7 @@ inline const ExhaustiveKeepPolicy& CachedExhaustiveKeep(const std::filesystem::p
 
 inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
 {
-    if (!profile.exhaustive_keep.empty()) { return; }
+    if (profile.HasExhaustiveKeep()) { return; }
 
     // Explicit per-context override -- decouples "the profile under test" from the presence-gated
     // committed sidecar so A/Bs and candidate testing don't churn `decks/` or the deck's GT:
@@ -620,8 +682,8 @@ inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesys
     {
         const std::string v = ov;
         if (v.empty() || v == "none" || v == "off" || v == "0") { return; }
-        const ExhaustiveKeepPolicy& cached = CachedExhaustiveKeep(v);
-        if (!cached.empty()) { profile.exhaustive_keep = cached; }
+        auto cached = CachedExhaustiveKeep(v);
+        if (cached && !cached->empty()) { profile.exhaustive_keep = std::move(cached); }
         return;
     }
 
@@ -636,8 +698,8 @@ inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesys
         const std::filesystem::path cand = dir / (stem + ext);
         if (std::filesystem::exists(cand))
         {
-            const ExhaustiveKeepPolicy& cached = CachedExhaustiveKeep(cand);
-            if (!cached.empty()) { profile.exhaustive_keep = cached; }
+            auto cached = CachedExhaustiveKeep(cand);
+            if (cached && !cached->empty()) { profile.exhaustive_keep = std::move(cached); }
             return;
         }
     }

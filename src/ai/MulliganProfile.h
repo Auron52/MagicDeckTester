@@ -3,6 +3,7 @@
 #include "KeepModel.h"
 #include "ExhaustiveKeepPolicy.h"
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -112,7 +113,12 @@ struct MulliganProfile
 
     // Exhaustive bucketed keep policy (optional). When present and a hand resolves to a tabled
     // bucket composition, it OVERRIDES keep_model/static for the keep decision (see AIEngine::KeepHand).
-    ExhaustiveKeepPolicy exhaustive_keep;
+    // SHARED (shared_ptr<const>): the table is large (antilife ~1GB / 366k entries) and read-only after
+    // build, so every profile/AIEngine copy shares ONE instance instead of deep-copying it. This is what
+    // keeps a THREADS=N goldfish batch from holding N copies (the per-thread AIEngine copies the profile);
+    // sharing turns N*1GB into 1*1GB. Null (or ->empty()) => no policy; use HasExhaustiveKeep() to test.
+    std::shared_ptr<const ExhaustiveKeepPolicy> exhaustive_keep;
+    bool HasExhaustiveKeep() const { return exhaustive_keep && !exhaustive_keep->empty(); }
 
     // Durable human-authored keep constraints, loaded from a SEPARATE sibling file
     // (<deck>.constraints.json) -- NOT part of the profile JSON, so regenerating the profile never

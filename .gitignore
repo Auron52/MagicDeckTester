@@ -94,3 +94,4 @@ __pycache__/
 # "keepmodel.exhaustive" infix so analyzer profiles stay tracked.
 # decks/**/ reaches into per-deck folders (decks/<name>/<name>.keepmodel.exhaustive.*.json).
 decks/**/*.keepmodel.exhaustive*.json
+scripts/*.so

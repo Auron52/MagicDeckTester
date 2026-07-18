@@ -78,6 +78,23 @@ public:
     }
     static std::atomic<unsigned long long>& Lookups() { static std::atomic<unsigned long long> v{0}; return v; }
     static std::atomic<unsigned long long>& Hits()    { static std::atomic<unsigned long long> v{0}; return v; }
+    // Peak entries in any single table (MTG_TT_STATS). The per-decision tables dominate RSS on
+    // decision-dense decks (antilife escalation), so this shows the memory driver directly.
+    static std::atomic<std::size_t>& PeakSize() { static std::atomic<std::size_t> v{0}; return v; }
+
+    // Result-NEUTRAL store cap (MTG_TT_CAP = max entries per table; 0/unset = unlimited = byte-identical).
+    // The table is a pure memoization of SimulateToEnd (a miss just recomputes the same value), so refusing
+    // to store past the cap only trades recompute time for bounded memory -- decisions are unchanged. Early
+    // (shallow, high-reuse) leaves are stored first and kept; only the deep long-tail is dropped. This bounds
+    // the antilife escalation's ~6GB single-decision footprint. Read once (static) so the hot path stays cheap.
+    static std::size_t Cap()
+    {
+        static const std::size_t cap = []{
+            const char* e = std::getenv("MTG_TT_CAP");
+            return e ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10)) : std::size_t{0};
+        }();
+        return cap;
+    }
 
     // Returns a pointer to the cached win turn, or nullptr on a miss.
     const int* Lookup(const Key& k) const
@@ -93,8 +110,21 @@ public:
     }
 
     // Records a win turn for a key. The same key always maps to the same value
-    // (pure function), so a redundant store is a harmless no-op.
-    void Store(const Key& k, int win_turn) { m_map.emplace(k, win_turn); }
+    // (pure function), so a redundant store is a harmless no-op. A result-neutral cap
+    // (MTG_TT_CAP) bounds memory: past the cap we simply stop storing (future lookups
+    // recompute -> identical answers, just slower). Off by default (cap==0) => the two
+    // extra reads short-circuit and the store is unchanged (byte-identical).
+    void Store(const Key& k, int win_turn)
+    {
+        static const std::size_t cap = Cap();
+        if (cap && m_map.size() >= cap) { return; }
+        m_map.emplace(k, win_turn);
+        if (StatsOn())
+        {
+            std::size_t sz = m_map.size(), prev = PeakSize().load(std::memory_order_relaxed);
+            while (sz > prev && !PeakSize().compare_exchange_weak(prev, sz, std::memory_order_relaxed)) {}
+        }
+    }
 
     std::size_t Size() const { return m_map.size(); }
 
@@ -115,8 +145,9 @@ namespace tt_detail
             if (!TranspositionTable::StatsOn()) { return; }
             const unsigned long long l = TranspositionTable::Lookups().load();
             const unsigned long long h = TranspositionTable::Hits().load();
-            std::fprintf(stderr, "[tt-stats] lookups=%llu hits=%llu (%.2f%% hit)\n",
-                         l, h, l ? (100.0 * static_cast<double>(h) / static_cast<double>(l)) : 0.0);
+            std::fprintf(stderr, "[tt-stats] lookups=%llu hits=%llu (%.2f%% hit) peak_entries=%zu cap=%zu\n",
+                         l, h, l ? (100.0 * static_cast<double>(h) / static_cast<double>(l)) : 0.0,
+                         TranspositionTable::PeakSize().load(), TranspositionTable::Cap());
         }
     };
     inline StatsReporter g_stats_reporter;

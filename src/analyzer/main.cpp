@@ -182,7 +182,8 @@ int main(int argc, char* argv[])
                 deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
             MulliganProfile profile = std::filesystem::exists(in_path) ? LoadDeckProfile(in_path)
                                                                        : MulliganProfile::DefaultProfile();
-            const auto& buckets = profile.exhaustive_keep.buckets;
+            static const ExhaustiveKeepPolicy kNoExhaustive;
+            const auto& buckets = (profile.exhaustive_keep ? *profile.exhaustive_keep : kNoExhaustive).buckets;
             const int K = static_cast<int>(buckets.size());
             std::map<std::string,int> bof;
             for (int b = 0; b < K; ++b) { for (const std::string& n : buckets[b]) { bof[n] = b; } }
@@ -352,7 +353,8 @@ int main(int argc, char* argv[])
             std::filesystem::path in_path =
                 deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
             MulliganProfile profile = LoadDeckProfile(in_path);
-            const auto& buckets = profile.exhaustive_keep.buckets;
+            static const ExhaustiveKeepPolicy kNoExhaustive;
+            const auto& buckets = (profile.exhaustive_keep ? *profile.exhaustive_keep : kNoExhaustive).buckets;
             const int K = static_cast<int>(buckets.size());
             std::map<std::string,int> bof;
             for (int b = 0; b < K; ++b) { for (const std::string& n : buckets[b]) { bof[n] = b; } }
