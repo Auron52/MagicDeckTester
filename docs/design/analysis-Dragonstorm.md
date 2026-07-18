@@ -264,6 +264,56 @@ later step; the deck still routes to **GenericProvider** (search enumerates targ
   `CastOffSuspend` increment. **fd-diverge / provider ordering (Lathliss-first) = the SEPARATE
   provider + Stage-5 steps.**
 
+### DragonstormProvider heuristic — DONE, build-green, byte-identity hinata/slivers/th ALL PASS (0 new)
+The put-order/selection HEURISTIC layer on top of the (already-committed) engine half. Faithful to the
+user's "SELECTION HEURISTIC" + "ORDER RULE" (2026-07-18). Files/functions:
+- **New base virtual `DecisionProvider::TutorToBattlefieldPutOrder(state, controller, pp, max_puts)`**
+  (DecisionProvider.h, Hook 1b) -- default `{}` (base + GenericProvider inherit it) so every
+  non-Dragonstorm deck stays byte-identical. Returns an EXACT ordered put multiset (repeats =
+  multiplicity, length <= max_puts) -- NOT a truncation of a candidate list.
+- **`PerformTutorToBattlefield`** (SpellEffects.h) now, when the caller's `preferred` is empty,
+  populates it from `ResolveProvider(state).TutorToBattlefieldPutOrder(...)`. The put-list construction
+  was split into (1) honour the provider's EXACT ordered multiset (each entry = one put, capped by
+  library + max_puts) then (2) fill remaining slots from `TutorCandidates` (library order, expand each
+  name to its still-available copies). With an empty put-list (every non-Dragonstorm deck + Dragonstorm
+  under MTG_UNPRUNED) pass (2) reproduces the pre-provider flat loop EXACTLY -> byte-identical. LOCKSTEP
+  by construction (single shared helper feeds executor + rollout). `<unordered_map>` added.
+- **`DragonstormProvider : GenericProvider`** (DecisionProviders.h/.cpp) overrides ONLY the new hook.
+  Classifies library Dragons by PARAMS (Lathliss=`etb_other_subtype_creates_tokens`,
+  Scourge=`dragon_ping_on_enter`, Utvara=`attack_per_matching_creates_tokens`,
+  haste-Dragon=`grants_haste`; Karrthus-vs-Kolaghan by NAME -- the user's explicit preference). SELECTION
+  is a max_puts-aware SUBSET (done FIRST): Case A (Ideal, Lathliss+haste) reserve preferred haste-Dragon
+  -> Lathliss -> a Scourge -> dump extras (more Scourges, Utvara, other haste); Case B (missing Lathliss)
+  reserve haste -> Scourges -> Utvara(s); Case C (no haste) Lathliss -> Scourges -> Utvara. The
+  haste-Dragon is RESERVED FIRST in A/B so it is guaranteed in the set even at small N. **DISCLOSED
+  INTERPRETATION of "haste-Dragon MUST be in the set even when N is small":** reserving it above
+  Lathliss/Scourge at the small-N edge -- validated as the dominant line (N=1 the hasted Dragon attacks
+  now; N=2 haste+Lathliss makes a hasted token). At the normal storm-3+ kill size all of a case's picks
+  fit, so the reservation only bites at N<3. ORDER (of the chosen subset): Lathliss, then all Scourges,
+  then Utvara, Karrthus, Kolaghan (fixed; the order-independent Dragons collapse losslessly -> search
+  never branches over orderings). MTG_UNPRUNED / MTG_UNPRUNE=tutor -> returns `{}` (heuristic off) ->
+  full library-order enumeration.
+- **Routing** (`SelectDecisionProvider`): a deck containing a `tutor_to_battlefield` card routes to the
+  DragonstormProvider (the archetype signature); returned FIRST (no other deck sets that param, so all
+  other decks are byte-identical).
+- **Byte-identity:** `cmake --build` clean; `regression.sh --smoke --deck={hinata,slivers,th}` = 3/3
+  ALL PASS, 0 new each.
+- **A/B (isolates the heuristic; bare `mtg`, 60g d5/b20 seed 1001, max_turns=8):** NEW (heuristic ON)
+  avg **7.2000**, 38/60 won; OLD (`MTG_UNPRUNE=tutor` -> committed library-order) avg **7.4000**, 35/60
+  won. Heuristic is BETTER (avg -0.20, +3 wins), never worse; 0 crash/assert. The MTG_UNPRUNE=tutor
+  (library-order) arm is worse -> the single deterministic order leaves nothing on the table (5e concern,
+  quick-check level; full 5e is a later step). NOTE: the ledger's 58/60 baseline was via `mtg-analyze`
+  (mulligan profile + larger horizon); a bare `mtg` no-profile max_turns=8 run wins fewer in absolute
+  terms, so the A/B (identical config, only the provider differs) is the valid isolation.
+- **TRACED put-order (real storm resolutions, MTG_TRACE_DRAGONSTORM, since-removed env trace):** all 18
+  real resolutions followed the rule. Representative (matches the KILL PATTERN):
+  `T4 storm-put=3 -> Lathliss, Dragon Queen | Scourge of Valkas | Karrthus, Tyrant of Jund`;
+  full dump `T4 storm-put=5 -> Lathliss | Scourge | Scourge | Scourge | Karrthus`;
+  Case B (no Lathliss) `T4 storm-put=3 -> Scourge | Scourge | Karrthus`;
+  Karrthus-gone fallback `T3 storm-put=3 -> Lathliss | Scourge | Dragonlord Kolaghan`;
+  small-N reservation `T5 storm-put=2 -> Lathliss | Karrthus`. Lathliss ALWAYS first when present,
+  Scourges next, haste-Dragon (Karrthus preferred) ALWAYS in the set incl. N=2.
+
 ### Lotus Bloom model — DONE, build-green, byte-identity th+hinata+slivers ALL PASS (0 new)
 Two new mechanics, both gated on new params so every other deck is byte-identical.
 - **SUSPEND 3—{0}** (`suspend_time_counters:3`): a `{0}` main-phase action `Action::Kind::Suspend` moves

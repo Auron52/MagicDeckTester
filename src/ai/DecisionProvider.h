@@ -39,6 +39,23 @@ public:
     virtual std::vector<std::string>
     TutorCandidates(const GameState& s, int controller, const CardParams& pp) const = 0;
 
+    // Hook 1b -- tutor-TO-BATTLEFIELD put ORDER + SELECTION (Dragonstorm). Returns the ordered
+    // list of card NAMES to put onto the battlefield for a `tutor_to_battlefield` resolution that
+    // puts up to `max_puts` (= the storm total, already capped at library Dragons by the caller).
+    // Names may REPEAT to honour multiplicity (two "Scourge of Valkas" entries == put 2 Scourges);
+    // the returned length is <= max_puts. Unlike Hook 1 (which the engine expands to every library
+    // copy of each listed name in library order), this is an EXACT max_puts-aware SUBSET selection
+    // PLUS a single deterministic put-order -- so when N is small the provider can reserve a slot
+    // for a same-turn-relevant Dragon (the haste-Dragon) instead of letting a run of Scourges crowd
+    // it out. The engine keeps the PUT mechanism (find/remove/enter + OnDragonEnters cascade +
+    // reshuffle); only the which-and-in-what-order decision is provider-owned. Default {} (empty) ->
+    // the engine falls back to Hook 1's library-order enumeration exactly as before, so every
+    // non-Dragonstorm deck (and Dragonstorm under MTG_UNPRUNED) stays byte-identical. Only
+    // DragonstormProvider overrides it. See PerformTutorToBattlefield + analyze-Dragonstorm.md.
+    virtual std::vector<std::string>
+    TutorToBattlefieldPutOrder(const GameState& /*s*/, int /*controller*/,
+                               const CardParams& /*pp*/, int /*max_puts*/) const { return {}; }
+
     // Hook 2 -- fetch priority: ordered land-name candidates for a fetchland.
     virtual std::vector<std::string>
     FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const = 0;

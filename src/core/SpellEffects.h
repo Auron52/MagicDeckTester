@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <unordered_map>
 #include <unordered_set>
 
 // A/B opt-out (default ON): retain leftover / over-produced mana (depletion + filter
@@ -574,27 +575,45 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         return false;
     };
 
-    // Ordered candidate NAME list: searched `preferred` first, then the provider's TutorCandidates
-    // (GenericProvider = every matching library name in order). A name may repeat across the two;
-    // `handled` dedups so each name's copies are counted once.
-    std::vector<std::string> order = preferred;
+    // The put-list: the SEARCHED `preferred` if the caller supplied one, else the deck provider's
+    // TutorToBattlefieldPutOrder heuristic (DragonstormProvider = Lathliss-first/Scourge-second
+    // SELECTION + order; every non-Dragonstorm deck -- and Dragonstorm under MTG_UNPRUNED -- returns
+    // {} -> byte-identical). This list is an EXACT ordered multiset (repeats == multiplicity).
+    std::vector<std::string> put_pref = preferred;
+    if (put_pref.empty())
+    {
+        put_pref = ResolveProvider(state).TutorToBattlefieldPutOrder(state, controller, pp, max_puts);
+    }
+
+    // Remaining library copies per matching name (decremented as we commit puts).
+    std::unordered_map<std::string, int> remaining;
+    for (const Card& c : ap.library) { if (matches_types(c)) { ++remaining[c.m_name]; } }
+
+    std::vector<std::string> put_names;
+    // 1) Honour the provider's EXACT ordered put-list: each entry is one put (multiplicity honoured),
+    //    capped by library availability + max_puts. Empty put_pref -> this pass is a no-op.
+    for (const std::string& nm : put_pref)
+    {
+        if (static_cast<int>(put_names.size()) >= max_puts) { break; }
+        auto it = remaining.find(nm);
+        if (it != remaining.end() && it->second > 0) { put_names.push_back(nm); --it->second; }
+    }
+    // 2) Fill any remaining slots from the provider's TutorCandidates (library order), expanding each
+    //    name to its STILL-AVAILABLE copies. With an empty put_pref (every non-Dragonstorm deck +
+    //    Dragonstorm unpruned) this reproduces the pre-provider flat loop exactly -> byte-identical.
     {
         std::vector<std::string> prov =
             ResolveProvider(state).TutorCandidates(state, controller, pp);
-        order.insert(order.end(), prov.begin(), prov.end());
-    }
-
-    // Flat ordered sequence of names to put, respecting library multiplicity + max_puts.
-    std::vector<std::string>        put_names;
-    std::unordered_set<std::string> handled;
-    for (const std::string& nm : order)
-    {
-        if (static_cast<int>(put_names.size()) >= max_puts) { break; }
-        if (!handled.insert(nm).second) { continue; }
-        int copies = 0;
-        for (const Card& c : ap.library) { if (c.m_name == nm && matches_types(c)) { ++copies; } }
-        for (int j = 0; j < copies && static_cast<int>(put_names.size()) < max_puts; ++j)
-        { put_names.push_back(nm); }
+        std::unordered_set<std::string> handled;
+        for (const std::string& nm : prov)
+        {
+            if (static_cast<int>(put_names.size()) >= max_puts) { break; }
+            if (!handled.insert(nm).second) { continue; }
+            auto it = remaining.find(nm);
+            if (it == remaining.end()) { continue; }
+            while (it->second > 0 && static_cast<int>(put_names.size()) < max_puts)
+            { put_names.push_back(nm); --it->second; }
+        }
     }
     if (put_names.empty()) { return; }
 

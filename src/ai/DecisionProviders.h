@@ -216,6 +216,19 @@ public:
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
 };
 
+// Dragonstorm (mono-red ritual-storm combo): a {8}{R} Storm sorcery puts min(storm+1, Dragons
+// left) Dragons onto the battlefield, each firing its ETB (Scourge ping / Lathliss token) and, with
+// a haste-Dragon out, swinging the same turn. The one override is the tutor-to-battlefield put ORDER
+// + SELECTION heuristic (Lathliss-first / Scourge-second, haste-Dragon reserved for the alpha
+// strike); the engine keeps the put + reshuffle mechanism and MTG_UNPRUNED(tutor) reverts to the
+// full library-order enumeration. Inherits Generic for everything else.
+class DragonstormProvider : public GenericProvider
+{
+public:
+    std::vector<std::string>
+    TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;
+};
+
 // Process-lifetime default provider (stateless, shared across threads). Used as the
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();

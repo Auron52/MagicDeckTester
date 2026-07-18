@@ -1730,6 +1730,131 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
     return {};   // lone, non-lethal -> HOLD the combo piece
 }
 
+// ---- DragonstormProvider ----------------------------------------------------
+
+// Tutor-to-battlefield SELECTION + put-ORDER for Dragonstorm (user-shaped 2026-07-18; see
+// docs/design/analysis-Dragonstorm.md "DRAGONSTORM tutor-to-battlefield SELECTION HEURISTIC" +
+// "ORDER RULE" + the KILL PATTERN section). Given N = max_puts (storm total, already capped at the
+// number of library Dragons by PerformTutorToBattlefield), pick WHICH Dragons to put and emit the
+// ONE deterministic put-order.
+//
+// The Dragons and their engine roles (classified by params, so this is robust to renames except the
+// Karrthus-vs-Kolaghan preference, which is a NAME rule the user stated explicitly):
+//   * Lathliss, Dragon Queen  -- etb_other_subtype_creates_tokens : token engine (5/5 per later Dragon)
+//   * Scourge of Valkas   (x3) -- dragon_ping_on_enter            : the pinger (X = Dragons you control)
+//   * Utvara Hellkite     (x2) -- attack_per_matching_creates_tokens : combat-token amplifier
+//   * Karrthus / Kolaghan (x1) -- grants_haste                     : the haste-Dragon (same-turn alpha
+//     strike). Karrthus PREFERRED over Kolaghan (user).
+//
+// SELECTION (max_puts-aware SUBSET, done FIRST -- NOT a truncation of the order list) by three cases:
+//   A. Ideal   (Lathliss present AND a haste-Dragon present): reserve the preferred haste-Dragon,
+//      then Lathliss + a Scourge, then dump the extras (more Scourges, Utvara, other haste-Dragon).
+//   B. Missing Lathliss (haste-Dragon present, no Lathliss): reserve the preferred haste-Dragon,
+//      then Scourges, then Utvara(s).
+//   C. No haste-Dragon (toughest -- ping is the wincon): Lathliss if present, then as many Scourges
+//      as possible, then Utvara(s). No alpha strike this turn.
+// The haste-Dragon is RESERVED FIRST in A/B so it is guaranteed in the set even when N is small (the
+// user's hard "haste-Dragon MUST be in the chosen N-set" rule) -- a same-turn alpha strike is the
+// dominant line at small N (at N=1 the hasted Dragon attacks now; at N=2 haste + Lathliss makes a
+// hasted token). At the normal storm-3+ kill size every case's picks all fit, so the reservation
+// only matters at the small-N edge; this is DISCLOSED as the interpretation of the "when N is small"
+// clause. More bodies is never worse in a goldfish, so any leftover slots are filled greedily.
+//
+// ORDER (of the chosen subset, one deterministic put-order): Lathliss first (so its token fires off
+// every LATER Dragon), then ALL Scourges (each pings every later entry), then every other Dragon in a
+// fixed order (Utvara, then Karrthus before Kolaghan). Only Lathliss+Scourge are order-relevant; the
+// rest are order-INDEPENDENT (identical outcome), so collapsing their permutations to one
+// representative is LOSSLESS -- the search need not branch over orderings.
+//
+// MTG_UNPRUNED / MTG_UNPRUNE=tutor returns {} -> the heuristic is OFF and PerformTutorToBattlefield
+// falls back to the full library-order enumeration (the committed engine behaviour), so the Stage-5
+// audit can open the space.
+std::vector<std::string>
+DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controller,
+                                                const CardParams& pp, int max_puts) const
+{
+    if (max_puts <= 0) { return {}; }
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { return {}; }   // search-primary: heuristic off
+
+    // --- Inventory: classify library Dragons (matching pp.tutor_types) by role + count copies. ---
+    std::string L, S, U, K, G;                 // the actual card names per role (as found)
+    int nL = 0, nS = 0, nU = 0, nK = 0, nG = 0; // library copy counts per role
+    const Player& ap = s.players[controller];
+    for (const Card& c : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        const Card& card = d->card;
+        bool type_ok = pp.tutor_types.empty();
+        for (const std::string& t : pp.tutor_types)
+        { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+        if (!type_ok) { continue; }
+
+        const CardParams& cp = d->params;
+        const std::string nm = c.m_name;
+        if      (cp.etb_other_subtype_creates_tokens)       { L = nm; ++nL; }   // Lathliss (token engine)
+        else if (cp.dragon_ping_on_enter)                   { S = nm; ++nS; }   // Scourge (pinger)
+        else if (cp.attack_per_matching_creates_tokens > 0) { U = nm; ++nU; }   // Utvara (attack tokens)
+        else if (cp.grants_haste)                                                // haste-Dragon
+        {
+            if (nm.find("Karrthus") != std::string::npos) { K = nm; ++nK; }     // preferred
+            else                                          { G = nm; ++nG; }     // Kolaghan / other
+        }
+        // Any other Dragon type is caught by the defensive fill below (more bodies never worse).
+    }
+
+    const bool has_haste    = (nK > 0 || nG > 0);
+    const bool has_lathliss = (nL > 0);
+
+    // --- SELECTION: choose per-role counts (sX <= inventory), total <= N, in priority order. ---
+    int sL = 0, sS = 0, sU = 0, sK = 0, sG = 0;
+    auto pick = [&](int& sel, int inv, int want)
+    {
+        int room = max_puts - (sL + sS + sU + sK + sG);
+        int add  = want;
+        if (add > inv - sel) { add = inv - sel; }
+        if (add > room)      { add = room; }
+        if (add > 0)         { sel += add; }
+    };
+
+    if (has_haste && has_lathliss)          // Case A -- Ideal
+    {
+        if (nK > 0) { pick(sK, nK, 1); } else { pick(sG, nG, 1); }  // reserve the preferred haste-Dragon
+        pick(sL, nL, 1);                    // Lathliss (token engine)
+        pick(sS, nS, 1);                    // a Scourge
+        pick(sS, nS, nS);                   // dump extras: more Scourges
+        pick(sU, nU, nU);                   //             Utvara(s)
+        pick(sK, nK, nK);                   //             remaining haste-Dragon(s)
+        pick(sG, nG, nG);
+    }
+    else if (has_haste)                     // Case B -- Missing Lathliss
+    {
+        if (nK > 0) { pick(sK, nK, 1); } else { pick(sG, nG, 1); }  // reserve the preferred haste-Dragon
+        pick(sS, nS, nS);                   // Scourge first
+        pick(sU, nU, nU);                   // Utvara second
+        pick(sK, nK, nK);                   // remaining haste-Dragon(s)
+        pick(sG, nG, nG);
+    }
+    else                                    // Case C -- No haste-Dragon (ping is the wincon)
+    {
+        pick(sL, nL, 1);                    // Lathliss if available
+        pick(sS, nS, nS);                   // as many Scourges as possible
+        pick(sU, nU, nU);                   // then Utvara
+    }
+    // Defensive fill: any leftover inventory up to N (more bodies is never worse in a goldfish).
+    pick(sL, nL, nL); pick(sS, nS, nS); pick(sU, nU, nU); pick(sK, nK, nK); pick(sG, nG, nG);
+
+    // --- ORDER: Lathliss, then all Scourges, then Utvara, Karrthus, Kolaghan (fixed). ---
+    std::vector<std::string> put;
+    put.reserve(sL + sS + sU + sK + sG);
+    for (int i = 0; i < sL; ++i) { put.push_back(L); }
+    for (int i = 0; i < sS; ++i) { put.push_back(S); }
+    for (int i = 0; i < sU; ++i) { put.push_back(U); }
+    for (int i = 0; i < sK; ++i) { put.push_back(K); }
+    for (int i = 0; i < sG; ++i) { put.push_back(G); }
+    return put;
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
@@ -1742,6 +1867,7 @@ namespace
     const VialProvider         g_vial;
     const HinataProvider       g_hinata;
     const BurnProvider         g_burn;
+    const DragonstormProvider  g_dragonstorm;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -1753,12 +1879,16 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 {
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
-    bool anti = false, th = false, vial = false, hinata = false, burn = false;
+    bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+
+        // Dragonstorm (Storm ritual-storm): the tutor-to-battlefield put IS the archetype signature
+        // (a {8}{R} that puts a wave of Dragons in). Owns the put-order / selection heuristic.
+        if (p.tutor_to_battlefield) { dragonstorm = true; }
 
         // Hinata, Dawn-Crowned's cost-reduction static is the deck's defining signature.
         if (p.hinata_cost_reducer) { hinata = true; }
@@ -1781,6 +1911,7 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
         if (p.upkeep_adds_charge) { vial = true; }
     }
 
+    if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
