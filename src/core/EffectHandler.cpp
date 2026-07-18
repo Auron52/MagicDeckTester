@@ -158,6 +158,34 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                     PerformTutorToBattlefield(state, entry.controller_index, def.params,
                                               state.spells_cast_this_turn);
                 }
+                // Apex of Power: "Exile the top seven cards of your library. Until end of turn, you may
+                // cast spells from among them. If this spell was cast from your hand, add ten mana of any
+                // one color." Exile impulse_exile cards as STAGED cards playable THIS turn (m_impulse_no_land
+                // so their lands are non-playable); then, IFF cast from hand (not off another Apex's exile),
+                // float impulse_float_amount of the searched colour. Staged into Player::staged_cards so the
+                // AIEngine draw-breakpoint merges them into hand and re-solves to cast them (mirrors the
+                // stages_cards DrawSpell). LOCKSTEP with TurnSolver::apply_one's impulse branch.
+                if (def.params.impulse_exile > 0)
+                {
+                    Player& imp = state.players[entry.controller_index];
+                    const int expiry = def.params.impulse_expiry_this_turn
+                                     ? state.turn_number : state.turn_number + 1;
+                    std::vector<Card> exiled = DrawTopAsImpulseStaged(
+                        state, entry.controller_index, def.params.impulse_exile, expiry);
+                    for (Card& ec : exiled)
+                    {
+                        StagedCard sc;
+                        sc.card        = std::move(ec);
+                        sc.expiry_turn = expiry;
+                        imp.staged_cards.push_back(std::move(sc));
+                    }
+                    // "add ten mana of any one color" -- cast-from-hand only (withheld for Apex-off-Apex).
+                    if (entry.cast_from_hand && def.params.impulse_float_amount > 0)
+                    {
+                        AddChosenColorFloat(state, entry.chosen_float_color,
+                                            def.params.impulse_float_amount);
+                    }
+                }
                 if (def.params.destroy_all_enchantments)
                 {
                     DestroyAllEnchantments(state);

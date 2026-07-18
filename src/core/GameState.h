@@ -117,6 +117,14 @@ struct StackEntry
     std::string         tutor_target;   // for a tutor spell: the specific library card to fetch
                                         // (searched choice). Empty -> PerformTutor uses the
                                         // heuristic's top pick.
+    std::string         chosen_float_color;        // Apex of Power (+ Lotus SacForMana on its own Action):
+                                        // the searched single colour whose N mana is floated on resolution
+                                        // (AddChosenColorFloat). Empty -> wild / no colour choice. Carried
+                                        // from Action::chosen_float_color at the cast site (CastSpellFromHand).
+    bool                cast_from_hand = true;      // Apex of Power gate: was this spell cast FROM HAND
+                                        // (vs off another Apex's staged exile)? Stamped = !hand_card.m_is_staged
+                                        // at the cast site; Apex adds its 10-of-one-colour float ONLY when
+                                        // true. True/unused for every non-impulse spell.
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
 };
 

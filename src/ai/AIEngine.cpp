@@ -201,6 +201,7 @@ static bool OrderingOpaqueAI(const std::string& name)
         || d->params.cascade_max_mv > 0
         || d->params.retrace
         || d->params.expressive_iteration
+        || d->params.impulse_exile > 0   // Apex of Power: staged exile -> search-owned breakpoint order
         || d->params.draw > 0;
 }
 
@@ -1693,7 +1694,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
                             int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
                             int crackle_targets = -1,   // -1 = legacy auto-max discount (see Action::crackle_targets)
-                            int splice_count = 0)       // Desperate Ritual splice count k (0 = plain cast)
+                            int splice_count = 0,       // Desperate Ritual splice count k (0 = plain cast)
+                            const std::string& chosen_float_color = "")  // Apex of Power: searched float colour
     {
         Player& ap = state.ActivePlayer();
         // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
@@ -1712,7 +1714,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
-                          crackle_targets, splice_count);
+                          crackle_targets, splice_count, chosen_float_color);
     };
 
     // Cast a spell from hand via its alternative cost (Invigorate / Skyshroud Cutter /
@@ -1804,7 +1806,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
-                  || d->params.stages_cards))
+                  || d->params.stages_cards || d->params.impulse_exile > 0))
         { cast_draw_engine = true; }
     };
 
@@ -1818,7 +1820,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     auto stage_draw_break = [&](const std::string& name) -> bool
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
-        return d && d->params.stages_cards;
+        // Apex of Power stages 7 this-turn exiles that compete for the same mana as the plan's
+        // remaining spells -> break here and re-solve post-exile, exactly like a stages_cards spell.
+        return d && (d->params.stages_cards || d->params.impulse_exile > 0);
     };
 
     // A spell whose resolution reveals new cards to play (Light Up the Stage staging,
@@ -1828,7 +1832,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         return d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
-                     || d->params.stages_cards || d->params.expressive_iteration);
+                     || d->params.stages_cards || d->params.expressive_iteration
+                     || d->params.impulse_exile > 0);
     };
 
     // SCRIPTED draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): cast the
@@ -1873,7 +1878,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
-            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); } resolve_now(); }
+            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::DigDraw)
@@ -1915,14 +1920,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
             {
-                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); resolve_now();
+                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); resolve_now();
                 if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(bp_depth + 1); }
             }
         }
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); resolve_now(); }
+            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); resolve_now(); }
         }
         for (const Action& a : extra.actions)
         {
@@ -2023,7 +2028,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -2055,7 +2060,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
             && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); note_draw_engine(a.card_name); resolve_now();
         }
     }
     // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
@@ -2077,7 +2082,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); note_draw_engine(a.card_name); resolve_now();
             spec_hoisted_sac.insert(ai);
         }
     }
@@ -2090,7 +2095,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); note_draw_engine(a.card_name); resolve_now();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -2120,7 +2125,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[oi];
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); note_draw_engine(a.card_name); resolve_now();
+        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); note_draw_engine(a.card_name); resolve_now();
     }
     }
     }
@@ -2130,7 +2135,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); note_draw_engine(a.card_name); resolve_now(); }
+        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); note_draw_engine(a.card_name); resolve_now(); }
     }
     for (const Action& a : plan.actions)
     {
@@ -2266,6 +2271,7 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
     for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
     {
         if (it->m_name != name) { continue; }
+        if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: castable only as a SPELL, never played
         auto d = CardDatabase::Instance().Lookup(it->m_name);
         if (!d || !d->card.IsLand()) { continue; }
         if (pick == ap.hand.end()) { pick = it; }
@@ -2387,6 +2393,7 @@ bool AIEngine::TryPlayLand(GameState& state)
     {
         for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
         {
+            if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: never played
             auto def = CardDatabase::Instance().Lookup(it->m_name);
             if (!def || !def->card.IsLand() || !def->params.no_max_hand_size) { continue; }
             return play_land_iter(it, *def);
@@ -2415,6 +2422,7 @@ bool AIEngine::TryPlayLand(GameState& state)
         bool want_multi    = (pass == 0 || pass == 2);
         for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
         {
+            if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: never played
             auto def = CardDatabase::Instance().Lookup(it->m_name);
             if (!def || !def->card.IsLand()) { continue; }
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
@@ -3087,7 +3095,8 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
 void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
                                  int alt_lifegain, const std::string& tutor_target,
                                  int chosen_x, int own_targets, int ponder_keep,
-                                 int crackle_targets, int splice_count)
+                                 int crackle_targets, int splice_count,
+                                 const std::string& chosen_float_color)
 {
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
@@ -3119,6 +3128,14 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // spells_cast_this_turn increment fires ONCE per base cast here, NOT per (k+1); each later hard-cast
     // of a leftover copy is its own increment. Unset (== 0 splices) for every non-splice spell.
     if (splice_count > 0) { entry.splice_count = splice_count; }
+    // Apex of Power: carry the searched float COLOUR + the CAST-FROM-HAND gate to resolution. The gate
+    // is read off the ACTUAL hand card (hand_card.m_is_staged): a hand Apex has m_is_staged == false ->
+    // cast_from_hand true (adds the 10-of-one-colour float); an Apex cast off another Apex's staged exile
+    // has m_is_staged == true -> cast_from_hand false (float withheld). entry.source is a fresh copy from
+    // the definition, so it does NOT carry m_is_staged -- the gate MUST read hand_card. Inert (colour
+    // empty, cast_from_hand unused) for every non-impulse spell.
+    entry.chosen_float_color = chosen_float_color;
+    entry.cast_from_hand     = !hand_card.m_is_staged;
 
     int opp_index = 1 - state.active_player_index;
     switch (def->params.targeting)

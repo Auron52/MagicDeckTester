@@ -1897,6 +1897,29 @@ inline void StageTopLibraryCard(GameState& state)
     ap.hand.push_back(std::move(c));
 }
 
+// Apex of Power impulse-exile: remove the top `n` cards of `controller`'s library and return them as
+// STAGED cards (m_is_staged) castable until `expiry` (Apex passes turn_number = THIS turn only). Each is
+// additionally flagged m_impulse_no_land so its LANDS are non-playable -- Apex says "cast SPELLS from
+// among them" (a land is played, not cast, CR 601.2). The bit is set ONLY here, so Light Up / Expressive
+// Iteration / Soulfire staged lands (which MUST stay playable) are unaffected. The caller decides the
+// destination -- the executor (EffectHandler) wraps each in a StagedCard on Player::staged_cards (the
+// AIEngine draw-breakpoint merges them into hand); the rollout (apply_one) pushes them straight into hand,
+// exactly like the stages_cards DrawSpell -- so both converge on the identical in-hand staged set (lockstep).
+inline std::vector<Card> DrawTopAsImpulseStaged(GameState& state, int controller, int n, int expiry)
+{
+    Player& ap = state.players[controller];
+    std::vector<Card> out;
+    for (int i = 0; i < n && !ap.library.empty(); ++i)
+    {
+        Card c = ap.library.DrawTop();
+        c.m_is_staged       = true;
+        c.m_staged_expiry   = expiry;
+        c.m_impulse_no_land = true;   // this staged card's LANDS may not be PLAYED (spells only)
+        out.push_back(std::move(c));
+    }
+    return out;
+}
+
 // ---- Soulfire Eruption: bounded-heuristic MULTI-TARGET model -----------------------------------
 // "Choose any number of target creatures/.../players. For each, exile the top card and deal its
 // mana value to that target; you may play the exiled cards until end of your next turn."

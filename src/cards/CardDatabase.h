@@ -548,6 +548,24 @@ struct CardParams
     // sac-for-mana source -> byte-identical for every other deck.
     int sac_for_mana_amount = 0;
 
+    // --- Apex of Power ({7}{R}{R}{R} Sorcery: impulse-exile-7 + conditional 10-of-one-colour float) ---
+    // "Exile the top seven cards of your library. Until end of turn, you may cast spells from among
+    // them." impulse_exile = the number of top cards exiled as STAGED cards (7 for Apex). > 0 gates the
+    // whole Apex mechanic (resolution in EffectHandler custom-else + TurnSolver::apply_one custom branch,
+    // lockstep). The staged cards are marked m_impulse_no_land so their LANDS are non-playable ("cast
+    // SPELLS" only). 0 = not an impulse-exile card -> byte-identical for every other deck.
+    int  impulse_exile = 0;
+    // Staged exile expires at turn_number (THIS turn only), like Expressive Iteration -- vs
+    // turn_number+1 for Light Up the Stage. true for Apex ("Until end of turn").
+    bool impulse_expiry_this_turn = false;
+    // "If this spell was cast from your hand, add ten mana of any one color." N mana of ONE search-chosen
+    // colour (Apex = 10) floated on resolution into state.floating_mana.<colour> (the reusable
+    // AddChosenColorFloat dimension Lotus Bloom shares) -- ONLY when cast FROM HAND (StackEntry.cast_from_hand
+    // == !m_is_staged; withheld for an Apex cast off another Apex's staged exile). NOT wild (a multicolour
+    // float could illegally pay off-colour pips). The colour rides on Action::chosen_float_color (one cast
+    // variant per candidate colour, opened to all five under MTG_UNPRUNED(SacColor)). 0 = no float.
+    int  impulse_float_amount = 0;
+
     // Irencrag Feat: "You can cast only one more spell this turn." After this spell resolves, the
     // controller may cast at most this many MORE spells this turn. -1 = no restriction (default).
     // Enforced in Solve::consider (reject a subset with > this many spells ordered AFTER it by

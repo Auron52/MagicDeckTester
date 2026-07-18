@@ -883,6 +883,57 @@ static bool SubsetHasIllegalSplice(const GameState& state,
     return false;
 }
 
+// Candidate single COLOURS for a "add N mana of ONE chosen colour" float (Lotus Bloom's SacForMana
+// and Apex of Power's 10-of-one-colour). The set = every colour appearing in the active player's
+// NONLAND spell costs across hand / library / graveyard / battlefield (so an off-colour combo line
+// stays reachable), or ALL FIVE under MTG_UNPRUNED(SacColor) so the full-search oracle can open every
+// colour. Never empty (defensive red fallback for a degenerate all-colourless deck). Returns W,U,B,R,G
+// order. Shared so both float sources enumerate the identical colour set. NOT hardcoded red.
+static std::vector<std::string> ChosenFloatColorCandidates(const GameState& state)
+{
+    const Player& ap = state.players[state.active_player_index];
+    const bool open_all = DecisionUnpruned(UnprunedGate::SacColor);
+    bool present[5] = { false, false, false, false, false };   // W,U,B,R,G
+    if (open_all) { present[0] = present[1] = present[2] = present[3] = present[4] = true; }
+    else
+    {
+        auto scan_zone = [&](auto begin_it, auto end_it)
+        {
+            for (auto it = begin_it; it != end_it; ++it)
+            {
+                const CardDefinition* cd = CardDatabase::Instance().LookupCached(*it);
+                if (!cd || cd->card.IsLand()) { continue; }
+                const ManaCost& mc = cd->card.m_mana_cost;
+                if (mc.white > 0) { present[0] = true; }
+                if (mc.blue  > 0) { present[1] = true; }
+                if (mc.black > 0) { present[2] = true; }
+                if (mc.red   > 0) { present[3] = true; }
+                if (mc.green > 0) { present[4] = true; }
+            }
+        };
+        scan_zone(ap.hand.begin(), ap.hand.end());
+        scan_zone(ap.library.begin(), ap.library.end());
+        scan_zone(ap.graveyard.begin(), ap.graveyard.end());
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
+            if (!cd || cd->card.IsLand()) { continue; }
+            const ManaCost& mc = cd->card.m_mana_cost;
+            if (mc.white > 0) { present[0] = true; }
+            if (mc.blue  > 0) { present[1] = true; }
+            if (mc.black > 0) { present[2] = true; }
+            if (mc.red   > 0) { present[3] = true; }
+            if (mc.green > 0) { present[4] = true; }
+        }
+    }
+    static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
+    std::vector<std::string> colors;
+    for (int c = 0; c < 5; ++c) { if (present[c]) { colors.push_back(kColorLetters[c]); } }
+    if (colors.empty()) { colors.push_back("R"); }
+    return colors;
+}
+
 // ---- CollectActions ------------------------------------------------------
 //
 // The single enumeration of action SOURCES, shared by Solve and EnumeratePlans.
@@ -1284,6 +1335,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             continue;
         }
 
+        // Apex of Power -- the "add ten mana of any one colour" COLOUR is a SEARCH decision. Emit one
+        // cast variant per candidate colour (ChosenFloatColorCandidates: the deck's spell-cost colours,
+        // or all five under MTG_UNPRUNED(SacColor)); all share this hand_index, so the group enumerator
+        // picks at most one per base copy (mutual exclusion, like the {X}/splice/Soulfire variants). The
+        // colour rides on chosen_float_color to resolution (apply_one / CastSpellFromHand). We DELIBERATELY
+        // do NOT credit the 10 as a.ritual_float here: it materialises only at Apex's resolution and funds
+        // the freshly-exiled spells via the draw-breakpoint re-solve (crediting it to the MAIN subset
+        // budget would over-project mana that isn't yet available). Inert for every non-impulse deck.
+        if (def.params.impulse_exile > 0)
+        {
+            for (const std::string& col : ChosenFloatColorCandidates(state))
+            {
+                Action a;
+                a.kind               = Action::Kind::CastFromHand;
+                a.card_name          = ap.hand[i].m_name;
+                a.hand_index         = i;
+                a.cost               = EffectiveCost(def, state);
+                a.eval               = EvalCard(def, state);
+                a.is_noncreature     = !def.card.IsCreature();
+                a.card_mv            = def.card.m_mana_cost.ManaValue();
+                a.chosen_float_color = col;
+                actions.push_back(std::move(a));
+            }
+            continue;
+        }
+
         // Count damage that actually reaches the opponent's life total. A player/multi-target burn
         // deals its face damage directly (Searing Blaze: 1, or landfall 3). A creature-only burn
         // deals damage to a permanent -- EXCEPT Searing Blood, whose "when that creature dies" rider
@@ -1500,47 +1577,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         {
             // Candidate colours: the colours in the active player's nonland spell costs across all zones
             // (order-independent set), or all five under the SacColor unpruned gate. Not hardcoded red.
-            const bool open_all = DecisionUnpruned(UnprunedGate::SacColor);
-            bool present[5] = { false, false, false, false, false };   // W,U,B,R,G
-            if (open_all) { present[0] = present[1] = present[2] = present[3] = present[4] = true; }
-            else
-            {
-                auto scan_zone = [&](auto begin_it, auto end_it)
-                {
-                    for (auto it = begin_it; it != end_it; ++it)
-                    {
-                        const CardDefinition* cd = CardDatabase::Instance().LookupCached(*it);
-                        if (!cd || cd->card.IsLand()) { continue; }
-                        const ManaCost& mc = cd->card.m_mana_cost;
-                        if (mc.white > 0) { present[0] = true; }
-                        if (mc.blue  > 0) { present[1] = true; }
-                        if (mc.black > 0) { present[2] = true; }
-                        if (mc.red   > 0) { present[3] = true; }
-                        if (mc.green > 0) { present[4] = true; }
-                    }
-                };
-                scan_zone(ap.hand.begin(), ap.hand.end());
-                scan_zone(ap.library.begin(), ap.library.end());
-                scan_zone(ap.graveyard.begin(), ap.graveyard.end());
-                for (const Permanent& p : state.battlefield)
-                {
-                    if (p.controller_index != state.active_player_index) { continue; }
-                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
-                    if (!cd || cd->card.IsLand()) { continue; }
-                    const ManaCost& mc = cd->card.m_mana_cost;
-                    if (mc.white > 0) { present[0] = true; }
-                    if (mc.blue  > 0) { present[1] = true; }
-                    if (mc.black > 0) { present[2] = true; }
-                    if (mc.red   > 0) { present[3] = true; }
-                    if (mc.green > 0) { present[4] = true; }
-                }
-            }
-            static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
-            std::vector<std::string> colors;
-            for (int c = 0; c < 5; ++c) { if (present[c]) { colors.push_back(kColorLetters[c]); } }
-            // Degenerate all-colourless deck (no coloured pip anywhere): still allow a red float so the
-            // source is usable (mono-red decks always hit red above, so this is a defensive fallback).
-            if (colors.empty()) { colors.push_back("R"); }
+            // Shared with Apex of Power's colour enumeration (ChosenFloatColorCandidates).
+            std::vector<std::string> colors = ChosenFloatColorCandidates(state);
 
             for (const Permanent& p : state.battlefield)
             {
@@ -2662,6 +2700,7 @@ static bool OrderingOpaque(const std::string& name)
         || d->params.cascade_max_mv > 0
         || d->params.retrace
         || d->params.expressive_iteration
+        || d->params.impulse_exile > 0   // Apex of Power: staged exile -> search-owned breakpoint order
         || d->params.draw > 0;
 }
 
@@ -3024,10 +3063,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
-                    int own_targets, int ponder_keep, int crackle_targets, int splice_count)
+                    int own_targets, int ponder_keep, int crackle_targets, int splice_count,
+                    const std::string& chosen_float_color)
     {
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
@@ -3078,6 +3118,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  IsCrackleCountSpell(def.params) ? crackle_targets : -1));
         }
         if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
+        // Apex of Power cast-from-hand gate (captured BEFORE the erase invalidates `it`): a hand copy
+        // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
+        // another Apex's staged exile has m_is_staged == true -> false (float withheld). Inert otherwise.
+        const bool cast_from_hand = !it->m_is_staged;
         zone.erase(it);
 
         // STORM counter (Dragonstorm): the spell is now cast (committed to the "stack"). Count it
@@ -3639,7 +3683,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0);
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{});
                 }
             }
         }
@@ -3742,6 +3786,51 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // preferred = provider (TutorCandidates) order, identical to EffectHandler (lockstep).
             PerformTutorToBattlefield(state, state.active_player_index, def.params,
                                       state.spells_cast_this_turn);
+        }
+        else if (def.params.impulse_exile > 0)
+        {
+            // Apex of Power: exile the top impulse_exile cards as STAGED cards playable THIS turn
+            // (m_impulse_no_land -> their lands are non-playable; "cast SPELLS from among them"), then --
+            // IFF cast FROM HAND (not off another Apex's exile) -- float impulse_float_amount of the
+            // searched colour into the turn-scoped reserve BEFORE the breakpoint re-solve, so the re-solve
+            // can spend it on the exiled spells. Mirrors EffectHandler (lockstep): the executor stages into
+            // Player::staged_cards + the AIEngine draw-breakpoint merges to hand; here we push straight to
+            // hand (like the stages_cards DrawSpell branch) and re-solve inline -> both realise the same
+            // castable set + float. The 10 is credited as within-turn combo mana ONLY via this real float
+            // (NOT projected in the wins_this_turn fast-path), so the rollout finds Apex kills without any
+            // over-projection (fd-diverge). Apex-off-Apex withholds the float (cast_from_hand false).
+            const int expiry = def.params.impulse_expiry_this_turn
+                             ? state.turn_number : state.turn_number + 1;
+            std::vector<Card> exiled = DrawTopAsImpulseStaged(
+                state, state.active_player_index, def.params.impulse_exile, expiry);
+            std::string staged_names;
+            for (Card& ec : exiled)
+            {
+                if (!staged_names.empty()) { staged_names += ", "; }
+                staged_names += ec.m_name.str();
+                ap.hand.push_back(std::move(ec));
+            }
+            if (g_play_event_sink && !staged_names.empty())
+            {
+                EmitPlayEvent(state.turn_number, "staged",
+                              "\xE2\x9F\x82 " + def.card.m_name.str()
+                              + " — exiled (castable this turn): " + staged_names);
+            }
+            if (cast_from_hand && def.params.impulse_float_amount > 0)
+            {
+                AddChosenColorFloat(state, chosen_float_color, def.params.impulse_float_amount);
+            }
+            // Draw breakpoint: re-solve from the post-exile state (staged spells in hand + the float
+            // available) so the freshly exiled spells are cast with the Apex mana. Mirrors the DrawSpell
+            // stages_cards branch above (lockstep with the executor's AIEngine breakpoint re-solve).
+            if (!s_human_play)
+            {
+                if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                play_breakpoint_land(my_bp_sink);
+                TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+                apply_plan_actions(extra.actions, false);
+                if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+            }
         }
         else if (def.params.destroy_all_enchantments)
         {
@@ -3870,7 +3959,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
                 }
             }
         }
@@ -3897,7 +3986,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); } }
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); } }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -3920,14 +4009,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[ai];
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); }
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); }
                 }
             }
             else
@@ -3947,7 +4036,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
                 }
             }
         }
@@ -3957,14 +4046,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
             }
         }
 
@@ -4090,7 +4179,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{});
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -4634,6 +4723,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
     {
         if (it->m_name != name) { continue; }
+        if (it->m_impulse_no_land) { continue; }                   // Apex-exiled land: castable as a SPELL only, never played
         auto d = CardDatabase::Instance().LookupCached(*it);
         if (!d || !d->card.IsLand()) { continue; }
         if (pick == ap.hand.end()) { pick = it; }                  // first match (fallback)
@@ -4643,6 +4733,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     for (auto it = pick; it != ap.hand.end(); ++it)
     {
         if (it->m_name != name) { continue; }
+        if (it->m_impulse_no_land) { continue; }                   // Apex-exiled land: never played
         auto def = CardDatabase::Instance().LookupCached(*it);
         if (!def || !def->card.IsLand()) { continue; }
 
@@ -4732,6 +4823,7 @@ static std::string SimulateLandPlay(GameState& state)
     {
         for (const Card& c : ap.hand)
         {
+            if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: never played
             auto def = CardDatabase::Instance().LookupCached(c);
             if (!def || !def->card.IsLand()) { continue; }
 
@@ -5313,7 +5405,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 case Action::Kind::ActivateVial:      v.push_back(act.card_name); break;
                 case Action::Kind::CastFromHand:
-                    (act.sacrifice_land ? a : s).push_back(act.card_name);        break;
+                    // Apex of Power: distinct float COLOURS are DISTINCT plans (each floats a different
+                    // colour that pays different exiled spells), so keep the colour in the signature so the
+                    // autonomous dedup never collapses the colour decision (core invariant -- same as
+                    // SacForMana below). Empty colour (every non-impulse cast) -> just the card name ->
+                    // byte-identical for every other deck.
+                    (act.sacrifice_land ? a : s).push_back(
+                        act.chosen_float_color.empty() ? act.card_name
+                                                       : act.card_name + "#" + act.chosen_float_color); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -5661,6 +5760,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     std::unordered_set<std::string> seen_key;
     for (const Card& c : ap.hand)
     {
+        if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: castable as a SPELL only, not enumerable as a land play
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def || !def->card.IsLand()) { continue; }
         const std::string key = s_human_play_lands ? c.m_name : land_sig(def->params);
@@ -5697,6 +5797,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             bool want_multi    = (pass == 0 || pass == 2);
             for (const Card& c : ap.hand)
             {
+                if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: never played
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (!d || !d->card.IsLand()) { continue; }
                 bool is_tapped = d->params.enters_tapped;

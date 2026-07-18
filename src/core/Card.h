@@ -87,6 +87,12 @@ struct Card
     int         m_number    = 0;    // per-copy stable ID (1–60); assigned at deck setup
     bool        m_is_staged = false; // true while the card is a staged (exiled) card in hand
     int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
+    // Apex of Power impulse-exile marker: this staged card was exiled by Apex ("you may cast SPELLS
+    // from among them"), so if it is a LAND it may NOT be PLAYED (a land is played, not cast; CR 601.2).
+    // Set ONLY in Apex's exile loop (DrawTopAsImpulseStaged) -- never on Light Up / Expressive Iteration
+    // / Soulfire staged cards, whose lands MUST stay playable. The land-play sites skip a staged card
+    // with this bit; every other card leaves it false -> byte-identical. Travels with the card (copied).
+    bool        m_impulse_no_land = false;
     ManaCost m_mana_cost;
     SubtypeSet  m_subtypes;              // creature/land subtypes (e.g. "Sliver", "Goblin", "Mountain"):
                                          // interned-id storage, iterates as std::string (see SubtypeSet)

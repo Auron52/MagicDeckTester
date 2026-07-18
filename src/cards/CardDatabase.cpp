@@ -457,6 +457,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.splice_onto_arcane        = params.value("splice_onto_arcane", false);
     p.suspend_time_counters     = params.value("suspend_time_counters", 0);
     p.sac_for_mana_amount       = params.value("sac_for_mana_amount", 0);
+    p.impulse_exile             = params.value("impulse_exile", 0);
+    p.impulse_expiry_this_turn  = params.value("impulse_expiry_this_turn", false);
+    p.impulse_float_amount      = params.value("impulse_float_amount", 0);
     p.reduces_spell_color       = params.value("reduces_spell_color", std::string());
     p.max_casts_after           = params.value("max_casts_after", -1);
     p.taps_spawn_opp_token      = params.value("taps_spawn_opp_token", false);

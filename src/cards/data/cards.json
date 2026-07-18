@@ -1783,6 +1783,20 @@
                 ],
                 "tutor_shuffle_after": true
             }
+        },
+        {
+            "name": "Apex of Power",
+            "mana_cost": "{7}{R}{R}{R}",
+            "types": [
+                "Sorcery"
+            ],
+            "oracle_text": "Exile the top seven cards of your library. Until end of turn, you may cast spells from among them. If this spell was cast from your hand, add ten mana of any one color. [IMPULSE-EXILE-7 (this turn) + conditional 10-of-one-color float. On resolution (impulse_exile:7 + impulse_expiry_this_turn:true) the top 7 cards are exiled as STAGED cards castable UNTIL END OF THIS TURN (m_staged_expiry = turn_number, the Expressive Iteration primitive; reused via DrawTopAsImpulseStaged) -- and marked m_impulse_no_land so their LANDS are NON-PLAYABLE ('cast SPELLS from among them'; a land is played, not cast). The m_impulse_no_land bit is set ONLY in Apex's exile loop, so Light Up the Stage / Expressive Iteration / Soulfire staged lands stay playable (no stager regressed). The 7 become castable this turn via the existing draw-breakpoint re-solve (Apex is treated like a stages_cards spell: OrderingOpaque + note/stage_draw_break + is_draw_engine detect impulse_exile). CONDITIONAL FLOAT (impulse_float_amount:10): iff cast FROM HAND -- StackEntry.cast_from_hand = !hand_card.m_is_staged, so an Apex cast off ANOTHER Apex's staged exile (m_is_staged true) WITHHOLDS the float -- add 10 mana of ONE search-chosen color (NOT wild; wild could illegally pay a multicolor mix) into the turn-scoped reserve via AddChosenColorFloat (the reusable colored-float dimension Lotus Bloom shares). The color is a plan VARIANT (Action::chosen_float_color): candidate colors = the deck's spell-cost colors, opened to all five under MTG_UNPRUNED(saccolor). The 10 is floated BEFORE the breakpoint re-solve so the freshly exiled spells are cast with it; it is realized ONLY by the rollout (NOT projected in the wins_this_turn fast-path -> no over-projection / fd-diverge). Lockstep across executor (EffectHandler custom-else) / rollout (apply_one custom branch) / planner (CollectActions color variants). VIEWER 5h TODO: which exiled cards to cast = Bucket A (plan menu); the 10-mana color = Bucket B (chooser).]",
+            "template": "custom",
+            "parameters": {
+                "impulse_exile": 7,
+                "impulse_expiry_this_turn": true,
+                "impulse_float_amount": 10
+            }
         }
     ]
 }

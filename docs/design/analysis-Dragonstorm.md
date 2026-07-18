@@ -209,8 +209,9 @@ Mercadian Bazaar — `storage_land` + `storage_charge_mode`; see "Storage-land m
 **Lotus Bloom** (`suspend_time_counters` + `sac_for_mana_amount`; see "Lotus Bloom model" below),
 **Desperate Ritual splice** (`splice_onto_arcane`; see "Desperate Ritual splice model" below),
 **Dragonstorm** (ENGINE half — storm counter + tutor-to-battlefield + shuffle; see "Dragonstorm
-engine model" below).
-REMAINING (1): Apex.
+engine model" below), **Apex of Power** (impulse-exile-7 + conditional 10-of-one-color float; see
+"Apex of Power model" below).
+REMAINING (0): coverage `missing = []` — ALL 16 Dragonstorm cards implemented.
 
 ### Dragonstorm engine model — DONE, build-green, byte-identity hinata/slivers/th ALL PASS (0 new)
 ENGINE half only (storm counter + tutor-to-battlefield + shuffle + eval wiring). The
@@ -419,6 +420,50 @@ like Sandstone Needle, NOT "custom").
   too but is not exercised by this mono-red deck. (c) storage handling is entirely gated on `storage_land` →
   every non-storage deck is byte-identical (th/hinata/slivers smoke: 3/3 pass, 0 new). Viewer: a `storage` counter
   badge is surfaced (GameEngine + main.cpp); no new chooser needed (burst size = plan variant, Bucket A).
+
+### Apex of Power model — DONE, build-green, byte-identity burn/hinata/slivers/th ALL PASS (0 new)
+`{7}{R}{R}{R}` Sorcery: impulse-exile-7 (this turn only) + conditional 10-of-one-color float, all gated
+on new params so every other deck is byte-identical. Faithful to the oracle + the impl-hooks map.
+- **Impulse-exile-7 (this turn):** new param `impulse_exile:7` + `impulse_expiry_this_turn:true`. On
+  resolution the top 7 are exiled as STAGED cards with `m_staged_expiry = turn_number` (the Expressive
+  Iteration primitive), via the SHARED helper `DrawTopAsImpulseStaged` (SpellEffects.h). They become
+  castable this turn through the EXISTING draw-breakpoint re-solve: Apex is added to the breakpoint
+  predicates (`OrderingOpaque`/`OrderingOpaqueAI`, `note_draw_engine`/`stage_draw_break`/`is_draw_engine`)
+  so it is handled exactly like a `stages_cards` spell. EXECUTOR (`EffectHandler` custom-else) stages into
+  `Player::staged_cards` -> the AIEngine breakpoint merges them to hand; ROLLOUT (`TurnSolver::apply_one`
+  new `impulse_exile` branch) pushes straight to hand + re-solves inline -> both converge (lockstep).
+- **Staged-LAND block (does NOT regress other stagers):** new per-instance Card bit `m_impulse_no_land`,
+  set ONLY in `DrawTopAsImpulseStaged` (Apex's loop). The land-play/enumeration sites skip a staged card
+  with this bit (`PlayLandByName` both loops, `SimulateLandPlay`, the EnumeratePlansWithLand land scan +
+  greedy tiebreak, `AIEngine::TryPlaySpecificLand`/`TryPlayLand`). NOT keyed on `m_is_staged` or expiry,
+  so Light Up the Stage / Expressive Iteration / Soulfire staged lands stay playable -- PROVEN by the burn
+  (Light Up) + hinata (EI/Soulfire) per-game A/B vs HEAD = byte-identical (0 diff, 120 games each).
+- **Conditional 10-of-one-color float, cast-from-hand only:** new param `impulse_float_amount:10`. Reuses
+  Lotus's `Action::chosen_float_color` + `AddChosenColorFloat`. The color is a SEARCH variant -- one cast
+  per candidate color (shared helper `ChosenFloatColorCandidates`, = the deck's spell-cost colors, all
+  five under `MTG_UNPRUNED(SacColor)`; the SacForMana scan was refactored onto the same helper). Cast-from-
+  hand gate: no cast-source flag existed, so `StackEntry.cast_from_hand = !hand_card.m_is_staged` (stamped
+  at `CastSpellFromHand` / captured before the `zone.erase` in `apply_one`); the 10-float is added ONLY
+  when true -> withheld for an Apex cast off ANOTHER Apex's exile (m_is_staged true). Floated BEFORE the
+  breakpoint re-solve so the exiled spells spend it; NOT credited as `a.ritual_float` and NOT projected in
+  the `wins_this_turn` fast-path (the rollout realizes the 10 + the kill -> no over-projection / fd-diverge).
+  `plan_signature` distinguishes the colors (CastFromHand bucket appends `#<color>` when non-empty) so the
+  autonomous dedup never collapses the color decision (core invariant, like SacForMana).
+- **3-path lockstep:** ENUM `CollectActions` (color variants, share hand_index -> mutual exclusion) /
+  ROLLOUT `apply_one` (impulse branch: stage + float + inline re-solve) / EXECUTOR `EffectHandler`
+  (stage into staged_cards + float) + `AIEngine` breakpoint. `chosen_float_color` threaded through
+  `apply_one` (13th param) + `cast_by_name`/`CastSpellFromHand`.
+- **cards.json:** `Apex of Power` `{7}{R}{R}{R}` Sorcery, template custom, verified oracle + bracket note,
+  params `impulse_exile:7` / `impulse_expiry_this_turn:true` / `impulse_float_amount:10`.
+- **Verify:** clean build; `regression.sh --smoke` burn/hinata/slivers/th = 4/4 ALL PASS, 0 new, EXACT
+  play-digest match; burn+hinata per-game A/B vs HEAD 5437427 = 0 diff. Coverage `missing = []`.
+  **Functional (120g d5/b20 max_turns=10, real committed play, env-trace since removed):** 73 Apex
+  resolutions, 0 crash/assert; all exile exactly 7; 70 hand-casts float 10 of a SEARCHED color (R and B
+  both chosen); 3 Apex-off-Apex casts correctly WITHHOLD the float (cast_from_hand=0), 0 illegal off-hand
+  floats; every exiled LAND (Mountain/Sandstone Needle/Unclaimed Territory/Mercadian Bazaar) correctly
+  NON-played (m_impulse_no_land), nonland spells castable. Apex fires as early as T3; the 60g d5/b20 max_turns=8
+  goldfish is 40/60 wins (bare mtg, no mulligan profile), fast combo wins T3-T5. VIEWER 5h (Bucket A which
+  exiled cards to cast / Bucket B the 10-mana color) still a later step.
 
 ### Follow-ups from the kill-engine (carry into later steps)
 - **CRITICAL for Dragonstorm (item 8):** the tutor-to-battlefield PUT must route each Dragon through the
