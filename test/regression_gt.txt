@@ -1,6 +1,6 @@
-# Regression ground truth -- commit 3c9412b  date 2026-07-18
+# Regression ground truth -- commit d5cbba9  date 2026-07-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-18): burn_s4004_gi282 & burn_s6006_gi656: d6-adoption horizon-edge (d5 wins T8, d6 commits a deeper line that misses the T8 knife-edge; no recovery at 16x budget; ~0.1% cost, wall-clock-faster trade). hinata_s7007_gi12: benign budget churn (recovers to wt=6 at 4x budget). Net overnight strongly positive: antilife/hinata many faster + loss->win, no other searched win->loss; knights/TH byte-identical.
+# accepted-with-regressions (overnight, 2026-07-18): beam3_ld2_fresh escalation adoption (antilife+hinata d5): better avg win-turn on ALL 8 heavy d5 cases; 2 searched win->loss (hinata s4004 gi135, s7007 gi247) both WIN in isolation via --game-index (beam-off AND beam-on) = pre-existing batch per-thread-AIEngine knife-edge, not a beam misplay; net +10 wins +26 faster wins
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -22,7 +22,7 @@ antilife_smoke_d3_s1001=4.6480/006e946f202f5bee
 antilife_smoke_d5_s1001=4.6333/891f3a25b588dd60
 hinata_smoke_d0_s1001=7.4900/411d5a9ac022d9bf
 hinata_smoke_d3_s1001=6.0267/3984f9586e74aa05
-hinata_smoke_d5_s1001=6.0800/5f7043ca83d3a955
+hinata_smoke_d5_s1001=6.0400/48fdc6b05c4df359
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6830/463ee80e460116ff
@@ -48,13 +48,13 @@ knights_regression_d5_s3003=4.3720/3491898367e5b8c3
 antilife_regression_d0_s2002=5.6170/a75c717e48fede1c
 antilife_regression_d3_s2002=4.6833/f0a13e6fbc37b762
 antilife_regression_d3_s3003=4.7433/4d574926d3f3b42d
-antilife_regression_d5_s2002=4.7360/a12eb4708f2bfb3c
-antilife_regression_d5_s3003=4.7920/6ae440897722e435
+antilife_regression_d5_s2002=4.7240/b6ce3bd20d37b474
+antilife_regression_d5_s3003=4.7880/aaca06af7b15ea8d
 hinata_regression_d0_s2002=7.5530/9941d35b65b88554
 hinata_regression_d3_s2002=6.2150/3a609e2138797c54
 hinata_regression_d3_s3003=6.1800/b85c3d74273ecebf
-hinata_regression_d5_s2002=6.1900/aaf8c499abb8c762
-hinata_regression_d5_s3003=6.0900/c4e80ac9c1d277c3
+hinata_regression_d5_s2002=6.1800/7178de2f1a42c61a
+hinata_regression_d5_s3003=6.0700/aa06d9aa946304f9
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6445/85f8eec58d440e26
@@ -113,10 +113,10 @@ antilife_overnight_d3_s4004=4.7030/99dd0705200861a9
 antilife_overnight_d3_s5005=4.7030/77a8ad371691a117
 antilife_overnight_d3_s6006=4.7110/6bbb5efb27b89cce
 antilife_overnight_d3_s7007=4.6170/8e2e1bf3bb582e7c
-antilife_overnight_d5_s4004=4.6990/38906b012e06cd50
-antilife_overnight_d5_s5005=4.7040/fb9f4e54c6524393
-antilife_overnight_d5_s6006=4.6980/108c16c765b1d72e
-antilife_overnight_d5_s7007=4.6050/f1e360ba31a8d130
+antilife_overnight_d5_s4004=4.6920/880f2d490e638e4a
+antilife_overnight_d5_s5005=4.6960/284cf5d7461267de
+antilife_overnight_d5_s6006=4.6970/6ce18b3d875a3b70
+antilife_overnight_d5_s7007=4.6020/b20eda5513a3d172
 hinata_overnight_d0_s4004=7.6505/1c6c380817437273
 hinata_overnight_d0_s5005=7.5940/bc76c88cac017d13
 hinata_overnight_d0_s6006=7.6165/cd16c1c6ac9b3630
@@ -125,7 +125,7 @@ hinata_overnight_d3_s4004=6.2250/3cef3d5ba21a1892
 hinata_overnight_d3_s5005=6.1300/f471538f42fa8d7a
 hinata_overnight_d3_s6006=6.1775/4412d65ea8b051f5
 hinata_overnight_d3_s7007=6.3625/2b3cbb0a8531172b
-hinata_overnight_d5_s4004=6.1367/d691445cfeb03c20
-hinata_overnight_d5_s5005=6.0933/3d82055cdb6b9531
-hinata_overnight_d5_s6006=6.1933/39e512bb8efa16e0
-hinata_overnight_d5_s7007=6.2667/a61ae278ec05f142
+hinata_overnight_d5_s4004=6.1200/624aa6683207e879
+hinata_overnight_d5_s5005=6.0833/88887256e9c94400
+hinata_overnight_d5_s6006=6.1600/5393fcd99f0cb4c8
+hinata_overnight_d5_s7007=6.2433/e41009ff48f1c9b9

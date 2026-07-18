@@ -1435,13 +1435,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     TranspositionTable* fd_tt =
                         (m_leaf_cache_enabled && !m_in_rollout && m_shared_tt == nullptr)
                             ? &m_leaf_cache : m_shared_tt;
+                    // The value_play play-levers (budget renewal + beam) were tuned for the block's OWN search
+                    // (its target_depth). They apply only when this search IS that one -- i.e. the resolved depth
+                    // equals target_depth. In real play the block LOCKS the depth to target_depth so this always
+                    // holds; only a harness case that pins a different depth (d3/d0 sanity, via
+                    // --ignore-play-profile) runs the block's model at an off-policy depth, and there the levers
+                    // must NOT fire (they'd over-prune a shallow search / change an off-production sanity result).
+                    const bool vp_here = m_profile.value_play.drives()
+                                      && m_lookahead_depth == m_profile.value_play.target_depth;
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,
                         m_profile.value_no_fallback, m_profile.value_fallback_take_at,
-                        // Per-deck escalation budget renewal; only an ENABLED value_play (adopted policy)
-                        // overrides the env static (-2.0 sentinel => use env => byte-identical otherwise).
-                        m_profile.value_play.drives() ? m_profile.value_play.escalation_fresh_frac : -2.0);
+                        // Per-deck escalation budget renewal; only the block's own on-policy search overrides the
+                        // env static (-2.0 sentinel => use env => byte-identical otherwise).
+                        vp_here ? m_profile.value_play.escalation_fresh_frac : -2.0,
+                        // Per-deck escalation beam; only the block's on-policy search drives it (-1 => use env =>
+                        // byte-identical). beam_leafdepth protects the top plies (the committed play).
+                        vp_here ? m_profile.value_play.beam_width : -1,
+                        vp_here ? m_profile.value_play.beam_leafdepth : 2);
 
                     // Oracle: track the EARLIEST win the search actually FOUND this game --
                     // i.e. a win VERIFIED inside the searched horizon (win_turn within

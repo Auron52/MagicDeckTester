@@ -5934,6 +5934,48 @@ struct ForceHeuristicLeafGuard
 // current decision's search (deterministic). g_fs_leaf_evals is a running counter; per-pass deltas are the
 // per-depth leaf counts, snapshotted by FullSearchLine into g_probe_leaves while g_probe_recording is set.
 inline thread_local long long g_fs_leaf_evals   = 0;
+// ESCALATION BEAM (value-guided frontier pruning): when > 0, FSLineWin / FSLineTail expand only the top
+// `g_esc_beam_width` MoveOrderPlans-ranked plans per node. The escalation re-search then visits only the
+// probe's top value-ranked lines (a W^depth frontier) and pays for exactly that many heuristic rollouts --
+// the escalation's dominant (94%) cost -- instead of the full B&B frontier. The value ordering IS the probe's
+// "first pass" ranking, so this reuses that work; only the incremental rollouts are new. 0 = unlimited =
+// byte-identical (the probe always runs with 0). Set only around the heuristic escalation pass. See the
+// escalation-fallback / verify-the-line work.
+inline thread_local int g_esc_beam_width = 0;
+// The beam applies ONLY to nodes at remaining depth <= g_esc_beam_leafdepth (near the leaf, where the frontier
+// is widest = most of the rollout cost). Nodes ABOVE it (the top plies -- crucially the ROOT, which is the play
+// we actually commit) keep the full static MoveOrder exploration, so a narrow beam can never drop the
+// heuristic-best PLAY -- it only prunes the deep win-turn-ESTIMATE frontier. INT_MAX (default when
+// MTG_ESC_BEAM_LEAFDEPTH is unset) => beam every node (uniform beam, the original behavior). See the
+// depth-aware-beam work.
+inline thread_local int g_esc_beam_leafdepth = 2147483647;
+struct EscBeamGuard
+{
+    int prev_w, prev_ld;
+    EscBeamGuard(int w, int ld)
+        : prev_w(g_esc_beam_width), prev_ld(g_esc_beam_leafdepth)
+    { g_esc_beam_width = w; g_esc_beam_leafdepth = ld; }
+    ~EscBeamGuard() { g_esc_beam_width = prev_w; g_esc_beam_leafdepth = prev_ld; }
+};
+// VALUE-RANKED BEAM reuse: when the beam is enabled, the probe (value-leaf) pass RECORDS, per interior node,
+// the value-win-turn each MoveOrderPlans-ordered plan produced (indexed by its position in the ordered `pre`).
+// The escalation then reorders that same `pre` by these recorded value ranks before beam-capping, so the top-W
+// beam holds the lines the VALUE pass actually rated best -- the faithful "reuse the first pass's ranking"
+// (vs. the static MoveOrderPlans order, which misses the value-best line at ~knife-edge nodes). Recorded only
+// on the probe's FULL-loop completion (non-winning nodes, where every plan was evaluated and ordering matters);
+// win-nodes early-return and don't need reordering. Keyed by the SAME BuildSimKey the FSLineCache uses, so the
+// escalation's identical `pre` maps position-for-position. thread_local (per worker's probe->escalation pair);
+// null map / recording off => zero overhead => byte-identical. Only allocated when MTG_ESC_BEAM > 0.
+using ProbePlanVals = std::unordered_map<TranspositionTable::Key, std::vector<int>,
+                                         TranspositionTable::KeyHash>;
+inline thread_local ProbePlanVals* g_probe_plan_vals   = nullptr;   // node key -> per-plan value-win-turns
+inline thread_local bool           g_probe_val_recording = false;   // set around the probe pass when beaming
+struct ProbeValsGuard   // point g_probe_plan_vals at a per-decision map for the probe->escalation pair
+{
+    ProbePlanVals* prev;
+    explicit ProbeValsGuard(ProbePlanVals* m) : prev(g_probe_plan_vals) { g_probe_plan_vals = m; }
+    ~ProbeValsGuard() { g_probe_plan_vals = prev; }
+};
 inline thread_local long long g_probe_leaves[16] = {0};   // probe leaf count at each pass depth (0 = unmeasured)
 inline thread_local long long g_probe_cost[16]   = {0};   // probe budget-work at each pass depth
 inline thread_local bool       g_probe_recording = false; // set while the probe's FullSearchLine ladders
@@ -6001,8 +6043,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // because it re-decides every turn; commit-the-line locks the line in.)
         TurnSolver::SearchLine best;
         best.win_turn = max_turns + 1;
+        int _beam_i = 0;
+        const bool beam_here = (g_esc_beam_width > 0 && depth <= g_esc_beam_leafdepth);
         for (const TurnSolver::Plan& q : post)
         {
+            if (beam_here && _beam_i++ >= g_esc_beam_width) { break; }   // value-guided beam (near-leaf only)
             if (budget) { budget->Consume(1); }   // one interior node (plan applied)
             GameState s2 = state;
             std::vector<Action> bp;
@@ -6108,10 +6153,47 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
     MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
 
+    // VALUE-RANKED BEAM: reorder `pre` by the PROBE's recorded value-win-turns for this node, so the beam-cap
+    // below keeps the top-W lines the VALUE pass rated best (not the static MoveOrderPlans order). The probe
+    // enumerated + MoveOrder'd the identical `pre` at this same key, so its recorded ranks map position-for-
+    // position. Missing/un-evaluated positions sort last (keeping their MoveOrder). Only when beaming AND the
+    // probe recorded this node; otherwise (incl. beam off) `pre` keeps the static order == byte-identical.
+    // Gated to depth <= g_esc_beam_leafdepth so the top plies (the committed play) keep the exact static order.
+    const bool beam_here = (g_esc_beam_width > 0 && depth <= g_esc_beam_leafdepth);
+    if (beam_here && g_probe_plan_vals != nullptr && lc != nullptr)
+    {
+        ProbePlanVals::const_iterator pit = g_probe_plan_vals->find(key);
+        if (pit != g_probe_plan_vals->end() && !pit->second.empty())
+        {
+            const std::vector<int>& vals = pit->second;
+            const int nv = static_cast<int>(vals.size());
+            std::vector<int> order(pre.size());
+            for (int i = 0; i < static_cast<int>(pre.size()); ++i) { order[i] = i; }
+            std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+                const int va = (a < nv) ? vals[a] : (max_turns + 1);
+                const int vb = (b < nv) ? vals[b] : (max_turns + 1);
+                return va < vb;
+            });
+            std::vector<TurnSolver::Plan> ranked;
+            ranked.reserve(pre.size());
+            for (int j : order) { ranked.push_back(std::move(pre[j])); }
+            pre.swap(ranked);
+        }
+    }
+    // Record the probe's per-plan value-win-turns for this node (only during the probe pass, when beaming).
+    const bool rec_vals = (g_probe_val_recording && g_probe_plan_vals != nullptr && lc != nullptr);
+    std::vector<int> node_vals;
+    if (rec_vals) { node_vals.reserve(pre.size()); }
+
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
+    int _beam_i = 0;
     for (const TurnSolver::Plan& p : pre)
     {
+        // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
+        // near-leaf nodes (beam_here); the top plies keep full exploration so the committed play is never pruned.
+        // 0 = unlimited = byte-identical. pre is value-ordered above, so this keeps the best W lines.
+        if (beam_here && _beam_i++ >= g_esc_beam_width) { break; }
         if (budget) { budget->Consume(1); }   // one interior node (plan applied)
         if (s_rollout_stats)
         {
@@ -6127,7 +6209,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // combat deals any damage. Skip the line entirely -- mirrors the baseline plan
         // guard (`self_damage >= ap.life`) so commit-the-line never commits a suicide
         // (burn gi=492: two Eidolons + an extra Goblin Guide = 8 self-damage at 6 life).
-        if (s.ActivePlayer().life <= 0) { continue; }
+        if (s.ActivePlayer().life <= 0) { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
         SimulateAnimateLands(s);
         SimulateTapTokens(s);
         SimulateCombat(s);
@@ -6144,6 +6226,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 
         TurnSolver::SearchLine tail =
             FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
+        if (rec_vals) { node_vals.push_back(tail.win_turn); }   // value-rank for the beam reorder
         if (tail.win_turn < best.win_turn)
         {
             best.win_turn = tail.win_turn;
@@ -6172,6 +6255,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
         }
     }
+
+    // Store the probe's per-plan value ranks for this fully-evaluated node (loop completed = every plan
+    // scored), so the escalation's beam can reorder by them. Win-node early-returns above skip this (they
+    // don't need reordering). Overwrites are harmless (depth is folded into the key, so no cross-pass clash).
+    if (rec_vals && !node_vals.empty()) { (*g_probe_plan_vals)[key] = std::move(node_vals); }
 
     // Cache only a genuine win; a no-win (best.win_turn > max_turns) may be a
     // cutoff abort rather than a true dead end, so it is never stored (mirrors
@@ -6640,7 +6728,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         int value_min_depth, int budget_ms,
                                                         bool value_no_fallback,
                                                         const std::vector<int>& value_fallback_take_at,
-                                                        double escalation_fresh_frac)
+                                                        double escalation_fresh_frac,
+                                                        int beam_width, int beam_leafdepth)
 {
     // --- Escalation budget shaping (all opt-in; ALL unset => byte-identical to the shared-budget hybrid) ---
     // MTG_ESC_SPLIT=c   : CAP the value-leaf probe to c*budget_ms so the probe cannot eat the whole decision
@@ -6676,9 +6765,35 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         for (int d = 0; d < 16; ++d) { g_probe_leaves[d] = 0; g_probe_cost[d] = 0; }
         g_probe_recording = true;
     }
+    // VALUE-RANKED BEAM (MTG_ESC_BEAM=W): capture the probe's per-node value ranking so the escalation reorders
+    // its beam by the lines the value pass rated best (see g_probe_plan_vals). Off (W=0) => map stays null =>
+    // recording is a no-op => byte-identical. The map lives for this whole decision (probe + escalation).
+    static const bool s_esc_beam_env_set = std::getenv("MTG_ESC_BEAM") != nullptr;
+    static const int s_esc_beam = []{ const char* e = std::getenv("MTG_ESC_BEAM");
+                                      return (e && *e) ? std::atoi(e) : 0; }();
+    // MTG_ESC_BEAM_LEAFDEPTH=D: apply the beam only to nodes within D plies of the leaf (the top plies keep full
+    // exploration so the committed PLAY is never beamed out). Unset => INT_MAX => uniform beam (original).
+    static const int s_esc_beam_leafdepth = []{ const char* e = std::getenv("MTG_ESC_BEAM_LEAFDEPTH");
+                                                return (e && *e) ? std::atoi(e) : 2147483647; }();
+    // Precedence (mirrors escalation_fresh_frac): an EXPLICITLY-SET MTG_ESC_BEAM env wins (keeps env A/B working
+    // + its uniform-beam semantics when LEAFDEPTH is unset). Else the per-deck value_play beam (beam_width >= 0
+    // when an enabled block drives; beam_leafdepth its protection depth). beam_width < 0 => off => byte-identical.
+    // DEPTH GUARD (per-deck path only): the beam is validated for the deck's deep PRODUCTION search; disable it
+    // when the search is too shallow to leave >= 2 protected top plies (depth < beam_leafdepth+2). Else a shallow
+    // search (e.g. the suite's d3 engine-sanity case) would beam all-but-the-root and over-prune (measured d3
+    // win->loss). The env path stays literal (a research tool). So a deck playing at d5 gets the beam; its d3/d0
+    // sanity cases stay byte-identical.
+    const bool beam_deep_enough  = (depth >= beam_leafdepth + 2);
+    const int eff_beam           = s_esc_beam_env_set ? s_esc_beam
+                                 : (beam_width >= 0 && beam_deep_enough ? beam_width : 0);
+    const int eff_beam_leafdepth = s_esc_beam_env_set ? s_esc_beam_leafdepth : beam_leafdepth;
+    ProbePlanVals beam_vals_map;
+    ProbeValsGuard _pvg(eff_beam > 0 ? &beam_vals_map : nullptr);
+    if (eff_beam > 0) { g_probe_val_recording = true; }
     int committed = depth;
     SearchLine line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
     g_probe_recording = false;
+    g_probe_val_recording = false;
 
     const bool value_active = UseValueModel() && state.m_value_model && !state.m_value_model->empty();
     // A VERIFIED win (win_turn within the committed horizon) is decided by real simulation, NOT the leaf
@@ -6764,6 +6879,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         static const int    s_esc_single_off = []{ const char* e = std::getenv("MTG_ESC_SINGLE_OFFSET");
                                                    return (e && *e) ? std::atoi(e) : 0; }();
         ForceHeuristicLeafGuard _fh(true);
+        // VALUE-GUIDED BEAM (MTG_ESC_BEAM=W): restrict the heuristic escalation to the probe's top-W
+        // value-ranked lines per node, so it rolls out only ~W^depth frontier states instead of the full
+        // B&B frontier. `pre` is reordered by the probe's recorded value ranks (g_probe_plan_vals) before the
+        // cap, so the kept W lines are the value pass's best -- only their rollouts are new work. s_esc_beam was
+        // read + recording armed at the top of the hybrid (before the probe). 0 = unlimited = byte-identical.
+        // eff_beam_leafdepth restricts the beam to near-leaf nodes (protects the top plies / committed play).
+        EscBeamGuard _beam(eff_beam, eff_beam_leafdepth);
         int hcommitted = depth;
         SearchBudget  esc_alloc_budget;
         SearchBudget* esc_budget = budget;   // legacy shared REMAINING budget (only when fresh_frac < 0)

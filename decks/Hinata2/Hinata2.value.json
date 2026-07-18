@@ -7840,6 +7840,9 @@
     "budget_ms": 20,
     "enabled": true,
     "regime": "heavy",
-    "note": "PROVISIONAL d5 default (byte-identical to current); revise after mulligan profile + depth table."
+    "note": "PROVISIONAL d5 default (byte-identical to current); revise after mulligan profile + depth table. | ADOPTED 2026-07-18: depth-aware value-ranked beam (W=3,leafdepth=2 (widened from 2: 0 worse seeds, best avg)) + budget-restore fresh0.5 = quality-better + faster (escalation-beam-verify.md); PROVISIONAL table.",
+    "escalation_fresh_frac": 0.5,
+    "beam_width": 3,
+    "beam_leafdepth": 2
   }
 }

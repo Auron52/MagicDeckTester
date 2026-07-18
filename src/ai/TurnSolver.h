@@ -422,7 +422,13 @@ public:
                                            // Per-deck escalation budget renewal (value_play.escalation_fresh_frac).
                                            // Sentinel <= -1.5 (default) => use the MTG_ESCALATION_FRESH_FRAC env
                                            // static (byte-identical). -1 => legacy shared budget; >=0 => fresh frac.
-                                           double escalation_fresh_frac = -2.0);
+                                           double escalation_fresh_frac = -2.0,
+                                           // Per-deck escalation beam (value_play.beam_width / beam_leafdepth).
+                                           // beam_width < 0 (default) => use the MTG_ESC_BEAM env static (byte-
+                                           // identical). 0 => off; >0 => keep top-N value-ranked plans near the
+                                           // leaf. beam_leafdepth: beam only nodes within that many plies of the
+                                           // leaf (protects the top plies / committed play).
+                                           int beam_width = -1, int beam_leafdepth = 2);
 
     // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic) -------------------
     // For the CURRENT pre-combat main, score EVERY candidate top-level play (the same

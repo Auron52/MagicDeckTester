@@ -27,21 +27,37 @@ BIN = "build/Release/mtg"
 DECKS = {
     "antilife": "decks/Anti-Lifegain/Anti-Lifegain.cod",
     "hinata":   "decks/Hinata2/Hinata2.cod",
+    "th":       "decks/treasure_hunt/treasure_hunt.txt",   # ~6% escalation rate (control deck, many decisions)
+    "slivers":  "decks/slivers_vial/slivers_vial.txt",     # ~6.5%
+    "knights":  "decks/Knights/Knights.cod",               # ~4.7%
+    "burn":     "decks/burn/burn.txt",                     # ~2.8%
 }
 # held-out seeds (disjoint from the 2002/3003 regression train seeds)
 SEEDS = [4004, 5005, 6006, 7007, 10010, 11011, 12012, 13013, 14014, 15015]
-AVG = re.compile(r"Avg win turn : ([0-9.]+)")
+AVG = re.compile(r"avg \(turns\)\s*:\s*([0-9.]+)")  # merged metric (was "Avg win turn : X" pre-a4f2be7)
 
 # variant name -> extra env (baseline = {}). fresh_frac renews the escalation budget; single = one heuristic
 # pass at committed-offset instead of the 1..depth ladder; the combo tests both together.
+# NOTE: the heavy decks now SHIP the combo in value_play, so a bare run == the adopted combo. To measure the
+# TRUE pre-adoption baseline, force legacy via env (MTG_ESC_BEAM=0 disables the beam; FRESH_FRAC=-1 = legacy
+# shared budget). Every variant sets both envs explicitly so the comparison is clean regardless of the JSON.
+_OFF = {"MTG_ESC_BEAM": "0", "MTG_ESCALATION_FRESH_FRAC": "-1"}
+def _v(beam=0, ld=None, fresh="-1"):
+    e = {"MTG_ESC_BEAM": str(beam), "MTG_ESCALATION_FRESH_FRAC": str(fresh)}
+    if ld is not None: e["MTG_ESC_BEAM_LEAFDEPTH"] = str(ld)
+    return e
 VARIANTS = {
-    "baseline":        {},
-    "fresh0.5":        {"MTG_ESCALATION_FRESH_FRAC": "0.5"},
-    "fresh1.0":        {"MTG_ESCALATION_FRESH_FRAC": "1.0"},
-    "single_off1":     {"MTG_ESC_SINGLE": "1", "MTG_ESC_SINGLE_OFFSET": "1"},
-    "single_off2":     {"MTG_ESC_SINGLE": "1", "MTG_ESC_SINGLE_OFFSET": "2"},
-    "fresh1_single2":  {"MTG_ESCALATION_FRESH_FRAC": "1.0", "MTG_ESC_SINGLE": "1", "MTG_ESC_SINGLE_OFFSET": "2"},
+    "baseline":         dict(_OFF),                        # true pre-adoption (no beam, legacy budget)
+    "beam2_ld2":        _v(2, 2, "-1"),                    # beam only (isolate)
+    "fresh0.5":         _v(0, None, "0.5"),                # fresh only (isolate)
+    "beam2_ld2_fresh":  _v(2, 2, "0.5"),                   # SHIPPED combo
+    "beam2_ld3_fresh":  _v(2, 3, "0.5"),                   # more play-protection (deeper leafdepth)
+    "beam3_ld2_fresh":  _v(3, 2, "0.5"),                   # wider beam
 }
+# Legacy variants (budget-renewal / cold single-depth fallback) — kept for reference, not in the default sweep:
+#   "fresh1.0":       {"MTG_ESCALATION_FRESH_FRAC": "1.0"}
+#   "single_off1":    {"MTG_ESC_SINGLE": "1", "MTG_ESC_SINGLE_OFFSET": "1"}
+#   "single_off2":    {"MTG_ESC_SINGLE": "1", "MTG_ESC_SINGLE_OFFSET": "2"}   (cold pass -> slower on hinata)
 LOG = "logs/eval/esc_fallback_ab.log"
 _lock = __import__("threading").Lock()
 
@@ -82,7 +98,7 @@ def main():
 
     tasks = [(dk, v, s) for dk in decks for v in VARIANTS for s in seeds]
     res = {}
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=int(os.environ.get("ESC_AB_WORKERS", "6"))) as ex:
         futs = {ex.submit(run, DECKS[dk], s, games, VARIANTS[v]): (dk, v, s) for (dk, v, s) in tasks}
         done = 0
         for fut in as_completed(futs):

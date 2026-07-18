@@ -41,6 +41,12 @@ struct ValuePlay
     bool   enabled      = false;          // true => the ADOPTED policy: drives + locks play. false => recorded
                                           //         recommendation only (does NOT affect play; byte-identical).
     double escalation_fresh_frac = -1.0;  // budget renewal, per-deck; -1 = off (legacy shared budget)
+    // Escalation value-guided beam (per-deck; see docs/design/escalation-beam-verify.md). The heuristic
+    // escalation reorders each node's plans by the probe's recorded value ranking and expands only the top
+    // `beam_width` at nodes within `beam_leafdepth` plies of the leaf -- cutting the deep rollout frontier
+    // while the top plies (the committed play) keep full exploration. 0 => off (byte-identical, full frontier).
+    int    beam_width     = 0;             // 0 => off; >0 => keep top-N value-ranked plans near the leaf
+    int    beam_leafdepth = 2;             // beam only nodes at remaining depth <= this (protect the top plies)
     // Informative only (not read at runtime): how fast the leaf / heuristic search is at each depth, and a
     // human-readable regime tag. Kept so target_depth can be re-derived if the budget changes.
     std::string         regime;           // "light" | "heavy"
