@@ -49,13 +49,18 @@ def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_dept
         env["MTG_VALUE_MIN_DEPTH"]=str(value_min_depth); env["MTG_VALUE_STARTGATE_ALPHA"]="8"
     else:
         env["MTG_VALUE_MODEL"]="0"
+    # --ignore-play-profile: a deck with an ENABLED value_play block (antilife/hinata since the beam
+    # adoption) locks play depth and REJECTS an explicit --depth; this bypasses that so the matrix can
+    # sweep depths. Harmless for decks without an enabled block (CLI depth just wins). REQUIRED now.
     cmd=[MTG,deck,"--games",str(games),"--seed",str(seed),"--depth",str(depth),
-         "--max-turns",str(mt),"--threads",str(threads)]
+         "--max-turns",str(mt),"--threads",str(threads),"--ignore-play-profile"]
     t0=time.time(); out=subprocess.run(cmd,capture_output=True,text=True,env=env).stdout; dt=time.time()-t0
     p=int(re.search(r"Games played\s*:\s*(\d+)",out).group(1))
-    w=int(re.search(r"Games won\s*:\s*(\d+)",out).group(1))
-    m=re.search(r"Avg win turn\s*:\s*([\d.]+)",out); a=float(m.group(1)) if m else float("nan")
-    return (w*a+(p-w)*(mt+1))/p, 1000.0*dt/p
+    # Merged metric (a4f2be7): "avg (turns)" IS the loss-penalised avg win turn (unwon = max_turns+1)
+    # printed directly -- identical to the old (w*a+(p-w)*(mt+1))/p, so numbers stay comparable to the
+    # existing tables. (Was: parse "Games won" + "Avg win turn" and recompute; both lines are now gone.)
+    m=re.search(r"avg \(turns\)\s*:\s*([\d.]+)",out); lp=float(m.group(1)) if m else float("nan")
+    return lp, 1000.0*dt/p
 
 
 def main():
