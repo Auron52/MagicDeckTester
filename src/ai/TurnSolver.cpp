@@ -231,6 +231,13 @@ static std::string PlanDesc(const TurnSolver::Plan& p)
 // Build the active player's accounting mana pool from untapped sources. Depletion
 // lands contribute 2, multi-color lands 1 wild, filter lands (Cascade Bluffs) 1 wild
 // when fed else 1 {C} — see AddSourceToPool, shared with AIEngine::BuildAvailableMana.
+// Storage lands (Dwarven Hold / Mercadian Bazaar) yield their LIVE storage_counters via
+// PermanentManaYield (0 when uncharged), exactly as BuildAvailableMana does -- passing it here
+// keeps the rollout's pool byte-identical to the executor's (a dead sc=0 storage land must add
+// nothing, not its static per-tap 1). For non-storage sources PermanentManaYield ==
+// ManaProducedPerTap, so every non-storage deck is byte-identical. WITHOUT this the rollout's
+// firebreathing pool (SimulateCombat) over-credited dead/low storage lands vs the executor's
+// AIEngine::Firebreathe, projecting the combo kill a turn early (Dragonstorm fd-diverge).
 static ManaPool BuildPool(const GameState& state)
 {
     ManaPool pool;
@@ -242,7 +249,7 @@ static ManaPool BuildPool(const GameState& state)
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
-        AddSourceToPool(pool, state, *def);
+        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
     }
     // Turn-scoped reserve (ritual float + retained over-production) is spendable on later
     // same-phase casts, so it counts toward affordability. Empty for non-floating decks ->
@@ -264,7 +271,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
-        AddSourceToPool(pool, state, *def);
+        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see BuildPool
     return pool;
