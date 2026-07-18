@@ -157,7 +157,11 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                 // EXACTLY in lockstep with the planner's ritual credit and the rollout's apply_one.
                 if (IsManaRitual(def))
                 {
-                    ApplyRitualFloat(state, def, entry.chosen_x.value_or(0));
+                    // Desperate Ritual SPLICE: float (splice_count+1)*{R}{R}{R} (each spliced copy adds
+                    // its own {R}{R}{R}; the copies themselves stay in hand). splice_count unset -> +1
+                    // copy (a plain ritual) -> byte-identical for every non-splice deck.
+                    ApplyRitualFloat(state, def, entry.chosen_x.value_or(0),
+                                     entry.splice_count.value_or(0) + 1);
                 }
                 MoveToGraveyard(state, entry);
             }

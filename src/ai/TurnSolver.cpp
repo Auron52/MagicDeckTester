@@ -573,13 +573,28 @@ static int FindOwnProwessBurnTarget(const GameState& state, const CardDefinition
     return FindSurvivingOwnCreature(state, state.active_player_index, CreatureBurnDamage(def, state));
 }
 
-static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state)
+static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state, int copies = 1)
 {
     if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
     {
         return def.params.spectacle_cost.value();
     }
     ManaCost cost = def.card.m_mana_cost;
+    // Desperate Ritual SPLICE: casting ONE base while splicing k OTHER copies pays (k+1) times the
+    // printed cost. Scale the RAW cost by copies (=k+1) FIRST, so the Medallion/affinity/Hinata
+    // reductions below apply ONCE to the scaled total (a single floor at 0) -- NOT (k+1) separate
+    // floors (which would over-subtract the reduction). copies==1 (every non-spliced cast) is an
+    // identity multiply -> byte-identical for all other decks.
+    if (copies != 1)
+    {
+        cost.generic   *= copies;
+        cost.white     *= copies;
+        cost.blue      *= copies;
+        cost.black     *= copies;
+        cost.red       *= copies;
+        cost.green     *= copies;
+        cost.colorless *= copies;
+    }
     if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
     {
         int reduction = 0;
@@ -818,6 +833,51 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         {
             if (cands[sel[b]].kind == Action::Kind::SacForMana
                 && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+        }
+    }
+    return false;
+}
+
+// Reject a subset that over-splices Desperate Ritual (splice_onto_arcane). Splicing k copies onto a
+// base cast REVEALS k OTHER copies that must still be IN HAND at that moment; a revealed copy stays in
+// hand and may later be cast as its own base (and/or spliced again). So casting m bases of the SAME
+// card with splice counts k (sorted DESCENDING) is physically legal iff the j-th base (0-indexed,
+// largest first) splices at most N-1-j other copies, where N = copies of that card in hand at
+// enumeration time. The maximal legal chain is triangular (N-1, N-2, ..., 0). Any k exceeding its slot
+// (e.g. two bases both claiming to splice the full N-1 others, when the first cast leaves hand) is
+// impossible -> reject. Grouped by card name (only same-named Arcane copies can be each other's splice
+// targets in this deck). Inert (false) without a splice base selected -> byte-identical for every
+// non-splice deck.
+static bool SubsetHasIllegalSplice(const GameState& state,
+                                   const std::vector<Action>& cands,
+                                   const std::vector<int>& sel)
+{
+    auto is_splice_base = [&](int j) -> bool {
+        const CardDefinition* d = cands[j].def;
+        return d && d->params.splice_onto_arcane && cands[j].kind == Action::Kind::CastFromHand;
+    };
+    std::vector<std::string> names;
+    for (int j : sel)
+    {
+        if (!is_splice_base(j)) { continue; }
+        if (std::find(names.begin(), names.end(), cands[j].card_name) == names.end())
+        { names.push_back(cands[j].card_name); }
+    }
+    if (names.empty()) { return false; }
+    const Player& ap = state.ActivePlayer();
+    for (const std::string& nm : names)
+    {
+        std::vector<int> ks;
+        for (int j : sel)
+        {
+            if (is_splice_base(j) && cands[j].card_name == nm) { ks.push_back(cands[j].splice_count); }
+        }
+        int N = 0;
+        for (const Card& c : ap.hand) { if (c.m_name == nm) { ++N; } }
+        std::sort(ks.begin(), ks.end(), std::greater<int>());
+        for (size_t j = 0; j < ks.size(); ++j)
+        {
+            if (ks[j] > N - 1 - static_cast<int>(j)) { return true; }
         }
     }
     return false;
@@ -1184,6 +1244,41 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 a.is_noncreature       = !def.card.IsCreature();
                 a.card_mv              = def.card.m_mana_cost.ManaValue();
                 a.soulfire_own_targets = ot;
+                actions.push_back(std::move(a));
+            }
+            continue;
+        }
+
+        // Desperate Ritual -- SPLICE onto Arcane. The splice COUNT k (how many OTHER same-named copies
+        // in hand are revealed + spliced onto this base cast) is a SEARCH decision: emit one cast
+        // variant per k = 0..(count of OTHER copies in hand). All variants share this hand_index, so the
+        // group enumerator picks at most one per base copy (mutual exclusion, like the {X}/tutor/Soulfire
+        // variants). Cost AND float scale by (k+1) here (EffectiveCost/RitualFloatAmount with copies=k+1)
+        // and are re-scaled IDENTICALLY at apply (apply_one) and in the executor (CastSpellFromHand +
+        // EffectHandler) off the same k -> lockstep. The k spliced copies STAY IN HAND (never removed).
+        // Physically-impossible over-splice across multiple selected bases (a spliced copy must still be
+        // in hand when revealed) is rejected per-plan by SubsetHasIllegalSplice; every k stays enumerable
+        // (never pruned) so MTG_UNPRUNED opens the full range. STORM (future): the spells_cast_this_turn
+        // increment fires ONCE per base cast, NOT per (k+1); a later hard-cast of a leftover copy is its
+        // own increment. Inert for every non-splice deck (splice_onto_arcane false) -> byte-identical.
+        if (def.params.splice_onto_arcane)
+        {
+            int others = 0;
+            for (const Card& c : ap.hand) { if (c.m_name == ap.hand[i].m_name) { ++others; } }
+            --others;   // exclude the base copy itself -> # of OTHER copies available to splice
+            for (int k = 0; k <= others; ++k)
+            {
+                Action a;
+                a.kind            = Action::Kind::CastFromHand;
+                a.card_name       = ap.hand[i].m_name;
+                a.hand_index      = i;
+                a.cost            = EffectiveCost(def, state, k + 1);
+                a.eval            = EvalCard(def, state);
+                a.is_noncreature  = !def.card.IsCreature();
+                a.card_mv         = def.card.m_mana_cost.ManaValue();
+                a.max_casts_after = def.params.max_casts_after;
+                a.ritual_float    = RitualFloatAmount(state, def, a.chosen_x, k + 1);
+                a.splice_count    = k;
                 actions.push_back(std::move(a));
             }
             continue;
@@ -1734,6 +1829,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
+        // hand). Inert without a splice base selected -> byte-identical.
+        if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
 
@@ -2926,10 +3024,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
-                    int own_targets, int ponder_keep, int crackle_targets)
+                    int own_targets, int ponder_keep, int crackle_targets, int splice_count)
     {
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
@@ -2960,7 +3058,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // before any nested casts, so exactly THIS cast skips its mana cost.
         bool free_cast = cascade_free;
         cascade_free = false;
-        ManaCost ec = EffectiveCost(def, state);
+        // Desperate Ritual SPLICE: pay (splice_count+1) times the printed cost (single Medallion floor
+        // inside EffectiveCost). Matches the enum's a.cost = EffectiveCost(def,state,k+1) and the
+        // executor's CastSpellFromHand -> lockstep. copies=1 for every non-spliced cast.
+        ManaCost ec = EffectiveCost(def, state, splice_count + 1);
         // Soulfire Eruption: extra Hinata discount from the searched own-creature targets (mirrors
         // the enumeration cost and the executor's CastSpellFromHand -> lockstep).
         ec.generic = std::max(0, ec.generic
@@ -3005,6 +3106,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.soulfire_own_targets = own_targets;
             rec.ponder_keep    = ponder_keep;
             rec.crackle_targets = crackle_targets;
+            rec.splice_count   = splice_count;
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -3530,7 +3632,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1);
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0);
                 }
             }
         }
@@ -3609,7 +3711,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // reserve for a same-turn payoff (Crackle). Mirrors EffectHandler so the rollout and
             // the real executor realise the identical floating mana (lockstep); the planner
             // credits this same amount, so the predicted combo and the executed one never diverge.
-            ApplyRitualFloat(state, def, chosen_x);
+            // Desperate Ritual SPLICE: float (splice_count+1)*{R}{R}{R} (k spliced copies each add their
+            // own {R}{R}{R} and STAY IN HAND). Matches the enum's a.ritual_float and the executor's
+            // EffectHandler ApplyRitualFloat off the same k -> lockstep. copies=1 for a plain ritual.
+            ApplyRitualFloat(state, def, chosen_x, splice_count + 1);
         }
         else if (def.params.tutor_to_hand || def.params.tutor_to_top)
         {
@@ -3745,7 +3850,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
                 }
             }
         }
@@ -3772,7 +3877,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); } }
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); } }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -3795,14 +3900,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[ai];
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets); }
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count); }
                 }
             }
             else
@@ -3822,7 +3927,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
                 }
             }
         }
@@ -3832,14 +3937,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count);
             }
         }
 
@@ -3965,7 +4070,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -4865,6 +4970,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
+        if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
         for (int j : sel)
         {
@@ -5230,6 +5337,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // HumanPlayActive() (the count range); the autonomous single count leaves it at -1
                 // and so never reaches this human-play branch.
                 if (act.crackle_targets >= 0)    { sub.push_back("c" + act.card_name + "=" + std::to_string(act.crackle_targets)); }
+                // Desperate Ritual splice COUNT: distinct k are distinct human choices (each floats
+                // another {R}{R}{R} for another {1}{R}), so keep them as separate plan variants under
+                // human-play. Autonomous dedup keys only on cast NAMES (the 's' bucket above), so distinct
+                // k collapse to the first-enumerated representative -- exactly the chosen_x precedent.
+                if (act.splice_count > 0)        { sub.push_back("k" + act.card_name + "=" + std::to_string(act.splice_count)); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }

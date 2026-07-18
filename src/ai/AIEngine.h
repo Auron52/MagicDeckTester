@@ -359,11 +359,14 @@ private:
     void CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
                            int alt_lifegain = 0, const std::string& tutor_target = "",
                            int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
-                           int crackle_targets = -1);   // -1 = legacy auto-max discount
+                           int crackle_targets = -1,    // -1 = legacy auto-max discount
+                           int splice_count = 0);       // Desperate Ritual splice count k (0 = plain)
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;
 
     // Returns the mana cost to pay for this card this turn (spectacle cost if eligible).
-    ManaCost EffectiveCost(const CardDefinition& def, const GameState& state) const;
+    // copies (default 1) = Desperate Ritual splice multiplier (splice_count+1): scales the RAW cost
+    // before the single-floor Medallion/Hinata reductions. 1 for every non-spliced cast.
+    ManaCost EffectiveCost(const CardDefinition& def, const GameState& state, int copies = 1) const;
 };

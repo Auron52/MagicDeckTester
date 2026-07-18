@@ -2156,9 +2156,14 @@ inline bool IsManaRitual(const CardDefinition& def)
 
 // Gross floating mana the ritual `def` adds when cast this turn (its X = `chosen_x` for untap
 // rituals). Reality Spasm -> RitualRefloatMana(chosen_x); a fixed burst -> its ritual_floating_mana.
-inline int RitualFloatAmount(const GameState& state, const CardDefinition& def, int chosen_x)
+// `copies` (default 1) is the Desperate Ritual SPLICE multiplier: casting ONE base while splicing k
+// OTHER copies adds (k+1) times the per-copy float. Threaded so enum / rollout / executor scale the
+// float IDENTICALLY off the same k (lockstep). copies==1 for every non-spliced ritual -> byte-identical.
+// Only Desperate Ritual is spliceable (no ritual_float_gy_self_bonus), so the per-copy amount is a flat
+// multiply; Rite of Flame's graveyard bonus is never spliced (copies always 1) and stays intact.
+inline int RitualFloatAmount(const GameState& state, const CardDefinition& def, int chosen_x, int copies = 1)
 {
-    if (def.params.untap_x_mana_sources) { return RitualRefloatMana(state, chosen_x); }
+    if (def.params.untap_x_mana_sources) { return RitualRefloatMana(state, chosen_x) * copies; }
     if (def.params.ritual_floating_mana > 0)
     {
         int amt = def.params.ritual_floating_mana;
@@ -2174,7 +2179,7 @@ inline int RitualFloatAmount(const GameState& state, const CardDefinition& def, 
                 }
             }
         }
-        return amt;
+        return amt * copies;
     }
     return 0;
 }
@@ -2203,9 +2208,11 @@ inline void AddChosenColorFloat(GameState& state, const std::string& col, int am
 // so a later same-turn cast (Crackle) can spend it. Default (empty ritual_float_color) = WILD,
 // preserving byte-identity for Irencrag Feat / Reality Spasm; a specific colour (the Dragonstorm
 // rituals set "R") floats real coloured mana that cannot pay off-colour pips. No-op for non-ritual cards.
-inline void ApplyRitualFloat(GameState& state, const CardDefinition& def, int chosen_x)
+// `copies` (default 1) = Desperate Ritual splice multiplier (splice_count+1); passed through to
+// RitualFloatAmount so the resolved float scales by (k+1) in lockstep across all cast paths.
+inline void ApplyRitualFloat(GameState& state, const CardDefinition& def, int chosen_x, int copies = 1)
 {
-    AddChosenColorFloat(state, def.params.ritual_float_color, RitualFloatAmount(state, def, chosen_x));
+    AddChosenColorFloat(state, def.params.ritual_float_color, RitualFloatAmount(state, def, chosen_x, copies));
 }
 
 // Forward decl: HinataInPlay (defined just below). Used by HinataRitualNetBonus.

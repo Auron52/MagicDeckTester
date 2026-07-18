@@ -206,8 +206,9 @@ Lathliss token / Utvara attack-tokens / firebreathing / `is_token` — shared `O
 token-first ordering verified 3+3+5+5=16, lockstep executor `EffectHandler::EnterBattlefield`+`CreateToken`
 / rollout `ApplyPlanDirect`+`SimulateCombat` / eval = rollout), **Storage lands** (Dwarven Hold +
 Mercadian Bazaar — `storage_land` + `storage_charge_mode`; see "Storage-land model" below),
-**Lotus Bloom** (`suspend_time_counters` + `sac_for_mana_amount`; see "Lotus Bloom model" below).
-REMAINING (3): Dragonstorm, Apex, Desperate Ritual (splice).
+**Lotus Bloom** (`suspend_time_counters` + `sac_for_mana_amount`; see "Lotus Bloom model" below),
+**Desperate Ritual splice** (`splice_onto_arcane`; see "Desperate Ritual splice model" below).
+REMAINING (2): Dragonstorm, Apex.
 
 ### Lotus Bloom model — DONE, build-green, byte-identity th+hinata+slivers ALL PASS (0 new)
 Two new mechanics, both gated on new params so every other deck is byte-identical.
@@ -244,6 +245,45 @@ Two new mechanics, both gated on new params so every other deck is byte-identica
   hard-cast). Stage-5 convergence item, not a Lotus lockstep bug.
 - **VIEWER 5h TODO (recorded, not wired):** suspend timing surfaces as a plan variant (Bucket A, confirm);
   the sac COLOUR is a NEW small chooser (Bucket B) — a `sac_color` decision type to wire like `vial_charge`.
+
+### Desperate Ritual splice model — DONE, byte-identity hinata+slivers+th ALL PASS (0 new)
+Splice onto Arcane as a **search-chosen count k** (0..#OTHER Desperate Rituals in hand), threaded lockstep
+across enum/rollout/executor. New param `splice_onto_arcane` gates everything → every non-splice deck is
+byte-identical (verified: hinata/slivers/th smoke 3/3, 0 new). Coverage: `missing` dropped to just
+Dragonstorm + Apex of Power.
+- **Shared `copies` multiplier** on `RitualFloatAmount`/`ApplyRitualFloat` (SpellEffects.h) and both
+  `EffectiveCost`s (TurnSolver static + AIEngine member, +header): default `copies=1` = byte-identical.
+  Float = `copies * per-copy` (Desperate = 3/copy, no gy-bonus). **Medallion single-floor:** `EffectiveCost`
+  scales the RAW generic + colored pips by `copies=k+1` FIRST, THEN runs the Medallion/affinity/Hinata
+  reductions ONCE (one floor at 0) — NOT `(k+1)*EffectiveCost` (which would subtract the reduction k+1×).
+  Verified math: 1 Ruby Medallion, k=1 → cost `{1}{R}{R}` (=3), float 6 (no-Medallion k=1 → `{2}{R}{R}`=4,
+  float 6 = the ledger's "pay 4, add 6").
+- **Three cast-path scaling sites (lockstep):** ENUM `CollectActions` splice block (`a.cost =
+  EffectiveCost(def,state,k+1)`, `a.ritual_float = RitualFloatAmount(...,k+1)`, one variant per k sharing
+  `hand_index`); ROLLOUT `apply_one` (new `splice_count` param → `EffectiveCost(def,state,splice_count+1)` +
+  `ApplyRitualFloat(...,splice_count+1)`); EXECUTOR `AIEngine::CastSpellFromHand` (new `splice_count` param →
+  `EffectiveCost(*def,state,splice_count+1)`, stamps `entry.splice_count`) + `EffectHandler` resolution
+  (`ApplyRitualFloat(...,entry.splice_count.value_or(0)+1)`).
+- **Mutual exclusion:** k-variants of one base share `hand_index` → the existing group enumerator picks ≤1
+  per base copy (like the {X}/tutor/Soulfire variants). Cross-base over-splice (a spliced copy must still be
+  IN HAND when revealed) is rejected per-plan by new guard `SubsetHasIllegalSplice` (sibling of
+  `SubsetHasDuplicateSacSource`, called in Solve::consider + EnumeratePlans): sort selected same-name
+  splice_counts descending, legal iff `k[j] <= N-1-j` (triangular max chain N-1,N-2,…,0). Every k stays
+  enumerable (never pruned) → `MTG_UNPRUNED` opens the full range.
+- **Keep-in-hand = free:** both cast paths remove ONLY the base copy (executor by pointer identity, rollout
+  by first-name-match `zone.erase`); the k spliced copies are OTHER hand entries, never touched.
+- **Signature:** `plan_signature` human-play block adds `k<name>=<count>` beside the chosen_x line (each k a
+  distinct human choice); autonomous dedup keys on cast-NAMES so distinct k collapse to the first-enumerated
+  representative — exact chosen_x precedent. **Viewer:** `splice_count` emitted beside `x` in the main-phase
+  plan menu (main.cpp; index.html already renders variant params) — Bucket A, no new chooser.
+- **STORM (future):** the `spells_cast_this_turn` increment fires ONCE per base cast, NOT per (k+1); each
+  later hard-cast of a leftover copy is its own increment. Code comments left at both cast sites.
+- **Scoped simplification:** splice bases/targets are grouped by card NAME (the only Arcane spell in the deck
+  is Desperate Ritual, so base == target). A deck with a DIFFERENT Arcane spell as the splice target would
+  need the guard to model cross-name Arcane bases — out of scope here, noted for generality.
+- **Functional:** Dragonstorm goldfish (60g, budget 8) runs clean, no crash/assert on the splice path (avg
+  turns still high — expected, Dragonstorm/Apex payoffs not yet implemented; pre-existing fd-diverge from the
+  missing payoffs is a Stage-5 convergence item, not a splice lockstep bug).
 
 ### Storage-land model (Dwarven Hold + Mercadian Bazaar) — DONE, byte-identity th+hinata+slivers ALL PASS (0 new)
 New mechanic (distinct from depletion): `Permanent.storage_counters` int + params `storage_land` +

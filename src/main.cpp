@@ -442,6 +442,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
             if (ac.soulfire_own_targets > 0) { os << ", \"soulfire_targets\": " << ac.soulfire_own_targets; }
+            if (ac.splice_count > 0)      { os << ", \"splice_count\": " << ac.splice_count; }
             os << " }";
         }
         os << "]";
