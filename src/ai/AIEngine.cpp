@@ -3322,6 +3322,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         }
     }
 
+    // STORM counter (Dragonstorm): the spell is now cast (about to go on the stack). Count it ONCE
+    // per CastSpellFromHand invocation -- a spliced Desperate Ritual is ONE base cast (the k spliced
+    // copies stay in hand, not cast). Mirrors TurnSolver::apply_one's increment (lockstep) so the
+    // executor's storm count matches the searched line. Read only by Dragonstorm's EffectHandler
+    // resolution + folded into no state key -> byte-identical for every non-storm deck.
+    ++state.spells_cast_this_turn;
+
     state.stack.push_back(std::move(entry));
 
     // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.

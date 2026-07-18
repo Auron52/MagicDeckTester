@@ -286,6 +286,10 @@ inline bool CardMatchesTypeName(const Card& card, const std::string& type_name)
     if (type_name == "Land")        { return card.IsLand(); }
     if (type_name == "Instant")     { return card.IsInstant(); }
     if (type_name == "Sorcery")     { return card.IsSorcery(); }
+    // Fallback: a SUBTYPE filter (Dragonstorm's tutor_types=["Dragon"]; also Sliver/Goblin/... tutors).
+    // Reached only for names that are not one of the card TYPES above, so every existing type-name tutor
+    // (Idyllic=Enchantment, Enlightened=Artifact/Enchantment) returns before here -> byte-identical.
+    for (const std::string& sub : card.m_subtypes) { if (sub == type_name) { return true; } }
     return false;
 }
 
@@ -535,6 +539,98 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         ap.hand.erase(ap.hand.begin() + victim);
         if (g_reveal_logger) { g_reveal_logger->LogDiscard(victim_num, victim_name); }
     }
+}
+
+// Dragonstorm (Storm) tutor-TO-BATTLEFIELD. Put up to `max_puts` cards matching pp.tutor_types
+// (Dragons) from the controller's library ONTO THE BATTLEFIELD, each routed through the shared
+// OnDragonEnters cascade (Scourge ping / Lathliss token) so a put Dragon is a live body, not inert
+// -- the #1 wiring requirement. `max_puts` = the STORM total = state.spells_cast_this_turn, which the
+// caller passes AS-IS: the storm counter is ++'d at Dragonstorm's own cast, so it already equals
+// (prior spells this turn) + 1 = storm copies + the original = the number of Dragons to fetch. The
+// helper caps it at the number of matching library cards.
+//
+// WHICH/ORDER: `preferred` is an optional searched put-list (Dragon names, put first in order); the
+// remainder follows ResolveProvider().TutorCandidates order -- for GenericProvider, every matching
+// name in LIBRARY order (a future DragonstormProvider owns the Lathliss-first/Scourge-second RANKING
+// + selection; this ENGINE step deliberately encodes no ordering/selection heuristic). Multiplicity
+// is honoured (3 Scourges can be put). After the puts, SHUFFLE the library (pp.tutor_shuffle_after)
+// exactly like a fetch (ShuffleAfterSearch, deterministic CRN reshuffle) -- KEPT per user.
+//
+// LOCKSTEP: called IDENTICALLY from EffectHandler (executor) and TurnSolver::apply_one (rollout);
+// both read the same pre-put library + spells_cast_this_turn, so they put the same Dragons in the
+// same order and reshuffle with the same seed. No-op for any card without tutor_to_battlefield.
+inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
+                                      int max_puts,
+                                      const std::vector<std::string>& preferred = {})
+{
+    if (max_puts <= 0 || pp.tutor_types.empty()) { return; }
+    Player& ap = state.players[controller];
+
+    auto matches_types = [&](const Card& c) -> bool {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const Card& card = d ? d->card : c;
+        for (const std::string& t : pp.tutor_types)
+        { if (CardMatchesTypeName(card, t)) { return true; } }
+        return false;
+    };
+
+    // Ordered candidate NAME list: searched `preferred` first, then the provider's TutorCandidates
+    // (GenericProvider = every matching library name in order). A name may repeat across the two;
+    // `handled` dedups so each name's copies are counted once.
+    std::vector<std::string> order = preferred;
+    {
+        std::vector<std::string> prov =
+            ResolveProvider(state).TutorCandidates(state, controller, pp);
+        order.insert(order.end(), prov.begin(), prov.end());
+    }
+
+    // Flat ordered sequence of names to put, respecting library multiplicity + max_puts.
+    std::vector<std::string>        put_names;
+    std::unordered_set<std::string> handled;
+    for (const std::string& nm : order)
+    {
+        if (static_cast<int>(put_names.size()) >= max_puts) { break; }
+        if (!handled.insert(nm).second) { continue; }
+        int copies = 0;
+        for (const Card& c : ap.library) { if (c.m_name == nm && matches_types(c)) { ++copies; } }
+        for (int j = 0; j < copies && static_cast<int>(put_names.size()) < max_puts; ++j)
+        { put_names.push_back(nm); }
+    }
+    if (put_names.empty()) { return; }
+
+    // Put each named Dragon: find+remove the first library copy, enter it (preserving its per-copy
+    // number), fire OnDragonEnters. Re-find per put -- erase shifts library indices, and OnDragonEnters
+    // may append tokens to the battlefield but never touches the library.
+    for (const std::string& nm : put_names)
+    {
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+        { if (ap.library[i].m_name == nm) { idx = i; break; } }
+        if (idx < 0) { continue; }
+        Card lc = ap.library[idx];
+        ap.library.erase(ap.library.begin() + idx);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        Permanent perm;
+        perm.card              = d ? d->card : lc;
+        perm.card.m_number     = lc.m_number;   // preserve per-copy id (logging / state key)
+        perm.controller_index  = controller;
+        perm.owner_index       = controller;
+        perm.entered_this_turn = true;
+        state.battlefield.push_back(perm);
+        if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
+        {
+            EmitPlayEvent(state.turn_number, "dragonstorm",
+                          "\xF0\x9F\x90\x89 " + lc.m_name.str()
+                          + " -- put onto the battlefield (Dragonstorm)");
+        }
+        // #1 wiring requirement: route the put Dragon through the SAME cascade the hard-cast enter
+        // uses (Scourge ping -> opponent life loss; Lathliss 5/5 token; token-first ordering baked in).
+        OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    }
+
+    // "then shuffle your library" (KEPT per user): deterministic CRN reshuffle like a fetch, so
+    // post-Dragonstorm draws come from a shuffled deck. Lockstep (same seed in both worlds).
+    if (pp.tutor_shuffle_after) { ShuffleAfterSearch(state, controller); }
 }
 
 // Exalted (Ignoble Hierarch): "Whenever a creature you control attacks ALONE, that creature
@@ -1323,8 +1419,12 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
 {
     const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
     if (!def) { return; }
-    // NOTE (storm, Dragonstorm owns it): the off-suspend cast is the point a future
-    // ++state.spells_cast_this_turn increment belongs -- keep this the arrival's only path.
+    // STORM counter (Dragonstorm): casting off suspend IS a spell cast (CR 702.62e) -> count it here,
+    // the single shared arrival path (executor GameEngine::UpkeepStep + rollout
+    // SimulateEndAndStartNextTurn, both after the turn-start reset). A Lotus Bloom arriving on the same
+    // turn as a Dragonstorm therefore adds +1 storm. Suspending ({0}) and sacrificing are NOT casts and
+    // do not come through here. Byte-identical for every deck that never suspends (this path never runs).
+    ++state.spells_cast_this_turn;
     Permanent perm;
     perm.card              = def->card;
     perm.card.m_number     = card.m_number;   // preserve the per-copy id for logging/state key

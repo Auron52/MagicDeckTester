@@ -141,6 +141,18 @@ struct GameState
     // start of each turn's planning/execution -> byte-identical when nothing fills it. NEVER
     // folded into BuildSimKey (it is empty at every cross-turn decision point).
     ManaPool                 floating_mana;
+    // STORM counter: number of spells cast THIS TURN (by the active player -- the only caster in
+    // the goldfish). Incremented by exactly 1 at every shared cast site (AIEngine::CastSpellFromHand,
+    // TurnSolver::apply_one, and the off-suspend CastOffSuspend -- a Lotus Bloom arrival IS a cast),
+    // reset to 0 at the start of each turn (GameEngine::UntapStep + the rollout's
+    // SimulateEndAndStartNextTurn) in lockstep. Read ONLY by Dragonstorm's tutor_to_battlefield
+    // resolution (put min(spells_cast_this_turn, Dragons-left) Dragons -- the counter already counts
+    // Dragonstorm's own cast, so it equals storm copies + the original). Turn-scoped and consumed
+    // WITHIN a single first-main plan application (rituals -> Dragonstorm), exactly like floating_mana
+    // above; therefore -- like floating_mana -- it is NEVER folded into BuildSimKey (it is 0 at every
+    // first-main dedup boundary and the combo never spans one). Byte-identical for every deck without
+    // a tutor_to_battlefield card: the field is written but read by nothing else and folded nowhere.
+    int                      spells_cast_this_turn = 0;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
     uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
                                                           // deterministic mid-game shuffle (ShuffleAfterSearch).

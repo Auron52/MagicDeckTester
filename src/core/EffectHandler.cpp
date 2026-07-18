@@ -143,6 +143,21 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                     PerformTutor(state, entry.controller_index, def.params, entry.tutor_target,
                                  def.card.m_name);
                 }
+                // Dragonstorm (Storm): put min(spells_cast_this_turn, Dragons-in-library) Dragons
+                // onto the battlefield, each through the shared OnDragonEnters cascade (Scourge ping
+                // + Lathliss token), then shuffle. spells_cast_this_turn was incremented at THIS
+                // spell's cast (CastSpellFromHand, before it went on the stack), so it already counts
+                // Dragonstorm itself -> it equals (prior spells cast this turn) + 1 = storm copies +
+                // the original = the number of Dragons to put. Lockstep with TurnSolver::apply_one.
+                if (def.params.tutor_to_battlefield)
+                {
+                    // preferred = {} (empty): put in the provider's TutorCandidates order. Both this
+                    // executor and the rollout (apply_one) pass empty, so they put the identical
+                    // Dragons in the identical order (lockstep). The DragonstormProvider / viewer
+                    // multi-pick (later steps) supply an explicit order via the `preferred` arg.
+                    PerformTutorToBattlefield(state, entry.controller_index, def.params,
+                                              state.spells_cast_this_turn);
+                }
                 if (def.params.destroy_all_enchantments)
                 {
                     DestroyAllEnchantments(state);

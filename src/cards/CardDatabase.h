@@ -356,6 +356,18 @@ struct CardParams
     bool                     tutor_to_hand = false;
     bool                     tutor_to_top  = false;
     std::vector<std::string> tutor_types;
+    // Dragonstorm (Storm) tutor-TO-BATTLEFIELD: on resolution, put min(spells_cast_this_turn,
+    // #library cards matching tutor_types) cards (Dragons) from the library ONTO THE BATTLEFIELD
+    // (not hand/top). Each put routes through the shared OnDragonEnters cascade (Scourge ping /
+    // Lathliss token) via PerformTutorToBattlefield (SpellEffects.h), lockstep executor
+    // (EffectHandler) + rollout (apply_one). Which/order of Dragons = the provider's TutorCandidates
+    // (search enumeration; a future DragonstormProvider owns the Lathliss-first/Scourge-second
+    // ranking). Empty tutor_types / false -> ordinary spell (every other deck byte-identical).
+    bool                     tutor_to_battlefield = false;
+    // "then shuffle your library" after a tutor/search (Dragonstorm KEEPS the shuffle, per user):
+    // deterministic CRN reshuffle (Library::ShuffleByKey via ShuffleAfterSearch) exactly like a
+    // fetch, so post-Dragonstorm draws come from a shuffled deck. Off -> no reshuffle.
+    bool                     tutor_shuffle_after  = false;
     // Tutor target selection. The intended DEFAULT (empty) is a SEARCHED choice -- the
     // search branches over fetch targets and keeps the best (a Tier-2 search-choice like
     // dig-as-search-choice; pending, see follow-up). A non-empty value names a HEURISTIC

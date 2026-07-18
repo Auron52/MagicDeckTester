@@ -1767,6 +1767,22 @@
                     "Dragon"
                 ]
             }
+        },
+        {
+            "name": "Dragonstorm",
+            "mana_cost": "{8}{R}",
+            "types": [
+                "Sorcery"
+            ],
+            "oracle_text": "Search your library for a Dragon permanent card, put it onto the battlefield, then shuffle.\nStorm (When you cast this spell, copy it for each spell cast before it this turn. You may choose new targets for the copies.) [STORM tutor-to-battlefield. Storm counter = new GameState.spells_cast_this_turn, ++'d ONCE per spell cast at the shared cast sites (AIEngine::CastSpellFromHand, TurnSolver::apply_one, and the off-suspend CastOffSuspend -- a Lotus Bloom arrival IS a cast, a spliced Desperate Ritual copy is NOT), reset each turn in lockstep (GameEngine::UntapStep + SimulateEndAndStartNextTurn), NOT folded into BuildSimKey (turn-scoped + consumed within one first-main plan, exactly like floating_mana). On resolution (tutor_to_battlefield + tutor_types=['Dragon']), PerformTutorToBattlefield puts min(spells_cast_this_turn, #Dragons left in library) Dragons onto the battlefield -- the counter already counts Dragonstorm's own cast, so it = storm copies + the original. Each put ROUTES THROUGH the shared OnDragonEnters cascade (Scourge ETB ping -> opponent life loss; Lathliss 5/5 token; token-first ordering baked in) so a wave of Dragons pings/spawns and the rollout's win projection (opp.life<=0) sees the kill -- no fast-path hand-projection (over-projection would fd-diverge). WHICH/ORDER of Dragons = SEARCH ENUMERATION via the provider's TutorCandidates (GenericProvider = every matching library name in order; MTG_UNPRUNED(Tutor) opens the full set); this ENGINE step encodes NO ordering/selection heuristic -- the Lathliss-first/Scourge-second RANKING is a future DragonstormProvider (validated 5e) and the viewer multi-pick is a 5h TODO. 'then shuffle' KEPT (tutor_shuffle_after): deterministic CRN reshuffle (Library::ShuffleByKey via ShuffleAfterSearch) like a fetch. Lockstep executor (EffectHandler) + rollout (apply_one). NOTE: card faithfully says 'a Dragon permanent card' -- the deck's Dragon cards are all Creatures matched by tutor_types=['Dragon'].]",
+            "template": "custom",
+            "parameters": {
+                "tutor_to_battlefield": true,
+                "tutor_types": [
+                    "Dragon"
+                ],
+                "tutor_shuffle_after": true
+            }
         }
     ]
 }

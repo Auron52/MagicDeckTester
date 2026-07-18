@@ -3080,6 +3080,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
         zone.erase(it);
 
+        // STORM counter (Dragonstorm): the spell is now cast (committed to the "stack"). Count it
+        // ONCE per apply_one invocation -- a spliced Desperate Ritual is ONE base cast (the k spliced
+        // copies stay in hand, not cast), a cascade free-cast IS its own spell, and each nested
+        // draw-breakpoint cast is its own apply_one so it self-counts. Read only by Dragonstorm's
+        // resolution (below) + no BuildSimKey fold -> byte-identical for every non-storm deck.
+        ++state.spells_cast_this_turn;
+
         // Alternative cost paid as "an opponent gains alt_lifegain life" (Invigorate / Skyshroud
         // Cutter / Reverent Silence) -> reversed to damage by a Tainted Remedy / Plague Drone.
         // Paid at cast (before on-cast triggers), then the spell resolves its normal effect.
@@ -3722,6 +3729,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // falls back to the heuristic's top pick. Identical to the real game (EffectHandler)
             // so the clairvoyant rollout sees the same fetched card.
             PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name);
+        }
+        else if (def.params.tutor_to_battlefield)
+        {
+            // Dragonstorm (Storm): mirror EffectHandler -- put min(spells_cast_this_turn, Dragons-
+            // left) Dragons onto the battlefield through the shared OnDragonEnters cascade (Scourge
+            // ping -> opponent life loss; Lathliss token), then shuffle. The pings/tokens are realised
+            // by THIS rollout, so the win projection (opp.life <= 0 after ApplyPlanDirect) sees the
+            // kill -- no fast-path hand-projection needed (an over-projection would fd-diverge; an
+            // under-estimate is safe). spells_cast_this_turn was ++'d at this cast (above), so it
+            // already counts Dragonstorm itself = storm copies + the original = the put count. Empty
+            // preferred = provider (TutorCandidates) order, identical to EffectHandler (lockstep).
+            PerformTutorToBattlefield(state, state.active_player_index, def.params,
+                                      state.spells_cast_this_turn);
         }
         else if (def.params.destroy_all_enchantments)
         {
@@ -4493,6 +4513,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ++state.turn_number;
     state.opponent_lost_life_this_turn = false;
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
+    state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
 

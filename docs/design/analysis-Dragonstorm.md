@@ -207,8 +207,62 @@ token-first ordering verified 3+3+5+5=16, lockstep executor `EffectHandler::Ente
 / rollout `ApplyPlanDirect`+`SimulateCombat` / eval = rollout), **Storage lands** (Dwarven Hold +
 Mercadian Bazaar — `storage_land` + `storage_charge_mode`; see "Storage-land model" below),
 **Lotus Bloom** (`suspend_time_counters` + `sac_for_mana_amount`; see "Lotus Bloom model" below),
-**Desperate Ritual splice** (`splice_onto_arcane`; see "Desperate Ritual splice model" below).
-REMAINING (2): Dragonstorm, Apex.
+**Desperate Ritual splice** (`splice_onto_arcane`; see "Desperate Ritual splice model" below),
+**Dragonstorm** (ENGINE half — storm counter + tutor-to-battlefield + shuffle; see "Dragonstorm
+engine model" below).
+REMAINING (1): Apex.
+
+### Dragonstorm engine model — DONE, build-green, byte-identity hinata/slivers/th ALL PASS (0 new)
+ENGINE half only (storm counter + tutor-to-battlefield + shuffle + eval wiring). The
+DragonstormProvider heuristic (Lathliss-first/Scourge-second ordering + selection) is a SEPARATE
+later step; the deck still routes to **GenericProvider** (search enumerates targets naively).
+- **STORM counter** `int GameState::spells_cast_this_turn` (GameState.h). RESET to 0 at turn start in
+  LOCKSTEP: executor `GameEngine::UntapStep` + rollout `SimulateEndAndStartNextTurn` (both beside the
+  `floating_mana` reset, BEFORE the off-suspend arrivals). INCREMENT by exactly 1 per spell cast in
+  LOCKSTEP at the three shared cast sites: executor `AIEngine::CastSpellFromHand` (just before the
+  stack push), rollout `TurnSolver::apply_one` (right after `zone.erase`), and the off-suspend
+  `CastOffSuspend` (SpellEffects.h) — a **Lotus Bloom off-suspend arrival IS a cast → +1 storm**
+  (verified live below); suspend ({0}) + sac-for-mana do NOT. Fires ONCE per base cast (a spliced
+  Desperate Ritual's k copies stay in hand, not cast).
+- **BYTE-IDENTITY:** `spells_cast_this_turn` is turn-scoped and CONSUMED WITHIN a single first-main
+  plan application (rituals → Dragonstorm), exactly like `floating_mana` — so, like `floating_mana`,
+  it is **NOT folded into `BuildSimKey`** (it is 0 at every first-main dedup boundary; the combo never
+  spans one). Read by NOTHING except Dragonstorm's resolution (gated on `tutor_to_battlefield`), so
+  incrementing an unread/unfolded field is inert for every non-storm deck → byte-identical BY
+  CONSTRUCTION. hinata/slivers/th smoke = 3/3 ALL PASS, 0 new.
+- **`storm` value / put count:** the counter is ++'d at Dragonstorm's OWN cast, so at resolution it
+  already = (prior spells this turn) + 1 = storm COPIES + the original = the number of Dragons to put.
+  Put count = `min(spells_cast_this_turn, #Dragons in library)`. (Chose the "counter includes
+  Dragonstorm" convention — no subtract-1 needed.)
+- **Tutor-to-battlefield** (`tutor_to_battlefield` + `tutor_types:["Dragon"]` + `tutor_shuffle_after`,
+  CardDatabase.h/.cpp): new shared helper `PerformTutorToBattlefield` (SpellEffects.h) puts the
+  min(...) Dragons from library ONTO THE BATTLEFIELD, each **routed through the shared `OnDragonEnters`
+  cascade** (Scourge ETB ping → opp life loss; Lathliss 5/5 token; token-first ordering) — the #1
+  wiring requirement, so puts are live bodies, not inert. Resolved LOCKSTEP in executor
+  `EffectHandler::Resolve` (custom else-branch) + rollout `apply_one` (custom else-chain). The
+  pings/tokens are realised by the ROLLOUT (opp.life<=0 after ApplyPlanDirect) → the win projection
+  sees the kill; NO eval fast-path hand-projection (over-projection would fd-diverge; the kill-engine
+  already made the rollout count pings/haste attackers).
+- **WHICH/ORDER = search enumeration:** `PerformTutorToBattlefield` puts in the provider's
+  `TutorCandidates` order (GenericProvider = every matching library name in order; multiplicity honoured
+  so 3 Scourges can be put; `MTG_UNPRUNED(Tutor)` opens the full candidate set). This ENGINE step
+  encodes **NO ordering/selection heuristic** — the reviewed Lathliss-first/Scourge-second RANKING is
+  the future DragonstormProvider (validated 5e); the helper's optional `preferred` arg is the forward
+  hook for it + the 5h viewer multi-pick. Dragonstorm enumerates as ONE plain custom cast in
+  CollectActions (no per-target variants) — matching the single-tutor's autonomous behaviour (which
+  also collapses targets via `plan_signature`). `CardMatchesTypeName` extended with a SUBTYPE fallback
+  so `tutor_types:["Dragon"]` matches (byte-identical: existing Enchantment/Artifact tutors return
+  before the fallback).
+- **"then shuffle" KEPT** (user): after the puts, `ShuffleAfterSearch` (deterministic CRN
+  `Library::ShuffleByKey`) like a fetch, both worlds, lockstep.
+- **Coverage:** `missing` dropped to just `Apex of Power`. **Functional** (60g d5/b20, seed 1001):
+  clean, 0 crash/assert, 58/60 wins, avg 8.55, FAST combo wins T4–T6 in 21 games. Verified the storm
+  math exactly on the T4 win (seed 1027): **Lotus off-suspend (+1) + Rite of Flame (+1) + Dragonstorm
+  (+1) = storm 3 → 3 Dragons put** (Utvara, Utvara, Scourge in library order); Scourge pings 2+3+(4+4)
+  = 13 to face (opp 19→6), then the Dragon + Utvara-attack-token alpha strike finished to −20. The two
+  8-mana Utvaras on T4 could only have arrived via the put, and the off-suspend +1 storm confirms the
+  `CastOffSuspend` increment. **fd-diverge / provider ordering (Lathliss-first) = the SEPARATE
+  provider + Stage-5 steps.**
 
 ### Lotus Bloom model — DONE, build-green, byte-identity th+hinata+slivers ALL PASS (0 new)
 Two new mechanics, both gated on new params so every other deck is byte-identical.
