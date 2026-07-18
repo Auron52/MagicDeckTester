@@ -22,7 +22,11 @@ enum class Keyword
     // Splice (Desperate Ritual): an INERT keyword-ability tag -- the "Splice onto Arcane {1}{R}" mechanic
     // is modelled structurally via CardParams::splice_onto_arcane (Action::splice_count scaling cost+float),
     // not by this enum. Kept only so the Scryfall keywords field ["Splice"] stays faithful; no code reads it.
-    Splice
+    Splice,
+    // Storm (Dragonstorm): an INERT keyword-ability tag -- the storm mechanic is modelled structurally via
+    // CardParams::tutor_to_battlefield + GameState::spells_cast_this_turn (put storm+1 Dragons), not by this
+    // enum. Kept only so the Scryfall keywords field ["Storm"] stays faithful; no engine code reads it.
+    Storm
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 

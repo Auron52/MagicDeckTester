@@ -182,6 +182,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Exalted")       { return Keyword::Exalted; }
     if (s == "Suspend")       { return Keyword::Suspend; }   // inert tag; mechanic is param-modelled
     if (s == "Splice")        { return Keyword::Splice;  }   // inert tag; mechanic is param-modelled
+    if (s == "Storm")         { return Keyword::Storm;   }   // inert tag; mechanic is param-modelled
     throw std::runtime_error("Unknown keyword: " + s);
 }
 

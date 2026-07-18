@@ -37,6 +37,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Apex of Power": {
+    "cmc": 10.0,
+    "keywords": [],
+    "mana_cost": "{7}{R}{R}{R}",
+    "oracle_text": "Exile the top seven cards of your library. Until end of turn, you may cast spells from among them.\nIf this spell was cast from your hand, add ten mana of any one color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Aria of Flame": {
     "cmc": 3.0,
     "keywords": [],
@@ -138,6 +147,17 @@
     "toughness": "1",
     "type_line": "Creature — Human Knight"
   },
+  "Desperate Ritual": {
+    "cmc": 2.0,
+    "keywords": [
+      "Splice"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Add {R}{R}{R}.\nSplice onto Arcane {1}{R} (As you cast an Arcane spell, you may reveal this card from your hand and pay its splice cost. If you do, add this card's effects to that spell.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant — Arcane"
+  },
   "Distorting Wake": {
     "cmc": 3.0,
     "keywords": [],
@@ -146,6 +166,38 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Dragonlord Kolaghan": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying",
+      "Haste"
+    ],
+    "mana_cost": "{4}{B}{R}",
+    "oracle_text": "Flying, haste\nOther creatures you control have haste.\nWhenever an opponent casts a creature or planeswalker spell with the same name as a card in their graveyard, that player loses 10 life.",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Elder Dragon"
+  },
+  "Dragonstorm": {
+    "cmc": 9.0,
+    "keywords": [
+      "Storm"
+    ],
+    "mana_cost": "{8}{R}",
+    "oracle_text": "Search your library for a Dragon permanent card, put it onto the battlefield, then shuffle.\nStorm (When you cast this spell, copy it for each spell cast before it this turn.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Dwarven Hold": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nYou may choose not to untap this land during your untap step.\nAt the beginning of your upkeep, if this land is tapped, put a storage counter on it.\n{T}, Remove any number of storage counters from this land: Add {R} for each storage counter removed this way.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Eidolon of the Great Revel": {
     "cmc": 2.0,
@@ -414,6 +466,18 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Karrthus, Tyrant of Jund": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flying",
+      "Haste"
+    ],
+    "mana_cost": "{4}{B}{R}{G}",
+    "oracle_text": "Flying, haste\nWhen Karrthus enters, gain control of all Dragons, then untap all Dragons.\nOther Dragon creatures you control have haste.",
+    "power": "7",
+    "toughness": "7",
+    "type_line": "Legendary Creature — Dragon"
+  },
   "Knight Exemplar": {
     "cmc": 3.0,
     "keywords": [
@@ -433,6 +497,17 @@
     "power": null,
     "toughness": null,
     "type_line": "World Enchantment"
+  },
+  "Lathliss, Dragon Queen": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{4}{R}{R}",
+    "oracle_text": "Flying\nWhenever another nontoken Dragon you control enters, create a 5/5 red Dragon creature token with flying.\n{1}{R}: Dragons you control get +1/+0 until end of turn.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Legendary Creature — Dragon"
   },
   "Leeching Sliver": {
     "cmc": 2.0,
@@ -474,6 +549,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Lotus Bloom": {
+    "cmc": 0.0,
+    "keywords": [
+      "Suspend"
+    ],
+    "mana_cost": "",
+    "oracle_text": "Suspend 3—{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\n{T}, Sacrifice this artifact: Add three mana of any one color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Magma Opus": {
     "cmc": 8.0,
     "keywords": [
@@ -511,6 +597,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Mercadian Bazaar": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Put a storage counter on this land.\n{T}, Remove any number of storage counters from this land: Add {R} for each storage counter removed this way.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Monastery Swiftspear": {
     "cmc": 1.0,
@@ -639,6 +734,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Pyretic Ritual": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Add {R}{R}{R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Reality Spasm": {
     "cmc": 2.0,
     "keywords": [],
@@ -695,6 +799,24 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Rite of Flame": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Add {R}{R}, then add {R} for each card named Rite of Flame in each graveyard.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Ruby Medallion": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "Red spells you cast cost {1} less to cast.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Sandstone Needle": {
     "cmc": 0.0,
     "keywords": [],
@@ -712,6 +834,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Scourge of Valkas": {
+    "cmc": 5.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{2}{R}{R}{R}",
+    "oracle_text": "Flying\nWhenever this creature or another Dragon you control enters, it deals X damage to any target, where X is the number of Dragons you control.\n{R}: This creature gets +1/+0 until end of turn.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Dragon"
   },
   "Searing Blaze": {
     "cmc": 2.0,
@@ -741,6 +874,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Seething Song": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Add {R}{R}{R}{R}{R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Shard Volley": {
     "cmc": 1.0,
@@ -930,6 +1072,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Utvara Hellkite": {
+    "cmc": 8.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{6}{R}{R}",
+    "oracle_text": "Flying\nWhenever a Dragon you control attacks, create a 6/6 red Dragon creature token with flying.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Dragon"
   },
   "Venerable Knight": {
     "cmc": 1.0,
