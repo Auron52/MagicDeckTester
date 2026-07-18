@@ -1,0 +1,160 @@
+{
+  "seed": 20, "game_index": 19, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 49, "name": "Unclaimed Territory" }, { "num": 57, "name": "Worthy Knight" }, { "num": 45, "name": "Tournament Grounds" }, { "num": 29, "name": "Marshal of Zhalfir" }, { "num": 50, "name": "Unclaimed Territory" }, { "num": 53, "name": "Venerable Knight" }, { "num": 6, "name": "Aether Vial" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Tournament Grounds", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Venerable Knight", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Venerable Knight", "land": "Unclaimed Territory", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 1, "summary": "land=Tournament Grounds; cast: Venerable Knight", "land": "Tournament Grounds", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 3, "summary": "land=Tournament Grounds; cast: Aether Vial", "land": "Tournament Grounds", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Tournament Grounds; cast: (nothing)", "land": "Tournament Grounds", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 2,
+  "heuristic_default": 1,
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Tournament Grounds", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Venerable Knight", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Knight Exemplar" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Tournament Grounds", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Venerable Knight", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Tournament Grounds; cast: Worthy Knight, Venerable Knight (vial)", "land": "Tournament Grounds", "casts": ["Worthy Knight", "Venerable Knight"], "actions": [{ "card": "Worthy Knight" }, { "card": "Venerable Knight" }] },
+    { "index": 1, "summary": "land=Tournament Grounds; cast: Marshal of Zhalfir, Venerable Knight (vial)", "land": "Tournament Grounds", "casts": ["Marshal of Zhalfir", "Venerable Knight"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Venerable Knight" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Worthy Knight, Venerable Knight (vial)", "land": "Unclaimed Territory", "casts": ["Worthy Knight", "Venerable Knight"], "actions": [{ "card": "Worthy Knight" }, { "card": "Venerable Knight" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Marshal of Zhalfir, Venerable Knight (vial)", "land": "Unclaimed Territory", "casts": ["Marshal of Zhalfir", "Venerable Knight"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Venerable Knight" }] },
+    { "index": 4, "summary": "land=Tournament Grounds; cast: Worthy Knight", "land": "Tournament Grounds", "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
+    { "index": 5, "summary": "land=Tournament Grounds; cast: Marshal of Zhalfir", "land": "Tournament Grounds", "casts": ["Marshal of Zhalfir"], "actions": [{ "card": "Marshal of Zhalfir" }] },
+    { "index": 6, "summary": "land=Tournament Grounds; cast: Venerable Knight", "land": "Tournament Grounds", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 7, "summary": "land=Tournament Grounds; cast: Venerable Knight (vial)", "land": "Tournament Grounds", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 8, "summary": "land=Unclaimed Territory; cast: Worthy Knight", "land": "Unclaimed Territory", "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
+    { "index": 9, "summary": "land=Unclaimed Territory; cast: Marshal of Zhalfir", "land": "Unclaimed Territory", "casts": ["Marshal of Zhalfir"], "actions": [{ "card": "Marshal of Zhalfir" }] },
+    { "index": 10, "summary": "land=Unclaimed Territory; cast: Venerable Knight", "land": "Unclaimed Territory", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 11, "summary": "land=Unclaimed Territory; cast: Venerable Knight (vial)", "land": "Unclaimed Territory", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 12, "summary": "land=none; cast: Venerable Knight", "land": null, "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 13, "summary": "land=none; cast: Venerable Knight (vial)", "land": null, "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 14, "summary": "land=Tournament Grounds; cast: (nothing)", "land": "Tournament Grounds", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 2,
+  "heuristic_default": 1,
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "is_land": true }, { "name": "Unclaimed Territory", "idx": 4, "is_land": true }, { "name": "Venerable Knight", "idx": 5, "is_land": false }, { "name": "Worthy Knight", "idx": 6, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Tournament Grounds", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Worthy Knight" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Unclaimed Territory", "idx": 1, "is_land": true }, { "name": "Unclaimed Territory", "idx": 4, "is_land": true }, { "name": "Venerable Knight", "idx": 5, "is_land": false }, { "name": "Worthy Knight", "idx": 6, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Tournament Grounds", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Tournament Grounds; cast: Marshal of Zhalfir (vial), Knight Exemplar", "land": "Tournament Grounds", "casts": ["Marshal of Zhalfir", "Knight Exemplar"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Knight Exemplar" }] },
+    { "index": 1, "summary": "land=Tournament Grounds; cast: Marshal of Zhalfir (vial), Worthy Knight", "land": "Tournament Grounds", "casts": ["Marshal of Zhalfir", "Worthy Knight"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Worthy Knight" }] },
+    { "index": 2, "summary": "land=Tournament Grounds; cast: Marshal of Zhalfir, Worthy Knight (vial)", "land": "Tournament Grounds", "casts": ["Marshal of Zhalfir", "Worthy Knight"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Worthy Knight" }] },
+    { "index": 3, "summary": "land=Tournament Grounds; cast: Knight Exemplar, Worthy Knight (vial)", "land": "Tournament Grounds", "casts": ["Knight Exemplar", "Worthy Knight"], "actions": [{ "card": "Knight Exemplar" }, { "card": "Worthy Knight" }] },
+    { "index": 4, "summary": "land=none; cast: Marshal of Zhalfir (vial), Worthy Knight", "land": null, "casts": ["Marshal of Zhalfir", "Worthy Knight"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Worthy Knight" }] },
+    { "index": 5, "summary": "land=none; cast: Marshal of Zhalfir, Worthy Knight (vial)", "land": null, "casts": ["Marshal of Zhalfir", "Worthy Knight"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Worthy Knight" }] },
+    { "index": 6, "summary": "land=Tournament Grounds; cast: Marshal of Zhalfir", "land": "Tournament Grounds", "casts": ["Marshal of Zhalfir"], "actions": [{ "card": "Marshal of Zhalfir" }] },
+    { "index": 7, "summary": "land=Tournament Grounds; cast: Marshal of Zhalfir (vial)", "land": "Tournament Grounds", "casts": ["Marshal of Zhalfir"], "actions": [{ "card": "Marshal of Zhalfir" }] },
+    { "index": 8, "summary": "land=Tournament Grounds; cast: Knight Exemplar", "land": "Tournament Grounds", "casts": ["Knight Exemplar"], "actions": [{ "card": "Knight Exemplar" }] },
+    { "index": 9, "summary": "land=Tournament Grounds; cast: Worthy Knight", "land": "Tournament Grounds", "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
+    { "index": 10, "summary": "land=Tournament Grounds; cast: Worthy Knight (vial)", "land": "Tournament Grounds", "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
+    { "index": 11, "summary": "land=none; cast: Marshal of Zhalfir", "land": null, "casts": ["Marshal of Zhalfir"], "actions": [{ "card": "Marshal of Zhalfir" }] },
+    { "index": 12, "summary": "land=none; cast: Marshal of Zhalfir (vial)", "land": null, "casts": ["Marshal of Zhalfir"], "actions": [{ "card": "Marshal of Zhalfir" }] },
+    { "index": 13, "summary": "land=none; cast: Worthy Knight", "land": null, "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
+    { "index": 14, "summary": "land=none; cast: Worthy Knight (vial)", "land": null, "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
+    { "index": 15, "summary": "land=Tournament Grounds; cast: (nothing)", "land": "Tournament Grounds", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 2,
+  "perm_index": 2,
+  "heuristic_default": 0,
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 10, "is_land": false }, { "name": "1/1 Human Token", "idx": 11, "is_land": false }, { "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Knight Exemplar", "idx": 12, "is_land": false }, { "name": "Tournament Grounds", "idx": 8, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "is_land": true }, { "name": "Unclaimed Territory", "idx": 4, "is_land": true }, { "name": "Venerable Knight", "idx": 5, "is_land": false }, { "name": "Worthy Knight", "idx": 6, "is_land": false }, { "name": "Worthy Knight", "idx": 9, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Venerable Knight" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Venerable Knight (3), Worthy Knight (3) — 6 to opponent (20→14)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 10, "is_land": false }, { "name": "1/1 Human Token", "idx": 11, "is_land": false }, { "name": "Aether Vial", "idx": 2, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Knight Exemplar", "idx": 12, "is_land": false }, { "name": "Tournament Grounds", "idx": 8, "is_land": true }, { "name": "Unclaimed Territory", "idx": 1, "is_land": true }, { "name": "Unclaimed Territory", "idx": 4, "is_land": true }, { "name": "Venerable Knight", "idx": 5, "is_land": false }, { "name": "Worthy Knight", "idx": 6, "is_land": false }, { "name": "Worthy Knight", "idx": 9, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Venerable Knight", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Marshal of Zhalfir, Venerable Knight", "land": null, "casts": ["Marshal of Zhalfir", "Venerable Knight"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Venerable Knight" }] },
+    { "index": 1, "summary": "land=none; cast: Venerable Knight, Marshal of Zhalfir", "land": null, "casts": ["Venerable Knight", "Marshal of Zhalfir"], "actions": [{ "card": "Venerable Knight" }, { "card": "Marshal of Zhalfir" }] },
+    { "index": 2, "summary": "land=none; cast: Marshal of Zhalfir (vial), Venerable Knight", "land": null, "casts": ["Marshal of Zhalfir", "Venerable Knight"], "actions": [{ "card": "Marshal of Zhalfir" }, { "card": "Venerable Knight" }] },
+    { "index": 3, "summary": "land=none; cast: Marshal of Zhalfir", "land": null, "casts": ["Marshal of Zhalfir"], "actions": [{ "card": "Marshal of Zhalfir" }] },
+    { "index": 4, "summary": "land=none; cast: Marshal of Zhalfir (vial)", "land": null, "casts": ["Marshal of Zhalfir"], "actions": [{ "card": "Marshal of Zhalfir" }] },
+    { "index": 5, "summary": "land=none; cast: Venerable Knight", "land": null, "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
