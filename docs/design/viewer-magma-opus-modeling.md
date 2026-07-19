@@ -1,6 +1,57 @@
 # Magma Opus: divide surfacing + unmodeled "tap two" / Treasure clauses (issue #9)
 
-Status: **DEFERRED — engine card-modeling + reproduction needed; moves Hinata GT.**
+Status: **ANALYZED — root cause found; card-model change specced (user design); needs GT-tradeoff sign-off.**
+
+## What was confirmed (2026-07-19)
+
+- Magma Opus **casts fine** and the `divide` decision surfaces (reproduced Seed 5 Game 4). The divide's
+  `legal_targets` include opponent creatures (`CollectDamageTargets(players_only=false)`), and opponent
+  permanents carry a board `idx` (`JsonBattlefield` for both players), so the divide stepper attaches to
+  them exactly as it does to your own Hinata (which works). So there is **no separate "can't select
+  opponent creatures" wiring bug** — the practical block was reaching the target COUNT.
+- **Root cause of "prevented from casting / needed more targets":** Hinata discounts per DISTINCT
+  target. Real Magma Opus reaches 6 targets = **4 damage (spread, ≤2 to face) + 2 tapped permanents**.
+  The model **omits tap-two**, so the human maxes at the ≤4 divide targets and can't reach the discount
+  the cheap `{R}{U}` line needs. Dumping all 4 damage on the face = 1 damage-target (poor spread).
+- The model's autonomous discount uses `HinataAvailableTargets = 2 + every permanent`
+  ([SpellEffects.h:2420](../../src/core/SpellEffects.h#L2420)) — a free over-count (the "reduction
+  without distinct targets" issue). It keeps the SEARCH's Magma cheap, so autonomous play is roughly OK.
+
+## The fix (user design)
+
+1. **Tap-two as a separate target step** — a new decision to choose 2 target permanents to tap; those
+   are 2 more DISTINCT targets that earn the discount. (Tap effect itself is ~inert vs a passive
+   goldfish opponent; the target COUNT is what matters.)
+2. **Distinct-target discount** — Hinata's reduction counts the distinct targets actually chosen
+   (divide damage targets ∪ tap targets), not `2 + all permanents`. More faithful.
+3. **Autonomous heuristic (goldfishing).** Under the distinct-target discount the search's real choice
+   is: *spread* the 4 damage 1-each across cheap **distinct** targets, then tap 2 lands, vs. concentrate
+   damage on the opponent face (fewer targets → more mana, more face damage). "The only real decision in
+   goldfishing is whether to pay more mana to deal more damage to the opponent" (user). Default to the
+   max-discount spread (cheapest cast); concentrate face damage only when the extra points are worth the
+   extra mana (lethal / near-lethal). Heuristic tuning (see `.claude/skills/heuristic-optimization.md`)
+   on top of the faithful model.
+
+   **Exact cost ladder (user).** The 4 damage-targets are: **the two players (opponent + self) + Hinata
+   + one other creature** (yours or the opponent's — *sometimes absent*), 1 damage each; plus **tap 2
+   lands**. Magma Opus is `{6}{U}{R}`; Hinata discounts `{1}` per DISTINCT target (cap 6):
+   - 4 damage-targets + 2 tap = **6 distinct** → `{U}{R}` (2 mana).
+   - no 4th creature → 3 damage-targets (put ≤2 on a face) + 2 tap = **5 distinct** → `{1}{U}{R}` (3 mana).
+   Distinctness is load-bearing: a permanent targeted twice earns only one `{1}`.
+
+## The GT tradeoff (needs sign-off before rebaseline)
+
+The Soulfire fix moved GT positively (more reach). Magma is the opposite: switching the autonomous
+discount from `2 + all permanents` to **distinct chosen targets** makes Magma Opus *more expensive* for
+the search (it can only count what it targets), so it likely casts later / less — a **GT-negative**
+move, though a more faithful one. Options:
+- **(A) Human-path only:** add the tap-two step + distinct-count for the VIEWER/human cast (like the
+  Soulfire chooser is human-only), leaving the autonomous discount as-is → GT-neutral, unblocks the
+  human, but keeps the search's over-count.
+- **(B) Full faithful:** change the discount everywhere → GT-negative but correct; rebaseline Hinata.
+
+Recommend confirming A vs B with the user. Reference-safe either way (no reference casts Magma —
+none replay a `divide`). Read `.claude/skills/mtg-rules.md` before implementing.
 
 ## Problem (as reported)
 
