@@ -8738,7 +8738,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     };
     struct PendingCast {
         std::string name; const CardDefinition* def; bool rock;
-        ManaCost full_cost;               // the printed cost (or hard cost of an alt-cost spell)
+        ManaCost full_cost;               // the EFFECTIVE cost (printed cost minus any Hinata /
+                                          // Medallion / affinity reduction in play), or the hard cost
+                                          // of an alt-cost spell
         bool has_spectacle;   ManaCost spectacle_cost;
         bool alt_free;                    // alt cost payable (controls the subtype) -> costs no mana
     };
@@ -8767,7 +8769,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             && ControlsSubtype(s, s.active_player_index, def->params.alt_cost_requires_subtype);
         PendingCast pc;
         pc.name = name; pc.def = def; pc.rock = def->params.mana_rock && !def->card.IsCreature();
-        pc.full_cost = mc;
+        // Use the EFFECTIVE cost so a Hinata-discounted (or Medallion/affinity-reduced) spell
+        // validates at the same reduced generic the enumerator charges -- otherwise a hand-built
+        // line casting e.g. Magma Opus with Hinata in play is checked against the full {6}{U}{R}
+        // and wrongly rejected as unpayable ("I needed more targets to cast", viewer issue #9).
+        // EffectiveCost only touches GENERIC (colored pips preserved, so the color gate above is
+        // unaffected) and is an identity when no reducer is in play -> byte-identical for every
+        // deck without one. CheckLine is viewer-only (sole caller --validate-line), so GT-neutral.
+        pc.full_cost = EffectiveCost(*def, s);
         pc.has_spectacle = def->params.spectacle_cost.has_value();
         pc.spectacle_cost = def->params.spectacle_cost.value_or(mc);
         pc.alt_free = alt_free;
