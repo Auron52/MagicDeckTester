@@ -1,0 +1,84 @@
+{
+  "card_scores": {
+    "Apex of Power": [
+      -0.2729855537720711,
+      -0.3616573033707864
+    ],
+    "Desperate Ritual": [
+      -0.06197501849675824,
+      0.00314267756128217
+    ],
+    "Dragonlord Kolaghan": [
+      -0.37848439662005173
+    ],
+    "Dragonstorm": [
+      0.14916017691911065,
+      -0.39619991738950855
+    ],
+    "Dwarven Hold": [
+      -0.08110027657316721
+    ],
+    "Irencrag Feat": [
+      0.27333333333333254
+    ],
+    "Karrthus, Tyrant of Jund": [
+      -0.5865973965326017
+    ],
+    "Lathliss, Dragon Queen": [
+      -0.557971963841216
+    ],
+    "Lotus Bloom": [
+      0.6615338973318536,
+      -0.7358258516787606
+    ],
+    "Mercadian Bazaar": [
+      -0.15757417810467,
+      -0.044179523141655075
+    ],
+    "Mountain": [
+      -0.14148517846339992,
+      0.1561403508771928,
+      -0.378571428571429
+    ],
+    "Pyretic Ritual": [
+      -0.20085470085470103,
+      0.09829059829059794
+    ],
+    "Rite of Flame": [
+      -0.27401477832512366,
+      -0.20586253369272178
+    ],
+    "Ruby Medallion": [
+      0.19318944542327365
+    ],
+    "Sandstone Needle": [
+      0.5001619041808825,
+      0.4666642338430096
+    ],
+    "Scourge of Valkas": [
+      0.11846785225718204
+    ],
+    "Seething Song": [
+      0.23551629817614472,
+      0.24335932337782484
+    ],
+    "Unclaimed Territory": [
+      -0.04805016955047403
+    ],
+    "Utvara Hellkite": [
+      -0.1922472861652169
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
