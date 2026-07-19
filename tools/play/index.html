@@ -1030,15 +1030,31 @@ function handleVerdict(v, line) {
   const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
             :v.verdict==='unsupported'?'The v1 line check can’t validate this yet.':'The model can’t play this line.';
   const plans=(v.decision&&v.decision.plans)||[];
-  const mp=plans.map(p=>`<div>• ${esc(p.summary)}</div>`).join('')||'<div>• (only pass)</div>';
+  // Each enumerated plan is CLICKABLE: picking it submits that plan index directly (same path a normal
+  // plan selection takes), so when the line-check can't validate a hand-built line (an X-spell like
+  // Crackle with Power, a bounce-land-after-casts sequence, issue #7) the user can one-click the
+  // matching combined plan the model DOES offer -- e.g. "land=Izzet Boilerworks; cast Crackle, Irencrag
+  // Feat" -- instead of rebuilding it. Plans with a valid index are buttons; the "(only pass)" fallback
+  // is inert text.
+  const mp=plans.length
+    ? plans.map(p=>`<button class="variant vplan" data-plan="${p.index}">${esc(p.summary)}</button>`).join('')
+    : '<div>• (only pass)</div>';
   const ve=$('verdict'); ve.className=cls;
   ve.innerHTML=`<span class="vtag">${tag}</span><h4>${head}</h4>`+
     `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
-    `<div class="modelplans"><b>What the model would accept:</b>${mp}</div>`+
+    `<div class="modelplans"><b>What the model would accept${plans.length?' (click to play)':''}:</b>${mp}</div>`+
     `<div class="actions"><button id="artbtn" class="primary">Store as artifact</button>`+
     `<button id="retrybtn" class="ghost">Clear &amp; retry</button></div><div id="artinfo" class="hint" style="margin-top:8px"></div>`;
   ve.style.display='block';
   $('retrybtn').onclick=clearPlan; $('artbtn').onclick=()=>storeArtifact(v, line);
+  // Wire each model-plan button to submit its index. Clear S.plan first so the rejected hand-built
+  // queue doesn't seed a false dropped-cast check against the (different) model plan's actual casts.
+  ve.querySelectorAll('.vplan').forEach(btn=>btn.onclick=()=>{
+    const idx=parseInt(btn.getAttribute('data-plan'),10);
+    if (!Number.isFinite(idx)) return;
+    S.plan=[]; S.leMode=false; S.vialMode=null;
+    applyAccepted(idx, 'chose model plan: '+btn.textContent);
+  });
 }
 async function storeArtifact(v, line) {
   S.hadReject=true; $('artinfo').textContent='saving…';

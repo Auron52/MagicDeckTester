@@ -15,13 +15,15 @@ sources + Irencrag's ritual; the tapped Boilerworks contributes 0 that turn), an
 NOT over-credit the tapped Boilerworks** — the combined *plan* path is sound. At turn 5 (only 4 sources,
 no ritual) the enumerator correctly offers **no** combined plan (unaffordable). Item 3 is closed.
 
-**So the reported misfire ("Boilerworks stays in hand, Crackle not cast") is the HAND-BUILD path, not
-the engine.** When the user assembles the line in the LineBuild UI: (1) `encodeLine`
-([tools/play/linebuild.js:55](../../tools/play/linebuild.js#L55)) emits `land=` before every `cast=`, so
-the Karoo land is sequenced *first*; and (2) Crackle is an X-spell, which `CheckLine` grades
-**`unsupported`** — so the whole hand-built line can't be validated/committed and silently no-ops. Both
-are viewer-only (GT-neutral). The user's workaround (pick the combined plan from the menu, or split
-across phases) already works because it bypasses the hand-build path.
+**Even the HAND-BUILT combined line works today.** Ran the engine directly with
+`--validate-line "land=Izzet Boilerworks;cast=Crackle with Power"` at that turn-6 state: it was
+**accepted and executed** — Boilerworks entered, Crackle cast (opponent 20→15), and the flow reached
+the Boilerworks bounce sub-decision. So `encodeLine`'s land-first ordering actually produces a *working*
+line here (CheckLine matches it to the enumerated combined plan and `accept`s it), and the X-spell is
+handled via the plan match rather than the `unsupported` bail. The originally-reported misfire was most
+likely a genuine affordability drop at a *different* turn (e.g. turn 5: only 4 untapped sources, no
+Irencrag ritual, Crackle X=0) or a since-fixed stale binary — NOT a current defect. Net: issue #7 has
+no live engine or hand-build bug; the only residual is UX polish (see below).
 
 ## Problem (as reported)
 
