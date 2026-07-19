@@ -1,6 +1,53 @@
 # Magma Opus: divide surfacing + unmodeled "tap two" / Treasure clauses (issue #9)
 
-Status: **ANALYZED — root cause found; card-model change specced (user design); needs GT-tradeoff sign-off.**
+Status: **PARTIALLY SHIPPED — the FUNCTIONAL blocker is FIXED (GT-neutral); the full-faithful discount
+is a deferred, GT-negative correctness improvement awaiting supervised sign-off.**
+
+## 2026-07-19 — the "prevented from casting" blocker is FIXED (WS6a, GT-neutral, shipped)
+
+The actual reproduction question ("does the human's Magma cost track the divide targets or the
+all-permanents over-count?") is resolved by the code: the cast cost is finalized at plan ENUMERATION
+via `HinataGenericDiscount`; the `divide` chooser does NOT feed back into cost. So the human is not
+blocked by the divide at all — they were blocked because **`CheckLine` (the viewer's `--validate-line`
+path) charged the full printed `{6}{U}{R}` and never applied the Hinata discount**, so a hand-built
+Magma line with Hinata in play was rejected as unpayable ("I needed more targets to cast"). Fixed by
+seeding `pc.full_cost` from `EffectiveCost` (commit on `phase-1-2-deck-analyzer`); CheckLine is
+viewer-only ⇒ smoke 18/18 byte-identical, per-game audit 0 flips. **The human can now hand-build and
+cast Magma Opus at the discounted cost, then the `divide` panel opens to split the 4 damage (opponent
+creatures included).**
+
+## What's LEFT (deferred, GT-negative, needs sign-off): the full-faithful discount + tap-two
+
+The autonomous SEARCH still uses the over-count `HinataAvailableTargets = 2 + every permanent`, which
+keeps Magma cheap ({U}{R}) even when the board can't supply 6 distinct targets. Making the discount
+faithful is GT-negative (Magma gets more expensive when the spread can't reach 6 distinct). The user
+chose "full faithful, heuristic does most of the work," but also observed **"the autonomous is probably
+not that much off"** — so the GT gain is expected to be small, and this is a correctness/faithfulness
+polish, not a blocker. Recommend implementing in a SUPERVISED session (per
+`.claude/skills/heuristic-optimization.md`: escape-hatch, sweep train seeds, validate on overnight,
+report, adopt on approval) rather than unsupervised, because it needs lockstep changes across the three
+resolution sites (EffectHandler / ApplyPlanDirect / Solve) plus a new tap-two model.
+
+### Lower-risk implementation than the full declared-count enumeration
+
+The user's own framing — "the only real decision in goldfishing is whether to pay more mana to deal
+more damage to the opponent" — means the SEARCH does **not** need to enumerate every declared target
+count (the heavy Crackle-style multi-plan machinery). A single **heuristic-chosen** line per board
+state suffices, gated on lethality, computed identically at enumeration and resolution so the discount
+and the damage stay lockstep:
+
+- **Concentrate line** (opponent at/near lethal from Magma face damage): all 4 damage on the opponent
+  face = 1 damage-target + 2 tap = **3 distinct** → `{3}{U}{R}` (pay more, deal 4 to face).
+- **Spread line** (default, developing): 1 damage each to **your own creatures first**, then the two
+  players (self + opponent), then an opponent creature only if needed to reach the count, up to 4
+  damage-targets; + tap 2 no-cost permanents = **5–6 distinct** → `{1}{U}{R}` / `{U}{R}` (cheapest,
+  but only ~1 to the face).
+
+`HinataAvailableTargets` (behind `MTG_MAGMA_FAITHFUL`, default off) returns the count the heuristic
+actually hits; the resolution applies the SAME spread + taps. Because the heuristic is a pure function
+of the board, the enumerator and the resolution agree ⇒ lockstep, conservative (never the cheap-cost-
+plus-full-face-damage over-rating the current model allows). Measure the smoke/overnight delta with the
+hatch ON and present before flipping the default / rebaselining Hinata GT.
 
 ## What was confirmed (2026-07-19)
 
