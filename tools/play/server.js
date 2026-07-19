@@ -21,7 +21,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawnSync, spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');          // repo root
 const DECKS_DIR = path.join(ROOT, 'decks');
@@ -144,21 +144,45 @@ function runStep(p, logDir) {
   return runStepRaw(p, logDir, false);
 }
 
+// Spawn the binary ASYNCHRONOUSLY (child_process.spawn, not spawnSync) so the up-to-tens-of-seconds
+// sidecar parse does NOT freeze Node's single-threaded event loop -- otherwise a spawnSync here would
+// block EVERY other request (including the fast /api/step for the next mulligan dialog) until it
+// returned, which is exactly the "big wait between mulligan dialog 1 and 2" the exhaustive keep-hint
+// caused. Resolves to { status, stdout, stderr, error } like spawnSync's return.
+function spawnAsyncCollect(bin, args, opts) {
+  return new Promise((resolve) => {
+    let stdout = '', stderr = '', settled = false;
+    const child = spawn(bin, args, { cwd: opts.cwd });
+    const done = (r) => { if (settled) return; settled = true; if (timer) clearTimeout(timer); resolve(r); };
+    const timer = opts.timeout ? setTimeout(() => { try { child.kill('SIGKILL'); } catch (e) {} done({ status: null, stdout, stderr, error: 'timeout' }); }, opts.timeout) : null;
+    child.stdout.on('data', d => { stdout += d; });
+    child.stderr.on('data', d => { stderr += d; });
+    child.on('error', (err) => done({ status: null, stdout, stderr, error: String(err) }));
+    child.on('close', (code) => done({ status: code, stdout, stderr }));
+  });
+}
+
 // Async MULLIGAN-TABLE hint: re-run the CURRENT pre-game decision (mulligan or bottom) WITH the
 // exhaustive keep sidecar (--exhaustive-keep -- the expensive parse) and return the deck's TABLE
 // recommendation. The re-run replays the identical game (same seed+choices → same decision); only the
 // AI-suggestion metadata differs. This drives BOTH the keep/mulligan call (ai_choice, from the table's
 // KeepHand -- so the profile decides whether to mulligan, not just how to bottom) and the joint bottom
-// set (ai_set). The browser fires it in PARALLEL with the modal, never blocking the human (the AI pick
-// is a hint). Table-less decks return hasSidecar:false with NO binary spawn. Viewer-scoped; the
-// engine's default --claude-play stays table-less (see main.cpp AttachExhaustiveSidecar).
-function runKeepHint(p) {
+// set (ai_set). Uses ASYNC spawn so the sidecar parse never blocks the event loop (see spawnAsyncCollect
+// -- a spawnSync here froze the next /api/step). The browser fires it in PARALLEL with the modal, never
+// blocking the human (the AI pick is a hint). Table-less decks return hasSidecar:false with NO spawn.
+// Viewer-scoped; the engine's default --claude-play stays table-less (see main.cpp AttachExhaustiveSidecar).
+async function runKeepHint(p) {
   let hasSidecar = false;
   try { hasSidecar = resolveDeck(p.deck).hasSidecar; } catch (e) { /* table-less */ }
   if (!hasSidecar) return { kind: 'keep-hint', hasSidecar: false };
-  const r = runStepRaw(p, null, true);   // WITH --exhaustive-keep
-  if (r.kind !== 'decision') return { kind: 'keep-hint', hasSidecar: true, error: r.error || ('unexpected ' + r.kind) };
-  const d = r.decision;
+  const args = buildArgs(p, null, null, true);   // WITH --exhaustive-keep
+  const r = await spawnAsyncCollect(BIN, args, { cwd: ROOT, timeout: STEP_TIMEOUT_MS });
+  if (r.error) return { kind: 'keep-hint', hasSidecar: true, error: String(r.error) };
+  const out = (r.stdout || '') + '\n' + (r.stderr || '');
+  const decisionRaw = extractBlock(out, '<<<CLAUDE_DECISION>>>', '<<<END_DECISION>>>');
+  if (!decisionRaw) return { kind: 'keep-hint', hasSidecar: true, error: 'no decision markers' };
+  let d;
+  try { d = JSON.parse(decisionRaw); } catch (e) { return { kind: 'keep-hint', hasSidecar: true, error: 'bad decision JSON: ' + e.message }; }
   return {
     kind: 'keep-hint', hasSidecar: true,
     decision_index: d.decision_index, type: d.type,
@@ -295,10 +319,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/keep-hint') {
       // Async mulligan-TABLE hint for the current pre-game decision (see runKeepHint). Non-blocking:
-      // the browser has already shown the mulligan/bottom modal; this loads the exhaustive sidecar in
-      // the background and returns the table's keep/mulligan call + joint bottom set.
+      // the browser has already shown the mulligan/bottom modal; this loads the exhaustive sidecar via
+      // an ASYNC spawn (so the parse never freezes the event loop / the next /api/step) and returns the
+      // table's keep/mulligan call + joint bottom set.
       const p = await readBody(req);
-      return sendJson(res, 200, runKeepHint(p));
+      return sendJson(res, 200, await runKeepHint(p));
     }
     if (req.method === 'POST' && url.pathname === '/api/validate') {
       // Reconcile the hand-assembled line (p.line, an encoded "land=X;cast=Y;..." string)
