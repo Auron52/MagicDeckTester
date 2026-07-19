@@ -313,10 +313,37 @@ the batch for all Magma-casting games):
   reproduce the batch win turn (283: batch OFF won T8, repro OFF unwon). Known CPU-oversubscription
   nondeterminism flipping borderline games, unrelated to the Magma change.
 
-**Conclusion: every REPRODUCIBLE faster OFF line is impossible under correct rules → the user's adopt
-criterion is met.** The reproducible metric cost (~+0.014) is purely deleting fictional wins.
+**INITIAL conclusion (WRONG, corrected below): "every reproducible faster OFF line is impossible → adopt."**
 
-### Adoption status: ADOPTED 2026-07-19 (faithful is now the DEFAULT; `MTG_LEGACY_MAGMA` = opt-out A/B)
+### CORRECTION 2026-07-19 (session 3b): the +1 games are SEARCH OVER-CONCENTRATION, not cheat-removal
+The over-count's specific line ({U}{R} for 4-to-face) IS impossible, but the WIN it reached was usually
+LEGALLY reachable a turn sooner — the audit's "impossible" framing missed that. Worked example gi163 (OFF
+T6 → faithful T7): OFF cast Magma cheap ({U}{R}, chip) and the **Crackle combo** did the kill (opp 12→-3);
+the faithful SEARCH instead paid `{3}{U}{R}` (concentrate, 5 mana) for Magma's 4-face, **starving the
+lethal Crackle** → slipped to T7. So a legal T6 line existed (cheap 1-face Magma + bigger Crackle) and the
+search didn't pick it. Eval-neutralising the variants (removing `eval=face*100`) recovered NONE — the
+over-concentration isn't an eval-pruning artifact.
+
+**Fix (user directive): Crackle-reserve rule** — when a Crackle is in hand it competes with Magma for
+mana, and Crackle is the better sink (3 mana → 5 damage vs Magma's 3 mana → +3 face), so RESERVE mana for
+Crackle: Magma emits ONLY the cheap 1-to-face variant when a Crackle is in hand. Implemented in
+`HinataProvider::ScaledCastVariants` (off-switch `MTG_NO_MAGMA_RESERVE`). Recovers **11/17** audited d5
+games. BUT d0 aggregate got WORSE (over-count 7.4760 → faithful-no-reserve 7.4840 → faithful+reserve
+7.4920): "always reserve" helps the d5 SEARCH (uses the reserved mana for Crackle) but hurts greedy d0 (no
+lookahead to spend it). The **net d5 aggregate with reserve is UNMEASURED** (the +0.017 held-out d5
+validation predates the reserve rule).
+
+### Adoption status: UN-ADOPTED 2026-07-19 — faithful+reserve is OPT-IN (`MTG_MAGMA_FAITHFUL`), default OFF
+Reverted the premature adoption: default is the over-count single line again (original GT restored,
+smoke back to 7.4760/6.0133/6.0400). All the work — the general scaled-cast mechanism + the Crackle-reserve
+rule — is preserved behind `MTG_MAGMA_FAITHFUL` (enables faithful+reserve; add `MTG_NO_MAGMA_RESERVE` to
+A/B the reserve rule). **NEXT: re-measure the held-out d5 aggregate WITH the reserve rule** (vs over-count);
+audit the residual 6 still-slower games (4004_115, 5005_73, 5005_189, 7007_1, 7007_107, 7007_269 — are
+these forced, or a different search miss?); only then decide adoption + rebaseline. The bincache
+(`26683d9`) and the general mechanism are independent and stay.
+
+--- (superseded) original adoption note below ---
+### (superseded) Adoption status: ADOPTED 2026-07-19
 Committed behind `MTG_MAGMA_FAITHFUL` (default OFF ⇒ byte-identical) at `4658d4f`. Adopting = flip the
 default (drop the gate, add an `MTG_LEGACY` escape hatch) + `regression.sh --accept` to rebaseline Hinata
 GT (d0/d3/d5 avg + all play digests move). **The held-out d5 validation shows adoption costs ~+0.017 avg

@@ -1753,12 +1753,16 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
 std::vector<ScaledCastVariant>
 HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def) const
 {
-    // ADOPTED (2026-07-19): faithful scaled-cast is the DEFAULT. The per-game audit proved every faster
-    // line the old "2 + every permanent" over-count reached was IMPOSSIBLE ({U}{R} for 4-to-face, which
-    // legally costs {3}{U}{R}); the ~+0.014 avg-turn "slowdown" is purely removing that illegal free
-    // lunch. MTG_LEGACY_MAGMA restores the over-count for the standing A/B (byte-identical to pre-adopt).
-    static const bool legacy = std::getenv("MTG_LEGACY_MAGMA") != nullptr;
-    if (legacy) { return {}; }
+    // UN-ADOPTED 2026-07-19 (rationale corrected): faithful scaled-cast is OPT-IN behind MTG_MAGMA_FAITHFUL
+    // again, default OFF => the over-count single line, original GT. The per-game audit initially read as
+    // "every faster over-count line is IMPOSSIBLE ({U}{R} for 4-to-face)", but a closer look (gi163) showed
+    // the +1-turn games are the SEARCH over-concentrating Magma ({3}{U}{R}) and starving the lethal Crackle
+    // combo -- the WIN was legally reachable a turn sooner with cheap Magma + a bigger Crackle. The
+    // Crackle-reserve rule below recovers 11/17 audited d5 games, but the NET d5 effect (vs the over-count)
+    // is UNMEASURED and d0 got worse (7.4760->7.4920), so adoption waits on a real d5 re-measure. Enable
+    // the faithful+reserve model with MTG_MAGMA_FAITHFUL for that A/B.
+    static const bool enabled = std::getenv("MTG_MAGMA_FAITHFUL") != nullptr;
+    if (!enabled) { return {}; }
     if (!def.params.damage_divided || !def.params.discount_targets_permanents) { return {}; }
     if (!HinataInPlay(s)) { return {}; }
 
@@ -1774,11 +1778,31 @@ HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def
     const int spread_capacity = 1 + creatures;                                 // self + creatures
     const int tap = std::min(2, static_cast<int>(s.battlefield.size()));
 
+    // Crackle-reserve heuristic (user directive): when a Crackle is in hand it competes with Magma for
+    // this turn's mana, and Crackle is the far better sink -- 3 mana -> 5 damage (5X) vs Magma's 3 mana
+    // -> +3 face. So RESERVE the mana for Crackle: Magma takes ONLY the cheap 1-to-face line (max
+    // discount, {U}{R}) and the freed mana funds a bigger Crackle X. The search alone couldn't be trusted
+    // to reserve -- it over-invested in Magma's 4-face ({3}{U}{R}) and starved the lethal Crackle combo,
+    // slipping the kill a turn (gi163 T6->T7; eval-neutralising did NOT fix it). Off-switch
+    // MTG_NO_MAGMA_RESERVE opens the full ladder for the A/B. Only fires on a turn that ALSO holds a
+    // Crackle; every other Magma turn keeps the full 1..damage ladder for the search to pick.
+    static const bool reserve_for_crackle = std::getenv("MTG_NO_MAGMA_RESERVE") == nullptr;
+    bool crackle_competes = false;
+    if (reserve_for_crackle)
+    {
+        for (const Card& c : s.players[s.active_player_index].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && IsCrackleCountSpell(d->params)) { crackle_competes = true; break; }
+        }
+    }
+    const int face_hi = crackle_competes ? 1 : dmg;   // reserve for Crackle -> emit only the cheap face
+
     // Walk face high -> low (cost non-increasing): emit each face only when it is the HIGHEST face at
     // its cost (a lower face at the same cost is strictly dominated -- same mana, less reach).
     std::vector<ScaledCastVariant> out;
     int prev_generic = -1;
-    for (int face = dmg; face >= 1; --face)
+    for (int face = face_hi; face >= 1; --face)
     {
         const int spread   = std::min(dmg - face, spread_capacity);
         const int distinct = 1 + spread + tap;
