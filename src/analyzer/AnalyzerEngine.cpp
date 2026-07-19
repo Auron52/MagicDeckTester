@@ -73,6 +73,17 @@ const bool SKIP_LAND_GRID = []{
     const char* e = std::getenv("MTG_SKIP_GRID");
     return e && *e && std::string(e) != "0";
 }();
+// MTG_CARD_SCORES_ONLY: the FASTEST light-analyze -- additionally skip Phase 1/2/2b (the baseline
+// scan, required-pieces confirmation, and colour-source confirmation, which are the dominant cost
+// after the land grid: each is a full multi-thousand-game RunForRecords batch and colour-sources
+// runs two per colour). Produce ONLY the cheap Phase 3a card scores, computed on the DEFAULT keep
+// profile (no discovered required_pieces / min_color_sources). Implies SKIP_LAND_GRID. The play path
+// tolerates the missing pieces (empty required_pieces = default keep; card_scores still drive the
+// bottoming tiebreak). DEFAULT OFF so a plain regeneration is byte-identical. Read once at startup.
+const bool CARD_SCORES_ONLY = []{
+    const char* e = std::getenv("MTG_CARD_SCORES_ONLY");
+    return e && *e && std::string(e) != "0";
+}();
 constexpr int ANALYSIS_BUDGET = 20;    // deterministic virtual-ms node budget; matches the
                                        // regression suite's proven-sufficient d5 budget (the
                                        // node budget is iterative-deepening refinement WITHIN
@@ -547,14 +558,29 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     std::cerr << "Optimising mulligan profile...\n";
 
     // ---- Phase 1: baseline scan ------------------------------------------------
+    // MTG_CARD_SCORES_ONLY skips the baseline scan (and, below, the candidate + colour-source
+    // confirmation) entirely: leaving scan_records empty makes the Phase 2 loop over `sorted` a
+    // no-op, and Phase 2b is guarded directly. Only the cheap Phase 3a card scores then run, on the
+    // default keep profile -- a ~single-scoring-batch fast path (matches the baseline scan's cost).
     MulliganProfile             baseline_profile;
     baseline_profile.vial_target_mv = vial_target_mv;
-    std::vector<GameRecord>     scan_records = RunForRecords(
-        deck, baseline_profile, SCAN_GAMES, opt_seed, max_turns,
-        ANALYSIS_DEPTH, ANALYSIS_BUDGET);
-    double baseline_avg = AverageWinTurn(scan_records, max_turns);
-
-    std::map<std::string, double> impacts = ScanCardImpacts(scan_records, max_turns);
+    std::vector<GameRecord>       scan_records;
+    double                        baseline_avg = 0.0;
+    std::map<std::string, double> impacts;
+    if (!CARD_SCORES_ONLY)
+    {
+        scan_records = RunForRecords(
+            deck, baseline_profile, SCAN_GAMES, opt_seed, max_turns,
+            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
+        baseline_avg = AverageWinTurn(scan_records, max_turns);
+        impacts      = ScanCardImpacts(scan_records, max_turns);
+    }
+    else
+    {
+        std::cerr << "  [MTG_CARD_SCORES_ONLY] Skipping baseline scan + required-pieces + "
+                     "colour-source confirmation; computing card scores on the default keep "
+                     "profile only.\n";
+    }
 
     // Sort candidates by correlation strength (descending).
     std::vector<std::pair<std::string, double>> sorted;
@@ -636,17 +662,22 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     }
 
     // ---- Phase 2b: color source requirements -----------------------------------
-    std::cerr << "  Analysing color source requirements...\n";
-    std::map<Color, int> max_pips = FindMaxPipsPerColor(deck);
-    for (const std::pair<const Color, int>& kv : max_pips)
+    // Skipped under MTG_CARD_SCORES_ONLY (two RunForRecords batches per colour -- the largest slice
+    // of the post-grid cost). working_profile.min_color_sources stays empty -> default keep.
+    if (!CARD_SCORES_ONLY)
     {
-        if (kv.second == 0) { continue; }
-        int confirmed = ConfirmColorSourceMin(
-            deck, working_profile, kv.first, kv.second,
-            baseline_avg, confirm_seed, max_turns);
-        if (confirmed > 0)
+        std::cerr << "  Analysing color source requirements...\n";
+        std::map<Color, int> max_pips = FindMaxPipsPerColor(deck);
+        for (const std::pair<const Color, int>& kv : max_pips)
         {
-            working_profile.min_color_sources[kv.first] = confirmed;
+            if (kv.second == 0) { continue; }
+            int confirmed = ConfirmColorSourceMin(
+                deck, working_profile, kv.first, kv.second,
+                baseline_avg, confirm_seed, max_turns);
+            if (confirmed > 0)
+            {
+                working_profile.min_color_sources[kv.first] = confirmed;
+            }
         }
     }
 
@@ -686,7 +717,7 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
 
     // ---- Phase 3b: JOINT land + threshold grid search --------------------------
     MulliganProfile optimal;
-    if (SKIP_LAND_GRID)
+    if (SKIP_LAND_GRID || CARD_SCORES_ONLY)
     {
         // Card-scores-only stopgap: skip the expensive land x threshold grid (superseded by the
         // exhaustive mulligan profile). Keep working_profile's default land params + the discovered
@@ -698,7 +729,8 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
         optimal = working_profile;
         optimal.card_scores          = card_scores;
         optimal.hand_score_threshold = NO_GATE;
-        std::cerr << "  [MTG_SKIP_GRID] Land grid skipped; card-scores-only profile "
+        std::cerr << "  [" << (CARD_SCORES_ONLY ? "MTG_CARD_SCORES_ONLY" : "MTG_SKIP_GRID")
+                  << "] Land grid skipped; card-scores-only profile "
                   << "(default land window min_lands=" << optimal.min_lands
                   << " max_lands=" << optimal.max_lands << ", no hand-score gate).\n";
     }

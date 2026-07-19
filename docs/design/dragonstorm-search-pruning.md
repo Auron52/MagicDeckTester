@@ -141,3 +141,24 @@ analyze's signals may be all we ever have for this deck. Therefore:
 - Decide the light-analyze SCOPE (full vs card_scores-only vs degraded) from MEASURED cost AFTER the
   pruning fix — do not pre-emptively cut. If pruning makes it affordable, keep the full light analyze
   (robust fallback); if still too slow, drop the expensive signals and let the play path ignore them.
+
+### Measured resolution (Dragonstorm, post-step-2)
+
+After step 2, the full light-analyze (`MTG_SKIP_GRID`, grid skipped) was measured: the **baseline scan
+straggler is GONE** (the phase that ate 2h18m pre-fix now clears in ~4 min), but the full run is still
+**~1 hr** — dominated NOT by card_scores but by the Phase 1/2/2b confirmation phases (baseline scan +
+per-candidate required-pieces confirm at CONFIRM1=3000 / CONFIRM2=5000 games + colour-source confirm at
+two RunForRecords batches per colour across R/B/G). A 60-min run never even reached `card_scores` (the
+cheap final ~1000-game pass).
+
+**User decision: card_scores-only.** Added `MTG_CARD_SCORES_ONLY` (AnalyzerEngine.cpp, default off,
+implies `SKIP_LAND_GRID`) which skips Phase 1/2/2b entirely and runs only Phase 3a card scores on the
+DEFAULT keep profile. Measured **6m43s** (well under the user's 30-min cap; card_scores kept at d5, not
+dropped to d0). Profile committed at `decks/Dragonstorm/Dragonstorm.profile.json`: 19 card_scores,
+`hand_score_threshold = NO_GATE`, empty `required_pieces` / `min_color_sources`.
+
+**Caveat (accepted):** card_scores are computed on the default-keep profile, so the scoring games PLAY
+bloated ritual hands a real mulligan would throw — that is where the ~6-min run's single tail-straggler
+game lives (step 2 bounds it to minutes, not the old hours). The scores are a bottoming tiebreak signal,
+not a correctness input, and the user opted for speed. Standing rule for future decks: if 30-min-capped
+`MTG_CARD_SCORES_ONLY` still overruns, ship WITHOUT card_scores (play tolerates empty).
