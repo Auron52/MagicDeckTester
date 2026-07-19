@@ -331,4 +331,18 @@ public:
     // byte-identical; only an overriding archetype changes any decision.
     virtual KeepGuard KeepFloor(const std::vector<Card>& /*hand*/, int /*mulligan_count*/,
                                 bool /*on_the_play*/) const { return KeepGuard::Undecided; }
+
+    // Hook 27 -- Dragonstorm acceleration-prefix collapse gate. When true, TurnSolver's Solve /
+    // EnumeratePlans odometer enumerates only the K+1 CHEAPEST-FIRST PREFIXES of the ritual accelerants
+    // (actions with ritual_floating_mana > 0: Rite of Flame, Pyretic/Desperate Ritual, Seething Song,
+    // Irencrag Feat) instead of their full 2^K powerset (see GroupChoiceNonPrefixAccel). A self-funding
+    // ritual chain is cheapest-first-optimal -- for any storm count j the cheapest j accelerants dominate
+    // every other size-j subset (same storm count, >= mana) -- so the reachable (storm, mana) frontier is
+    // preserved while the go-off hand's combinatorial straggler collapses to linear. This is a HEURISTIC
+    // (it changes which action masks are enumerated -> NOT byte-identical), so it lives in the archetype
+    // provider and is opened by MTG_UNPRUNED (UnprunedGate::AccelPrefix) for the standing pruned-vs-unpruned
+    // A/B, exactly like EnumGroupCap / SituationalCardRank. Base returns false -> every non-Dragonstorm deck
+    // (and Dragonstorm under MTG_UNPRUNED) stays byte-identical; only DragonstormProvider opts in. See
+    // docs/design/dragonstorm-search-pruning.md (Step 2).
+    virtual bool UseAccelPrefixCollapse() const { return false; }
 };

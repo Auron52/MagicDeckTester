@@ -942,6 +942,62 @@ static bool GroupChoiceOverSplices(const GameState& state,
     return false;
 }
 
+// Dragonstorm acceleration-prefix collapse (HEURISTIC -- unlike GroupChoiceOverSplices this changes WHICH
+// action masks are enumerated, so it is NOT byte-identical: callers gate it behind
+// DragonstormProvider::UseAccelPrefixCollapse() && !DecisionUnpruned(UnprunedGate::AccelPrefix)). On a
+// non-lethal go-off hand the odometer powersets the K ritual accelerants (ritual_floating_mana > 0: Rite
+// of Flame, Pyretic/Desperate Ritual, Seething Song, Irencrag Feat) into 2^K positions, and this fires at
+// EVERY node of a full-depth rollout -> a combinatorial straggler (docs/design/dragonstorm-search-pruning.md
+// Step 2). A ritual chain funds itself cheapest-first (each cheap ritual pays for the next), so for any
+// storm count j the CHEAPEST j accelerants dominate every other size-j accelerant subset (identical storm
+// count, >= mana); enumerating only the K+1 cheapest-first PREFIXES therefore preserves the reachable
+// (storm, mana) frontier while collapsing 2^K -> K+1. This returns true (skip) when the CAST accelerant
+// groups are NOT a cheapest-first prefix: order accelerant groups by (base cast ManaValue, hand_index)
+// ascending and reject any position that casts an accelerant sitting AFTER an un-cast cheaper one. Only
+// WHICH accelerant groups are cast is constrained -- the splice-k option WITHIN a cast Desperate Ritual
+// stays free (storm-vs-mana is still a search choice; step 1's over-splice skip handles its legality), and
+// the payoff / Irencrag "one more spell" (max_casts_after) legality is enforced elsewhere. The ordering key
+// is choice-INDEPENDENT (min effective cost over the group's ritual-cast options + the group's unique
+// hand_index as tiebreak) so the sort is stable across every odometer position. Callers gate on a one-time
+// any_accel flag so a deck with no ritual accelerant pays nothing.
+static bool GroupChoiceNonPrefixAccel(const GameState& /*state*/,
+                                      const std::vector<Action>& cands,
+                                      const std::vector<std::vector<int>>& groups,
+                                      const std::vector<int>& group_hand_index,
+                                      const std::vector<int>& choice)
+{
+    struct AccelG { int base_mv; int hand_index; bool cast; };
+    std::vector<AccelG> accel;
+    for (size_t g = 0; g < groups.size(); ++g)
+    {
+        int base_mv = -1;   // min effective MV over this group's ritual-cast options (choice-independent)
+        for (int j : groups[g])
+        {
+            const CardDefinition* d = cands[j].def;
+            if (d && d->params.ritual_floating_mana > 0 && cands[j].kind == Action::Kind::CastFromHand)
+            {
+                int mv = cands[j].cost.ManaValue();
+                if (base_mv < 0 || mv < base_mv) { base_mv = mv; }
+            }
+        }
+        if (base_mv < 0) { continue; }   // not an accelerant group
+        accel.push_back({ base_mv, group_hand_index[g], choice[g] > 0 });
+    }
+    if (accel.size() < 2) { return false; }   // 0/1 accelerant -> every selection is trivially a prefix
+    std::sort(accel.begin(), accel.end(), [](const AccelG& a, const AccelG& b) {
+        if (a.base_mv != b.base_mv) { return a.base_mv < b.base_mv; }
+        return a.hand_index < b.hand_index;
+    });
+    // Cheapest-first prefix: once a cheaper accelerant is left UN-cast, no more-expensive one may be cast.
+    bool saw_uncast = false;
+    for (const AccelG& a : accel)
+    {
+        if (a.cast) { if (saw_uncast) { return true; } }
+        else        { saw_uncast = true; }
+    }
+    return false;
+}
+
 // Candidate single COLOURS for a "add N mana of ONE chosen colour" float (Lotus Bloom's SacForMana
 // and Apex of Power's 10-of-one-colour). The set = every colour appearing in the active player's
 // NONLAND spell costs across hand / library / graveyard / battlefield (so an off-colour combo line
@@ -1902,6 +1958,23 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     const bool has_extra_lethal = provider.HasExtraLethalModel();
     std::vector<const CardDefinition*> casting;   // reused per subset (only when has_extra_lethal)
 
+    // Dragonstorm acceleration-prefix collapse (HEURISTIC; provider-owned + MTG_UNPRUNED(AccelPrefix)-
+    // gated -> byte-identical for every non-Dragonstorm deck and for Dragonstorm under MTG_UNPRUNED). When
+    // on, GroupChoiceNonPrefixAccel below collapses the 2^K ritual-accelerant powerset to the K+1 cheapest-
+    // first prefixes. any_accel gates the odometer skip on there actually being a ritual accelerant in hand,
+    // mirroring the any_splice fast path -> zero overhead when the gate is off or no accelerant is present.
+    const bool accel_prefix_on = provider.UseAccelPrefixCollapse()
+                              && !DecisionUnpruned(UnprunedGate::AccelPrefix);
+    bool any_accel = false;
+    if (accel_prefix_on)
+    {
+        for (const Action& ra : cands)
+        {
+            if (ra.def && ra.def->params.ritual_floating_mana > 0
+                && ra.kind == Action::Kind::CastFromHand) { any_accel = true; break; }
+        }
+    }
+
     int m = static_cast<int>(cands.size());
     Plan best;
     int  best_mask = 0;     // action mask of `best` (0 = the do-nothing default); ties keep min mask
@@ -2305,7 +2378,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // would reject every extension anyway; splice legality is fixed by the group selection). any_splice
         // gates it off for every non-splice deck. Kills the Dragonstorm illegal-over-splice majority.
         const bool splice_ok = !any_splice || !GroupChoiceOverSplices(state, cands, groups, choice);
-        if (gcost <= mana_bound && splice_ok)
+        // Dragonstorm acceleration-prefix collapse (HEURISTIC, gated by accel_prefix_on/any_accel above):
+        // reject a group choice whose cast accelerants are not a cheapest-first prefix. Off/absent -> true.
+        const bool accel_ok = !(accel_prefix_on && any_accel)
+                           || !GroupChoiceNonPrefixAccel(state, cands, groups, group_hand_index, choice);
+        if (gcost <= mana_bound && splice_ok && accel_ok)
         {
             for (int imask = 0; imask < (1 << num_ind); ++imask)
             {
@@ -5037,6 +5114,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // pay nothing and stay byte-identical.
     bool any_splice = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.splice_onto_arcane) { any_splice = true; break; } }
+    // Dragonstorm acceleration-prefix collapse (HEURISTIC, provider-owned + MTG_UNPRUNED(AccelPrefix)-gated;
+    // mirrors Solve). Off/absent -> byte-identical (any_accel scan skipped entirely). See
+    // GroupChoiceNonPrefixAccel + docs/design/dragonstorm-search-pruning.md.
+    const bool accel_prefix_on = ResolveProvider(state).UseAccelPrefixCollapse()
+                              && !DecisionUnpruned(UnprunedGate::AccelPrefix);
+    bool any_accel = false;
+    if (accel_prefix_on)
+    {
+        for (const Action& ra : cands)
+        {
+            if (ra.def && ra.def->params.ritual_floating_mana > 0
+                && ra.kind == Action::Kind::CastFromHand) { any_accel = true; break; }
+        }
+    }
     // Filter/ramp land present? (mirrors Solve) Enables the real-payment affordability fallback.
     const bool any_filter = HasUntappedFilterSource(state);
 
@@ -5314,7 +5405,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Over-splice group choices are likewise skipped (byte-identical: eval_and_push()'s
         // SubsetHasIllegalSplice rejects every extension; splice legality is fixed by the group choice).
         const bool splice_ok = !any_splice || !GroupChoiceOverSplices(state, cands, groups, choice);
-        if (gcost <= mana_bound && splice_ok)
+        // Dragonstorm acceleration-prefix collapse (HEURISTIC, gated by accel_prefix_on/any_accel above;
+        // mirrors Solve): reject a group choice whose cast accelerants are not a cheapest-first prefix.
+        const bool accel_ok = !(accel_prefix_on && any_accel)
+                           || !GroupChoiceNonPrefixAccel(state, cands, groups, group_hand_index, choice);
+        if (gcost <= mana_bound && splice_ok && accel_ok)
         {
             for (int imask = 0; imask < (1 << num_ind); ++imask)
             {

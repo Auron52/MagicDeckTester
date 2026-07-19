@@ -50,6 +50,8 @@ enum class UnprunedGate
     DrawEngine,   // draw-engine (flood) cast gate ungated -- always a cast choice
     SacColor,     // Lotus Bloom SacForMana / Apex colour: open ALL five colours instead of the
                   // deck's spell-cost colours (the narrowed default candidate set)
+    AccelPrefix,  // Dragonstorm acceleration-prefix collapse disabled: enumerate the full 2^K ritual-
+                  // accelerant powerset instead of only the K+1 cheapest-first prefixes (DragonstormProvider)
     _Count
 };
 
@@ -227,6 +229,11 @@ class DragonstormProvider : public GenericProvider
 public:
     std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;
+
+    // Opt in to the acceleration-prefix collapse (Hook 27): the go-off hand's ritual accelerants are
+    // enumerated cheapest-first prefix-only rather than powerset. HEURISTIC, MTG_UNPRUNED(AccelPrefix)-
+    // openable. See docs/design/dragonstorm-search-pruning.md (Step 2).
+    bool UseAccelPrefixCollapse() const override { return true; }
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the
