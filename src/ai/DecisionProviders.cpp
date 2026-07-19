@@ -1753,8 +1753,12 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
 std::vector<ScaledCastVariant>
 HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def) const
 {
-    static const bool enabled = std::getenv("MTG_MAGMA_FAITHFUL") != nullptr;
-    if (!enabled) { return {}; }
+    // ADOPTED (2026-07-19): faithful scaled-cast is the DEFAULT. The per-game audit proved every faster
+    // line the old "2 + every permanent" over-count reached was IMPOSSIBLE ({U}{R} for 4-to-face, which
+    // legally costs {3}{U}{R}); the ~+0.014 avg-turn "slowdown" is purely removing that illegal free
+    // lunch. MTG_LEGACY_MAGMA restores the over-count for the standing A/B (byte-identical to pre-adopt).
+    static const bool legacy = std::getenv("MTG_LEGACY_MAGMA") != nullptr;
+    if (legacy) { return {}; }
     if (!def.params.damage_divided || !def.params.discount_targets_permanents) { return {}; }
     if (!HinataInPlay(s)) { return {}; }
 

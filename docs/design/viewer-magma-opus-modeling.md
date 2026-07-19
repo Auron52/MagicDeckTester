@@ -300,7 +300,23 @@ genuine correctness-vs-goldfish-speed tradeoff, not a free win.
 when affordable), `{U}{R}`×1 (cheap spread to free mana), `{6}{U}{R}`×2 (no Hinata ⇒ provider returns `{}`
 ⇒ generic path, full cost, byte-identical). The search genuinely picks the face level per plan.
 
-### Adoption status: BUILT + default OFF; held-out validation done; awaiting user sign-off
+### Per-game audit of all 22 changed d5 games (user criterion: adopt iff the faster OFF lines are impossible)
+Reproduced every changed held-out d5 game single-threaded (`--seed job.seed+gi --game-index gi`, matches
+the batch for all Magma-casting games):
+- **17 games — OFF's faster win used a PROVABLY IMPOSSIBLE Magma line.** Every one cast Magma at `{U}{R}`
+  (2 mana) dealing 4-to-face. Legal cost for 4-to-face = 1 target + 2 tap = 3 distinct = `{3}{U}{R}` (5
+  mana). The over-count credited a `{1}` discount for all ~6 permanents it never targeted AND dealt the
+  full 4 to the face — a line that cannot be played. These +1-turn "regressions" are the correct removal
+  of an illegal free lunch.
+- **5 games — batch noise, not real** (4004/213, 5005/283, 5005/291, 7007/122, 7007/264): none cast Magma
+  in the OFF line, and in deterministic single-thread repro they are NEUTRAL (OFF == ON) or don't even
+  reproduce the batch win turn (283: batch OFF won T8, repro OFF unwon). Known CPU-oversubscription
+  nondeterminism flipping borderline games, unrelated to the Magma change.
+
+**Conclusion: every REPRODUCIBLE faster OFF line is impossible under correct rules → the user's adopt
+criterion is met.** The reproducible metric cost (~+0.014) is purely deleting fictional wins.
+
+### Adoption status: ADOPTED 2026-07-19 (faithful is now the DEFAULT; `MTG_LEGACY_MAGMA` = opt-out A/B)
 Committed behind `MTG_MAGMA_FAITHFUL` (default OFF ⇒ byte-identical) at `4658d4f`. Adopting = flip the
 default (drop the gate, add an `MTG_LEGACY` escape hatch) + `regression.sh --accept` to rebaseline Hinata
 GT (d0/d3/d5 avg + all play digests move). **The held-out d5 validation shows adoption costs ~+0.017 avg
