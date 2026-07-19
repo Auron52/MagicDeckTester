@@ -1,7 +1,9 @@
 #pragma once
 #include "MulliganProfile.h"
 #include <nlohmann/json.hpp>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -652,6 +654,106 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
 // Returns a SHARED handle to the cached policy (or nullptr if the path has none). The one loaded instance
 // is shared by every profile that attaches it, so a THREADS=N batch holds 1 copy, not N. Read-only after
 // load (Index() ran in the loader), so concurrent readers are safe.
+// ---- Cross-process parsed-sidecar cache ---------------------------------------------------------
+// The exhaustive keep sidecar is a large gzipped JSON whose nlohmann::json::parse dominates every
+// launch (~14 s Knights, ~68 s Anti-Lifegain; ~60% in the parse). The in-process CachedExhaustiveKeep
+// below only helps WITHIN one process, but the play server spawns a FRESH mtg per keep-hint, so each
+// re-parses from scratch. We write a compact binary of the PARSED ExhaustiveKeepPolicy next to the
+// sidecar (`<sidecar>.bincache`) on first parse, and every later launch memcpy-loads it (<1 s) instead
+// of re-parsing -- keyed by the source's (size, mtime) so a regenerated sidecar invalidates it
+// automatically. The .bincache is a derived artifact (gitignored); a corrupt/short/stale one fails the
+// header check and is silently rebuilt. Format is internal + version-gated, never shipped/pooled.
+constexpr uint32_t kBinCacheMagic   = 0x4b504f4cu;  // 'LOPK'
+constexpr uint32_t kBinCacheVersion = 1u;
+
+namespace bincache_detail
+{
+    template <class T> inline void PutPod(std::string& b, T v)
+    { b.append(reinterpret_cast<const char*>(&v), sizeof(T)); }
+    inline void PutStr(std::string& b, const std::string& s)
+    { PutPod<uint32_t>(b, static_cast<uint32_t>(s.size())); b.append(s); }
+    inline void PutIVec(std::string& b, const std::vector<int>& v)
+    { PutPod<uint32_t>(b, static_cast<uint32_t>(v.size())); for (int x : v) { PutPod<int32_t>(b, static_cast<int32_t>(x)); } }
+
+    template <class T> inline bool GetPod(const char*& p, const char* end, T& v)
+    { if (end - p < static_cast<std::ptrdiff_t>(sizeof(T))) { return false; } std::memcpy(&v, p, sizeof(T)); p += sizeof(T); return true; }
+    inline bool GetStr(const char*& p, const char* end, std::string& s)
+    { uint32_t n; if (!GetPod(p, end, n) || end - p < static_cast<std::ptrdiff_t>(n)) { return false; } s.assign(p, n); p += n; return true; }
+    inline bool GetIVec(const char*& p, const char* end, std::vector<int>& v)
+    { uint32_t n; if (!GetPod(p, end, n)) { return false; } v.resize(n);
+      for (uint32_t i = 0; i < n; ++i) { int32_t x; if (!GetPod(p, end, x)) { return false; } v[i] = x; } return true; }
+}
+
+// Serialize a parsed policy to the binary cache blob (header carries the source size+mtime for
+// invalidation). Mirrors ExhaustiveKeepPolicy field-for-field; Deserialize is the exact inverse.
+inline std::string SerializeExhaustiveKeep(const ExhaustiveKeepPolicy& ek,
+                                           uint64_t src_size, uint64_t src_mtime)
+{
+    using namespace bincache_detail;
+    std::string b;
+    PutPod<uint32_t>(b, kBinCacheMagic);
+    PutPod<uint32_t>(b, kBinCacheVersion);
+    PutPod<uint64_t>(b, src_size);
+    PutPod<uint64_t>(b, src_mtime);
+    PutPod<uint32_t>(b, static_cast<uint32_t>(ek.buckets.size()));
+    for (const auto& bk : ek.buckets)
+    { PutPod<uint32_t>(b, static_cast<uint32_t>(bk.size())); for (const auto& n : bk) { PutStr(b, n); } }
+    PutPod<int32_t>(b, static_cast<int32_t>(ek.max_mull));
+    PutPod<uint32_t>(b, static_cast<uint32_t>(ek.keep.size()));
+    for (const auto& kv : ek.keep)
+    { PutIVec(b, kv.first); PutPod<uint32_t>(b, static_cast<uint32_t>(kv.second.size())); b.append(kv.second.data(), kv.second.size()); }
+    PutPod<uint32_t>(b, static_cast<uint32_t>(ek.bottom_keep.size()));
+    for (const auto& kv : ek.bottom_keep)
+    { PutIVec(b, kv.first); PutPod<uint32_t>(b, static_cast<uint32_t>(kv.second.size())); for (const auto& sub : kv.second) { PutIVec(b, sub); } }
+    PutPod<uint8_t>(b, static_cast<uint8_t>(ek.bottoming_enabled ? 1 : 0));
+    PutStr(b, ek.commit);
+    PutStr(b, ek.play_digest);
+    PutPod<int32_t>(b, static_cast<int32_t>(ek.effective_R));
+    return b;
+}
+
+// Inverse of Serialize. Returns false (ek left partial) on ANY magic/version/size/mtime mismatch or
+// truncation, so the caller falls back to the JSON parse. On success ek.Index() has been run.
+inline bool DeserializeExhaustiveKeep(const std::string& blob, uint64_t src_size, uint64_t src_mtime,
+                                      ExhaustiveKeepPolicy& ek)
+{
+    using namespace bincache_detail;
+    const char* p = blob.data(); const char* end = p + blob.size();
+    uint32_t magic, version; uint64_t sz, mt;
+    if (!GetPod(p, end, magic) || magic != kBinCacheMagic)         { return false; }
+    if (!GetPod(p, end, version) || version != kBinCacheVersion)   { return false; }
+    if (!GetPod(p, end, sz) || !GetPod(p, end, mt))                { return false; }
+    if (sz != src_size || mt != src_mtime)                         { return false; }   // source changed
+    uint32_t nb; if (!GetPod(p, end, nb)) { return false; }
+    ek.buckets.assign(nb, {});
+    for (auto& bk : ek.buckets)
+    { uint32_t nn; if (!GetPod(p, end, nn)) { return false; } bk.resize(nn); for (auto& n : bk) { if (!GetStr(p, end, n)) { return false; } } }
+    int32_t max_mull; if (!GetPod(p, end, max_mull)) { return false; } ek.max_mull = max_mull;
+    uint32_t nk; if (!GetPod(p, end, nk)) { return false; }
+    for (uint32_t i = 0; i < nk; ++i)
+    {
+        std::vector<int> comp; if (!GetIVec(p, end, comp)) { return false; }
+        uint32_t nf; if (!GetPod(p, end, nf) || end - p < static_cast<std::ptrdiff_t>(nf)) { return false; }
+        std::vector<char> flags(p, p + nf); p += nf;
+        ek.keep.emplace(std::move(comp), std::move(flags));
+    }
+    uint32_t nbk; if (!GetPod(p, end, nbk)) { return false; }
+    for (uint32_t i = 0; i < nbk; ++i)
+    {
+        std::vector<int> comp; if (!GetIVec(p, end, comp)) { return false; }
+        uint32_t nsub; if (!GetPod(p, end, nsub)) { return false; }
+        std::vector<std::vector<int>> subs(nsub);
+        for (auto& sub : subs) { if (!GetIVec(p, end, sub)) { return false; } }
+        ek.bottom_keep.emplace(std::move(comp), std::move(subs));
+    }
+    uint8_t be; if (!GetPod(p, end, be)) { return false; } ek.bottoming_enabled = (be != 0);
+    if (!GetStr(p, end, ek.commit))      { return false; }
+    if (!GetStr(p, end, ek.play_digest)) { return false; }
+    int32_t R; if (!GetPod(p, end, R)) { return false; } ek.effective_R = R;
+    ek.Index();
+    return true;
+}
+
 inline std::shared_ptr<const ExhaustiveKeepPolicy> CachedExhaustiveKeep(const std::filesystem::path& path)
 {
     static std::mutex mtx;
@@ -659,12 +761,59 @@ inline std::shared_ptr<const ExhaustiveKeepPolicy> CachedExhaustiveKeep(const st
     const std::string key = path.string();
     std::lock_guard<std::mutex> lock(mtx);
     auto it = cache.find(key);
-    if (it == cache.end())
+    if (it != cache.end()) { return it->second; }
+
+    // Source (size, mtime) fingerprint for cross-process cache validation. On any FS error, skip the
+    // binary cache entirely and just parse (cache disabled, never wrong).
+    std::error_code ec_sz, ec_mt;
+    const uint64_t src_size  = static_cast<uint64_t>(std::filesystem::file_size(path, ec_sz));
+    const auto     wt        = std::filesystem::last_write_time(path, ec_mt);
+    const uint64_t src_mtime = static_cast<uint64_t>(wt.time_since_epoch().count());
+    const bool     fp_ok     = !ec_sz && !ec_mt;
+    const std::filesystem::path binpath = key + ".bincache";
+
+    std::shared_ptr<const ExhaustiveKeepPolicy> result;
+
+    // 1) Fast path: memcpy-load the parsed binary cache if it exists and matches the source fingerprint.
+    if (fp_ok)
     {
-        MulliganProfile exh = LoadDeckProfile(path);   // exh.exhaustive_keep is already a shared_ptr<const>
-        it = cache.emplace(key, std::move(exh.exhaustive_keep)).first;
+        std::ifstream bf(binpath, std::ios::binary | std::ios::ate);
+        if (bf)
+        {
+            const std::streamoff blen = bf.tellg();          // BULK read (the cache is ~100s of MB;
+            std::string blob;                                // an istreambuf_iterator would crawl it
+            if (blen > 0)                                    // char-by-char and negate the whole win)
+            {
+                blob.resize(static_cast<std::size_t>(blen));
+                bf.seekg(0);
+                bf.read(&blob[0], blen);
+            }
+            ExhaustiveKeepPolicy ek;
+            if (DeserializeExhaustiveKeep(blob, src_size, src_mtime, ek) && !ek.empty())
+            { result = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek)); }
+        }
     }
-    return it->second;
+
+    // 2) Miss/stale/corrupt: the slow JSON parse, then write the binary cache for next time (atomic
+    //    temp+rename; temp name is uniquified by the per-process mutex address so concurrent launches
+    //    don't clobber, and a torn/failed write just fails validation next time and is rebuilt).
+    if (!result)
+    {
+        MulliganProfile exh = LoadDeckProfile(path);   // exh.exhaustive_keep is already shared_ptr<const>
+        if (fp_ok && exh.exhaustive_keep && !exh.exhaustive_keep->empty())
+        {
+            const std::string blob = SerializeExhaustiveKeep(*exh.exhaustive_keep, src_size, src_mtime);
+            const std::filesystem::path tmp =
+                binpath.string() + "." + std::to_string(reinterpret_cast<uintptr_t>(&mtx)) + ".tmp";
+            { std::ofstream of(tmp, std::ios::binary); of.write(blob.data(), static_cast<std::streamsize>(blob.size())); }
+            std::error_code rec; std::filesystem::rename(tmp, binpath, rec);
+            if (rec) { std::error_code rmec; std::filesystem::remove(tmp, rmec); }
+        }
+        result = std::move(exh.exhaustive_keep);
+    }
+
+    cache.emplace(key, result);
+    return result;
 }
 
 inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
