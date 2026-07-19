@@ -72,7 +72,11 @@ function resolveDeck(deckName) {
   if (path.dirname(deckPath) !== dir) throw new Error('deck must be under decks/<name>/');
   if (!fs.existsSync(deckPath)) throw new Error('deck not found: ' + base);
   const profilePath = path.join(dir, stem + '.profile.json');
-  return { deckPath, profilePath: fs.existsSync(profilePath) ? profilePath : null, stem };
+  // The exhaustive keep/bottom sidecar (mulligan TABLE). Its presence gates whether the viewer's
+  // pre-game keep/bottom suggestions come from the table (see runStep) rather than the live heuristic.
+  const sidecarPath = path.join(dir, stem + '.keepmodel.exhaustive.profile.json.gz');
+  return { deckPath, profilePath: fs.existsSync(profilePath) ? profilePath : null, stem,
+           hasSidecar: fs.existsSync(sidecarPath) };
 }
 
 function intParam(v, dflt) {
@@ -83,12 +87,18 @@ function intParam(v, dflt) {
 // Build the argv for one --claude-play invocation.
 // validateLine (optional): an encoded human-assembled line ("land=X;cast=Y;...") to reconcile
 // against the model at the first un-chosen main phase instead of dumping the plan menu.
-function buildArgs(p, logDir, validateLine) {
+// exhaustiveKeep (optional): pass --exhaustive-keep so the engine loads the deck's mulligan-table
+// sidecar and emits table-based keep/bottom suggestions. Used ONLY for the pre-game keep/bottom
+// steps (see runStep) — the sidecar parse is expensive (up to tens of seconds on big decks), so it
+// must never be on the per-turn hot path. This is the VIEWER opting in; default --claude-play (the
+// engine-test sweep/oracle) deliberately stays table-less (see main.cpp AttachExhaustiveSidecar).
+function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
   const { deckPath, profilePath } = resolveDeck(p.deck);
   const args = [deckPath];
   if (profilePath) args.push('--profile', profilePath);
   args.push('--cards-json', CARDS_JSON);
   args.push('--claude-play');
+  if (exhaustiveKeep) args.push('--exhaustive-keep');
   args.push('--seed', String(intParam(p.seed, 1)));
   args.push('--game-index', String(intParam(p.gameIndex, 0)));
   args.push('--max-turns', String(intParam(p.maxTurns, 8)));
@@ -105,9 +115,9 @@ function buildArgs(p, logDir, validateLine) {
   return args;
 }
 
-// Run the binary once for the given choices; classify the output.
-function runStep(p, logDir) {
-  const args = buildArgs(p, logDir, null);
+// Run the binary once for the given choices (optionally with the mulligan-table sidecar); classify.
+function runStepRaw(p, logDir, exhaustiveKeep) {
+  const args = buildArgs(p, logDir, null, exhaustiveKeep);
   const r = spawnSync(BIN, args, { cwd: ROOT, encoding: 'utf8', timeout: STEP_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 });
   if (r.error) return { kind: 'error', error: String(r.error), args };
   const out = (r.stdout || '') + '\n' + (r.stderr || '');
@@ -123,6 +133,29 @@ function runStep(p, logDir) {
     catch (e) { return { kind: 'error', error: 'bad result JSON: ' + e.message, raw: resultRaw }; }
   }
   return { kind: 'error', error: 'no decision/result markers in output', raw: out.slice(0, 4000), code: r.status };
+}
+
+// Run one step for the given choices. Fast path is table-LESS (no sidecar). But the VIEWER is a
+// correctness tool, so its pre-game BOTTOM suggestion should reflect the deck's mulligan TABLE, not
+// the live heuristic (issue #5: "Follow AI" was picking a 1-drop the table would keep). A bottom
+// decision only occurs before turn 1 and there are at most a handful, so when the deck has a sidecar
+// we re-run JUST that decision WITH --exhaustive-keep to fill its joint ai_set from the table. The
+// re-run replays the identical game (same seed+choices → same decision); only the AI-suggestion
+// metadata differs. Turn-play steps never load the (up-to-tens-of-seconds) sidecar. Scoped to the
+// viewer/server — the engine's default --claude-play stays table-less. (The mulligan KEEP suggestion
+// is left on the static profile: it only needs to toss 0-land/flood hands, already correct at play
+// depth, so it isn't worth the extra sidecar parse.)
+function runStep(p, logDir) {
+  const res = runStepRaw(p, logDir, false);
+  if (res.kind === 'decision' && res.decision.type === 'bottom') {
+    let hasSidecar = false;
+    try { hasSidecar = resolveDeck(p.deck).hasSidecar; } catch (e) { /* fall through to table-less */ }
+    if (hasSidecar) {
+      const tabled = runStepRaw(p, logDir, true);
+      if (tabled.kind === 'decision') return tabled;   // enriched with the table's joint bottom set
+    }
+  }
+  return res;
 }
 
 // Compute the DEEP-search AI hint for the current pending decision, run at HINT_DEPTH (default 5) on a

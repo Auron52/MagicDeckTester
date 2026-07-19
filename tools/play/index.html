@@ -1000,17 +1000,22 @@ function applyAccepted(planIndex, label) {
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
   // Dropped-cast detection (issue 2): remember the non-land casts we INTENDED plus the pre-commit
-  // hand AND graveyard counts, so after the line resolves we can tell if a queued cast never actually
-  // resolved (silently dropped for mana — e.g. an over-generated Reality Spasm / Soulfire line that
-  // couldn't pay). A cast is "dropped" only if it neither left the hand NOR reached the graveyard;
-  // the graveyard check avoids a false positive when the same-named card is cast (→ gy) but a fresh
-  // copy is re-staged into hand (Soulfire's dig), which leaves the hand count unchanged. Compared in
-  // step() against the next state; a real drop rolls the whole line back (rollbackLine).
+  // hand, graveyard AND battlefield counts, so after the line resolves we can tell if a queued cast
+  // never actually resolved (silently dropped for mana — e.g. an over-generated line the board can't
+  // pay). A cast is "dropped" only if it stayed in hand AND did not reach the graveyard AND did not
+  // reach the battlefield. The graveyard check avoids a false positive when the same-named card is
+  // cast (→ gy) but a fresh copy is re-staged into hand (Soulfire's dig), leaving the hand count
+  // unchanged; the BATTLEFIELD check avoids the same false positive for permanents — a creature/
+  // artifact resolves to the battlefield (never the gy), and with 4-of decks a redrawn copy restores
+  // the hand count, which otherwise looked like a drop. Compared in step() against the next state; a
+  // real drop rolls the whole line back (rollbackLine).
   S._intendedCasts = (S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le'&&p.kind!=='retrace').map(p=>p.name);
   S._preHandCounts = {};
   (((S.decision||{}).me||{}).hand||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preHandCounts[nm]=(S._preHandCounts[nm]||0)+1; } });
   S._preGyCounts = {};
   (((S.decision||{}).me||{}).graveyard||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preGyCounts[nm]=(S._preGyCounts[nm]||0)+1; } });
+  S._preBfCounts = {};
+  (((S.decision||{}).me||{}).battlefield||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preBfCounts[nm]=(S._preBfCounts[nm]||0)+1; } });
   // Record a one-int step so undo can pop this main-phase decision. Without it S.steps desyncs from
   // S.choices and undo() (which bails when S.steps is empty) silently does nothing after any line.
   S.prev = S.decision; S.choices.push(planIndex); (S.steps=S.steps||[]).push(1);
@@ -1634,7 +1639,19 @@ function commitBoardSel(d, dec){
   } else {
     const want=sel.slice().sort().join('|');
     const opt=(d.options||[]).find(o=>(o.targets||[]).map(tgtKey).sort().join('|')===want);
-    oi=opt?opt.index:d.heuristic_default;
+    if (!opt){
+      // The `target` protocol is option-INDEX based: only the engine's pre-enumerated target subsets
+      // (capped at 256) are submittable. Previously a non-enumerated set silently fell back to the AI
+      // default (heuristic_default) — so the user's picks were discarded without notice, and for a
+      // dig spell like Soulfire that also changed which cards were exiled ("my targets were ignored
+      // and did not give cards", issue #8). Don't eat the selection: tell the user this exact set
+      // isn't an available option and abort the commit (the preselected AI pick is always a valid
+      // option). Full arbitrary-set support needs an engine protocol change — see
+      // docs/design/viewer-explicit-target-set.md.
+      flashHint(`That exact target set isn’t one the engine offers here — the AI-offered options are the only submittable groups. Adjust to match one (the preselected AI pick is valid), then Confirm.`);
+      return;
+    }
+    oi=opt.index;
     const labels=(d.legal_targets||[]).filter(t=>S.boardSel.has(tgtKey(t))).map(t=>t.label);
     lab=`${d.source}: ${labels.join(', ')||'face'}`;
   }
@@ -1805,32 +1822,38 @@ async function step() {
   } else showError(res.error||'unknown error', res.raw);
 }
 // Dropped-cast detection (issue 2): return the intended non-land casts that never resolved. A cast
-// is "dropped" only if it BOTH stayed in hand (count did not fall below pre-commit) AND did not reach
-// the graveyard (an instant/sorcery that resolved always lands there) — the graveyard check keeps a
-// cast-then-re-staged copy (Soulfire's dig re-adds a same-named card, so the hand count is unchanged)
-// from being misread as dropped, and keeps a discard (left hand → gy, never cast) from being missed.
-// This is the known Reality-Spasm / Soulfire over-generation: the search enumerated a line the board
-// can't actually pay for. Such a line is illegal, so step() rolls the whole thing back (rollbackLine).
+// is "dropped" only if it stayed in hand (count did not fall below pre-commit) AND did not reach the
+// graveyard (an instant/sorcery that resolved always lands there) AND did not reach the battlefield
+// (a creature/artifact/permanent that resolved lands there). The gy check keeps a cast-then-re-staged
+// copy (Soulfire's dig re-adds a same-named card, so the hand count is unchanged) from being misread
+// as dropped; the BATTLEFIELD check does the same for permanents — a resolved permanent increments
+// its battlefield count, and battlefield counts are stable across the next draw step, so a redrawn
+// 4-of copy no longer looks like a drop. A discard (left hand → gy, never cast) is still caught.
+// A genuine over-generated/unpayable line reaches none of gy/battlefield, so step() rolls the whole
+// thing back (rollbackLine).
 function detectDropped(meAfter){
   const intended=S._intendedCasts; S._intendedCasts=null;
   const preH=S._preHandCounts||{}; S._preHandCounts=null;
   const preG=S._preGyCounts||{};   S._preGyCounts=null;
+  const preB=S._preBfCounts||{};   S._preBfCounts=null;
   if (!intended || !intended.length || !meAfter) return [];
   const cn=c=>typeof c==='string'?c:(c&&c.name);
   const afterH={}; (meAfter.hand||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterH[nm]=(afterH[nm]||0)+1; } });
   const afterG={}; (meAfter.graveyard||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterG[nm]=(afterG[nm]||0)+1; } });
+  const afterB={}; (meAfter.battlefield||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterB[nm]=(afterB[nm]||0)+1; } });
   const dropped=[]; const seen=new Set();
   intended.forEach(nm=>{ if(seen.has(nm)) return; seen.add(nm);
     const stillInHand=(afterH[nm]||0) >= (preH[nm]||0) && (preH[nm]||0) > 0;
     const reachedGy  =(afterG[nm]||0) >  (preG[nm]||0);
-    if (stillInHand && !reachedGy) dropped.push(nm); });
+    const reachedBf  =(afterB[nm]||0) >  (preB[nm]||0);
+    if (stillInHand && !reachedGy && !reachedBf) dropped.push(nm); });
   return dropped;
 }
 function notifyDropped(names){
   const ve=$('verdict'); ve.className='unsupported';
   ve.innerHTML=`<span class="vtag">line rejected</span>`+
     `<h4>${names.map(esc).join(', ')} — not enough mana</h4>`+
-    `<div>The mana didn’t actually come together (e.g. a Reality Spasm that couldn’t untap enough), so `+
+    `<div>The board couldn’t actually produce the mana this line needs, so `+
     `${names.length>1?'these spells were':'this spell was'} unpayable. The whole line was <b>rolled back</b> — `+
     `nothing was cast, tapped, or drawn. Pick a line the board can really pay for.</div>`+
     `<div class="actions"><button id="dropok" class="ghost">Dismiss</button></div>`;
