@@ -62,6 +62,17 @@ const bool BUILD_KEEP_MODEL = []{
     const char* e = std::getenv("MTG_KEEP_MODEL");
     return e && *e && std::string(e) != "0";
 }();
+// MTG_SKIP_GRID: skip the expensive JOINT land x hand-score-gate grid (Phase 3b) and emit a
+// card-scores-only profile -- default land window + the deck's discovered required_pieces /
+// min_color_sources + the cheap per-card scores, with the hand-score gate DECLINED (NO_GATE).
+// The land grid is the analyzer's dominant cost (~4.5 h on Dragonstorm) and is SUPERSEDED by the
+// separate exhaustive mulligan profile; card_scores (the cheap ~2000-game pass) are the only piece
+// consumed in play we still want up front (bottoming tiebreak + optional keep gate). DEFAULT OFF so
+// a plain regeneration is byte-identical. Read once at startup.
+const bool SKIP_LAND_GRID = []{
+    const char* e = std::getenv("MTG_SKIP_GRID");
+    return e && *e && std::string(e) != "0";
+}();
 constexpr int ANALYSIS_BUDGET = 20;    // deterministic virtual-ms node budget; matches the
                                        // regression suite's proven-sufficient d5 budget (the
                                        // node budget is iterative-deepening refinement WITHIN
@@ -674,12 +685,32 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     }
 
     // ---- Phase 3b: JOINT land + threshold grid search --------------------------
-    std::cerr << "  Grid-searching land parameters x hand-score gate (joint)...\n";
-    double best_win_turn = 0.0;
-    uint64_t grid_seed = seed + SCORING_OFFSET + SCORING_GAMES;
-    MulliganProfile optimal = GridSearchLands(
-        deck, working_profile, GRID_GAMES, grid_seed, max_turns,
-        card_scores, thr_candidates, best_win_turn);
+    MulliganProfile optimal;
+    if (SKIP_LAND_GRID)
+    {
+        // Card-scores-only stopgap: skip the expensive land x threshold grid (superseded by the
+        // exhaustive mulligan profile). Keep working_profile's default land params + the discovered
+        // required_pieces / min_color_sources, attach the cheap card_scores, and DECLINE to gate
+        // (NO_GATE): absent the joint grid we do NOT ship an unvalidated hand-score gate -- the
+        // bolt-on gate was the old over-mulligan regression, and the grid itself always included
+        // NO_GATE precisely as the "decline to gate" option. card_scores still drive the bottoming
+        // tiebreak (HeuristicBottomPick), which is threshold-independent.
+        optimal = working_profile;
+        optimal.card_scores          = card_scores;
+        optimal.hand_score_threshold = NO_GATE;
+        std::cerr << "  [MTG_SKIP_GRID] Land grid skipped; card-scores-only profile "
+                  << "(default land window min_lands=" << optimal.min_lands
+                  << " max_lands=" << optimal.max_lands << ", no hand-score gate).\n";
+    }
+    else
+    {
+        std::cerr << "  Grid-searching land parameters x hand-score gate (joint)...\n";
+        double best_win_turn = 0.0;
+        uint64_t grid_seed = seed + SCORING_OFFSET + SCORING_GAMES;
+        optimal = GridSearchLands(
+            deck, working_profile, GRID_GAMES, grid_seed, max_turns,
+            card_scores, thr_candidates, best_win_turn);
+    }
 
     std::cerr << "  Done. Optimal profile: min_lands=" << optimal.min_lands
               << " max_lands=" << optimal.max_lands
