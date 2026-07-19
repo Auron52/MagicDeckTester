@@ -39,6 +39,14 @@ Status: **ANALYZED — root cause found; card-model change specced (user design)
    - no 4th creature → 3 damage-targets (put ≤2 on a face) + 2 tap = **5 distinct** → `{1}{U}{R}` (3 mana).
    Distinctness is load-bearing: a permanent targeted twice earns only one `{1}`.
 
+   **Damage-target priority (user).** For the 1-damage spread, prefer **your OWN creatures first** —
+   all friendly creatures survive 1 damage, so it's a free distinct target, and it leaves the
+   opponent's 1/1s alive (they stay useful as future targets). Order: own creatures → the two players
+   (self + opponent, both safe/relevant) → an opponent creature ONLY if no other target exists to
+   reach the count (killing a 1/1 to hit the target count is fine as a last resort). Tap targets =
+   2 permanents that don't cost you (opponent's, or your own already-tapped lands — never untap-needed
+   lands).
+
 ## The GT tradeoff (needs sign-off before rebaseline)
 
 The Soulfire fix moved GT positively (more reach). Magma is the opposite: switching the autonomous
