@@ -49,6 +49,30 @@ of the board, the enumerator and the resolution agree ⇒ lockstep, conservative
 plus-full-face-damage over-rating the current model allows). Measure the smoke/overnight delta with the
 hatch ON and present before flipping the default / rebaselining Hinata GT.
 
+## IMPLEMENTED behind `MTG_MAGMA_FAITHFUL` (default OFF) — 2026-07-19
+
+Shipped the minimal, lockstep-correct version: since the SEARCH resolves Magma as ALL damage to the
+opponent face (1 damage-target, [TurnSolver.cpp:3508](../../src/ai/TurnSolver.cpp#L3508); the divided
+allocation is human-only), the faithful distinct-target count for the search's actual line is
+**1 (opp face) + 2 (the oracle's mandatory "tap two target permanents") = 3**, capped by
+`min(2, #permanents)`. `HinataAvailableTargets` returns that when the hatch is on, instead of the
+`2 + every permanent` over-count. No resolution change needed (the tap is goldfish-inert; only the count
+is load-bearing, and Magma always taps 2, so the count is faithful, not a phantom). Magma's cost goes
+`{U}{R}` → `{3}{U}{R}` on a permanent-rich board. Scoped to `damage_divided && discount_targets_permanents`
+(Magma only; Reality Spasm is `scale_x` untap, excluded).
+
+**Measured delta (metric = mean turn-to-win, unwon=max+1; lower better):**
+- Hinata d0, seed 1001, 1000 games: OFF **7.4760** (== GT, byte-identical) → ON **7.4910** = **+0.015**.
+- Tiny GT-negative, matching the user's "the autonomous is probably not that much off." (d5 search-path
+  delta pending; expected similar or smaller since the search plans around the higher cost.)
+
+This is the CONCENTRATE line (4-to-face, `{3}{U}{R}`) — the goldfish-value line the search already
+plays. The user's cheaper SPREAD default (`{U}{R}`, 1-to-face) would need the search resolution to
+actually spread damage onto own creatures (a bigger change to TurnSolver.cpp:3508 + the two other
+lockstep sites) and a lethality gate to concentrate when near-lethal; deferred as a follow-up if the
+spread option is wanted. Adoption of the concentrate faithful discount = flip the default + rebaseline
+Hinata GT (+0.015).
+
 ## What was confirmed (2026-07-19)
 
 - Magma Opus **casts fine** and the `divide` decision surfaces (reproduced Seed 5 Game 4). The divide's

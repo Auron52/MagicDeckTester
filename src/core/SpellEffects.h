@@ -2399,6 +2399,19 @@ inline bool HinataInPlay(const GameState& state)
     return false;
 }
 
+// Opt-in (MTG_MAGMA_FAITHFUL): make Magma Opus's Hinata discount count only the DISTINCT targets the
+// SEARCH actually hits -- the opponent face (all damage goes there, TurnSolver ResolveDirectDamage) plus
+// the oracle's mandatory "tap two target permanents" = 3 -- instead of the "2 + every permanent"
+// over-count below, which credits a {1} discount for permanents the spell never targets. GT-changing
+// (Magma gets more expensive on a permanent-rich board: {U}{R} -> {3}{U}{R}), so default OFF until the
+// delta is measured + adopted. Lockstep-safe: the count matches the all-to-face + tap-two resolution, so
+// the discount is never a phantom. See docs/design/viewer-magma-opus-modeling.md.
+inline bool MagmaFaithfulDiscountEnabled()
+{
+    static const bool on = std::getenv("MTG_MAGMA_FAITHFUL") != nullptr;
+    return on;
+}
+
 // Count the beneficial targets `def` would choose on the current board to maximise Hinata's
 // per-target discount: the opponent (every discounting spell here can point at them) + your
 // creatures (extra spread-damage/tap targets) + yourself (if discount_self_safe -- a non-lethal
@@ -2408,6 +2421,16 @@ inline bool HinataInPlay(const GameState& state)
 inline int HinataAvailableTargets(const CardDefinition& def, const GameState& state)
 {
     const int active = state.active_player_index;
+    // Magma Opus faithful distinct-target count (opt-in): opponent face (1 damage-target) + tap two
+    // permanents = 3, capped by however many permanents exist to tap. Replaces the over-count for the
+    // damage_divided + tap-permanents spell (Magma); scale_x untap spells (Reality Spasm) are excluded
+    // (not damage_divided) and keep the legacy count. Default-off -> byte-identical.
+    if (MagmaFaithfulDiscountEnabled() && def.params.damage_divided
+        && def.params.discount_targets_permanents)
+    {
+        const int perms = static_cast<int>(state.battlefield.size());
+        return 1 + (perms < 2 ? perms : 2);
+    }
     // Soulfire Eruption: the discount must count exactly the targets the resolution heuristic
     // actually chooses (opponent + opp creatures + self-if-life>9), NOT own creatures -- otherwise
     // it would be discounted for targets it never uses (a free, rules-illegal discount). Own
