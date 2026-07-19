@@ -91,6 +91,7 @@ MANIFEST = {
     # listed here so the self-guard treats them as MAPPED (not unknown choice params).
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
+    "tutor_to_battlefield":  ("main_phase",           truthy),   # Dragonstorm: which Dragon to put onto bf
     "fetch_land_types":      ("main_phase",           truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
@@ -172,6 +173,32 @@ INERT_PARAMS = {
     "target_own_creature": "targeting modifier; choice rides `targeting` (can also hit opponent creatures)",
     # self-declared
     "goldfish_inert": "self-declared inert marker",
+    # --- Dragonstorm (mono-red ritual/storm combo) -----------------------------------------
+    # Token creation is automatic (no choice); its P/T/subtypes are computed detail.
+    "attack_per_matching_creates_tokens": "automatic attack trigger (Utvara: per-attacking-Dragon token)",
+    "attack_per_token_power": "token P/T", "attack_per_token_toughness": "token P/T",
+    "attack_per_token_subtypes": "token subtypes",
+    "attack_token_requires_subtypes": "token gating detail (which attackers make a token)",
+    "etb_other_subtype_creates_tokens": "automatic ETB trigger (Lathliss: per other nontoken Dragon)",
+    "etb_created_token_power": "token P/T", "etb_created_token_toughness": "token P/T",
+    "etb_created_token_subtypes": "token subtypes", "etb_token_requires_subtype": "ETB token gating detail",
+    # automatic triggers, no choice
+    "tutor_shuffle_after": "automatic shuffle after tutor, no choice",
+    "impulse_exile": "automatic exile of top N (Apex: exile top 7); which exiled cards to CAST rides main_phase",
+    "impulse_expiry_this_turn": "automatic end-of-turn expiry of staged exile, no choice",
+    "ritual_float_gy_self_bonus": "automatic graveyard-count float scaling (Rite of Flame), no choice",
+    # mana production -- color/amount auto-resolved by the payment engine (user: 'mana we leave to the engine')
+    "impulse_float_amount": "impulse mana float amount; color auto-resolved in payment (left to engine)",
+    "sac_for_mana_amount": "Lotus Bloom sac-for-mana amount; color auto-resolved (left to engine); when-to-sac rides the search plan",
+    "ritual_float_color": "ritual float color (fixed R), no choice",
+    "storage_land": "storage battery: charge auto-while-idle; burst amount search-resolved via payment (like other mana sources)",
+    "storage_charge_mode": "storage charge timing (auto-while-idle), no choice",
+    # static cost reducer
+    "reduces_spell_color": "static per-copy color cost reducer (Ruby Medallion), no choice",
+    # pump-amount detail params that ride the DEFERRED firebreathing/team_pump decision
+    "firebreathing_power": "pump power-per-{R} detail (rides firebreathing_cost, DEFERRED)",
+    "team_pump_power": "team pump power detail (rides team_pump_cost, DEFERRED)",
+    "team_pump_subtypes": "team pump subtype filter detail (rides team_pump_cost, DEFERRED)",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -188,6 +215,8 @@ MAINPHASE_PARAMS = {
     "alt_lifegain_cost":   "free-pitch alt cost (opponent-lifegain half is goldfish-inert)",
     "animate_cost":        "animate = main_phase activation",
     "can_animate":         "capability flag; animate rides main_phase",
+    "splice_onto_arcane":  "Desperate Ritual splice count = a main_phase plan variant (emitted in main.cpp)",
+    "suspend_time_counters": "Lotus Bloom suspend = a {0} main_phase action; when-to-suspend is a plan variant",
 }
 
 # DEFAULT after onboarding = SURFACE every decision (user 2026-07-17). "Let the AI decide" is a
@@ -205,6 +234,17 @@ MAINPHASE_PARAMS = {
 DEFERRED_PARAMS = {
     "cascade_max_mv":       "cascade SEARCH target -- heuristic-picked (DECISIONS.md known gap)",
     "untap_x_mana_sources": "Reality Spasm untap mode -- needs an engine-model change (phase-2 gap)",
+    # Dragonstorm: pump + ping are real player choices but currently search-resolved. User (2026-07-19)
+    # signed off on deferring the WIRING to the planned viewer options-menu toggle system ("every choice
+    # toggleable... can be done in the future"), with these defaults:
+    "firebreathing_cost":   "Scourge firebreathing pump amount -- currently search-resolved w/ leftover "
+                            "combat mana; user wants it a toggleable choice, ON by default (deferred to the "
+                            "viewer options-menu toggle system)",
+    "team_pump_cost":       "Lathliss team pump amount -- currently search-resolved; user wants it a "
+                            "toggleable choice, ON by default (deferred to the options-menu toggle system)",
+    "dragon_ping_on_enter": "Scourge ETB ping target -- any-target collapses to face in the goldfish; user "
+                            "wants a toggleable target choice, OFF by default (deferred to the options-menu "
+                            "toggle system; matters more in phase-2 with a real opponent)",
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\n(.*?)\n<<<END_DECISION>>>", re.S)
