@@ -60,7 +60,10 @@ full permutation set), then the payoff.
    ONLY when the last spell is **Dragonstorm**. **Must NOT be cast before Apex of Power** (Apex casts
    multiple spells from exile; Irencrag's "only one more spell" clause would cap it). So Irencrag is a
    Dragonstorm-payoff-only accelerant.
-8. **Payoff: Dragonstorm or Apex of Power** (last).
+8. **Payoff (last): Dragonstorm or Apex of Power** — the two primary win payoffs. **Fallback:**
+   hard-cast a Dragon directly (e.g. **Utvara Hellkite**) — strictly a bad-hand fallback when the
+   storm/Apex combo can't be assembled, so the deck can still pull out a win. Rank the primary payoffs
+   above the direct-dragon line; only reach the dragon when neither combo payoff is castable.
 
 **Constraints the heuristic must respect:**
 - Splice legality: the triangular `N-1-j` bound (last base splices nothing) — already modelled by
@@ -74,6 +77,30 @@ full permutation set), then the payoff.
 NOT byte-identical), so it lives in the archetype provider (DragonstormProvider) and is opened by
 `MTG_UNPRUNED` (the standing pruned-vs-unpruned A/B), exactly like the existing `GroupCap` /
 `SituationalCardRank` machinery. Measure its win-turn cost vs unpruned on Dragonstorm and disclose.
+
+### Mechanism decision (do NOT use EnumGroupCap for the accelerants)
+
+`EnumGroupCap` (base default **12**, `DecisionProvider.h:292`) is the WRONG lever here: it DROPS the
+lowest-`SituationalCardRank` groups beyond the cap, i.e. it would drop ritual/accelerant spells the
+combo wants to cast. A combo deck wants to cast ALL its acceleration — it just should not enumerate
+every permutation/subset of it.
+
+**Right mechanism — acceleration-prefix collapse:** identify the accelerant actions (ritual_floating_mana
+> 0, plus the Medallion cost-reducer as a pre-accelerant) via a DragonstormProvider predicate; instead
+of letting the odometer powerset them (`2^K`), enumerate only the **K+1 cheapest-first prefixes** ("cast
+the j cheapest accelerants," j=0..K) crossed with the payoff choice. Cheapest-first is optimal for a
+ritual chain (each cheap ritual funds the next), so the reachable mana/storm outcomes are preserved
+while the `2^K` explosion becomes linear. Layer the constraints on top: splice-vs-separate stays a kept
+option (splice lowers spell count → matters for storm), Irencrag Feat is placed second-to-last and only
+when the payoff is Dragonstorm (never before Apex), and the payoff is ranked Dragonstorm/Apex first with
+a direct-Dragon (Utvara Hellkite) bad-hand fallback last.
+
+**Status:** NOT yet implemented. Step 1 (byte-identical over-splice skip, commit `d6cb727`) confirmed
+INSUFFICIENT on its own — a backtrace of a bounded d5 measurement showed the worker still grinding the
+`Solve` odometer (the legal ritual enumeration is itself huge). Step 2 is required for feasibility.
+Implement in DragonstormProvider + a gated enumeration path; validate with smoke 18/0/0 (GT byte-
+identical, no splice cards) + `MTG_UNPRUNED` A/B on Dragonstorm (measure win-turn cost) + a re-run of
+the light-analyze to confirm the straggler is gone.
 
 ## Graceful-degradation scope principle (analyze-light)
 
