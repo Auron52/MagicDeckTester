@@ -1,7 +1,27 @@
 # Viewer: bounce-land after casts + X-spell line validation (issue #7)
 
-Status: **DEFERRED — engine (`CheckLine`) + front-end (`linebuild.js`); reproduction needed. User has a
-working two-phase workaround, so not blocking.**
+Status: **REPRODUCED — item 3 (enumerator over-credit) DISPROVEN; the residual issue is a VIEWER
+convenience (hand-building an X-spell + Karoo-land line), GT-neutral, with a working two-phase /
+plan-menu workaround. Not blocking; no rebaseline needed.**
+
+## Reproduction result (2026-07-19) — item 3 is NOT a bug
+
+Replayed Hinata `--seed 3 --game-index 2` to turn 6 (the Boilerworks + Crackle turn) and **picked the
+combined plan** the enumerator offers (`land=Izzet Boilerworks; cast Crackle with Power, Irencrag Feat`,
+plan idx 2 at that decision). It **executes correctly**: Boilerworks enters the battlefield, all the
+Crackles + Irencrag Feat resolve to the graveyard, and the opponent drops to 5 life. So the engine's
+`s_karoo_defer` correctly defers Boilerworks *after* the casts (casts paid from the 5 real untapped
+sources + Irencrag's ritual; the tapped Boilerworks contributes 0 that turn), and **the enumerator does
+NOT over-credit the tapped Boilerworks** — the combined *plan* path is sound. At turn 5 (only 4 sources,
+no ritual) the enumerator correctly offers **no** combined plan (unaffordable). Item 3 is closed.
+
+**So the reported misfire ("Boilerworks stays in hand, Crackle not cast") is the HAND-BUILD path, not
+the engine.** When the user assembles the line in the LineBuild UI: (1) `encodeLine`
+([tools/play/linebuild.js:55](../../tools/play/linebuild.js#L55)) emits `land=` before every `cast=`, so
+the Karoo land is sequenced *first*; and (2) Crackle is an X-spell, which `CheckLine` grades
+**`unsupported`** — so the whole hand-built line can't be validated/committed and silently no-ops. Both
+are viewer-only (GT-neutral). The user's workaround (pick the combined plan from the menu, or split
+across phases) already works because it bypasses the hand-build path.
 
 ## Problem (as reported)
 
@@ -30,19 +50,27 @@ drop-detector fix does **not** mask it; the viewer correctly reports it.
    combined plan's enumerated affordability appears to over-credit it, so at execution Crackle can't be
    paid and is dropped.
 
-## Fix (deferred, staged)
+## Fix (revised — GT-neutral viewer work only; NO engine mana-accounting change)
 
-1. **Reproduce** `--seed 3 --game-index 2` (Boilerworks + Crackle) to capture the offending plan and
-   confirm the enumerator over-credits the tapped Boilerworks (item 3).
-2. **Fix the mana accounting** so a land that `enters_tapped` contributes **0** available mana the turn
-   it enters (its `{U}{R}` only counts next turn). This is the core correctness fix — verify the
-   enumerator and executor agree (lockstep) that the combined plan is only affordable when the 5 other
-   mana cover Crackle independent of Boilerworks.
-3. **Let the viewer express cast-then-bounce-land in one commit:** support X-spells in `CheckLine`
-   (with an X value) so hand-built Crackle lines validate, and allow `encodeLine` to sequence a
-   bounce/Karoo land after casts (reuse `s_karoo_defer` in the line-check path).
-4. Engine mana-accounting changes may move GT for Karoo/enters-tapped decks → rebaseline per
-   `.claude/skills/regression-testing.md`.
+1. ~~Reproduce + confirm the enumerator over-credits the tapped Boilerworks.~~ **DONE — DISPROVEN.**
+   The combined plan executes correctly; the mana accounting is already lockstep-correct (`s_karoo_defer`).
+2. ~~Fix the enters_tapped mana accounting.~~ **NOT NEEDED** — no over-credit exists, so no engine change
+   and **no GT rebaseline**.
+3. **Let the viewer hand-build a cast-then-bounce-land line** (the only remaining, GT-neutral work):
+   - `encodeLine` should sequence a Karoo/bounce land AFTER the casts when the land `enters_tapped` /
+     is a bounce land (so the encoded order matches how the engine defers it), instead of always
+     land-first.
+   - `CheckLine` grades X-spells `unsupported`; a hand-built Crackle line therefore can't validate. Two
+     options: (a) extend `CheckLine` to validate an X-spell line at a chosen X (larger, viewer-only), or
+     (b) cheaper interim — when the assembled line contains an X-spell (or otherwise `unsupported`),
+     surface a clear "use the plan menu for this line" hint instead of a silent misfire, since the
+     combined *plan* already works.
+   Both are viewer-only (`CheckLine`'s sole caller is `--validate-line`; `encodeLine` is the GUI) →
+   **GT-neutral, no rebaseline.**
+
+Recommendation: ship 3(b) (the clear-hint) as the low-risk unblock, and treat 3(a) (full X-spell line
+validation) as a separate, larger viewer feature. The user's headline pain (a *silent* misfire) is
+resolved by 3(b) + the fact that the plan menu already does the combined cast correctly.
 
 ## Verification
 
