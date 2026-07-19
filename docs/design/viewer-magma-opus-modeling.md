@@ -277,29 +277,38 @@ face ⇒ fewer distinct spread/tap targets ⇒ less Hinata discount ⇒ more man
 - **Removed** the old single-line `IsMagmaFaithful` / `MagmaFaithfulPlan` (SpellEffects.h) + its two
   resolution overrides; `HinataAvailableTargets` reverts to the plain over-count as the OFF fallback.
 
-### Measured (Hinata, seed 1001; metric = mean turn-to-win, unwon=max+1; lower better)
-| depth | games | OFF (== GT) | ON (scaled) | Δ | per-game win-turn changes |
-|-------|-------|-------------|-------------|-----|---------------------------|
-| d0 (greedy)  | 1000 | 7.4760 | 7.4840 | **+0.008** | 14 changed (11 slower, 3 FASTER) |
-| d5 (search)  |   75 | 6.0400 | 6.0400 | **0.000** | **0 games changed win turn** |
+### Measured (Hinata; metric = mean turn-to-win, unwon=max+1; lower better)
+| depth | seeds | games | OFF (== GT) | ON (scaled) | Δ | per-game win-turn changes |
+|-------|-------|-------|-------------|-------------|-----|---------------------------|
+| d0 (greedy) | 1001 | 1000 | 7.4760 | 7.4840 | **+0.008** | 14 (11 slower, 3 FASTER) |
+| d5 (search) | 1001 |   75  | 6.0400 | 6.0400 | 0.000 | 0 changed *(small-sample fluke — see below)* |
+| **d5 (search)** | **4004/5005/6006/7007** | **1200** | **6.1467** | **6.1633** | **+0.0167** | **22 (20 slower, 2 FASTER)** |
 
-**Key result: at d5 — the depth the deck's value_play policy actually uses — the faithful model changes
-ZERO win turns** (only the play-digest differs: the search reaches the same win a turn honestly, e.g.
-concentrating `{3}{U}{R}` for a real kill instead of the over-count's fictional cheap-`{U}{R}`-plus-4-face).
-The greedy d0 baseline is a tiny +0.008 (the over-count is doubly over-rated — cheap AND 4-to-face — so a
-myopic rollout loses a fraction of a turn it never really had; 3 games actually get FASTER because the
-honest cost steers the greedy to a genuine concentrate kill). This is far better than any single-line
-model (concentrate +0.015, spread +0.026): the search's spare-mana allocation is what recovers the speed.
+Per held-out seed the ON delta is CONSISTENTLY positive (+0.0134 / +0.0167 / +0.0133 / +0.0234), so the
+tiny 75-game d5 "0 changed" at seed 1001 was a **small-sample fluke, not true neutrality**. At the real
+held-out scale (1200 d5 games) the faithful model is a **small, consistent GT-negative of ~+0.017** — the
+same magnitude as the concentrate single-line's d0 +0.015.
+
+**Honest conclusion: no faithful Magma model beats the over-count for the goldfish.** The over-count is
+doubly over-rated — it lets Magma be BOTH cheap (`{U}{R}`) AND deal 4-to-face, an impossible line that
+genuinely wins ~0.017 turns faster on average. The two-variant/scaled model is the *least-negative* and
+*most correct* faithful option (far better than concentrate +0.015 / spread +0.026 as single lines, and
+only 22/1200 games move — 20 slower by 1 turn, 2 faster), but it is **NOT free**. Adoption is therefore a
+genuine correctness-vs-goldfish-speed tradeoff, not a free win.
 
 **Mechanism verified** (60 games, d0, ON): Magma cast-cost distribution `{3}{U}{R}`×8 (concentrate 4-face
 when affordable), `{U}{R}`×1 (cheap spread to free mana), `{6}{U}{R}`×2 (no Hinata ⇒ provider returns `{}`
 ⇒ generic path, full cost, byte-identical). The search genuinely picks the face level per plan.
 
-### Adoption status: BUILT + default OFF; awaiting user sign-off to flip + rebaseline
-Adopting = flip the provider default (drop the `MTG_MAGMA_FAITHFUL` gate, add an `MTG_LEGACY` escape
-hatch) + `regression.sh --accept` to rebaseline Hinata GT. GT impact: d5 win turns UNCHANGED, but the
-**play digests change** (different-but-equally-fast lines) and the d0/d3 coverage baselines move
-(d0 7.4760→7.4840). Because it moves GT (digests + d0 avg) it needs the user's explicit go, per
-`heuristic-optimization.md` + `regression-testing.md`. Recommendation: **adopt** — it's metric-neutral at
-the real play depth and strictly more correct (kills the impossible cheap-and-4-face over-count). Optional
-pre-adoption: confirm d5 neutrality on the held-out overnight seeds.
+### Adoption status: BUILT + default OFF; held-out validation done; awaiting user sign-off
+Committed behind `MTG_MAGMA_FAITHFUL` (default OFF ⇒ byte-identical) at `4658d4f`. Adopting = flip the
+default (drop the gate, add an `MTG_LEGACY` escape hatch) + `regression.sh --accept` to rebaseline Hinata
+GT (d0/d3/d5 avg + all play digests move). **The held-out d5 validation shows adoption costs ~+0.017 avg
+turn-to-win** (consistent across the 4 overnight seeds) — small but real, not free. So this is a
+correctness call, not a metric win:
+- **FOR adopting**: the over-count models an IMPOSSIBLE line (Magma cheap AND 4-to-face); the faithful
+  model is honest, prices each face level correctly, and the search still picks sensibly (concentrate
+  when it can afford it, cheap spread to free mana for Crackle). Only 22/1200 d5 games move.
+- **AGAINST**: it's a ~+0.017 goldfish slowdown at every depth, with no compensating metric gain — the
+  goldfish genuinely wins faster on the fiction.
+Presented to the user for the decision (per `heuristic-optimization.md`: adopt only on approval).
