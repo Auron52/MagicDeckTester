@@ -238,3 +238,68 @@ discount from the count (`HinataGenericDiscount(def,state,x,count)` SpellEffects
 `MTG_MAGMA_FAITHFUL` behind-the-hatch behavior = the LETHALITY-GATED SPREAD (measured +0.026, the worse
 one). It is to be REPLACED by the two-variant model above. Default OFF ⇒ all GT byte-identical (d0 OFF =
 7.4760 verified). Committed so it's not lost; the two-variant is the next step.
+
+---
+
+## 2026-07-19 (session 3): IMPLEMENTED — general "scaled cast" mechanism, model in the provider
+
+### Architectural pivot (user directive)
+The user reframed the invasive part to be **general**: "treat this case similarly to how you would scale
+{X} spells if you have extra mana." Magma's opponent-face damage is a scaled OUTPUT (like {X}) — more
+face ⇒ fewer distinct spread/tap targets ⇒ less Hinata discount ⇒ more mana. The rules:
+- **No card-specific branches in general logic.** The engine gets a general **scaled-cast** mechanism
+  (emit one mutually-exclusive cast per output level, thread the committed level to resolution, deal it);
+  the whole Magma MODEL (which face levels, what each costs) lives in the **HinataProvider** — "within the
+  deck-specific heuristics we can do whatever card-specific logic we want."
+- **The search picks by default; a heuristic may narrow** (like `XCandidates`). With several scaling
+  spells in hand (Crackle {X} + Magma face) the search allocates spare mana across them — Crackle's X
+  moves in 3-mana steps, Magma's face in 1-mana steps, so the fine-grained face soaks up mana the coarse
+  X can't. "By default the search must pick, but we'll override with a heuristic here."
+
+### What was built (all behind `MTG_MAGMA_FAITHFUL`, default OFF ⇒ byte-identical)
+- **`DecisionProvider.h`**: general `struct ScaledCastVariant { int face; ManaCost cost; }` + Hook 28
+  `ScaledCastVariants(state, def)` (base returns `{}` ⇒ every other deck's single-line cast, byte-identical).
+- **`HinataProvider::ScaledCastVariants`** (`DecisionProviders.cpp`): the DECK-SPECIFIC cost model.
+  Gated on the flag + Magma-by-DATA (`damage_divided && discount_targets_permanents`) + Hinata in play.
+  For each face `F` in `1..damage`: `distinct(F) = 1 (face) + min(damage−F, 1+#creatures) (spread) +
+  min(2, #perms) (tap)`; `discount(F) = min(discount_max_targets, distinct(F))`;
+  `cost.generic = printed − discount(F)`. Dominated levels (a HIGHER face at the SAME cost) are dropped.
+- **`TurnSolver::CollectActions`**: a general block — for a `DirectDamage && damage_divided` spell, ask
+  the provider for variants; if non-empty, emit one cast per `{face, cost}` (thread the face on
+  `crackle_targets`, the searched-scalar carrier) and `continue`; else fall through (byte-identical).
+- **Lockstep**: the committed face rides on `crackle_targets` (Magma is not `IsCrackleCountSpell`, so no
+  Crackle resolution fires). Resolution deals `face` in `EffectHandler::ResolveDirectDamage` and
+  `ApplyPlanDirect` (gated on `damage_divided && crackle_targets>=0`). The cost is recomputed from the
+  committed face via the provider on the CURRENT board at BOTH the rollout (`apply_one`) and the executor
+  (`CastSpellFromHand`) — the same recompute-from-the-searched-count pattern as Soulfire/Crackle — so
+  enumeration/CanPay/rollout/executor price the same face identically. `cast_by_name` gate extended to set
+  `entry.crackle_targets` for a scaled Magma variant.
+- **Removed** the old single-line `IsMagmaFaithful` / `MagmaFaithfulPlan` (SpellEffects.h) + its two
+  resolution overrides; `HinataAvailableTargets` reverts to the plain over-count as the OFF fallback.
+
+### Measured (Hinata, seed 1001; metric = mean turn-to-win, unwon=max+1; lower better)
+| depth | games | OFF (== GT) | ON (scaled) | Δ | per-game win-turn changes |
+|-------|-------|-------------|-------------|-----|---------------------------|
+| d0 (greedy)  | 1000 | 7.4760 | 7.4840 | **+0.008** | 14 changed (11 slower, 3 FASTER) |
+| d5 (search)  |   75 | 6.0400 | 6.0400 | **0.000** | **0 games changed win turn** |
+
+**Key result: at d5 — the depth the deck's value_play policy actually uses — the faithful model changes
+ZERO win turns** (only the play-digest differs: the search reaches the same win a turn honestly, e.g.
+concentrating `{3}{U}{R}` for a real kill instead of the over-count's fictional cheap-`{U}{R}`-plus-4-face).
+The greedy d0 baseline is a tiny +0.008 (the over-count is doubly over-rated — cheap AND 4-to-face — so a
+myopic rollout loses a fraction of a turn it never really had; 3 games actually get FASTER because the
+honest cost steers the greedy to a genuine concentrate kill). This is far better than any single-line
+model (concentrate +0.015, spread +0.026): the search's spare-mana allocation is what recovers the speed.
+
+**Mechanism verified** (60 games, d0, ON): Magma cast-cost distribution `{3}{U}{R}`×8 (concentrate 4-face
+when affordable), `{U}{R}`×1 (cheap spread to free mana), `{6}{U}{R}`×2 (no Hinata ⇒ provider returns `{}`
+⇒ generic path, full cost, byte-identical). The search genuinely picks the face level per plan.
+
+### Adoption status: BUILT + default OFF; awaiting user sign-off to flip + rebaseline
+Adopting = flip the provider default (drop the `MTG_MAGMA_FAITHFUL` gate, add an `MTG_LEGACY` escape
+hatch) + `regression.sh --accept` to rebaseline Hinata GT. GT impact: d5 win turns UNCHANGED, but the
+**play digests change** (different-but-equally-fast lines) and the d0/d3 coverage baselines move
+(d0 7.4760→7.4840). Because it moves GT (digests + d0 avg) it needs the user's explicit go, per
+`heuristic-optimization.md` + `regression-testing.md`. Recommendation: **adopt** — it's metric-neutral at
+the real play depth and strictly more correct (kills the impossible cheap-and-4-face over-count). Optional
+pre-adoption: confirm d5 neutrality on the held-out overnight seeds.

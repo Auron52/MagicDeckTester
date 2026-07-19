@@ -1476,6 +1476,39 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             continue;
         }
 
+        // Scaled divided-damage spell (Magma Opus): the mana cost scales with how much of the divided
+        // damage we commit to the opponent's FACE (more face -> fewer distinct spread/tap targets ->
+        // less Hinata discount -> more mana), exactly like paying more for a bigger {X}. The archetype
+        // owns the model (ScaledCastVariants: which face levels + what each costs -- all card-specific
+        // numbers); the engine emits one mutually-exclusive cast per level and lets the plan enumerator
+        // + search pick per affordability + value (allocating spare mana across every scaling spell in
+        // hand -- a Crackle {X} and this face). The committed face rides to resolution on crackle_targets
+        // (the searched-scalar carrier; Magma is not IsCrackleCountSpell, so no crackle resolution
+        // fires) and is dealt to the opponent there. Empty (every other deck/card, and Magma with the
+        // model off) -> the generic single-line cast below (byte-identical).
+        if (def.tmpl == CardTemplate::DirectDamage && def.params.damage_divided)
+        {
+            std::vector<ScaledCastVariant> scaled = ResolveProvider(state).ScaledCastVariants(state, def);
+            if (!scaled.empty())
+            {
+                for (const ScaledCastVariant& v : scaled)
+                {
+                    Action a;
+                    a.kind            = Action::Kind::CastFromHand;
+                    a.card_name       = ap.hand[i].m_name;
+                    a.hand_index      = i;
+                    a.cost            = v.cost;
+                    a.eval            = v.face * 100;          // DMG unit: face damage reaches the opponent
+                    a.direct_damage   = v.face;               // (the inert spread is not simulated)
+                    a.is_noncreature  = !def.card.IsCreature();
+                    a.card_mv         = def.card.m_mana_cost.ManaValue();
+                    a.crackle_targets = v.face;               // committed opp-face damage -> resolution
+                    actions.push_back(std::move(a));
+                }
+                continue;
+            }
+        }
+
         // Count damage that actually reaches the opponent's life total. A player/multi-target burn
         // deals its face damage directly (Searing Blaze: 1, or landfall 3). A creature-only burn
         // deals damage to a permanent -- EXCEPT Searing Blood, whose "when that creature dies" rider
@@ -3268,6 +3301,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                            - HinataGenericDiscount(def, state, chosen_x,
                                  IsCrackleCountSpell(def.params) ? crackle_targets : -1));
         }
+        // Scaled divided-damage spell (Magma Opus): the committed face (carried on crackle_targets)
+        // fixes the cost via the archetype's model, recomputed on the CURRENT board so the rollout, the
+        // executor (CastSpellFromHand), and CanPay price the same committed face identically -> lockstep
+        // (the same recompute-from-the-searched-count pattern as Soulfire/Crackle above). Only a scaled
+        // Magma variant sets crackle_targets >= 0 on a damage_divided spell; every other cast is inert.
+        if (def.params.damage_divided && crackle_targets >= 0)
+        {
+            for (const ScaledCastVariant& v : ResolveProvider(state).ScaledCastVariants(state, def))
+            { if (v.face == crackle_targets) { ec = v.cost; break; } }
+        }
         if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
         // Apex of Power cast-from-hand gate (captured BEFORE the erase invalidates `it`): a hand copy
         // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
@@ -3505,10 +3548,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 else
                 {
-                    // Magma Opus faithful spread (opt-in): the opponent's face takes only the plan's face
-                    // damage (1 spreading / `dmg` concentrating; see MagmaFaithfulPlan), lockstep with
-                    // ResolveDirectDamage + the discount. Every other burn deals its full dmg to the face.
-                    int face = IsMagmaFaithful(def.params) ? MagmaFaithfulPlan(def, state).opp_face_damage : dmg;
+                    // A scaled divided-damage spell (Magma Opus) deals only its committed face level to
+                    // the opponent (the searched `crackle_targets`; the rest was spread onto inert
+                    // targets for the Hinata discount, not simulated). crackle_targets >= 0 marks a
+                    // scaled variant; every other burn (and Magma with the model off, crackle_targets
+                    // == -1) deals its full dmg. Lockstep with ResolveDirectDamage + the committed cost.
+                    int face = (def.params.damage_divided && crackle_targets >= 0) ? crackle_targets : dmg;
                     state.players[opp_idx].life -= face;
                     if (face > 0) { state.opponent_lost_life_this_turn = true; }
                 }

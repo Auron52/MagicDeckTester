@@ -29,6 +29,17 @@
 #include <string>
 #include <vector>
 
+// A "scaled cast" variant of a spell whose mana cost depends on how much OUTPUT it commits -- the
+// divided-damage analogue of an {X} value. `face` damage reaches the opponent; the total `cost` is
+// what committing that much face costs (all discounts already applied). An archetype's
+// ScaledCastVariants() hook returns the sensible levels; the engine emits one mutually-exclusive cast
+// per variant and the plan enumerator + search pick among them. See DecisionProvider::ScaledCastVariants.
+struct ScaledCastVariant
+{
+    int      face = 0;   // damage dealt to the opponent's face at resolution
+    ManaCost cost;       // finalized total cost for committing that much face
+};
+
 class DecisionProvider
 {
 public:
@@ -345,4 +356,22 @@ public:
     // (and Dragonstorm under MTG_UNPRUNED) stays byte-identical; only DragonstormProvider opts in. See
     // docs/design/dragonstorm-search-pruning.md (Step 2).
     virtual bool UseAccelPrefixCollapse() const { return false; }
+
+    // Hook 28 -- SCALED-CAST variants: for a spell whose cost depends on how much output it commits,
+    // the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage
+    // analogue of XCandidates (Hook 18): Magma Opus deals 4 damage divided among any number of
+    // targets, and committing more of it to the opponent's FACE leaves fewer distinct spread/tap
+    // targets for Hinata's per-target discount -- so more face costs more mana, exactly like paying
+    // more for a bigger {X}. The engine emits one mutually-exclusive cast per returned variant and the
+    // plan enumerator picks per affordability + value, so with several scaling spells in hand (a
+    // Crackle {X} + a Magma face) the SEARCH allocates the spare mana across them (Crackle's X moves
+    // in 3-mana steps, Magma's face in 1-mana steps, so the fine-grained face soaks up mana the coarse
+    // X cannot). The archetype owns the WHOLE model -- which levels, and what each costs; every
+    // card-specific number lives in the provider -- while the engine keeps only the emit/thread/resolve
+    // MECHANISM (the committed face rides to resolution and is dealt to the opponent). Base returns {}
+    // -> the spell's normal single-line cast (byte-identical for every other deck/card); only an
+    // archetype with a scaling card returns variants, and only when its model is enabled. The search
+    // still picks by default; a provider may narrow the set as a heuristic (like XCandidates does).
+    virtual std::vector<ScaledCastVariant>
+    ScaledCastVariants(const GameState& /*s*/, const CardDefinition& /*def*/) const { return {}; }
 };

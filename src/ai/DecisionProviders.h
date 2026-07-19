@@ -216,6 +216,11 @@ public:
     // a second copy is already in hand. Off-switch MTG_NO_HINATA_HOLD_CRACKLE. Deterministic on the
     // GameState, so lockstep across the search enumeration, the rollout, and the executor.
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
+    // Magma Opus scaled-cast (face-damage) variants (Hook 28): the deck-specific cost model. More
+    // face damage = fewer distinct spread/tap targets = less Hinata discount = more mana. Behind
+    // MTG_MAGMA_FAITHFUL (default off -> {} -> byte-identical over-count path). See the .cpp.
+    std::vector<ScaledCastVariant>
+    ScaledCastVariants(const GameState&, const CardDefinition&) const override;
 };
 
 // Dragonstorm (mono-red ritual-storm combo): a {8}{R} Storm sorcery puts min(storm+1, Dragons

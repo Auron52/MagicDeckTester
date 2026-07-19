@@ -1731,6 +1731,63 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
     return {};   // lone, non-lethal -> HOLD the combo piece
 }
 
+// Magma Opus scaled-cast (face-damage) variants (Hook 28) -- the DECK-SPECIFIC cost model.
+//
+// Magma Opus: "deal 4 damage divided among any number of targets. Tap two target permanents." Hinata
+// reduces the cost {1} per DISTINCT target, so the cheapest cast SPREADS the 4 one-per-target across
+// yourself + creatures and taps two permanents (up to 6 distinct targets -> {U}{R}); CONCENTRATING
+// more of the 4 onto the opponent's FACE uses fewer distinct targets, so each extra point of face
+// costs {1} more (face F costs generic 6 - discount(F), colours {U}{R} kept):
+//   distinct(F) = 1 (face) + min(4-F, self+creatures) (spread) + min(2, permanents) (tap);
+//   discount(F) = min(discount_max_targets, distinct(F)).
+// We enumerate every affordable face level 1..damage and let the SEARCH pick -- the plan enumerator's
+// CanPay drops the concentrate levels a mana-tight plan can't pay, and with a Crackle also in hand the
+// search allocates spare mana across both (this is the archetype's opinionated set; the search decides
+// which to scale). Dominated levels (a HIGHER face at the SAME cost) are dropped. The spread/tap damage
+// itself is goldfish-inert (a passive opponent, and our own creatures survive 1), so only the face
+// amount + the cost are load-bearing; resolution deals exactly `face` to the opponent (threaded on the
+// stack). Gated on MTG_MAGMA_FAITHFUL (default off) + Magma-by-DATA (divided damage that taps
+// permanents; Reality Spasm is has_x and never reaches this fixed-cost path) + Hinata online (no
+// Hinata -> no per-target discount -> nothing to scale). Returns {} otherwise -> the engine's normal
+// single-line Magma cast (the "2 + every permanent" over-count), byte-identical.
+std::vector<ScaledCastVariant>
+HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def) const
+{
+    static const bool enabled = std::getenv("MTG_MAGMA_FAITHFUL") != nullptr;
+    if (!enabled) { return {}; }
+    if (!def.params.damage_divided || !def.params.discount_targets_permanents) { return {}; }
+    if (!HinataInPlay(s)) { return {}; }
+
+    const int dmg = def.params.damage;
+    if (dmg <= 0) { return {}; }
+    const int cap = def.params.discount_max_targets;   // Hinata reduction ceiling (Magma = 6)
+
+    // Distinct 1-damage recipients OTHER than the opponent face, for the spread: yourself + every
+    // creature (own first, opponent's as a last resort -- only the COUNT feeds the discount). Plus the
+    // mandatory "tap two target permanents", up to two of any permanents on the board.
+    int creatures = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.IsCreature()) { ++creatures; } }
+    const int spread_capacity = 1 + creatures;                                 // self + creatures
+    const int tap = std::min(2, static_cast<int>(s.battlefield.size()));
+
+    // Walk face high -> low (cost non-increasing): emit each face only when it is the HIGHEST face at
+    // its cost (a lower face at the same cost is strictly dominated -- same mana, less reach).
+    std::vector<ScaledCastVariant> out;
+    int prev_generic = -1;
+    for (int face = dmg; face >= 1; --face)
+    {
+        const int spread   = std::min(dmg - face, spread_capacity);
+        const int distinct = 1 + spread + tap;
+        const int discount = std::min(cap, distinct);
+        ManaCost cost      = def.card.m_mana_cost;                              // printed {6}{U}{R}
+        cost.generic       = std::max(0, cost.generic - discount);
+        if (cost.generic == prev_generic) { continue; }                        // dominated -> skip
+        prev_generic = cost.generic;
+        out.push_back({ face, cost });
+    }
+    return out;
+}
+
 // ---- DragonstormProvider ----------------------------------------------------
 
 // Tutor-to-battlefield SELECTION + put-ORDER for Dragonstorm (user-shaped 2026-07-18; see
