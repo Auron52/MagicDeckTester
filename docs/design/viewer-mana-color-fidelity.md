@@ -1,7 +1,17 @@
 # Mana-color fidelity: multi-color sources must not pay off-color pips (viewer issue #6)
 
-Status: **DEFERRED — needs GT rebaseline + MTG-rules review (discuss before implementing).**
-Owner decision required: this changes ground truth across every dual-land deck.
+Status: **Viewer verdict FIXED (Option 3 shipped); full mana-model change (search/batch) still DEFERRED.**
+
+**Shipped (Option 3, viewer-only, no GT impact):** `TurnSolver::CheckLine` now applies the existing
+conservative color-producibility gate (`ComputeAvailableColors`) so a line needing a colored pip no
+untapped source can produce is graded **`Illegal`** (not `LegalNotEnumerated`). CheckLine is called
+only by the viewer's `--validate-line` path, so the search/executor/GT are untouched. Escape hatch
+`MTG_LINE_COLOR_GATE=0`. Verified: Seed 29 Game 28 Marshal-of-Zhalfir line → `illegal` ("no untapped
+source produces blue mana"); `{W}` casts still `accept`; smoke GT byte-identical.
+
+**Still deferred (Options 1/2 below):** the autonomous search/executor still model every multi-color
+source as full `wild`, so in *batch* the engine can still over-fix blue (it just no-ops at execution).
+Fixing that for real changes ground truth across dual-land decks — the decision + rebaseline below.
 
 ## Problem (as reported)
 

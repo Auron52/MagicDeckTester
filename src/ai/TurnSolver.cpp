@@ -8537,6 +8537,19 @@ static void DeductPayable(ManaPool& p, const ManaCost& cost)
     int w = std::min(g, p.wild); p.wild -= w; g -= w;
 }
 
+// Restricted-color line gate (viewer line-check only). Reuses the enumerator's conservative
+// ComputeAvailableColors necessary-condition so CheckLine grades a genuinely-unpayable COLORED line
+// (e.g. Marshal of Zhalfir {W}{U} off W/R/B Tournament Grounds with no blue source) as Illegal rather
+// than LegalNotEnumerated -- the flat BuildPool/CanPay stores every dual as one any-color "wild".
+// Default ON; MTG_LINE_COLOR_GATE=0 restores the pre-gate wild behavior. CheckLine is viewer-only, so
+// this never affects the search / executor / ground truth.
+static bool LineColorGateEnabled()
+{
+    static const bool v = []{ const char* e = std::getenv("MTG_LINE_COLOR_GATE");
+                              return !(e && std::string(e) == "0"); }();
+    return v;
+}
+
 TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_combat,
                                             const LineSpec& spec)
 {
@@ -8775,6 +8788,50 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 return out;
             }
             handNames.erase(it);
+        }
+    }
+
+    // Restricted-color gate: reject a line that needs a colored pip NO untapped source can produce
+    // (see LineColorGateEnabled). `s` already has this line's land played, so its color is credited;
+    // a mana rock cast in this line also contributes its colors (the greedy below casts rocks first).
+    // Amount/contention is left to the greedy CanPay + the executor -- this only prunes the "no source
+    // of that color at all" phantom the flat wild pool otherwise lets through (viewer issue #6).
+    if (LineColorGateEnabled() && !pending.empty())
+    {
+        bool have[5];
+        ComputeAvailableColors(s, have);
+        for (const PendingCast& pc : pending)
+        {
+            if (!pc.rock || !pc.def) { continue; }
+            for (Color c : EffectiveProduces(s, s.active_player_index, *pc.def))
+            {
+                switch (c)
+                {
+                    case Color::White: have[0] = true; break;
+                    case Color::Blue:  have[1] = true; break;
+                    case Color::Black: have[2] = true; break;
+                    case Color::Red:   have[3] = true; break;
+                    case Color::Green: have[4] = true; break;
+                    default: break;
+                }
+            }
+        }
+        static const char* kColorName[5] = { "white", "blue", "black", "red", "green" };
+        for (const PendingCast& pc : pending)
+        {
+            if (pc.alt_free) { continue; }   // alt cost pays no mana -> no colored requirement
+            const ManaCost& c = pc.full_cost;
+            const bool needs[5] = { c.white > 0, c.blue > 0, c.black > 0, c.red > 0, c.green > 0 };
+            for (int i = 0; i < 5; ++i)
+            {
+                if (needs[i] && !have[i])
+                {
+                    out.verdict = V::Illegal; out.failed_action = "cast=" + pc.name;
+                    out.reason = "can't pay for '" + pc.name + "': no untapped source produces " +
+                                 kColorName[i] + " mana (a multi-color land makes only its own colors)";
+                    return out;
+                }
+            }
         }
     }
 
