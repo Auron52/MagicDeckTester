@@ -2430,7 +2430,6 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
 {
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed
-    int      produced_total = 0;  // running total produced by taps (storage partial-burst shortfall)
 
     // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
     // empty -> byte-identical for non-ritual decks. Mirrors AIEngine::TapForCost so the rollout
@@ -2475,19 +2474,22 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
         // amt 1) keep `amt` of the matched colour -> every deck without such a land is byte-identical.
         // Mirrored in AIEngine::tap_source -- keep the two in lockstep.
         //
-        // Storage-counter land (Dwarven Hold / Mercadian Bazaar) PARTIAL BURST: one tap removes only
-        // the payment's remaining shortfall (cost - produced_total) worth of counters, adding that
-        // many {R}; the rest PERSIST for a later turn. ManaSourceRank taps storage LAST so the
-        // shortfall is minimal. See AIEngine::tap_source -- kept byte-for-byte in lockstep.
+        // Storage-counter land (Dwarven Hold / Mercadian Bazaar) BURST-ALL: one tap floats ALL live
+        // storage counters (the land is committed for the turn). The planner credits the land its full
+        // PermanentManaYield (= storage_counters) and marks the whole count consumed on tap, so the
+        // executor must deliver all of them. The old per-spell PARTIAL burst (need = cost.ManaValue() -
+        // produced_total) delivered LESS than the planner promised, silently dropping a legal cast on a
+        // tight multi-spell plan when an earlier spell under-burst and stranded a counter (the burst
+        // amount shifted with irrelevant cast order). See docs/design/dragonstorm-plan-execution-
+        // fidelity-bug.md. Bank-the-rest is via the RESERVE (an unneeded storage land is held untapped),
+        // not a partial burst. ManaSourceRank taps storage LAST. Mirrors AIEngine::tap_source (lockstep).
         int amt;
         if (def.params.storage_land)
         {
-            const int need = std::max(1, cost.ManaValue() - produced_total);
-            amt = std::min(p.storage_counters, need);
-            p.storage_counters -= amt;
+            amt = p.storage_counters;
+            p.storage_counters = 0;
         }
         else { amt = ManaProducedPerTap(def); }
-        produced_total += amt;
         const std::vector<Color>& prod = EffectiveProduces(state, active, def);
         if (amt > 1 && prod.size() > 1) { for (Color c : prod) { floating.Add(c, 1); } }
         else                            { floating.Add(col, amt); }

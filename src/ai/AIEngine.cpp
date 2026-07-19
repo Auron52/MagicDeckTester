@@ -2633,8 +2633,6 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
     Player&  ap     = state.ActivePlayer();
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed (held locally)
-    int      produced_total = 0;  // running total of mana produced by taps this payment (for the
-                                  // storage-counter partial-burst shortfall; 0 for every other source)
 
     // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
     // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
@@ -2677,25 +2675,24 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
         // TurnSolver::tap_source -- keep the two in lockstep.
         //
         // `amt` = mana produced into floating; `consumed` = mana removed from this-turn's `available`
-        // pool. They differ ONLY for a STORAGE-COUNTER land (Dwarven Hold / Mercadian Bazaar): its
-        // single tap bursts a PARTIAL, search-driven amount = the payment's remaining shortfall
-        // (cost minus what's already been produced), removing exactly that many counters -- the rest
-        // PERSIST on the land for a later turn ("burst some now, bank the rest"). `consumed` is its
-        // FULL pre-tap counter count because the land is now tapped, so its leftover counters are
-        // unavailable THIS turn (but not lost). ManaSourceRank taps storage LAST so the shortfall is
-        // minimal. Non-storage sources keep amt == consumed == the static per-tap yield -> byte-
-        // identical for every non-storage deck. Mirrored in TurnSolver::tap_source (lockstep).
+        // pool. For a STORAGE-COUNTER land (Dwarven Hold / Mercadian Bazaar) a single tap now BURSTS
+        // ALL live counters (amt == consumed == had): the land is committed for the turn, and the
+        // planner already credits it its full PermanentManaYield (= counters) and marks the whole count
+        // consumed on tap. The old per-spell PARTIAL burst (amt = min(had, cost - produced_total)) set
+        // consumed = had but floated LESS, so the executor delivered fewer red than the planner
+        // promised -- silently dropping a legal cast on a tight multi-spell plan when an earlier spell
+        // under-burst and stranded a counter (burst amount shifted with irrelevant cast order). See
+        // docs/design/dragonstorm-plan-execution-fidelity-bug.md. Bank-the-rest is via the RESERVE (an
+        // unneeded storage land is held untapped), not a partial burst. ManaSourceRank taps storage
+        // LAST. Non-storage sources keep amt == consumed == the static per-tap yield -> byte-identical
+        // for every non-storage deck. Mirrored in TurnSolver::tap_source (lockstep).
         int amt, consumed;
         if (def.params.storage_land)
         {
-            const int had  = p.storage_counters;
-            const int need = std::max(1, cost.ManaValue() - produced_total);
-            amt = std::min(had, need);
-            consumed = had;
-            p.storage_counters -= amt;
+            amt = consumed = p.storage_counters;   // burst ALL counters on tap
+            p.storage_counters = 0;
         }
         else { amt = consumed = ManaProducedPerTap(def); }
-        produced_total += amt;
         const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
         if (amt > 1 && prod.size() > 1)
         { for (Color c : prod) { floating.Add(c, 1); } available.wild -= consumed; }
