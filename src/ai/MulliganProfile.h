@@ -48,6 +48,18 @@ struct ValuePlay
     // while the top plies (the committed play) keep full exploration. 0 => off (byte-identical, full frontier).
     int    beam_width     = 0;             // 0 => off; >0 => keep top-N value-ranked plans near the leaf
     int    beam_leafdepth = 2;             // beam only nodes at remaining depth <= this (protect the top plies)
+    // Single-depth escalation cap (per-deck; see docs/design/escalation-beam-verify.md "SINGLE-DEPTH"). When
+    // >0 the heuristic escalation runs ONE pass at the budget-affordable depth (predicted from the value-leaf
+    // probe's free per-depth structure) CAPPED at this convergence depth, instead of the full 1..depth ladder --
+    // skipping both the wasteful deep passes (past convergence) and the shallow-pass rework, while tracking the
+    // ladder's depth so light decks that only afford d1/d2 are not forced deeper. 0 => off (legacy ladder,
+    // byte-identical). Set to the deck's heuristic convergence depth from the value_leaf_table (heuristic_lp).
+    int    escalation_cap = 0;             // 0 => off; >0 => single-pass predicted-affordable escalation, capped
+    // FROZEN heuristic cost-per-probe-leaf for the predicted-affordable walk (calibrated offline via
+    // MTG_ESC_PREDICT_STATS). A fixed value keeps the single pass DETERMINISTIC (an adaptive thread_local R has a
+    // thread-schedule-dependent trajectory => non-reproducible play). 0/unset => 120 prior. Only read when
+    // escalation_cap>0.
+    double escalation_r = 0.0;
     // Informative only (not read at runtime): how fast the leaf / heuristic search is at each depth, and a
     // human-readable regime tag. Kept so target_depth can be re-derived if the budget changes.
     std::string         regime;           // "light" | "heavy"

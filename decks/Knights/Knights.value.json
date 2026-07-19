@@ -10648,6 +10648,7 @@
     "budget_ms": 20,
     "enabled": true,
     "regime": "light",
-    "note": "MEASURED: d5=d6=d7 flat LP => no depth benefit; d5 = current play."
+    "note": "MEASURED: d5=d6=d7 flat LP => no depth benefit; d5 = current play.",
+    "escalation_cap": 5
   }
 }

@@ -19041,6 +19041,7 @@
     "budget_ms": 20,
     "enabled": true,
     "regime": "light",
-    "note": "MEASURED: d6/d7 give flat LP vs d5 => no depth benefit; d5 = current play."
+    "note": "MEASURED: d6/d7 give flat LP vs d5 => no depth benefit; d5 = current play.",
+    "escalation_cap": 5
   }
 }
