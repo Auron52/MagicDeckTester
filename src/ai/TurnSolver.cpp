@@ -2725,6 +2725,8 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
     // casts gain the chain solution. See TapForCostBacktrack.
     const std::vector<Permanent> bf_pre = state.battlefield;
     const int life_pre = state.players[active].life;
+    const int opp_pre = state.players[1 - active].life;
+    const bool oll_pre = state.opponent_lost_life_this_turn;
     // Retain over-produced mana (forced filter/depletion over-tap) into the turn-scoped
     // reserve so a later same-(main-)phase cast can spend it (CR 500.4). state.floating_mana
     // already holds the un-spent reserve after SpendFloatingTowardCost; add the leftover on top.
@@ -2744,8 +2746,6 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
     };
     if (greedy()) { commit_leftover(floating); return true; }
     // Greedy failed: try the backtracking solver from a clean board.
-    const std::vector<Permanent> bf_greedy_fail = state.battlefield;
-    const int life_greedy_fail = state.players[active].life;
     state.battlefield        = bf_pre;
     state.players[active].life = life_pre;
     ManaPool bt_leftover;
@@ -2773,10 +2773,15 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
             return true;
         }
     }
-    // Total failure: restore the greedy's exact end-state to match prior behaviour.
-    state.battlefield        = bf_greedy_fail;
-    state.players[active].life = life_greedy_fail;
-    state.floating_mana      = reserve_pre;   // payment failed -> return the reserve untouched
+    // Total failure: a cast that cannot be paid must leave the game exactly as it found it
+    // (atomic rollback) -- restore the full pre-payment snapshot, not the greedy's partial-tap
+    // end-state. Callers (cycling/sac loops, ill-ordered plans) rely on a failed payment being
+    // side-effect-free; the old greedy-fail restore leaked tapped lands / spent counters.
+    state.battlefield                  = bf_pre;
+    state.players[active].life         = life_pre;
+    state.players[1 - active].life     = opp_pre;
+    state.opponent_lost_life_this_turn = oll_pre;
+    state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
     return false;
 }
 

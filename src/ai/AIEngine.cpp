@@ -2942,6 +2942,8 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
     // previously-FAILING casts gain the chain solution. See TapForCostBacktrack.
     const std::vector<Permanent> bf_pre = state.battlefield;
     const int life_pre = state.players[active].life;
+    const int opp_pre = state.players[1 - active].life;
+    const bool oll_pre = state.opponent_lost_life_this_turn;
     // Retain over-produced mana into the turn-scoped reserve (CR 500.4) -- mirrors
     // TurnSolver::TapForCostDirect byte-for-byte so the rollout and the real game realise
     // identical leftover mana (lockstep). Off (MTG_NO_FLOAT_LEFTOVER) -> no-op.
@@ -2960,8 +2962,6 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
         return true;
     };
     if (greedy()) { commit_leftover(floating); return true; }
-    const std::vector<Permanent> bf_greedy_fail = state.battlefield;
-    const int life_greedy_fail = state.players[active].life;
     state.battlefield        = bf_pre;
     state.players[active].life = life_pre;
     ManaPool bt_leftover;
@@ -2987,9 +2987,14 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
             return true;
         }
     }
-    state.battlefield        = bf_greedy_fail;
-    state.players[active].life = life_greedy_fail;
-    state.floating_mana      = reserve_pre;   // payment failed -> return the reserve untouched
+    // Total failure: atomic rollback -- restore the full pre-payment snapshot, not the greedy's
+    // partial-tap end-state (mirrors TurnSolver::TapForCostDirectOnce). A failed cast leaves no
+    // side effects; callers rely on this.
+    state.battlefield                  = bf_pre;
+    state.players[active].life         = life_pre;
+    state.players[1 - active].life     = opp_pre;
+    state.opponent_lost_life_this_turn = oll_pre;
+    state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
     return false;
 }
 
