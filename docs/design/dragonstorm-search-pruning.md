@@ -39,7 +39,33 @@ it changes no results, same category as `ManaPruneBound`.
 Validation: full smoke must be 18/0/0 with exact digests (GT decks carry no splice card, so they are
 byte-identical by construction; the flag proves it).
 
-### Step 2 — acceleration-ordering heuristic  (TO IMPLEMENT, gated behind MTG_UNPRUNED)
+### Step 2 — acceleration-ordering heuristic  (IMPLEMENTED, commit `4e68c8c`, gated behind MTG_UNPRUNED)
+
+**Implemented** as `GroupChoiceNonPrefixAccel(...)` in TurnSolver.cpp — a generate-time odometer skip
+mirroring `GroupChoiceOverSplices`, applied in BOTH `Solve` and `EnumeratePlans`. Provider-owned via
+`DragonstormProvider::UseAccelPrefixCollapse()` (Hook 27, base returns false → byte-identical everywhere
+else) and opened by `UnprunedGate::AccelPrefix` (`MTG_UNPRUNE=accelprefix` / `MTG_UNPRUNED=1`). Accelerant
+= `ritual_floating_mana > 0 && kind==CastFromHand`; **verified** this set is exactly the 5 rituals
+(Rite of Flame MV1, Pyretic/Desperate MV2, Seething Song MV3, Irencrag MV4 — so Irencrag naturally sorts
+last among accelerants) and that Apex/Dragonstorm/Utvara/Ruby Medallion/Lotus Bloom are `rfm=0` and thus
+**excluded** (payoff + cost-reducer selection stays full-search). Ordering key is choice-independent
+(min effective `cost.ManaValue()` over the group's ritual-cast options, `group_hand_index` tiebreak) →
+stable across every odometer position. Splice-k within a cast Desperate Ritual stays free (step 1 handles
+over-splice legality); Irencrag's `max_casts_after:1` legality is enforced by the existing consider/eval
+loops (no special-casing needed — it just ranks last).
+
+**Gate results:** smoke **18/0/0** exact digests (independently re-run — GT decks carry no ritual
+accelerant so byte-identical by construction); bounded d5 Dragonstorm measurement **completes** (EXIT 0)
+with the collapse on and reproduces the pre-change stall (**EXIT 124**) when reopened via
+`MTG_UNPRUNE=accelprefix`; d0 matched A/B (deepest depth where the unpruned side terminates) pruned vs
+unpruned **identical avg + identical unwon set** → drops zero winning lines where apples-to-apples is
+possible. The d5 A/B is unmeasurable because the unpruned d5 side is non-terminating *by construction* —
+which is exactly the bug fixed. Theoretical caveat (accepted, `MTG_UNPRUNED`-openable): cheapest-first
+maximizes storm-count/affordability per prefix, but a dearer ritual can net marginally more mana, so a
+pure big-X (Crackle) payoff could in principle reach slightly more mana via a non-prefix subset — not
+observed.
+
+### Step 2 (original spec) — acceleration-ordering heuristic
 
 **User's model of the deck:** "On the turn you go off you just use a big burst of mana and win." The
 order of pure accelerants does NOT matter for the outcome — only the legal splice multiset and the
