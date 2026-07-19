@@ -2399,17 +2399,55 @@ inline bool HinataInPlay(const GameState& state)
     return false;
 }
 
-// Opt-in (MTG_MAGMA_FAITHFUL): make Magma Opus's Hinata discount count only the DISTINCT targets the
-// SEARCH actually hits -- the opponent face (all damage goes there, TurnSolver ResolveDirectDamage) plus
-// the oracle's mandatory "tap two target permanents" = 3 -- instead of the "2 + every permanent"
-// over-count below, which credits a {1} discount for permanents the spell never targets. GT-changing
-// (Magma gets more expensive on a permanent-rich board: {U}{R} -> {3}{U}{R}), so default OFF until the
-// delta is measured + adopted. Lockstep-safe: the count matches the all-to-face + tap-two resolution, so
-// the discount is never a phantom. See docs/design/viewer-magma-opus-modeling.md.
+// Opt-in (MTG_MAGMA_FAITHFUL): resolve Magma Opus with a faithful, lethality-gated SPREAD instead of the
+// "2 + every permanent" Hinata over-count (which credits a {1} discount for permanents the spell never
+// targets AND lets the search deal 4-to-face for the spread price -- doubly over-rated). GT-changing, so
+// default OFF until measured + adopted. See docs/design/viewer-magma-opus-modeling.md.
 inline bool MagmaFaithfulDiscountEnabled()
 {
     static const bool on = std::getenv("MTG_MAGMA_FAITHFUL") != nullptr;
     return on;
+}
+
+// True for the specific spell this faithful model governs: Magma Opus (divided damage that also taps
+// permanents). Reality Spasm is scale_x untap (not damage_divided) and is excluded.
+inline bool IsMagmaFaithful(const CardParams& p)
+{
+    return MagmaFaithfulDiscountEnabled() && p.damage_divided && p.discount_targets_permanents;
+}
+
+// Faithful Magma Opus target plan (opt-in). The search resolves Magma as ONE heuristic line, chosen by
+// lethality:
+//   * CONCENTRATE (dealing all `damage` to the opponent's face is lethal, opp_life <= damage): dump all
+//     `damage` on the face -- 1 damage-target + the oracle's 2 tapped permanents = 3 distinct -> {3}{U}{R}.
+//     Taken only when the face damage is the kill.
+//   * SPREAD (default): 1 to the opponent + 1 to each other distinct target (self + creatures), up to
+//     `damage` damage-targets, + 2 tap = up to 6 distinct -> as cheap as {U}{R}. The opponent takes only
+//     1 -- the combo, not Magma, is the finisher -- so Magma stays a cheap cantrip.
+// Returns { opp_face_damage, distinct_targets }; BOTH the discount (HinataAvailableTargets) and the
+// resolution (EffectHandler::ResolveDirectDamage / ApplyPlanDirect) read it, so cost and damage stay
+// lockstep. The inert spread damage onto your own creatures/self is NOT simulated (it cannot change a
+// goldfish outcome and could needlessly kill your own 1/1s); only the opponent-face amount and the
+// distinct-target COUNT are load-bearing. (Edge case: a prior same-turn burn that drops the opponent
+// across the lethal line makes the enumeration-time discount and the resolution-time face damage disagree
+// by a bounded amount -- rare for this 1-of, accepted.)
+struct MagmaFaithfulResult { int opp_face_damage; int distinct_targets; };
+inline MagmaFaithfulResult MagmaFaithfulPlan(const CardDefinition& def, const GameState& state)
+{
+    const int active   = state.active_player_index;
+    const int dmg      = def.params.damage;
+    const int perms    = static_cast<int>(state.battlefield.size());
+    const int tap      = perms < 2 ? perms : 2;                 // "tap two target permanents"
+    const int opp_life = state.players[1 - active].life;
+    if (opp_life <= dmg)                                        // concentrate: the face damage is lethal
+    {
+        return { dmg, 1 + tap };
+    }
+    int creatures = 0;                                         // spread damage-targets: opponent + self
+    for (const Permanent& p : state.battlefield) { if (p.card.IsCreature()) { ++creatures; } }
+    int dmg_targets = 2 + creatures;                           // ... + every creature (Hinata guarantees >=1)
+    if (dmg_targets > dmg) { dmg_targets = dmg; }              // at most `dmg` targets can each take 1
+    return { 1, dmg_targets + tap };
 }
 
 // Count the beneficial targets `def` would choose on the current board to maximise Hinata's
@@ -2421,15 +2459,12 @@ inline bool MagmaFaithfulDiscountEnabled()
 inline int HinataAvailableTargets(const CardDefinition& def, const GameState& state)
 {
     const int active = state.active_player_index;
-    // Magma Opus faithful distinct-target count (opt-in): opponent face (1 damage-target) + tap two
-    // permanents = 3, capped by however many permanents exist to tap. Replaces the over-count for the
-    // damage_divided + tap-permanents spell (Magma); scale_x untap spells (Reality Spasm) are excluded
-    // (not damage_divided) and keep the legacy count. Default-off -> byte-identical.
-    if (MagmaFaithfulDiscountEnabled() && def.params.damage_divided
-        && def.params.discount_targets_permanents)
+    // Magma Opus faithful distinct-target count (opt-in): the lethality-gated spread/concentrate plan's
+    // distinct targets (see MagmaFaithfulPlan), replacing the "2 + every permanent" over-count. Excludes
+    // scale_x untap spells (Reality Spasm). Default-off -> byte-identical.
+    if (IsMagmaFaithful(def.params))
     {
-        const int perms = static_cast<int>(state.battlefield.size());
-        return 1 + (perms < 2 ? perms : 2);
+        return MagmaFaithfulPlan(def, state).distinct_targets;
     }
     // Soulfire Eruption: the discount must count exactly the targets the resolution heuristic
     // actually chooses (opponent + opp creatures + self-if-life>9), NOT own creatures -- otherwise

@@ -3505,8 +3505,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 else
                 {
-                    state.players[opp_idx].life -= dmg;
-                    if (dmg > 0) { state.opponent_lost_life_this_turn = true; }
+                    // Magma Opus faithful spread (opt-in): the opponent's face takes only the plan's face
+                    // damage (1 spreading / `dmg` concentrating; see MagmaFaithfulPlan), lockstep with
+                    // ResolveDirectDamage + the discount. Every other burn deals its full dmg to the face.
+                    int face = IsMagmaFaithful(def.params) ? MagmaFaithfulPlan(def, state).opp_face_damage : dmg;
+                    state.players[opp_idx].life -= face;
+                    if (face > 0) { state.opponent_lost_life_this_turn = true; }
                 }
             }
             else if (t == Targeting::Creature || t == Targeting::Multi)

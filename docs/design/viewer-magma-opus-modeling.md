@@ -177,3 +177,64 @@ vs a passive opponent), and the `{U/R}{U/R}`-discard-for-Treasure ramp mode." So
 
 Cast Magma Opus interactively in the repro: divide 4 among opponent creatures, choose two permanents to
 tap, confirm the 4/4 token + draw-two land. Regression-suite audit before `--accept`.
+
+---
+
+## 2026-07-19 (session 2): per-game analysis → CHOSEN MODEL = two-variant search (NOT yet implemented)
+
+### Measured deltas (Hinata d0, seed 1001, 1000 games; metric = mean turn-to-win, unwon=max+1)
+- Over-count (current GT, default): **7.4760**.
+- CONCENTRATE faithful ({3}{U}{R}, all 4 to face): **7.4910 (+0.015)**. Committed `4536d64` then edited.
+- Lethality-gated SPREAD ({U}{R}, ~1 to face unless opp_life<=4): **7.5020 (+0.026)** — WORSE.
+  (This is the CURRENTLY-UNCOMMITTED / then-committed state: `MagmaFaithfulPlan` in SpellEffects.h +
+  the face-damage override in EffectHandler::ResolveDirectDamage + ApplyPlanDirect.)
+
+### Why spread is worse (the key finding — measurement refutes intuition)
+Worked example gi=0 (Magma cast turn 5 with **Hinata + Ornithopter** on board = 4 damage-targets + 2 tap
+= 6 distinct available → legitimately `{U}{R}`): the concentrate model IGNORES creatures (counts only
+opp+2tap=3) so it over-charges `{3}{U}{R}` and delays 6→7. BUT across 1000 games the deck **values
+Magma's 4-to-face more than the mana the spread saves** — dropping face 4→1 to get the cheap cost is a
+net loss (+0.026). So "were there targets to reduce cost / was the face damage needed": targets existed,
+but at the goldfish level the face damage IS generally worth it. The over-count is fastest precisely
+because it is doubly over-rated (cheap AND 4-to-face); any single-line faithful correction is slower.
+
+### CHOSEN MODEL (user, session 2): two-variant search — "max affordable vs 1 damage"
+Make Magma a **branch point** the search resolves, NOT a fixed line, because 4-to-face costs 5 mana
+({3}{U}{R}) and isn't always affordable. Enumerate TWO Magma variants (NO in-between levels — user:
+"we just choose based on what the plan allows"):
+- **Cheap**: 1 to face, spread the other 3 across distinct targets → max discount → `{U}{R}` (or
+  `{1}{U}{R}` w/ few creatures). Frees mana for other casts.
+- **Concentrate (max affordable)**: as much face damage as the plan's leftover mana pays for, up to 4
+  (`{3}{U}{R}`). Only affordable in mana-rich plans; the affordability check drops it otherwise.
+The search's normal plan enumeration + affordability + value picks per-game → should land ~neutral
+(keeps cheap Magma when mana is the bottleneck, concentrates when it can afford it). Face F costs (F+1)
+total mana: F=1→{U}{R}, F=2→{1}{U}{R}, F=3→{2}{U}{R}, F=4→{3}{U}{R}; discount(F)=min(6, 1 +
+min(4-F,1+#creatures) + min(2,#perms)).
+
+**Crackle interaction (user):** if the cheap-Magma-frees-mana line competes with Crackle for the same
+mana, **prioritize a higher Crackle X** (Crackle's 5X face damage usually wins the race).
+
+### Implementation plan (mirror Crackle's declared-count machinery)
+Crackle already does exactly this: `TurnSolver.cpp:1233-1294` loops X-candidates × declared `count`,
+sets `a.crackle_targets`, threads it `Action → cast_by_name(AIEngine.cpp:1881+ / :3124 :3146) →
+StackEntry.crackle_targets (GameState.h:101) → ResolveDirectDamage / ApplyPlanDirect`, and derives the
+discount from the count (`HinataGenericDiscount(def,state,x,count)` SpellEffects.h:2502). For Magma
+(fixed-cost, so the FIXED-cost enumeration path near TurnSolver.cpp:1360-1520, NOT the X-loop):
+1. When `IsMagmaFaithful(def.params)` && Hinata in play, emit TWO Action variants sharing hand_index
+   (mutually exclusive): a spread variant (face=1) and a concentrate variant (face=4). Set each
+   variant's `a.cost` directly from discount(F), and thread the face via a field (REUSE `crackle_targets`
+   as the "extra spread targets beyond the face" count = 4-F, so 3 for spread / 0 for concentrate, OR add
+   a dedicated `magma_face`). Reuse avoids threading a new field through the ~10 cast_by_name call sites.
+2. Extend `cast_by_name` (AIEngine.cpp:3146) to also set `entry.crackle_targets` for IsMagmaFaithful.
+3. In ResolveDirectDamage + ApplyPlanDirect, for Magma compute `face = damage - entry.crackle_targets`
+   (concentrate=0→4, spread=3→1) and deal that to the opp face. REMOVE the lethality-gate
+   `MagmaFaithfulPlan` face override (superseded).
+4. Discount per variant: distinct = 1 + crackle_targets + min(2,#perms) → cost via the enumerator (like
+   Crackle's `HinataGenericDiscount(def,state,x,count)` derived path; Magma is non-X so compute directly).
+5. Keep `MTG_MAGMA_FAITHFUL` gate (default off, byte-identical). Build → measure d0/d5 vs GT → per-game
+   audit → accept only if the delta makes sense. Read `.claude/skills/heuristic-optimization.md`.
+
+### Current code state at compaction
+`MTG_MAGMA_FAITHFUL` behind-the-hatch behavior = the LETHALITY-GATED SPREAD (measured +0.026, the worse
+one). It is to be REPLACED by the two-variant model above. Default OFF ⇒ all GT byte-identical (d0 OFF =
+7.4760 verified). Committed so it's not lost; the two-variant is the next step.
