@@ -14,14 +14,17 @@ the claude oracle's T5). Banking excess counters is now via the RESERVE (hold an
 land untapped), not a partial burst — accepted for this deck (it bursts in one turn); the
 multi-turn "bank a partial amount while tapping" optimization is deferred (low value here).
 
-**RESIDUAL (trigger 2 — menu offers unpayable orderings), NOT fixed, disclosed:** the plan
-enumerator still offers cast-orderings where a spell is listed BEFORE the mana source (Lotus sac
-/ a ritual) that funds it (e.g. Apex ordered before its rituals); selecting such a plan no-ops
-that spell (and an aborted cast still taps lands → a depletion-counter leak on Sandstone Needle).
-The SEARCH never picks these dominated orderings (so play win-rate is unaffected — game 6 stays
-T6 for a separate search-enumeration reason, likely needing a main1/main2 split), but a human in
-claude-play could. Lower priority; a follow-up should canonicalize plan action order (mana sources
-before dependent spells) or reject unpayable-at-position orderings in the enumerator.
+**NOT-A-BUG / benign enumeration artifact (trigger 2), deferred cleanliness:** the plan enumerator
+offers cast-orderings where a spell is listed BEFORE the mana source (Lotus sac / a ritual) that
+funds it (e.g. Apex ordered before its rituals). Per the user (2026-07-19): **funding sources
+should be cast first**, so such an ordering is nonsensical — you genuinely lack the mana at that
+position, and it CORRECTLY fails to cast. Real plays always sequence sources first, and the SEARCH
+never picks these dominated orderings, so game-state and win-rate are unaffected (game 6 staying T6
+is a separate search-enumeration limit, likely a main1/main2 split). The only genuinely-improvable
+bits are cosmetic: the plan SUMMARY shouldn't advertise an unpayable-at-position cast, and an
+aborted cast shouldn't tap a land for nothing (minor Sandstone Needle depletion tick). Deferred as
+a cleanliness follow-up (canonicalize plan action order: mana sources before dependent spells) —
+NOT a correctness bug and NOT an unresolved sweep flag.
 
 ## Symptom
 

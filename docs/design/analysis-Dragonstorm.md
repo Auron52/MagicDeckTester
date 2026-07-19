@@ -552,3 +552,25 @@ all 6 GT decks; Dragonstorm goldfish 50g/seed1001 avg 6.36→6.12, won 41→43, 
 unwon set ⊂ baseline). The fix cannot reduce real executor wins (its own `BuildAvailableMana` is unchanged);
 it only makes the rollout projection accurate, so the search stopped committing phantom firebreathing kills.
 **→ ENGINE CONVERGED: fd-diverge 13→0, nonconv 0.**
+
+## Claude-play sweep
+- commit: `69a26d4`
+- seeds: 900001 games: 16
+- flags: 0 unresolved
+
+Stage-5d sweep (16 games, one Claude agent each via the stateless-replay protocol + adversarial
+flag-verify; run as a Workflow). Result: Claude beat the search T5 vs T6 on all 16 games and the
+sweep surfaced **one real engine bug** — a planner↔executor mana-fidelity defect where storage
+lands (Mercadian Bazaar / Dwarven Hold) under-burst their counters, silently dropping a legal,
+advertised cast (Scourge) on a tight go-off plan depending on irrelevant ritual cast order.
+**FIXED** `69a26d4` (storage lands now burst ALL counters on tap = what the planner already
+credits); smoke 18/0/0 byte-identical, Dragonstorm search avg **6.0→5.06**. Root cause + fix:
+`docs/design/dragonstorm-plan-execution-fidelity-bug.md`.
+
+The sweep's other flags were either verified-FALSE (card-data misreads) or a benign
+ENUMERATION artifact — the plan menu offers cast-orderings where a spell precedes its funding
+source, which correctly fail (you don't have the mana yet; funding sources are cast first in every
+real play, and the search never picks these dominated orderings). Not a game-state correctness bug
+and does not affect win-rate; a cosmetic follow-up could canonicalize plan action order (mana
+sources before dependent spells) and stop the plan summary advertising an unpayable-at-position
+cast. Left as a deferred cleanliness item, not an unresolved sweep flag.
