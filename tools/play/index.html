@@ -1203,10 +1203,12 @@ function renderDecisionPanel(d, dec){
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
-  // The bottom decision's AI pick is the DEEP-search pick, fetched async so the modal never blocks on
-  // the clairvoyant rollout. Kick it off once per decision (guarded so the repaint-on-arrival doesn't loop).
-  // Tabled deck already carries the profile's joint ai_set -> skip the deep-hint search (authoritative).
-  if (dec==='bottom' && !(d.ai_set&&d.ai_set.length) && d._aiHint===undefined && !d._aiHintPending) fetchBottomHint(d);
+  // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
+  // is fetched ASYNCHRONOUSLY (fetchKeepHint) in parallel with the modal -- the human decides without
+  // waiting (the AI pick is good-to-have, not required). One shot per decision, guarded so the repaint-
+  // on-arrival doesn't loop. fetchKeepHint falls back to the deep-search hint for a table-less deck.
+  if ((dec==='mulligan' || dec==='bottom') && !(d.ai_set&&d.ai_set.length)
+      && d._keepHint===undefined && !d._keepHintPending) fetchKeepHint(d);
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
 
@@ -1342,9 +1344,14 @@ function landEntryPanelHtml(d){
 // engine's KeepHand) is tagged, so the human sees "AI would keep/mulligan" and can follow or override.
 function mulliganPanelHtml(d){
   const aiKeep = d.ai_choice===1, hand=d.hand||[];
+  // The keep/mulligan recommendation comes from the deck's MULLIGAN TABLE, loaded asynchronously
+  // (fetchKeepHint). Until it lands the shown pick is the fast static-profile call; tag the state so the
+  // human knows whether the table has weighed in (it's a hint either way -- keep/mulligan freely).
+  const tblTag = d._keepHint ? ' <span class="hint">(mulligan table)</span>'
+               : d._keepHintPending ? ' <span class="hint">— consulting mulligan table…</span>' : '';
   let h=`<h3>Mulligan — ${d.on_the_play?'on the play':'on the draw'}</h3>`;
   h+=`<div class="sub">${d.mulligan_count?('Mulligan '+d.mulligan_count+' — keeping now puts '+d.to_bottom+' card'+(d.to_bottom===1?'':'s')+' on the bottom. '):''}`+
-     `AI would <b>${aiKeep?'keep':'mulligan'}</b>.</div>`;
+     `AI would <b>${aiKeep?'keep':'mulligan'}</b>${tblTag}.</div>`;
   h+=`<div class="tutgrid">`+hand.map(c=>cardMini(c.name)).join('')+`</div>`;
   h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
      `<button class="${aiKeep?'primary':'ghost'}" data-mull="1">Keep${aiKeep?'  ·  AI':''}</button>`+
@@ -1375,6 +1382,7 @@ function bottomPanelHtml(d){
   if (S._bottomFor !== d.decision_index){ S._bottomFor=d.decision_index; S.bottomSel=new Set(tabled?d.ai_set:[]); }
   const sel=S.bottomSel;
   const hintTxt = tabled ? `Mulligan profile’s optimal set is preselected`
+                : d._keepHintPending ? `<span class="hint">consulting mulligan table…</span>`
                 : hint===undefined ? `<span class="hint">AI thinking…</span>`
                 : (ai!=null && hand[ai]) ? `AI would start with <b>${esc(hand[ai].name)}</b> (depth ${hint.depth})`
                 : `AI pick unavailable`;
@@ -1394,6 +1402,35 @@ function bottomPanelHtml(d){
      ((tabled||ai!=null||someOpt)?`<button class="ghost" id="bottomai">Follow AI</button>`:'')+`<span class="spacer"></span>`+
      `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Bottom ${K} card${K===1?'':'s'}</button></div>`;
   return h;
+}
+// Fetch the deck's MULLIGAN-TABLE recommendation in the background (see /api/keep-hint). Fired when a
+// mulligan OR bottom modal is first shown; the server loads the exhaustive sidecar (expensive) and
+// returns the table's keep/mulligan call (ai_choice) and joint bottom set (ai_set). Patched in place
+// when it returns — never blocks the human (the AI pick is good-to-have, not required to choose). For a
+// table-less deck the server returns hasSidecar:false and we fall back to the deep-search bottom hint.
+function fetchKeepHint(d){
+  d._keepHintPending = true;
+  const captured = d.decision_index;
+  post('/api/keep-hint', cfg({})).then(h=>{
+    d._keepHintPending = false;
+    if (!h || h.kind!=='keep-hint'){ d._keepHint=null; if (S.decision===d) renderBoard(); return; }
+    if (!h.hasSidecar){                                   // table-less: use the deep-search bottom hint
+      d._keepHint=null;
+      if (d.type==='bottom' && d._aiHint===undefined && !d._aiHintPending) fetchBottomHint(d);
+      else if (S.decision===d) renderBoard();
+      return;
+    }
+    if (h.decision_index!==captured){ d._keepHint=null; if (S.decision===d) renderBoard(); return; }
+    d._keepHint=h;
+    if (d.type==='mulligan' && h.ai_choice!=null) d.ai_choice=h.ai_choice;   // table's keep/mulligan call
+    if (d.type==='bottom' && Array.isArray(h.ai_set)){
+      d.ai_set=h.ai_set;                                                     // table's joint bottom set
+      // Re-seed the bottom selection with the table set IF the human hasn't touched it yet (they may
+      // have started picking while the sidecar loaded -- never clobber their choices).
+      if (S._bottomFor===d.decision_index && S.bottomSel && S.bottomSel.size===0) S._bottomFor=null;
+    }
+    if (S.decision===d) renderBoard();
+  }).catch(()=>{ d._keepHintPending=false; d._keepHint=null; if (S.decision===d) renderBoard(); });
 }
 // Fetch the deep-search bottom hint in the background (see /api/ai-hint). Fired when a bottom decision
 // is first shown; patches the modal in place when it returns. Never blocks the human — they can bottom

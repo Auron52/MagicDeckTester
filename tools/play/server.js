@@ -135,27 +135,37 @@ function runStepRaw(p, logDir, exhaustiveKeep) {
   return { kind: 'error', error: 'no decision/result markers in output', raw: out.slice(0, 4000), code: r.status };
 }
 
-// Run one step for the given choices. Fast path is table-LESS (no sidecar). But the VIEWER is a
-// correctness tool, so its pre-game BOTTOM suggestion should reflect the deck's mulligan TABLE, not
-// the live heuristic (issue #5: "Follow AI" was picking a 1-drop the table would keep). A bottom
-// decision only occurs before turn 1 and there are at most a handful, so when the deck has a sidecar
-// we re-run JUST that decision WITH --exhaustive-keep to fill its joint ai_set from the table. The
-// re-run replays the identical game (same seed+choices → same decision); only the AI-suggestion
-// metadata differs. Turn-play steps never load the (up-to-tens-of-seconds) sidecar. Scoped to the
-// viewer/server — the engine's default --claude-play stays table-less. (The mulligan KEEP suggestion
-// is left on the static profile: it only needs to toss 0-land/flood hands, already correct at play
-// depth, so it isn't worth the extra sidecar parse.)
+// Run one step for the given choices. ALWAYS table-LESS (no sidecar) so /api/step NEVER blocks on the
+// up-to-tens-of-seconds sidecar parse -- the browser gets the decision instantly. The deck's mulligan
+// TABLE recommendation (the keep/mulligan call AND the joint bottom set) is fetched SEPARATELY and
+// ASYNCHRONOUSLY via /api/keep-hint (runKeepHint), fired in parallel with the modal, so the human is
+// never made to wait for a suggestion that is good-to-have but not required to make the choice.
 function runStep(p, logDir) {
-  const res = runStepRaw(p, logDir, false);
-  if (res.kind === 'decision' && res.decision.type === 'bottom') {
-    let hasSidecar = false;
-    try { hasSidecar = resolveDeck(p.deck).hasSidecar; } catch (e) { /* fall through to table-less */ }
-    if (hasSidecar) {
-      const tabled = runStepRaw(p, logDir, true);
-      if (tabled.kind === 'decision') return tabled;   // enriched with the table's joint bottom set
-    }
-  }
-  return res;
+  return runStepRaw(p, logDir, false);
+}
+
+// Async MULLIGAN-TABLE hint: re-run the CURRENT pre-game decision (mulligan or bottom) WITH the
+// exhaustive keep sidecar (--exhaustive-keep -- the expensive parse) and return the deck's TABLE
+// recommendation. The re-run replays the identical game (same seed+choices → same decision); only the
+// AI-suggestion metadata differs. This drives BOTH the keep/mulligan call (ai_choice, from the table's
+// KeepHand -- so the profile decides whether to mulligan, not just how to bottom) and the joint bottom
+// set (ai_set). The browser fires it in PARALLEL with the modal, never blocking the human (the AI pick
+// is a hint). Table-less decks return hasSidecar:false with NO binary spawn. Viewer-scoped; the
+// engine's default --claude-play stays table-less (see main.cpp AttachExhaustiveSidecar).
+function runKeepHint(p) {
+  let hasSidecar = false;
+  try { hasSidecar = resolveDeck(p.deck).hasSidecar; } catch (e) { /* table-less */ }
+  if (!hasSidecar) return { kind: 'keep-hint', hasSidecar: false };
+  const r = runStepRaw(p, null, true);   // WITH --exhaustive-keep
+  if (r.kind !== 'decision') return { kind: 'keep-hint', hasSidecar: true, error: r.error || ('unexpected ' + r.kind) };
+  const d = r.decision;
+  return {
+    kind: 'keep-hint', hasSidecar: true,
+    decision_index: d.decision_index, type: d.type,
+    ai_choice: (d.ai_choice != null ? d.ai_choice : null),   // mulligan: 1=keep, 0=mulligan
+    ai_set: Array.isArray(d.ai_set) ? d.ai_set : null,        // bottom: the table's joint bottom set
+    bottom_total: (d.bottom_total != null ? d.bottom_total : null),
+  };
 }
 
 // Compute the DEEP-search AI hint for the current pending decision, run at HINT_DEPTH (default 5) on a
@@ -282,6 +292,13 @@ const server = http.createServer(async (req, res) => {
       // has already shown the decision; this fills in what the depth-HINT_DEPTH search would do.
       const p = await readBody(req);
       return sendJson(res, 200, runAiHint(p));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/keep-hint') {
+      // Async mulligan-TABLE hint for the current pre-game decision (see runKeepHint). Non-blocking:
+      // the browser has already shown the mulligan/bottom modal; this loads the exhaustive sidecar in
+      // the background and returns the table's keep/mulligan call + joint bottom set.
+      const p = await readBody(req);
+      return sendJson(res, 200, runKeepHint(p));
     }
     if (req.method === 'POST' && url.pathname === '/api/validate') {
       // Reconcile the hand-assembled line (p.line, an encoded "land=X;cast=Y;..." string)
