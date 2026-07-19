@@ -1835,20 +1835,35 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             auto toSentinels = [&](const std::vector<ChosenTarget>& ts) {
                 std::vector<int> out; for (const ChosenTarget& c : ts) { out.push_back(chosenToSentinel(c, controller)); } return out; };
             int di = static_cast<int>(cursor);
-            if (cursor < choices.size())
+            // PER-TARGET reply (issue #8): Soulfire targets ANY number of the legal targets, but the
+            // 256-option enumeration can't represent a wide set (with ~13 targets the largest enumerated
+            // option was only 8), so a human wanting to hit all opponent creatures had their pick silently
+            // dropped to the heuristic floor. Read ONE int per legal target (1 = targeted), like the
+            // `divide` decision -- uncapped, so any subset (incl. all creatures) is expressible. The
+            // caller (SoulfireDig) validates count >= min_targets and re-charges owed mana. Reference-
+            // safe: no saved reference casts Soulfire (all replay Crackle single-target). This chooser is
+            // human-play only (nulled for the search), so batch ground truth is unaffected.
+            const int need = static_cast<int>(legal_ct.size());
+            if (cursor + need <= static_cast<int>(choices.size()))
             {
-                int chosen = choices[cursor++];
+                std::vector<int> flags(need);
+                for (int i = 0; i < need; ++i) { flags[i] = choices[cursor++]; }
                 ++decisions_made;
-                if (chosen < 0 || chosen >= static_cast<int>(opts.size())) { chosen = heur_option; }
+                std::vector<ChosenTarget> picked;
+                for (int i = 0; i < need; ++i) { if (flags[i] > 0) { picked.push_back(legal_ct[i]); } }
+                const int cnt = static_cast<int>(picked.size());
+                const bool ok = cnt >= min_targets && cnt <= max_targets;
                 if (!log_dir.empty())
                 {
                     std::ostringstream ss;
-                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    ss << "{ \"chosen\": [";
+                    for (int i = 0; i < need; ++i) { if (i) { ss << ", "; } ss << flags[i]; }
+                    ss << "], \"decision\": ";
                     WriteTargetDecisionJson(ss, s, source, legal_ct, legal_labels, opts, 0, max_targets, heur_option, di, "", "", min_targets, /*random_damage=*/true);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
-                return toSentinels(opts[chosen].targets);
+                return ok ? toSentinels(picked) : heuristic_subset;   // invalid count -> heuristic floor
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
             WriteTargetDecisionJson(std::cout, s, source, legal_ct, legal_labels, opts, 0, max_targets, heur_option, di, "", "", min_targets, /*random_damage=*/true);

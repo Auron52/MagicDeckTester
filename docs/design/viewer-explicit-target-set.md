@@ -1,6 +1,23 @@
 # Viewer: explicit wide target sets + Soulfire own-target selection (issue #8)
 
-Status: **PARTIAL — front-end silent-discard fixed; the full wide-selection + dig-fidelity fix is DEFERRED (engine/protocol).**
+Status: **DONE — per-target reply shipped; Soulfire wide selection + dig verified.**
+
+**Shipped:** the Soulfire target chooser (`g_play_soulfire_chooser`, human-play only) now reads a
+PER-TARGET reply — one int per legal target (1 = targeted), like `divide` — instead of a single index
+into the ≤256 enumerated subsets. The viewer's `commitBoardSel` submits that 0/1 list for
+`random_damage` decisions. Uncapped, so the human can target ALL opponent creatures. Verified on
+Seed 4 Game 3: submitted 11/13 targets (face + 3 creatures + 7 spirits) → dig staged 11 playable
+cards (previously the 256-cap's largest option was 8, and a wider pick silently fell back to 4 →
+"targets ignored, did not give cards"). Reference-safe (no reference casts Soulfire) and GT-neutral
+(chooser nulled for the search) — smoke byte-identical.
+
+Remaining nicety (optional): the heuristic DEFAULT still seeds the min floor, so "Follow AI" starts
+narrow; a better default (seed all beneficial opponent creatures) would let one click take the wide
+line. Low priority now that the human can select freely.
+
+---
+
+### Original analysis (retained)
 
 ## Problem (as reported)
 

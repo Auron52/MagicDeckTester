@@ -1636,6 +1636,16 @@ function commitBoardSel(d, dec){
     oi=opt?opt.index:d.heuristic_default;
     const names=(d.candidates||[]).filter(c=>S.boardSel.has('m:'+c.perm_index)).map(c=>c.name);
     lab=`Soulfire: target ${names.join(', ')||'—'}`;
+  } else if (d.random_damage){
+    // Soulfire Eruption (issue #8): reply ONE int per legal target (1=selected), in legal_targets
+    // order -- an uncapped per-target set (like `divide`), so you can target ALL opponent creatures
+    // for the full dig. The engine reads this exact list; no 256-option cap, no silent fallback.
+    const flags=(d.legal_targets||[]).map(t=>S.boardSel&&S.boardSel.has(tgtKey(t))?1:0);
+    const n=flags.reduce((a,b)=>a+b,0);
+    const min=Math.max(1,d.min_targets||1), max=d.max_targets||flags.length;
+    if (n<min || n>max){ flashHint(`Pick ${min===max?min:`${min}–${max}`} target${max===1?'':'s'} (you have ${n}).`); return; }
+    const labels=(d.legal_targets||[]).filter(t=>S.boardSel.has(tgtKey(t))).map(t=>t.label);
+    return pushChoices(d, flags, `${d.source}: ${labels.join(', ')||'—'}`);
   } else {
     const want=sel.slice().sort().join('|');
     const opt=(d.options||[]).find(o=>(o.targets||[]).map(tgtKey).sort().join('|')===want);
