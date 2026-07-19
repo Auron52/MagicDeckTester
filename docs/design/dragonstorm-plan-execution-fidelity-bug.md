@@ -1,9 +1,27 @@
 # Dragonstorm plan-execution fidelity bug (found by the 5d Claude-play sweep)
 
-**Status:** CONFIRMED real engine bug, NOT yet fixed. Found by the Stage-5d claude-play
-sweep (seed 900001, 16 games, commit ~`741c78d`, 2026-07-19). One verify agent confirmed
-it with a precise reproduction + root cause; ~5 other independent sweep flags describe the
-same root cause. This is a real correctness bug — it is NOT a heuristic to tune.
+**Status:** **FIXED** (commit `69a26d4`) for the storage-under-burst trigger. Found by the
+Stage-5d claude-play sweep (seed 900001, 16 games, commit ~`741c78d`, 2026-07-19). One verify
+agent confirmed it with a precise reproduction + root cause; ~5 other independent sweep flags
+describe the same root cause. This is a real correctness bug — NOT a heuristic to tune.
+
+**Fix (trigger 1 — storage under-burst):** storage lands now BURST ALL live counters on tap
+(`amt == consumed == had`) in both mirror sites (`TurnSolver::tap_source` +
+`AIEngine::tap_source`), so the executor delivers exactly what the planner credited. Validated:
+smoke **18/0/0** (byte-identical — no GT deck uses `storage_land`/`sac_for_mana`); Dragonstorm
+search avg **6.0 → 5.06** (the dropped-Scourge tempo loss is gone on 15/16 sweep games, matching
+the claude oracle's T5). Banking excess counters is now via the RESERVE (hold an unneeded storage
+land untapped), not a partial burst — accepted for this deck (it bursts in one turn); the
+multi-turn "bank a partial amount while tapping" optimization is deferred (low value here).
+
+**RESIDUAL (trigger 2 — menu offers unpayable orderings), NOT fixed, disclosed:** the plan
+enumerator still offers cast-orderings where a spell is listed BEFORE the mana source (Lotus sac
+/ a ritual) that funds it (e.g. Apex ordered before its rituals); selecting such a plan no-ops
+that spell (and an aborted cast still taps lands → a depletion-counter leak on Sandstone Needle).
+The SEARCH never picks these dominated orderings (so play win-rate is unaffected — game 6 stays
+T6 for a separate search-enumeration reason, likely needing a main1/main2 split), but a human in
+claude-play could. Lower priority; a follow-up should canonicalize plan action order (mana sources
+before dependent spells) or reject unpayable-at-position orderings in the enumerator.
 
 ## Symptom
 
