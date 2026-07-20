@@ -845,6 +845,31 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
     return false;
 }
 
+// Reject a plan that casts a mana ramp RITUAL (Reality Spasm untap / Irencrag Feat burst -- IsManaRitual)
+// without also casting Crackle with Power in the SAME plan. In this deck a ritual's only worthwhile sink
+// is Crackle (Hinata already discounts the other payoffs, so spending a ritual on e.g. Magma Opus is a
+// wasted card); a ritual with no Crackle in-plan is that waste. Same pattern the user names for
+// Dragonstorm (rituals only when casting Dragonstorm/Apex). Also a search PRUNE: it drops the
+// ritual-without-Crackle subsets that dominate combo-hand enumeration EVEN WHEN Crackle is in hand
+// (which the emission gate ShouldEmitUntapRitual cannot -- that only suppresses Reality Spasm when
+// Crackle is ABSENT from hand). The "dig into Crackle then cast it" line survives via action
+// re-collection: a plan that digs and then casts the drawn Crackle DOES contain Crackle. Gated on
+// MTG_HINATA_SPASM_GATE (default off => returns false for every subset => byte-identical).
+static bool SubsetWastesRampRitual(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    static const bool spasm_gate = std::getenv("MTG_HINATA_SPASM_GATE") != nullptr;
+    if (!spasm_gate) { return false; }
+    bool has_ritual = false, has_crackle = false;
+    for (int j : sel)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (!d) { continue; }
+        if (IsManaRitual(*d))                  { has_ritual  = true; }
+        if (d->params.x_damage_multiplier > 1) { has_crackle = true; }   // Crackle with Power (the sink)
+    }
+    return has_ritual && !has_crackle;
+}
+
 // Reject a subset that over-splices Desperate Ritual (splice_onto_arcane). Splicing k copies onto a
 // base cast REVEALS k OTHER copies that must still be IN HAND at that moment; a revealed copy stays in
 // hand and may later be cast as its own base (and/or spliced again). So casting m bases of the SAME
@@ -888,6 +913,46 @@ static bool SubsetHasIllegalSplice(const GameState& state,
         }
     }
     return false;
+}
+
+// Fill a scaled divided-damage cast (Magma Opus) UP from a plan's LEFTOVER mana (user directive: "spend all
+// available mana in the plan"; "fit the scalars to the proposed plan" rather than enumerate every cost). The
+// cast is emitted as ONE cheap candidate (min face); after a plan's other costs are paid -- including the
+// searched Crackle {X}, which takes its 3-mana chunks first -- this pours the surplus generic into Magma's
+// face, up to its max, pricing each face via the provider's cost-per-face ladder. So a plan spends all its
+// mana: Crackle (searched) first, Magma the sub-chunk remainder. Keeps the plan enumeration NARROW (a single
+// Magma candidate) -- a wide face ladder bloated the group product and the breadth cap dropped the winning
+// subset (see the CollectActions note + docs). Lockstep: apply_one / CastSpellFromHand recompute the cost
+// from crackle_targets via the SAME ladder, and resolution deals crackle_targets, so the filled face is
+// consistent end-to-end. Mutates `a` in place (cost, crackle_targets, direct_damage, eval); returns the
+// EXTRA face damage added (0 if not a fillable scaled cast, or no affordable bump). Off-switch
+// MTG_NO_MAGMA_RESERVE keeps the emitted (min) face -- the A/B baseline. Inert for every non-scaled cast.
+static int FillScaledCastFace(const GameState& state, Action& a, int surplus_generic)
+{
+    static const bool fill_enabled = std::getenv("MTG_NO_MAGMA_RESERVE") == nullptr;
+    if (!fill_enabled) { return 0; }
+    const CardDefinition* d = a.def;
+    if (!d || a.kind != Action::Kind::CastFromHand) { return 0; }
+    if (!d->params.damage_divided || a.crackle_targets < 0) { return 0; }
+    if (surplus_generic <= 0) { return 0; }
+    std::vector<ScaledCastVariant> ladder = ResolveProvider(state).ScaledCastVariants(state, *d);
+    if (ladder.empty()) { return 0; }
+    const int base_gen  = a.cost.generic;      // cost of the currently-committed (cheap) face
+    const int cur_face  = a.crackle_targets;
+    const ScaledCastVariant* best = nullptr;   // highest face whose extra generic fits the surplus
+    for (const ScaledCastVariant& v : ladder)
+    {
+        if (v.face <= cur_face)                              { continue; }
+        if (v.cost.generic - base_gen > surplus_generic)    { continue; }
+        if (!best || v.face > best->face)                   { best = &v; }
+    }
+    if (!best) { return 0; }
+    const int extra   = best->face - cur_face;
+    a.cost            = best->cost;
+    a.crackle_targets = best->face;
+    a.direct_damage   = best->face;
+    a.eval            = best->face * 100;
+    return extra;
 }
 
 // Generate-time, BYTE-IDENTICAL analogue of SubsetHasIllegalSplice applied to the odometer's GROUP
@@ -1491,20 +1556,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             std::vector<ScaledCastVariant> scaled = ResolveProvider(state).ScaledCastVariants(state, def);
             if (!scaled.empty())
             {
+                // Emit ONE candidate at the CHEAPEST face (min generic). A single, narrow cast keeps the plan
+                // enumeration as small as the over-count's -- a wide face ladder here bloated the group product
+                // so the breadth cap dropped the winning ramp+Crackle subset (diagnosed on gi163: the lethal
+                // cheap-Magma + big-Crackle combo was enumerated but never offered as a FEASIBLE plan; not a
+                // budget issue -- 40x budget didn't help). See docs/design/viewer-magma-opus-modeling.md
+                // "session 3d". The face is then FILLED UP from the plan's LEFTOVER mana in the evaluator
+                // (FillScaledCastFace in eval_and_push / Solve::consider): spend all mana -- the searched
+                // Crackle X takes its 3-mana chunks first, Magma mops up the sub-chunk remainder. Cost per
+                // face stays the ladder's (recomputed by crackle_targets at apply_one / CastSpellFromHand), so
+                // the fill is lockstep with resolution.
+                const ScaledCastVariant* cheapest = &scaled[0];
                 for (const ScaledCastVariant& v : scaled)
                 {
-                    Action a;
-                    a.kind            = Action::Kind::CastFromHand;
-                    a.card_name       = ap.hand[i].m_name;
-                    a.hand_index      = i;
-                    a.cost            = v.cost;
-                    a.eval            = v.face * 100;          // DMG unit: face damage reaches the opponent
-                    a.direct_damage   = v.face;               // (the inert spread is not simulated)
-                    a.is_noncreature  = !def.card.IsCreature();
-                    a.card_mv         = def.card.m_mana_cost.ManaValue();
-                    a.crackle_targets = v.face;               // committed opp-face damage -> resolution
-                    actions.push_back(std::move(a));
+                    if (v.cost.generic < cheapest->cost.generic) { cheapest = &v; }
                 }
+                Action a;
+                a.kind            = Action::Kind::CastFromHand;
+                a.card_name       = ap.hand[i].m_name;
+                a.hand_index      = i;
+                a.cost            = cheapest->cost;
+                a.eval            = cheapest->face * 100;      // DMG unit: face damage reaches the opponent
+                a.direct_damage   = cheapest->face;            // (the inert spread is not simulated)
+                a.is_noncreature  = !def.card.IsCreature();
+                a.card_mv         = def.card.m_mana_cost.ManaValue();
+                a.crackle_targets = cheapest->face;            // committed opp-face damage -> resolution
+                actions.push_back(std::move(a));
                 continue;
             }
         }
@@ -2036,6 +2113,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        // Reject a ramp ritual (Reality Spasm / Irencrag Feat) not spent into Crackle this plan. Inert
+        // unless MTG_HINATA_SPASM_GATE -> byte-identical off.
+        if (SubsetWastesRampRitual(cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
@@ -2172,6 +2252,22 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // resolve BEFORE the spell. A plan that kills us via self-damage cannot win.
         if (self_damage >= ap.life)                          { return; }
 
+        // FILL a scaled Magma cast UP from this plan's LEFTOVER mana (spend-all; the searched Crackle {X}
+        // already took its 3-mana chunks, so the surplus is Magma's sub-chunk remainder). At most one Magma
+        // per plan (mutually exclusive by hand_index). Feeds direct_dmg/total_eval BEFORE the win projection
+        // and stores the filled action below; lockstep cost is recomputed from crackle_targets at execution.
+        int fill_surplus = mana_ok ? std::max(0, (credited ? eff.Total() : pool.Total()) - combined.ManaValue()) : 0;
+        int fill_j = -1; Action fill_action;
+        if (fill_surplus > 0)
+        {
+            for (int j : sel)
+            {
+                Action ca = cands[j];
+                int extra = FillScaledCastFace(state, ca, fill_surplus);
+                if (extra > 0) { direct_dmg += extra; total_eval += extra * 100; fill_j = j; fill_action = ca; break; }
+            }
+        }
+
         int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
         // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
         // provider-owned. Built only when the deck has such a model (byte-identical otherwise).
@@ -2206,7 +2302,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (!better) { return; }
 
         best.actions.clear();
-        for (int j : sel) { best.actions.push_back(cands[j]); }
+        for (int j : sel) { best.actions.push_back(j == fill_j ? fill_action : cands[j]); }
         best.value          = rank_value;
         best.wins_this_turn = wins;
         best_mask           = mask;
@@ -5301,6 +5397,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        // Reject a ramp ritual (Reality Spasm / Irencrag Feat) not spent into Crackle this plan. Inert
+        // unless MTG_HINATA_SPASM_GATE -> byte-identical off.
+        if (SubsetWastesRampRitual(cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
@@ -5434,12 +5533,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
         if (self_damage >= ap.life) { return; }
 
+        // FILL a scaled Magma cast UP from this plan's LEFTOVER mana (spend-all; the searched Crackle {X}
+        // already took its 3-mana chunks, so the surplus is Magma's sub-chunk remainder). At most one Magma
+        // per plan. Feeds direct_dmg/total_eval before the win projection and stores the filled action;
+        // lockstep cost recomputed from crackle_targets at execution. Mirrors Solve::consider.
+        int fill_surplus = mana_ok ? std::max(0, (credited ? eff.Total() : pool.Total()) - combined.ManaValue()) : 0;
+        int fill_j = -1; Action fill_action;
+        if (fill_surplus > 0)
+        {
+            for (int j : sel)
+            {
+                Action ca = cands[j];
+                int extra = FillScaledCastFace(state, ca, fill_surplus);
+                if (extra > 0) { direct_dmg += extra; total_eval += extra * 100; fill_j = j; fill_action = ca; break; }
+            }
+        }
+
         int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
         TurnSolver::Plan plan;
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
-        for (int j : sel) { plan.actions.push_back(cands[j]); }
+        for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
         plans.push_back(std::move(plan));
     };
 
