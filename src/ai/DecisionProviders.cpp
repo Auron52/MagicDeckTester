@@ -1493,8 +1493,16 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
 bool HinataProvider::ShouldEmitUntapRitual(const GameState& s) const
 {
     if (!HinataInPlay(s)) { return false; }
-    static const bool spasm_gate = std::getenv("MTG_HINATA_SPASM_GATE") != nullptr;
-    if (!spasm_gate) { return true; }                       // legacy: emit whenever Hinata is online
+    // Mode: 0=off (unset, byte-identical), 1=STRICT (emit only when Crackle in hand), 2=SOFT (emit
+    // always; the plan-prune SubsetWastesRampRitual handles only the Crackle-in-hand-but-uncast waste,
+    // so a ritual as an accelerant on a non-Crackle turn stays available). See TurnSolver gate mode.
+    static const int mode = []{
+        const char* e = std::getenv("MTG_HINATA_SPASM_GATE");
+        if (!e || !*e) { return 0; }
+        const std::string v(e);
+        return (v == "2" || v == "soft") ? 2 : 1;
+    }();
+    if (mode != 1) { return true; }                         // off / soft: emit whenever Hinata is online
     const Player& ap = s.players[s.active_player_index];
     for (const Card& h : ap.hand)
     {

@@ -855,10 +855,37 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
 // Crackle is ABSENT from hand). The "dig into Crackle then cast it" line survives via action
 // re-collection: a plan that digs and then casts the drawn Crackle DOES contain Crackle. Gated on
 // MTG_HINATA_SPASM_GATE (default off => returns false for every subset => byte-identical).
-static bool SubsetWastesRampRitual(const std::vector<Action>& cands, const std::vector<int>& sel)
+// Spasm-gate mode from MTG_HINATA_SPASM_GATE: 0=off (unset, byte-identical); 1=STRICT (a ritual always
+// requires same-turn Crackle in the plan); 2=SOFT (only prune when Crackle is IN HAND but the plan does
+// not cast it -- the user's literal "prune Crackle-present hands that do not cast Crackle"; a ritual with
+// Crackle ABSENT is allowed as a mana-accelerant, which measurement showed is net-positive tempo).
+static int HinataSpasmGateMode()
 {
-    static const bool spasm_gate = std::getenv("MTG_HINATA_SPASM_GATE") != nullptr;
-    if (!spasm_gate) { return false; }
+    static const int mode = []{
+        const char* e = std::getenv("MTG_HINATA_SPASM_GATE");
+        if (!e || !*e) { return 0; }
+        const std::string v(e);
+        return (v == "2" || v == "soft") ? 2 : 1;
+    }();
+    return mode;
+}
+
+// True iff the active player holds Crackle with Power (the ritual's mana SINK) in hand right now.
+static bool HinataCrackleInHand(const GameState& s)
+{
+    for (const Card& c : s.players[s.active_player_index].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.x_damage_multiplier > 1) { return true; }
+    }
+    return false;
+}
+
+static bool SubsetWastesRampRitual(const GameState& state,
+                                   const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const int mode = HinataSpasmGateMode();
+    if (mode == 0) { return false; }
     bool has_ritual = false, has_crackle = false;
     for (int j : sel)
     {
@@ -867,7 +894,11 @@ static bool SubsetWastesRampRitual(const std::vector<Action>& cands, const std::
         if (IsManaRitual(*d))                  { has_ritual  = true; }
         if (d->params.x_damage_multiplier > 1) { has_crackle = true; }   // Crackle with Power (the sink)
     }
-    return has_ritual && !has_crackle;
+    if (!(has_ritual && !has_crackle)) { return false; }
+    // SOFT: keep the ritual when Crackle is ABSENT (it may be a legit accelerant for a cantrip/dig turn);
+    // only prune the wasteful case where Crackle IS in hand but this plan casts the ritual without it.
+    if (mode == 2 && !HinataCrackleInHand(state)) { return false; }
+    return true;
 }
 
 // Reject a subset that over-splices Desperate Ritual (splice_onto_arcane). Splicing k copies onto a
@@ -2115,7 +2146,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
         // Reject a ramp ritual (Reality Spasm / Irencrag Feat) not spent into Crackle this plan. Inert
         // unless MTG_HINATA_SPASM_GATE -> byte-identical off.
-        if (SubsetWastesRampRitual(cands, sel)) { return; }
+        if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
@@ -5399,7 +5430,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
         // Reject a ramp ritual (Reality Spasm / Irencrag Feat) not spent into Crackle this plan. Inert
         // unless MTG_HINATA_SPASM_GATE -> byte-identical off.
-        if (SubsetWastesRampRitual(cands, sel)) { return; }
+        if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
