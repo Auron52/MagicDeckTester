@@ -361,6 +361,22 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
     state.players[0].library.Shuffle(SaltSeed(seed, state.shuffle_salt_opening));
 
+    // Assign stable per-copy card numbers at the single setup choke point, ALWAYS -- so every
+    // caller (batch GT / goldfish CLI / analyzer / viewer / references) numbers identically and
+    // the CRN mid-game reshuffle (Library::ShuffleByKey, keyed on m_number) is REAL and CONSISTENT
+    // everywhere. Previously numbering happened only under --log-dir / forced-mulligan, so the
+    // batch (which never numbered) ran ShuffleByKey with all m_number==0 -> every key equal ->
+    // stable_sort a no-op -> the "reshuffle" left the library untouched, diverging from the
+    // numbered viewer/reference/audit runs. Numbering is post-shuffle-order based (same as the old
+    // logging path) and independent of the opening Fisher-Yates shuffle, so opening hands are
+    // unchanged; only decks that mid-game reshuffle (Hinata Ponder, antilife fetch) move.
+    // Escape hatch MTG_LEGACY_UNNUMBERED restores the old number-only-when-logging behavior for A/B.
+    static const bool s_legacy_unnumbered = std::getenv("MTG_LEGACY_UNNUMBERED") != nullptr;
+    if (!s_legacy_unnumbered)
+    {
+        AssignCardNumbers(state, BuildCardNumbering(deck));
+    }
+
     state.active_player_index   = 0;
     state.priority_player_index = 0;
     state.turn_number           = 0;
