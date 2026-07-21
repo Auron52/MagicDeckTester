@@ -1462,7 +1462,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // Per-deck escalation beam; fires whenever the block drives (depth-adaptive inside the
                         // hybrid). beam_leafdepth protects the top plies (the committed play). -1 => use env.
                         vp_beam ? m_profile.value_play.beam_width : -1,
-                        vp_beam ? m_profile.value_play.beam_leafdepth : 2);
+                        vp_beam ? m_profile.value_play.beam_leafdepth : 2,
+                        // Per-deck single-depth escalation cap; on-policy only (vp_here) -- the predicted-
+                        // affordable single pass was tuned/measured at the deck's own depth. 0 => use env / off.
+                        vp_here ? m_profile.value_play.escalation_cap : 0,
+                        // Per-deck FROZEN cost-per-leaf R for the predicted walk (determinism). <=0 => 120 prior.
+                        vp_here ? m_profile.value_play.escalation_r : -1.0);
 
                     // Oracle: track the EARLIEST win the search actually FOUND this game --
                     // i.e. a win VERIFIED inside the searched horizon (win_turn within

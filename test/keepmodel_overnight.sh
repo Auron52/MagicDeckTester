@@ -104,15 +104,18 @@ for fn,dd in ((sys.argv[1],gt),(sys.argv[2],nw)):
             a=ln.split()
             if len(a)>=2: dd[int(a[0])]=int(a[1])
     except FileNotFoundError: pass
-wl=lw=f=sl=0; wlg=[]
+# Loss-penalized: a loss (v<=0) scores worse than any win, so win->loss folds into "slower"
+# (tracked in slg = the maximal slowdowns) and loss->win into "faster". No win->loss category.
+def _sc(v): return v if v>0 else 10000
+f=sl=0; slg=[]
 for gi in gt:
     g=gt[gi]; n=nw.get(gi,g)
-    if g==n: continue
-    if g>0 and n<0: wl+=1; wlg.append(gi)
-    elif g<0 and n>0: lw+=1
-    elif 0<n<g: f+=1
-    elif 0<g<n: sl+=1
-print(f"    d{sys.argv[3]} s{sys.argv[4]}: WIN->LOSS={wl}{(' '+str(wlg[:8])) if wlg else ''} LOSS->WIN={lw} faster={f} slower={sl}")
+    if _sc(g)==_sc(n): continue
+    if _sc(n)<_sc(g): f+=1
+    else:
+        sl+=1
+        if n<=0: slg.append(gi)
+print(f"    d{sys.argv[3]} s{sys.argv[4]}: faster={f} slower={sl}{(' ->loss:'+str(slg[:8])) if slg else ''}  (loss-penalized score)")
 PY
   done; done
 }
@@ -154,4 +157,4 @@ done
 
 log ""; log "=== DONE ($(stamp)) ==="
 log "Staged keep-model profiles: $OUT/km_eps*.profile.json   (committed profile untouched)"
-log "Review: aggregate above + any WIN->LOSS gi in the flip lines (reproduce single-game to root-cause)."
+log "Review: aggregate above + any ->loss gi in the slower lines (reproduce single-game to root-cause)."

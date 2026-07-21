@@ -460,7 +460,16 @@ public:
                                            // identical). 0 => off; >0 => keep top-N value-ranked plans near the
                                            // leaf. beam_leafdepth: beam only nodes within that many plies of the
                                            // leaf (protects the top plies / committed play).
-                                           int beam_width = -1, int beam_leafdepth = 2);
+                                           int beam_width = -1, int beam_leafdepth = 2,
+                                           // Per-deck single-depth escalation cap (value_play.escalation_cap).
+                                           // 0 (default) => use the MTG_ESC_SINGLE* env statics (byte-identical).
+                                           // >0 => the escalation runs ONE predicted-affordable pass capped at
+                                           // this depth (predict-then-jump), instead of the 1..depth ladder.
+                                           int escalation_cap = 0,
+                                           // Per-deck FROZEN heuristic cost-per-probe-leaf (value_play.escalation_r),
+                                           // used by the predicted-affordable walk. <=0 => 120 prior. Freezing it
+                                           // keeps the adopted single-pass DETERMINISTIC (no adaptive thread_local).
+                                           double escalation_r = -1.0);
 
     // ---- Rule-miner: enumerate-all-earliest-wins (offline diagnostic) -------------------
     // For the CURRENT pre-combat main, score EVERY candidate top-level play (the same

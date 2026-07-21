@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Auto-classify every SEARCHED-depth turn-later game the audit flagged for <mode>, by re-running
-# that ONE game at higher search budget (the classification the skill makes mandatory before
-# --accept, generated instead of done by hand):
+# Auto-classify every SEARCHED-depth SLOWER game the audit flagged for <mode>, by re-running
+# that ONE game at higher search budget (the metric is the loss-penalized avg, so a slower game
+# is any worse score -- a bigger win turn OR a win->loss, which is just the maximal slowdown):
 #
 #   * recovers to the OLD win turn at higher budget -> "churn"    (search-truncation at the case's
 #                                                                   budget; the fast line is still
@@ -47,17 +47,18 @@ for spec in "${CASES[@]}"; do
   CASE_OF["${deck}_${MODE}_d${depth}_s${seed}"]="$spec"
 done
 
-# Pull the SEARCHED-depth turn-later entries from the audit output. Lines look like:
-#   "    <key> gi<N>: <old>-><new>"   (both numeric -- a turn-later, not a win->loss).
+# Pull the SEARCHED-depth SLOWER entries from the audit output. Lines look like:
+#   "    <key> gi<N>: <old>-><new>"   where <old> is the (numeric) prior win turn and <new> is
+#   either a slower win turn or "loss" (win->loss = the maximal slowdown under the loss=9 metric).
 # Reset the grab flag at the next section header so the d0 block is never mis-read.
 audit=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1)
 list=$(printf '%s\n' "$audit" | awk '
-  /SEARCHED-depth turn-later/{grab=1; next}
-  /^d0 |^GATE|^\*\*\*/{grab=0}
-  grab && /gi[0-9]+: *[0-9]+->[0-9]+/{print}
+  /SEARCHED-depth SLOWER/{grab=1; next}
+  /^d0 |^REVIEW|^\*\*\*/{grab=0}
+  grab && /gi[0-9]+: *[0-9]+->(loss|[0-9]+)/{print}
 ')
 if [ -z "$list" ]; then
-  echo "no searched-depth turn-later games for $MODE -- nothing to classify."
+  echo "no searched-depth slower games for $MODE -- nothing to classify."
   exit 0
 fi
 
@@ -71,7 +72,7 @@ run_wt() { # deck_file game_seed gi depth budget -> win turn (or -1 loss)
     --ignore-play-profile 2>&1 | grep -oP 'wt=\K-?[0-9]+' | head -1
 }
 
-echo "=== classify searched turn-later ($MODE) -- re-run each at 4x and 16x its case budget ==="
+echo "=== classify searched slower games ($MODE) -- re-run each at 4x and 16x its case budget ==="
 printf '%-40s %-5s %-5s  %s\n' "GAME" "OLD" "NEW" "CLASSIFICATION"
 churn=0; persist=0
 printf '%s\n' "$list" | while read -r key gi_field old_new; do

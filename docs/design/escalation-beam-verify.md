@@ -1,5 +1,156 @@
 # Escalation value-guided beam ("reuse the leaf-value pass, do only the incremental rollout")
 
+> **ADOPTED + SHIPPED (2026-07-19): single-depth escalation = R-hint + live climb, per-deck `value_play.escalation_cap`.**
+> The escalation now runs ONE heuristic pass at a depth chosen by a cheap FROZEN cost-per-leaf hint (R=120 default),
+> then a per-decision LIVE climb/back-off corrects the depth from THIS decision's measured cost — deterministic AND
+> adaptive (no cross-game `thread_local`; that was the determinism blocker with the old adaptive R). Config is one
+> auto-derived integer per deck: `escalation_cap = target_depth` (emitted by `valueleaf_table_to_metadata.py`);
+> R and the climb are engine defaults. Set in all 6 decks' `.value.json`. **Validation:** smoke/regression clean
+> (no win→loss); overnight NET-NEUTRAL — 8 searched d5 win→loss are ALL budget-edge CHURN (each recovers to a win
+> at 4× case budget, `scripts/winloss_recover.sh`), offset by 3 loss→win + 7 turn-earlier; d0/d3 + light decks
+> BYTE-IDENTICAL. GT rebaselined (`--accept-with-regressions`). **Escalation work −20..−38%** on the on-policy d5
+> decisions (heaviest saving on antilife). Key mechanism findings: (a) R must be HIGH to protect light decks (a
+> low hint over-shoots → fallback-thrash explosion 173–945%); the climb recovers depth UPWARD where affordable.
+> (b) Tuning R DOWN to climb less is NOT worth it — climbing is cheap (TT reuse; work ~flat across R) AND a
+> conservative-R incremental climb is slightly HIGHER quality than a cold deep jump (ladder-like warmup).
+> **Determinism VERIFIED** (T4==T4==T1, thread-invariant). Env knobs: `MTG_ESC_SINGLE*` (research), `MTG_ESC_SINGLE_R`
+> (frozen-R override), `MTG_ESC_SINGLE_CLIMB`, `MTG_ESC_CLIMB_GROWTH` (climb growth-estimate mode; see below).
+>
+> **BEAM-AWARE climb estimate (`MTG_ESC_CLIMB_GROWTH`) — MEASURED ON THE MERGED BASE + REJECTED (2026-07-20).**
+> The toggle stays a DORMANT, default-0 (byte-identical) research knob; mode 1 is NOT adopted. mode 0 estimates the
+> next climb depth's cost from the probe's UN-BEAMED leaf ratio, which over-estimates hinata's BEAMED deep-combo
+> cost → the climb stops one depth short there = hinata's tiny residual. mode 1 = MEASURED beamed growth for climb
+> steps ≥2 (light decks climb ≤1 step → byte-identical). **Decisive 3-way A/B (ladder=origin binary vs mode0 vs
+> mode1; hinata + burn; 6 seeds 2002/3003/4004/5005/6006/7007 × 200g; d5/budget20; dLP vs the true ladder = the
+> "neutrality" metric; work = deterministic turn_steps; `scripts/beam_growth_merged_ab.sh`):**
+> - **hinata mean dLP-vs-ladder: mode0 = +0.0133, mode1 = +0.0125** — a 0.0008 "recovery" = pure NOISE, and
+>   INCONSISTENT: mode1 recovers on 2 seeds (3003/5005), no change on 3 (2002/6006/7007), and **REGRESSES s4004**
+>   (mode0 was PERFECTLY neutral +0.0000 there, mode1 made it +0.0050 WORSE). So it does not reliably make results
+>   more neutral, and it can hurt.
+> - **cost: +5–7% hinata turn_steps on EVERY seed** — a consistent tax on the slowest, most expensive deck.
+> - **burn (light deck): byte-identical** (mode0==mode1==ladder, 100.0% work) — confirms mode1 is light-deck-safe.
+> **VERDICT: reject.** No quality benefit (recovery within noise + one regression) at a real +6% work cost on the
+> deck where work matters most. The shipped mode0 is already within +0.0133 of the ladder — all budget-edge churn,
+> 0 win→loss (see the merged-base smoke/regression validation) — so there is essentially nothing to recover. The
+> pre-merge "marginal → deferred" read is CONFIRMED and strengthened (the s4004 regression is new evidence
+> against). mode 2 (cost-ratio bootstrap) not separately re-run — same mechanism, subsumed by the reject.
+
+> **CORRECTION (2026-07-18, user directive): SINGLE-DEPTH ESCALATION IS *NOT* REJECTED.** An earlier note here
+> called the single-depth pass (`MTG_ESC_SINGLE` + `MTG_ESC_SINGLE_OFFSET`) "REFUTED" and it was "dropped" in
+> favor of the beam. That framing was wrong and was never the user's decision to bypass. The actual record
+> (memory `escalation-levers-ab-2026-07-18`): **single-depth offset-2 was a MILD WIN on antilife** (−0.0033 LP,
+> 5/6 seeds better, 0 worse, faster on 5/6; earlier "~35% faster" hint). The ONLY negative was hinata, on a tiny
+> 2-seed×60g stub-table sample. It was de-prioritized when the beam+fresh0.5 combo became the focus — a lever
+> choice, not a rigorous universal refutation. **The single-depth code is intact and functional; it remains an
+> OPEN, per-deck candidate to be measured properly (current binary, real metric, held-out seeds) and decided
+> WITH the user — it can compose with or stand apart from the beam.** See "SINGLE-DEPTH — OPEN" below.
+
+## SINGLE-DEPTH ESCALATION — VINDICATED: 2.5–13.6× FASTER at neutral quality (2026-07-18)
+**The old "single-depth is slower" refutation was measuring the WRONG offset.** `MTG_ESC_SINGLE_OFFSET=K` targets
+`clamp(committed - K, 1, depth)`, and `committed` is the VALUE-LEAF's (deep, cheap) commit depth (~5). So small
+offsets (1–2) aim the *heuristic* pass far DEEPER than the budget-limited ladder ever reaches -> 2–4× the work
+(the "slower" everyone saw). At **offset 3–4** the pass targets the SHALLOW depth that actually decides the
+escalation (off3≈d2, off4≈d1), and it is dramatically faster at neutral quality.
+
+Measured d5 / budget 20, 4 held-out seeds (4004/5005/6006/7007); LP = mean loss-penalized avg win turn; work =
+deterministic `MTG_ROLLOUT_STATS` turn_steps (seed 4004):
+| deck | ladder LP | off3 LP | off4 LP | off4 speedup |
+|---|---|---|---|---|
+| slivers | 4.2567 | 4.2567 | 4.2567 (exact) | **7.2×** |
+| knights | 4.3683 | 4.3683 | 4.3683 (exact) | **2.5×** |
+| burn    | 4.3167 | 4.3167 | 4.3167 (exact) | **13.6×** |
+| hinata  | 6.3937 | 6.3438 (BETTER) | 6.3937 (exact) | **3.1×** |
+| antilife| 4.7083 | 4.7125 | 4.7125 (+0.004) | **3.5×** |
+| th      | 4.2550 | 4.2650 | 4.2650 (+0.010) | **7.6×** |
+
+**off4 dominates off3** on 5/6 decks (same quality, faster; slivers/knights clamp both to the same floor). hinata
+is the exception: off3 is quality-BETTER (−0.05, all 4 seeds) at ~ladder cost, off4 is exact at 3× faster — a real
+knee (hinata's ladder slightly over-searches). This is a FAR bigger lever than the escalation beam (1–6%), and
+likely SUPERSEDES it (single-depth replaces the ladder with one shallow pass -> little ladder left for the beam to
+prune). Env-gated (`MTG_ESC_SINGLE`), GT untouched. **NEXT: absolute-depth per-deck `value_play` knob (cleaner
+than the relative offset since `committed` varies) + full regression/overnight held-out validation + per-deck
+off3/off4 (or absolute d1/d2) decision — bring to user; no adoption without sign-off. Bounds A/B (sparse-seed,
+rollout) were a red herring — the lever is the TARGET DEPTH, not the incumbent.**
+
+## SINGLE-DEPTH — RESOLVED via a PREDICTED-AFFORDABLE single pass (2026-07-19). Clean fleet-wide win.
+User directive: "go single-depth; per-deck is fine; I need an extremely strong case to give up on it." Built and
+validated the predicted-affordability single pass. **This is the adoption candidate.**
+
+**The mechanism (`MTG_ESC_SINGLE_PREDICT`, and per-deck `value_play.escalation_cap`).** Instead of the full
+1..depth heuristic LADDER, the escalation runs ONE pass at the depth the ladder WOULD commit to — its budget-
+affordable depth — CAPPED at the deck's convergence depth. That target is predicted from the value-leaf probe's
+FREE per-depth leaf structure (`g_probe_leaves`, recorded during the probe) × an amortized heuristic cost-per-leaf
+`g_esc_R`, walked through the SAME start-gate the ladder uses (`chat[d] = probe_cost[d] + R*probe_leaves[d]`, take
+the deepest d whose incremental cost still fits gate_alpha*remaining). One cold pass at that target; budget-
+fallback to d-1..d1 if it overruns; `g_esc_R` self-calibrates by EMA after each pass.
+
+**THE BUG that made an earlier version under-search (and the fix).** `R` must be anchored to the probe's
+CUMULATIVE UN-BEAMED leaves through the pass depth — NOT the pass's own beamed leaf count. The escalation runs
+BEAMED but the walk uses the probe's un-beamed leaf counts; calibrating R on beamed leaves inflates it by the
+beam-pruning factor, so the walk stops too shallow. Symptom: hinata under-searched to d1/d2 (LP +0.025). Fixed by
+`R = (pass_cost − cumulative_probe_cost) / cumulative_probe_leaves`, making `chat[]`'s cumulative sum reproduce the
+measured cost. After the fix the predictor tracks the ladder depth faithfully on every deck.
+
+**MEASURED (fixed R, bare shipped configs, `MTG_ROLLOUT_STATS` turn_steps + `MTG_HYBRID_STATS` h-histogram):**
+- **antilife** (4 seeds ×200g, cap 3): dLP avg = **+0.0000** (per-seed ±0.005, cancels), escalation work **35–48%**
+  of the ladder (**−55% avg**). The heaviest deck; the clear win.
+- **light decks** (burn/knights/slivers/th, 2 seeds ×300g, cap 3): dLP = **+0.0000 on EVERY seed** (exactly
+  neutral), work **45–94%** of the ladder. The forced-fixed-depth confound (7–11× on these) is GONE — the
+  predictor targets the same d1/d2 the ladder does, and is even a bit faster.
+- **hinata**: `pred_fb` cap4/cap5 ≈ neutral-to-+0.01 at ~77% work (borderline; see the run — hinata's quality
+  needs depth, so it is the marginal deck). Decide its cap (or leave it on the ladder, escalation_cap=0) from the
+  full seed set.
+
+**Wiring (built, default-off byte-identical).** `value_play.escalation_cap` (int, 0=off): parsed in
+MulliganProfileIO, passed by AIEngine on-policy (`vp_here`), consumed in FullSearchLineHybrid. Precedence mirrors
+the beam: an explicit `MTG_ESC_SINGLE` env is the research override (its `_PREDICT`/`_ABS`/`_FALLBACK` knobs); else
+`escalation_cap>0` drives the per-deck predicted path (predict + fallback ALWAYS on). `escalation_cap=0` + no env =>
+legacy ladder => byte-identical. **REMAINING: finalize hinata cap, set per-deck caps, full regression/overnight A/B
++ GT rebaseline + user sign-off.**
+
+## SINGLE-DEPTH DEEP-DIVE — OPEN + PROMISING (2026-07-18/19). DO NOT call single-depth "slower"/"refuted".
+Long collaborative investigation with the user. Two SEPARATE, both-valid optimizations emerged; neither is
+adopted. **The user's clear direction: single-depth (one budget-limited pass) is the goal — do NOT drop it or
+conclude it "does more work"; a prior naive measurement that said so was CONFOUNDED (see below).**
+
+1. **Depth matters, converges ~d3.** Clean abort-free `value_leaf_table` heuristic_lp per depth: d1→d2 is a big
+   gain (−0.05..−0.07 on combo/value decks), d2→d3 small, **d3→d4→d5 ≈ 0 on every deck**. So the escalation
+   should reach ~d3 and no deeper. (th/antilife tail to ~d4; slivers/knights/burn/hinata converge exactly d3.)
+
+2. **SINGLE-DEPTH (skip the shallow passes) is CHEAPER at MATCHED committed depth — user's intuition CONFIRMED.**
+   Fair test (budget 150 so both actually reach d3; achieved-depth histogram verified MATCHED): a single d3 pass
+   vs the ladder-to-d3, both committing d3: **burn 32629 vs 40510 (−20%), th 250866 vs 279624 (−10%)**. Matches
+   the codebase's JUMP-ladder note ("a single cold pass is ~18% cheaper than d1..K at matched depth — the memo
+   does NOT pay for the shallow passes"). CONFOUND WARNING: an earlier run comparing `abs_d3` (FORCES uniform d3)
+   vs the budget-limited ladder (which only reaches d1/d2 at budget 20) showed single "1.6-11x MORE work" — that
+   was NOT real; it was single searching DEEPER than the ladder did, not single being inefficient. Only compare
+   at MATCHED committed depth (verify with the `h`-histogram). OPEN piece for a clean adoption: pick the budget-
+   AFFORDABLE depth (<= the ~d3 convergence cap) and run ONE pass there, falling back to d2/d1 when d3 doesn't
+   fit — the user's spec. Incumbent/bound experiments tried so far (warm value-leaf bound; sparse-ladder seed;
+   one deep rollout at value-leaf depth `MTG_ESC_SINGLE_BOUND=3`) did NOT help the LONE pass and are a side road;
+   the real result above is the matched-depth speedup. **Note: the value-leaf PROBE still searches to full depth
+   (d5), so deep wins in the search window are still found even if the heuristic escalation is shallow.**
+
+3. **Separately, capping the DEEP passes is a clean win too.** `MTG_ESC_DEPTH_CAP=3` (cap the heuristic ladder at
+   d3, drop the converged d4/d5) = exact quality on all 6 decks, −16..−48% work; multi-seed neutral. This is a
+   DIFFERENT axis from #2 (skip-deep vs skip-shallow) and could COMPOSE with it. It is NOT a replacement for
+   single-depth.
+
+**STATUS: OPEN (resume after compaction).** Both #2 (single budget-limited pass, cheaper at matched depth) and #3
+(cap the deep end) are promising and uncommitted. All knobs (`MTG_ESC_SINGLE*` incl. `_ABS`/`_FALLBACK`/`_BOUND`,
+`MTG_ESC_DEPTH_CAP`) are env-gated, default-off, GT-safe. Adoption of either needs full regression/overnight A/B +
+GT rebaseline + user sign-off; per-deck depth must come from the profile's convergence depth, not a global env.
+
+## SINGLE-DEPTH ESCALATION — OPEN (not rejected)
+The escalation default is the full 1..depth iterative-deepening ladder (`FullSearchLine`). `MTG_ESC_SINGLE` runs
+ONE heuristic pass at a single target depth `clamp(committed - MTG_ESC_SINGLE_OFFSET, 1, depth)` instead — the
+idea being to skip the ladder's shallow-pass rework and concentrate budget on the crossover-deciding depth. It is
+env-only, default off, no deck's `value_play` enables it. Status: **OPEN candidate, mild win on antilife, hinata
+result inconclusive (tiny sample). To do: a proper A/B — offset sweep, all decks, held-out seeds, current
+binary/metric, wall + `MTG_ROLLOUT_STATS` work — and bring the numbers to the user for a per-deck decision. Do
+NOT mark it rejected.**
+
+
 **Status (2026-07-18): ADOPTED on the two heavy decks (antilife + hinata) as `beam2_ld2 + fresh0.5`, per USER
 ("wire + full A/B now"). Smoke + regression A/B GREEN (0 searched win->loss; all d5 cases neutral-to-better;
 d0/d3/light byte-identical). Overnight A/B + GT rebaseline in flight. Not yet committed.**
@@ -235,8 +386,10 @@ Optional follow-up: shrink the TH/burn/antilife d3 residual (+0.0006..+0.0017) v
 ## The goal (user-directed)
 Make the value-leaf hybrid's heuristic **escalation** match the original (baseline) quality but run faster, by
 **reusing everything practical from the value (first/probe) pass and paying only for the incremental heuristic
-rollouts**. A cold "single-depth" pass was REFUTED (slower on hinata — it throws away the ladder's move-ordering
-+ leaf memo). The BEAM keeps the ladder and prunes its WIDTH: expand only the top-W plans per node, so the
+rollouts**. A cold "single-depth" pass measured slower on hinata here (it throws away the ladder's move-ordering
++ leaf memo) — but this was NOT a universal refutation (it was a mild WIN on antilife) and single-depth is an
+OPEN lever, not rejected; see the CORRECTION at the top of this file. The BEAM keeps the ladder and prunes its
+WIDTH: expand only the top-W plans per node, so the
 escalation rolls out ~`W^depth` frontier states instead of the full B&B frontier. Rollouts are ~94% of
 escalation cost, so cutting frontier width cuts the dominant cost.
 

@@ -91,6 +91,11 @@ static std::array<std::atomic<long long>, 16> g_pred_committed{};
 // first few lossy cases so we can see WHY the estimate under-shot. Doubles escalation work (audit only).
 static const bool             s_esc_predict_audit = std::getenv("MTG_ESC_PREDICT_AUDIT") != nullptr;
 static std::atomic<long long> g_pred_audit_n{0}, g_pred_lossy{0}, g_pred_deeper{0}, g_pred_lossy_dumped{0};
+// Amortized-R telemetry (MTG_ESC_PREDICT_STATS): accumulate every measured heuristic-cost-per-probe-leaf sample
+// (roll/lv) so we can report the deck's converged R -- the value to FREEZE into value_play.escalation_r for the
+// deterministic adopted path. Sum is scaled x1000 to keep it in a long long (R is O(100)).
+static std::atomic<long long> g_esc_R_sum_milli{0};
+static std::atomic<long long> g_esc_R_n{0};
 namespace
 {
     struct RolloutStatsReporter
@@ -117,7 +122,17 @@ namespace
     {
         ~EscPredictReporter()
         {
-            if (!s_esc_predict_stats || g_pred_n.load() == 0) { return; }
+            if (!s_esc_predict_stats) { return; }
+            // R telemetry is independent of the K-predictor path (the single-depth eff_single path records R but
+            // does not touch g_pred_n), so report it whenever samples exist.
+            if (g_esc_R_n.load() > 0)
+            {
+                const double meanR = (g_esc_R_sum_milli.load() / 1000.0) / g_esc_R_n.load();
+                std::cerr << "[esc-predict] converged R (heuristic cost / probe leaf): mean=" << meanR
+                          << " over n=" << g_esc_R_n.load() << " samples"
+                          << "  -> freeze as value_play.escalation_r\n";
+            }
+            if (g_pred_n.load() == 0) { return; }
             std::cerr << "[esc-predict] predictions=" << g_pred_n.load()
                       << " fallbacks=" << g_pred_fallback.load()
                       << " (" << (100.0 * g_pred_fallback.load() / g_pred_n.load()) << "% aborted K)\n";
@@ -7599,7 +7614,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         bool value_no_fallback,
                                                         const std::vector<int>& value_fallback_take_at,
                                                         double escalation_fresh_frac,
-                                                        int beam_width, int beam_leafdepth)
+                                                        int beam_width, int beam_leafdepth,
+                                                        int escalation_cap,
+                                                        double escalation_r)
 {
     // --- Escalation budget shaping (all opt-in; ALL unset => byte-identical to the shared-budget hybrid) ---
     // MTG_ESC_SPLIT=c   : CAP the value-leaf probe to c*budget_ms so the probe cannot eat the whole decision
@@ -7629,8 +7646,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     }
     // K-predictor (MTG_ESC_PREDICT): record the probe's per-depth leaf counts so the escalation can predict
     // its own affordable depth from this MEASURED structure. Cleared before the probe; recorded during it.
+    // The single-depth predict path (MTG_ESC_SINGLE_PREDICT) uses the SAME free probe structure, so arm the
+    // recording for it too (else g_probe_leaves stays 0 and the affordability walk sees an empty tree).
     static const bool s_esc_predict = std::getenv("MTG_ESC_PREDICT") != nullptr;
-    if (s_esc_predict)
+    static const bool s_esc_single_predict = std::getenv("MTG_ESC_SINGLE_PREDICT") != nullptr;
+    static const bool s_esc_single_env     = std::getenv("MTG_ESC_SINGLE") != nullptr;
+    // Effective single-depth escalation. Precedence mirrors the beam/fresh_frac: an explicitly-set MTG_ESC_SINGLE
+    // env is the RESEARCH override (its own _PREDICT/_ABS/_FALLBACK knobs apply, byte-identical A/B path). Else a
+    // per-deck escalation_cap>0 (the ADOPTED policy) drives the single-pass predicted-affordable path. The deck
+    // path ALWAYS predicts (that is what makes it safe fleet-wide); the env path predicts only if _PREDICT is set.
+    const bool eff_single_deck    = !s_esc_single_env && escalation_cap > 0;
+    const bool eff_single         = s_esc_single_env || eff_single_deck;
+    const bool eff_single_predict = s_esc_single_env ? s_esc_single_predict : eff_single_deck;
+    if (s_esc_predict || eff_single_predict)
     {
         for (int d = 0; d < 16; ++d) { g_probe_leaves[d] = 0; g_probe_cost[d] = 0; }
         g_probe_recording = true;
@@ -7673,9 +7701,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         eff_beam_leafdepth = s_esc_beam_leafdepth;
         eff_beam_static    = s_esc_beam_static;
     }
-    else if (beam_width >= 0)   // an enabled value_play block drives (any depth); pick the regime by depth
+    else if (beam_width >= 0)   // an enabled value_play block drives; enable ONLY at VALIDATED depths (d3, d5)
     {
-        if (depth >= 5)      { eff_beam = beam_width; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
+        // The beam fires only where it has been measured + validated: d5 (deep, the heavy decks' production
+        // target -- value W3 ld2, byte-identical adoption) and d3 (shallow, static W20 ld1). EVERY other depth
+        // (d1/d2/d4 and d6+) is UNTESTED -> beam OFF -> byte-identical. d6+ used to fire via `depth >= 5`; it's
+        // gated off now so off-policy deep runs don't hit an unvalidated beam path. Widen only after measuring.
+        if (depth == 5)      { eff_beam = beam_width; eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
         else if (depth == 3) { eff_beam = 20;         eff_beam_leafdepth = 1;              eff_beam_static = true;  }
         else                 { eff_beam = 0;          eff_beam_leafdepth = beam_leafdepth; eff_beam_static = false; }
     }
@@ -7770,7 +7802,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         const double eff_fresh_frac = s_fresh_frac_env_set
                                     ? s_fresh_frac
                                     : (escalation_fresh_frac <= -1.5 ? s_fresh_frac : escalation_fresh_frac);
-        static const bool   s_esc_single = std::getenv("MTG_ESC_SINGLE") != nullptr;
         static const int    s_esc_single_off = []{ const char* e = std::getenv("MTG_ESC_SINGLE_OFFSET");
                                                    return (e && *e) ? std::atoi(e) : 0; }();
         ForceHeuristicLeafGuard _fh(true);
@@ -8003,14 +8034,75 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 else if (delta > 0) { g_pred_deeper.fetch_add(1, std::memory_order_relaxed); }
             }
         }
-        else if (s_esc_single)
+        else if (eff_single)
         {
-            // ONE heuristic pass at a single target depth (= clamp(committed - offset, 1, depth)), not the
-            // 1..depth ladder -- concentrate the reserved budget on the one depth that decides the crossover
-            // and skip the shallow-pass rework. Overrun-guarded: a pass that cannot complete in budget ABORTS
-            // and is treated as NOT taken (hcommitted=0) -> keep the value-leaf line. That abort IS the
-            // crossover-skip: an unaffordable escalation is dropped, never partially committed.
-            const int target = std::clamp(committed - s_esc_single_off, 1, depth);
+            // SINGLE-DEPTH ESCALATION: run ONE heuristic pass instead of the full 1..depth ladder. The ADOPTED
+            // path (per-deck value_play.escalation_cap>0 => eff_single_deck) predicts the budget-AFFORDABLE depth
+            // and runs one pass there, capped at the deck's convergence depth -- see the PREDICTED-AFFORDABILITY
+            // block below (this tracks the ladder's own depth, so it is quality-neutral and cheaper fleet-wide;
+            // measured antilife 4-seed dLP=0.0000 at ~45% work, light decks dLP=0.0000 + faster). The env research
+            // path (MTG_ESC_SINGLE) keeps the fixed-depth knobs for A/B: MTG_ESC_SINGLE_ABS=D pins an ABSOLUTE
+            // target D; else committed-offset. Overrun-guarded with depth fallback (below): a pass that cannot
+            // complete falls back a depth; if none fit, the value-leaf line is kept (hcommitted=0).
+            static const int s_esc_single_abs = []{ const char* e = std::getenv("MTG_ESC_SINGLE_ABS");
+                                                    return (e && *e) ? std::atoi(e) : 0; }();
+            // `cap` = the CONVERGENCE cap (heuristic gains ~0 past it). Per-deck path (adopted): the profile's
+            // escalation_cap. Env research path: MTG_ESC_SINGLE_ABS, else committed-offset. Never search deeper.
+            const int cap = eff_single_deck
+                          ? std::clamp(escalation_cap, 1, depth)
+                          : (s_esc_single_abs > 0
+                              ? std::clamp(s_esc_single_abs, 1, depth)
+                              : std::clamp(committed - s_esc_single_off, 1, depth));
+            // DETERMINISM: the adopted per-deck path (eff_single_deck) must use a FIXED cost-per-leaf R and NEVER
+            // mutate the thread_local g_esc_R. g_esc_R's EMA trajectory depends on the game->thread schedule (each
+            // worker converges R over the games it happens to run), so an adaptive R makes PLAY non-reproducible
+            // across runs / thread counts -- fatal for GT digest baselining and cross-machine determinism. Frozen
+            // R (calibrated offline into value_play.escalation_r, else a deck-agnostic prior) keeps the predicted
+            // target a pure function of this decision's probe structure. The env research path keeps adaptive R.
+            // Env override MTG_ESC_SINGLE_R=<v> forces a fixed R in the env RESEARCH path too (deterministic),
+            // so R can be swept per deck without editing profiles. >0 => frozen at v; unset => adaptive (research).
+            static const double s_esc_single_r = []{ const char* e = std::getenv("MTG_ESC_SINGLE_R");
+                                                     return (e && *e) ? std::atof(e) : 0.0; }();
+            const bool   frozen_R = eff_single_deck || (s_esc_single_r > 0.0);
+            const double R_fixed  = eff_single_deck ? ((escalation_r > 0.0) ? escalation_r : 120.0)
+                                                    : ((s_esc_single_r > 0.0) ? s_esc_single_r : 120.0);
+            // PREDICTED-AFFORDABILITY target (MTG_ESC_SINGLE_PREDICT): run ONE pass at the depth the LADDER
+            // would commit to (its budget-affordable depth), capped at `cap`. Estimated from the value-leaf
+            // probe's FREE per-depth leaf structure x an amortized heuristic cost-per-leaf (g_esc_R), walked
+            // through the SAME start-gate the ladder uses. This makes the single pass track the ladder depth on
+            // EVERY deck: heavy decks that afford the cap hit the cap (the skip-shallow win); light decks whose
+            // ladder stops at d1/d2 target d1/d2 too -- killing the forced-d3 confound (their whole regression)
+            // where it is cheapest to fix, with no ladder rework. Off (predict unset) => target == cap (the
+            // fixed-depth research path). No probe structure (all leaves 0) => walk stops at d1 => target 1.
+            int target = cap;
+            if (eff_single_predict)
+            {
+                double R;
+                if (frozen_R) { R = R_fixed; }             // deterministic per-deck constant (no g_esc_R mutation)
+                else { if (g_esc_R <= 0.0) { g_esc_R = 120.0; } R = g_esc_R; }  // env research: adaptive
+                const int pmax = std::min(depth, std::max(1, committed));
+                double chat[16] = {0};
+                for (int d = 1; d <= pmax && d < 16; ++d)
+                {
+                    chat[d] = static_cast<double>(std::max<long long>(0, g_probe_cost[d]))
+                            + R * static_cast<double>(std::max<long long>(0, g_probe_leaves[d]));
+                }
+                // Budget the ladder actually sees at escalation: the escalation budget's REMAINING units (fresh
+                // budget => its full Limit; legacy shared => what the probe left). Walk the start-gate on the
+                // per-pass estimate chat[d] directly (we HAVE the whole cost curve, unlike the ladder which must
+                // extrapolate from measured passes) and take the deepest pass whose incremental cost still fits.
+                const long long esc_units = (esc_budget && !esc_budget->Unlimited())
+                                          ? esc_budget->Remaining()
+                                          : SearchBudget::FromVirtualMs(std::max(1, budget_ms)).Limit();
+                int daff = 1;
+                double rem = static_cast<double>(esc_units) - chat[1];
+                for (int d = 2; d <= pmax; ++d)
+                {
+                    if (chat[d] > kStartGateAlpha * std::max(0.0, rem)) { break; }
+                    daff = d; rem -= chat[d];
+                }
+                target = std::min(cap, std::max(1, daff));
+            }
             FSLineCache single_cache;
             // BUGFIX: FSLineWin memoizes leaf rollouts only through a non-null tt. In normal play the
             // hybrid's `tt` is nullptr (m_shared_tt is set only during bottoming), so passing it straight
@@ -8030,22 +8122,210 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 const long long ceil = 2 * esc_budget->Limit();
                 esc_budget->SetOverrunLimit(ub + std::max<long long>(ceil, 1));
             }
-            // DIAGNOSTIC (MTG_ESC_SINGLE_WARM): seed the single pass's B&B cutoff with the value-leaf's
-            // committed win turn instead of the loose max_turns+1. If this collapses the work toward the
-            // ladder's, the ladder's advantage is the INCUMBENT (cheap to reuse); if work stays high, it's
-            // the cross-pass MEMO (needs structural reuse). May over-prune (value-leaf optimism) -> only a
-            // work-diagnostic, not a shippable config.
-            static const bool s_esc_single_warm = std::getenv("MTG_ESC_SINGLE_WARM") != nullptr;
-            const int single_cut = s_esc_single_warm ? old_wt : (max_turns + 1);
-            hline = FSLineWin(state, target, max_turns, single_cut, second_main, single_tt, &single_cache, esc_budget);
-            const bool aborted = (esc_budget && esc_budget->Overrun());
+            // B&B INCUMBENT for the single pass. Without a tight ACHIEVABLE win-turn bound, FSLineWin cannot
+            // prune -> a lone deep pass rolls out the whole tree (measured 2-4x the ladder's work: the ladder
+            // gets its bound free from its shallow passes). Supply one. MTG_ESC_SINGLE_BOUND:
+            //   0 = loose max_turns+1 (COLD default -- no pruning; the un-handled baseline).
+            //   1 = value-leaf committed win turn (== legacy MTG_ESC_SINGLE_WARM). OPTIMISTIC and often
+            //       UNACHIEVABLE -> the search can't find a line beating it, so it never establishes an
+            //       incumbent and prunes nothing (measured WORSE, not better). A diagnostic, not a fix.
+            //   2 = SPARSE-LADDER seed: a cheap shallow FSLineWin at MTG_ESC_SINGLE_SEED (default 2), reusing
+            //       the SAME tt+cache (both keyed by (state, remaining-depth), so cross-depth reuse is sound).
+            //       Its win turn is a REAL achievable bound (a genuine line at that depth). Tighter bound, but
+            //       costs a shallow search. (Conceptually the same family as MTG_ESC_JUMP.)
+            //   3 = ROLLOUT bound: a greedy playout win turn from the CURRENT state (real + achievable, cheapest
+            //       to obtain; looser than (2) since the greedy policy is suboptimal).
+            // Back-compat: MTG_ESC_SINGLE_WARM (with BOUND unset) selects mode 1.
+            static const bool s_esc_single_warm  = std::getenv("MTG_ESC_SINGLE_WARM") != nullptr;
+            static const int  s_esc_single_bound = []{ const char* e = std::getenv("MTG_ESC_SINGLE_BOUND");
+                                                       return (e && *e) ? std::atoi(e) : -1; }();
+            static const int  s_esc_single_seed  = []{ const char* e = std::getenv("MTG_ESC_SINGLE_SEED");
+                                                       return (e && *e) ? std::atoi(e) : 2; }();
+            const int bound_mode = (s_esc_single_bound >= 0) ? s_esc_single_bound : (s_esc_single_warm ? 1 : 0);
+            int single_cut = max_turns + 1;                                     // 0: loose (cold)
+            if (bound_mode == 1) { single_cut = old_wt; }                       // 1: value-leaf (optimistic)
+            else if (bound_mode == 2)                                           // 2: sparse-ladder seed
+            {
+                const int sd = std::clamp(s_esc_single_seed, 1, std::max(1, target - 1));
+                if (sd < target)
+                {
+                    SearchLine seed = FSLineWin(state, sd, max_turns, max_turns + 1, second_main,
+                                                single_tt, &single_cache, esc_budget);
+                    if (seed.win_turn <= max_turns) { single_cut = seed.win_turn; }   // real achievable bound
+                }
+            }
+            else if (bound_mode == 3)                                           // 3: ONE deep rollout bound
+            {
+                // ONE heuristic rollout from the current state with STRUCTURED lookahead to
+                // MTG_ESC_SINGLE_ROLLDEPTH (default = search depth => a deep, value-leaf-depth-ish playout that
+                // follows good play rather than greedy). Its win turn is a REAL achievable bound at depth -- the
+                // cheap incumbent a lone deep pass otherwise lacks, WITHOUT the ladder's shallow rework. This is
+                // the user's "one rollout at the value-leaf's max depth" made concrete.
+                static const int s_esc_single_rolldepth = []{ const char* e = std::getenv("MTG_ESC_SINGLE_ROLLDEPTH");
+                                                              return (e && *e) ? std::atoi(e) : -1; }();
+                const int rd = std::clamp(s_esc_single_rolldepth < 0 ? depth : s_esc_single_rolldepth, 0, depth);
+                GameState rs = state;
+                const int rwt = SimulateToEnd(std::move(rs), rd, max_turns, esc_budget,
+                                              max_turns + 1, second_main, single_tt);
+                if (rwt <= max_turns) { single_cut = rwt; }
+            }
+            // BUDGET-LIMITED single pass with DEPTH FALLBACK (MTG_ESC_SINGLE_FALLBACK): try `target`; if it
+            // OVERRUNS the budget, retry one depth SHALLOWER (reusing the warmed tt/cache, so the d3 attempt's
+            // exploration primes the d2 retry) -- the user's "single pass, budget-limited: fall back to d2 if d3
+            // doesn't fit," down to d1. A depth that never fits keeps the value-leaf line (hcommitted=0). Off =>
+            // legacy single behaviour (one attempt at target; abort => keep value-leaf).
+            // Depth-fallback defaults ON for the adopted per-deck path (it IS the budget-limited fallback); the env
+            // research path keeps it opt-in (MTG_ESC_SINGLE_FALLBACK) for back-compat A/B.
+            static const bool s_esc_single_fallback = std::getenv("MTG_ESC_SINGLE_FALLBACK") != nullptr;
+            const bool eff_fallback = eff_single_deck || s_esc_single_fallback;
+            // UP-CLIMB (adopted path default ON; env research: MTG_ESC_SINGLE_CLIMB; off-switch MTG_ESC_SINGLE_NOCLIMB).
+            // The frozen-R hint picks the START depth cheaply (no d1/d2 tax). After that pass, use its LIVE measured
+            // cost x the probe's leaf-expansion ratio to test whether ONE deeper still fits the remaining budget; if
+            // so, climb (capped at `cap`). This corrects a too-shallow (pessimistic-hint) target from THIS decision's
+            // own measurement -- deterministic + adaptive, no cross-decision state. It only fires with real budget
+            // headroom, so the common case (hint ~right => little budget left => estimate exceeds remaining) stays a
+            // single pass. Combined with the existing overrun fallback (corrects a too-DEEP hint), the hint need only
+            // be roughly right: R is a hint, the live estimate makes the final depth reliable.
+            static const bool s_esc_single_climb   = std::getenv("MTG_ESC_SINGLE_CLIMB") != nullptr;
+            static const bool s_esc_single_noclimb = std::getenv("MTG_ESC_SINGLE_NOCLIMB") != nullptr;
+            const bool eff_climb = eff_single_deck ? !s_esc_single_noclimb : s_esc_single_climb;
+            int  td = target;
+            bool aborted = true;
+            bool first = true;
+            long long c_last = 0;   // measured budget-work of the last COMPLETED pass (for the climb estimate)
+            for (; td >= 1; --td)
+            {
+                if (esc_budget && !esc_budget->Unlimited())
+                {
+                    const long long ub2 = esc_budget->Used();
+                    esc_budget->SetOverrunLimit(ub2 + std::max<long long>(2 * esc_budget->Limit(), 1));
+                }
+                const long long r_ub0 = esc_budget ? esc_budget->Used() : 0;
+                const long long r_lv0 = g_fs_leaf_evals;
+                hline = FSLineWin(state, td, max_turns, single_cut, second_main, single_tt, &single_cache, esc_budget);
+                aborted = (esc_budget && esc_budget->Overrun());
+                if (!aborted && esc_budget) { c_last = esc_budget->Used() - r_ub0; }
+                // Self-calibrate R = heuristic cost per (un-beamed) PROBE leaf, anchored to this pass's actual
+                // cost. CRITICAL: the affordability walk uses the PROBE's un-beamed per-depth leaf counts, but the
+                // escalation runs BEAMED -- so R must be measured against the probe's CUMULATIVE leaves through td
+                // (not the pass's own beamed leaf count), else R is inflated by the beam-pruning factor and the
+                // walk stops too shallow (measured hinata under-search). roll = pass cost minus the probe's
+                // interior cost; R = roll / cumulative-probe-leaves. Then chat[d]=probe_cost[d]+R*probe_leaves[d]
+                // is self-consistent (its cumulative sum through td reproduces this measured cost). EMA-smoothed;
+                // d1 skipped (short-tree per-leaf overhead is unrepresentative), mirroring the ladder.
+                (void)r_lv0;
+                if (eff_single_predict && first && !aborted && td >= 2 && esc_budget)
+                {
+                    long long cumL = 0, cumC = 0;
+                    for (int k = 1; k <= td && k < 16; ++k)
+                    {
+                        cumL += std::max<long long>(0, g_probe_leaves[k]);
+                        cumC += std::max<long long>(0, g_probe_cost[k]);
+                    }
+                    const double lv = std::max(1.0, static_cast<double>(cumL));
+                    const double roll = std::max(0.0, static_cast<double>(esc_budget->Used() - r_ub0)
+                        - static_cast<double>(cumC));
+                    if (roll > 0.0)
+                    {
+                        const double Rsample = std::max(1.0, roll / lv);
+                        // Adaptive EMA ONLY on the env research path -- the adopted per-deck path (frozen_R) holds
+                        // R fixed for determinism (see the frozen_R note above).
+                        if (!frozen_R) { g_esc_R = 0.6 * g_esc_R + 0.4 * Rsample; }
+                        // Telemetry (behind MTG_ESC_PREDICT_STATS): accumulate the measured cost-per-leaf so we can
+                        // report the converged R to freeze into value_play.escalation_r.
+                        if (s_esc_predict_stats)
+                        {
+                            g_esc_R_sum_milli.fetch_add(static_cast<long long>(Rsample * 1000.0),
+                                                        std::memory_order_relaxed);
+                            g_esc_R_n.fetch_add(1, std::memory_order_relaxed);
+                        }
+                    }
+                }
+                first = false;
+                if (!aborted || !eff_fallback) { break; }
+            }
+            // CLIMB: only when the hint pass FIT ON THE FIRST try (td == target). A descent means the hint OVER-shot,
+            // so climbing would just re-overrun -- the affordable depth is at/below where we landed. Estimate the
+            // next depth's cost from the last pass's LIVE cost x a growth factor; climb while it fits the remaining
+            // budget, capped at `cap`. A deeper pass that overruns is reverted (keep the current committed line).
+            // No probe structure for the next depth => cannot estimate => stop (never gamble blind).
+            // GROWTH estimate mode (MTG_ESC_CLIMB_GROWTH; research toggle, default 0 == shipped, byte-identical):
+            //   0 = probe UN-BEAMED leaf-count ratio at every step. Conservative -- it over-estimates the BEAMED
+            //       deep-pass cost on explosive-tree combo decks (hinata) so the climb stops one depth short there
+            //       (measured: climb reaches d5 on 841 decisions vs the ladder's 1098). Light decks are safe.
+            //   1 = BEAM-AWARE: use the MEASURED beamed growth (c_last/c_prev) for climb steps >=2, keeping the
+            //       leaf-ratio bootstrap for step 1. Step 1 -- and thus light decks, which climb <=1 step -- is
+            //       byte-identical to mode 0; only hinata-style MULTI-step climbs change, using this decision's
+            //       real beamed cost curve instead of the un-beamed proxy. (Likely deeper => more work; A/B it.)
+            //   2 = like 1 but bootstraps step 1 from the probe COST ratio (interior-aware) rather than leaves.
+            static const int s_climb_growth = []{ const char* e = std::getenv("MTG_ESC_CLIMB_GROWTH");
+                                                  return (e && *e) ? std::atoi(e) : 0; }();
+            if (eff_climb && !aborted && td == target && esc_budget && !esc_budget->Unlimited())
+            {
+                double c_prev_climb = 0.0;   // cost of the pass before c_last (measured beamed growth for steps >=2)
+                while (td < cap && td + 1 < 16)
+                {
+                    const long long pl_cur  = std::max<long long>(1, g_probe_leaves[td]);
+                    const long long pl_next = std::max<long long>(0, g_probe_leaves[td + 1]);
+                    if (pl_next <= 0) { break; }
+                    double est_next;
+                    if (s_climb_growth == 0)
+                    {
+                        // ORIGINAL expression (kept verbatim so mode 0 stays byte-identical to the shipped path).
+                        est_next = static_cast<double>(c_last)
+                                 * static_cast<double>(pl_next) / static_cast<double>(pl_cur);
+                    }
+                    else
+                    {
+                        double growth;
+                        if (c_prev_climb > 0.0)  // step >=2: this decision's measured beamed growth
+                        {
+                            growth = static_cast<double>(c_last) / c_prev_climb;
+                        }
+                        else if (s_climb_growth == 2)  // step 1 bootstrap: probe interior-cost ratio
+                        {
+                            const long long pc_cur  = std::max<long long>(1, g_probe_cost[td]);
+                            const long long pc_next = std::max<long long>(0, g_probe_cost[td + 1]);
+                            growth = static_cast<double>(pc_next) / static_cast<double>(pc_cur);
+                        }
+                        else                           // step 1 bootstrap: leaf ratio (== mode 0)
+                        {
+                            growth = static_cast<double>(pl_next) / static_cast<double>(pl_cur);
+                        }
+                        if (growth < 1.0) { growth = 1.0; }   // deeper never costs less
+                        est_next = static_cast<double>(c_last) * growth;
+                    }
+                    const double rem = static_cast<double>(std::max<long long>(0, esc_budget->Remaining()));
+                    if (est_next > kStartGateAlpha * rem) { break; }
+                    const long long ub2 = esc_budget->Used();
+                    esc_budget->SetOverrunLimit(ub2 + std::max<long long>(2 * esc_budget->Limit(), 1));
+                    const long long r_ub0 = esc_budget->Used();
+                    SearchLine up = FSLineWin(state, td + 1, max_turns, single_cut, second_main,
+                                              single_tt, &single_cache, esc_budget);
+                    if (esc_budget->Overrun()) { break; }   // deeper pass did not fit => keep current line
+                    c_prev_climb = static_cast<double>(c_last);
+                    hline  = up;
+                    c_last = esc_budget->Used() - r_ub0;
+                    ++td;
+                }
+            }
             if (esc_budget) { esc_budget->SetOverrunLimit(0); }
-            hcommitted = aborted ? 0 : target;
+            hcommitted = aborted ? 0 : td;
         }
         else
         {
+            // ESCALATION DEPTH CAP (MTG_ESC_DEPTH_CAP=D; per-deck this would be the convergence depth from the
+            // value_leaf_table). The heuristic escalation CONVERGES ~d3 on every deck (heuristic_lp gains ~0 past
+            // d3), so ladder passes beyond D are pure WASTE. Cap the ladder at D: it still deepens BUDGET-
+            // ADAPTIVELY up to D (deepest affordable via the start-gate, so a budget too small for d3 lands on d2
+            // and we live with that), it just never spends budget past convergence -- which also frees budget so
+            // MORE decisions reach the useful depth. Keeps the ladder's incumbent + move-ordering (unlike a cold
+            // single pass). 0 = off = byte-identical.
+            static const int s_esc_depth_cap = []{ const char* e = std::getenv("MTG_ESC_DEPTH_CAP");
+                                                   return (e && *e) ? std::atoi(e) : 0; }();
+            const int esc_depth = (s_esc_depth_cap > 0) ? std::min(depth, s_esc_depth_cap) : depth;
             const long long used_before = (s_esc_measure && esc_budget) ? esc_budget->Used() : 0;
-            hline = FullSearchLine(state, depth, max_turns, second_main, tt, esc_budget, &hcommitted);
+            hline = FullSearchLine(state, esc_depth, max_turns, second_main, tt, esc_budget, &hcommitted);
             if (s_esc_measure && esc_budget && hcommitted >= 1)
             {
                 // Ladder work for this escalation (interior + rollout units).

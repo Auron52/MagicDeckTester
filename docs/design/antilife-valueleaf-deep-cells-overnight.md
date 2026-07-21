@@ -1,5 +1,75 @@
 # Antilife value-leaf deep-cell matrix (V6–V8, H6–H7) — INCREMENTAL plan (approved, for later)
 
+> ## ⚠️ 2026-07-19 SWEEP RESULT — ANCHOR FAILS: the committed table does NOT reproduce (needs user attention)
+> Ran the incremental sweep (seeds 8008/9009/10010/11011, `--hdepths 5 6 7 --vdepths 5 6 7 8`,
+> `--target 1000 --reference-target 50`, unbounded, value_min_depth=0). It COMPLETED and saved to
+> `logs/eval/valueleaf_matrix_antilife_deep.txt(.cells.json)`. **The d5 consistency anchor FAILS badly:**
+> | cell | committed table | fresh sweep (same seeds) |
+> |------|-----------------|--------------------------|
+> | **V5** (value-leaf d5) | **4.0975** | **4.659** (1000 g/seed: 4.728/4.662/4.586/4.659) |
+> | V6 / V7 | 4.665 / 4.663 | 4.648 / 4.611 (50 g) |
+> | **H5** (heuristic d5) | **4.0885** | **4.505** (50 g) |
+> | H6 | 4.6933 | 4.505 (50 g) |
+>
+> **The fresh d5 (~4.66) reproduces the committed table's OWN anomalous d6/d7 (~4.665) — the ones the table
+> already flags with `monotonicity_warnings` ("V5→V6 WORSENS by +0.5675", "H5→H6 WORSENS by +0.6048").** So the
+> current engine plays antilife value-leaf **~0.56 LP WORSE** (loss-penalized avg win turn; higher = worse) than
+> when the committed table's d1–d5 cells were built, and does so CONSISTENTLY across d5–d8 (no jump). Reading:
+> the committed d1–d5 (bottoming at ~4.09) were built at a BETTER-playing engine state; the d6–d7 cells (~4.66) +
+> the current engine are a LATER, worse state. Something regressed antilife play by ~0.5 LP between those builds.
+>
+> **NOT caused by the in-flight single-depth work** — the value arm runs `value_min_depth=0` (no escalation, no
+> escalation beam), byte-identical to before those uncommitted changes.
+>
+> ### ROOT-CAUSE INVESTIGATION (2026-07-19) — it's ACCUMULATED CORRECTNESS FIXES, not a bug to revert
+> Built old engines in an isolated worktree (`/tmp/mtg-bisect`) and measured the SAME antilife d5 value-leaf run:
+> | engine | date | win% (seed 8008, 100g) | avg-win-turn (won) | loss-penalized LP |
+> |--------|------|------------------------|---------------------|-------------------|
+> | **9e583bf** (learned-d0 era) | 07-10 | **99%** | **4.03** | **~4.08 (== table 4.0975)** |
+> | b50cdad | 07-18 | 96% | ~4.42 | 4.60 |
+> | HEAD (f517bb3) | 07-18 | 96% | ~4.42 | 4.60 |
+>
+> Established: (1) the value MODEL (`eval_model` md5 `5d69222948`) is CONSTANT — model ruled out; (2) `max_turns`
+> doesn't matter (LP flat for mt=6..12) — config ruled out; (3) **b50cdad == HEAD byte-identical** — the beam
+> (f517bb3) is innocent; (4) the table (4.09) matches the **9e583bf** (07-10) engine, committed STALE at b50cdad;
+> (5) swapping the OLD (pre-mm6) profile onto the HEAD engine still gives **4.61** → the **mulligan/keep/bottoming
+> profile is NOT the cause**; (6) the shift hits BOTH arms → an ENGINE change, not a model/metric artifact.
+>
+> ### DEFINITIVE ROOT CAUSE (mapped via the committed regression GT `test/regression_gt.txt`, avg field)
+> Traced antilife `d5_s2002` avg-win-turn across every GT rebaseline and attributed each jump to the commits
+> between rebaselines. **TWO shuffle/clairvoyance commits account for the whole thing:**
+> | date | Δ avg | commit | change |
+> |------|-------|--------|--------|
+> | 06-23 | **−0.44** | `693883b`/`e5a912cd` | "deterministic shuffle on library search (fetchland/tutor)" + search-shuffle default |
+> | 07-14 | **+0.51** | **`bf89675`** | **"CRN mid-game reshuffle default-on + re-randomize each reshuffle"** |
+>
+> `bf89675` is THE big one. Its body: the mid-game reshuffle had been a **no-op** (keyed on a pinned ordinal 0 →
+> the SAME library order on every reshuffle), so repeated fetch/tutor/shuffle-to-dig on a **fetchland/tutor-heavy
+> deck like antilife** saw a fixed, known order — effectively **clairvoyant**. The fix re-randomizes each reshuffle
+> (keyed on the per-game shuffle ordinal). That removed ~0.5 turns of shuffle clairvoyance → the table's 4.09 was
+> the CLAIRVOYANT number, today's ~4.66 is the HONEST one. Both shuffle commits **confound clairvoyance only**,
+> which is exactly why they were accepted (user-confirmed). The mm6 profile/bottoming adoption (`ec297a5b`) landed
+> the same day (07-14) but had **ZERO** antilife GT effect (4.1245 before and after) — the timing coincidence made
+> it look like the profile; it wasn't.
+>
+> ### RESOLUTION: REGENERATE the antilife table, NOTHING to revert (no real play regression)
+> There is no play regression — antilife plays the same, we just stopped letting the search see the shuffle. The
+> table's d1–d5 (4.09) are stale CLAIRVOYANT numbers from the pre-`bf89675` engine. Rebuild the antilife
+> value_leaf_table on the current (honest) engine — the 2026-07-19 sweep already did (all cells ~4.6, no d5→d6
+> jump) — and re-derive `value_trust_depth`/`value_fallback_crossover`. **Single-depth work is unaffected** (all
+> measured on the current engine; dLP=0.0000 deltas valid).
+
+> ### PARKED (2026-07-19, user) — two follow-ups to handle AFTER the current work
+> 1. **Fair-playing-field table view.** The incremental table mixes game counts per cell (V5=1000g vs tough
+>    cells=50g) AND — worse — at partial counts each cell averages a DIFFERENT seed mix (e.g. V7 has s10010:300
+>    of 600, V8 has s10010:350 of 600). So cell-to-cell comparison is NOT apples-to-apples. Add a render option
+>    that shows the whole table at a UNIFORM sample (e.g. the same 200 games/cell, or the per-cell min, using the
+>    SAME game-index range across every cell) so depth trends are comparable. This is display-only; the underlying
+>    per-cell data can hold more.
+> 2. **V7-vs-V8 "deeper is worse" alarm (4.611 vs 4.618 @ 600g each).** Almost certainly an artifact of #1 (V7 and
+>    V8 blend different seed weights of the fast seed s10010, both partial/noisy) — NOT a real depth signal. Re-check
+>    under the fair view; only investigate the engine if the non-monotonicity survives equal games/seed.
+
 Regenerate the **deep cells of antilife's value-leaf × heuristic depth table** (the "play profile table" that
 calibrates `value_trust_depth` / `value_fallback_crossover` in `decks/Anti-Lifegain/Anti-Lifegain.value.json`).
 **Not run yet — saved for a future run at the user's direction.**

@@ -68,18 +68,21 @@ def reg(m): return sum((m[g] if m[g]>0 else loss) for g in gis)/len(gis)
 def won(m): return sum(1 for g in gis if m[g]>0)
 def avg(m):
     w=[m[g] for g in gis if m[g]>0]; return sum(w)/len(w) if w else 0
-wl=lw=fa=sl=0; wlg=[]
+# Loss-penalized: score a loss (v<=0) worse than any win, so a win->loss folds into "slower"
+# (tracked in slg = the maximal slowdowns) and a loss->win into "faster". No win->loss category.
+def _sc(v): return v if v>0 else 10000
+fa=sl=0; slg=[]
 for g in gis:
     cv,kv=c[g],k[g]
-    if cv==kv: continue
-    if cv>0 and kv<0: wl+=1; wlg.append(g)
-    elif cv<0 and kv>0: lw+=1
-    elif 0<kv<cv: fa+=1
-    elif 0<cv<kv: sl+=1
+    if _sc(cv)==_sc(kv): continue
+    if _sc(kv)<_sc(cv): fa+=1
+    else:
+        sl+=1
+        if kv<=0: slg.append(g)
 cr,kr=reg(c),reg(k)
 print(f"  d{d} n={len(gis)}: TURN-REGRET committed={cr:.4f} keepmodel={kr:.4f} delta={kr-cr:+.4f} (neg=better)")
 print(f"       won committed={won(c)} keepmodel={won(k)} | avg-win-turn {avg(c):.3f} -> {avg(k):.3f}")
-print(f"       flips vs committed: WIN->LOSS={wl}{(' '+str(wlg[:10])) if wlg else ''} LOSS->WIN={lw} faster={fa} slower={sl}")
+print(f"       vs committed (loss-penalized score): faster={fa} slower={sl}{(' ->loss:'+str(slg[:10])) if slg else ''}")
 PY
 done
 echo "=== DONE ($(date -u +%H:%M:%SZ)) ==="

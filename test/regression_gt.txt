@@ -1,6 +1,5 @@
-# Regression ground truth -- commit b3f0bd5  date 2026-07-20
+# Regression ground truth -- commit 708ae7b  date 2026-07-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-20): hinata rank fix vs numbered baseline. Net strongly +: per case faster 26-59 vs slower 7-19; loss->win generally >= win->loss. 13 searched win->loss = rank-fix DECISION-divergence (SituationalCardRank changes scry AND keep/bottom rankings -> different physical game). 5 spot-checked across modes all 'different physical game': gi73 (d3 s4004) DRAWS DIVERGE; gi194 (d3 s4004) + gi330 (d3 s5005) KEPT HANDS DIFFER (mulligan/bottom diverged); + smoke gi11 & regression gi27 (draws diverge). Not like-for-like regressions. Rank fix independently validated -0.035/-0.036 held-out. Blockers: d3_s4004 gi73/88/158/194/374, d3_s5005 gi321/330, d3_s6006 gi11, d3_s7007 gi308, d5_s4004 gi88/158, d5_s6006 gi11/23.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -13,16 +12,16 @@ burn_smoke_d3_s1001=4.3533/07099e18d00b06c8
 burn_smoke_d5_s1001=4.3640/3e68a95ac5d9955c
 th_smoke_d0_s1001=5.4780/bc0e73033910b09a
 th_smoke_d3_s1001=4.2333/a96a12b4eb049b89
-th_smoke_d5_s1001=4.1600/b0dbe8515220205f
+th_smoke_d5_s1001=4.1600/3e3e7622e6151006
 knights_smoke_d0_s1001=4.5440/f9f1a1dbd111bc44
 knights_smoke_d3_s1001=4.3960/d3d46a3e982ea9bb
 knights_smoke_d5_s1001=4.4000/def7d65ff1283926
 antilife_smoke_d0_s1001=5.5820/b8f0a980a8a99381
 antilife_smoke_d3_s1001=4.2200/142a40e97cc48f60
-antilife_smoke_d5_s1001=4.1800/0b2c388d472844a8
+antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
 hinata_smoke_d0_s1001=7.3590/464dd16aa6c2a2a7
 hinata_smoke_d3_s1001=5.6533/f32cde15059011ca
-hinata_smoke_d5_s1001=5.6933/ac81210bf9968de6
+hinata_smoke_d5_s1001=5.7333/ef51eafda477ef29
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6830/b07b4b048d5a2517
@@ -38,8 +37,8 @@ burn_regression_d5_s3003=4.2500/c776f41aa202ee5a
 th_regression_d0_s2002=5.4830/ee4b00aa76d9c5a3
 th_regression_d3_s2002=4.3040/01e2d83ec2171d5c
 th_regression_d3_s3003=4.1300/daa99b13901f368e
-th_regression_d5_s2002=4.2600/55341bbf0dba5902
-th_regression_d5_s3003=4.1400/0f515aa6d6eb83f1
+th_regression_d5_s2002=4.2567/70f868bd4227968f
+th_regression_d5_s3003=4.1400/93c7b1828e16a91a
 knights_regression_d0_s2002=4.5700/8618d79e3409e669
 knights_regression_d3_s2002=4.3133/b41e09aa4c5e8d33
 knights_regression_d3_s3003=4.3667/d73ecc0d875cd3a1
@@ -48,13 +47,13 @@ knights_regression_d5_s3003=4.3720/a0cec01649154228
 antilife_regression_d0_s2002=5.7190/f6ac2bfd01421969
 antilife_regression_d3_s2002=4.2900/0aaa7a8d6999f9df
 antilife_regression_d3_s3003=4.2733/b8aee22e65838e70
-antilife_regression_d5_s2002=4.3160/30320bc08555ea33
-antilife_regression_d5_s3003=4.2360/2582d2fc20f848da
+antilife_regression_d5_s2002=4.3160/80e88e4ad09954a2
+antilife_regression_d5_s3003=4.2560/e4d7273b75ec2273
 hinata_regression_d0_s2002=7.4380/2c4f72f5eb5823cf
 hinata_regression_d3_s2002=5.7550/b62d6ef01d81e261
 hinata_regression_d3_s3003=5.7950/96d4c5b6437e9b9a
-hinata_regression_d5_s2002=5.7000/0c68377984a328b3
-hinata_regression_d5_s3003=5.7400/035f6530e379ee76
+hinata_regression_d5_s2002=5.6900/b41e585aaa76b30a
+hinata_regression_d5_s3003=5.7400/d2c10edb6bf42afd
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6445/60e754b51fb1b8a0
@@ -89,10 +88,10 @@ th_overnight_d3_s4004=4.2540/32a1080437dc0d40
 th_overnight_d3_s5005=4.2170/c7ed62522c13c2dd
 th_overnight_d3_s6006=4.2180/699be840fe9ca98c
 th_overnight_d3_s7007=4.2300/13a3ea0a7f19ea87
-th_overnight_d5_s4004=4.2550/fe3043b0d3fda4e3
-th_overnight_d5_s5005=4.2140/d9b21df7a4bf5c83
-th_overnight_d5_s6006=4.2170/cd17c5db98a57653
-th_overnight_d5_s7007=4.2310/df0b0ec8e9a1c31a
+th_overnight_d5_s4004=4.2550/681f4395a0b34952
+th_overnight_d5_s5005=4.2130/0352c44c1f4f695a
+th_overnight_d5_s6006=4.2180/0dea969dd4f44781
+th_overnight_d5_s7007=4.2300/279a77b7019d4793
 knights_overnight_d0_s4004=4.5505/c216d58bc66b476a
 knights_overnight_d0_s5005=4.5675/5e92f25f687d4a0b
 knights_overnight_d0_s6006=4.5560/c41a86df7e749590
@@ -113,10 +112,10 @@ antilife_overnight_d3_s4004=4.2600/ccde72693924d155
 antilife_overnight_d3_s5005=4.2820/bba9319933b68324
 antilife_overnight_d3_s6006=4.2450/57b54bcc0b832880
 antilife_overnight_d3_s7007=4.2230/552c9602d96c5f78
-antilife_overnight_d5_s4004=4.2350/facbb981df3402ae
-antilife_overnight_d5_s5005=4.2730/f816ab04d6923356
-antilife_overnight_d5_s6006=4.2300/8aa93d91e9adafe5
-antilife_overnight_d5_s7007=4.2030/14c9bdb0768a358f
+antilife_overnight_d5_s4004=4.2430/6d6b1b6a8c72fc7a
+antilife_overnight_d5_s5005=4.2760/e145cc4dfa11f4ae
+antilife_overnight_d5_s6006=4.2310/83ead0a629f48a06
+antilife_overnight_d5_s7007=4.2120/b1a6f34e537eab80
 hinata_overnight_d0_s4004=7.4575/e0e10e85c1750074
 hinata_overnight_d0_s5005=7.3755/e16f503d9d1c5976
 hinata_overnight_d0_s6006=7.4160/23e96a1c7595e0d9
@@ -125,7 +124,7 @@ hinata_overnight_d3_s4004=5.8550/445d53d05c55fc70
 hinata_overnight_d3_s5005=5.7575/077cd7ab1e7dbf99
 hinata_overnight_d3_s6006=5.8950/8bca072f39a118b8
 hinata_overnight_d3_s7007=5.9275/57efb5f5d5d79fa8
-hinata_overnight_d5_s4004=5.7800/08e5857de9de316b
-hinata_overnight_d5_s5005=5.7400/99dd5ecc058b82da
-hinata_overnight_d5_s6006=5.8433/59f87cb86d8e8256
-hinata_overnight_d5_s7007=5.8200/dbcf75280ee1d9c0
+hinata_overnight_d5_s4004=5.7900/8ce3094050e29c38
+hinata_overnight_d5_s5005=5.7533/fde778384704daa2
+hinata_overnight_d5_s6006=5.8400/3af2507beb0ef005
+hinata_overnight_d5_s7007=5.8233/2b774a7b86d9e358

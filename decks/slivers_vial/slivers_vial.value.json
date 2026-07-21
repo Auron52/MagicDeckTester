@@ -11053,6 +11053,7 @@
     "budget_ms": 20,
     "enabled": true,
     "regime": "light",
-    "note": "MEASURED: d5=d6=d7 flat LP + heavy-tail spin => keep d5/b20 safety cap."
+    "note": "MEASURED: d5=d6=d7 flat LP + heavy-tail spin => keep d5/b20 safety cap.",
+    "escalation_cap": 5
   }
 }

@@ -217,7 +217,7 @@ def training_adequacy(H, V, xover, hgames_of, vgames, min_games, band=0.03, conv
     return warns, detail
 
 
-def write_deck(block, tol, offset, margin, dry, scalar_cap=5):
+def write_deck(block, tol, offset, margin, dry, scalar_cap=5, set_esc_cap=True):
     deck = block["deck"]
     prof = NAME2VALUE.get(deck)
     if prof is None:
@@ -294,6 +294,20 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=5):
         if k not in ("value_leaf_table", "value_fallback_crossover", "value_trust_depth", "value_no_fallback"):
             nd[k] = v
 
+    # AUTO-DERIVE the single-depth escalation cap. The heuristic escalation runs ONE predicted-affordable pass
+    # (a cheap frozen-R hint picks the start depth) with a LIVE per-decision up-climb / down-fallback that adapts
+    # the actual depth from this decision's measured cost -- deterministic AND adaptive. The right CEILING is the
+    # deck's SEARCH depth (value_play.target_depth): the climb handles the real depth adaptivity, so the cap only
+    # needs to not truncate below the search depth (capping at the offline heuristic-convergence depth measurably
+    # regressed antilife -- the in-play hybrid uses deeper passes than pure heuristic_lp converges at). R defaults
+    # to 120 and the climb defaults ON in the engine, so this single integer is the whole per-deck config. 0/off =
+    # legacy ladder. Verified quality-neutral (dLP~0) + 20-38% less escalation work on all 6 decks; see
+    # docs/design/escalation-beam-verify.md.
+    if set_esc_cap:
+        vp = nd.get("value_play")
+        if isinstance(vp, dict) and vp.get("target_depth"):
+            vp["escalation_cap"] = int(vp["target_depth"])
+
     td = "UNSET" if trust_depth is None else str(trust_depth)
     ov_note = "" if not manual else "  [manual: %s]" % ",".join(
         "c%s:%s->%s" % (k, (v.get("from") if isinstance(v, dict) else "?"),
@@ -326,6 +340,9 @@ def main():
                     help="AVERAGE per-depth cells instead of latest-wins -- for PER-SEED incremental logs "
                          "(valueleaf_incremental.py emits one block per (seed,depth)). Do NOT use for the "
                          "cross-provenance 5-deck merge.")
+    ap.add_argument("--no-escalation-cap", action="store_true",
+                    help="do NOT auto-set value_play.escalation_cap = target_depth (leave the single-depth "
+                         "escalation OFF / legacy ladder). Default: auto-enable it (climb-adaptive, quality-neutral).")
     ap.add_argument("--dry-run", action="store_true", help="print the derivation but do NOT write")
     args = ap.parse_args()
 
@@ -338,7 +355,8 @@ def main():
     for deck in want:
         if deck not in blocks:
             print("  %-9s SKIP (not in log)" % deck); continue
-        write_deck(blocks[deck], args.tol, args.offset, args.margin, args.dry_run, args.scalar_max_depth)
+        write_deck(blocks[deck], args.tol, args.offset, args.margin, args.dry_run, args.scalar_max_depth,
+                   set_esc_cap=not args.no_escalation_cap)
 
 
 if __name__ == "__main__":

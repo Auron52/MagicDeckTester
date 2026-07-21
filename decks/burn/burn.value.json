@@ -11872,6 +11872,7 @@
     "budget_ms": 20,
     "enabled": true,
     "regime": "light",
-    "note": "MEASURED: d6 trusted-leaf ~10-20% faster than d5-escalate at identical quality (via trust, not budget)."
+    "note": "MEASURED: d6 trusted-leaf ~10-20% faster than d5-escalate at identical quality (via trust, not budget).",
+    "escalation_cap": 6
   }
 }
