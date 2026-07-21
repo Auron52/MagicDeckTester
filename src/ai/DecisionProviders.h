@@ -230,6 +230,12 @@ public:
     std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;
 
+    // Cast mana rituals BEFORE the payoff (Dragonstorm / Apex) so their floating mana is online to pay
+    // it -- otherwise the canonical order can cast the expensive payoff first and strand the rituals
+    // (dropped-cast rollback in human play; a self-stranded, under-resolved go-off autonomously). Mirrors
+    // HinataProvider (ritual -> 15, before the rank-20 payoff; an Irencrag-style cast-restrictor -> 18).
+    int CastOrderRank(const GameState&, const CardDefinition&) const override;
+
     // Opt in to the acceleration-prefix collapse (Hook 27): the go-off hand's ritual accelerants are
     // enumerated cheapest-first prefix-only rather than powerset. HEURISTIC, MTG_UNPRUNED(AccelPrefix)-
     // openable. See docs/design/dragonstorm-search-pruning.md (Step 2).

@@ -1874,6 +1874,21 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
     return put;
 }
 
+int DragonstormProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    // Irencrag Feat restricts further casts ("you can cast only one more spell this turn"), so it must
+    // be the LAST ritual: after the other rituals (15) but BEFORE the payoff (Dragonstorm, 20), so the
+    // only spell that follows it is the payoff. (Mirrors HinataProvider's Irencrag handling.)
+    if (def.params.max_casts_after >= 0) { return 18; }
+    // A mana ritual (Seething Song / Pyretic Ritual / Rite of Flame / Irencrag burst) must resolve
+    // BEFORE the payoff so its floating mana is available to pay Dragonstorm / a hard-cast Dragon /
+    // another Apex. Rank between creatures (10) and other noncreatures (20). Without this the canonical
+    // order can cast the payoff first and strand the mana-positive rituals (the dropped-cast rollback
+    // the user hit; a self-stranded go-off autonomously). Everything else uses the generic order.
+    if (IsManaRitual(def)) { return 15; }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
