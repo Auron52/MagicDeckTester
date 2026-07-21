@@ -595,3 +595,29 @@ correctness call, not a metric win:
 - **AGAINST**: it's a ~+0.017 goldfish slowdown at every depth, with no compensating metric gain — the
   goldfish genuinely wins faster on the fiction.
 Presented to the user for the decision (per `heuristic-optimization.md`: adopt only on approval).
+
+---
+
+## GOING FORWARD (2026-07-21 user directive) — faithful Magma should be default-ON; first root-cause the regression
+
+The user's decision on the above: **faithful Magma should NOT stay off-by-default** — the honest model
+(no impossible "cheap AND 4-to-face" line) is the one we want live. But the ~+0.0167 goldfish slowdown is
+a *regression to explain*, not a cost to accept blindly: **before flipping the default, root-cause WHY the
+faithful model loses ~0.017 turn-to-win.** The suspicion is that the goldfish metric rewards the fiction
+(the search wins a hair faster when Magma is mispriced cheap), i.e. the "loss" is the metric preferring an
+illegal line — in which case adopting is correct despite the number. Confirm that attribution rather than
+assume it.
+
+**This is now an investigation under the MERGED engine** (as of the 2026-07-21 merge of origin's escalation
+feature `eded828` into the numbering/rank branch). Escalation changes deep-search line selection, so the
+Magma faithful vs over-count delta must be *re-measured on the merged binary* — the prior +0.0167 predates
+escalation and may shift. Sequence (per `.claude/skills/heuristic-optimization.md` +
+`.claude/skills/regression-testing.md`):
+1. Re-measure faithful (`MTG_MAGMA_FAITHFUL=1`) vs default on the merged binary, Hinata train seeds, then
+   held-out overnight seeds — get the current delta and its per-game decomposition.
+2. **Attribute the slowdown**: for the games that get slower, confirm the over-count line the goldfish
+   prefers is the *impossible* one (Magma cheap AND 4-to-face) — i.e. the metric is rewarding a fiction.
+   If so, the faithful slowdown is a metric artifact and adoption is the correct call.
+3. Flip the default to faithful + add an `MTG_LEGACY_MAGMA` escape hatch (byte-identical off), rebaseline
+   Hinata GT via `--accept`, and disclose. Do NOT adopt until the attribution in (2) is measured, not
+   assumed.
