@@ -406,7 +406,7 @@ let S = { choices:[], history:[], decision:null, prev:null, over:false, result:n
 
 function cfg(extra) {
   return Object.assign({
-    deck:$('deck').value, seed:+$('seed').value, gameIndex:0,
+    deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
   }, extra || {});
 }
@@ -2037,7 +2037,7 @@ async function checkReference() {
   const el=$('refnote'); if(!el) return;
   const deck=$('deck').value;
   if(!deck){ el.style.display='none'; return; }
-  const seed=+$('seed').value||0, gi=0;
+  const seed=+$('seed').value||0, gi=Math.max(0,seed-1);
   try {
     const j=await (await fetch(`/api/reference-exists?deck=${encodeURIComponent(deck)}&seed=${seed}&gi=${gi}`)).json();
     if (j && j.exists){ el.style.display=''; el.title=j.path||''; el.textContent=`✓ reference saved for seed ${seed} — skip, or play again`; }
