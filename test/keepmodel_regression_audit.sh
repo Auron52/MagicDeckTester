@@ -2,7 +2,8 @@
 # Per-deck regression-suite audit of an adopted keep model: runs the deck's REGRESSION_CASES
 # (seeds 2002/3003, depths 0/3/5 -- DISJOINT from the A/B fit seeds) with the keepmodel profile via
 # the SAME --batch path the harness uses, then diffs per-game vs the committed static baseline in
-# test/gt_logs/. Classifies every flip (won<->loss, faster, slower). Read-only; promotes nothing.
+# test/gt_logs/. Classifies every change as faster/slower by loss-penalized score (a win<->loss is
+# just the maximal slowdown/speedup, not a separate category). Read-only; promotes nothing.
 #
 # Usage: DECK=burn PROF=logs/.../burn.keepmodel.profile.json bash test/keepmodel_regression_audit.sh
 #        (optional) BASELINE=1 also runs the STATIC profile fresh to prove it reproduces gt_logs (rule 6).

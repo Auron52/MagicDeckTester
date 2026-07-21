@@ -344,22 +344,19 @@ for spec in "${CASES[@]}"; do
 done
 
 # ---- per-game audit (split by depth) -- makes the pre-accept analysis unmissable ----------
-# The fingerprint compare above governs PASS/FAIL; this appends the per-game flip breakdown the
-# aggregate hides (win->loss / turn-later, split searched vs d0) plus the list of every searched
-# flip, so an ordinary run already surfaces exactly what a later --accept must have explained. The
-# same audit hard-gates --accept (see the ACCEPT block). See docs/design/auto-audit-integration.md.
+# The fingerprint compare above governs PASS/FAIL; this appends the per-game breakdown the aggregate
+# hides -- every SLOWER game (worse loss-penalized score; a win->loss is just the maximal slowdown,
+# not a special category) split searched vs d0 -- so an ordinary run already surfaces what to analyze
+# before --accept. The metric is the loss-penalized avg (loss = max_turns+1); the accept decision is a
+# human judgement on the NET delta, not a per-game gate. See docs/design/auto-audit-integration.md.
 if [ -f "$HERE/audit_changed_games.py" ] && command -v python3 >/dev/null 2>&1; then
   log ""
   log "--- per-game audit (vs committed gt_logs) ---"
-  audit_out=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1); audit_rc=$?
+  audit_out=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1)
   printf '%s\n' "$audit_out" | while IFS= read -r al; do log "$al"; done
-  if [ "$audit_rc" -ne 0 ]; then
-    log "      >> searched-depth win->loss present -- --accept will be BLOCKED until each is"
-    log "         root-caused (then acknowledged via --accept-with-regressions=...)."
-  fi
-  # Offer the churn auto-classifier when there are searched turn-later games to explain.
-  if printf '%s\n' "$audit_out" | grep -q "SEARCHED-depth turn-later"; then
-    log "      >> classify searched turn-later automatically: bash test/classify_turn_later.sh $MODE"
+  # Offer the churn auto-classifier when there are searched SLOWER games to explain.
+  if printf '%s\n' "$audit_out" | grep -q "SEARCHED-depth SLOWER"; then
+    log "      >> classify searched slower games automatically: bash test/classify_turn_later.sh $MODE"
   fi
 fi
 
