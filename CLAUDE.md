@@ -12,6 +12,14 @@ The application is in early development — no build system, test runner, or sou
 
 ## Repository Conventions
 
+- **NEVER wrap commands in a timeout (no `timeout N`, no Bash `timeout` parameter).**
+  A timeout silently truncates a run — a partially-finished regression sweep, batch,
+  or build reads as a *result* when it is actually cut off, which corrupts A/B
+  comparisons and hides real slowness. Let long commands run to completion; if one is
+  exceedingly slow the **user** will manually stop it (that choice is theirs, not the
+  agent's). This applies to every tool call in this repo: analysis runs, the test
+  harness, builds, and ad-hoc scripts.
+
 - **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
   Any script or command that writes game logs, batch output, or A/B scratch must
   target a subdirectory of `logs/` (e.g. `logs/fd_quick`), not a root-level
