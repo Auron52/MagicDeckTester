@@ -1,5 +1,6 @@
-# Regression ground truth -- commit 6d6d9c9  date 2026-07-21
+# Regression ground truth -- commit ccec4e8  date 2026-07-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (regression, 2026-07-21): cast-ordering search (ccec4e8): net +601 turns (851 faster/17 slower); 9 persist durdles = gi22-class no-Medallion subset-eval, a known value-leaf follow-up
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -23,8 +24,8 @@ hinata_smoke_d0_s1001=7.4760/c907a51d2f2abf58
 hinata_smoke_d3_s1001=6.0133/81febc367402161f
 hinata_smoke_d5_s1001=6.0400/8353aa99273e9037
 dragonstorm_smoke_d0_s1001=8.1240/32b5c9f9f8d20868
-dragonstorm_smoke_d3_s1001=5.6200/bc91ce7c11b8f0a2
-dragonstorm_smoke_d5_s1001=5.6667/f0c48575ff602a4d
+dragonstorm_smoke_d3_s1001=5.0333/a6c9043d79f4747d
+dragonstorm_smoke_d5_s1001=5.0000/efb362b94dae6e19
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6830/1c52c53844821180
@@ -57,11 +58,11 @@ hinata_regression_d3_s2002=6.2100/9e5760f6d2c18d74
 hinata_regression_d3_s3003=6.1800/b9c8430b14bf8259
 hinata_regression_d5_s2002=6.1700/dced9bb9f904974b
 hinata_regression_d5_s3003=6.0700/2540e41c03735ff1
-dragonstorm_regression_d0_s2002=8.2640/9735182ccbf0e4af
-dragonstorm_regression_d3_s2002=6.1067/3e328df8d538444f
-dragonstorm_regression_d3_s3003=6.2200/e18dc2ed5f854037
-dragonstorm_regression_d5_s2002=8.3400/d4bd87f2d24d9a93
-dragonstorm_regression_d5_s3003=8.3480/494d4674292181f3
+dragonstorm_regression_d0_s2002=8.0640/506b1d9feaf262f8
+dragonstorm_regression_d3_s2002=4.9367/c247772293edf225
+dragonstorm_regression_d3_s3003=4.8933/37e293c85c43bbb1
+dragonstorm_regression_d5_s2002=4.7680/fcd33d3daa699d49
+dragonstorm_regression_d5_s3003=4.8240/3272a51652778876
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6445/fb2c4c8daf622fb4
