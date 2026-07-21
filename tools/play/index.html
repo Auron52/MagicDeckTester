@@ -518,7 +518,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1195,7 +1195,7 @@ function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
-                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry'; // centered card-image modals
+                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1207,6 +1207,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='land_entry' ? landEntryPanelHtml(d)
                   : dec==='mulligan' ? mulliganPanelHtml(d)
                   : dec==='bottom' ? bottomPanelHtml(d)
+                  : dec==='dragon' ? dragonPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -1295,6 +1296,32 @@ function discardPanelHtml(d){
   h+=`<div class="pbtns"><span class="pcount">${n} / ${over} selected</span>`+
      `<button class="ghost" id="discardai">Follow AI</button><span class="spacer"></span>`+
      `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Discard ${over} card${over===1?'':'s'}</button></div>`;
+  return h;
+}
+// Dragonstorm put-override panel (#6): IMAGE-based central modal, MULTI-SELECT. The candidate library
+// Dragons are shown as art IN THE ORDER they'll enter (Lathliss + Scourges first — order-dependent);
+// the AI's rule pick (d.ai_set) is preselected and badged. Click to toggle WHICH Dragons enter (capped
+// at d.max_puts = the storm count); the engine keeps the shown order. Commit puts them all in one step.
+function aiDragonSet(d){ return (d.ai_set && d.ai_set.length) ? d.ai_set.slice() : []; }
+function dragonPanelHtml(d){
+  const cap=d.max_puts||0;
+  // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
+  if (S._dragonFor !== d.decision_index){ S._dragonFor=d.decision_index; S.dragonSel=new Set(aiDragonSet(d)); }
+  const sel=S.dragonSel, aiSet=new Set(aiDragonSet(d));
+  let h=`<h3>Dragonstorm — put which Dragons?</h3>`;
+  h+=`<div class="sub">Choose up to <b>${cap}</b> Dragon${cap===1?'':'s'} to put onto the battlefield. They enter in the order shown (Lathliss and Scourges first — they trigger off every later Dragon). The AI’s picks are preselected.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.candidates||[]).forEach(c=>{
+    const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+    h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div>`;
+  const n=sel.size, ok=(n<=cap);
+  h+=`<div class="pbtns"><span class="pcount">${n} / ${cap} selected</span>`+
+     `<button class="ghost" id="dragonai">Follow AI</button><span class="spacer"></span>`+
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Put ${n} Dragon${n===1?'':'s'}</button></div>`;
   return h;
 }
 // Retrace-discard panel (Throes of Chaos): IMAGE-based central modal. Casting a retrace spell from
@@ -1560,6 +1587,11 @@ function wireDecisionPanel(d, dec){
     const ai=panel.querySelector('#discardai'); if (ai) ai.onclick=()=>{ S.discardSel=new Set(aiDiscardSet(d)); renderDecisionPanel(d,'discard'); };
     const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDiscardBatch(d);
   }
+  else if (dec==='dragon'){
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleDragon(d, +b.dataset.opt));
+    const ai=panel.querySelector('#dragonai'); if (ai) ai.onclick=()=>{ S.dragonSel=new Set(aiDragonSet(d)); renderDecisionPanel(d,'dragon'); };
+    const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDragonBatch(d);
+  }
   else if (dec==='divide')
     { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDivide(d); }
   else if (dec==='expressive_iteration')
@@ -1618,6 +1650,23 @@ function commitDiscardBatch(d){
   const names=desc.map(i=>{ const c=(d.options||[]).find(x=>x.index===i); return c?c.name:'card'; });
   S._discardFor=null; S.discardSel=null;      // clear the per-decision selection guard
   pushChoices(d, desc, `discard: ${names.join(', ')}`);
+}
+// Multi-select Dragonstorm put override: toggle a candidate Dragon in/out of the put set (capped at
+// max_puts), then commit all at once. The engine reads ONE int per candidate (1 = put), in candidate
+// order, so we send a 0/1 flag per candidate (like divide/Soulfire). The engine keeps the shown order.
+function toggleDragon(d, oi){
+  const cap=d.max_puts||0, sel=S.dragonSel||(S.dragonSel=new Set());
+  if (sel.has(oi)) { sel.delete(oi); }
+  else { if (sel.size>=cap){ flashHint(`Up to ${cap} — deselect one first.`); return; } sel.add(oi); }
+  renderDecisionPanel(d,'dragon');
+}
+function commitDragonBatch(d){
+  const cap=d.max_puts||0, sel=S.dragonSel||new Set();
+  if (sel.size>cap){ flashHint(`Pick up to ${cap} Dragon${cap===1?'':'s'}.`); return; }
+  const flags=(d.candidates||[]).map(c=>sel.has(c.index)?1:0);
+  const names=(d.candidates||[]).filter(c=>sel.has(c.index)).map(c=>c.name);
+  S._dragonFor=null; S.dragonSel=null;        // clear the per-decision selection guard
+  pushChoices(d, flags, `Dragonstorm: put ${names.length?names.join(', '):'nothing'}`);
 }
 // Divide: send one integer per legal target (in legal order = the order the engine reads them).
 function commitDivide(d){

@@ -156,7 +156,8 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                     // Dragons in the identical order (lockstep). The DragonstormProvider / viewer
                     // multi-pick (later steps) supply an explicit order via the `preferred` arg.
                     PerformTutorToBattlefield(state, entry.controller_index, def.params,
-                                              state.spells_cast_this_turn);
+                                              state.spells_cast_this_turn, /*preferred=*/{},
+                                              def.card.m_name.str());
                 }
                 // Apex of Power: "Exile the top seven cards of your library. Until end of turn, you may
                 // cast spells from among them. If this spell was cast from your hand, add ten mana of any

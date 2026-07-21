@@ -3949,7 +3949,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // already counts Dragonstorm itself = storm copies + the original = the put count. Empty
             // preferred = provider (TutorCandidates) order, identical to EffectHandler (lockstep).
             PerformTutorToBattlefield(state, state.active_player_index, def.params,
-                                      state.spells_cast_this_turn);
+                                      state.spells_cast_this_turn, /*preferred=*/{},
+                                      def.card.m_name.str());
         }
         else if (def.params.impulse_exile > 0)
         {

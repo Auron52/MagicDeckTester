@@ -373,6 +373,26 @@ using SoulfireTargetChooser = std::function<std::vector<int>(const GameState& st
                                                              const std::vector<int>& heuristic_subset)>;
 extern thread_local SoulfireTargetChooser* g_play_soulfire_chooser;
 
+// ---- Human-play Dragonstorm put chooser (WHICH library Dragons enter -- override the rule) --------
+// Dragonstorm puts up to `max_puts` (the storm count, capped by Dragons left in library) Dragons from
+// the library onto the battlefield. Autonomously DragonstormProvider::TutorToBattlefieldPutOrder
+// SELECTS which Dragons by role (Lathliss = token engine, Scourge = pinger, Utvara = attack tokens,
+// Karrthus/Kolaghan = haste) and PerformTutorToBattlefield ORDERS them by a fixed play order (Lathliss
+// -> Scourges -> Utvara -> Karrthus -> Kolaghan; Lathliss/Scourge stay front, order-dependent). Under
+// --claude-play the human OVERRIDES only the SELECTION: `candidates` = the library Dragon copies in
+// that play order (one Card per copy, so multiplicity + the cap read naturally), `max_puts` = the cap,
+// `heuristic_subset` = the indices (into `candidates`) the rule picked (the default). The chooser
+// returns the chosen indices into `candidates` (size 0..max_puts); the engine keeps candidate order --
+// already the rule's play order -- so the human picks WHICH, never the order. Nulled by RevealLogPause
+// for every search/rollout/enumeration scope, so it fires only on the REAL resolution and the rule
+// stands as the autonomous/search default -> byte-identical. Inert (rule) unless set.
+using DragonChooser = std::function<std::vector<int>(const GameState& state, int controller,
+                                                     const std::string& source,
+                                                     const std::vector<Card>& candidates,
+                                                     int max_puts,
+                                                     const std::vector<int>& heuristic_subset)>;
+extern thread_local DragonChooser* g_play_dragon_chooser;
+
 // ---- Human-play draw sink (accurate per-draw reporting for the viewer history) -------------
 // Under --claude-play the viewer wants to show exactly what was drawn and on which turn, rather
 // than guessing from a hand diff (which can't tell duplicate copies apart or split a cantrip
@@ -420,25 +440,28 @@ struct RevealLogPause
     BounceChooser* saved_sacchooser;
     ReplicateChooser* saved_repchooser;
     LandEntryChooser* saved_lechooser;
+    DragonChooser* saved_dragchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
                        saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
                        saved_evsink(g_play_event_sink), saved_sacchooser(g_play_sacrifice_chooser),
-                       saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser)
+                       saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
+                       saved_dragchooser(g_play_dragon_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
       g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_sacrifice_chooser = nullptr;
-      g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; }
+      g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
                         g_play_event_sink = saved_evsink; g_play_sacrifice_chooser = saved_sacchooser;
-                        g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser; }
+                        g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
+                        g_play_dragon_chooser = saved_dragchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

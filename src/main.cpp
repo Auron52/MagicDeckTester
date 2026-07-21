@@ -928,6 +928,42 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     os << "}\n";
 }
 
+// Dragonstorm put-order decision (the Dragon override dialog): the player picks WHICH library Dragons
+// enter the battlefield (up to `max_puts`); the engine keeps the rule's fixed play order (Lathliss ->
+// Scourges -> Utvara -> haste). Emits the candidate Dragon copies as image options IN THAT ORDER, each
+// with a `def` flag (in the rule's default selection). The reply is ONE int per candidate (1 = put this
+// copy), read positionally like the divide / Soulfire decisions -- so any subset up to max_puts is
+// expressible. `ai_set` lists the default-selected candidate indices (the viewer pre-checks them).
+static void WriteDragonDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                    const std::vector<Card>& candidates, int max_puts,
+                                    const std::vector<int>& heuristic_subset, int decision_index)
+{
+    std::vector<bool> is_def(candidates.size(), false);
+    for (int di : heuristic_subset)
+    { if (di >= 0 && di < static_cast<int>(candidates.size())) { is_def[di] = true; } }
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"dragon\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"max_puts\": " << max_puts << ",\n";
+    os << "  \"ai_set\": [";
+    for (size_t i = 0; i < heuristic_subset.size(); ++i) { if (i) os << ", "; os << heuristic_subset[i]; }
+    os << "],\n";
+    os << "  \"candidates\": [";
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+        if (i) os << ", ";
+        os << "{ \"index\": " << i << ", \"def\": " << (is_def[i] ? "true" : "false")
+           << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply one int per candidate (1 = put this Dragon), up to max_puts total. "
+          "The engine keeps the rule's play order. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
 // Cleanup-discard decision (#2): the player picks WHICH hand card to discard down to maximum hand
 // size. Emits every hand card as an image option; the reply is the hand index to discard. One such
 // decision fires per over-limit card.
@@ -1621,6 +1657,47 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_dig_chooser = &dig_chooser;
 
+    // Dragonstorm put override (the Dragon dialog): the player picks WHICH library Dragons enter (up to
+    // max_puts); the engine keeps the rule's play order. Reply = one int per candidate (1 = put this
+    // copy), read positionally like the divide / Soulfire decisions (any subset up to max_puts is
+    // expressible). Default = the rule's selection (heuristic_subset). Human-play only (the chooser is
+    // nulled for the search/rollout), so batch ground truth is unaffected.
+    DragonChooser dragon_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<Card>& candidates, int max_puts,
+            const std::vector<int>& heuristic_subset) -> std::vector<int>
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            const int need = static_cast<int>(candidates.size());
+            if (cursor + need <= static_cast<int>(choices.size()))
+            {
+                std::vector<int> flags(need);
+                for (int i = 0; i < need; ++i) { flags[i] = choices[cursor++]; }
+                ++decisions_made;
+                std::vector<int> picked;
+                for (int i = 0; i < need; ++i)
+                { if (flags[i] > 0 && static_cast<int>(picked.size()) < max_puts) { picked.push_back(i); } }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": [";
+                    for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << flags[i]; }
+                    ss << "], \"decision\": ";
+                    WriteDragonDecisionJson(ss, s, source, candidates, max_puts, heuristic_subset, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return picked;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteDragonDecisionJson(std::cout, s, source, candidates, max_puts, heuristic_subset, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_dragon_chooser = &dragon_chooser;
+
     // Cleanup discard (#2): the player picks which hand card to discard to max hand size. Shares the
     // --choices stream; the reply is a hand index. Default = the engine's heuristic pick.
     DiscardChooser discard_chooser =
@@ -1886,6 +1963,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_retrace_chooser = nullptr;
     g_play_replicate_chooser = nullptr;
     g_play_land_entry_chooser = nullptr;
+    g_play_dragon_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
