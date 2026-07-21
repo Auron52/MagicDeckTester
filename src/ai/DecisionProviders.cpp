@@ -1480,36 +1480,15 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
 // Crackle the discount makes free, and Soulfire's own-creature targets each shave {1} (and dig
 // deeper). Off Hinata they are dead weight, so the solver must not branch on them.
 //
-// SPASM GATE (MTG_HINATA_SPASM_GATE, default OFF => legacy `HinataInPlay` only): the untap ritual only
-// pays off spent into a big mana SINK, and in this deck that sink is Crackle with Power. So -- like a
-// Dragonstorm deck only casting rituals when it will cast Dragonstorm/Apex -- only EMIT Reality Spasm
-// when Crackle is available to be cast this turn. Proxy = Crackle with Power in HAND: a mid-turn dig
-// that draws Crackle re-collects actions (AIEngine chooser re-fires post-draw), so the post-dig
-// decision sees Crackle in hand and the "draw then play Crackle" line still fires; only casting Reality
-// Spasm BEFORE the dig is forbidden (fungible -- the floated mana is identical either ordering). This
-// is a search PRUNE (fewer ritual actions in the powerset -> smaller EnumeratePlans blow-up on combo
-// hands) AND a play heuristic (never waste Reality Spasm with no sink). Irencrag Feat is the parallel
-// ramp ritual; gating it is a follow-up (it is a single card, far less of an enumeration multiplier).
+// Emit the untap ritual (Reality Spasm) whenever Hinata is online. The spasm gate does NOT suppress
+// emission any more: the "waste" judgement is made as a rollout PRUNE at the turn boundary
+// (SimulateEndAndStartNextTurn -- a ritual cast on a non-winning turn is cut), never by deleting the
+// action at one instant (the fragment bug of the old emission gate, which blocked the accelerant AND the
+// incidental kill). So the ritual is always a legal candidate; MTG_HINATA_SPASM_GATE lives entirely in
+// TurnSolver now. See SpasmGateEnabled().
 bool HinataProvider::ShouldEmitUntapRitual(const GameState& s) const
 {
-    if (!HinataInPlay(s)) { return false; }
-    // Mode: 0=off (unset, byte-identical), 1=STRICT (emit only when Crackle in hand), 2=SOFT (emit
-    // always; the plan-prune SubsetWastesRampRitual handles only the Crackle-in-hand-but-uncast waste,
-    // so a ritual as an accelerant on a non-Crackle turn stays available). See TurnSolver gate mode.
-    static const int mode = []{
-        const char* e = std::getenv("MTG_HINATA_SPASM_GATE");
-        if (!e || !*e) { return 0; }
-        const std::string v(e);
-        return (v == "2" || v == "soft") ? 2 : 1;
-    }();
-    if (mode != 1) { return true; }                         // off / soft: emit whenever Hinata is online
-    const Player& ap = s.players[s.active_player_index];
-    for (const Card& h : ap.hand)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
-        if (d && d->params.x_damage_multiplier > 1) { return true; }   // Crackle with Power in hand
-    }
-    return false;
+    return HinataInPlay(s);
 }
 bool HinataProvider::BranchSoulfireOwnTargets(const GameState& s) const  { return HinataInPlay(s); }
 

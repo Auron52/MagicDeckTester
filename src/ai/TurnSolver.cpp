@@ -845,61 +845,36 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
     return false;
 }
 
-// Reject a plan that casts a mana ramp RITUAL (Reality Spasm untap / Irencrag Feat burst -- IsManaRitual)
-// without also casting Crackle with Power in the SAME plan. In this deck a ritual's only worthwhile sink
-// is Crackle (Hinata already discounts the other payoffs, so spending a ritual on e.g. Magma Opus is a
-// wasted card); a ritual with no Crackle in-plan is that waste. Same pattern the user names for
-// Dragonstorm (rituals only when casting Dragonstorm/Apex). Also a search PRUNE: it drops the
-// ritual-without-Crackle subsets that dominate combo-hand enumeration EVEN WHEN Crackle is in hand
-// (which the emission gate ShouldEmitUntapRitual cannot -- that only suppresses Reality Spasm when
-// Crackle is ABSENT from hand). The "dig into Crackle then cast it" line survives via action
-// re-collection: a plan that digs and then casts the drawn Crackle DOES contain Crackle. Gated on
-// MTG_HINATA_SPASM_GATE (default off => returns false for every subset => byte-identical).
-// Spasm-gate mode from MTG_HINATA_SPASM_GATE: 0=off (unset, byte-identical); 1=STRICT (a ritual always
-// requires same-turn Crackle in the plan); 2=SOFT (only prune when Crackle is IN HAND but the plan does
-// not cast it -- the user's literal "prune Crackle-present hands that do not cast Crackle"; a ritual with
-// Crackle ABSENT is allowed as a mana-accelerant, which measurement showed is net-positive tempo).
-static int HinataSpasmGateMode()
+// Hinata spasm gate (MTG_HINATA_SPASM_GATE, default OFF => byte-identical: no gate anywhere). Purpose is
+// PERFORMANCE, not correctness (the search already commits the optimal win turn). A mana RITUAL (Reality
+// Spasm untap / Irencrag Feat burst, IsManaRitual) floats mana that must be spent THIS turn; the CRACKLE
+// approach prunes a line only when the ritual bought NO Crackle payoff (x_damage_multiplier > 1) this
+// turn AND the turn does not win -- the genuinely-wasted case. A ritual that funds a Crackle, even a
+// sub-lethal one, is KEPT (evaluating those games showed the sub-lethal Crackle is load-bearing chip
+// damage that reaches the same optimal win a turn or two later). Applied whole-turn at the turn boundary
+// (SimulateEndAndStartNextTurn): in the FSLine line-finder a false return means "this line has no win,
+// try another" (an INVALID line, not a slow one), so the search finds the payoff-funded / deferred line.
+// NET perf is measured, not assumed: pruning removes lines but deferring a ritual grows the hand it holds
+// (bigger downstream powersets), which can offset the saving. Default off => byte-identical.
+static bool SpasmGateEnabled()
 {
-    static const int mode = []{
-        const char* e = std::getenv("MTG_HINATA_SPASM_GATE");
-        if (!e || !*e) { return 0; }
-        const std::string v(e);
-        return (v == "2" || v == "soft") ? 2 : 1;
-    }();
-    return mode;
+    static const bool on = []{ const char* e = std::getenv("MTG_HINATA_SPASM_GATE"); return e && *e; }();
+    return on;
 }
 
-// True iff the active player holds Crackle with Power (the ritual's mana SINK) in hand right now.
-static bool HinataCrackleInHand(const GameState& s)
+// True while inside a SimulateToEnd rollout -- the win-turn ESTIMATE used to RANK candidates. The spasm
+// gate's Crackle prune must NOT fire here: pruning a rollout branch returns a false "no win" that poisons
+// the ranking (the confound that lost gi10/gi46 when the greedy rollout happened to cast a ritual without
+// a Crackle). It fires ONLY in the FSLine line-finder / top-level commit (g_in_rollout_eval == false),
+// where a false return correctly means "this line has no win, try another" (an INVALID line, not a slow
+// one). thread_local so parallel rollouts don't race.
+static thread_local bool g_in_rollout_eval = false;
+struct RolloutEvalGuard
 {
-    for (const Card& c : s.players[s.active_player_index].hand)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d && d->params.x_damage_multiplier > 1) { return true; }
-    }
-    return false;
-}
-
-static bool SubsetWastesRampRitual(const GameState& state,
-                                   const std::vector<Action>& cands, const std::vector<int>& sel)
-{
-    const int mode = HinataSpasmGateMode();
-    if (mode == 0) { return false; }
-    bool has_ritual = false, has_crackle = false;
-    for (int j : sel)
-    {
-        const CardDefinition* d = cands[j].def;
-        if (!d) { continue; }
-        if (IsManaRitual(*d))                  { has_ritual  = true; }
-        if (d->params.x_damage_multiplier > 1) { has_crackle = true; }   // Crackle with Power (the sink)
-    }
-    if (!(has_ritual && !has_crackle)) { return false; }
-    // SOFT: keep the ritual when Crackle is ABSENT (it may be a legit accelerant for a cantrip/dig turn);
-    // only prune the wasteful case where Crackle IS in hand but this plan casts the ritual without it.
-    if (mode == 2 && !HinataCrackleInHand(state)) { return false; }
-    return true;
-}
+    bool prev;
+    RolloutEvalGuard() : prev(g_in_rollout_eval) { g_in_rollout_eval = true; }
+    ~RolloutEvalGuard() { g_in_rollout_eval = prev; }
+};
 
 // Reject a subset that over-splices Desperate Ritual (splice_onto_arcane). Splicing k copies onto a
 // base cast REVEALS k OTHER copies that must still be IN HAND at that moment; a revealed copy stays in
@@ -2144,9 +2119,6 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
-        // Reject a ramp ritual (Reality Spasm / Irencrag Feat) not spent into Crackle this plan. Inert
-        // unless MTG_HINATA_SPASM_GATE -> byte-identical off.
-        if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
@@ -3451,6 +3423,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // draw-breakpoint cast is its own apply_one so it self-counts. Read only by Dragonstorm's
         // resolution (below) + no BuildSimKey fold -> byte-identical for every non-storm deck.
         ++state.spells_cast_this_turn;
+        // One-turn acceleration flag for the spasm-gate rollout prune (read at the turn boundary in
+        // SimulateEndAndStartNextTurn). Set here where the search applies a cast; false for non-ritual
+        // decks -> byte-identical. See SpasmGateEnabled().
+        // Order-aware spasm gate: a fresh ritual resets the "Crackle since ritual" flag (it now needs a
+        // Crackle AFTER it); a Crackle cast sets it. Both false for non-ritual/non-Crackle decks => byte-id.
+        if (IsManaRitual(def)) { state.ritual_cast_this_turn = true; state.crackle_since_ritual = false; }
+        if (def.params.x_damage_multiplier > 1) { state.crackle_since_ritual = true; }   // Crackle payoff
 
         // Alternative cost paid as "an opponent gains alt_lifegain life" (Invigorate / Skyshroud
         // Cutter / Reverent Silence) -> reversed to damage by a Tainted Remedy / Plague Drone.
@@ -4857,6 +4836,14 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
 
+    // Spasm gate -- CRACKLE payoff-sink (MTG_HINATA_SPASM_GATE, default off => byte-identical): the turn
+    // just ending cast a mana ritual, cast NO Crackle payoff, and did not win. The ritual's mana bought
+    // nothing this turn, so this line is INVALID -- return false so the FSLine finder tries another line
+    // (the payoff-funded or ritual-deferred line) instead of projecting further turns. Ritual lines that
+    // DID cast a Crackle (even sub-lethal) are kept. Purpose is perf (fewer lines explored); measured.
+    if (SpasmGateEnabled() && !g_in_rollout_eval && state.ritual_cast_this_turn && !state.crackle_since_ritual
+        && state.Opponent().life > 0) { return false; }
+
     // Check for "no maximum hand size" permanent (e.g. Reliquary Tower) — if present,
     // skip the discard-to-7 step so the lookahead correctly models turns after RT is played.
     bool unlimited_hand = false;
@@ -4930,6 +4917,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
+    state.ritual_cast_this_turn   = false;         // one-turn acceleration flag resets each turn (spasm gate)
+    state.crackle_since_ritual    = false;         // Crackle-since-ritual flag resets each turn (spasm gate)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
 
@@ -5428,9 +5417,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
-        // Reject a ramp ritual (Reality Spasm / Irencrag Feat) not spent into Crackle this plan. Inert
-        // unless MTG_HINATA_SPASM_GATE -> byte-identical off.
-        if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
@@ -6533,6 +6519,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt)
 {
+    RolloutEvalGuard _reg;   // this whole subtree is a ranking ESTIMATE: disable the spasm prune (no false "no win")
     const bool trace_pl = g_trace_arm;   // only the outermost diagnostic playout prints
     g_trace_arm = false;
     // TRUNCATED ROLLOUT (MTG_ROLLOUT_HORIZON=K, default -1 = unlimited/off): after K simulated turns with
@@ -8589,7 +8576,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
             // End of this turn + start of next. The next turn's land drop is searched
             // inside SimulateToEnd's per-turn SolveWithLookahead, so no greedy land
-            // play happens here.
+            // play happens here. (The spasm gate's Crackle payoff-sink lives inside
+            // SimulateEndAndStartNextTurn so it applies to the FSLine finder too.)
             if (!SimulateEndAndStartNextTurn(copy)) { ++candidates_done; continue; }
 
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to

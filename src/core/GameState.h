@@ -161,6 +161,20 @@ struct GameState
     // first-main dedup boundary and the combo never spans one). Byte-identical for every deck without
     // a tutor_to_battlefield card: the field is written but read by nothing else and folded nowhere.
     int                      spells_cast_this_turn = 0;
+    // One-turn acceleration flag: true once the active player casts a mana ritual (Reality Spasm /
+    // Irencrag Feat -- IsManaRitual) this turn; reset each turn-start alongside spells_cast_this_turn.
+    // Read ONLY by the search's SimulateEndAndStartNextTurn spasm-gate prune (MTG_HINATA_SPASM_GATE):
+    // a ritual cast on a turn that does not win is a dominated line (the same play is available next
+    // turn off the same ritual mana), so the rollout branch is cut. Turn-scoped, NEVER folded into
+    // BuildSimKey (false at every cross-turn dedup boundary), byte-identical when the gate is off.
+    bool                     ritual_cast_this_turn = false;
+    // Companion flag for the spasm gate (MTG_HINATA_SPASM_GATE), ORDER-AWARE: true iff a Crackle-style
+    // X-burn payoff (x_damage_multiplier > 1) has been cast SINCE the most-recent ritual this turn. Set
+    // false on each ritual cast (that ritual now needs a Crackle AFTER it to be justified) and true on
+    // each Crackle cast. At the turn boundary a ritual line with no Crackle since its last ritual and no
+    // win is pruned -- so a Spasm that shows up in a later segment and fuels no Crackle is rejected, while
+    // the 2-Crackle line (Crackle -> Spasm -> Crackle) is kept. Reset each turn-start, never in BuildSimKey.
+    bool                     crackle_since_ritual = false;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
     uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
                                                           // deterministic mid-game shuffle (ShuffleAfterSearch).

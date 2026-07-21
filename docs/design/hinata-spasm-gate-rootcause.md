@@ -98,7 +98,30 @@ too strict *in both forms* — Reality Spasm as a mid-combo mana accelerant (to 
 turn, or to hold Crackle for a bigger X next turn) is, on balance, net-positive tempo. **0 games are ever
 lost** (it's pure turn-count), and the effect is small (~0.02–0.05 turn).
 
-**Recommendation:** keep `MTG_HINATA_SPASM_GATE` **opt-in, default off** (as committed). Use **strict (=1)**
+## Concrete refuting games — FOR USER REVIEW (numbers alone are not convincing)
+
+The user (rightly) wants to SEE the games where casting Reality Spasm without Crackle was good, not just
+the aggregate. `logs/audit_fix/gate/refute.py <gi...>` reproduces a gate-worse game OFF vs ON (strict),
+prints both full lines, and FLAGS every gate-OFF turn that casts a mana ritual (Reality Spasm / Irencrag
+Feat) WITHOUT same-turn Crackle — the exact play the gate forbids (`◄◄ RITUAL W/O CRACKLE`).
+
+Reproduced set (gate-worse at d3 s4004): gi46/48/51/93/113/120 (5→6), gi13/63 (6→7) →
+`logs/audit_fix/gate/refute_games.out`.
+
+**HONEST CONFOUND to state up-front when reviewing:** gate on/off are *different physical games* — the
+gate perturbs lookahead values, changing an early decision, and because Hinata Ponders that reshuffles
+the draws. So it is usually NOT "same board, gate removed one Reality Spasm." The evidence to weigh is
+(a) the flagged ritual-without-Crackle plays the gate-OFF line actually made, and whether each looks
+reckless or like a sensible mana accelerant / hold-Crackle-for-bigger-X; and (b) that gate-OFF assembles
+the combo ~1 turn sooner across these games. If the user judges the flagged plays reckless, the +0.047 is
+"correct pruning that costs a hair"; if sensible, the rule is slightly too strict. **NEXT SESSION: walk
+the user through `refute_games.out` game-by-game.** If a cleaner isolation is wanted, reproduce the same
+game with a forced opening hand (`--force-mulligan`) so both arms share draws and the ONLY difference is
+the gate's ritual decision.
+
+## Recommendation
+
+Keep `MTG_HINATA_SPASM_GATE` **opt-in, default off** (as committed). Use **strict (=1)**
 only as a fast approximate mode when search cost matters more than ~1 turn of tempo (e.g. bulk
 profile-gen). **Soft (=2)** is not worth adopting (no perf payoff). Do NOT adopt either as default. If
 the user wants the perf without the tempo cost, the real lever is elsewhere (a cheaper enumerator /
