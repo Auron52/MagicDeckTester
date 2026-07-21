@@ -425,6 +425,56 @@ static int SameTurnAffinityGenericCredit(const GameState& state, const std::vect
     return credit;
 }
 
+// Same-turn cost-reducer generic credit (Ruby Medallion: "Red spells you cast cost {1} less"). A
+// spell's per-Action cost (EffectiveCost) only credits reducers ALREADY in play; a reducer cast in
+// the SAME subset is deferred here (the ManaPruneBound bail already disables the scalar prune for
+// such subsets). When the plan casts a reducer, the executor casts it before the spells it discounts
+// (Apex-containing sets are OrderingOpaque -> plan-action order; a same-turn Medallion resolves
+// ahead of the later red casts, whose per-cast EffectiveCost then sees it in play). Returns the extra
+// generic discount to subtract from the subset's combined cost so an affordable
+// "Medallion + discounted rituals + Apex" line is ENUMERATED instead of dropped as too costly. Each
+// matching same-colour spell's generic drops by 1 per same-turn reducer (floored at its generic;
+// colour pips never reduce -- matching "cost {1} less"). The credit is OPTIMISTIC (it assumes the
+// reducer precedes every discounted cast); that is SOUND because it can only ADD plans -- a plan the
+// executor's realised order cannot actually pay rolls out to a non-win and the search discards it, so
+// over-crediting never picks an unpayable line. Returns 0 unless the subset holds a reducer, so every
+// non-reducer deck/seed is byte-identical. Only Ruby Medallion sets reduces_spell_color today, so the
+// whole path is Dragonstorm-scoped.
+static int SameTurnReducerGenericCredit(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    (void)state;
+    // Count same-turn reducers per colour in the subset (only "R" exists today, but generalise).
+    int red = 0, white = 0, blue = 0, black = 0, green = 0;
+    for (int j : sel)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (!d || d->params.reduces_spell_color.empty()) { continue; }
+        const std::string& rc = d->params.reduces_spell_color;
+        if      (rc == "R") { ++red; }   else if (rc == "W") { ++white; }
+        else if (rc == "U") { ++blue; }  else if (rc == "B") { ++black; }
+        else if (rc == "G") { ++green; }
+    }
+    if (red + white + blue + black + green == 0) { return 0; }
+    int credit = 0;
+    for (int j : sel)
+    {
+        const CardDefinition* dj = cands[j].def;
+        if (!dj || cands[j].cost.generic <= 0) { continue; }   // nothing to discount
+        const ManaCost& mc = dj->card.m_mana_cost;             // printed pips (colour set by the card)
+        int reducers = 0;
+        if (mc.red   > 0) { reducers += red; }
+        if (mc.white > 0) { reducers += white; }
+        if (mc.blue  > 0) { reducers += blue; }
+        if (mc.black > 0) { reducers += black; }
+        if (mc.green > 0) { reducers += green; }
+        // A reducer never discounts itself (its own printed cost carries no matching colour pip -- a
+        // Ruby Medallion is {2}, colourless), so no self-exclusion is needed here.
+        credit += std::min(reducers, cands[j].cost.generic);
+    }
+    return credit;
+}
+
 // Forward decl of the real backtracking mana payment (defined below); used by the filter
 // affordability fallback so enumeration can recognize filter/depletion/ramp-land lines.
 static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
@@ -1942,6 +1992,14 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // NOTE: the same-turn cost-reducer (Ruby Medallion) generic credit is applied ONLY in
+    // EnumeratePlans (the search's / viewer's plan list), NOT here in Solve's greedy consider(). The
+    // credit is an OPTIMISTIC affordability hint (it assumes the reducer resolves before the spells it
+    // discounts); that is sound only when a ROLLOUT validates the line -- every EnumeratePlans plan is
+    // rollout-scored by the search or user-selected in the viewer, so an unrealisable Medallion+Apex
+    // line rolls out to a non-win and is discarded. Solve's d0 greedy pick has NO rollout, so crediting
+    // it here let the greedy commit an Apex line the executor then stranded on (smoke gi523 8->loss).
+    // Leaving Solve uncredited keeps the d0 decision + every rollout leaf byte-identical.
     // Any splice-onto-Arcane base among the candidates? Gates the odometer's generate-time over-splice
     // skip (GroupChoiceOverSplices) so every non-splice deck pays nothing and stays byte-identical.
     bool any_splice = false;
@@ -2112,6 +2170,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
             }
         }
+        // (No same-turn reducer credit here -- see the note at the any_affinity flag above; the
+        // Medallion credit is EnumeratePlans-only so Solve's greedy/leaf stays byte-identical.)
         const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                        : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
@@ -5131,6 +5191,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // Same-turn cost reducer (Ruby Medallion) castable this turn? Gates the reducer generic credit
+    // (mirrors Solve). Inert unless a reducer is a candidate -> every non-reducer deck byte-identical.
+    bool any_reducer = false;
+    for (const Action& ra : cands) { if (ra.def && !ra.def->params.reduces_spell_color.empty()) { any_reducer = true; break; } }
     // Any splice-onto-Arcane base? Gates the over-splice odometer skip (mirrors Solve); non-splice decks
     // pay nothing and stay byte-identical.
     bool any_splice = false;
@@ -5368,6 +5432,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 combined.generic             = std::max(0, combined.generic - acred);
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
+            }
+        }
+        // Same-turn cost reducer (Ruby Medallion): subtract the extra generic discount it gives the
+        // later same-colour casts in this subset, so the Medallion-discounted go-off enumerates.
+        if (any_reducer)
+        {
+            int rcred = SameTurnReducerGenericCredit(state, cands, sel);
+            if (rcred > 0)
+            {
+                combined.generic             = std::max(0, combined.generic - rcred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - rcred);
             }
         }
         const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
