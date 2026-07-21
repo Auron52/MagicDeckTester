@@ -9163,6 +9163,26 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         if (pc.has_spectacle && spectacle_on) { return pc.spectacle_cost; }
         return pc.full_cost;
     };
+    // Add `amt` mana of colour `col` (one-letter W/U/B/R/G/C, empty = wild) to a working pool --
+    // mirrors AddChosenColorFloat but on a local ManaPool; credits a resolved ritual's float.
+    auto addColorToPool = [](ManaPool& p, const std::string& col, int amt) {
+        if (amt <= 0) { return; }
+        if      (col == "W") { p.white     += amt; }
+        else if (col == "U") { p.blue      += amt; }
+        else if (col == "B") { p.black     += amt; }
+        else if (col == "R") { p.red       += amt; }
+        else if (col == "G") { p.green     += amt; }
+        else if (col == "C") { p.colorless += amt; }
+        else                 { p.wild      += amt; }   // empty / unknown -> wild
+    };
+    // A cast is a mana PRODUCER if it's a rock OR a mana ritual (Seething Song / Pyretic Ritual /
+    // Rite of Flame / Irencrag Feat). Producers are cast FIRST (phase 0) and their output credited so
+    // a ritual-ramp line into an expensive spell (Dragonstorm) is not wrongly rejected as unpayable --
+    // the rituals ADD mana (viewer issue #8). IsManaRitual is the same param test the enumerator /
+    // executor use (ApplyRitualFloat on resolution), so the credit matches the real float.
+    auto is_producer = [](const PendingCast& pc) -> bool {
+        return pc.rock || (pc.def && IsManaRitual(*pc.def));
+    };
     std::vector<bool> done(pending.size(), false);
     size_t remaining = pending.size();
     bool progress = true;
@@ -9171,14 +9191,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         progress = false;
         for (int phase = 0; phase < 2 && !progress; ++phase)
         {
-            const bool want_rock = (phase == 0);
+            const bool want_producer = (phase == 0);
             for (size_t k = 0; k < pending.size(); ++k)
             {
-                if (done[k] || pending[k].rock != want_rock) { continue; }
+                if (done[k] || is_producer(pending[k]) != want_producer) { continue; }
                 const ManaCost cost = cur_cost(pending[k]);
                 if (!avail.CanPay(cost)) { continue; }
                 DeductPayable(avail, cost);
                 if (pending[k].rock) { AddSourceToPool(avail, s, *pending[k].def); }
+                else if (IsManaRitual(*pending[k].def))    // ritual floats mana ON resolution (issue #8)
+                {
+                    addColorToPool(avail, pending[k].def->params.ritual_float_color,
+                                   RitualFloatAmount(s, *pending[k].def, /*chosen_x=*/0));
+                }
                 if (deals_opponent_damage(*pending[k].def)) { spectacle_on = true; }  // enable later spectacle
                 done[k] = true; --remaining; progress = true; break;
             }
