@@ -1820,14 +1820,36 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                                vg7[pd] += std::max(0.0, kv.second.sumsq[pd] / c - mn * mn); ++ng7[pd]; } }
             for (int pd = 0; pd < 2; ++pd) { if (ng7[pd] > 0) { vg7[pd] /= ng7[pd]; } }
 
+            // LOW-PROBABILITY EARLY-CUTOFF (gen-only, play-neutral): a size-7 cell drawn with tiny
+            // hypergeometric probability barely moves the P-weighted Dopt thresholds AND rarely occurs
+            // in play, so refining it to the full cap is wasted budget. Once such a cell has reached
+            // cutoff_R samples (a decent unbiased estimate -- NOT the noisy floor), freeze it at its
+            // current keep/mull label even if it is still near-threshold. Draw-P is combinatorial/exact
+            // (deck-derived) so this classification never churns across R. OFF (cutoff_P<=0) => the emit
+            // is byte-identical to the confident-only set. See grind memory (probability-weighted freeze).
+            const double cutoff_P = []{ const char* s = std::getenv("MTG_KEEP_CUTOFF_P");
+                return (s && *s) ? std::atof(s) : 0.0; }();
+            const long long cutoff_R = []{ const char* s = std::getenv("MTG_KEEP_CUTOFF_R");
+                return (s && *s) ? std::atoll(s) : 0; }();
+            const bool cutoff_on = (cutoff_P > 0.0 && cutoff_R > 0);
+            const long long draw_denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
+
             using json = nlohmann::json;
             json frozen = json::array();
-            long long n_frozen = 0, n_mull = 0, n_keep = 0, n_size7 = 0;
+            long long n_frozen = 0, n_mull = 0, n_keep = 0, n_size7 = 0, n_cutoff = 0;
             for (const auto& kv : H7pool)
             {
                 ++n_size7;
                 const std::vector<int>& comp = kv.first;
                 const Acc& a = kv.second;
+                // Exact draw probability of this bucket composition (multivariate hypergeometric).
+                double drawP = 1.0;
+                if (cutoff_on)
+                {
+                    long long num = 1;
+                    for (int b = 0; b < K; ++b) { num *= Comb(count[b], comp[b]); }
+                    drawP = static_cast<double>(num) / static_cast<double>(draw_denom);
+                }
                 for (int pd = 0; pd < 2; ++pd)
                 {
                     const long long c = a.cnt[pd];
@@ -1841,16 +1863,19 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                     const double se  = std::sqrt(vs / c);
                     const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(V - thr) / (se * SQRT2))
                                                  : 0.0;            // se==0 => certain (V!=thr)
-                    if (flip > prune_eps) { continue; }            // near-tie -> keep it LIVE
+                    const bool confident = (flip <= prune_eps);
+                    const bool cutoff    = cutoff_on && !confident && drawP < cutoff_P && c >= cutoff_R;
+                    if (!confident && !cutoff) { continue; }        // near-tie & not low-P -> keep it LIVE
                     json je;
                     je["comp"]  = comp;
                     je["pd"]    = pd;
-                    je["keep"]  = keep ? 1 : 0;                    // 1 = confident KEEP, 0 = confident MULL
+                    je["keep"]  = keep ? 1 : 0;                    // 1 = KEEP, 0 = MULL (current label)
                     je["sum"]   = a.sum[pd];
                     je["sumsq"] = a.sumsq[pd];
                     je["count"] = c;
                     frozen.push_back(je);
                     ++n_frozen; if (keep) { ++n_keep; } else { ++n_mull; }
+                    if (cutoff) { ++n_cutoff; }
                 }
             }
             json root;
