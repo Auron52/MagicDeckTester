@@ -621,3 +621,65 @@ escalation and may shift. Sequence (per `.claude/skills/heuristic-optimization.m
 3. Flip the default to faithful + add an `MTG_LEGACY_MAGMA` escape hatch (byte-identical off), rebaseline
    Hinata GT via `--accept`, and disclose. Do NOT adopt until the attribution in (2) is measured, not
    assumed.
+
+## 2026-07-21 root-cause — faithful is NOT adoptable as-is (the +0.017 is MISSING IMPLEMENTATION, not fiction) — ⚠️ SUPERSEDED, WRONG; see the ADOPTED section at the bottom
+
+Re-measured on the merged (escalation) binary: faithful is **+0.017 slower** on all 5 Hinata train cases
+(d0 +0.013, d3 +0.010/+0.030, d5 +0.010/+0.020); escalation did not flip the sign. Only ~3 d5 games move
+per seed (+1 turn). Attribution step (2) done game-by-game and **the "fiction" framing was wrong** — it's
+two implementation gaps:
+
+1. **The Crackle-first mana-allocation prune is a PHANTOM.** `ScaledCastVariants` emits the full Magma
+   face-ladder (face 4 = `{3}{U}{R}` … face 1 = `{U}{R}`) and PUNTS the Magma-vs-Crackle allocation to
+   `SubsetMisallocatesScalingMana` "in TurnSolver" — **which does not exist.** The string appears in exactly
+   one place in the repo: the comment at `DecisionProviders.cpp:1889` (entered in `f2ee9d7`, never as code).
+   The earlier real "Crackle in hand → force face 1" reserve (`fb5238f`) was removed and "replaced" by this
+   non-existent prune. With nothing routing mana to Crackle first, the search over-pays for the expensive
+   Magma-4-face instead of minimal-Magma + big-Crackle.
+2. **Opponent creatures are undercounted in the discount.** `spread_capacity = 1 + own creatures` ignores
+   the opponent's creatures, which are legal Magma damage targets that feed the Hinata `{1}`/target discount
+   — contradicting the code's own comment ("every creature, own first, opponent's as a last resort").
+
+Game evidence (unbounded `--budget-ms 0` confirms): **gi4** (default T5, opp −3) — dropping Magma 4→1 face
+(3 less, same `{U}{R}` cost, 2 own creatures) leaves opp at exactly **0 = dead**, so the honest T5 exists at
+the same cost; faithful stays T6 even unbounded ⇒ **search/allocation bug**. **gi69** (opp −8) — faithful
+UNBOUNDED recovers T5 via `RS + Crackle`, no Magma ⇒ search-miss + opp-creature undercount. **gi47** (opp
+−1) — honest lethal needs Magma-3-face at `{2}` more mana ⇒ **possibly genuine fiction**.
+
+**⇒ Build first, then re-measure:** (a) implement the Crackle-first scaling-mana allocation the comment
+describes (plan-level co-optimization of Magma face + Crackle X — route mana to the efficient sink first,
+Magma takes the leftover face); (b) fix `spread_capacity` to count both sides' creatures. Both are Rule-0
+CORRECTNESS fixes (`mtg-rules.md`), not heuristic tunes. Only after they land is the true residual (gi47-type
+genuine fiction) measurable and the adopt/flip-default decision meaningful. If gi4 does not recover after the
+fixes, hand the winning-line log to the user to inspect.
+
+## 2026-07-21 VERDICT — ADOPTED default-ON (the +0.02 is honest cost-of-correction + search variance, NOT a bug)
+
+The section above is **wrong on every point** — it was written from stale compaction notes and a broken A/B.
+Corrected findings, verified against the current merged binary:
+
+- **Test-env bug that produced the false picture:** the gate is `getenv("MTG_MAGMA_FAITHFUL") != nullptr`, so
+  `MTG_MAGMA_FAITHFUL=0` (non-null string "0") **enables** faithful. The default arm must **unset** the var
+  (`env -u MTG_MAGMA_FAITHFUL`). With that fixed, the movers reappear (gi4 default T5 / faithful T6, etc.).
+- **Both "bugs" refuted.** (1) The opponent-creature "undercount" does not exist — `ScaledCastVariants`'
+  creature loop has no controller filter and already counts both sides (opponent spawns/lands enter the shared
+  `s.battlefield` with `controller_index=1`; unchanged since `4658d4f`). (2) `SubsetMisallocatesScalingMana`
+  is comment-only, but the allocation it describes **is implemented** — `FillScaledCastFace` (TurnSolver.cpp)
+  emits Magma at min face and fills the face from leftover **after** the searched Crackle X ("Crackle first,
+  Magma the remainder"). The missing prune was only a redundant perf-prune.
+- **The whole "+0.017" is ~9 games in 400 (d5, seeds 2002/3003/4004/5005), every one exactly +1 turn, ZERO
+  faster** (avg delta ≈ +0.022). A model that only *removes over-counted damage* can only push a Magma-kill a
+  turn later, never earlier — "all +1, none faster" is the fingerprint of correcting a fiction, not a bug.
+- **Every mover is one of two honest shapes** (per-game verified via `logs/audit_fix/magma2/{showline,divergence}.py`):
+  **genuine cost** (gi47 — the one same-board case; overkill only 1, honest kill needs Magma-3-face at +2 mana
+  that wasn't there), or **search variance** (gi4, gi69, gi46, gi55, gi68 — the honest cost reshapes *early*
+  lookahead decisions, e.g. gi69 loses its Gamble→Sol-Ring ramp, so faithful walks to a different, slightly
+  slower board; several don't even cast Magma). Confirmed **not** budget-recoverable (gi4 stays T6 at budget
+  2000 and unbounded, depth 5 — and depth is locked to 5 for value_play decks) and **not** the value model
+  (T6 with `MTG_VALUE_MODEL=0`). gi4's honest T5 line exists at the same mana but is not on faithful's board.
+
+**Decision (user-approved 2026-07-21): ADOPT default-ON.** Gate flipped in `ScaledCastVariants` /
+`DecisionProviders.h`: faithful is the default; `MTG_LEGACY_MAGMA` restores the over-count single line
+(byte-identical to the pre-adoption GT). `MTG_MAGMA_FAITHFUL` retired. Hinata GT rebaselined across
+smoke/regression/overnight via `regression.sh --accept`. The only GT movement is the ~2% Hinata Magma
+games above (all +1 turn); every other deck is byte-identical.

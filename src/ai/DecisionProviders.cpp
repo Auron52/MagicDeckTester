@@ -1876,25 +1876,30 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
 // which to scale). Dominated levels (a HIGHER face at the SAME cost) are dropped. The spread/tap damage
 // itself is goldfish-inert (a passive opponent, and our own creatures survive 1), so only the face
 // amount + the cost are load-bearing; resolution deals exactly `face` to the opponent (threaded on the
-// stack). Gated on MTG_MAGMA_FAITHFUL (default off) + Magma-by-DATA (divided damage that taps
-// permanents; Reality Spasm is has_x and never reaches this fixed-cost path) + Hinata online (no
-// Hinata -> no per-target discount -> nothing to scale). Returns {} otherwise -> the engine's normal
-// single-line Magma cast (the "2 + every permanent" over-count), byte-identical.
+// stack). ADOPTED default-ON (2026-07-21); MTG_LEGACY_MAGMA restores the over-count. Also gated on
+// Magma-by-DATA (divided damage that taps permanents; Reality Spasm is has_x and never reaches this
+// fixed-cost path) + Hinata online (no Hinata -> no per-target discount -> nothing to scale). Returns
+// {} otherwise -> the engine's normal single-line Magma cast (the "2 + every permanent" over-count),
+// byte-identical to the pre-adoption ground truth.
 std::vector<ScaledCastVariant>
 HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def) const
 {
-    // OPT-IN behind MTG_MAGMA_FAITHFUL (default OFF => the over-count single line, original GT). This hook
-    // owns only the MODEL (which face levels + what each costs). Extra-mana ALLOCATION across competing
-    // scaling damage sinks (a Crackle {X} and this face) is NOT decided here -- it is a GENERAL, data-driven
-    // plan-level rule in the engine (SubsetMisallocatesScalingMana in TurnSolver): the search enumerates
-    // every face here, and that prune routes extra mana to the most mana-efficient growable sink FIRST (a
-    // Crackle: 5 dmg / 3 mana), letting Magma take only the sub-chunk leftover -- so a plan never pays the
-    // 5-mana 4-face concentrate while a Crackle that could still grow is IN THE PLAN. (An earlier "Crackle
-    // in HAND -> force face 1" reserve was both mis-triggered -- hand, not plan -- and too blunt -- forced
-    // the minimum instead of the leftover; the full 3-way d5 diff showed it recovered combo turns but
-    // REGRESSED turns where no Crackle was actually cast. See docs/design/viewer-magma-opus-modeling.md.)
-    static const bool enabled = std::getenv("MTG_MAGMA_FAITHFUL") != nullptr;
-    if (!enabled) { return {}; }
+    // ADOPTED default-ON (2026-07-21). MTG_LEGACY_MAGMA => {} => the over-count single line (4-to-face
+    // at {U}{R} regardless -- an impossible cheap line), byte-identical to the pre-adoption GT. Root-cause
+    // of the +0.02 adoption cost: a handful of games (~2%) where the honest price makes a Magma-dependent
+    // kill land one turn later -- either genuine (the cheap-4-face fiction bought a turn that isn't there,
+    // e.g. small overkill) or search variance (the honest cost reshapes EARLY lookahead decisions so the
+    // game walks a different, slightly slower board). Never faster, never a bug. See
+    // docs/design/viewer-magma-opus-modeling.md (2026-07-21 verdict).
+    //
+    // This hook owns only the MODEL (which face levels + what each costs). Extra-mana ALLOCATION across
+    // competing scaling sinks (a Crackle {X} and this face) is handled by FillScaledCastFace (TurnSolver):
+    // the search searches Crackle X (XCandidates), and the leftover mana fills Magma's face up from its
+    // emitted minimum -- Crackle first, Magma the sub-chunk remainder. (There is no separate allocation
+    // prune; an earlier comment referencing "SubsetMisallocatesScalingMana in TurnSolver" was describing a
+    // function that was never written -- FillScaledCastFace already does the job.)
+    static const bool legacy = std::getenv("MTG_LEGACY_MAGMA") != nullptr;
+    if (legacy) { return {}; }
     if (!def.params.damage_divided || !def.params.discount_targets_permanents) { return {}; }
     if (!HinataInPlay(s)) { return {}; }
 

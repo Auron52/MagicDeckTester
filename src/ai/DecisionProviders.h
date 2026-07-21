@@ -217,8 +217,8 @@ public:
     // GameState, so lockstep across the search enumeration, the rollout, and the executor.
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
     // Magma Opus scaled-cast (face-damage) variants (Hook 28): the deck-specific cost model. More
-    // face damage = fewer distinct spread/tap targets = less Hinata discount = more mana. Behind
-    // MTG_MAGMA_FAITHFUL (default off -> {} -> byte-identical over-count path). See the .cpp.
+    // face damage = fewer distinct spread/tap targets = less Hinata discount = more mana. ADOPTED
+    // default-ON (2026-07-21); MTG_LEGACY_MAGMA -> {} -> byte-identical over-count path. See the .cpp.
     std::vector<ScaledCastVariant>
     ScaledCastVariants(const GameState&, const CardDefinition&) const override;
 };
