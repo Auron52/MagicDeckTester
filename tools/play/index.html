@@ -365,7 +365,6 @@
   <h1>MagicDeckTester — Play</h1>
   <label>Deck <select id="deck"></select></label>
   <label>Seed <input id="seed" type="number" value="1"/></label>
-  <label>Game # <input id="gi" type="number" value="0"/></label>
   <label>Max turns <input id="maxturns" type="number" value="8"/></label>
   <button id="newgame" class="primary">New game</button>
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
@@ -407,7 +406,7 @@ let S = { choices:[], history:[], decision:null, prev:null, over:false, result:n
 
 function cfg(extra) {
   return Object.assign({
-    deck:$('deck').value, seed:+$('seed').value, gameIndex:+$('gi').value,
+    deck:$('deck').value, seed:+$('seed').value, gameIndex:0,
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
   }, extra || {});
 }
@@ -1934,10 +1933,10 @@ async function newGame() {
   S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
-// Bump Seed + Game# and start the next game — for playing several in a row.
+// Bump Seed and start the next game — for playing several in a row. (Game index is always 0;
+// each distinct seed IS a distinct game, so seed alone selects the game — no separate Game # field.)
 async function nextGame() {
   $('seed').value = (+$('seed').value || 0) + 1;
-  $('gi').value   = (+$('gi').value   || 0) + 1;
   await newGame();
 }
 // Pop the last-committed decision's state: drop its choices, roll history + gy/hand diff state back
@@ -1989,10 +1988,10 @@ async function checkReference() {
   const el=$('refnote'); if(!el) return;
   const deck=$('deck').value;
   if(!deck){ el.style.display='none'; return; }
-  const seed=+$('seed').value||0, gi=+$('gi').value||0;
+  const seed=+$('seed').value||0, gi=0;
   try {
     const j=await (await fetch(`/api/reference-exists?deck=${encodeURIComponent(deck)}&seed=${seed}&gi=${gi}`)).json();
-    if (j && j.exists){ el.style.display=''; el.title=j.path||''; el.textContent=`✓ reference saved for seed ${seed} · game ${gi} — skip, or play again`; }
+    if (j && j.exists){ el.style.display=''; el.title=j.path||''; el.textContent=`✓ reference saved for seed ${seed} — skip, or play again`; }
     else if (j && j.suboptimal){ el.style.display=''; el.title=j.suboptimalPath||''; el.textContent=`⚠ suboptimal target saved for seed ${seed} · game ${gi} — try to win it faster`; }
     else { el.style.display='none'; el.textContent=''; el.title=''; }
   } catch(e){ el.style.display='none'; }
@@ -2020,7 +2019,6 @@ $('saveref').onclick=()=>saveRef(false); $('saveref-sub').onclick=()=>saveRef(tr
 // Refresh the reference badge whenever the game selector changes.
 $('deck').addEventListener('change', checkReference);
 $('seed').addEventListener('input', checkReference);
-$('gi').addEventListener('input', checkReference);
 
 // Scryfall hover popover
 const pop=document.createElement('div'); pop.id='pop'; pop.innerHTML='<img alt=""/>'; document.body.appendChild(pop);

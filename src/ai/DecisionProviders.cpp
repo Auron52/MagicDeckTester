@@ -1823,7 +1823,20 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
         if (add > 0)         { sel += add; }
     };
 
-    if (has_haste && has_lathliss)          // Case A -- Ideal
+    if (max_puts <= 2)                      // SMALL-N (1-2 Dragons) -- SELECTION priority (what you GET)
+    {
+        // Distinct from the play ORDER below (Lathliss/Scourge stay front there because they are
+        // order-dependent). With only 1-2 Dragons lethal is usually out of reach and the Scourge ping
+        // scales with Dragon count, so it is DEPRIORITIZED here; a haste-Dragon (same-turn attack) and
+        // the token engines are worth more. Priority: haste -> Lathliss -> Utvara -> Scourge -> 2nd
+        // haste (user rule). The defensive fill below still tops up from any leftover inventory.
+        if (nK > 0) { pick(sK, nK, 1); } else { pick(sG, nG, 1); }  // haste 1 (Karrthus preferred)
+        pick(sL, nL, 1);                    // Lathliss
+        pick(sU, nU, 1);                    // Utvara
+        pick(sS, nS, 1);                    // Scourge (low at small N -- weak ping)
+        if (nK > 0) { pick(sG, nG, 1); } else { pick(sK, nK, 1); }  // haste 2 (the other haste-Dragon)
+    }
+    else if (has_haste && has_lathliss)     // Case A -- Ideal (>=3 Dragons: ping scales -> max Scourges)
     {
         if (nK > 0) { pick(sK, nK, 1); } else { pick(sG, nG, 1); }  // reserve the preferred haste-Dragon
         pick(sL, nL, 1);                    // Lathliss (token engine)

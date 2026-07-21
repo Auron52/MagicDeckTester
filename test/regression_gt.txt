@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 89dfa69  date 2026-07-21
+# Regression ground truth -- commit a5b0983  date 2026-07-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -22,9 +22,9 @@ antilife_smoke_d5_s1001=4.6333/4f407bc43b7480e4
 hinata_smoke_d0_s1001=7.4760/c907a51d2f2abf58
 hinata_smoke_d3_s1001=6.0133/81febc367402161f
 hinata_smoke_d5_s1001=6.0400/8353aa99273e9037
-dragonstorm_smoke_d0_s1001=8.2930/9a40cfafcc4e7529
-dragonstorm_smoke_d3_s1001=6.2667/ef283f10375eabce
-dragonstorm_smoke_d5_s1001=8.2533/b961eaf5ddd0348a
+dragonstorm_smoke_d0_s1001=8.2930/43f1df9b50972c71
+dragonstorm_smoke_d3_s1001=6.2667/90c7bdb38fa0c508
+dragonstorm_smoke_d5_s1001=8.2533/b186ec2a2e875e46
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6830/1c52c53844821180
@@ -57,11 +57,11 @@ hinata_regression_d3_s2002=6.2100/9e5760f6d2c18d74
 hinata_regression_d3_s3003=6.1800/b9c8430b14bf8259
 hinata_regression_d5_s2002=6.1700/dced9bb9f904974b
 hinata_regression_d5_s3003=6.0700/2540e41c03735ff1
-dragonstorm_regression_d0_s2002=8.2640/5507d9e9867bbc83
-dragonstorm_regression_d3_s2002=6.1067/b778bc9d3843412c
-dragonstorm_regression_d3_s3003=6.2233/4d6c2ecf81ff2120
-dragonstorm_regression_d5_s2002=8.3400/018e4104006b050c
-dragonstorm_regression_d5_s3003=8.3480/ece151525c82afe0
+dragonstorm_regression_d0_s2002=8.2640/9735182ccbf0e4af
+dragonstorm_regression_d3_s2002=6.1067/3e328df8d538444f
+dragonstorm_regression_d3_s3003=6.2200/e18dc2ed5f854037
+dragonstorm_regression_d5_s2002=8.3400/d4bd87f2d24d9a93
+dragonstorm_regression_d5_s3003=8.3480/494d4674292181f3
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6445/fb2c4c8daf622fb4
