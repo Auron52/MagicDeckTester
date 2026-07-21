@@ -398,6 +398,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // mismatch (a changed decklist changes bucket/deck_fp -> a modified-list carry is a separate feature).
     std::vector<std::array<bool, 2>> frozen7(TB(HAND).comps.size(),   { false, false });  // skip cells
     std::vector<std::array<bool, 2>> carry_lowfloor7(TB(HAND).comps.size(), { false, false });  // verify cells
+    // Phase 2 sub-table freeze: a size-(7-m) sub-hand whose value is confidently ABOVE its keep-bar
+    // Dopt[m+1] is never a KEEP's bottoming argmin (a hand bottoming into it has keep_val > Dopt -> it
+    // mulligans), so skipping its rollouts is decision-preserving. frozen_sub[H][idx][pd], H=1..HAND-1.
+    std::vector<std::vector<std::array<bool, 2>>> frozen_sub(HAND);
+    for (int H = 1; H < HAND; ++H) { frozen_sub[H].assign(TB(H).comps.size(), { false, false }); }
     long long carry_floor = []{ const char* s = std::getenv("MTG_KEEP_CARRY_FLOOR");
         return (s && *s) ? std::max<long long>(1, std::strtoll(s, nullptr, 10)) : 2LL; }();
     const bool carry_skip = []{ const char* s = std::getenv("MTG_KEEP_CARRY_MODE");
@@ -441,26 +446,43 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 {
                     SizeTable& t7 = TB(HAND);
                     long long n_carried = 0;
+                    long long n_carried_sub = 0;
                     for (const auto& e : pj["frozen"])
                     {
                         const std::vector<int> comp = e["comp"].get<std::vector<int>>();
                         const int pd = e.value("pd", -1);
                         if (pd != 0 && pd != 1) { continue; }
-                        auto it = t7.index.find(comp);
-                        if (it == t7.index.end()) { continue; }
-                        const int idx = it->second;
-                        if (frozen7[idx][pd] || carry_lowfloor7[idx][pd]) { continue; }
                         const long long c = e.value("count", 0LL);
                         if (c <= 0) { continue; }
-                        if (carry_skip)
+                        const int H = e.value("size", HAND);   // sub-table entries carry "size"<7; size-7 default
+                        if (H == HAND)
                         {
-                            frozen7[idx][pd] = true;
-                            t7.V[idx][pd]    = e["sum"].get<double>() / static_cast<double>(c);  // preload V only
+                            auto it = t7.index.find(comp);
+                            if (it == t7.index.end()) { continue; }
+                            const int idx = it->second;
+                            if (frozen7[idx][pd] || carry_lowfloor7[idx][pd]) { continue; }
+                            if (carry_skip)
+                            {
+                                frozen7[idx][pd] = true;
+                                t7.V[idx][pd]    = e["sum"].get<double>() / static_cast<double>(c);  // preload V only
+                            }
+                            else { carry_lowfloor7[idx][pd] = true; }   // verify: reduced floor, refinable
+                            ++n_carried;
                         }
-                        else { carry_lowfloor7[idx][pd] = true; }   // verify: reduced floor, refinable
-                        ++n_carried;
+                        else if (H >= 1 && H < HAND && carry_skip)   // sub-table freeze (skip mode only)
+                        {
+                            SizeTable& ts = TB(H);
+                            auto it = ts.index.find(comp);
+                            if (it == ts.index.end()) { continue; }
+                            const int idx = it->second;
+                            if (frozen_sub[H][idx][pd]) { continue; }
+                            frozen_sub[H][idx][pd] = true;
+                            ts.V[idx][pd] = e["sum"].get<double>() / static_cast<double>(c);  // preload high V
+                            ++n_carried_sub;
+                        }
                     }
-                    std::cerr << "[keepgen] PRUNE-SET: carried " << n_carried << " confident size-7 cell-sides ("
+                    std::cerr << "[keepgen] PRUNE-SET: carried " << n_carried << " size-7 + " << n_carried_sub
+                              << " sub-table cell-sides ("
                               << (carry_skip ? "skip mode -- 0 rollouts, asserted decision (keep/mull)"
                                              : ("verify mode -- reduced floor " + std::to_string(carry_floor) + ", refinable"))
                               << ") from " << ps << " (source_R=" << m.value("source_R", 0)
@@ -1089,6 +1111,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // skip mode: a carried (frozen) size-7 cell gets 0 rollouts -- V preloaded, no samples.
                 // Live/other cells keep their w, so seeds are unperturbed.
                 if (Hw == HAND && frozen7[iw][pd]) { continue; }
+                if (Hw >= 1 && Hw < HAND && frozen_sub[Hw][iw][pd]) { continue; }   // Phase 2 sub-table skip
                 // Whole-pool reuse (EXTEND-DEPTH / identical play_digest): a cell taken verbatim from the
                 // prior needs NO fresh floor sample -- change-detection marks it `resolved` and
                 // apply_prior_override sets its V from the prior R=40 value regardless. Skipping it spends
@@ -1878,6 +1901,60 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                     if (cutoff) { ++n_cutoff; }
                 }
             }
+            // ---- Phase 2 SUB-TABLE freeze: a size-(7-m) sub-hand confidently ABOVE its keep-bar
+            // Dopt[m+1] can never be a KEEP's bottoming argmin (a hand bottoming into it has keep_val >
+            // Dopt -> it mulligans), so skipping its rollouts is decision-preserving. Gated by
+            // MTG_KEEP_SUB_CUTOFF_R (min samples; 0 => OFF => byte-identical). Reuses the size-7 flip gate
+            // per-size (shrink target = that size's pooled per-sample variance) so the confidence margin
+            // is the stability guard against a noise-promoted argmin. sizes 6..2 (m=1..5); size-1 (m=6) is
+            // forced-keep (no bar) -> skipped.
+            const long long sub_cut_R = []{ const char* s = std::getenv("MTG_KEEP_SUB_CUTOFF_R");
+                return (s && *s) ? std::atoll(s) : 0; }();
+            long long n_subcut = 0;
+            if (sub_cut_R > 0)
+            {
+                for (int H = HAND - 1; H >= 2; --H)
+                {
+                    auto pit = pooled.find(H);
+                    if (pit == pooled.end()) { continue; }
+                    const int m = HAND - H;                         // this sub-size is used at mull depth m
+                    std::array<double, 2> vgs = { 0.0, 0.0 }; std::array<long long, 2> ngs = { 0, 0 };
+                    for (const auto& kv : pit->second)
+                        for (int pd = 0; pd < 2; ++pd)
+                        { const long long c = kv.second.cnt[pd];
+                          if (c > 1) { const double mn = kv.second.sum[pd] / c;
+                                       vgs[pd] += std::max(0.0, kv.second.sumsq[pd] / c - mn * mn); ++ngs[pd]; } }
+                    for (int pd = 0; pd < 2; ++pd) { if (ngs[pd] > 0) { vgs[pd] /= ngs[pd]; } }
+                    for (const auto& kv : pit->second)
+                    {
+                        const Acc& a = kv.second;
+                        for (int pd = 0; pd < 2; ++pd)
+                        {
+                            const long long c = a.cnt[pd];
+                            if (c < 2 || c < sub_cut_R) { continue; }
+                            const double V   = a.sum[pd] / c;
+                            const double thr = Dopt[pd][m + 1];      // keep-bar for a size-(7-m) sub-hand
+                            if (V <= thr) { continue; }              // only freeze cells ABOVE the bar
+                            const double vc = std::max(0.0, a.sumsq[pd] / c - V * V);
+                            const double vs = (c * vc + se_prior * vgs[pd]) / (c + se_prior);
+                            const double se = std::sqrt(vs / c);
+                            const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(V - thr) / (se * SQRT2))
+                                                         : 0.0;
+                            if (flip > prune_eps) { continue; }      // too close to the bar -> keep it LIVE
+                            json je;
+                            je["comp"]  = kv.first;
+                            je["pd"]    = pd;
+                            je["size"]  = H;
+                            je["keep"]  = 0;                         // sub-cells carry no keep decision
+                            je["sum"]   = a.sum[pd];
+                            je["sumsq"] = a.sumsq[pd];
+                            je["count"] = c;
+                            frozen.push_back(je);
+                            ++n_subcut; ++n_frozen;
+                        }
+                    }
+                }
+            }
             json root;
             root["meta"] = {
                 { "kind", include_keep ? "confident_size7" : "confident_mull_size7" },
@@ -1885,16 +1962,18 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                 { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp }, { "equiv_seed", equiv_seed },
                 { "K", K }, { "max_mull", max_mull }, { "source_R", effective_R },
                 { "prune_eps", prune_eps }, { "frozen_cell_sides", n_frozen },
-                { "frozen_mull", n_mull }, { "frozen_keep", n_keep }, { "size7_cells", n_size7 }
+                { "frozen_mull", n_mull }, { "frozen_keep", n_keep }, { "size7_cells", n_size7 },
+                { "frozen_subcut", n_subcut }
             };
             root["frozen"] = frozen;
             std::ofstream f(pe);
             if (f)
             {
                 f << root.dump();
-                os << "PRUNE-EMIT: " << n_frozen << " confident size-7 cell-sides (" << n_mull << " mull, "
-                   << n_keep << " keep; of " << (2 * n_size7) << ") at prune_eps=" << prune_eps
-                   << ", source_R=" << effective_R << " -> " << pe << "\n";
+                os << "PRUNE-EMIT: " << n_frozen << " frozen cell-sides (" << n_mull << " mull, "
+                   << n_keep << " keep size-7; " << n_subcut << " sub-table; of " << (2 * n_size7)
+                   << " size-7) at prune_eps=" << prune_eps << ", source_R=" << effective_R
+                   << " -> " << pe << "\n";
             }
             else { os << "PRUNE-EMIT: WARNING failed to write " << pe << "\n"; }
         }
