@@ -20,7 +20,7 @@ Usage:
     # e.g. python3 test/explain_game.py regression antilife_regression_d3_s2002 206
 
 It is also imported by audit_changed_games.py, which calls diff_game(...) inline for every
-searched-depth win->loss / turn-later game so the diff is in the audit output by default.
+searched-depth SLOWER game so the diff is in the audit output by default.
 """
 import sys, os, re, json, glob, tempfile, shutil, subprocess
 
@@ -200,23 +200,22 @@ def diff_game(mode, key, gi, old_bin=None, new_bin=None, budget_ms=None):
             out.append(f"      T{tn}   old: {os_}")
             out.append(f"      T{tn}   new: {ns_}")
 
-    # Verdict hint. For a SLOWER win, the budget test (classify_turn_later) is authoritative --
-    # always point to it -- with the divergence above as context, not a substitute.
-    physically_diff = kept_diverge or draw_div is not None
-    ow, nw = old["win"] or 0, new["win"] or 0
-    if new["win"] and old["win"] and nw > ow:
+    # Verdict hint under the loss-penalized metric (a game unwon by the horizon scores max_turns+1).
+    # A game going from a win to unwon is NOT a special category -- it is just the MAXIMAL slowdown, so
+    # it folds into SLOWER; a win from a prior loss folds into FASTER. For any SLOWER game the budget
+    # test (classify_turn_later) is authoritative -- always point to it, with the divergence as context.
+    old_win, new_win = bool(old["win"]), bool(new["win"])
+    slower = (old_win and not new_win) or (old_win and new_win and (new["win"] > old["win"]))
+    faster = (new_win and not old_win) or (old_win and new_win and (new["win"] < old["win"]))
+    if slower:
         out.append(f"      >> SLOWER -> classify: bash test/classify_turn_later.sh {mode}")
         out.append("         recovers at higher budget = churn (benign search truncation);")
         out.append("         persists + divergence above = variance (different physical game);")
         out.append("         persists + identical draws = a REAL slowdown (inspect the first differing turn).")
-    elif new["win"] and old["win"] and nw < ow:
+        if not new_win:
+            out.append("         (now unwon by the horizon = the maximal slowdown under the loss=max_turns+1 metric.)")
+    elif faster:
         out.append("      >> FASTER -> improvement.")
-    elif old["win"] and not new["win"]:
-        tail = " -- but the divergence above shows a different physical game; confirm it is variance." \
-            if physically_diff else " -- kept hand + draws identical, so a genuine capability loss."
-        out.append(f"      >> WIN -> LOSS: hard-gate regression{tail}")
-    elif new["win"] and not old["win"]:
-        out.append("      >> LOSS -> WIN -> improvement.")
     return "\n".join(out)
 
 

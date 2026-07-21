@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Auto-classify every SEARCHED-depth SLOWER game the audit flagged for <mode>, by re-running
 # that ONE game at higher search budget (the metric is the loss-penalized avg, so a slower game
-# is any worse score -- a bigger win turn OR a win->loss, which is just the maximal slowdown):
+# is any worse score -- a bigger win turn OR a game becoming unwon, which is just the maximal slowdown):
 #
 #   * recovers to the OLD win turn at higher budget -> "churn"    (search-truncation at the case's
 #                                                                   budget; the fast line is still
@@ -49,7 +49,7 @@ done
 
 # Pull the SEARCHED-depth SLOWER entries from the audit output. Lines look like:
 #   "    <key> gi<N>: <old>-><new>"   where <old> is the (numeric) prior win turn and <new> is
-#   either a slower win turn or "loss" (win->loss = the maximal slowdown under the loss=9 metric).
+#   either a slower win turn or "loss" (a game becoming unwon = the maximal slowdown under loss=9).
 # Reset the grab flag at the next section header so the d0 block is never mis-read.
 audit=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1)
 list=$(printf '%s\n' "$audit" | awk '

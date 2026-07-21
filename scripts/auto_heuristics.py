@@ -14,14 +14,14 @@ the loop prints a reminder to REBASELINE ground truth (the new default changes p
 
 Why one run per variant is enough: the committed gt_logs / test/results/<mode>.env ARE the
 baseline, so `test/regression.sh <mode>` prints `exp=<baseline_avg>[/<baseline_digest>]` vs
-`got=<variant_avg>[/<variant_digest>]` per case AND a `[searched]/[d0] win->loss=...` audit of
-the run against gt_logs. Setting the experiment's env var makes that a variant-vs-baseline A/B.
+`got=<variant_avg>[/<variant_digest>]` per case AND a `[searched]/[d0] slower=.../faster=...` audit
+of the run against gt_logs. Setting the experiment's env var makes that a variant-vs-baseline A/B.
 
 Metric -- THE ONLY ONE: average win turn, with a loss counted as max_turns+1 (= 9 for the default
 max_turns=8); lower is better. This is exactly the `avg` in the harness fingerprint (ComputeAvgTurns,
-unwon=9). win%/win-count and "win->loss" game flips are NOISE and are deliberately NOT used: a game
-that flips win->loss already shows up as its turn going from <=8 to 9, i.e. a worse average -- the
-avg-9 metric subsumes it. Judge on the average alone.
+unwon=9). win%/win-count are NOISE and are deliberately NOT used: a game left unwon by the horizon
+already shows up as its turn going from <=8 to 9, i.e. a worse average -- the avg-9 metric subsumes
+it. Judge on the average alone.
 
 Strict bar to ADOPT a variant (purely avg-9):
   * total avg improves beyond the noise floor (sum of per-case avg deltas <= -NOISE_EPS),
@@ -85,7 +85,7 @@ CASE_RE = re.compile(
     r"^\s*(PASS|FAIL|NEW)\s+(\S+)\s+exp=([0-9.]+|\S*?)(?:/(\w+))?\s+got=([0-9.]+|\(no output\)|\S*?)(?:/(\w+))?\s*$"
 )
 AUDIT_RE = re.compile(
-    r"\[(searched|d0)\s*\]\s*win->loss=(\d+)\s+loss->win=(\d+)\s+later=(\d+)\s+earlier=(\d+)\s+play-changed=(\d+)"
+    r"\[(searched|d0)\s*\]\s*slower=(\d+)\s+faster=(\d+)\s+play-changed=(\d+)"
 )
 
 
@@ -113,9 +113,8 @@ def parse_harness(text):
             continue
         a = AUDIT_RE.search(ln)
         if a:
-            grp, wl, lw, later, earlier, pc = a.groups()
-            audit[grp] = {"win_loss": int(wl), "loss_win": int(lw), "later": int(later),
-                          "earlier": int(earlier), "play_changed": int(pc)}
+            grp, slower, faster, pc = a.groups()
+            audit[grp] = {"slower": int(slower), "faster": int(faster), "play_changed": int(pc)}
     return {"cases": cases, "audit": audit}
 
 

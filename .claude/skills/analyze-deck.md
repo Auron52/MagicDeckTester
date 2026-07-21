@@ -483,9 +483,10 @@ Neither is shipped on by default — they are the reference the heuristic is mea
 6. **Validate definitively (with/without A/B).** Re-run step 1 comparing the heuristic ON vs
    OFF per game. Accept only if net-positive with **every** regression explained: d0 (no
    search) greedy churn is acceptable (per user); a search-budget line-shift or a
-   left-to-search staging game is expected; an unexplained win→loss or a true `[fd-diverge]`
-   is not. The aggregate fingerprint can hide per-game churn (faster+slower cancel in the
-   avg) — always diff per game against `test/gt_logs/*.wins`, never trust the win/avg pair.
+   left-to-search staging game is expected; an unexplained SLOWER game (including a win
+   going to unwon) or a true `[fd-diverge]` is not. The aggregate fingerprint can hide
+   per-game churn (faster+slower cancel in the avg) — always diff per game against
+   `test/gt_logs/*.wins`, never trust the aggregate avg alone.
 
 This generalizes beyond ordering: the same oracle-diff → classify → derive → encode →
 with/without-validate loop applies to dig-source selection, targeting, and tutor/fetch

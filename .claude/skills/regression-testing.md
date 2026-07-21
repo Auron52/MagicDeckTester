@@ -7,13 +7,14 @@ rebaselining ground truth.
 
 > **The one rule that keeps getting skipped:** never `--accept` (or commit new
 > ground truth) on the basis of an aggregate fingerprint or a plausible
-> *explanation* of why it moved. This is now **enforced by the harness**, not just
-> policy: every ordinary `regression.sh <mode>` run auto-prints the per-game
-> audit at the end, and `--accept` **re-runs the audit and refuses to promote**
-> while any searched-depth win→loss is unacknowledged (see **"MANDATORY before
-> `--accept`"** below). Review ALL searched-depth (d>0) changes; a couple of d0
-> examples suffice. An explanation is not a measurement — and for turn-later games
-> the measurement is generated for you by `test/classify_turn_later.sh <mode>`.
+> *explanation* of why it moved. Every ordinary `regression.sh <mode>` run
+> auto-prints the per-game audit at the end so the evidence is in front of you (see
+> **"Before `--accept`: analyze every changed game"** below). The audit **reports,
+> it does not block** — the accept decision is a **human judgement on the NET
+> loss-penalized delta** (avg win turn with an unwon game scored `max_turns+1`).
+> Review ALL searched-depth (d>0) SLOWER games; a couple of d0 examples suffice. An
+> explanation is not a measurement — and for slower games the measurement is
+> generated for you by `test/classify_turn_later.sh <mode>`.
 
 The harness lives in `test/`:
 
@@ -21,11 +22,11 @@ The harness lives in `test/`:
 |------|------|-----------|
 | `regression.sh` | runs a mode, compares to ground truth, and (with `--accept`) promotes a run into ground truth. `--deck=<name>` restricts the run to one deck's cases (safe with `--accept` — updates only that deck's GT). | yes |
 | `regression_deck.sh` | runs ONE deck across modes (`regression_deck.sh <deck> [smoke regression overnight]`) — the per-deck counterpart; each mode still prints its audit and is accepted separately | yes |
-| `audit_changed_games.py` | **the mandatory pre-`--accept` gate**: per-game win→loss / turn-later breakdown split by depth; exits non-zero on a searched-depth win→loss. Auto-run by `regression.sh` on every run and again as a hard gate on `--accept`. | yes |
-| `classify_turn_later.sh` | auto-classifies each searched-depth turn-later game (`churn` = recovers at 4x/16x budget vs `PERSISTS` = variance/real), re-running that one game — the generated form of the mandatory turn-later classification | yes |
-| `explain_game.py` | old-vs-new **per-turn diff** of ONE changed game (kept-hand/draw divergence + aligned lines + classification hint). Called inline by `audit_changed_games.py` for every searched win→loss / turn-later game; also runnable standalone. Baseline = `logs/snapshots/<mode>-baseline` (saved by `--accept`) or `--old-bin`. | yes |
+| `audit_changed_games.py` | **the pre-`--accept` report you must read**: per-game SLOWER / faster / play-changed breakdown split by depth. Metric = loss-penalized avg, so a game going from a win to unwon is not special — it is just the maximal slowdown, folded into SLOWER. REPORT-ONLY (always exits 0); auto-run by `regression.sh` on every run. The accept decision is yours, on the net delta. | yes |
+| `classify_turn_later.sh` | auto-classifies each searched-depth SLOWER game (`churn` = recovers at 4x/16x budget vs `PERSISTS` = variance/real), re-running that one game — the generated form of the slowdown classification | yes |
+| `explain_game.py` | old-vs-new **per-turn diff** of ONE changed game (kept-hand/draw divergence + aligned lines + classification hint). Called inline by `audit_changed_games.py` for every searched SLOWER game; also runnable standalone. Baseline = `logs/snapshots/<mode>-baseline` (saved by `--accept`) or `--old-bin`. | yes |
 | `regression_cases.sh` | the test matrix (deck × depth × seed × games × budget) + deck metadata — **single source of truth** | yes |
-| `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<won>/<avg_win_turn>/<play_digest>`. The **play digest** (a per-case fold of per-game decision-stream hashes) makes a play change that keeps the same win counts/turns still FAIL — the coarse won/avg cannot see it. Legacy 2-field entries (no digest) match on won/avg alone until re-accepted. | yes |
+| `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<avg_win_turn>[/<play_digest>]` (avg = mean turn-to-win, an unwon game scored `max_turns+1`, so a game going from a win to unwon shows up directly as a worse avg). The **play digest** (a per-case fold of per-game decision-stream hashes) makes a play change that keeps the same avg still FAIL — the coarse avg cannot see it. Legacy entries without a digest match on avg alone until re-accepted. | yes |
 | `gt_logs/<key>.wins` | ground truth, **per-game**: one `<game_index> <win_turn> <play_digest>` line per game (`-1` = loss; digest = 16 hex chars). Committed old-side baseline for the per-game audit — `--accept` promotes it with `regression_gt.txt`. The digest column is optional to every reader, so pre-digest logs still parse. | yes |
 | `TIMINGS.md` | measured per-case wall times; sizing reference for the matrix | yes |
 | `results/<mode>.env` | last run's fingerprints (what `--accept` promotes) | no (gitignored) |
@@ -62,17 +63,18 @@ bash test/regression.sh --overnight  # deep sweep (run later, not inline)
 
 ## Reading results
 
-Each line is `STATUS  <key>  exp=<won>/<awt>  got=<won>/<awt>  <wall>s`:
+Each line is `STATUS  <key>  exp=<avg>[/<digest>]  got=<avg>[/<digest>]  <wall>s`
+(avg = mean turn-to-win, an unwon game scored `max_turns+1`):
 
 - **PASS** — fingerprint matches ground truth.
 - **FAIL** — mismatch (a real behaviour change) *or* no output (crash/hang). Open
-  `test/logs/<mode>/<key>.log` and `.err` to see what moved: win count, avg win
-  turn, or the per-game loss list.
+  `test/logs/<mode>/<key>.log` and `.err` to see what moved: the avg win turn (with
+  unwon games folded in at `max_turns+1`) or the per-game outcomes.
 - **NEW** — no ground-truth key yet (e.g. first overnight run before it is
   accepted). Does **not** fail the suite.
 
 **Per-game audit needs NO re-run** — the old-side baseline is already committed.
-To see *which* games changed (the win↔loss flips the aggregate hides), diff the
+To see *which* games changed (the per-game moves the aggregate hides), diff the
 committed per-game GT against this run directly:
 
 ```bash
@@ -80,8 +82,9 @@ diff <(sort -n test/gt_logs/<key>.wins) \
      <(sort -n test/logs/<mode>/wins/<key>.wins)   # < = committed GT, > = this run
 ```
 
-That reveals the exact flips a fingerprint conceals — e.g. a net `−11` can be **26
-win→loss vs 15 loss→win**, which a single number never shows.
+That reveals the exact per-game moves a fingerprint conceals — e.g. a net `−0.2`
+avg can be **26 games slower vs 15 faster** (some all the way to/from unwon), which
+a single number never shows.
 
 **Re-run policy (minimize it):**
 - **Never re-run the whole case or suite to learn "what changed vs GT"** — the
@@ -102,10 +105,12 @@ win→loss vs 15 loss→win**, which a single number never shows.
   baseline (the `MTG_DUMP_WINS` A/B below, rules 5–6) — a different question from
   "what did this run change vs its GT."
 
-The fingerprint is **`games_won/avg_win_turn`**. The won-count catches win↔loss
-flips that barely move the average (important for Treasure Hunt: ~95% at depth 0,
-100% under lookahead). Always glance at the `wall` column — a sudden slowdown is
-the cheapest early warning of a perf regression even when the metric is unchanged.
+The fingerprint is the **loss-penalized `avg_win_turn`** (an unwon game scored
+`max_turns+1`), so a game going from a win to unwon moves the avg directly — no
+separate win-count is needed (this matters for Treasure Hunt, which does not always
+win: ~95% at depth 0, 100% under lookahead). Always glance at the `wall` column — a
+sudden slowdown is the cheapest early warning of a perf regression even when the
+metric is unchanged.
 
 Exit code: 0 = all pass (NEW allowed), 1 = any FAIL.
 
@@ -133,33 +138,38 @@ Typical rebaseline cycle after a deliberate change:
 `run → inspect FAILs/deltas → analyze EVERY changed game per-game → --accept → (optional) re-run to confirm all PASS`.
 The per-game analysis comes **before** `--accept`, always.
 
-### MANDATORY before `--accept`: analyze every changed game (a hard gate)
+### Before `--accept`: analyze every changed game (the discipline)
 
-This is the step that most often gets skipped — so **the harness now enforces it
-for you.** You may not `--accept` (or commit new ground truth) until you have
+This is the step that most often gets skipped — so **the harness surfaces it for
+you** on every run. `--accept` does not block (the audit is report-only), so the
+discipline is on you: do not `--accept` (or commit new ground truth) until you have
 diffed the individual games that changed and explained each one. A plausible-sounding
 *narrative* for an aggregate shift is NOT a substitute for measuring it per game.
+The accept decision is a human judgement on the **net loss-penalized delta** — a
+net-negative avg with every SLOWER game understood, not a top-line number that "looks fine."
 
 **The harness runs the audit automatically — you read and act on it.** Four pieces:
 
 1. **Every `regression.sh <mode>` run** prints the per-game audit at the end (the
-   split-by-depth breakdown + each searched-depth flip), so you see it without a
-   separate step.
-2. **The audit prints an inline old-vs-new per-turn DIFF for every searched
-   `win→loss` and `turn-later` game** — the exact thing you must inspect, already at
-   your fingertips (no separate `--log-dir` step). Each block shows: the win-turn
-   change; whether the **kept hand** or the **draws diverged** (→ a physically
-   different game, not like-for-like); the aligned per-turn line (lands / spells +
-   targets / attacks / opponent life); and the classification hint. It needs the
-   baseline binary saved by the last `--accept` (`logs/snapshots/<mode>-baseline`);
-   without it the block shows the NEW line only + how to get a baseline.
-3. **`regression.sh <mode> --accept` re-runs the audit first and REFUSES to promote**
-   while any searched-depth `win→loss` exists. To accept over an explained one, pass
-   `--accept-with-regressions="gi<N>:<reason>; ..."` — the acknowledgement is recorded
-   in the ground-truth provenance header. `--accept` also snapshots the accepted binary
-   to `logs/snapshots/<mode>-baseline` so the NEXT run's audit can diff against it.
-   (Turn-later does not block, but must still be classified — see below.)
-4. **`test/classify_turn_later.sh <mode>` classifies every searched turn-later game
+   split-by-depth SLOWER / faster / play-changed breakdown + each searched-depth
+   SLOWER game), so you see it without a separate step.
+2. **The audit prints an inline old-vs-new per-turn DIFF for every searched SLOWER
+   game** — the exact thing you must inspect, already at your fingertips (no separate
+   `--log-dir` step). Each block shows: the win-turn change (or a win becoming
+   unwon, the maximal slowdown); whether the **kept hand** or the **draws diverged**
+   (→ a physically different game, not like-for-like); the aligned per-turn line
+   (lands / spells + targets / attacks / opponent life); and the classification hint.
+   It needs the baseline binary saved by the last `--accept`
+   (`logs/snapshots/<mode>-baseline`); without it the block shows the NEW line only +
+   how to get a baseline.
+3. **`regression.sh <mode> --accept` promotes the last run** and snapshots the
+   accepted binary to `logs/snapshots/<mode>-baseline` so the NEXT run's audit can
+   diff against it. It does **not** re-run the games or re-run the audit — inspect
+   the audit in the RUN output first, decide there, then `--accept`. The optional
+   `--accept-with-regressions="gi<N>:<reason>; ..."` records WHY an intended
+   slowdown was accepted into the ground-truth provenance header — documentation,
+   not a gate.
+4. **`test/classify_turn_later.sh <mode>` classifies every searched SLOWER game
    for you**, re-running each at 4x and 16x its case budget: `churn` (recovers →
    benign search-truncation) vs `PERSISTS` (draw-divergence variance if the deck
    shuffles/fetches, else a real same-draws slowdown).
@@ -177,35 +187,36 @@ python3 test/explain_game.py <mode> <key> <gi>      # old-vs-new per-turn diff o
 ```
 
 It diffs the committed per-game GT against this run and prints, **split by depth**,
-every `win→loss` / `loss→win` / `turn-later` / `turn-earlier` / `play-changed`, listing each
-searched-depth flip individually. `play-changed` = the per-game **play digest** moved while the
-win turn did NOT — a line change (deliberate or a bug) that the win-turn diff alone cannot see;
-the audit prints an inline `explain_game` diff for each so you can tell which. Exit non-zero ⇒ a
-searched-depth `win→loss` exists ⇒ `--accept` is blocked. A prose summary is not the gate; the
-script's output is. (Play-changed games do not hard-block, but must be analyzed before `--accept`.)
+the per-game `slower` / `faster` / `play-changed` counts, listing each searched-depth SLOWER
+game individually. A SLOWER game is any worse loss-penalized score — a bigger win turn OR a game
+that went from a win to unwon (the maximal slowdown); the two are one bucket. `play-changed` = the
+per-game **play digest** moved while the score did NOT — a line change (deliberate or a bug) that
+the score diff alone cannot see; the audit prints an inline `explain_game` diff for each so you can
+tell which. The audit is **report-only (always exits 0)** — it surfaces what to analyze; the accept
+decision is yours on the net delta. (Play-changed games likewise must be analyzed before `--accept`.)
 
 **Review bar differs by depth (this is the part that makes the audit tractable):**
 
-- **Searched depth (d>0) — review ALL of them.** Every `win→loss` must be
-  individually root-caused; every `turn-later` must be classified as one of:
-  *fetch-shuffle variance* (confirm: the two lines' DRAWS diverge — an eval change
-  flipped an early land/fetch tie-break, reshuffling the game), or *budget churn*
-  (confirm: the game recovers when you re-run that ONE game at a higher budget —
-  a marginal deep line the new search just needs a hair more budget to find), or a
-  *real slowdown* (draws identical AND doesn't recover at higher budget → a bug,
-  blocks acceptance). This is where engine quality lives; do not sample it.
+- **Searched depth (d>0) — review ALL of them.** Every SLOWER game must be
+  classified as one of: *fetch-shuffle variance* (confirm: the two lines' DRAWS
+  diverge — an eval change flipped an early land/fetch tie-break, reshuffling the
+  game), or *budget churn* (confirm: the game recovers when you re-run that ONE game
+  at a higher budget — a marginal deep line the new search just needs a hair more
+  budget to find), or a *real slowdown* (draws identical AND doesn't recover at
+  higher budget → a bug). This is where engine quality lives; do not sample it. A
+  game that went from a win to unwon is the same analysis — just the maximal slowdown.
 - **Depth 0 (greedy, no search) — light touch.** d0 has no lookahead, so its swaps
   are the greedy casting-more / attack-order heuristic churning; they are expected
   and are **not** a quality bar. Spot-check a couple of examples for sanity (no
   crash, the swap is a plausible greedy line) and move on — do **not** root-cause
-  every d0 flip. The script reports d0 separately and does not gate on it.
+  every d0 change. The script reports d0 separately.
 
 When a run moves **hundreds or thousands** of games (a deliberate engine/horizon/
 baseline shift this mode never exercised — e.g. the overnight first seeing
 commit-the-line), per-game reading of all of them is infeasible: use the
 **"Auditing a LARGE changed-game set"** workflow below (classify → legality sweep →
-out-of-horizon reproduction → in-horizon deep-dive), which satisfies this gate at
-scale. The rules below still bind every game it surfaces.
+out-of-horizon reproduction → in-horizon deep-dive), which satisfies this discipline
+at scale. The rules below still bind every game it surfaces.
 
 The rules — all of them, every time:
 
@@ -215,18 +226,20 @@ The rules — all of them, every time:
    *certifies* the analysis is already done.
 2. **Aggregates certify nothing.** A flat `avg_win_turn` routinely hides equal
    improvements and regressions cancelling; a *better* aggregate can still hide a
-   won→lost; a *reduced* `[nonconv]`/`[fd-diverge]` count can be predictions
-   becoming uniformly more pessimistic (**masking**), not a fidelity gain. Never
-   reason "the totals look fine/better, so it's safe."
+   game that went from a win to unwon (the maximal slowdown); a *reduced*
+   `[nonconv]`/`[fd-diverge]` count can be predictions becoming uniformly more
+   pessimistic (**masking**), not a fidelity gain. Never reason "the totals look
+   fine/better, so it's safe."
 3. **Never explain by inference from another mode or deck.** "Smoke and
    regression improved, so the overnight change is the same kind of thing" is NOT
    allowed — measure the mode you are accepting, on **its own seeds**. Different
-   seeds expose different games (in practice a won→lost appeared at exactly one
-   overnight seed and nowhere in smoke/regression).
-4. **Enumerate the win↔loss flips explicitly.** List every `X → -1` (won→lost)
-   and `-1 → X` (lost→won). **Every won→lost must be individually root-caused**,
-   no matter how net-positive the totals are — one unexplained won→lost blocks
-   acceptance.
+   seeds expose different games (in practice a game going from a win to unwon
+   appeared at exactly one overnight seed and nowhere in smoke/regression).
+4. **Surface the maximal moves explicitly.** List every `X → -1` (a win became
+   unwon — the maximal slowdown) and `-1 → X` (unwon became a win — the maximal
+   speedup). These are the loudest per-game signal an avg can bury; **every win that
+   became unwon must be individually root-caused** before you accept, no matter how
+   net-positive the totals are.
 5. **Diff against the right baseline: the prior committed code (the change you
    are certifying), not the stale ground truth.** When the GT is itself stale
    (e.g. it predates an earlier switch), diffing the new binary against the stale
@@ -259,9 +272,9 @@ git checkout HEAD -- <changed files>; cmake --build build --config Release
 # SANITY (rule 6): the arms MUST differ for a config you expect to change.
 diff old.txt new.txt | grep -c '^[<>]'        # 0 here on an expected-change config => invalid A/B
 
-# Classify every delta and surface win<->loss flips loudly (rule 4):
+# Classify every delta; the games going to/from unwon are the maximal moves (rule 4):
 awk 'FNR==NR{o[$1]=$2;next} ($1 in o)&&o[$1]!=$2{
-       t=(o[$1]<=0&&$2>0)?"LOST->WON":($2<=0&&o[$1]>0)?"WON->LOST":($2<o[$1])?"faster":"SLOWER";
+       t=(o[$1]<=0&&$2>0)?"faster(from-unwon)":($2<=0&&o[$1]>0)?"SLOWER(to-unwon)":($2<o[$1])?"faster":"SLOWER";
        print t" gi="$1": "o[$1]" -> "$2}' old.txt new.txt | sort | uniq -c
 ```
 
@@ -269,8 +282,9 @@ Then reproduce each moved game single-game in BOTH builds
 (`--seed <base+gi> --games 1 --game-index <gi> --log-dir <dir>`, or
 `MTG_NONCONV_TRACE_SEED=<seed>`) and read the log. Confirm **every** moved game
 makes sense: faster games win via a legal, genuinely-better line (not a phantom —
-verify mana/targets/zones); slower games and **every** won→lost are an
-understood, acceptable consequence (not a real misplay, rules violation, or
+verify mana/targets/zones); slower games — including **every** game that went to
+unwon (the maximal slowdown) — are an understood, acceptable consequence (not a
+real misplay, rules violation, or
 **budget starvation** — confirm starvation by re-running that game at a much
 larger `--budget-ms`; if a bigger budget recovers the good line, the change
 starved the search). Decks with no relevant cards must stay **byte-identical
@@ -285,7 +299,7 @@ have explained the deltas — not that the top-line number looks unchanged.
 When a deliberate engine change that this mode never exercised lands between
 baselines — a commit-the-line/full-depth default switch, a horizon change
 (`max_turns`), a NODES rebase, dig modeling — a single run can move **hundreds or
-thousands** of games. Reading every log is infeasible, but the gate's *intent*
+thousands** of games. Reading every log is infeasible, but the discipline's *intent*
 (understand every change, no hidden regression) still holds. Do it in two passes:
 mechanical classification, then a legality sweep over ALL games plus a targeted
 deep-dive of the concerning buckets. **All of this happens before `--accept`.**
@@ -301,12 +315,13 @@ deep-dive of the concerning buckets. **All of this happens before `--accept`.**
 ```python
 # buckets: horizon-cut (gt>H -> -1, expected if H was lowered), improvement
 # (new<gt, or gt=-1 & new<=H), slowdown (gt,new<=H, new>gt; still a win),
-# IN-HORIZON WIN-LOSS (gt in 1..H & new=-1; the loudest), new-win.
+# IN-HORIZON TO-UNWON (gt in 1..H & new=-1; a win within the horizon now unwon =
+# the maximal in-horizon slowdown; the loudest), new-win.
 for gi in gt:
     g,n = gt[gi], new.get(gi,-1)
     if g==n: continue
     if g>H and n==-1: bucket='horizon_cut'
-    elif 1<=g<=H and n==-1: bucket='IN_HORIZON_WIN_LOSS'   # root-cause each
+    elif 1<=g<=H and n==-1: bucket='IN_HORIZON_TO_UNWON'   # root-cause each
     elif g==-1 and 1<=n<=H: bucket='new_win'
     elif 1<=g<=H and 1<=n<=H and n<g: bucket='faster'
     elif 1<=g<=H and 1<=n<=H and n>g: bucket='slowdown'
@@ -314,8 +329,8 @@ for gi in gt:
 ```
 Report the bucket counts; they must sum to the total changed and each class must
 have a single explained cause. Horizon-cut + faster/pulled-in are expected for a
-horizon-lowering + search-improvement change; **the in-horizon win-loss bucket is
-the one that blocks acceptance until each is root-caused.**
+horizon-lowering + search-improvement change; **the in-horizon-to-unwon bucket is
+the loudest — root-cause each before accepting.**
 
 **Pass 2a — legality sweep over ALL games (mandatory).** This is how "improvements
 and out-of-horizon results" get checked for an illegal/phantom line without reading
@@ -326,7 +341,7 @@ MTG_FLAG_NONCONV=1 MTG_FD_ORACLE=1 ./build/Release/mtg --batch <manifest> \
   --threads N 2>flags.err          # full-depth/commit-the-line is the default
 ```
 - `[nonconv]` MUST be **0**. Any non-convergence is a search inconsistency — root-cause; never accept with `nonconv>0`.
-- `[fd-diverge]` = commit-the-line predicted a win earlier than the real game realized it. Categorize by `realized-predicted`: **off-by-one** (realized=predicted+1) is the known minor rollout-optimism — note the count (it must not grow run-over-run); **delta≥2, or predicted-but-never-realized** (realized beyond horizon) is SEVERE → root-cause each. Caveat: the oracle only catches *predicted-but-missed*; a game commit-the-line should have won but **never predicted** is NOT flagged here — Pass 1's in-horizon win-loss bucket + Pass 2c catch those.
+- `[fd-diverge]` = commit-the-line predicted a win earlier than the real game realized it. Categorize by `realized-predicted`: **off-by-one** (realized=predicted+1) is the known minor rollout-optimism — note the count (it must not grow run-over-run); **delta≥2, or predicted-but-never-realized** (realized beyond horizon) is SEVERE → root-cause each. Caveat: the oracle only catches *predicted-but-missed*; a game commit-the-line should have won but **never predicted** is NOT flagged here — Pass 1's in-horizon-to-unwon bucket + Pass 2c catch those.
 
 **Pass 2b — out-of-horizon "worse": reproduce at a lifted horizon.** A
 `gt>H → -1` game is benign only if its old win still EXISTS. Re-run those cases at
@@ -341,8 +356,8 @@ Games that reproduce their GT win (same turn or earlier) at the lifted horizon a
 pure horizon-cut (benign). Games that **do not win even at the lifted horizon** are
 real regressions the cut was hiding → root-cause.
 
-**Pass 2c — in-horizon win-losses & severe divergences: per-game + engine A/B.**
-For each in-horizon win-loss (and each severe fd-diverge): reproduce single-game,
+**Pass 2c — in-horizon-to-unwon games & severe divergences: per-game + engine A/B.**
+For each in-horizon-to-unwon game (and each severe fd-diverge): reproduce single-game,
 read the log (the per-game recipe above), and decide whether it is a
 **commit-the-line (full-depth) regression** by comparing the default engine to
 legacy per-turn search on that exact game:
@@ -363,12 +378,12 @@ MTG_LEGACY_SEARCH=1 MTG_DUMP_WINS=1 ./build/Release/mtg <deck> --seed $((base+gi
   horizon-edge cost is ~0.1% at suite budget and shrinks with budget).
 - Rule out **budget starvation** either way by re-running at a much larger `--budget-ms`.
 
-**Gate (no `--accept` until all hold):** Pass-1 buckets sum and each has one
+**Checklist (clear all before `--accept`):** Pass-1 buckets sum and each has one
 explained cause; `nonconv=0`; every severe fd-diverge root-caused (off-by-one
 count noted); every out-of-horizon "worse" reproduces at the lifted horizon or is
-root-caused; every in-horizon win-loss categorized (commit-the-line regression /
+root-caused; every in-horizon-to-unwon game categorized (commit-the-line regression /
 horizon-edge / budget / genuinely unwinnable). A net-positive aggregate NEVER
-waives a single unexplained in-horizon win-loss or a `nonconv`.
+waives a single unexplained in-horizon-to-unwon game or a `nonconv`.
 
 ---
 

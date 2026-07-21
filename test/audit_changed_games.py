@@ -3,8 +3,9 @@
 
 The metric is the loss-penalized average win turn (a game unwon by the horizon scores max_turns+1).
 Under that metric there is exactly ONE thing that matters per game: did it get **SLOWER** (worse score)
-or **FASTER** (better score)? A win→loss is not a special category — it is just the maximal slowdown
-(a win turn replaced by the max_turns+1 loss score); a loss→win is just the maximal speedup. So this
+or **FASTER** (better score)? A game going from a win to unwon is not a special category — it is just
+the maximal slowdown (a win turn replaced by the max_turns+1 loss score); an unwon game becoming a win
+is just the maximal speedup. So this
 script classifies every changed game as slower / faster / (same-score) play-changed, by loss-penalized
 score ORDER (a loss ranks worse than any win), SPLIT BY depth because the review bar differs:
 
@@ -103,10 +104,10 @@ for key in keys:
         o, od = ov          # old (win_turn, digest)
         n, nd = nv          # new (win_turn, digest)
         so, sn = score(o), score(n)
-        if sn > so:         # SLOWER (worse score; absorbs turn-later AND win->loss)
+        if sn > so:         # SLOWER (worse score; absorbs both turn-later and a win becoming unwon)
             tot[bucket]["slower"] += 1
             (searched_slower if bucket == "searched" else d0_slower).append((key, gi, o, n, seed))
-        elif sn < so:       # FASTER (better score; absorbs turn-earlier AND loss->win)
+        elif sn < so:       # FASTER (better score; absorbs both turn-earlier and an unwon game winning)
             tot[bucket]["faster"] += 1
         else:               # same loss-penalized score: did the PLAY change? (needs both digests)
             if od is not None and nd is not None and od != nd:
@@ -120,7 +121,7 @@ print(f"  configs changed: {len(keys) - unchanged - missing}   unchanged: {uncha
 for b in ("searched", "d0"):
     t = tot[b]
     print(f"  [{b:8}] slower={t['slower']}  faster={t['faster']}  play-changed={t['played']}  "
-          f"(slower/faster by loss-penalized score; win->loss counts as slower, loss->win as faster)")
+          f"(slower/faster by loss-penalized score; a win becoming unwon is just the maximal slowdown)")
 if not digest_baseline:
     print("  (no play-digest baseline yet -- ground-truth logs are pre-digest; --accept records "
           "digests so play-only changes are caught next run)")

@@ -73,13 +73,14 @@ override (e.g. `AntiLifegainProvider::ManaSourceRank`), never the root
    Prefer the **d0** cases for the first read (most games ⇒ least noise); the searched
    depths (d3/d5) are the play-quality check.
 5. **Judge against noise.** A few wins out of ~1000 on a *single* seed is inside
-   run-to-run variance — not a result. Score explicitly (win% primary, avg win turn
-   tiebreak; they can trade off) and note per-deck divergence.
+   run-to-run variance — not a result. Score explicitly on the **loss-penalized avg
+   win turn** (an unwon game scored max_turns+1; win% is not used for the goldfish —
+   it returns only with real 1v1 play) and note per-deck divergence.
 6. **Validate the winner on HELD-OUT seeds.** The three modes use disjoint seeds:
    tune on smoke/regression, confirm on **overnight** before trusting any delta
    (guards against overfitting the tuning seeds).
-7. **Report the decision to the user** — knob, from→to, per-deck win%/avg deltas, any
-   `win->loss`, and the noise caveat — *before* adopting. A pass that finds "baseline
+7. **Report the decision to the user** — knob, from→to, per-deck avg deltas, any
+   notable SLOWER games, and the noise caveat — *before* adopting. A pass that finds "baseline
    wins" reports that; it does not silently keep the default.
 8. **Adopt + rebaseline** only on approval: move the winner into the archetype
    provider, delete the scaffolding, and `--accept` the GT like any change.
