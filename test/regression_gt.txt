@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a5b0983  date 2026-07-21
+# Regression ground truth -- commit fea3a2c  date 2026-07-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -22,9 +22,9 @@ antilife_smoke_d5_s1001=4.6333/4f407bc43b7480e4
 hinata_smoke_d0_s1001=7.4760/c907a51d2f2abf58
 hinata_smoke_d3_s1001=6.0133/81febc367402161f
 hinata_smoke_d5_s1001=6.0400/8353aa99273e9037
-dragonstorm_smoke_d0_s1001=8.2930/43f1df9b50972c71
-dragonstorm_smoke_d3_s1001=6.2667/90c7bdb38fa0c508
-dragonstorm_smoke_d5_s1001=8.2533/b186ec2a2e875e46
+dragonstorm_smoke_d0_s1001=8.1240/32b5c9f9f8d20868
+dragonstorm_smoke_d3_s1001=5.6200/bc91ce7c11b8f0a2
+dragonstorm_smoke_d5_s1001=8.0400/ba615fa2fdb41479
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6830/1c52c53844821180
