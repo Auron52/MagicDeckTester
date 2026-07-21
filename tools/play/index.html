@@ -108,7 +108,7 @@
   .thumb .cnt.p1p1{ background:var(--good); } .thumb .cnt.m1m1{ background:var(--bad); }
   .thumb .cnt.loyalty{ background:var(--warn); } .thumb .cnt.poison{ background:#9a6ad1; }
   .thumb .cnt.depletion{ background:var(--land); } .thumb .cnt.charge{ background:var(--acc); }
-  .thumb .cnt.verse{ background:#e69a5a; }
+  .thumb .cnt.verse{ background:#e69a5a; } .thumb .cnt.storage{ background:#e3b23c; }
   /* floating (unspent) mana, shown beside the Lands header */
   .floatmana { margin-left:10px; display:inline-flex; gap:3px; vertical-align:middle; }
   .mpip { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px;
@@ -897,7 +897,7 @@ function renderChooseDialog(v, line){
   const variants=(v.variants||[]).slice();
   // Fallback: a variant with no structured subs can't be decomposed (degenerate / older engine).
   if (!variants.length || variants.some(x=>!x.subs || !x.subs.length)) return renderChooseFlat(v, line);
-  const KIND={fetch:0,tutor:1,x:2,soulfire:3,crackle:4};
+  const KIND={fetch:0,tutor:1,x:2,soulfire:3,crackle:4,splice:5};
   const kindPri=k=>(KIND[k]===undefined?9:KIND[k]);
   const subOf=(x,key)=>(x.subs||[]).filter(s=>s.key===key)[0];
   const choiceOf=(x,key)=>{ const s=subOf(x,key); return s?s.choice:'—'; };
@@ -1025,6 +1025,13 @@ function applyAccepted(planIndex, label) {
 function handleVerdict(v, line) {
   if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line);
   if (v.verdict==='choose') return renderChooseDialog(v, line);   // central image dialog, not the side panel
+  // REJECT (illegal / legal_not_enumerated / unsupported): the committed line did NOT play, so a
+  // pending "Pass turn" skip (S.commitTurn, set by the Commit-turn button) must be dropped -- otherwise
+  // picking an ALTERNATE plan from the menu below inherits the skip and auto-passes the rest of THIS
+  // turn (advanceTo), so the user never gets the same turn's post_main decision to cast e.g. Apex of
+  // Power. A reject means "your intended turn didn't happen" -> hand control back; the user re-declares
+  // Pass phase / Pass turn on the next decision. (Commit-phase never sets the flag, so it's unaffected.)
+  S.commitTurn = null; S.commitTurnPasses = 0;
   const cls=v.verdict==='legal_not_enumerated'?'legal':(v.verdict==='unsupported'?'unsupported':'illegal');
   const tag=v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
   const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'

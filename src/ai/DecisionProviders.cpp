@@ -1775,7 +1775,12 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
                                                 const CardParams& pp, int max_puts) const
 {
     if (max_puts <= 0) { return {}; }
-    if (DecisionUnpruned(UnprunedGate::Tutor)) { return {}; }   // search-primary: heuristic off
+    // Heuristic OFF only for the autonomous SEARCH audit (MTG_UNPRUNED opens the full library-order
+    // enumeration so the Stage-5 tutor audit can branch the whole space). Human play ALSO sets
+    // MTG_UNPRUNED, but there the fallback = raw library order, which drops whatever Dragons sit on top
+    // of the library (e.g. 3 Scourge + 1 Utvara) instead of the rule pick (Lathliss + reserved haste-
+    // Dragon). So the carve-out: in HUMAN play keep the rule ON as the default the viewer resolves to.
+    if (DecisionUnpruned(UnprunedGate::Tutor) && !HumanPlayActive()) { return {}; }
 
     // --- Inventory: classify library Dragons (matching pp.tutor_types) by role + count copies. ---
     std::string L, S, U, K, G;                 // the actual card names per role (as found)

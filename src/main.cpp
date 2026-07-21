@@ -443,6 +443,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
             if (ac.soulfire_own_targets > 0) { os << ", \"soulfire_targets\": " << ac.soulfire_own_targets; }
             if (ac.splice_count > 0)      { os << ", \"splice_count\": " << ac.splice_count; }
+            if (!ac.chosen_float_color.empty()) { os << ", \"float_color\": "; JsonStr(os, ac.chosen_float_color); }
             os << " }";
         }
         os << "]";

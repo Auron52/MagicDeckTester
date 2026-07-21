@@ -24,6 +24,7 @@ declare -A DECK_FILE=(
   [knights]=decks/Knights/Knights.cod
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
   [hinata]=decks/Hinata2/Hinata2.cod
+  [dragonstorm]=decks/Dragonstorm/Dragonstorm.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -32,6 +33,7 @@ declare -A DECK_PROF=(
   [knights]=decks/Knights/Knights.profile.json
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
   [hinata]=decks/Hinata2/Hinata2.profile.json
+  [dragonstorm]=decks/Dragonstorm/Dragonstorm.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -67,6 +69,11 @@ SMOKE_CASES=(
   "hinata  0 1001 1000 0"
   "hinata  3 1001  150 10"
   "hinata  5 1001   75 20"
+  # dragonstorm: cheap storm/combo deck (d0 ~0.24ms/game; d3 ~0.17 s/game, d5 ~0.28 s/game measured).
+  # Small d3/d5 gate mirroring th/hinata; deeper coverage lives in regression/overnight.
+  "dragonstorm 0 1001 1000 0"
+  "dragonstorm 3 1001  150 10"
+  "dragonstorm 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -108,6 +115,12 @@ REGRESSION_CASES=(
   "hinata  3 3003  200 10"
   "hinata  5 2002  100 20"
   "hinata  5 3003  100 20"
+  # dragonstorm: two seeds at d3/d5 (~0.17/0.28 s/game -> ~4 min added; well under the 45-min budget).
+  "dragonstorm 0 2002 1000 0"
+  "dragonstorm 3 2002  300 10"
+  "dragonstorm 3 3003  300 10"
+  "dragonstorm 5 2002  250 20"
+  "dragonstorm 5 3003  250 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -198,4 +211,17 @@ OVERNIGHT_CASES=(
   "hinata  5 5005  300 20"
   "hinata  5 6006  300 20"
   "hinata  5 7007  300 20"
+  # dragonstorm: 4-seed sweep at modest gate budgets (10/20) -- it's cheap, ~11 min total across seeds.
+  "dragonstorm 0 4004 2000 0"
+  "dragonstorm 0 5005 2000 0"
+  "dragonstorm 0 6006 2000 0"
+  "dragonstorm 0 7007 2000 0"
+  "dragonstorm 3 4004  500 10"
+  "dragonstorm 3 5005  500 10"
+  "dragonstorm 3 6006  500 10"
+  "dragonstorm 3 7007  500 10"
+  "dragonstorm 5 4004  300 20"
+  "dragonstorm 5 5005  300 20"
+  "dragonstorm 5 6006  300 20"
+  "dragonstorm 5 7007  300 20"
 )

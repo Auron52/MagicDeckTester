@@ -1017,49 +1017,43 @@ static bool GroupChoiceNonPrefixAccel(const GameState& /*state*/,
 // and Apex of Power's 10-of-one-colour). The set = every colour appearing in the active player's
 // NONLAND spell costs across hand / library / graveyard / battlefield (so an off-colour combo line
 // stays reachable), or ALL FIVE under MTG_UNPRUNED(SacColor) so the full-search oracle can open every
-// colour. Never empty (defensive red fallback for a degenerate all-colourless deck). Returns W,U,B,R,G
-// order. Shared so both float sources enumerate the identical colour set. NOT hardcoded red.
+// colour. Never empty (defensive red fallback for a degenerate all-colourless deck).
+//
+// ORDER = descending coloured-pip DEMAND (how many pips of that colour the active player's spells
+// want), tiebroken W,U,B,R,G. So the colour the deck most needs is FIRST -- and "add N of any one
+// colour" defaults to it: that colour WEAKLY DOMINATES every other (a coloured mana pays generic pips
+// just as well, PLUS its own pips), so the search picks it in every value-tie and the human-play
+// enumeration collapses to it. This is why a mono-red deck floats RED, never a dead off-colour (the
+// old W,U,B,R,G order defaulted ties to White). Shared so both float sources enumerate the identical
+// ordered set. NOT hardcoded red -- a blue deck floats blue, etc.
 static std::vector<std::string> ChosenFloatColorCandidates(const GameState& state)
 {
     const Player& ap = state.players[state.active_player_index];
     const bool open_all = DecisionUnpruned(UnprunedGate::SacColor);
-    bool present[5] = { false, false, false, false, false };   // W,U,B,R,G
-    if (open_all) { present[0] = present[1] = present[2] = present[3] = present[4] = true; }
-    else
+    int demand[5] = { 0, 0, 0, 0, 0 };   // W,U,B,R,G : total coloured pips across AP nonland spell costs
+    auto scan = [&](const Card& card)
     {
-        auto scan_zone = [&](auto begin_it, auto end_it)
-        {
-            for (auto it = begin_it; it != end_it; ++it)
-            {
-                const CardDefinition* cd = CardDatabase::Instance().LookupCached(*it);
-                if (!cd || cd->card.IsLand()) { continue; }
-                const ManaCost& mc = cd->card.m_mana_cost;
-                if (mc.white > 0) { present[0] = true; }
-                if (mc.blue  > 0) { present[1] = true; }
-                if (mc.black > 0) { present[2] = true; }
-                if (mc.red   > 0) { present[3] = true; }
-                if (mc.green > 0) { present[4] = true; }
-            }
-        };
-        scan_zone(ap.hand.begin(), ap.hand.end());
-        scan_zone(ap.library.begin(), ap.library.end());
-        scan_zone(ap.graveyard.begin(), ap.graveyard.end());
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
-            if (!cd || cd->card.IsLand()) { continue; }
-            const ManaCost& mc = cd->card.m_mana_cost;
-            if (mc.white > 0) { present[0] = true; }
-            if (mc.blue  > 0) { present[1] = true; }
-            if (mc.black > 0) { present[2] = true; }
-            if (mc.red   > 0) { present[3] = true; }
-            if (mc.green > 0) { present[4] = true; }
-        }
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(card);
+        if (!cd || cd->card.IsLand()) { return; }
+        const ManaCost& mc = cd->card.m_mana_cost;
+        demand[0] += mc.white; demand[1] += mc.blue; demand[2] += mc.black;
+        demand[3] += mc.red;   demand[4] += mc.green;
+    };
+    for (const Card& c : ap.hand)      { scan(c); }
+    for (const Card& c : ap.library)   { scan(c); }
+    for (const Card& c : ap.graveyard) { scan(c); }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        scan(p.card);
     }
     static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
+    std::vector<int> idx;                                      // candidate colour indices, W,U,B,R,G order
+    for (int c = 0; c < 5; ++c) { if (open_all || demand[c] > 0) { idx.push_back(c); } }
+    // Stable sort by DESCENDING demand -> equal-demand colours keep their W,U,B,R,G tiebreak order.
+    std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return demand[a] > demand[b]; });
     std::vector<std::string> colors;
-    for (int c = 0; c < 5; ++c) { if (present[c]) { colors.push_back(kColorLetters[c]); } }
+    for (int c : idx) { colors.push_back(kColorLetters[c]); }
     if (colors.empty()) { colors.push_back("R"); }
     return colors;
 }
@@ -8874,7 +8868,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // target). The land + the plan index come along so we can both honour the player's ORDER and
     // surface genuine sub-decision choices.
     struct Cand { int idx; std::vector<std::string> order; std::string sig, label;
-                  std::vector<std::string> cards; std::vector<SubChoice> subs; };
+                  std::vector<std::string> cards; std::vector<SubChoice> subs; int sacs; };
     std::vector<Cand> cands;
     for (size_t i = 0; i < plans.size(); ++i)
     {
@@ -8886,13 +8880,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //   ActivateVial       -> creature names vs spec.vial_deploys (free Vial deploy)
         //   CastFromGraveyard  -> spell names vs spec.retrace_casts (retrace)
         //   everything else    -> the plain hand-cast multiset vs spec.casts (order honoured)
-        int planLE = 0;
+        //   SacForMana         -> an IMPLICIT one-shot mana source (Lotus Bloom): tap+sacrifice for a
+        //                         float, exactly like auto-tapping a land. The human declares the SPELLS
+        //                         they want to cast; the engine sacs Lotus to help pay when (and only
+        //                         when) the line needs the mana -- so it is NOT part of the declared cast
+        //                         multiset. planSacs counts them so a line affordable WITHOUT saccing
+        //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
+        int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames;
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
             if (a.kind == Action::Kind::ActivateVial)       { vialNames.push_back(a.card_name); continue; }
             if (a.kind == Action::Kind::CastFromGraveyard)  { retraceNames.push_back(a.card_name); continue; }
+            if (a.kind == Action::Kind::SacForMana)         { ++planSacs; continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
@@ -8954,6 +8955,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                            a.card_name + " extra targets", "+" + std::to_string(a.crackle_targets),
                            a.card_name, "crackle");
                 }
+                // Splice (Desperate Ritual, splice_onto_arcane): a base Arcane cast may splice k OTHER
+                // copies onto itself (cost + red float scale by k+1; the spliced copies STAY IN HAND, so
+                // they do NOT appear as separate casts in orderNames). Without a sub, the k-variants share
+                // an empty signature and the dedup below collapses them to the FIRST enumerated (k=0) --
+                // silently dropping the human's splice (the same failure the float_color/soulfire subs
+                // fix). Emit for EVERY count >= 0 (like Soulfire/Crackle) so a multi-copy hand surfaces a
+                // clean per-count picker; a single-copy hand has only k=0 -> one variant -> Accept, no dialog.
+                if (adef && adef->params.splice_onto_arcane && a.splice_count >= 0)
+                {
+                    addSub(a.card_name + " splice+" + std::to_string(a.splice_count),
+                           a.card_name + " splice", "+" + std::to_string(a.splice_count),
+                           a.card_name, "splice");
+                }
             }
         }
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
@@ -8965,7 +8979,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         std::string sig, label;
         for (size_t t = 0; t < toks.size(); ++t) { sig += "|" + toks[t]; label += (t?"; ":"") + toks[t]; }
         if (label.empty()) { label = LineSummaryOfPlan(p); }
-        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs });
+        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs, planSacs });
     }
 
     // Honour the player's ORDER: prefer candidates whose cast sequence equals the queued order, so
@@ -8975,6 +8989,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     std::vector<const Cand*> pool;
     for (const Cand& c : cands) { if (c.order == spec.casts) { pool.push_back(&c); } }
     if (pool.empty()) { for (const Cand& c : cands) { pool.push_back(&c); } }
+    // Prefer FEWER one-shot sacrifices (Lotus Bloom's sac-for-mana): a line affordable without the
+    // sac keeps the same signature as the sac plan (the sac is implicit, not a declared cast), so the
+    // dedup below keeps whichever comes first -- stable-sort the no-sac plan ahead so Lotus is SAVED
+    // unless the line genuinely needs its mana (only-affordable-with-sac -> no no-sac plan exists ->
+    // the sac plan is kept). Stable so the ORDER preference above is otherwise preserved.
+    std::stable_sort(pool.begin(), pool.end(),
+                     [](const Cand* a, const Cand* b) { return a->sacs < b->sacs; });
 
     std::vector<std::string> seenSig;
     for (const Cand* c : pool)
