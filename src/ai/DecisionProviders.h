@@ -240,6 +240,13 @@ public:
     // enumerated cheapest-first prefix-only rather than powerset. HEURISTIC, MTG_UNPRUNED(AccelPrefix)-
     // openable. See docs/design/dragonstorm-search-pruning.md (Step 2).
     bool UseAccelPrefixCollapse() const override { return true; }
+
+    // Opt in to the cast-ORDERING search (Hook 28): let the search FIND the best cast order for a combo
+    // turn instead of the fixed CastOrderRank bucket. The fixed order is needed for search/executor
+    // lockstep + human play, but it reorders ~12 combos into worse lines AND leaves broad value on the
+    // table; searching the order recovers it (regression d3 5.56->4.95, d5 5.36->4.82). See
+    // docs/design/dragonstorm-cast-order-search.md.
+    bool WantsCastOrderingSearch() const override { return true; }
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

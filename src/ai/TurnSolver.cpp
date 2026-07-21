@@ -5074,10 +5074,98 @@ static std::string SimulateLandPlay(GameState& state)
 // heuristic batches wrong (enabler / destroy-all-payload rebuilds) are reachable. Off by
 // default => byte-identical (canonical order). On via MTG_SEARCH_ORDER or the global
 // MTG_UNPRUNED. Expensive (applies each tried ordering on a copy); run with a high budget.
-static bool OrderingSearchEnabled()
+static bool OrderingSearchEnabled(const GameState& state)
 {
-    static const bool v = (std::getenv("MTG_SEARCH_ORDER") != nullptr) || DecisionUnpruned(UnprunedGate::SearchOrder);
-    return v;
+    // Global A/B knob (env / MTG_UNPRUNED), cached once.
+    static const bool global = (std::getenv("MTG_SEARCH_ORDER") != nullptr) || DecisionUnpruned(UnprunedGate::SearchOrder);
+    // Archetype opt-in (Hook 28): Dragonstorm searches its combo cast order by default. Provider-scoped
+    // so every other deck stays byte-identical (base hook returns false). Cheap per-call vtable check --
+    // the real cost is the k! applies below, gated behind this.
+    return global || ResolveProvider(state).WantsCastOrderingSearch();
+}
+
+// Targeted cast-ORDERING candidates for Dragonstorm (Hook 28; see docs/design/dragonstorm-cast-order-search.md).
+// The combo is a CHEAPEST-FIRST self-funding ritual chain with only a few real degrees of freedom, so we
+// enumerate a handful of principled orderings instead of all k! permutations (which the caller caps at 120,
+// SKIPPING the biggest go-off hands). The rules (user-specified):
+//   * mana rituals -> cheapest-first (each funds the next); never searched among themselves;
+//   * Irencrag Feat ("cast only one more spell") -> immediately before the finisher;
+//   * finisher (Dragonstorm / Apex / a closing Dragon) -> last;
+//   * multiple Desperate Ritual vs Seething Song -> two variants: splice-AFTER (preferred, splice the
+//     Desperates once Seething's mana is up) and interleaved-by-cost (fallback, cast individually);
+//   * Ruby Medallion -> the one genuinely SEARCHED position: tried at every slot so the rollout keeps the
+//     earliest that still goes off (earlier discounts more red rituals).
+// The identity (given) order is always included so the search can never do worse than the canonical line.
+// Returns index-orderings over `reorder`; the caller applies + dedups-by-end-state + scores each.
+static std::vector<std::vector<int>>
+DragonstormCastOrderings(const std::vector<Action>& reorder)
+{
+    const int n = static_cast<int>(reorder.size());
+    std::vector<int> medallion, irencrag, finisher, ritual_splice, ritual_plain, other;
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = reorder[i].def;
+        if (!d)                                       { other.push_back(i); continue; }
+        const CardParams& p = d->params;
+        if (!p.reduces_spell_color.empty())           { medallion.push_back(i); }      // Ruby Medallion
+        else if (p.max_casts_after >= 0)              { irencrag.push_back(i); }        // Irencrag Feat
+        else if (p.tutor_to_battlefield || p.impulse_exile > 0 || d->card.IsCreature())
+                                                      { finisher.push_back(i); }        // Dragonstorm/Apex/Dragon
+        else if (p.ritual_floating_mana > 0 && p.splice_onto_arcane) { ritual_splice.push_back(i); } // Desperate
+        else if (p.ritual_floating_mana > 0)          { ritual_plain.push_back(i); }    // Rite/Pyretic/Seething
+        else                                          { other.push_back(i); }
+    }
+    auto cheapest = [&](std::vector<int>& v) {
+        std::stable_sort(v.begin(), v.end(), [&](int a, int b) { return reorder[a].card_mv < reorder[b].card_mv; });
+    };
+    cheapest(ritual_plain); cheapest(ritual_splice); cheapest(finisher); cheapest(other);
+
+    // Build a base chain (Medallion NOT yet inserted). splice_after=true keeps the Desperates after the
+    // plain rituals (splice line); false merges them cheapest-first (individual line).
+    auto build_base = [&](bool splice_after) {
+        std::vector<int> chain;
+        if (splice_after)
+        {
+            chain.insert(chain.end(), ritual_plain.begin(),  ritual_plain.end());
+            chain.insert(chain.end(), ritual_splice.begin(), ritual_splice.end());
+        }
+        else
+        {
+            std::vector<int> merged = ritual_plain;
+            merged.insert(merged.end(), ritual_splice.begin(), ritual_splice.end());
+            cheapest(merged);
+            chain = merged;
+        }
+        chain.insert(chain.end(), other.begin(),    other.end());
+        chain.insert(chain.end(), irencrag.begin(), irencrag.end());   // before the finisher
+        chain.insert(chain.end(), finisher.begin(), finisher.end());   // last
+        return chain;
+    };
+    std::vector<std::vector<int>> bases;
+    bases.push_back(build_base(true));                                 // preferred: splice after Seething
+    if (!ritual_splice.empty() && !ritual_plain.empty()) { bases.push_back(build_base(false)); }
+    // Always offer the given (canonical) order too, so search can't underperform the fixed line.
+    { std::vector<int> ident(n); for (int i = 0; i < n; ++i) { ident[i] = i; } bases.push_back(std::move(ident)); }
+
+    if (medallion.empty()) { return bases; }
+    std::vector<std::vector<int>> out;
+    for (const std::vector<int>& base : bases)
+    {
+        // `base` excludes the medallion(s) unless it is the identity order; drop them so we insert once.
+        std::vector<int> stripped;
+        stripped.reserve(base.size());
+        for (int idx : base) { if (reorder[idx].def && reorder[idx].def->params.reduces_spell_color.empty()) { stripped.push_back(idx); } }
+        const int m = static_cast<int>(stripped.size());
+        for (int pos = 0; pos <= m; ++pos)
+        {
+            std::vector<int> cand; cand.reserve(n);
+            for (int i = 0; i < pos; ++i)   { cand.push_back(stripped[i]); }
+            for (int mi : medallion)        { cand.push_back(mi); }         // medallion(s) as a block
+            for (int i = pos; i < m; ++i)   { cand.push_back(stripped[i]); }
+            out.push_back(std::move(cand));
+        }
+    }
+    return out;
 }
 
 // Defined after EnumeratePlans; used here only as an end-of-phase STATE signature for
@@ -5770,7 +5858,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Cast-ordering search (C): expand each action set into the DISTINCT orderings of its
     // non-sacrifice hand casts, deduped by end-of-phase state. Off by default => return
     // the canonical-order sets unchanged (byte-identical). See OrderingSearchEnabled.
-    if (!OrderingSearchEnabled()) { return deduped; }
+    if (!OrderingSearchEnabled(state)) { return deduped; }
 
     std::vector<TurnSolver::Plan> ordered;
     ordered.reserve(deduped.size());
@@ -5786,22 +5874,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         if (reorder.size() < 2) { ordered.push_back(std::move(p)); continue; }
 
-        // Bound the work: permutations grow as k! (distinct end-states are far fewer, but we
-        // still APPLY each tried ordering). Beyond the cap keep the canonical order only.
-        long long perms = 1; bool too_many = false;
-        for (size_t i = 2; i <= reorder.size(); ++i)
-        { perms *= static_cast<long long>(i); if (perms > 120) { too_many = true; break; } }
-        if (too_many) { ordered.push_back(std::move(p)); continue; }
-
-        // Permute reorderable casts by NAME (next_permutation over a name-sorted index list
-        // yields each distinct multiset ordering once -- identical copies don't multiply).
-        std::vector<int> idx(reorder.size());
-        for (size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
-        auto by_name = [&](int x, int y) { return reorder[x].card_name < reorder[y].card_name; };
-        std::sort(idx.begin(), idx.end(), by_name);
+        // Candidate orderings to try. Dragonstorm (Hook 28) uses the TARGETED generator (cheapest-first
+        // chain + Irencrag-before-finisher + Medallion-position + Desperate/Seething splice variants) --
+        // O(k) principled orderings, and it covers the big go-off hands the k! cap below would skip. The
+        // global A/B knob (MTG_SEARCH_ORDER on a non-Dragonstorm deck) keeps the full-permutation search.
+        std::vector<std::vector<int>> orderings;
+        if (ResolveProvider(state).WantsCastOrderingSearch())
+        {
+            orderings = DragonstormCastOrderings(reorder);
+        }
+        else
+        {
+            // Bound the work: permutations grow as k! (distinct end-states are far fewer, but we still
+            // APPLY each tried ordering). Beyond the cap keep the canonical order only.
+            long long perms = 1; bool too_many = false;
+            for (size_t i = 2; i <= reorder.size(); ++i)
+            { perms *= static_cast<long long>(i); if (perms > 120) { too_many = true; break; } }
+            if (too_many) { ordered.push_back(std::move(p)); continue; }
+            // Permute reorderable casts by NAME (next_permutation over a name-sorted index list yields
+            // each distinct multiset ordering once -- identical copies don't multiply).
+            std::vector<int> idx(reorder.size());
+            for (size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
+            auto by_name = [&](int x, int y) { return reorder[x].card_name < reorder[y].card_name; };
+            std::sort(idx.begin(), idx.end(), by_name);
+            do { orderings.push_back(idx); } while (std::next_permutation(idx.begin(), idx.end(), by_name));
+        }
 
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> seen_states;
-        do
+        for (const std::vector<int>& idx : orderings)
         {
             TurnSolver::Plan cand = p;
             cand.actions.clear();
@@ -5814,14 +5914,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             ApplyPlanDirect(copy, cand, is_pre_combat);
             if (seen_states.insert(BuildSimKey(copy, 0, 0, false)).second)
             {
-                // Combat is order-independent, so inherit the base plan's combat-based
-                // win; a reordering can only ADD direct damage (e.g. the rebuild), so also
-                // mark a win if this ordering kills outright. Keeps winning orderings
-                // sorted first (not cut under budget).
+                // Combat is order-independent, so inherit the base plan's combat-based win; a reordering
+                // can only ADD direct damage (e.g. the rebuild), so also mark a win if this ordering
+                // kills outright. Keeps winning orderings sorted first (not cut under budget).
                 cand.wins_this_turn = p.wins_this_turn || (copy.Opponent().life <= 0);
                 ordered.push_back(std::move(cand));
             }
-        } while (std::next_permutation(idx.begin(), idx.end(), by_name));
+        }
     }
 
     return ordered;

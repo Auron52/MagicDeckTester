@@ -345,4 +345,17 @@ public:
     // (and Dragonstorm under MTG_UNPRUNED) stays byte-identical; only DragonstormProvider opts in. See
     // docs/design/dragonstorm-search-pruning.md (Step 2).
     virtual bool UseAccelPrefixCollapse() const { return false; }
+
+    // Hook 28 -- cast-ORDERING search gate. When true, EnumeratePlansWithLand expands each action set
+    // into the DISTINCT orderings of its non-sacrifice hand casts (deduped by end-of-phase state) and
+    // the search scores each, committing the best via Plan::searched_order (the executor replays that
+    // vector order -> lockstep). The archetype opt-in for the global MTG_SEARCH_ORDER knob. Dragonstorm's
+    // combo turns leave a lot on the table under the fixed CastOrderRank (rituals@15/Irencrag@18/payoff@20)
+    // -- a specific interleave (fund -> reducer -> discounted rest, or a Dragon hard-cast between rituals)
+    // routinely beats the canonical bucket -- so letting the search FIND the order recovers it. Measured
+    // (regression): d3 5.56->4.95, d5 5.36->4.82 (~0.55 turns) at ~+47% makespan. EXPENSIVE (applies each
+    // tried ordering on a copy, k! capped at 120), so it lives in the archetype provider; base returns
+    // false -> every non-Dragonstorm deck stays byte-identical. Also openable globally via MTG_SEARCH_ORDER
+    // / MTG_UNPRUNED (UnprunedGate::SearchOrder) for the standing A/B.
+    virtual bool WantsCastOrderingSearch() const { return false; }
 };
