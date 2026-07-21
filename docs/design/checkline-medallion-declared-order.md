@@ -38,12 +38,17 @@ which the **user played correctly**. Neither "producers-first" nor "Medallion-fi
 (Medallion-first stalls: paying {2} for the Medallion from 2 base mana leaves nothing, and Rite has
 no generic to discount).
 
-## Fix (proposed; viewer-only, GT-neutral — CheckLine's sole caller is `--validate-line`)
-Add a **declared-order-first** affordability pass to CheckLine: walk the casts in the user's given
-order, tracking a ManaPool + the set of same-turn `reduces_spell_color` permanents cast so far, and
-apply each cast's discount positionally (generic −1 per matching in-line reducer). If the declared
-order is payable → `LegalNotEnumerated`. If not, fall back to the existing producers-first greedy
-(current behavior) so a human who clicks in a bad order still benefits. This:
+## Fix (IMPLEMENTED — viewer-only, GT-neutral; CheckLine's sole caller is `--validate-line`)
+Added a **declared-order-first** affordability pass to CheckLine (`TurnSolver.cpp`, just before the
+producers-first greedy): walk the casts in the user's given order, tracking a ManaPool + the set of
+same-turn `reduces_spell_color` permanents cast so far, and apply each cast's discount positionally
+(generic −1 per matching in-line reducer). If the declared order is payable → `LegalNotEnumerated`.
+If not, fall back to the existing producers-first greedy (current behavior) so a human who clicks in
+a bad order still benefits.
+
+**Verified:** the artifact line → `legal_not_enumerated` (was `illegal`); bare Apex (2 mana) and the
+same chain WITHOUT Ruby Medallion both stay `illegal` (no false-accept); goldfish smoke byte-identical
+(CheckLine is not in the goldfish path). This:
 - fixes the false "illegal" (→ correctly `LegalNotEnumerated`, the bug-finding signal that the search
   missed a legal line — the enumerator offered 40+ plans, none casting Apex);
 - realizes the deferred **"honor the user's declared cast order"** item (the user orders correctly),

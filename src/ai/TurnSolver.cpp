@@ -9183,6 +9183,64 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     auto is_producer = [](const PendingCast& pc) -> bool {
         return pc.rock || (pc.def && IsManaRitual(*pc.def));
     };
+
+    // --- Declared-order affordability: honor the human's EXACT cast order first -----------------
+    // The producers-first greedy below is order-INDEPENDENT (rituals cast before everything), which
+    // is right for a mis-clicked order but WRONG for a same-turn cost reducer: a Ruby Medallion cast
+    // early in the line makes the later red spells cheaper, but the greedy casts the rituals BEFORE
+    // the Medallion and loses the discount -- wrongly rejecting a payable line (viewer artifact: a
+    // Ruby-Medallion + ritual chain into Apex of Power, "can't pay {7}{R}{R}{R}"). The user orders
+    // correctly (a ritual for the Medallion -> Medallion -> discounted rituals -> payoff), so an
+    // IN-ORDER walk that applies same-turn reduces_spell_color discounts positionally pays for it.
+    // If the declared order does NOT pay, fall through to the greedy (order-tolerant). CheckLine is
+    // viewer-only (sole caller --validate-line), so this is GT-neutral and only ever ACCEPTS more.
+    {
+        ManaPool p = BuildPool(s);
+        bool spec = s.opponent_lost_life_this_turn;
+        std::vector<std::string> reducers;   // reduces_spell_color of Medallions cast so far in-line
+        bool ok = true;
+        for (const PendingCast& pc : pending)
+        {
+            ManaCost cost = pc.alt_free ? ManaCost{}
+                          : (pc.has_spectacle && spec) ? pc.spectacle_cost
+                          : pc.full_cost;
+            if (!cost.has_x && pc.def)   // same-turn Ruby-Medallion discount (generic -1 per matching reducer)
+            {
+                const ManaCost& mc = pc.def->card.m_mana_cost;   // printed pips
+                int disc = 0;
+                for (const std::string& rc : reducers)
+                {
+                    const bool matches =
+                          (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
+                        || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
+                        || (rc == "G" && mc.green > 0);
+                    if (matches) { ++disc; }
+                }
+                cost.generic = std::max(0, cost.generic - disc);
+            }
+            if (!p.CanPay(cost)) { ok = false; break; }
+            DeductPayable(p, cost);
+            if (pc.rock && pc.def) { AddSourceToPool(p, s, *pc.def); }
+            else if (pc.def && IsManaRitual(*pc.def))
+            {
+                addColorToPool(p, pc.def->params.ritual_float_color,
+                               RitualFloatAmount(s, *pc.def, /*chosen_x=*/0));
+            }
+            if (pc.def && !pc.def->params.reduces_spell_color.empty())
+            {
+                reducers.push_back(pc.def->params.reduces_spell_color);
+            }
+            if (pc.def && deals_opponent_damage(*pc.def)) { spec = true; }
+        }
+        if (ok)
+        {
+            out.verdict = V::LegalNotEnumerated;
+            out.reason  = "rules-legal in your cast order (a same-turn cost reducer makes it "
+                          "payable), but the search never enumerated this line";
+            return out;
+        }
+    }
+
     std::vector<bool> done(pending.size(), false);
     size_t remaining = pending.size();
     bool progress = true;
