@@ -119,11 +119,15 @@
   .hand .thumb.staged img { box-shadow:0 0 0 2px #9a6ad1; }
   .hand .thumb .stagedbadge { position:absolute; top:2px; left:2px; background:rgba(154,106,209,.95); color:#0c1116;
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
-  /* Exile zone: NON-playable exiled cards (suspended + Apex-exiled lands) — dimmed, with their own badge */
-  .zone.exile h3 { color:#8fa0c0; }
+  /* Suspend zone (incoming, beside lands) + Exiled-unusable zone (gone-for-good, beside graveyard) */
+  .zone.suspend h3 { color:#7fb0e0; }
+  .zone.exiledead h3 { color:#8fa0c0; } .zone.exiledead { opacity:.75; }
+  .fieldrow .lands, .fieldrow .gy { flex:1; min-width:0; }
+  .fieldrow .suspend, .fieldrow .exiledead { width:210px; flex:none; border-left:1px solid var(--line); padding-left:14px; }
   .thumb.staged .stagedbadge { position:absolute; top:2px; left:2px; background:rgba(154,106,209,.95); color:#0c1116;
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
-  .thumb.noplay img { opacity:.5; filter:grayscale(.35); box-shadow:0 0 0 2px #6b7280; }
+  .thumb.pending img { box-shadow:0 0 0 2px #5a96e1; }                                   /* suspended — incoming */
+  .thumb.noplay img { opacity:.5; filter:grayscale(.35); box-shadow:0 0 0 2px #6b7280; } /* exiled — unusable */
   .stagedbadge.susp   { background:rgba(90,150,225,.95) !important; }
   .stagedbadge.noplay { background:rgba(150,155,165,.95) !important; }
   /* Aether Vial: the permanent is a clickable deploy source; matching-MV hand creatures light up */
@@ -613,23 +617,26 @@ function renderBoard() {
          `${S.leMode?` <span class="lehint">click lands to add · click Land’s Edge to finish</span>`:''}</h3>`+
          zoneRow(plannedLE.length?plannedLE:[])+`</div>`;
   }
-  h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
-  // Exile — NON-playable exiled cards you should still SEE: SUSPENDED cards (Lotus Bloom, with a ⌛
-  // time-counter = turns to arrival) and Apex-of-Power-exiled LANDS (⊘ — Apex lets you cast SPELLS
-  // from among the exiled cards, so a land is stuck in exile, never playable). Playable staged spells
-  // stay in the Hand (purple ▸T badge); these are the ones you canNOT act on now. Emitted by the
-  // engine only when non-empty (me.exile).
-  if (me.exile && me.exile.length) {
-    const exThumbs = me.exile.map(c=>{
-      const badge = c.reason==='suspend'
-        ? `<span class="stagedbadge susp" title="suspended — arrives turn ${c.arrive_turn} (${c.time_counters} time counter${c.time_counters===1?'':'s'} left)">⌛${c.time_counters}</span>`
-        : `<span class="stagedbadge noplay" title="exiled by Apex of Power — a land can't be cast (spells only), so it stays in exile">⊘</span>`;
-      return `<span class="thumb staged ${c.kind==='land'?'land':'spell'} noplay" data-name="${esc(c.name)}" title="${esc(c.name)} — exiled, not playable now">`+
-        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/>`+
-        badge+`<em>${esc(c.name)}</em></span>`;
-    });
-    h += `<div class="zone exile"><h3>Exile — not playable now (${me.exile.length})</h3>`+zoneRow(exThumbs)+`</div>`;
-  }
+  // Exiled/suspended cards you should still SEE. Split by kind (engine tags each via `reason`):
+  //   SUSPENDED  (Lotus Bloom, ⌛ time-counter to arrival) -> INCOMING resource, shown beside the Lands.
+  //   Apex-exiled LANDS (⊘, "cast SPELLS from among them" -> a land is stuck in exile) -> GONE-for-good,
+  //     shown beside the Graveyard (below). Playable staged SPELLS stay in the Hand (purple ▸T badge).
+  const exThumb = c => {
+    const susp = c.reason==='suspend';
+    const badge = susp
+      ? `<span class="stagedbadge susp" title="suspended — arrives turn ${c.arrive_turn} (${c.time_counters} time counter${c.time_counters===1?'':'s'} left)">⌛${c.time_counters}</span>`
+      : `<span class="stagedbadge noplay" title="exiled by Apex of Power — a land can't be cast (spells only), so it stays in exile">⊘</span>`;
+    return `<span class="thumb staged ${c.kind==='land'?'land':'spell'} ${susp?'pending':'noplay'}" data-name="${esc(c.name)}" `+
+      `title="${esc(c.name)} — ${susp?`suspended, arrives T${c.arrive_turn}`:'exiled, not playable'}">`+
+      `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/>`+
+      badge+`<em>${esc(c.name)}</em></span>`;
+  };
+  const suspendCards = (me.exile||[]).filter(c=>c.reason==='suspend');
+  const exiledDead   = (me.exile||[]).filter(c=>c.reason!=='suspend');
+  const landsZone = `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
+  if (suspendCards.length)
+    h += `<div class="fieldrow">${landsZone}<div class="zone suspend"><h3>Suspended (${suspendCards.length})</h3>`+zoneRow(suspendCards.map(exThumb))+`</div></div>`;
+  else h += landsZone;
   h += `</div>`;  // /playfield
   // Hand sits ABOVE the graveyard: it is the most-used zone, so keeping it high (right under your
   // field) means the turn bar and hand are visible together without scrolling. The graveyard (less
@@ -668,7 +675,17 @@ function renderBoard() {
         `<span class="rtbadge" title="Retrace — cast from here, discarding a land">↩</span><em>${esc(n)}</em></span>`
       : bfThumb({name:n,is_land:false}));
     const hint = rset.size ? ` <span class="help">↩ click a Retrace card to cast it from here (discards a land)</span>` : '';
-    h += `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})${hint}</h3>`+zoneRow(gyThumbs)+`</div>`;
+    var gyZone = `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})${hint}</h3>`+zoneRow(gyThumbs)+`</div>`;
+  }
+  // Exiled — unusable: Apex-exiled LANDS (gone for good), shown beside the graveyard (a "second
+  // graveyard" of cards you can never use). Suspended cards live beside the Lands instead.
+  {
+    var gy = (typeof gyZone === 'string') ? gyZone : '';
+    var deadZone = exiledDead.length
+      ? `<div class="zone exiledead"><h3>Exiled — unusable (${exiledDead.length})</h3>`+zoneRow(exiledDead.map(exThumb))+`</div>`
+      : '';
+    if (gy && deadZone) h += `<div class="fieldrow">${gy}${deadZone}</div>`;
+    else h += gy + deadZone;
   }
   // sticky commit/turn-plan footer, last so its position:sticky bottom:0 docks to the viewport.
   if (isMain) h += `<div id="planbar"></div>`;
