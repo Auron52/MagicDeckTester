@@ -133,6 +133,13 @@ struct Action
                                        // Solve::consider rejects a subset with more than this many
                                        // spells ordered after it (by CastOrderRank). Set only for the
                                        // restricting ritual; -1 for every other action.
+    int         enchant_target   = 0;  // Aura cast: the card.m_number of the creature this Aura enters
+                                       // attached to. CollectActions emits one CastFromHand variant per
+                                       // legal creature target (sharing hand_index -> mutually exclusive),
+                                       // so the search picks WHICH creature carries the aura (the clock
+                                       // depends on it: summoning sickness + Kor's per-aura self-buff).
+                                       // Threaded to resolution via apply_one (rollout) and cast_by_name ->
+                                       // CastSpellFromHand -> StackEntry (executor). 0 = not an aura.
     int         ponder_keep      = -1;
                                        // Ponder-style cast_reorder: the SEARCHED keep-vs-shuffle
                                        // call. CollectActions emits TWO variants (1 = keep top N in

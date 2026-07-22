@@ -26,7 +26,20 @@ enum class Keyword
     // Storm (Dragonstorm): an INERT keyword-ability tag -- the storm mechanic is modelled structurally via
     // CardParams::tutor_to_battlefield + GameState::spells_cast_this_turn (put storm+1 Dragons), not by this
     // enum. Kept only so the Scryfall keywords field ["Storm"] stays faithful; no engine code reads it.
-    Storm
+    Storm,
+    // Enchant (every Aura): an INERT keyword-ability tag -- the aura's attach mechanic is modelled
+    // structurally via CardParams::is_aura + Permanent::aura_attached_to, not by this enum. Kept only so the
+    // Scryfall keywords field ["Enchant"] stays faithful; no engine code reads it.
+    // Hexproof (Slippery Bogle, Gladecover Scout, Alpha Authority's grant): an INERT keyword-ability
+    // tag -- "can't be the target of spells/abilities your opponents control." Provably inert vs the
+    // passive goldfish opponent (no opponent spells/abilities target our creatures). No engine code
+    // reads it; kept so the Scryfall keywords field ["Hexproof"] stays faithful.
+    Hexproof,
+    Enchant,
+    // Umbra armor (Hyena/Spider/Lion Umbra): an INERT keyword-ability tag -- "if enchanted creature would be
+    // destroyed, instead destroy this Aura." Provably inert vs the passive goldfish opponent (no removal /
+    // combat damage ever destroys our creatures). Kept only so the Scryfall keywords field stays faithful.
+    UmbraArmor
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 

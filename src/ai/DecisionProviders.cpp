@@ -2106,9 +2106,15 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
         {
             anti = true;
         }
-        if (p.discard_land_damage > 0 || p.etb_scry > 0 || p.etb_surveil > 0
-            || p.cycling_cost.has_value() || p.sacrifice_draw_cost.has_value()
-            || def->tmpl == CardTemplate::DrawUntilNonland)
+        // Treasure Hunt archetype = the actual flood-combo ENGINE only: Treasure Hunt itself
+        // (DrawUntilNonland) or Land's Edge (discard_land_damage). A generic sac-to-draw / cycling /
+        // scry-surveil land (Horizon Canopy, Lonely Sandbar, a Temple) is NOT the archetype -- those
+        // appear in aggro/other decks (e.g. the Auras/Bogles deck's Horizon Canopy) that must ride
+        // GenericProvider, so they no longer trip TH detection. Verified by deck scan (2026-07-22):
+        // among all suite decks, only treasure_hunt carries the engine (it has BOTH signals); every
+        // other deck that matched the old broad signature (only Auras, via sacrifice_draw_cost) should
+        // be generic. treasure_hunt still routes to g_treasure -> byte-identical.
+        if (p.discard_land_damage > 0 || def->tmpl == CardTemplate::DrawUntilNonland)
         {
             th = true;
         }

@@ -199,6 +199,15 @@ INERT_PARAMS = {
     "firebreathing_power": "pump power-per-{R} detail (rides firebreathing_cost, DEFERRED)",
     "team_pump_power": "team pump power detail (rides team_pump_cost, DEFERRED)",
     "team_pump_subtypes": "team pump subtype filter detail (rides team_pump_cost, DEFERRED)",
+    # --- Auras (Bogles): effect/stat/trigger detail params -- no interactive player choice ---
+    "aura_power_bonus": "aura stat grant (rides is_aura)", "aura_tough_bonus": "aura stat grant (rides is_aura)",
+    "aura_grants_lifelink": "automatic lifelink grant, no choice",
+    "aura_scale_kind": "aura scaling selector (rides is_aura)", "aura_scale_power": "aura scaling stat (rides is_aura)",
+    "aura_scale_tough": "aura scaling stat (rides is_aura)",
+    "aura_enchant_requires": "aura enchant-target restriction (narrows the is_aura main_phase variants)",
+    "aura_self_buff_power": "Kor static per-aura self-buff, computed P/T", "aura_self_buff_tough": "Kor static per-aura self-buff, computed P/T",
+    "draw_on_aura_cast": "Kor may-draw auto-resolved as always-draw (strictly good in goldfish), no meaningful choice",
+    "fastland_max_other_lands": "static land property (conditional enters-tapped, Razorverge)",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -217,6 +226,7 @@ MAINPHASE_PARAMS = {
     "can_animate":         "capability flag; animate rides main_phase",
     "splice_onto_arcane":  "Desperate Ritual splice count = a main_phase plan variant (emitted in main.cpp)",
     "suspend_time_counters": "Lotus Bloom suspend = a {0} main_phase action; when-to-suspend is a plan variant",
+    "is_aura":             "Aura enchant-target = a main_phase plan variant (one per legal creature, offered unpruned; SummarizePlan labels it, main.cpp emits enchant_target)",
 }
 
 # DEFAULT after onboarding = SURFACE every decision (user 2026-07-17). "Let the AI decide" is a
@@ -233,6 +243,7 @@ MAINPHASE_PARAMS = {
 # Known unwired decision gaps, DEFERRED with the user's sign-off (disclosed in Stage 6a).
 DEFERRED_PARAMS = {
     "cascade_max_mv":       "cascade SEARCH target -- heuristic-picked (DECISIONS.md known gap)",
+    "aura_cast_tutor_attach": "Light-Paws fetch target -- heuristic-picked (disclosed 6a known gap, like cascade)",
     "untap_x_mana_sources": "Reality Spasm untap mode -- needs an engine-model change (phase-2 gap)",
     # Dragonstorm: pump + ping are real player choices but currently search-resolved. User (2026-07-19)
     # signed off on deferring the WIRING to the planned viewer options-menu toggle system ("every choice

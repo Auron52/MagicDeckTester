@@ -361,7 +361,8 @@ private:
                            int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
                            int crackle_targets = -1,    // -1 = legacy auto-max discount
                            int splice_count = 0,        // Desperate Ritual splice count k (0 = plain)
-                           const std::string& chosen_float_color = ""); // Apex of Power: searched float colour
+                           const std::string& chosen_float_color = "", // Apex of Power: searched float colour
+                           int enchant_target = 0);     // Aura: searched creature to enchant (0 = none)
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;

@@ -124,6 +124,17 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                 || def.card.HasType(CardType::Artifact) || def.card.IsLand())
             {
                 EnterBattlefield(state, entry, def);
+                // Aura (Bogles): attach to the searched creature (enchant_target), then fire
+                // Light-Paws' tutor-attach. Set aura_attached_to on the JUST-entered permanent
+                // (battlefield.back()) BEFORE PerformLightPawsAttach push_backs the fetched aura.
+                // Lockstep with the rollout's apply_one enchantment-enter branch.
+                if (def.params.is_aura && !state.battlefield.empty())
+                {
+                    state.battlefield.back().aura_attached_to =
+                        ResolveEnchantTarget(state, entry.controller_index, entry.enchant_target);
+                    PerformLightPawsAttach(state, entry.controller_index,
+                                           def.card.m_mana_cost.ManaValue());
+                }
                 // ETB "each opponent gains N life" (Aria of Flame) -> reversed to damage by
                 // a Tainted Remedy / Plague Drone via OpponentGainsLife.
                 if (def.params.etb_opponent_lifegain > 0)

@@ -74,9 +74,12 @@ own-target **count** (`soulfire_own_targets`) still rides the `main_phase` plan 
 
 Plan-variant sub-decisions ride the `main_phase` plan list rather than their own `type`
 (the human picks a plan index): `tutor_target`, `fetch_target`, `chosen_x`, `ponder_keep`,
-`soulfire_own_targets` (count). For these the only per-deck work is confirming the provider's
-`*Candidates` hook returns **every** legal option (human-play runs unpruned), so each legal
-option appears as a distinct plan variant.
+`soulfire_own_targets` (count), `enchant_target` (which creature an Aura enchants — Bogles).
+For these the only per-deck work is confirming **every** legal option appears as a distinct plan
+variant (human-play runs unpruned). `enchant_target` is emitted directly by `CollectActions`
+(one variant per `LegalEnchantTargets`, no provider narrowing) and labeled in `SummarizePlan`
+("Rancor → Kor Spiritdancer") + the per-action JSON (`enchant_target` + `enchant_target_name`),
+so distinct placements are human-distinguishable.
 
 ## Surfacing options (viewer "⚙ Options" menu)
 
@@ -98,3 +101,6 @@ fully wired (all four sites) regardless of the menu default.
   engine-model change (de-abstract the untap float into literal targets), not viewer wiring.
 - **Cascade / Retrace SEARCH target** — which card the flip casts. Heuristic-picked today;
   build a type only when a deck needs it.
+- **Light-Paws fetch target** (Bogles/Auras) — which Aura the `aura_cast_tutor_attach` trigger
+  tutors onto Light-Paws. Heuristic-picked (highest power contribution), like the cascade target;
+  build a type only if a deck needs it surfaced.

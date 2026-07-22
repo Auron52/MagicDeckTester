@@ -23,6 +23,14 @@ struct Permanent
     std::vector<Counter> counters;
     bool      entered_this_turn    = false;  // summoning sickness tracker
     Permanent* attached_to         = nullptr;
+    // Aura attachment (Bogles / hexproof-auras). For an Aura enchantment on the battlefield,
+    // this is the card.m_number of the creature it enchants (0 = not an Aura / unattached).
+    // A STABLE per-copy id is used deliberately instead of `attached_to` above: the battlefield
+    // is a std::vector deep-copied per search node and reallocated on push_back, so a raw
+    // Permanent* would dangle -- which is why `attached_to` is a dead stub. The aura's power/
+    // toughness/lifelink grant is applied to the creature with this m_number at the combat sites
+    // (AuraBonusFor / CreatureHasLifelink, SpellEffects.h). Copied with the permanent.
+    int       aura_attached_to     = 0;
     bool      marked_for_destruction = false;
     int       temp_power_bonus     = 0;    // accumulated "until end of turn" boosts; reset each cleanup
     int       temp_tough_bonus     = 0;

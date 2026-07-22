@@ -505,6 +505,7 @@ static int PendingAttackDamage(const GameState& state)
             if (animated) { base_pw += adef->params.animate_power; }
             base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
+        base_pw += AuraBonusFor(p, state).first;                 // Bogles: attached auras + Kor self-buff
         dmg += base_pw * (ds ? 2 : 1);
         attackers.push_back(&p);
     }
@@ -1630,6 +1631,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                 actions.push_back(std::move(a));
                 continue;
             }
+        }
+
+        // Aura (Bogles): the enchant TARGET is a SEARCH decision -- which creature carries the aura
+        // changes the clock (summoning sickness + Kor Spiritdancer's per-aura self-buff). Emit one
+        // CastFromHand variant per legal creature target (sharing hand_index -> mutually exclusive),
+        // so the search picks. No legal target -> uncastable (an aura can't enchant nothing,
+        // CR 601.2c) -> not emitted, the card stays in hand. Restriction-filtered in
+        // LegalEnchantTargets (Daybreak Coronet: a creature already carrying an aura; Lion Umbra: a
+        // modified creature). The provider is NOT the narrower here -- every legal target is emitted.
+        if (def.params.is_aura)
+        {
+            for (int tgt_num : LegalEnchantTargets(state, state.active_player_index, def.params))
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(def, state);
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = true;   // enchantments are noncreature spells
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.enchant_target = tgt_num;
+                actions.push_back(std::move(a));
+            }
+            continue;
         }
 
         // Count damage that actually reaches the opponent's life total. A player/multi-target burn
@@ -3389,11 +3415,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
-                    const std::string& chosen_float_color)
+                    const std::string& chosen_float_color, int enchant_target)
     {
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
@@ -3458,6 +3484,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
         // another Apex's staged exile has m_is_staged == true -> false (float withheld). Inert otherwise.
         const bool cast_from_hand = !it->m_is_staged;
+        // Per-copy stable ID of the card being cast. The permanent must carry it (like the
+        // executor's EffectHandler::EnterBattlefield does via entry.source.m_number) so that
+        // aura attachment (Permanent::aura_attached_to == creature m_number) resolves to the
+        // SPECIFIC creature. Without this every rollout permanent kept the definition's m_number
+        // of 0, so ResolveEnchantTarget returned 0 and AuraBonusFor matched every aura (att 0)
+        // against every creature (m_number 0) -- a systematic aura over-count vs the executor.
+        const int cast_number = it->m_number;
         zone.erase(it);
 
         // STORM counter (Dragonstorm): the spell is now cast (committed to the "stack"). Count it
@@ -3817,6 +3850,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             Permanent perm;
             perm.card              = def.card;
+            perm.card.m_number     = cast_number;   // preserve per-copy ID (mirror EffectHandler)
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
@@ -4025,7 +4059,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{});
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0);
                 }
             }
         }
@@ -4219,10 +4253,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // -> reversed to damage by a Tainted Remedy / Plague Drone.
             Permanent perm;
             perm.card              = def.card;
+            perm.card.m_number     = cast_number;   // preserve per-copy ID (mirror EffectHandler)
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
             state.battlefield.push_back(perm);
+            // Aura (Bogles): attach to the searched creature (enchant_target), then fire Light-Paws.
+            // Set aura_attached_to BEFORE PerformLightPawsAttach push_backs the fetched aura. Lockstep
+            // with EffectHandler's executor enchantment-enter branch.
+            if (def.params.is_aura)
+            {
+                state.battlefield.back().aura_attached_to =
+                    ResolveEnchantTarget(state, state.active_player_index, enchant_target);
+                PerformLightPawsAttach(state, state.active_player_index,
+                                       def.card.m_mana_cost.ManaValue());
+            }
             if (def.params.etb_opponent_lifegain > 0)
             {
                 OpponentGainsLife(state, state.active_player_index, def.params.etb_opponent_lifegain);
@@ -4301,7 +4346,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                 }
             }
         }
@@ -4328,7 +4373,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); } }
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); } }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -4351,14 +4396,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[ai];
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); }
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); }
                 }
             }
             else
@@ -4378,7 +4423,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                 }
             }
         }
@@ -4388,14 +4433,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
             }
         }
 
@@ -4521,7 +4566,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{});
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -4787,9 +4832,16 @@ static void SimulateCombat(GameState& state)
             if (animated) { base_pw += adef->params.animate_power; }
             base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
+        base_pw += AuraBonusFor(p, state).first;                 // Bogles: attached auras + Kor self-buff
         int power = base_pw * (ds ? 2 : 1);
         state.players[opp_idx].life -= power;
-        if (power > 0) { state.opponent_lost_life_this_turn = true; }
+        if (power > 0)
+        {
+            state.opponent_lost_life_this_turn = true;
+            // Lifelink (modeled): the enchanted creature's damage also gains its controller that
+            // much life. Inert vs the passive opponent's clock, tracked for life-total decks.
+            if (CreatureHasLifelink(p, state)) { state.players[active].life += power; }
+        }
         if (!p.card.HasKeyword(Keyword::Vigilance)) { p.tapped = true; }
         attackers.push_back(&p);
     }

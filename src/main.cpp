@@ -185,7 +185,18 @@ static bool HandIsDraw(const CardDefinition* d)
 }
 
 // One-line human-readable summary of a candidate plan (land drop + casts).
-static std::string SummarizePlan(const TurnSolver::Plan& plan)
+// Resolve a creature's m_number (an aura's enchant_target) to its card name for display, so two
+// otherwise-identical aura casts read as distinct plans ("Rancor -> Kor Spiritdancer" vs "-> Bogle").
+static std::string EnchantTargetName(const GameState& s, int m_number)
+{
+    for (const Permanent& p : s.battlefield)
+        if (p.controller_index == s.active_player_index && p.card.IsCreature()
+            && p.card.m_number == m_number)
+        { return p.card.m_name.str(); }
+    return "#" + std::to_string(m_number);
+}
+
+static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& s)
 {
     std::ostringstream os;
     // Pure dig line (human play): cycle a land / sacrifice Fiery Islet to draw -- show just the
@@ -204,7 +215,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan)
         std::string tag;
         switch (a.kind)
         {
-            case Action::Kind::CastFromHand:      tag = a.card_name; break;
+            case Action::Kind::CastFromHand:
+                tag = a.card_name;
+                if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.enchant_target); }
+                break;
             case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
@@ -406,7 +420,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     {
         const TurnSolver::Plan& p = plans[i];
         os << "    { \"index\": " << i << ", \"summary\": ";
-        JsonStr(os, SummarizePlan(p));
+        JsonStr(os, SummarizePlan(p, s));
         // Structured land + cast list so the GUI can match a hand-assembled line against
         // the model's plans (and show, after a reject, exactly which lines it WOULD play).
         os << ", \"land\": ";
@@ -443,6 +457,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
             if (ac.soulfire_own_targets > 0) { os << ", \"soulfire_targets\": " << ac.soulfire_own_targets; }
             if (ac.splice_count > 0)      { os << ", \"splice_count\": " << ac.splice_count; }
+            // Aura enchant target: the creature (m_number + resolved name) this Aura attaches to, so
+            // the GUI shows WHICH creature when several plans cast the same aura on different targets.
+            if (ac.enchant_target > 0)
+            {
+                os << ", \"enchant_target\": " << ac.enchant_target
+                   << ", \"enchant_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.enchant_target));
+            }
             os << " }";
         }
         os << "]";

@@ -842,6 +842,216 @@ inline void DestroyAllEnchantments(GameState& state)
     }
 }
 
+// ==================== Auras (attach-to-creature enchantments) =========================
+// A single, battlefield-aware home for the Bogles/hexproof-auras mechanic. Auras attach to a
+// creature by STABLE m_number (Permanent::aura_attached_to) -- copy/realloc-safe unlike the dead
+// `attached_to` pointer. Every function here is a plain scan over state.battlefield, so it composes
+// cleanly with the deep-copied search state. Inert for decks with no is_aura cards (the scans find
+// nothing) -> byte-identical for every other deck.
+
+// True if `creature` has at least one Aura you (its controller) control attached to it.
+inline bool CreatureHasAura(const Permanent& creature, const GameState& state)
+{
+    if (!creature.card.IsCreature()) { return false; }
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to != creature.card.m_number) { continue; }
+        if (a.controller_index != creature.controller_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d && d->params.is_aura) { return true; }
+    }
+    return false;
+}
+
+// "Modified" (Lion Umbra's restriction): the creature has an Aura you control, Equipment (none in
+// this engine), or a +1/+1 counter (CR 701.48). = has-aura OR has-a-plus-one-counter here.
+inline bool CreatureIsModified(const Permanent& creature, const GameState& state)
+{
+    if (CreatureHasAura(creature, state)) { return true; }
+    for (const Counter& c : creature.counters)
+    { if (c.type == Counter::Type::PlusOnePlusOne && c.count > 0) { return true; } }
+    return false;
+}
+
+// Board-count units for a scaling aura's per-unit grant (aura_scale_kind); see CardParams.
+inline int CountAuraScaleUnits(const std::string& kind, const Permanent& aura,
+                               const GameState& state, int controller)
+{
+    int n = 0;
+    if (kind == "enchantments")
+    {
+        for (const Permanent& p : state.battlefield)
+            if (p.controller_index == controller && p.card.HasType(CardType::Enchantment)) { ++n; }
+    }
+    else if (kind == "other_enchantments")
+    {
+        // "each OTHER enchantment on the battlefield" (any controller). Count all enchantments and
+        // subtract this aura itself (always an enchantment on the battlefield when this is called).
+        for (const Permanent& p : state.battlefield)
+            if (p.card.HasType(CardType::Enchantment)) { ++n; }
+        n -= 1;
+        (void)aura;
+    }
+    else if (kind == "artifacts_enchantments")
+    {
+        for (const Permanent& p : state.battlefield)
+            if (p.controller_index == controller
+                && (p.card.HasType(CardType::Artifact) || p.card.HasType(CardType::Enchantment))) { ++n; }
+    }
+    return n < 0 ? 0 : n;
+}
+
+// Total {power, toughness} the enchanted `creature` gets from all Auras you control attached to it
+// (flat + dynamic scaling) PLUS its own per-aura self-buff (Kor Spiritdancer +2/+2 per Aura on it).
+// Added on top of EffectivePower()/lords/dynamic at every combat site. Toughness is currently inert
+// vs the passive opponent but is summed for future life-total fidelity.
+inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameState& state)
+{
+    if (!creature.card.IsCreature() && !creature.is_animated) { return {0, 0}; }
+    const int num  = creature.card.m_number;
+    const int ctrl = creature.controller_index;
+    int pw = 0, tb = 0, aura_count = 0;
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to != num || a.controller_index != ctrl) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (!d || !d->params.is_aura) { continue; }
+        ++aura_count;
+        pw += d->params.aura_power_bonus;
+        tb += d->params.aura_tough_bonus;
+        if (!d->params.aura_scale_kind.empty())
+        {
+            int units = CountAuraScaleUnits(d->params.aura_scale_kind, a, state, ctrl);
+            pw += d->params.aura_scale_power * units;
+            tb += d->params.aura_scale_tough * units;
+        }
+    }
+    const CardDefinition* cd = CardDatabase::Instance().LookupCached(creature.card);
+    if (cd && aura_count > 0)
+    {
+        pw += cd->params.aura_self_buff_power * aura_count;
+        tb += cd->params.aura_self_buff_tough * aura_count;
+    }
+    return {pw, tb};
+}
+
+// True if `creature` deals combat damage with lifelink -- its own keyword or any attached
+// aura_grants_lifelink Aura you control. Combat sites gain the controller that much life.
+inline bool CreatureHasLifelink(const Permanent& creature, const GameState& state)
+{
+    if (creature.card.HasKeyword(Keyword::Lifelink)) { return true; }
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to != creature.card.m_number) { continue; }
+        if (a.controller_index != creature.controller_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d && d->params.is_aura && d->params.aura_grants_lifelink) { return true; }
+    }
+    return false;
+}
+
+// The m_numbers of creatures `controller` controls that an Aura with these params may legally
+// enchant (CR 601.2c). Empty => the aura is uncastable (no legal target) and stays in hand.
+inline std::vector<int> LegalEnchantTargets(const GameState& state, int controller,
+                                            const CardParams& pp)
+{
+    std::vector<int> out;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+        if (pp.aura_enchant_requires == "another_aura" && !CreatureHasAura(p, state)) { continue; }
+        if (pp.aura_enchant_requires == "modified"     && !CreatureIsModified(p, state)) { continue; }
+        out.push_back(p.card.m_number);
+    }
+    return out;
+}
+
+// Resolve the creature this aura should attach to. Prefer the searched `enchant_target` when it names
+// a creature `controller` controls; otherwise a deterministic heuristic fallback (a self-buff creature
+// like Kor first, then the one already carrying the most auras, then lowest m_number) so the executor
+// and rollout agree even if a target was ever left unset. Returns 0 if no creature exists.
+inline int ResolveEnchantTarget(const GameState& state, int controller, int enchant_target)
+{
+    for (const Permanent& p : state.battlefield)
+        if (p.controller_index == controller && p.card.IsCreature()
+            && p.card.m_number == enchant_target)
+        { return enchant_target; }
+    int best = 0, best_score = -1;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        int auras = 0;
+        for (const Permanent& a : state.battlefield)
+            if (a.aura_attached_to == p.card.m_number && a.controller_index == controller) { ++auras; }
+        int score = auras * 4 + ((d && d->params.aura_self_buff_power > 0) ? 1000 : 0);
+        if (score > best_score || (score == best_score && p.card.m_number < best))
+        { best_score = score; best = p.card.m_number; }
+    }
+    return best;
+}
+
+// Light-Paws, Emperor's Voice: an Aura you CAST just resolved (mv = its mana value). For each
+// Light-Paws you control, search your library for an Aura with mana value <= mv and a name different
+// from every Aura you control (and whose own enchant restriction Light-Paws satisfies), put it onto
+// the battlefield attached to that Light-Paws, then shuffle. WHICH aura is a heuristic pick (highest
+// power contribution; disclosed 6a). The put does NOT re-trigger (it was not cast) -> bounded to one
+// fetch per cast aura. Deterministic + lockstep (executor + rollout call it identically).
+inline void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv)
+{
+    Player& ap = state.players[controller];
+    // Names of every Aura the controller currently controls (the "different name than each Aura you
+    // control" restriction). Recomputed per Light-Paws (a prior fetch adds a name).
+    for (int li = 0; li < static_cast<int>(state.battlefield.size()); ++li)
+    {
+        const Permanent lp = state.battlefield[li];   // copy: library edits below don't touch it, but
+        const CardDefinition* lpd = CardDatabase::Instance().LookupCached(lp.card);
+        if (!lpd || !lpd->params.aura_cast_tutor_attach) { continue; }
+        if (lp.controller_index != controller) { continue; }
+
+        std::unordered_set<std::string> controlled_aura_names;
+        for (const Permanent& p : state.battlefield)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.is_aura && p.controller_index == controller)
+            { controlled_aura_names.insert(p.card.m_name); }
+        }
+        // Whether Light-Paws satisfies a candidate aura's own enchant restriction right now.
+        auto lp_now = [&]() -> const Permanent& {
+            for (Permanent& q : state.battlefield)
+                if (q.card.m_number == lp.card.m_number && q.controller_index == controller) { return q; }
+            return state.battlefield[li];
+        };
+        int best_idx = -1, best_pw = -1;
+        for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+            if (!d || !d->params.is_aura) { continue; }
+            if (d->card.m_mana_cost.ManaValue() > cast_aura_mv) { continue; }
+            if (controlled_aura_names.count(ap.library[i].m_name)) { continue; }
+            if (d->params.aura_enchant_requires == "another_aura" && !CreatureHasAura(lp_now(), state)) { continue; }
+            if (d->params.aura_enchant_requires == "modified"     && !CreatureIsModified(lp_now(), state)) { continue; }
+            int contrib = d->params.aura_power_bonus + d->params.aura_scale_power;   // static rank
+            if (contrib > best_pw || (contrib == best_pw && d->card.m_mana_cost.ManaValue() >
+                                      (best_idx >= 0 ? CardDatabase::Instance().LookupCached(ap.library[best_idx])->card.m_mana_cost.ManaValue() : -1)))
+            { best_pw = contrib; best_idx = i; }
+        }
+        if (best_idx < 0) { continue; }   // no eligible aura -> no put
+        Card fetched = ap.library[best_idx];
+        ap.library.erase(ap.library.begin() + best_idx);
+        Permanent perm;
+        const CardDefinition* fd = CardDatabase::Instance().LookupCached(fetched);
+        perm.card              = fd ? fd->card : fetched;
+        perm.card.m_number     = fetched.m_number;
+        perm.controller_index  = controller;
+        perm.owner_index       = controller;
+        perm.entered_this_turn = true;
+        perm.aura_attached_to  = lp.card.m_number;   // attached to Light-Paws
+        state.battlefield.push_back(perm);
+        ShuffleAfterSearch(state, controller);
+    }
+}
+
 // Fires on-cast triggers from all permanents on the battlefield (e.g. Eidolon of the
 // Great Revel; Worthy Knight). Called at cast time from both AIEngine (real game) and
 // ApplyPlanDirect (lookahead). Two trigger families:
@@ -849,6 +1059,7 @@ inline void DestroyAllEnchantments(GameState& state)
 //     MV <= on_cast_trigger_max_mv (Eidolon of the Great Revel).
 //   - cast_trigger_creates_tokens: create tokens when they cast a spell whose subtypes
 //     include cast_trigger_subtype (Worthy Knight: cast a Knight -> 1/1 Human token).
+//   - draw_on_aura_cast: Kor Spiritdancer draws a card when you cast an Aura spell.
 // Aether Vial deployment is NOT a cast, so it never reaches here -- correct (CR 601.2).
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 {
@@ -908,6 +1119,25 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
                                      def->params.cast_token_power,
                                      def->params.cast_token_toughness,
                                      def->params.cast_token_subtypes});
+            }
+        }
+
+        // Kor Spiritdancer: "Whenever you cast an Aura spell, you may draw a card." Always draw
+        // (card advantage is strictly good in a goldfish). Deterministic top-of-library draw,
+        // lockstep in both cast paths; the drawn card is a resource for LATER turns (no same-turn
+        // re-solve -- conservative, avoids an fd-diverge re-solve divergence; disclosed 6a).
+        if (def->params.draw_on_aura_cast && cast_def.params.is_aura)
+        {
+            Player& kp = state.players[active];
+            if (!kp.library.empty())
+            {
+                std::size_t before = kp.hand.size();
+                kp.library.DrawN(1, kp.hand);
+                if (g_play_draw_sink)
+                {
+                    for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
+                    { g_play_draw_sink->push_back({ state.turn_number, kp.hand[hi].m_name.str() }); }
+                }
             }
         }
     }
@@ -2952,6 +3182,16 @@ inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& d
         return !(allow_pay_life && state.ActivePlayer().life > pp.etb_pay_life_to_untap);
     if (!pp.etb_untap_reveal_subtypes.empty())
         return !LandCanReveal(state, def);
+    if (pp.fastland_max_other_lands >= 0)
+    {
+        // Fastland (Razorverge Thicket): enters untapped iff you control <= N other lands. The card
+        // being played is still in hand (not yet on the battlefield), so every battlefield land the
+        // active player controls is an "other" land.
+        int other_lands = 0;
+        for (const Permanent& p : state.battlefield)
+            if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++other_lands; }
+        return other_lands > pp.fastland_max_other_lands;
+    }
     return pp.enters_tapped;
 }
 
