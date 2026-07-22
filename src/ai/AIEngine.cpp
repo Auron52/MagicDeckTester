@@ -1721,8 +1721,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (auto c = ap.hand.begin(); c != ap.hand.end(); ++c)
         {
             if (c->m_name != name) { continue; }
-            if (it == ap.hand.end()) { it = c; }                 // first match (fallback)
-            if (c->m_is_staged) { it = c; break; }               // prefer the expiring staged copy
+            if (it == ap.hand.end()) { it = c; continue; }       // first match (fallback)
+            // Prefer a staged (expiring) copy over a persistent hand copy, and among staged copies the
+            // EARLIEST-EXPIRING one (kept in lockstep with ApplyPlanDirect's apply_one). Byte-identical
+            // when no staged copy of `name` is in hand.
+            if (c->m_is_staged && (!it->m_is_staged || c->m_staged_expiry < it->m_staged_expiry))
+            {
+                it = c;
+            }
         }
         if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);

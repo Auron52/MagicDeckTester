@@ -3295,8 +3295,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // and the two early-returns (not in zone / unknown def) yield the same outcome in either
         // order.
         std::vector<Card>& zone = from_graveyard ? ap.graveyard : ap.hand;
-        std::vector<Card>::iterator it = std::find_if(zone.begin(), zone.end(),
-            [&name](const Card& c) { return c.m_name == name; });
+        // Choose WHICH copy of `name` to cast: prefer the EARLIEST-EXPIRING copy, so a staged
+        // (exiled, expires end-of-turn) copy is spent before a persistent hand copy. Otherwise the
+        // staged copy lapses unplayed while a hand copy that would keep for a later turn is wasted --
+        // the Dragonstorm s26 Scourge (1 hand + 2 staged): casting hand+staged stranded a staged copy
+        // that expired, costing the T5 follow-up cast. Mirrors TryPlaySpecificLand and the executor's
+        // AIEngine::cast_by_name (kept in lockstep so the committed line replays exactly). A staged
+        // copy is preferred over a non-staged one, and among staged copies the earlier m_staged_expiry
+        // wins. Falls to the first match when no copy is staged -> byte-identical for decks without
+        // staged duplicates of `name`.
+        std::vector<Card>::iterator it = zone.end();
+        for (auto c = zone.begin(); c != zone.end(); ++c)
+        {
+            if (c->m_name != name) { continue; }
+            if (it == zone.end()) { it = c; continue; }             // first match (fallback)
+            if (c->m_is_staged && (!it->m_is_staged || c->m_staged_expiry < it->m_staged_expiry))
+            {
+                it = c;                                             // earlier-expiring staged copy wins
+            }
+        }
         if (it == zone.end()) { return; }
         const CardDefinition* opt = CardDatabase::Instance().LookupCached(*it);
         if (!opt) { return; }
@@ -9204,13 +9221,51 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     std::vector<const Cand*> pool;
     for (const Cand& c : cands) { if (c.order == spec.casts) { pool.push_back(&c); } }
     if (pool.empty()) { for (const Cand& c : cands) { pool.push_back(&c); } }
-    // Prefer FEWER one-shot sacrifices (Lotus Bloom's sac-for-mana): a line affordable without the
-    // sac keeps the same signature as the sac plan (the sac is implicit, not a declared cast), so the
-    // dedup below keeps whichever comes first -- stable-sort the no-sac plan ahead so Lotus is SAVED
-    // unless the line genuinely needs its mana (only-affordable-with-sac -> no no-sac plan exists ->
-    // the sac plan is kept). Stable so the ORDER preference above is otherwise preserved.
+    // Choose the representative among cast-multiset matches by (1) PAYABLE first, then (2) FEWER
+    // one-shot sacrifices (Lotus Bloom's sac-for-mana). The enumerator OVER-generates: it lists a
+    // spell subset WITHOUT the mana actions (a Lotus Bloom sac -- a one-shot "depletion" source) needed
+    // to pay it, so a 0-sac candidate can be UNPAYABLE -- applied literally its casts drop and stay in
+    // hand (the seed-23 3-ritual + Dragonstorm combo: the no-sac plan can't pay {8}{R}, the Lotus-sac
+    // plan can). Because the sac is implicit (not a declared cast) the no-sac and sac plans share a
+    // signature; the OLD sacs-only sort kept the no-sac plan, so the viewer committed an unpayable line
+    // and rolled it back ("not enough mana"). Now: trial-apply each candidate on a COPY (ApplyPlan ==
+    // the commit path, and with default null sinks it has NO global side effects) and keep the ones
+    // whose DECLARED casts actually left the hand; prefer those. The sacs tiebreak still SAVES Lotus
+    // when the line pays without it (both plans payable -> fewer sacs wins), and spends it when the
+    // line needs the mana to go off. CheckLine is viewer-only -> GT-neutral; byte-identical ordering
+    // when every candidate is payable (payable-first is then a no-op).
+    auto handCountOf = [](const GameState& gs, const std::string& nm) {
+        int n = 0; for (const Card& c : gs.ActivePlayer().hand) { if (c.m_name == nm) { ++n; } } return n;
+    };
+    auto plan_pays = [&](int plan_idx) -> bool {
+        GameState sc = state;                       // work on a copy (ApplyPlan mutates)
+        {
+            // Resolve any sub-decisions (Dragonstorm's Dragon put, a tutor target, ...) via AI defaults
+            // rather than the live g_play_* choosers -- otherwise the trial-apply would read the choices
+            // stream / EMIT a decision (the combo casts Dragonstorm mid-check, which fires the dragon-put
+            // chooser and exits 70). RevealLogPause saves+nulls every g_play_* chooser AND the draw/event
+            // sinks for the scope, so the trial-apply is fully side-effect-free; it restores on exit.
+            RevealLogPause pause_io;
+            ApplyPlan(sc, plans[plan_idx], is_pre_combat);
+        }
+        for (const std::string& nm : spec.casts)
+        {
+            int declared = 0; for (const std::string& n2 : spec.casts) { if (n2 == nm) { ++declared; } }
+            if (handCountOf(state, nm) - handCountOf(sc, nm) < declared) { return false; }  // a cast dropped
+        }
+        return true;
+    };
+    std::vector<int> payableIdx;
+    for (const Cand* c : pool) { if (plan_pays(c->idx)) { payableIdx.push_back(c->idx); } }
+    auto isPayable = [&](int idx) {
+        return std::find(payableIdx.begin(), payableIdx.end(), idx) != payableIdx.end();
+    };
     std::stable_sort(pool.begin(), pool.end(),
-                     [](const Cand* a, const Cand* b) { return a->sacs < b->sacs; });
+                     [&](const Cand* a, const Cand* b) {
+                         bool pa = isPayable(a->idx), pb = isPayable(b->idx);
+                         if (pa != pb) { return pa; }        // payable before unpayable
+                         return a->sacs < b->sacs;           // then save one-shot sources when we can
+                     });
 
     std::vector<std::string> seenSig;
     for (const Cand* c : pool)
