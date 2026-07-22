@@ -1,0 +1,264 @@
+{
+  "seed": 22, "game_index": 21, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [27, 10] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 22, "name": "Mercadian Bazaar" }, { "num": 23, "name": "Mercadian Bazaar" }, { "num": 26, "name": "Mountain" }, { "num": 17, "name": "Lathliss, Dragon Queen" }, { "num": 50, "name": "Scourge of Valkas" }, { "num": 39, "name": "Rite of Flame" }, { "num": 18, "name": "Lotus Bloom" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 31, "name": "Mountain" }, { "num": 52, "name": "Scourge of Valkas" }, { "num": 8, "name": "Desperate Ritual" }, { "num": 18, "name": "Lotus Bloom" }, { "num": 27, "name": "Mountain" }, { "num": 6, "name": "Desperate Ritual" }, { "num": 56, "name": "Seething Song" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 49, "name": "Sandstone Needle" }, { "num": 35, "name": "Pyretic Ritual" }, { "num": 10, "name": "Dragonstorm" }, { "num": 12, "name": "Dragonstorm" }, { "num": 36, "name": "Pyretic Ritual" }, { "num": 19, "name": "Lotus Bloom" }, { "num": 27, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 49, "name": "Sandstone Needle", "win_optimal": true }, { "num": 35, "name": "Pyretic Ritual", "win_optimal": true }, { "num": 10, "name": "Dragonstorm", "win_optimal": true }, { "num": 12, "name": "Dragonstorm", "win_optimal": true }, { "num": 36, "name": "Pyretic Ritual", "win_optimal": true }, { "num": 19, "name": "Lotus Bloom", "win_optimal": true }, { "num": 27, "name": "Mountain", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 10, "name": "Dragonstorm" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 49, "name": "Sandstone Needle", "win_optimal": true }, { "num": 35, "name": "Pyretic Ritual", "win_optimal": true }, { "num": 10, "name": "Dragonstorm", "win_optimal": true }, { "num": 12, "name": "Dragonstorm", "win_optimal": true }, { "num": 36, "name": "Pyretic Ritual", "win_optimal": true }, { "num": 19, "name": "Lotus Bloom", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 10, "name": "Dragonstorm" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 12, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 19, "name": "Lotus Bloom", "cost": "", "mv": 0, "kind": "permanent" }, { "num": 35, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 36, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 49, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Sandstone Needle; cast: Lotus Bloom (other)", "land": "Sandstone Needle", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Lotus Bloom (other)", "land": null, "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Mountain" }],
+  "events": [{ "turn": 1, "kind": "suspend", "text": "⌛ Lotus Bloom -- suspended (arrives T4)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 36, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Pyretic Ritual, Pyretic Ritual", "land": "Mountain", "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Pyretic Ritual", "land": "Mountain", "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 3, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 1, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 35, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 36, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Mountain" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 1, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 36, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Pyretic Ritual, Pyretic Ritual", "land": "Mountain", "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Pyretic Ritual", "land": "Mountain", "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 3, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 1, "is_land": true }, { "name": "Mountain", "idx": 2, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 35, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 36, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Mercadian Bazaar" }],
+  "events": [{ "turn": 4, "kind": "suspend", "text": "⌛ Lotus Bloom -- cast off suspend (enters play)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Lotus Bloom", "idx": 3, "is_land": false }, { "name": "Mountain", "idx": 1, "is_land": true }, { "name": "Mountain", "idx": 2, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 23, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 36, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 1, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 2, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 3, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 4, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 5, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 6, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 7, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 8, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 9, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Dragonstorm, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Dragonstorm", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 10, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 11, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 12, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 13, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 14, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 15, "summary": "land=none; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 16, "summary": "land=none; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 17, "summary": "land=none; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 18, "summary": "land=none; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 19, "summary": "land=none; cast: Pyretic Ritual, Dragonstorm, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Dragonstorm", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Dragonstorm" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 20, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 21, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 22, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 23, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 24, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 25, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 26, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 27, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 28, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 29, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 30, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 31, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 32, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 33, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 34, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 35, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 36, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 37, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 38, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 39, "summary": "land=none; cast: Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 40, "summary": "land=none; cast: Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 41, "summary": "land=none; cast: Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 42, "summary": "land=none; cast: Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 43, "summary": "land=none; cast: Pyretic Ritual, Lotus Bloom (other)", "land": null, "casts": ["Pyretic Ritual", "Lotus Bloom"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 44, "summary": "land=Mercadian Bazaar; cast: (nothing)", "land": "Mercadian Bazaar", "casts": [], "actions": [] },
+    { "index": 45, "summary": "land=Mercadian Bazaar; cast: Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 46, "summary": "land=Mercadian Bazaar; cast: Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 47, "summary": "land=Mercadian Bazaar; cast: Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 48, "summary": "land=Mercadian Bazaar; cast: Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 49, "summary": "land=Mercadian Bazaar; cast: Lotus Bloom (other)", "land": "Mercadian Bazaar", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "U" }] },
+    { "index": 50, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 51, "summary": "land=none; cast: Lotus Bloom (other)", "land": null, "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "R" }] },
+    { "index": 52, "summary": "land=none; cast: Lotus Bloom (other)", "land": null, "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "B" }] },
+    { "index": 53, "summary": "land=none; cast: Lotus Bloom (other)", "land": null, "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "G" }] },
+    { "index": 54, "summary": "land=none; cast: Lotus Bloom (other)", "land": null, "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "W" }] },
+    { "index": 55, "summary": "land=none; cast: Lotus Bloom (other)", "land": null, "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "float_color": "U" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": [1, 1, 1, 0, 0, 0, 1, 0], "decision": {
+  "decision_index": 11,
+  "type": "dragon",
+  "source": "Dragonstorm",
+  "turn": 4,
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 1, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 23, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Lotus Bloom", "Pyretic Ritual", "Pyretic Ritual"], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "max_puts": 4,
+  "ai_set": [0, 1, 2, 6],
+  "candidates": [{ "index": 0, "def": true, "name": "Lathliss, Dragon Queen" }, { "index": 1, "def": true, "name": "Scourge of Valkas" }, { "index": 2, "def": true, "name": "Scourge of Valkas" }, { "index": 3, "def": false, "name": "Scourge of Valkas" }, { "index": 4, "def": false, "name": "Utvara Hellkite" }, { "index": 5, "def": false, "name": "Utvara Hellkite" }, { "index": 6, "def": true, "name": "Karrthus, Tyrant of Jund" }, { "index": 7, "def": false, "name": "Dragonlord Kolaghan" }],
+  "note": "reply one int per candidate (1 = put this Dragon), up to max_puts total. The engine keeps the rule's play order. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "mana", "text": "🪷 Lotus Bloom -- tap, sacrifice: add 3 R" }, { "turn": 4, "kind": "dragonstorm", "text": "🐉 Lathliss, Dragon Queen -- put onto the battlefield (Dragonstorm)" }, { "turn": 4, "kind": "dragonstorm", "text": "🐉 Scourge of Valkas -- put onto the battlefield (Dragonstorm)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (3 Dragons): 3 to opponent (20→17)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (3 Dragons): 3 to opponent (17→14)" }, { "turn": 4, "kind": "dragonstorm", "text": "🐉 Scourge of Valkas -- put onto the battlefield (Dragonstorm)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (5 Dragons): 5 to opponent (14→9)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (5 Dragons): 5 to opponent (9→4)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (5 Dragons): 5 to opponent (4→-1)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (5 Dragons): 5 to opponent (-1→-6)" }, { "turn": 4, "kind": "dragonstorm", "text": "🐉 Karrthus, Tyrant of Jund -- put onto the battlefield (Dragonstorm)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (7 Dragons): 7 to opponent (-6→-13)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (7 Dragons): 7 to opponent (-13→-20)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (7 Dragons): 7 to opponent (-20→-27)" }, { "turn": 4, "kind": "damage", "text": "🐉 Scourge of Valkas (7 Dragons): 7 to opponent (-27→-34)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "5/5 Dragon Token", "idx": 5, "is_land": false }, { "name": "5/5 Dragon Token", "idx": 7, "is_land": false }, { "name": "5/5 Dragon Token", "idx": 9, "is_land": false }, { "name": "Karrthus, Tyrant of Jund", "idx": 8, "is_land": false }, { "name": "Lathliss, Dragon Queen", "idx": 3, "is_land": false }, { "name": "Mountain", "idx": 1, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 0, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Scourge of Valkas", "idx": 4, "is_land": false }, { "name": "Scourge of Valkas", "idx": 6, "is_land": false }], "vial_counters": [], "hand": [{ "num": 23, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dragonstorm", "Lotus Bloom", "Pyretic Ritual", "Pyretic Ritual"], "library_size": 48 },
+  "opponent": { "life": -34, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mercadian Bazaar; cast: (nothing)", "land": "Mercadian Bazaar", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
