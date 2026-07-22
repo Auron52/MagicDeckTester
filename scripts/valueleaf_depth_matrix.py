@@ -36,6 +36,9 @@ DECKS = {
     # leaf is cheap at every depth. Use separate --hdepths (cap at 3) / --vdepths (1..5) to keep it tractable;
     # the fallback decision only needs V5-vs-H2 and H_conv (heuristic converges by d3). See value.json note.
     "hinata":   ("decks/Hinata2/Hinata2.cod",             "decks/Hinata2/Hinata2.value.json",             8),
+    # dragonstorm (storm/combo): like hinata/antilife the deep heuristic is expensive; use capped --hdepths
+    # and --vdepths 1..5 for the fallback calibration (V5-vs-H_conv). value model generated 2026-07-22.
+    "dragonstorm": ("decks/Dragonstorm/Dragonstorm.cod",  "decks/Dragonstorm/Dragonstorm.value.json",     8),
 }
 
 

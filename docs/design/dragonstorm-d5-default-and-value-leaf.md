@@ -25,6 +25,39 @@ Containment (smoke): **only** `dragonstorm_smoke_d5` moved (8.04→5.6667); d0/d
 decks byte-identical PASS; scenarios 4/4. GT rebaselined smoke+regression (overnight deferred —
 contained change, only `dragonstorm_*_d5` moves).
 
+## GENERATED 2026-07-22 (PROVISIONAL) — value-leaf model + tables built and adopted
+
+Built the value-leaf on the frozen post-Unclaimed commit (e6c1f2c), per the user's explicit request
+to generate it now (this pre-empts the reference-gating in the "Deferred" plan below — no hand-played
+Dragonstorm references exist yet, so the model is **NOT** reference-validated; treat as PROVISIONAL).
+
+- **Label = ROLLOUT (not searched).** Chosen because the matrix shows Dragonstorm's heuristic is
+  already GOOD (converges cheap by d3), which is exactly the regime where `learned-d0-policy.md` says
+  rollout labels (imitate the baseline) beat searched labels (distill a clairvoyant optimum the
+  baseline doesn't reach) — and rollout dumps are ~10x cheaper (no clairvoyant heavy-tail). The
+  "Deferred" section below anticipated a searched label; rollout is the better fit given the measured
+  heuristic quality, but **searched labels remain an untried alternative** worth an A/B later.
+- **Pipeline:** d3-play rollout dump (K=8, `MTG_EVAL_ROWS_ROLLOUT=1`, 400g) → 9164 rows → GBDT
+  (200 trees, depth 5, min-leaf 20; pair-acc 73.8%) → `decks/Dragonstorm/Dragonstorm.value.json`
+  `eval_model`. Depth matrix (`--hdepths 1 2 3 --vdepths 1 2 3 4 5 --games 400 --seeds 4004 5005`,
+  unbounded): heuristic converges H3=4.778; value-leaf V5=4.786 (**+0.009 vs H3**). So
+  `value_trust_depth=UNSET` (never within tol=0.002 of converged H → escalate every depth) and
+  `value_no_fallback=False` — identical profile to the other combo decks (hinata/antilife). Wrote
+  `value_leaf_table` + `value_fallback_crossover` via `valueleaf_table_to_metadata.py` and a combo
+  `value_play` block mirroring hinata/antilife (depth-aware value-ranked beam W3 leafdepth2 +
+  budget-restore fresh0.5, regime heavy, target_depth 5, escalation_cap 5) — the beam bounds the
+  combo tail (a raw unbounded value-on run hung on one combo state; the beam fixes it).
+- **Adoption measure (regression, multi-seed):** quality-NEUTRAL — d3 s2002 −0.003 / s3003 +0.013,
+  d5 s2002 −0.004 / s3003 +0.012 (**mean +0.0045**), ~**1.8x faster** at budget (50g timed 13.9s vs
+  24.8s). d0 byte-identical (the d0 ranker gate `MTG_EVAL_MODEL` stays off — only the *value leaf*
+  engages at d3/d5), all non-Dragonstorm decks byte-identical. Per-game it's a wash (d5 s2002: 4
+  faster incl. gi13 6→5, 3 slower incl. gi179 6→7). Smoke seed s1001 d5 was a small-sample +0.053
+  outlier; the powered seeds are neutral.
+- **Caveats to revisit:** PROVISIONAL 2-seed/400g table; rollout (not searched) label unvalidated
+  vs searched; NOT reference-validated (build refs then re-check); `value_trust_depth=UNSET` means
+  the leaf is escalated everywhere so the speedup is the main win, not clairvoyant depth. Artifacts:
+  `logs/eval_dragonstorm/` (rows, gbdt, budgeted_ab), `logs/eval/valueleaf_depth_dragonstorm.txt`.
+
 ## Deferred: build a value-leaf model for Dragonstorm (gated on references)
 
 **Why it's the right general lever (not per-deck hand heuristics):** the user dislikes
