@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="2" name="Glimpse the Unthinkable"/>
+        <card number="4" name="Archive Trap"/>
+        <card number="4" name="Visions of Beyond"/>
+        <card number="3" name="Island"/>
+        <card number="4" name="Fractured Sanity"/>
+        <card number="4" name="Hedron Crab"/>
+        <card number="4" name="Ruin Crab"/>
+        <card number="3" name="Surgical Extraction"/>
+        <card number="4" name="Counterspell"/>
+        <card number="4" name="Drown in the Loch"/>
+        <card number="4" name="Tasha's Hideous Laughter"/>
+        <card number="4" name="Watery Grave"/>
+        <card number="1" name="Swamp"/>
+        <card number="4" name="Darkslick Shores"/>
+        <card number="2" name="Drowned Catacomb"/>
+        <card number="2" name="Scalding Tarn"/>
+        <card number="2" name="Fatal Push"/>
+        <card number="1" name="Oboro, Palace in the Clouds"/>
+        <card number="4" name="Polluted Delta"/>
+    </zone>
+</cockatrice_deck>
