@@ -2,49 +2,8 @@
   "seed": 30, "game_index": 29, "win_turn": 5, "won": true,
   "mulligan": { "count": 1, "bottom": [46] },
   "decisions": [
-    { "chosen": 0, "decision": {
+    { "chosen": 2, "decision": {
   "decision_index": 0,
-  "type": "mulligan",
-  "turn": 0,
-  "me": { "life": 20, "battlefield": [] },
-  "opponent": { "life": 20, "battlefield": [] },
-  "mulligan_count": 0,
-  "on_the_play": true,
-  "to_bottom": 0,
-  "hand": [{ "num": 16, "name": "Forest" }, { "num": 41, "name": "Skyshroud Cutter" }, { "num": 26, "name": "Invigorate" }, { "num": 37, "name": "Reverent Silence" }, { "num": 53, "name": "Temple Garden" }, { "num": 18, "name": "Grove of the Burnwillows" }, { "num": 1, "name": "Aria of Flame" }],
-  "ai_choice": 0,
-  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
-}
-},
-    { "chosen": 1, "decision": {
-  "decision_index": 1,
-  "type": "mulligan",
-  "turn": 0,
-  "me": { "life": 20, "battlefield": [] },
-  "opponent": { "life": 20, "battlefield": [] },
-  "mulligan_count": 1,
-  "on_the_play": true,
-  "to_bottom": 1,
-  "hand": [{ "num": 20, "name": "Idyllic Tutor" }, { "num": 46, "name": "Swords to Plowshares" }, { "num": 58, "name": "Wooded Foothills" }, { "num": 31, "name": "Marsh Flats" }, { "num": 13, "name": "Enlightened Tutor" }, { "num": 12, "name": "Bloodstained Mire" }, { "num": 3, "name": "Aria of Flame" }],
-  "ai_choice": 0,
-  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
-}
-},
-    { "chosen": 1, "decision": {
-  "decision_index": 2,
-  "type": "bottom",
-  "turn": 0,
-  "me": { "life": 20, "battlefield": [] },
-  "opponent": { "life": 20, "battlefield": [] },
-  "bottom_step": 0,
-  "bottom_total": 1,
-  "hand": [{ "num": 20, "name": "Idyllic Tutor", "win_optimal": true }, { "num": 46, "name": "Swords to Plowshares", "win_optimal": true }, { "num": 58, "name": "Wooded Foothills", "win_optimal": true }, { "num": 31, "name": "Marsh Flats", "win_optimal": true }, { "num": 13, "name": "Enlightened Tutor", "win_optimal": true }, { "num": 12, "name": "Bloodstained Mire", "win_optimal": true }, { "num": 3, "name": "Aria of Flame", "win_optimal": true }],
-  "ai_choice": { "index": 1, "num": 46, "name": "Swords to Plowshares" },
-  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
-}
-},
-    { "chosen": 5, "decision": {
-  "decision_index": 3,
   "type": "main_phase",
   "turn": 1,
   "phase": "pre_main",
@@ -52,14 +11,14 @@
   "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 12, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Enlightened Tutor", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Marsh Flats", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54 },
   "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }] },
   "plans": [
-    { "index": 0, "summary": "land=Wooded Foothills; cast: Enlightened Tutor", "land": "Wooded Foothills", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 1, "summary": "land=Wooded Foothills; cast: Enlightened Tutor", "land": "Wooded Foothills", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Tainted Remedy" }] },
-    { "index": 2, "summary": "land=Marsh Flats; cast: Enlightened Tutor", "land": "Marsh Flats", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 3, "summary": "land=Marsh Flats; cast: Enlightened Tutor", "land": "Marsh Flats", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Tainted Remedy" }] },
-    { "index": 4, "summary": "land=Marsh Flats; cast: Enlightened Tutor", "land": "Marsh Flats", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 5, "summary": "land=Marsh Flats; cast: Enlightened Tutor", "land": "Marsh Flats", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Tainted Remedy" }] },
-    { "index": 6, "summary": "land=Bloodstained Mire; cast: Enlightened Tutor", "land": "Bloodstained Mire", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 7, "summary": "land=Bloodstained Mire; cast: Enlightened Tutor", "land": "Bloodstained Mire", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Enlightened Tutor", "land": "Wooded Foothills", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Enlightened Tutor", "land": "Wooded Foothills", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 2, "summary": "land=Marsh Flats; cast: Enlightened Tutor", "land": "Marsh Flats", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 3, "summary": "land=Marsh Flats; cast: Enlightened Tutor", "land": "Marsh Flats", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 4, "summary": "land=Marsh Flats; cast: Enlightened Tutor", "land": "Marsh Flats", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 5, "summary": "land=Marsh Flats; cast: Enlightened Tutor", "land": "Marsh Flats", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 6, "summary": "land=Bloodstained Mire; cast: Enlightened Tutor", "land": "Bloodstained Mire", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 7, "summary": "land=Bloodstained Mire; cast: Enlightened Tutor", "land": "Bloodstained Mire", "casts": ["Enlightened Tutor"], "actions": [{ "card": "Enlightened Tutor", "tutor_target": "Aria of Flame" }] },
     { "index": 8, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
     { "index": 9, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
     { "index": 10, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
@@ -78,21 +37,21 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 1, "decision": {
-  "decision_index": 4,
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
   "type": "main_phase",
   "turn": 2,
   "phase": "pre_main",
   "on_the_play": true,
   "drew": [{ "turn": 2, "card": "Tainted Remedy" }],
-  "me": { "life": 17, "battlefield": [{ "name": "Temple Garden", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 12, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Enlightened Tutor", "Marsh Flats"], "library_size": 52 },
+  "me": { "life": 17, "battlefield": [{ "name": "Godless Shrine", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 12, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Enlightened Tutor", "Marsh Flats"], "library_size": 52 },
   "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "is_land": false }] },
   "plans": [
     { "index": 0, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
     { "index": 1, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
     { "index": 2, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
     { "index": 3, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
-    { "index": 4, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
     { "index": 5, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
     { "index": 6, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
     { "index": 7, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
@@ -101,76 +60,145 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 11, "decision": {
-  "decision_index": 5,
+    { "chosen": 18, "decision": {
+  "decision_index": 2,
   "type": "main_phase",
   "turn": 3,
   "phase": "pre_main",
   "on_the_play": true,
-  "drew": [{ "turn": 3, "card": "Ignoble Hierarch" }],
-  "me": { "life": 14, "battlefield": [{ "name": "Blood Crypt", "idx": 3, "is_land": true }, { "name": "Temple Garden", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 12, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 50 },
+  "drew": [{ "turn": 3, "card": "Skyshroud Cutter" }],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 1, "is_land": true }, { "name": "Overgrown Tomb", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 12, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 42, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 50 },
   "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "is_land": false }] },
   "plans": [
-    { "index": 0, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 1, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
-    { "index": 2, "summary": "land=Bloodstained Mire; cast: Aria of Flame", "land": "Bloodstained Mire", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
-    { "index": 3, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
-    { "index": 4, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
-    { "index": 5, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 6, "summary": "land=Bloodstained Mire; cast: Aria of Flame", "land": "Bloodstained Mire", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
-    { "index": 7, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
-    { "index": 8, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 9, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
-    { "index": 10, "summary": "land=Bloodstained Mire; cast: Aria of Flame", "land": "Bloodstained Mire", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
-    { "index": 11, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
-    { "index": 12, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
-    { "index": 13, "summary": "land=Bloodstained Mire; cast: Ignoble Hierarch", "land": "Bloodstained Mire", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
-    { "index": 14, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
-    { "index": 15, "summary": "land=Bloodstained Mire; cast: Ignoble Hierarch", "land": "Bloodstained Mire", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
-    { "index": 16, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
-    { "index": 17, "summary": "land=Bloodstained Mire; cast: Ignoble Hierarch", "land": "Bloodstained Mire", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
-    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
-    { "index": 19, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] }
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor, Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor, Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 2, "summary": "land=Bloodstained Mire; cast: Aria of Flame, Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Aria of Flame", "Skyshroud Cutter"], "actions": [{ "card": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: Skyshroud Cutter, Aria of Flame", "land": "Bloodstained Mire", "casts": ["Skyshroud Cutter", "Aria of Flame"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Aria of Flame" }] },
+    { "index": 4, "summary": "land=Bloodstained Mire; cast: Skyshroud Cutter, Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Skyshroud Cutter", "Tainted Remedy"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Tainted Remedy" }] },
+    { "index": 5, "summary": "land=Bloodstained Mire; cast: Tainted Remedy, Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Tainted Remedy", "Skyshroud Cutter"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 6, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor, Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 7, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor, Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 8, "summary": "land=Bloodstained Mire; cast: Aria of Flame, Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Aria of Flame", "Skyshroud Cutter"], "actions": [{ "card": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 9, "summary": "land=Bloodstained Mire; cast: Skyshroud Cutter, Aria of Flame", "land": "Bloodstained Mire", "casts": ["Skyshroud Cutter", "Aria of Flame"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Aria of Flame" }] },
+    { "index": 10, "summary": "land=Bloodstained Mire; cast: Skyshroud Cutter, Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Skyshroud Cutter", "Tainted Remedy"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Tainted Remedy" }] },
+    { "index": 11, "summary": "land=Bloodstained Mire; cast: Tainted Remedy, Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Tainted Remedy", "Skyshroud Cutter"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 12, "summary": "land=Bloodstained Mire; cast: Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 13, "summary": "land=Bloodstained Mire; cast: Skyshroud Cutter", "land": "Bloodstained Mire", "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 14, "summary": "land=none; cast: Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 15, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 16, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 17, "summary": "land=Bloodstained Mire; cast: Aria of Flame", "land": "Bloodstained Mire", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 18, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 19, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 20, "summary": "land=Bloodstained Mire; cast: Idyllic Tutor", "land": "Bloodstained Mire", "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 21, "summary": "land=Bloodstained Mire; cast: Aria of Flame", "land": "Bloodstained Mire", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 22, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 23, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 24, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 25, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 2, "decision": {
-  "decision_index": 6,
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 11, "battlefield": [{ "name": "Godless Shrine", "idx": 1, "tapped": true, "is_land": true }, { "name": "Overgrown Tomb", "idx": 3, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 5, "tapped": true, "is_land": true }, { "name": "Tainted Remedy", "idx": 6, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 42, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire", "Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 49 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "me": { "life": 11, "battlefield": [{ "name": "Godless Shrine", "idx": 1, "tapped": true, "is_land": true }, { "name": "Overgrown Tomb", "idx": 3, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 5, "tapped": true, "is_land": true }, { "name": "Tainted Remedy", "idx": 6, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 42, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire", "Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 49 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 13, "decision": {
+  "decision_index": 5,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
   "on_the_play": true,
-  "drew": [{ "turn": 4, "card": "Aria of Flame" }],
-  "me": { "life": 11, "battlefield": [{ "name": "Blood Crypt", "idx": 3, "is_land": true }, { "name": "Godless Shrine", "idx": 5, "is_land": true }, { "name": "Tainted Remedy", "idx": 6, "is_land": false }, { "name": "Temple Garden", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire", "Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 48 },
+  "drew": [{ "turn": 4, "card": "Skyshroud Cutter" }],
+  "me": { "life": 11, "battlefield": [{ "name": "Godless Shrine", "idx": 1, "is_land": true }, { "name": "Overgrown Tomb", "idx": 3, "is_land": true }, { "name": "Stomping Ground", "idx": 5, "is_land": true }, { "name": "Tainted Remedy", "idx": 6, "is_land": false }], "vial_counters": [], "hand": [{ "num": 3, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 42, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire", "Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 48 },
   "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "is_land": false }] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
-    { "index": 1, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 2, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
-    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
-    { "index": 4, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] }
+    { "index": 0, "summary": "land=none; cast: Aria of Flame, Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Aria of Flame", "Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Aria of Flame" }, { "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 1, "summary": "land=none; cast: Skyshroud Cutter, Aria of Flame, Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter", "Aria of Flame", "Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 2, "summary": "land=none; cast: Skyshroud Cutter, Skyshroud Cutter, Aria of Flame", "land": null, "casts": ["Skyshroud Cutter", "Skyshroud Cutter", "Aria of Flame"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }, { "card": "Aria of Flame" }] },
+    { "index": 3, "summary": "land=none; cast: Idyllic Tutor, Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Idyllic Tutor", "Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 4, "summary": "land=none; cast: Idyllic Tutor, Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Idyllic Tutor", "Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 5, "summary": "land=none; cast: Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 6, "summary": "land=none; cast: Idyllic Tutor, Skyshroud Cutter", "land": null, "casts": ["Idyllic Tutor", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 7, "summary": "land=none; cast: Idyllic Tutor, Skyshroud Cutter", "land": null, "casts": ["Idyllic Tutor", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 8, "summary": "land=none; cast: Aria of Flame, Skyshroud Cutter", "land": null, "casts": ["Aria of Flame", "Skyshroud Cutter"], "actions": [{ "card": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 9, "summary": "land=none; cast: Skyshroud Cutter, Aria of Flame", "land": null, "casts": ["Skyshroud Cutter", "Aria of Flame"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Aria of Flame" }] },
+    { "index": 10, "summary": "land=none; cast: Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 11, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 12, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 13, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 2, "decision": {
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −10 life (via Tainted Remedy)" }],
+  "me": { "life": 11, "battlefield": [{ "name": "Aria of Flame", "idx": 7, "is_land": false }, { "name": "Godless Shrine", "idx": 1, "tapped": true, "is_land": true }, { "name": "Overgrown Tomb", "idx": 3, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 5, "tapped": true, "is_land": true }, { "name": "Tainted Remedy", "idx": 6, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 42, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire", "Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 48 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 1, "summary": "land=none; cast: Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 13, "decision": {
   "decision_index": 7,
   "type": "main_phase",
   "turn": 5,
   "phase": "pre_main",
   "on_the_play": true,
-  "drew": [{ "turn": 5, "card": "Tainted Remedy" }],
-  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −10 life (via Tainted Remedy)" }],
-  "me": { "life": 11, "battlefield": [{ "name": "Aria of Flame", "idx": 7, "is_land": false }, { "name": "Blood Crypt", "idx": 3, "is_land": true }, { "name": "Godless Shrine", "idx": 5, "is_land": true }, { "name": "Tainted Remedy", "idx": 6, "is_land": false }, { "name": "Temple Garden", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Bloodstained Mire", "Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 47 },
+  "drew": [{ "turn": 5, "card": "Aria of Flame" }],
+  "me": { "life": 11, "battlefield": [{ "name": "Aria of Flame", "idx": 7, "is_land": false }, { "name": "Godless Shrine", "idx": 1, "is_land": true }, { "name": "Overgrown Tomb", "idx": 3, "is_land": true }, { "name": "Stomping Ground", "idx": 5, "is_land": true }, { "name": "Tainted Remedy", "idx": 6, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 42, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire", "Enlightened Tutor", "Marsh Flats", "Wooded Foothills"], "library_size": 47 },
   "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "is_land": false }] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
-    { "index": 1, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
-    { "index": 2, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
-    { "index": 3, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
-    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
-    { "index": 5, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] }
+    { "index": 0, "summary": "land=none; cast: Idyllic Tutor, Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Idyllic Tutor", "Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 1, "summary": "land=none; cast: Idyllic Tutor, Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Idyllic Tutor", "Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 2, "summary": "land=none; cast: Aria of Flame, Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Aria of Flame", "Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Aria of Flame" }, { "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 3, "summary": "land=none; cast: Skyshroud Cutter, Aria of Flame, Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter", "Aria of Flame", "Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 4, "summary": "land=none; cast: Skyshroud Cutter, Skyshroud Cutter, Aria of Flame", "land": null, "casts": ["Skyshroud Cutter", "Skyshroud Cutter", "Aria of Flame"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }, { "card": "Aria of Flame" }] },
+    { "index": 5, "summary": "land=none; cast: Skyshroud Cutter, Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter", "Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 6, "summary": "land=none; cast: Aria of Flame, Skyshroud Cutter", "land": null, "casts": ["Aria of Flame", "Skyshroud Cutter"], "actions": [{ "card": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 7, "summary": "land=none; cast: Skyshroud Cutter, Aria of Flame", "land": null, "casts": ["Skyshroud Cutter", "Aria of Flame"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Aria of Flame" }] },
+    { "index": 8, "summary": "land=none; cast: Idyllic Tutor, Skyshroud Cutter", "land": null, "casts": ["Idyllic Tutor", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 9, "summary": "land=none; cast: Idyllic Tutor, Skyshroud Cutter", "land": null, "casts": ["Idyllic Tutor", "Skyshroud Cutter"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 10, "summary": "land=none; cast: Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 11, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Aria of Flame" }] },
+    { "index": 12, "summary": "land=none; cast: Idyllic Tutor", "land": null, "casts": ["Idyllic Tutor"], "actions": [{ "card": "Idyllic Tutor", "tutor_target": "Tainted Remedy" }] },
+    { "index": 13, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
