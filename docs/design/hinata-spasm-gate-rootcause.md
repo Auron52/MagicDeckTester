@@ -1,7 +1,30 @@
 # Hinata spasm gate — root-cause (measured)
 
-**Status:** ROOT-CAUSED (opt-in, `MTG_HINATA_SPASM_GATE`, default OFF, committed dormant in `f2ee9d7`).
-Measured under the numbered+rankfix binary (commits `b3f0bd5` + `f2ee9d7`). NOT adopted.
+**Status:** ROOT-CAUSED. Only `off / strict(=1) / soft(=2)` are committed (opt-in, `MTG_HINATA_SPASM_GATE`,
+default OFF, `f2ee9d7`) — and both non-off modes were **rejected**. The variant actually kept (≈0 quality /
+~0.5% perf) was a *full-turn "ritual but no Win and no Crackle"* guard that **was never saved** — see the
+next section. NOT adopted; the keeper is unimplemented.
+
+## 2026-07-22 — the keeper variant (from memory; THE CODE NO LONGER EXISTS)
+
+Per the user's recollection, the variant actually settled on — measured at **literally no quality change
+and a ~0.5% speedup** (too small to distinguish from noise, so not worth chasing further) — was a
+full-turn guard, NOT either committed mode:
+
+> **Disallow a *full-turn* line that contains a mana ritual (Reality Spasm or Irencrag Feat) but contains
+> neither a Win nor a Crackle.** Emit always; no `HinataCrackleInHand` check.
+> Predicate: `has_ritual && !has_win && !has_crackle`. It removes only genuinely-wasteful lines (a ritual
+> floats mana that empties unused when the turn casts no sink and does not win), which is why it was
+> quality-neutral with only a tiny enumeration win.
+
+**This code was never saved** — it is not in the source, any stash, or git history (confirmed 2026-07-22).
+The two committed modes are NOT it and were both rejected: `strict (=1)` has no Win escape and fires on
+subsets (killing the "accelerate → dig → Crackle-later" lines the user wanted kept); `soft (=2)` adds an
+*inverted* `HinataCrackleInHand` check. **Not rebuilt** (user: "if it's not there, it's fine"). If ever
+revisited, implement the predicate above as a full-turn guard behind the existing `MTG_HINATA_SPASM_GATE`.
+
+_(The original `strict`/`soft` tables below were measured under `b3f0bd5`+`f2ee9d7` and are stale: a
+2026-07-22 re-check under `1290f68` put `strict` at ~1.8× perf / +0.04 tempo and `soft` at ~neutral.)_
 
 ## What the gate is
 
