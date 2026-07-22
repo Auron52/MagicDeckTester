@@ -52,6 +52,8 @@ enum class UnprunedGate
                   // deck's spell-cost colours (the narrowed default candidate set)
     AccelPrefix,  // Dragonstorm acceleration-prefix collapse disabled: enumerate the full 2^K ritual-
                   // accelerant powerset instead of only the K+1 cheapest-first prefixes (DragonstormProvider)
+    PayoffPrune,  // Dragonstorm payoff-prune disabled: keep the ritual-accelerant subsets that cast no
+                  // payoff (Dragon/Dragonstorm/Apex) instead of dropping them (DragonstormProvider, Hook 29)
     _Count
 };
 
@@ -247,6 +249,13 @@ public:
     // table; searching the order recovers it (regression d3 5.56->4.95, d5 5.36->4.82). See
     // docs/design/dragonstorm-cast-order-search.md.
     bool WantsCastOrderingSearch() const override { return true; }
+
+    // Payoff-prune (Hook 29): allow plans that cast a Dragon / Dragonstorm / Apex; prune the other
+    // one-turn ritual-accelerant lines (their float has no same-turn sink here). Default ON for
+    // Dragonstorm; the callsites gate it with !DecisionUnpruned(UnprunedGate::PayoffPrune), so the
+    // standing MTG_UNPRUNED / MTG_UNPRUNE=payoffprune audit reverts to the full (unpruned) branch set.
+    // Measured (train+held-out): ~-0.055 turns, -42% rollout calls. See docs/design/dragonstorm-payoff-prune.md.
+    bool PrunesAcceleratorWithoutPayoff() const override { return true; }
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

@@ -358,4 +358,16 @@ public:
     // false -> every non-Dragonstorm deck stays byte-identical. Also openable globally via MTG_SEARCH_ORDER
     // / MTG_UNPRUNED (UnprunedGate::SearchOrder) for the standing A/B.
     virtual bool WantsCastOrderingSearch() const { return false; }
+
+    // Hook 29 -- payoff-prune gate (the ritual-guard's search-side analog; the user's spec). A mana
+    // ritual is a ONE-TURN accelerant: its float empties at end of turn (identical to Hinata's Reality
+    // Spasm untap). So a plan that casts a ritual but no PAYOFF -- a Dragon (creature), Dragonstorm
+    // (tutor_to_battlefield), or Apex of Power (impulse_exile) -- burns the ritual for nothing (the mana
+    // has no same-turn sink; storm count doesn't carry across turns). When true, both Solve::consider
+    // (leaf) and EnumeratePlans (search branch list) DROP those accelerant-only subsets, focusing the
+    // search budget on payoff lines. Deliberately NOT enabled for Hinata: there the ritual IS a useful
+    // mid-combo accelerant (it powers a bigger cantrip/dig turn), so the same prune measured -0.05 tempo
+    // (see docs/design/hinata-spasm-gate-rootcause.md). Dragonstorm has no such mana sink, so the prune
+    // should net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
+    virtual bool PrunesAcceleratorWithoutPayoff() const { return false; }
 };

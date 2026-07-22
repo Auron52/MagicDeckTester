@@ -892,6 +892,29 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
     return !has_enabler;   // removal present, no enabler live and none cast this turn -> unbacked
 }
 
+// Payoff-prune (DecisionProvider Hook 29 -- the ritual-guard's search-side analog; the user's spec).
+// A mana ritual is a ONE-TURN accelerant: its float empties at end of turn (identical to Reality Spasm's
+// untap) and storm count does not carry across turns, so a subset that casts a ritual (ritual_float > 0)
+// but no PAYOFF -- a Dragon (creature), Dragonstorm (tutor_to_battlefield), or Apex of Power
+// (impulse_exile) -- burns the ritual for nothing (no same-turn sink). Callers gate this on
+// ResolveProvider(state).PrunesAcceleratorWithoutPayoff() so ONLY Dragonstorm prunes; Hinata (whose
+// ritual is a useful cantrip/dig accelerant) is untouched. A ritual-only subset deals no damage, so it
+// can never be a winning line -> pruning it never drops a lethal plan. Inert (no ritual) -> unchanged.
+static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    bool has_ritual = false, has_payoff = false;
+    for (int j : sel)
+    {
+        if (cands[j].ritual_float > 0) { has_ritual = true; }
+        const CardDefinition* d = cands[j].def;
+        if (d && (d->card.IsCreature() || d->params.tutor_to_battlefield || d->params.impulse_exile > 0))
+        {
+            has_payoff = true;
+        }
+    }
+    return has_ritual && !has_payoff;
+}
+
 // Reject a subset that selects two SacForMana actions for the SAME source (its colour variants are
 // mutually exclusive -- a given Lotus can be tapped+sacrificed for exactly one colour, once). The
 // colour variants are enumerated as independent actions, so this is the analogue of the Vial per-charge
@@ -2082,6 +2105,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        // Payoff-prune (Hook 29): drop a ritual-accelerant subset that casts no payoff
+        // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
+        // gated; inert for every other deck -> byte-identical.
+        if (ResolveProvider(state).PrunesAcceleratorWithoutPayoff()
+            && !DecisionUnpruned(UnprunedGate::PayoffPrune)
+            && SubsetWastesAccelerant(cands, sel)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
@@ -5553,6 +5582,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        // Payoff-prune (Hook 29): drop a ritual-accelerant subset that casts no payoff
+        // (Dragon/Dragonstorm/Apex) from the SEARCH branch list -- this is where the freed budget
+        // comes from. Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-gated; inert
+        // for every other deck -> byte-identical.
+        if (ResolveProvider(state).PrunesAcceleratorWithoutPayoff()
+            && !DecisionUnpruned(UnprunedGate::PayoffPrune)
+            && SubsetWastesAccelerant(cands, sel)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
