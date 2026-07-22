@@ -331,6 +331,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.has_replicate                  = params.value("has_replicate", false);
     p.grants_replicate_to_subtypes   = params.value("grants_replicate_to_subtypes", false);
     p.creature_mana_only             = params.value("creature_mana_only", false);
+    p.colored_creature_only          = params.value("colored_creature_only", false);
     p.upkeep_creates_tokens          = params.value("upkeep_creates_tokens", 0);
     p.upkeep_token_power             = params.value("upkeep_token_power", 0);
     p.upkeep_token_toughness         = params.value("upkeep_token_toughness", 0);

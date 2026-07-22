@@ -2441,6 +2441,10 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             p.owner_index       = p.controller_index;
             p.tapped            = e.value("tapped", false);
             p.entered_this_turn = e.value("sick", false);   // false => can attack (not summoning sick)
+            // Optional counters so a scenario can stage a CHARGED storage land (Mercadian Bazaar /
+            // Dwarven Hold: storage_counters) or a primed Aether Vial (charge_counters).
+            p.storage_counters  = e.value("storage_counters", 0);
+            p.charge_counters   = e.value("charge_counters", 0);
             state.battlefield.push_back(p);
         }
         for (const auto& hc : j.value("hand", json::array()))

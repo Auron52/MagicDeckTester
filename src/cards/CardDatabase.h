@@ -99,6 +99,16 @@ struct CardParams
     // spells (e.g. Ancient Ziggurat). Enforced at payment time and in solver pool checks.
     bool creature_mana_only = false;
 
+    // Colored-creature-only mana (Unclaimed Territory / Cavern of Souls / Secluded Courtyard):
+    // "{T}: Add {C}. {T}: Add one mana of any color -- spend only on a creature spell of the chosen
+    // type." Unlike creature_mana_only, the {C} is UNRESTRICTED; only the COLORED mana is creature-
+    // restricted. Modelled as produces = [C, <colors>] + this flag: at payment time a non-creature
+    // spell may take only {C} from the source (ProducesForPayment strips the colours), a creature
+    // spell may take any colour. The chosen creature TYPE is simplified to "any creature" (these
+    // lands are played in single-tribe decks, so type == any-creature for every deck tested). See
+    // docs/design/unclaimed-territory-restricted-mana.md.
+    bool colored_creature_only = false;
+
     // Upkeep token creation: at the beginning of upkeep, create N creature tokens
     // with the given power/toughness/subtypes (e.g. Thrumming Hivepool: 2 × 1/1 Sliver).
     int upkeep_creates_tokens     = 0;

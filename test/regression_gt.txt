@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 46c9b28  date 2026-07-22
+# Regression ground truth -- commit acc8388  date 2026-07-22
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -19,12 +19,12 @@ knights_smoke_d5_s1001=4.4000/89c1dfe9c1053a05
 antilife_smoke_d0_s1001=5.5990/b83c527a9a3d91b8
 antilife_smoke_d3_s1001=4.6480/006e946f202f5bee
 antilife_smoke_d5_s1001=4.6333/4f407bc43b7480e4
-hinata_smoke_d0_s1001=7.4810/3334806a882a6749
-hinata_smoke_d3_s1001=6.0200/e98a3cfd3422bbd9
-hinata_smoke_d5_s1001=6.0533/0496210e47496792
-dragonstorm_smoke_d0_s1001=8.1570/219abc5233e9609f
-dragonstorm_smoke_d3_s1001=5.0600/e86417192cde8fd8
-dragonstorm_smoke_d5_s1001=5.0000/9118a0d88771894b
+hinata_smoke_d0_s1001=7.3950/5a7376af728f7abe
+hinata_smoke_d3_s1001=6.0200/b54725e4930b4abf
+hinata_smoke_d5_s1001=6.0533/709eb0a582b3144c
+dragonstorm_smoke_d0_s1001=7.2710/315b8f1a0ca49ee9
+dragonstorm_smoke_d3_s1001=4.7933/99b20c73b5324276
+dragonstorm_smoke_d5_s1001=4.8000/4a3867ebef5f5426
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6830/1c52c53844821180
@@ -52,16 +52,16 @@ antilife_regression_d3_s2002=4.6833/7d52278e6cfdff79
 antilife_regression_d3_s3003=4.7433/4d574926d3f3b42d
 antilife_regression_d5_s2002=4.7240/8cb7eafbf9c075d6
 antilife_regression_d5_s3003=4.7840/11ef6dce409fb3cb
-hinata_regression_d0_s2002=7.5410/d514ff3f94fa29fc
-hinata_regression_d3_s2002=6.2050/d1ecda5ed7c533c9
-hinata_regression_d3_s3003=6.1850/81901820a2b9df42
-hinata_regression_d5_s2002=6.1800/69df0a4c9094a206
-hinata_regression_d5_s3003=6.0900/36f000da0b002aa5
-dragonstorm_regression_d0_s2002=8.0640/74b3fa00e1807b1e
-dragonstorm_regression_d3_s2002=4.9667/f25728d1e46cbd49
-dragonstorm_regression_d3_s3003=4.9067/34ce28a5746be407
-dragonstorm_regression_d5_s2002=4.8080/b64d190203d3ab07
-dragonstorm_regression_d5_s3003=4.8560/4d3cd2898cabc9cd
+hinata_regression_d0_s2002=7.4900/6a701b0757275388
+hinata_regression_d3_s2002=6.1850/b6f0143d3cbc8e80
+hinata_regression_d3_s3003=6.1750/4317aff01ef059ad
+hinata_regression_d5_s2002=6.1500/cece33d25d97b0b8
+hinata_regression_d5_s3003=6.0800/dbaf153bb3ba7276
+dragonstorm_regression_d0_s2002=7.1590/b801c60b7ff77414
+dragonstorm_regression_d3_s2002=4.8433/40951af90718b2be
+dragonstorm_regression_d3_s3003=4.8300/ac7cec658a5cd376
+dragonstorm_regression_d5_s2002=4.7160/4e9f89e25c8d3ffc
+dragonstorm_regression_d5_s3003=4.7840/efef7103f91da2c1
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6445/fb2c4c8daf622fb4

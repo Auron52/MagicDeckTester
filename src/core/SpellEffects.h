@@ -2774,6 +2774,26 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
     return ReflectedColors(state, controller, in_hand);
 }
 
+// Colours a source may produce to pay for THIS spell (payment context -> for_creature is known).
+// Identical to EffectiveProduces for every source EXCEPT a colored_creature_only source (Unclaimed
+// Territory / Cavern of Souls: {C} free, coloured only for a creature spell of the chosen type,
+// simplified to any creature): when the spell is NOT a creature it yields only {Colorless}, so its
+// coloured mana can't pay a coloured/{C}-typed... no: only its {C} survives, which pays generic pips
+// but not coloured pips. for_creature == true (or the flag off) -> the full EffectiveProduces list.
+// Returns a thread_local buffer when it strips (safe like ReflectedColors: consumed within one
+// source's loop, never held across another Produces* call). Byte-identical for every deck without a
+// colored_creature_only source.
+inline const std::vector<Color>& ProducesForPayment(const GameState& state, int controller,
+                                                    const CardDefinition& def, bool for_creature)
+{
+    const std::vector<Color>& base = EffectiveProduces(state, controller, def);
+    if (!def.params.colored_creature_only || for_creature) { return base; }
+    static thread_local std::vector<Color> only_c;
+    only_c.clear();
+    for (Color c : base) { if (c == Color::Colorless) { only_c.push_back(c); } }
+    return only_c;
+}
+
 // Hand-context variant for mulligan / bottoming evaluation, where the relevant "other lands" are
 // the ones in the passed-in candidate `hand` (not state's hand). A Reflecting Pool reflects the
 // union of the OTHER non-reflecting lands in this hand -- so an all-Reflecting-Pool hand reads as
@@ -3977,7 +3997,20 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)
         if (def->params.reflecting && !rp_ready)
         { rp_colors = &ReflectedColors(state, active, /*in_hand=*/false); rp_ready = true; }
-        const std::vector<Color>& produces = def->params.reflecting ? *rp_colors : def->params.produces;
+        const std::vector<Color>& produces_base = def->params.reflecting ? *rp_colors : def->params.produces;
+        // colored_creature_only (Unclaimed Territory / Cavern of Souls): a non-creature spell may take
+        // only {C} from this source (its coloured mana is creature-only). Strip the colours here so the
+        // pip-matching below can pay a generic pip with {C} but never a coloured pip. Keeps the reflecting
+        // hoist above (these lands are never reflecting). Identity for every other source -> byte-identical.
+        static thread_local std::vector<Color> ccov;
+        const std::vector<Color>* produces_ptr = &produces_base;
+        if (def->params.colored_creature_only && !for_creature)
+        {
+            ccov.clear();
+            for (Color c : produces_base) { if (c == Color::Colorless) { ccov.push_back(c); } }
+            produces_ptr = &ccov;
+        }
+        const std::vector<Color>& produces = *produces_ptr;
         // Undo across this source's options. `activate` only ever modifies THIS source (its
         // tapped flag + a depletion counter); deeper recursion taps OTHER sources but each level
         // self-restores on failure ("returns false => state unchanged", by induction over the

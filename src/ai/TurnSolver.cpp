@@ -2055,6 +2055,21 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     const MidGameEvaluator* ev = (UseLearnedEval() && state.m_evaluator && !state.m_evaluator->empty())
                                ? state.m_evaluator : nullptr;
 
+    // d0/rollout "rituals-for-payoff" guard (HEURISTIC; default ON, opt-out MTG_NO_RITUAL_PAYOFF_GUARD).
+    // A mana ritual (Rite of Flame, Desperate/Pyretic Ritual, Lotus sac -- anything with ritual_float > 0)
+    // should only be cast to the extent its floated mana funds a same-turn payoff. On a non-winning plan
+    // the scoring-site check below rejects a subset that casts a SURPLUS ritual (one removable with the
+    // rest still payable) -- so a plan never spends "10 mana of rituals to hard-cast a 4-mana Scourge",
+    // nor floats mana nothing uses (lost card + Sandstone depletion; the Dragonstorm setup-turn misplays
+    // the user flagged). EXCEPTION (storm gate): a plan containing a tutor_to_battlefield storm wincon
+    // (Dragonstorm) keeps ALL rituals -- extra spells = extra dragons; measured decisive. This is a
+    // GREEDY/ROLLOUT policy fix only -- Solve is the d0 decision and every rollout leaf, so curbing waste
+    // here improves both direct d0 play and the leaf win-turns the search reads. It deliberately does NOT
+    // touch EnumeratePlans (the search's branch list): a ritual is still OFFERED as a branch and kept in
+    // hand for a future turn. Gated on any_ritual -> byte-identical for non-ritual decks. Measured:
+    // Dragonstorm d0 ~0.9 turns faster / search ~0.05-0.08; Hinata +0.05; burn byte-identical; work down.
+    static const bool s_ritual_payoff_guard = std::getenv("MTG_NO_RITUAL_PAYOFF_GUARD") == nullptr;
+
     // Evaluate one selected combination of candidate indices and, if it is the new optimum,
     // record it. The optimum is ordered by (wins, value, SMALLEST action mask): a winning plan
     // beats a non-winner; higher eval beats lower; among equals the numerically smallest mask
@@ -2219,6 +2234,69 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             extra_lethal = provider.ExtraLethalDamage(state, casting);
         }
         bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
+
+        // Rituals-for-payoff guard (see the flag above), with the STORM heuristic gate the user asked for.
+        // Question: may this plan spend MORE ritual mana than the payoff's cost? Default NO -- so we reject
+        // a non-winning subset with a SURPLUS ritual (one whose removal still leaves everything payable):
+        // over-paying a fixed-cost spell (the user's "10 mana of rituals to hard-cast a 4-mana Scourge")
+        // just burns a card + Sandstone depletion for nothing. But a STORM wincon breaks that: Dragonstorm
+        // puts min(spells_cast_this_turn, ...) dragons, so EXTRA rituals ARE the payoff (more dragons) --
+        // measured decisive (ungated count-minimisation robbed storm lethality, dLP -0.008 vs -0.804). So
+        // when the plan contains a tutor_to_battlefield (storm) card we DON'T minimise -- keep every
+        // ritual. Never blocks a winning plan; gated on any_ritual -> byte-identical for non-ritual decks.
+        if (s_ritual_payoff_guard && any_ritual && !wins)
+        {
+            bool wants_excess = false;   // storm wincon in the plan -> extra rituals buy dragons, keep all
+            for (int j : sel)
+            {
+                if (cands[j].def && cands[j].def->params.tutor_to_battlefield) { wants_excess = true; break; }
+            }
+            if (!wants_excess)
+            {
+                // Is ANY selected ritual surplus -- removable with everything else still payable? The
+                // credited pool `eff` treats ritual float as wild, so removing a ritual reduces wild by its
+                // float (triangular gy-self bonus recomputed for Rite chains) and drops its own cost from
+                // the target. A cheap ritual can be the load-bearing bootstrap for an expensive one, so we
+                // test EACH ritual (linear, two CanPay each -- not a powerset). SubsetPayable need not be
+                // rechecked: dropping a ritual only shrinks color demand and the full subset already passed
+                // it. Subsumes the zero-payoff case (all rituals removable). Runs only on the credited/pool
+                // path (mana_ok), not the filter fallback.
+                if (mana_ok)
+                {
+                    int flat_sum = 0, gy = 0;
+                    for (int j : sel)
+                    {
+                        if (cands[j].ritual_float <= 0) { continue; }
+                        flat_sum += cands[j].ritual_float;
+                        if (cands[j].def && cands[j].def->params.ritual_float_gy_self_bonus) { ++gy; }
+                    }
+                    const int full_credit = flat_sum + gy * (gy - 1) / 2;   // == the wild credited into eff
+                    for (int r : sel)
+                    {
+                        if (cands[r].ritual_float <= 0) { continue; }
+                        const bool r_gy   = cands[r].def && cands[r].def->params.ritual_float_gy_self_bonus;
+                        const int  gy_r   = gy - (r_gy ? 1 : 0);
+                        const int  cred_r = (flat_sum - cands[r].ritual_float) + gy_r * (gy_r - 1) / 2;
+
+                        ManaPool ewr = eff, encwr = eff_nc;
+                        ewr.wild   = std::max(0, ewr.wild   - (full_credit - cred_r));
+                        encwr.wild = std::max(0, encwr.wild - (full_credit - cred_r));
+
+                        const ManaCost& rc = cands[r].cost;
+                        ManaCost cwr = combined, ncwr = noncreature_combined;
+                        cwr.white -= rc.white; cwr.blue -= rc.blue; cwr.black -= rc.black; cwr.red -= rc.red;
+                        cwr.green -= rc.green; cwr.colorless -= rc.colorless; cwr.generic = std::max(0, cwr.generic - rc.generic);
+                        if (cands[r].is_noncreature)
+                        {
+                            ncwr.white -= rc.white; ncwr.blue -= rc.blue; ncwr.black -= rc.black; ncwr.red -= rc.red;
+                            ncwr.green -= rc.green; ncwr.colorless -= rc.colorless; ncwr.generic = std::max(0, ncwr.generic - rc.generic);
+                        }
+
+                        if (ewr.CanPay(cwr) && encwr.CanPay(ncwr)) { return; }   // r is surplus -> hold it
+                    }
+                }
+            }
+        }
 
         // Learned ranking for NON-lethal plans (lethal stays exact and dominates, so the model never
         // ranks a win). rank_value replaces total_eval in the compare + best.value; it IS total_eval
@@ -2670,7 +2748,10 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
-            const std::vector<Color>& prod = EffectiveProduces(state, active, *def);  // RP-aware
+            // ProducesForPayment: a colored_creature_only land (Unclaimed Territory / Cavern of Souls)
+            // yields only {C} for a non-creature spell -> a coloured pip won't match below, but a
+            // generic pip still taps it for {C}. RP-aware; identity for every other source.
+            const std::vector<Color>& prod = ProducesForPayment(state, active, *def, for_creature);
             Color col;
             if (any)
             {

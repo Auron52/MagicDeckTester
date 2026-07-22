@@ -1918,10 +1918,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // turn re-solves this many times after draws, and this is the no-win greedy-pilot fallback whose
     // drift is already documented as harmless, so capping the chain only stops a pathological loop --
     // it never abandons a win (the win paths use the bounded committed-line replay, not this).
-    constexpr int kMaxDrawBreakpointDepth = 40;
+    constexpr int  kMaxDrawBreakpointDepth = 40;
+    // The depth cap alone does NOT bound this recursion against a NO-PROGRESS loop. Observed at
+    // Dragonstorm d0: the greedy re-solve returns an UNREALIZABLE draw-engine line (cast Apex of Power off
+    // ritual float the board can't actually pay for), the executor no-ops it, and the state is left
+    // FROZEN (hand/mana/float identical every level). But the recursion at line ~1943 fires on
+    // is_draw_engine(NAME) regardless of whether the cast happened, so it re-solves the same frozen state
+    // -> same phantom plan -> recurses forever (re-entered from the outer cast loop -> millions of no-op
+    // calls, a hang). A TOTAL per-main-phase invocation budget bounds it. This is the harmless no-win
+    // greedy fallback (wins replay the committed line, not this path); a real draw chain is deep at most
+    // (each real cast consumes its card), well under the budget, so the cap only stops the phantom spin.
+    constexpr long kMaxDrawBreakpointCalls = 4096;
+    long rdb_calls = 0;
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
-        if (bp_depth >= kMaxDrawBreakpointDepth) { return; }
+        if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -2766,7 +2777,9 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
                 else if (def->params.ramp_filter) { continue; }
                 else
                 {
-                    const std::vector<Color>& prod = EffectiveProduces(state, active, *def);
+                    // ProducesForPayment: a colored_creature_only land makes only {C} for a non-creature
+                    // spell, so it is NOT selected for a coloured pip there (but still pays a generic pip).
+                    const std::vector<Color>& prod = ProducesForPayment(state, active, *def, for_creature);
                     bool makes = false;
                     if (any) { makes = !prod.empty(); }
                     else { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
@@ -2781,7 +2794,9 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
             const CardDefinition* bdef = CardDatabase::Instance().LookupCached(bp.card);
             if (best_kind == 1)
             {
-                const std::vector<Color>& prod = EffectiveProduces(state, active, *bdef);
+                // {C}-only for a non-creature colored_creature_only land -> the generic tap uses {C}
+                // (prod[0]) rather than a colour that could leak to pay a coloured pip.
+                const std::vector<Color>& prod = ProducesForPayment(state, active, *bdef, for_creature);
                 tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, prod[0]) : needed);
                 return true;
             }
