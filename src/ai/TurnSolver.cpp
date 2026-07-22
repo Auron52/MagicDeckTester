@@ -3302,6 +3302,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!opt) { return; }
         const CardDefinition& def = *opt;
 
+        // Irencrag Feat "you can cast only one more spell this turn": once a restrictor has resolved, the
+        // turn-scoped budget counts down; at 0 no further spell may be cast -- hand OR staged (an Apex-of-
+        // Power-exiled Dragonstorm is still a spell cast this turn). This is the EXECUTION-TIME enforcement
+        // the static subset checks only approximate; without it the search finds illegal Irencrag -> Apex ->
+        // (dump the whole exile) lines. Checked before any mutation. Inert (budget == -1) for every deck
+        // without a max_casts_after card. See GameState::casts_remaining_this_turn.
+        if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
+
         // Cast-time guard for a risky alt payload (Reverent Silence): the search may commit it
         // from a node whose enabler diverges away in the realized line (commit-the-line
         // non-convergence, gi=212). Re-check the gate on the CURRENT board: if no enabler
@@ -3350,6 +3358,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // draw-breakpoint cast is its own apply_one so it self-counts. Read only by Dragonstorm's
         // resolution (below) + no BuildSimKey fold -> byte-identical for every non-storm deck.
         ++state.spells_cast_this_turn;
+
+        // Maintain the "one more spell" budget in lockstep with the storm counter (same per-cast site).
+        // A non-restrictor spends one (when a budget is active); the restrictor itself (Irencrag) INSTALLS
+        // its budget -- decrement FIRST (its own cast is governed by any PRIOR budget, already checked
+        // above), THEN take the min with its max_casts_after so two Irencrags compose correctly. Inert
+        // (budget stays -1) for every deck without a max_casts_after card.
+        if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+        if (def.params.max_casts_after >= 0)
+        {
+            state.casts_remaining_this_turn =
+                (state.casts_remaining_this_turn < 0)
+                    ? def.params.max_casts_after
+                    : std::min(state.casts_remaining_this_turn, def.params.max_casts_after);
+        }
 
         // Alternative cost paid as "an opponent gains alt_lifegain life" (Invigorate / Skyshroud
         // Cutter / Reverent Silence) -> reversed to damage by a Tainted Remedy / Plague Drone.
@@ -4828,6 +4850,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
+    state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
 
@@ -5101,7 +5124,12 @@ static std::vector<std::vector<int>>
 DragonstormCastOrderings(const std::vector<Action>& reorder)
 {
     const int n = static_cast<int>(reorder.size());
-    std::vector<int> medallion, irencrag, finisher, ritual_splice, ritual_plain, other;
+    // Apex of Power is an ENABLER (adds 10 mana + lets you cast 7 exiled cards this turn), NOT a
+    // closer: it belongs BEFORE Irencrag. Irencrag ("cast only one more spell") before Apex is the
+    // trap (Apex's mana + exiled spells are then unusable) -> never generate it. Dragonstorm / a
+    // closing Dragon are the true closers -> AFTER Irencrag (Apex -> Irencrag -> Dragonstorm is the
+    // golden line). See docs/design/gi22-durdle-and-irencrag-apex.md rules 2-3.
+    std::vector<int> medallion, irencrag, apex, closer, ritual_splice, ritual_plain, other;
     for (int i = 0; i < n; ++i)
     {
         const CardDefinition* d = reorder[i].def;
@@ -5109,8 +5137,9 @@ DragonstormCastOrderings(const std::vector<Action>& reorder)
         const CardParams& p = d->params;
         if (!p.reduces_spell_color.empty())           { medallion.push_back(i); }      // Ruby Medallion
         else if (p.max_casts_after >= 0)              { irencrag.push_back(i); }        // Irencrag Feat
-        else if (p.tutor_to_battlefield || p.impulse_exile > 0 || d->card.IsCreature())
-                                                      { finisher.push_back(i); }        // Dragonstorm/Apex/Dragon
+        else if (p.impulse_exile > 0)                 { apex.push_back(i); }            // Apex of Power (enabler, BEFORE Irencrag)
+        else if (p.tutor_to_battlefield || d->card.IsCreature())
+                                                      { closer.push_back(i); }          // Dragonstorm / closing Dragon (AFTER Irencrag)
         else if (p.ritual_floating_mana > 0 && p.splice_onto_arcane) { ritual_splice.push_back(i); } // Desperate
         else if (p.ritual_floating_mana > 0)          { ritual_plain.push_back(i); }    // Rite/Pyretic/Seething
         else                                          { other.push_back(i); }
@@ -5118,7 +5147,7 @@ DragonstormCastOrderings(const std::vector<Action>& reorder)
     auto cheapest = [&](std::vector<int>& v) {
         std::stable_sort(v.begin(), v.end(), [&](int a, int b) { return reorder[a].card_mv < reorder[b].card_mv; });
     };
-    cheapest(ritual_plain); cheapest(ritual_splice); cheapest(finisher); cheapest(other);
+    cheapest(ritual_plain); cheapest(ritual_splice); cheapest(apex); cheapest(closer); cheapest(other);
 
     // Build a base chain (Medallion NOT yet inserted). splice_after=true keeps the Desperates after the
     // plain rituals (splice line); false merges them cheapest-first (individual line).
@@ -5137,8 +5166,9 @@ DragonstormCastOrderings(const std::vector<Action>& reorder)
             chain = merged;
         }
         chain.insert(chain.end(), other.begin(),    other.end());
-        chain.insert(chain.end(), irencrag.begin(), irencrag.end());   // before the finisher
-        chain.insert(chain.end(), finisher.begin(), finisher.end());   // last
+        chain.insert(chain.end(), apex.begin(),     apex.end());       // Apex enables mana+casts: BEFORE Irencrag (never Irencrag->Apex)
+        chain.insert(chain.end(), irencrag.begin(), irencrag.end());   // second-to-last: gates the one closing spell
+        chain.insert(chain.end(), closer.begin(),   closer.end());     // Dragonstorm / closing Dragon: last
         return chain;
     };
     std::vector<std::vector<int>> bases;
@@ -5156,7 +5186,17 @@ DragonstormCastOrderings(const std::vector<Action>& reorder)
         stripped.reserve(base.size());
         for (int idx : base) { if (reorder[idx].def && reorder[idx].def->params.reduces_spell_color.empty()) { stripped.push_back(idx); } }
         const int m = static_cast<int>(stripped.size());
-        for (int pos = 0; pos <= m; ++pos)
+        // Ruby Medallion must never be the post-Irencrag "one more spell": a cost reducer cast after
+        // Irencrag discounts nothing and burns the single allowed cast (the payoff should have it).
+        // Cap insertion to BEFORE the restrictor (earliest-first search among the legal slots is kept).
+        // No restrictor in this base -> irc == m -> all positions stay open (byte-identical there).
+        int irc = m;
+        for (int i = 0; i < m; ++i)
+        {
+            const CardDefinition* d = reorder[stripped[i]].def;
+            if (d && d->params.max_casts_after >= 0) { irc = i; break; }
+        }
+        for (int pos = 0; pos <= irc; ++pos)
         {
             std::vector<int> cand; cand.reserve(n);
             for (int i = 0; i < pos; ++i)   { cand.push_back(stripped[i]); }

@@ -26,8 +26,13 @@ The user specified the actual decision structure, so we enumerate only the princ
 
 - **Mana rituals** (Rite of Flame, Pyretic/Desperate Ritual, Seething Song) → **cheapest-first**; they
   self-fund the chain, so their relative order is never searched.
-- **Irencrag Feat** ("cast only one more spell this turn") → fixed: immediately **before the finisher**.
-- **Finisher** (Dragonstorm / Apex of Power / a closing Dragon) → **last**.
+- **Apex of Power** (`impulse_exile>0`) → an **enabler**, not a closer: it adds 10 mana and exiles 7
+  castable cards, so it sits **before Irencrag** (`... rituals, apex, irencrag, closer`). Irencrag→Apex
+  is the trap (Apex's mana + exiled spells wasted after "only one more spell") and is **never generated**;
+  the reverse **Apex → Irencrag → Dragonstorm** is a genuine line and always is.
+- **Irencrag Feat** ("cast only one more spell this turn") → fixed: immediately **before the closer**
+  (second-to-last). Irencrag→Dragon is low value but kept as an offered option, not cut off.
+- **Closer** (Dragonstorm / a closing Dragon) → **last**.
 - **Ruby Medallion** → the one genuinely **searched** position: **as early as it can be paid** (earlier
   discounts more red rituals). Tried at every slot, earliest-first, so the rollout keeps the earliest
   that still goes off; the *subset* enumerator separately offers no-Medallion lines, so "drop it only if

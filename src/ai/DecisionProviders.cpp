@@ -1880,6 +1880,12 @@ int DragonstormProvider::CastOrderRank(const GameState& s, const CardDefinition&
     // be the LAST ritual: after the other rituals (15) but BEFORE the payoff (Dragonstorm, 20), so the
     // only spell that follows it is the payoff. (Mirrors HinataProvider's Irencrag handling.)
     if (def.params.max_casts_after >= 0) { return 18; }
+    // Ruby Medallion (a red cost reducer) must be cast BEFORE Irencrag: casting it as the single spell
+    // allowed AFTER Irencrag discounts nothing and wastes the "one more spell" (the payoff should take
+    // that slot). Rank it just after the rituals (16) -- funded by their floating mana, on the board to
+    // discount the post-Irencrag payoff, and never trailing Irencrag. This governs the fixed-order/d0
+    // path AND the post-Apex STAGED re-solve (where the ordering search can't reach the exiled casts).
+    if (!def.params.reduces_spell_color.empty()) { return 16; }
     // A mana ritual (Seething Song / Pyretic Ritual / Rite of Flame / Irencrag burst) must resolve
     // BEFORE the payoff so its floating mana is available to pay Dragonstorm / a hard-cast Dragon /
     // another Apex. Rank between creatures (10) and other noncreatures (20). Without this the canonical

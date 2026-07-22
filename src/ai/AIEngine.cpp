@@ -3141,6 +3141,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     auto def = CardDatabase::Instance().LookupCached(hand_card);
     if (!def) { return; }
 
+    // Irencrag Feat "you can cast only one more spell this turn": mirror TurnSolver::apply_one's
+    // execution-time budget in the REAL executor so a replayed line OR the post-Apex staged re-solve
+    // cannot cast past the limit (an Apex-exiled Dragonstorm is still a spell cast this turn). Keeps the
+    // executor in lockstep with the enforced rollout. Inert (budget == -1) for every deck without a
+    // max_casts_after card. See GameState::casts_remaining_this_turn.
+    if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
+
     StackEntry entry;
     entry.type             = StackEntry::EntryType::Spell;
     entry.source           = def->card;
@@ -3384,6 +3391,19 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // executor's storm count matches the searched line. Read only by Dragonstorm's EffectHandler
     // resolution + folded into no state key -> byte-identical for every non-storm deck.
     ++state.spells_cast_this_turn;
+
+    // Maintain the "one more spell" budget in lockstep with TurnSolver::apply_one (same per-cast site):
+    // a non-restrictor spends one (when a budget is active); the restrictor (Irencrag) installs its own
+    // (decrement FIRST -- its cast is governed by any prior budget checked above -- then min). Inert
+    // (budget stays -1) for every deck without a max_casts_after card.
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    if (def->params.max_casts_after >= 0)
+    {
+        state.casts_remaining_this_turn =
+            (state.casts_remaining_this_turn < 0)
+                ? def->params.max_casts_after
+                : std::min(state.casts_remaining_this_turn, def->params.max_casts_after);
+    }
 
     state.stack.push_back(std::move(entry));
 

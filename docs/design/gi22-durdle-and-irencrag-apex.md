@@ -23,11 +23,22 @@ follow-up. **The user corrected this: they are NOT budget and ARE fixable withou
    never search their relative order.
 2. **Irencrag Feat** — allowed in the ordering, but **only immediately before Dragonstorm, or as the
    second-to-last cast of the turn**. Its "you may cast only one more spell this turn" (`max_casts_after=1`)
-   means exactly one cast may follow it.
-3. **Irencrag before Apex of Power is a TRAP — never generate it.** Apex adds 10 mana of one colour AND
-   exiles 7 cards to cast this turn; after Irencrag you may cast only ONE more spell (Apex itself), so
-   Apex's 10 mana and its 7 exiled spells are **unusable/wasted**. Irencrag must precede Dragonstorm / a
-   closing Dragon, **not** Apex.
+   means exactly one cast may follow it. **Irencrag before a closing Dragon** is *usually* low value
+   (dragons are relatively low impact) but must **not be cut off entirely** — keep it as a generated,
+   search-decided option, just not a preferred one.
+3. **Irencrag before Apex of Power is a TRAP — never generate it** (excluding it is "a no-brainer").
+   Apex adds 10 mana of one colour AND exiles 7 cards to cast this turn; after Irencrag you may cast only
+   ONE more spell (Apex itself), so Apex's 10 mana and its 7 exiled spells are **unusable/wasted**.
+   **But the reverse — Apex → Irencrag → Dragonstorm — is a GOOD line and must be generated:** cast Apex
+   first (it produces the mana and exiles the cards), *then* Irencrag, *then* Dragonstorm as the single
+   permitted closing spell. So Apex is an **enabler that sits BEFORE Irencrag**, not a closer; Dragonstorm
+   / a closing Dragon is the **closer AFTER Irencrag**.
+
+   Implemented in `DragonstormCastOrderings` (`TurnSolver.cpp`) by splitting the old single "finisher"
+   bucket into `apex` (`impulse_exile>0`, inserted **before** Irencrag) and `closer`
+   (`tutor_to_battlefield || IsCreature()`, inserted **after** Irencrag, last). This makes
+   `... apex, irencrag, closer` the base chain: Irencrag→Apex is never emitted, Apex→Irencrag→Dragonstorm
+   always is, and Irencrag→Dragon remains an offered (low-priority) option.
 4. **Ruby Medallion** — the one genuinely searched position: **as early as it can be paid** (earlier
    discounts more red rituals); move it later or drop it from the line only if necessary (the subset
    enumerator supplies the no-Medallion lines).
@@ -37,11 +48,9 @@ follow-up. **The user corrected this: they are NOT budget and ARE fixable withou
 
 ## Open hypothesis / next step (post-compaction)
 
-The `DragonstormCastOrderings` generator (`TurnSolver.cpp`) currently places Irencrag "before the
-finisher" for ANY finisher — including **Apex**, which is the trap in rule 3. Two things to chase:
-- Enforce rule 3: never emit an Irencrag→Apex ordering (and make sure Irencrag→Dragonstorm / second-last
-  IS emitted). This may or may not be gi22's specific cause (gi22's line is Dragonstorm, not Apex), but
-  it is a definite correctness rule for the ordering.
+Rule 3 is now **enforced** — `DragonstormCastOrderings` splits Apex (enabler, before Irencrag) from the
+closer (Dragonstorm / Dragon, after Irencrag), so Irencrag→Apex is never emitted and Apex→Irencrag→
+Dragonstorm always is. Remaining:
 - gi22 itself: with Lotus Bloom mana + Irencrag, find why the d3 search no longer prices the earlier
   (T4) go-off it used to. Since it is not budget/AccelPrefix/ordering-cap, suspect the enumeration of the
   Lotus-Bloom-funded Irencrag→Dragonstorm subset, or a mis-scoring of that line under the fea3a2c order.

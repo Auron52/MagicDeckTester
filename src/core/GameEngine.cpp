@@ -145,6 +145,7 @@ void GameEngine::UntapStep(GameState& state)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
+    state.casts_remaining_this_turn = -1; // Irencrag "one more spell" budget clears each turn (see GameState); no-op for non-restrictor decks
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;
