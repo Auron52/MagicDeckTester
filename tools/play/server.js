@@ -200,11 +200,23 @@ async function runKeepHint(p) {
 // win-optimal removal), whereas the mulligan keep and other decisions are already correct at the play
 // depth. Returns the pending decision's ai_choice + per-card win_optimal so the browser can patch the
 // modal in place. Bottoming happens before turn 1, so this invocation only pays the bottoming rollout.
-function runAiHint(p) {
+//
+// Uses ASYNC spawn (spawnAsyncCollect), NOT spawnSync: at HINT_DEPTH the engine runs lookahead-bottoming
+// (a full clairvoyant RolloutWinTurn per candidate card, per bottom step -- up to count*hand_size rollouts,
+// expensive on a combo deck like Dragonstorm). A spawnSync here froze Node's single-threaded event loop
+// for that whole computation, so the user's own /api/step (submit the bottom, advance to turn 1) could not
+// be serviced until the hint finished -- the "waiting for lookahead bottoming while making the decision"
+// stall. Async spawn keeps the hint a true background fill-in. Mirrors runKeepHint's async fix.
+async function runAiHint(p) {
   const depth = intParam(p.hintDepth, HINT_DEPTH);
-  const r = runStep({ ...p, depth }, null);
-  if (r.kind !== 'decision') return { kind: 'hint-error', error: r.error || ('unexpected ' + r.kind) };
-  const d = r.decision;
+  const args = buildArgs({ ...p, depth }, null, null, false);   // table-less, depth = HINT_DEPTH
+  const r = await spawnAsyncCollect(BIN, args, { cwd: ROOT, timeout: STEP_TIMEOUT_MS });
+  if (r.error) return { kind: 'hint-error', error: String(r.error) };
+  const out = (r.stdout || '') + '\n' + (r.stderr || '');
+  const decisionRaw = extractBlock(out, '<<<CLAUDE_DECISION>>>', '<<<END_DECISION>>>');
+  if (!decisionRaw) return { kind: 'hint-error', error: 'no decision markers' };
+  let d;
+  try { d = JSON.parse(decisionRaw); } catch (e) { return { kind: 'hint-error', error: 'bad decision JSON: ' + e.message }; }
   return {
     kind: 'hint',
     decision_index: d.decision_index,
@@ -312,10 +324,11 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, runStep(p, null));
     }
     if (req.method === 'POST' && url.pathname === '/api/ai-hint') {
-      // Async deep-search hint for the current decision (see runAiHint). Non-blocking: the browser
-      // has already shown the decision; this fills in what the depth-HINT_DEPTH search would do.
+      // Async deep-search hint for the current decision (see runAiHint). Genuinely non-blocking now: the
+      // hint spawns via async spawn, so its lookahead-bottoming rollout never freezes the event loop /
+      // the user's next /api/step (advance to turn 1). The browser has already shown the decision.
       const p = await readBody(req);
-      return sendJson(res, 200, runAiHint(p));
+      return sendJson(res, 200, await runAiHint(p));
     }
     if (req.method === 'POST' && url.pathname === '/api/keep-hint') {
       // Async mulligan-TABLE hint for the current pre-game decision (see runKeepHint). Non-blocking:
