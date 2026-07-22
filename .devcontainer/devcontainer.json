@@ -14,7 +14,12 @@
   //                        container's OWN netfilter rules (no host network access).
   //   PERFMON           -> let `perf` call perf_event_open for sampling (the WSL2
   //                        kernel defaults to perf_event_paranoid=2).
-  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW", "--cap-add=PERFMON"],
+  //   SYS_PTRACE        -> let `gdb -p <pid>` attach to an already-running process.
+  //                        gdb itself is in the base image and launch-and-debug
+  //                        (break/run/inspect) already works without this; Docker
+  //                        drops SYS_PTRACE by default, which only blocks *attach*.
+  //                        The cap alone is enough (no seccomp=unconfined needed).
+  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW", "--cap-add=PERFMON", "--cap-add=SYS_PTRACE"],
 
   // Node.js (for the Claude Code CLI, installed in postCreateCommand below) and
   // the GitHub CLI (so `gh auth login` can authenticate git as the dtippett-bot

@@ -193,12 +193,23 @@ the event explicitly:
 
 ```bash
 cmake --build build --config RelWithDebInfo
-perf record -e task-clock -F 999 -g --call-graph dwarf \
+perf record -o build/perf.data -e task-clock -F 999 -g --call-graph dwarf \
   ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
-perf report                      # where CPU time goes, with call stacks
+perf report -i build/perf.data   # where CPU time goes, with call stacks
 perf stat -e task-clock,context-switches,cpu-migrations,page-faults \
   ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
 ```
+
+**Write `perf.data` to a container-native path, never the workspace root.** The
+repo is a **bind mount of the Windows filesystem** (mount type `v9fs`/virtiofs), and
+perf's ring-buffer data writes are not supported there — `perf record` with no `-o`
+(or `-o` pointing anywhere under the workspace) fails with `failed to write perf
+data, error: Bad address` (or silently writes `0.000 MB (null)` and dumps binary to
+the terminal). This is **not** a PMU or attach limitation — attaching to a live PID
+(`perf record -p <pid> -- sleep N`) works fine; only the *output file's* filesystem
+matters. Use `-o build/perf.data` (the `build/` Docker volume is native and stays out
+of your Windows tree), or `-o /tmp/...` / `-o ~/...`. `perf stat` has no data file, so
+it needs no `-o`.
 
 For everything else:
 - **Exact instruction counts + call graph (deterministic, PMU-free)** —
