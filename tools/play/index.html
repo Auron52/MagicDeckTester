@@ -1868,6 +1868,12 @@ function autoResolveDecision(dec){
   return true;
 }
 function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
+  // When this decision was reached by an UNDO (user stepping back), suppress the forward-play
+  // auto-advance below for THIS one decision: the dead-opponent auto-pass / commit-turn skip exist to
+  // spare a FORWARD player clicking through a decided game, but on undo they would instantly re-commit
+  // back to the win -- so you could never land INSIDE the winning turn to inspect the board (e.g. "where
+  // did Lathliss go"). Consume the flag so normal forward interaction resumes on the next decision.
+  const undoing = S.undoing; S.undoing = false;
   // Undo checkpoint: snapshot the history length + graveyard/hand diff state BEFORE this decision's
   // draws/gy are logged. A single forward step appends a VARIABLE number of history lines (draw
   // lines + gy lines + the action), so undo can't just pop one -- it truncates back to this
@@ -1884,12 +1890,12 @@ function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=
   // re-prompt in the SAME main -- e.g. Anti-Lifegain seed 1 game 0, which re-prompts a pre_main at
   // turn 4 with the opponent at -1). Don't make the user click through a decided game -- auto-pass an
   // empty line to fetch the result. Fires on ANY main decision with a dead opponent (both phases).
-  if (isDeadOpponentMain(dec)) { S.plan=[]; commitLine(); return; }
+  if (!undoing && isDeadOpponentMain(dec)) { S.plan=[]; commitLine(); return; }
   // "Commit turn": auto-pass every remaining MAIN-phase decision of the same turn (a post-combat
   // Main 2, or a draw-breakpoint re-prompt) so the user jumps to the next turn without clicking
   // through the rest of this one. Stops as soon as the turn advances, a non-main decision appears
   // (needs a real choice), or the game ends (result -> showResult clears the flag). Capped defensively.
-  if (S.commitTurn != null) {
+  if (!undoing && S.commitTurn != null) {
     if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
       S.commitTurnPasses = (S.commitTurnPasses||0) + 1; S.plan=[]; commitLine(); return;
     }
@@ -1912,6 +1918,9 @@ function flashHint(msg) { const ve=$('verdict'); ve.className=''; ve.style.displ
 
 function showResult(r) {
   S.over=true; S.result=r; S.commitTurn=null;   // game over -> end any in-progress turn-skip
+  // Keep Undo usable AFTER a win (the win can arrive via commitLine/showResult, which bypasses step()
+  // where the button state is otherwise set) so the user can step back into the winning turn to inspect.
+  $('undo').disabled = !(S.steps && S.steps.length);
   logEventList(r.events);   // the winning turn's combat/damage/life events (after the last decision)
   S.history.push({ turn:r.won?r.win_turn:'—', label:r.won?`WON turn ${r.win_turn}`:'no win', win:r.won });
   renderHistory(); renderBoard(); hideVerdict(); $('vialslot').innerHTML='';
@@ -2010,6 +2019,7 @@ function rollbackStep() {
 }
 async function undo() {
   if (!rollbackStep()) return;
+  S.undoing = true;   // land INSIDE the replayed decision (suppress the dead-opponent/commit-turn auto-advance once)
   renderHistory(); await step();
 }
 // Auto-reject: the committed line dropped a cast it couldn't pay for (detectDropped). Roll the whole
