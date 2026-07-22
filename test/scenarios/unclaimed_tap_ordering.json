@@ -1,0 +1,9 @@
+{
+  "_comment": "TIGHT tap-ordering test. Board = 1 Mountain (ONLY red) + 1 Unclaimed. Hand = only {1}{R} rituals (no pure-{R} Rite). To combo, Pyretic Ritual #1 MUST be cast with Unclaimed paying {1} via {C} and the lone Mountain paying {R}. If the solver wastes the Mountain on the {1} generic, Pyretic #1 is unpayable -> no combo -> no win. PASS(win) => ordering correct even with scarce red.",
+  "deck": "decks/Dragonstorm/Dragonstorm.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 6,
+  "battlefield": [ { "name": "Mountain" }, { "name": "Unclaimed Territory" } ],
+  "hand": [ "Pyretic Ritual", "Pyretic Ritual", "Pyretic Ritual", "Seething Song", "Seething Song", "Dragonstorm" ],
+  "library_filler": "Utvara Hellkite", "library_size": 40,
+  "depth": 5, "budget_ms": 400, "max_turns": 5, "expect_win_turn": 5
+}

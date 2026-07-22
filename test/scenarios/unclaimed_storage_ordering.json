@@ -1,0 +1,6 @@
+{ "deck": "decks/Dragonstorm/Dragonstorm.cod", "turn": 4, "on_the_play": true,
+  "active_life": 20, "opponent_life": 6,
+  "battlefield": [ {"name":"Mercadian Bazaar","storage_counters":2}, {"name":"Unclaimed Territory"} ],
+  "hand": [ "Seething Song", "Seething Song", "Seething Song", "Dragonstorm" ],
+  "library_filler": "Utvara Hellkite", "library_size": 40,
+  "depth": 5, "budget_ms": 400, "max_turns": 5, "expect_win_turn": 5 }

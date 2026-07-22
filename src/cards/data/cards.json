@@ -240,7 +240,7 @@
             "keywords": [],
             "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type, and that spell can't be countered. [Simplified: modelled as producing all five colors; ETB choice, color restriction, and uncounterable clause not modelled]",
             "template": "basic_land",
-            "parameters": { "produces": ["W", "U", "B", "R", "G"] }
+            "parameters": { "produces": ["W", "U", "B", "R", "G", "C"], "colored_creature_only": true }
         },
         {
             "name": "Sliver Hive",
@@ -251,7 +251,8 @@
             "oracle_text": "{T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a Sliver spell. {5}, {T}: Create a 1/1 colorless Sliver creature token. Activate only if you control a Sliver. [Color restriction on mana not modelled: produces all colors; token ability implemented.]",
             "template": "basic_land",
             "parameters": {
-                "produces": ["W", "U", "B", "R", "G"],
+                "produces": ["W", "U", "B", "R", "G", "C"],
+                "colored_creature_only": true,
                 "tap_token_cost": "{5}",
                 "tap_token_power": 1,
                 "tap_token_toughness": 1,
@@ -267,7 +268,7 @@
             "keywords": [],
             "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type. [Simplified: modelled as producing all five colors; ETB choice and color restriction not modelled]",
             "template": "basic_land",
-            "parameters": { "produces": ["W", "U", "B", "R", "G"] }
+            "parameters": { "produces": ["W", "U", "B", "R", "G", "C"], "colored_creature_only": true }
         },
         {
             "name": "Ancient Ziggurat",
@@ -287,7 +288,7 @@
             "keywords": [],
             "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type. [Simplified: modelled as producing all five colors; ETB choice and restriction not modelled]",
             "template": "basic_land",
-            "parameters": { "produces": ["W", "U", "B", "R", "G"] }
+            "parameters": { "produces": ["W", "U", "B", "R", "G", "C"], "colored_creature_only": true }
         },
         {
             "name": "Mutavault",

@@ -1,13 +1,26 @@
 # Faithful restricted-mana for Unclaimed Territory / Cavern of Souls / Secluded Courtyard
 
-**Status: HELD / DEFERRED 2026-07-22.** The engine wiring (`ProducesForPayment` + `colored_creature_only`
-param) is COMMITTED but INERT — the `cards.json` flags are NOT applied (reverted to the fake-red model),
-so behaviour is unchanged. The model is validated CORRECT and FAITHFUL (definitive per-case proof below,
-0 stumbles), but the user chose to **hold adoption pending a manual review of the affected games/logs**
-(the "regression" it produced turned out to be search weakness, not honest cost — fixed independently by
-the Dragonstorm payoff-prune, see [dragonstorm-payoff-prune.md](dragonstorm-payoff-prune.md), which
-shipped first). To adopt later: re-apply the four `colored_creature_only` flags to cards.json (Unclaimed
-Territory / Cavern of Souls / Secluded Courtyard / Sliver Hive), rebaseline GT, commit.
+**Status: ADOPTED 2026-07-22.** The four `colored_creature_only` flags are now applied to cards.json
+(Unclaimed Territory / Cavern of Souls / Secluded Courtyard / Sliver Hive: `produces` gains `{C}` last +
+`colored_creature_only: true`) on top of the previously-committed engine wiring, and smoke+regression GT
+is rebaselined on the resulting behaviour. Adopted after the post-merge, prune-on re-A/B + a per-game
+trace review of every persistent d5 slowdown confirmed the user's gate: the searched cost is tiny
+(dragonstorm +0.03..+0.05 turns, knights BYTE-IDENTICAL, slivers ~neutral +0.0067) and is **dominated by
+honest LOAD-BEARING faithful corrections** — games where the baseline was illegitimately powering out an
+early combo off Unclaimed's fake red with little or no real red on board. The purest example is
+`d5 s3003 gi171`: the baseline combos on T4 off **two Unclaimed Territories with ZERO real red anywhere**,
+a 100% modeling-bug "win" that the fix correctly delays until real red is drawn (~T7). The few larger
+non-load-bearing gaps (e.g. `d5 s2002 gi63`, where B assembles dragons by T5 but the search fails to close
+until T8) are exactly the "search failing for lack of a value-leaf" cases the user flagged; their
+recoverability under sufficient search is to be demonstrated empirically by re-measuring this A/B WITH the
+Dragonstorm value-leaf once it is generated. Full prune-on gate evidence: `logs/unclaimed_ab2/`
+(cards_fix.json, per-case A/B, per-game A-vs-B traces, render_ab.py classification).
+
+Design: `colored_creature_only` produces gain `{C}` (placed LAST so the generic-tap colour for CREATURE
+casts is unchanged); backtracker sites use `ProducesForPayment` (SpellEffects.h) to strip the colours for a
+non-creature spell. Verified: Dragonstorm rituals / Dragonstorm / Apex can no longer take a red pip off
+Unclaimed (combo correctly delayed); Slivers/Knights (all-creature decks that rely on these lands for
+coloured mana) stay ~neutral -> the for_creature path is intact.
 
 Design (unchanged, for when adopted): `colored_creature_only` produces gain `{C}` (placed LAST so the
 generic-tap colour for CREATURE casts is unchanged); backtracker sites use `ProducesForPayment`
