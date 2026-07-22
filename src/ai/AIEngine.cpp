@@ -3185,6 +3185,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // Crackle with Power: carry the declared extra-target count so ResolveDirectDamage's derived
     // discount + faithful 5X damage match the rollout's (lockstep). Scale_x spells only.
     if (IsCrackleCountSpell(def->params)) { entry.crackle_targets = crackle_targets; }
+    // Scaled divided-damage spell (Magma Opus): carry the committed opponent-face damage on the same
+    // field so ResolveDirectDamage deals exactly that to the opponent. Set only when a scaled variant
+    // was chosen (crackle_targets >= 0); a normal Magma cast leaves it unset -> full damage (byte-
+    // identical). Magma is not IsCrackleCountSpell, so the Crackle extra-target resolution never fires.
+    else if (def->params.damage_divided && crackle_targets >= 0) { entry.crackle_targets = crackle_targets; }
     // Ponder cast_reorder: carry the searched keep-vs-shuffle call so ResolveDrawSpell's reorder
     // matches the rollout's (lockstep). -1 = not a reorder spell (legacy heuristic path).
     if (ponder_keep >= 0) { entry.ponder_keep = ponder_keep; }
@@ -3299,6 +3304,15 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // prints the actual mana paid (e.g. "{4}{R}{R}") and not a stray "{X}" on top.
         effective.has_x  = false;
         effective.x_pips = 0;
+    }
+    // Scaled divided-damage spell (Magma Opus): recompute the committed-face cost from the archetype's
+    // model on the CURRENT board, matching the enumeration/rollout (which price the same committed face
+    // the same way) -> lockstep. Only a scaled Magma variant sets crackle_targets >= 0 on a
+    // damage_divided spell; every other cast keeps the EffectiveCost above (byte-identical).
+    if (def->params.damage_divided && crackle_targets >= 0)
+    {
+        for (const ScaledCastVariant& v : ResolveProvider(state).ScaledCastVariants(state, *def))
+        { if (v.face == crackle_targets) { effective = v.cost; break; } }
     }
     if (alt_lifegain > 0)
     {

@@ -1480,7 +1480,38 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
 // Hinata's per-target discount online: the untap ritual (Reality Spasm) floats mana for a same-turn
 // Crackle the discount makes free, and Soulfire's own-creature targets each shave {1} (and dig
 // deeper). Off Hinata they are dead weight, so the solver must not branch on them.
-bool HinataProvider::ShouldEmitUntapRitual(const GameState& s) const     { return HinataInPlay(s); }
+//
+// SPASM GATE (MTG_HINATA_SPASM_GATE, default OFF => legacy `HinataInPlay` only): the untap ritual only
+// pays off spent into a big mana SINK, and in this deck that sink is Crackle with Power. So -- like a
+// Dragonstorm deck only casting rituals when it will cast Dragonstorm/Apex -- only EMIT Reality Spasm
+// when Crackle is available to be cast this turn. Proxy = Crackle with Power in HAND: a mid-turn dig
+// that draws Crackle re-collects actions (AIEngine chooser re-fires post-draw), so the post-dig
+// decision sees Crackle in hand and the "draw then play Crackle" line still fires; only casting Reality
+// Spasm BEFORE the dig is forbidden (fungible -- the floated mana is identical either ordering). This
+// is a search PRUNE (fewer ritual actions in the powerset -> smaller EnumeratePlans blow-up on combo
+// hands) AND a play heuristic (never waste Reality Spasm with no sink). Irencrag Feat is the parallel
+// ramp ritual; gating it is a follow-up (it is a single card, far less of an enumeration multiplier).
+bool HinataProvider::ShouldEmitUntapRitual(const GameState& s) const
+{
+    if (!HinataInPlay(s)) { return false; }
+    // Mode: 0=off (unset, byte-identical), 1=STRICT (emit only when Crackle in hand), 2=SOFT (emit
+    // always; the plan-prune SubsetWastesRampRitual handles only the Crackle-in-hand-but-uncast waste,
+    // so a ritual as an accelerant on a non-Crackle turn stays available). See TurnSolver gate mode.
+    static const int mode = []{
+        const char* e = std::getenv("MTG_HINATA_SPASM_GATE");
+        if (!e || !*e) { return 0; }
+        const std::string v(e);
+        return (v == "2" || v == "soft") ? 2 : 1;
+    }();
+    if (mode != 1) { return true; }                         // off / soft: emit whenever Hinata is online
+    const Player& ap = s.players[s.active_player_index];
+    for (const Card& h : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d && d->params.x_damage_multiplier > 1) { return true; }   // Crackle with Power in hand
+    }
+    return false;
+}
 bool HinataProvider::BranchSoulfireOwnTargets(const GameState& s) const  { return HinataInPlay(s); }
 
 // Situational "what do I need THIS turn" ranking (Hook 19). HIGHER = more wanted. The decisive
@@ -1496,20 +1527,34 @@ namespace
 {
     enum HinataRank
     {
+        kRankSolRingScrewed = 1100,  // Sol Ring while mana-short: THE card to find -- 2 mana off a {1} rock
+                                     // and every Reality Spasm untaps it for 2 more. Above even a screwed
+                                     // land; it fixes the screw harder than any single land.
+        kRankScrewedLandNow = 1050,  // mana-screwed AND can play this land NOW for mana: drawn FIRST (above
+                                     // Hinata in the dig ORDER) -- you cannot cast her without the mana --
+                                     // though Hinata is ALWAYS kept too (never bottomed unless a duplicate).
         kRankHinataLynchpin = 1000,  // Hinata when not yet online -- the deck is dead without her
-        kRankNeededLand     =  900,  // a land when we need this turn's drop and are land-light
         kRankMissingCrackle =  800,  // the lethal finisher, not yet in hand (Hinata online)
         kRankMissingSpasm   =  750,  // Reality Spasm (the ritual that powers the lethal X)
-        kRankIrencragShort  =  720,  // Irencrag Feat when MANA-SHORT: a mana ritual beats Soulfire
+        kRankExtraSpasm     =  730,  // a 2nd+ Reality Spasm -- STACKABLE ramp (the combo untaps twice) and
+                                     // straight-up better than Irencrag even in multiples
+        kRankIrencrag       =  710,  // Irencrag Feat, single tier: a slightly-worse, harder-to-cast Reality
+                                     // Spasm stand-in -- ABOVE Soulfire regardless of mana level
         kRankSoulfire       =  700,  // Soulfire Eruption: digs AND finishes
-        kRankIrencrag       =  650,  // Irencrag Feat (mana not the bottleneck): more mana, but late
-        kRankMagma          =  600,  // Magma Opus: secondary payoff (tokens + draw)
+        kRankSolRing        =  695,  // Sol Ring, mana OK: over everything EXCEPT the actual combo pieces
+        kRankEarlyRamp      =  660,  // a mana rock/dork on T1-T2 while short: accelerate into the combo --
+                                     // just under the combo pieces, above lands-late / cantrips
+        kRankScrewedLandLate=  560,  // mana-screwed but land drop already spent (can't play it this turn):
+                                     // still a keep for next turn, but below the live combo pieces
         kRankCantrip        =  500,  // Ponder / Preordain / EI -- keep digging toward pieces
-        kRankRamp           =  450,  // a mana rock while still short of the mana target
+        kRankMagma          =  470,  // Magma Opus UNDER the cantrips -- a one-of secondary payoff, not a
+                                     // piece to dig for (there is a reason the deck runs a single copy)
+        kRankRamp           =  450,  // a mana rock/dork (past the early turns) while still short of target
         kRankExtraLand      =  380,  // a land beyond the urgent drop: still mana for the combo
-        kRankFloodedLand    =  340,  // a land once well past the mana target (mild)
+        kRankDigPastLand    =  250,  // a surplus land/rock/dork while hunting Hinata -- dig past it
         kRankDeadPayoff     =  200,  // a payoff/ritual while Hinata is NOT online -- dead now
-        kRankDigPastLand    =  250,  // a surplus land/rock while hunting Hinata -- dig past it
+        kRankExtraSoulfire  =  170,  // a 2nd+ Soulfire Eruption -- rarely want multiples (only a rare
+                                     // Reality-Spasm chain affords two); pretty low, above a strict duplicate
         kRankDuplicate      =  150,  // a second copy of a piece we already hold -- redundant
         kRankInert          =  100,  // goldfish-inert interaction / unknown
     };
@@ -1523,9 +1568,17 @@ int HinataProvider::SituationalCardRank(const GameState& s, const Card& card) co
     const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
     const Card& c = def ? def->card : card;
 
+    // Situational dig/keep ranking, user-designed (2026-07-20; see docs/design/viewer-magma-opus-modeling.md,
+    // SESSION 3e). Adopted after held-out validation (paired -0.035 seed4004 / -0.036 seed7000). Key ideas:
+    // a 2nd+ Reality Spasm is STACKABLE ramp not a duplicate; a mana DORK (Ornithopter) is ramp not inert;
+    // Sol Ring is in its own class; lands are ranked colour-aware toward casting Hinata; Magma sits under
+    // the cantrips; a 2nd Soulfire goes low. The relative tier ORDER is the contract.
+
     const bool is_land     = c.IsLand();
     const bool is_hinata   = def && def->params.hinata_cost_reducer;
     const bool is_rock     = def && def->params.mana_rock;
+    const bool is_solring  = def && def->params.mana_rock && def->params.produces_amount >= 2; // Sol Ring (2 off one rock)
+    const bool is_dork     = def && !def->params.produces.empty() && !is_land && !is_rock; // mana dork (Ornithopter)
     const bool is_ritual   = def && IsManaRitual(*def);                 // Reality Spasm / Irencrag
     const bool is_spasm    = def && def->params.untap_x_mana_sources;   // Reality Spasm
     const bool is_crackle  = def && def->params.x_damage_multiplier > 1;// Crackle with Power (5X)
@@ -1570,26 +1623,95 @@ int HinataProvider::SituationalCardRank(const GameState& s, const Card& card) co
     const int  source_target  = have_hinata ? 7 : 4;
     const bool land_drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
     bool land_in_hand = false;
+    int  hand_sources = 0;   // mana-makers already in hand (lands, rocks, dorks)
     for (const Card& h : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
-        if (d ? d->card.IsLand() : h.IsLand()) { land_in_hand = true; break; }
+        const bool h_land = d ? d->card.IsLand() : h.IsLand();
+        if (h_land) { land_in_hand = true; }
+        if (h_land || (d && (d->params.mana_rock || !d->params.produces.empty()))) { ++hand_sources; }
     }
+    // Total mana-makers across hand + board: the real "are we mana-screwed" signal (user: a land is
+    // crucial when we have only ~2-3 total sources, extra so when we can't make a land drop from hand).
+    const int  total_sources = sources + hand_sources;
     const bool need_land = land_drop_open && sources < source_target;
+
+    // Ramp (a non-Sol-Ring rock or a dork): prioritise on the early turns (T1-T2), where accelerating into
+    // the combo matters most -- just under the key combo pieces; normal once past them; low once we
+    // already have enough mana.
+    auto ramp_rank = [&]() -> int
+    {
+        if (sources >= source_target) { return kRankDigPastLand; }   // enough mana already
+        return (s.turn_number <= 2) ? kRankEarlyRamp : kRankRamp;    // short: high early, normal later
+    };
 
     // --- the lynchpin / a needed land outrank everything else ---
     if (is_hinata) { return have_hinata ? kRankDuplicate : kRankHinataLynchpin; }
     if (is_land)
     {
-        if (need_land && !land_in_hand) { return kRankNeededLand; }          // land-light, no drop in hand
-        if (sources < source_target)   { return kRankExtraLand; }           // more mana still helps
-        return have_hinata ? kRankFloodedLand : kRankDigPastLand;           // flooded: keep (combo) / dig (hunt)
+        const bool enters_tapped = def && def->params.enters_tapped;
+        {
+            // Four land categories on (mana-screwed x can-play-now), user-specified (2026-07-20):
+            //  1) mana-SCREWED + playable NOW  -> top keep (nothing matters until we have mana)
+            //  2) mana-SCREWED + drop already spent / tapped -> keep for next turn, but below live pieces
+            //  3) OKAY mana + playable now -> extra mana, helps but loses to the missing pieces
+            //  4) OKAY mana + can't use now -> pretty useless, dig past it
+            // "playable now" = a land drop is open AND the land enters untapped (a tapped Boilerworks
+            // yields no mana the turn it is played).
+            //
+            // "mana-screwed" is COLOUR-AWARE (user 2026-07-20): the goal is casting Hinata ({1}{U}{R}{W}),
+            // so we count a land toward the screw rating only if we cannot yet cast her AND this land
+            // ADVANCES that goal -- i.e. it supplies a still-MISSING Hinata colour, OR raw count is the
+            // binding constraint (we need more bodies than we are missing colours, so any land helps).
+            // A land supplying only colours we already have, when we are merely one source short, does
+            // NOT count (3 sources + no white -> a non-white land is useless for Hinata; at 2 sources it
+            // does count, since even after the white we still need another body). A land of a missing
+            // colour ALWAYS counts (only blue in play -> a red land is urgent).
+            static const Color kHinataColors[3] = { Color::White, Color::Blue, Color::Red };
+            bool have_col[3] = { false, false, false };
+            auto note_colors = [&](const CardDefinition* d) {
+                if (!d) { return; }
+                for (Color col : d->params.produces)
+                    for (int i = 0; i < 3; ++i) { if (col == kHinataColors[i]) { have_col[i] = true; } }
+            };
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != active) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d && (p.card.IsLand() || d->params.mana_rock)) { note_colors(d); }
+            }
+            for (const Card& h : ap.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+                if (d && (d->card.IsLand() || d->params.mana_rock || !d->params.produces.empty())) { note_colors(d); }
+            }
+            int  missing = 0;
+            for (int i = 0; i < 3; ++i) { if (!have_col[i]) { ++missing; } }
+            bool provides_missing = false;
+            if (def) { for (Color col : def->params.produces)
+                for (int i = 0; i < 3; ++i) { if (col == kHinataColors[i] && !have_col[i]) { provides_missing = true; } } }
+            const int  kHinataMV       = 4;                                   // {1}{U}{R}{W}
+            const bool can_cast_hinata = (total_sources >= kHinataMV) && (missing == 0);
+            const bool count_binding   = (kHinataMV - total_sources) > missing; // need more bodies than colours
+            const bool screwed         = !can_cast_hinata && (provides_missing || count_binding);
+            const bool usable_now      = land_drop_open && !enters_tapped;
+            if (screwed)  { return usable_now ? kRankScrewedLandNow : kRankScrewedLandLate; }      // (1) / (2)
+            return (usable_now && sources < source_target) ? kRankExtraLand : kRankDigPastLand;    // (3) / (4)
+        }
+    }
+
+    // Sol Ring is in a class of its own: two mana off a {1} rock, and every Reality Spasm untaps it for
+    // two more (it compounds with the combo). Mana-short -> the single best card to see, above even a
+    // screwed land; mana OK -> still beats everything except the actual combo pieces.
+    if (is_solring)
+    {
+        return (sources < source_target) ? kRankSolRingScrewed : kRankSolRing;
     }
 
     // --- before Hinata: payoffs/rituals are DEAD; dig past them, keep ramp + cantrips ---
     if (!have_hinata)
     {
-        if (is_rock)                { return sources < source_target ? kRankRamp : kRankDigPastLand; }
+        if (is_rock || is_dork)     { return ramp_rank(); }
         if (is_cantrip)             { return kRankCantrip; }    // keep digging for her
         if (is_payoff || is_ritual) { return kRankDeadPayoff; } // uncastable until she lands
         return kRankInert;
@@ -1603,17 +1725,25 @@ int HinataProvider::SituationalCardRank(const GameState& s, const Card& card) co
     }
     if (is_spasm)
     {
+        // Reality Spasm is STACKABLE ramp (the lethal line untaps twice), not a redundant duplicate --
+        // a 2nd+ copy stays a top-tier piece (above Irencrag / any idle land), not kRankDuplicate.
         const bool dup = have_in_hand([](const CardParams& p) { return p.untap_x_mana_sources; });
-        return dup ? kRankDuplicate : kRankMissingSpasm;
+        return dup ? kRankExtraSpasm : kRankMissingSpasm;
     }
-    if (is_soulfire) { return kRankSoulfire; }
-    // Irencrag Feat (fixed ritual burst). When mana is the bottleneck it outranks Soulfire -- the
-    // shortage is exactly what the +7 mana fixes, and a {6}{R}{R}{R} Soulfire is uncastable while
-    // short anyway; otherwise it ranks below the dig (Soulfire finds pieces, Irencrag is just mana).
-    if (is_ritual)   { return (sources < source_target) ? kRankIrencragShort : kRankIrencrag; }
-    if (is_magma)    { return kRankMagma; }
+    if (is_soulfire)
+    {
+        // A 2nd+ Soulfire Eruption is nearly redundant -- you normally never cast multiples; only a
+        // rare Reality-Spasm ramp chain affords two. So a duplicate drops PRETTY LOW (a hair above a
+        // strict duplicate for that uncommon multi-cast), not the full finisher rank.
+        const bool dup = have_in_hand([](const CardParams& p) { return p.damage_equals_top_mv; });
+        return dup ? kRankExtraSoulfire : kRankSoulfire;
+    }
+    // Irencrag Feat: a single tier just above Soulfire -- a decent (if slightly worse, harder-to-cast)
+    // Reality-Spasm stand-in regardless of mana level.
+    if (is_ritual)   { return kRankIrencrag; }
+    if (is_magma)    { return kRankMagma; }        // Magma Opus UNDER the cantrips (one-of secondary payoff)
     if (is_cantrip)  { return kRankCantrip; }
-    if (is_rock)     { return sources < source_target ? kRankRamp : kRankDigPastLand; }
+    if (is_rock || is_dork) { return ramp_rank(); }
     return kRankInert;
 }
 
@@ -1730,6 +1860,79 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
     if (max_x * mult + attack_ub >= opp_life) { return generic; }   // wins now -> cast it
 
     return {};   // lone, non-lethal -> HOLD the combo piece
+}
+
+// Magma Opus scaled-cast (face-damage) variants (Hook 28) -- the DECK-SPECIFIC cost model.
+//
+// Magma Opus: "deal 4 damage divided among any number of targets. Tap two target permanents." Hinata
+// reduces the cost {1} per DISTINCT target, so the cheapest cast SPREADS the 4 one-per-target across
+// yourself + creatures and taps two permanents (up to 6 distinct targets -> {U}{R}); CONCENTRATING
+// more of the 4 onto the opponent's FACE uses fewer distinct targets, so each extra point of face
+// costs {1} more (face F costs generic 6 - discount(F), colours {U}{R} kept):
+//   distinct(F) = 1 (face) + min(4-F, self+creatures) (spread) + min(2, permanents) (tap);
+//   discount(F) = min(discount_max_targets, distinct(F)).
+// We enumerate every affordable face level 1..damage and let the SEARCH pick -- the plan enumerator's
+// CanPay drops the concentrate levels a mana-tight plan can't pay, and with a Crackle also in hand the
+// search allocates spare mana across both (this is the archetype's opinionated set; the search decides
+// which to scale). Dominated levels (a HIGHER face at the SAME cost) are dropped. The spread/tap damage
+// itself is goldfish-inert (a passive opponent, and our own creatures survive 1), so only the face
+// amount + the cost are load-bearing; resolution deals exactly `face` to the opponent (threaded on the
+// stack). ADOPTED default-ON (2026-07-21); MTG_LEGACY_MAGMA restores the over-count. Also gated on
+// Magma-by-DATA (divided damage that taps permanents; Reality Spasm is has_x and never reaches this
+// fixed-cost path) + Hinata online (no Hinata -> no per-target discount -> nothing to scale). Returns
+// {} otherwise -> the engine's normal single-line Magma cast (the "2 + every permanent" over-count),
+// byte-identical to the pre-adoption ground truth.
+std::vector<ScaledCastVariant>
+HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def) const
+{
+    // ADOPTED default-ON (2026-07-21). MTG_LEGACY_MAGMA => {} => the over-count single line (4-to-face
+    // at {U}{R} regardless -- an impossible cheap line), byte-identical to the pre-adoption GT. Root-cause
+    // of the +0.02 adoption cost: a handful of games (~2%) where the honest price makes a Magma-dependent
+    // kill land one turn later -- either genuine (the cheap-4-face fiction bought a turn that isn't there,
+    // e.g. small overkill) or search variance (the honest cost reshapes EARLY lookahead decisions so the
+    // game walks a different, slightly slower board). Never faster, never a bug. See
+    // docs/design/viewer-magma-opus-modeling.md (2026-07-21 verdict).
+    //
+    // This hook owns only the MODEL (which face levels + what each costs). Extra-mana ALLOCATION across
+    // competing scaling sinks (a Crackle {X} and this face) is handled by FillScaledCastFace (TurnSolver):
+    // the search searches Crackle X (XCandidates), and the leftover mana fills Magma's face up from its
+    // emitted minimum -- Crackle first, Magma the sub-chunk remainder. (There is no separate allocation
+    // prune; an earlier comment referencing "SubsetMisallocatesScalingMana in TurnSolver" was describing a
+    // function that was never written -- FillScaledCastFace already does the job.)
+    static const bool legacy = std::getenv("MTG_LEGACY_MAGMA") != nullptr;
+    if (legacy) { return {}; }
+    if (!def.params.damage_divided || !def.params.discount_targets_permanents) { return {}; }
+    if (!HinataInPlay(s)) { return {}; }
+
+    const int dmg = def.params.damage;
+    if (dmg <= 0) { return {}; }
+    const int cap = def.params.discount_max_targets;   // Hinata reduction ceiling (Magma = 6)
+
+    // Distinct 1-damage recipients OTHER than the opponent face, for the spread: yourself + every
+    // creature (own first, opponent's as a last resort -- only the COUNT feeds the discount). Plus the
+    // mandatory "tap two target permanents", up to two of any permanents on the board.
+    int creatures = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.IsCreature()) { ++creatures; } }
+    const int spread_capacity = 1 + creatures;                                 // self + creatures
+    const int tap = std::min(2, static_cast<int>(s.battlefield.size()));
+
+    // Emit the FULL face ladder (high -> low, cost non-increasing): each face only when it is the HIGHEST
+    // face at its cost (a lower face at the same cost is strictly dominated -- same mana, less reach). The
+    // plan enumerator + search pick the face; the scaling-mana packing prune handles Crackle competition.
+    std::vector<ScaledCastVariant> out;
+    int prev_generic = -1;
+    for (int face = dmg; face >= 1; --face)
+    {
+        const int spread   = std::min(dmg - face, spread_capacity);
+        const int distinct = 1 + spread + tap;
+        const int discount = std::min(cap, distinct);
+        ManaCost cost      = def.card.m_mana_cost;                              // printed {6}{U}{R}
+        cost.generic       = std::max(0, cost.generic - discount);
+        if (cost.generic == prev_generic) { continue; }                        // dominated -> skip
+        prev_generic = cost.generic;
+        out.push_back({ face, cost });
+    }
+    return out;
 }
 
 // ---- DragonstormProvider ----------------------------------------------------

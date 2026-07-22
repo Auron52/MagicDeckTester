@@ -4,20 +4,6 @@
   "decisions": [
     { "chosen": 1, "decision": {
   "decision_index": 0,
-  "type": "mulligan",
-  "turn": 0,
-  "me": { "life": 20, "battlefield": [] },
-  "opponent": { "life": 20, "battlefield": [] },
-  "mulligan_count": 0,
-  "on_the_play": true,
-  "to_bottom": 0,
-  "hand": [{ "num": 18, "name": "Grove of the Burnwillows" }, { "num": 33, "name": "Plague Drone" }, { "num": 22, "name": "Ignoble Hierarch" }, { "num": 5, "name": "Birds of Paradise" }, { "num": 23, "name": "Ignoble Hierarch" }, { "num": 17, "name": "Godless Shrine" }, { "num": 1, "name": "Aria of Flame" }],
-  "ai_choice": 1,
-  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
-}
-},
-    { "chosen": 2, "decision": {
-  "decision_index": 1,
   "type": "main_phase",
   "turn": 1,
   "phase": "pre_main",
@@ -25,17 +11,17 @@
   "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 5, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Grove of the Burnwillows", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
   "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }] },
   "plans": [
-    { "index": 0, "summary": "land=Grove of the Burnwillows; cast: (nothing)", "land": "Grove of the Burnwillows", "casts": [], "actions": [] },
-    { "index": 1, "summary": "land=Grove of the Burnwillows; cast: Ignoble Hierarch", "land": "Grove of the Burnwillows", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
-    { "index": 2, "summary": "land=Grove of the Burnwillows; cast: Birds of Paradise", "land": "Grove of the Burnwillows", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 0, "summary": "land=Grove of the Burnwillows; cast: Ignoble Hierarch", "land": "Grove of the Burnwillows", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=Grove of the Burnwillows; cast: Birds of Paradise", "land": "Grove of the Burnwillows", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=Grove of the Burnwillows; cast: (nothing)", "land": "Grove of the Burnwillows", "casts": [], "actions": [] },
     { "index": 3, "summary": "land=Godless Shrine; cast: (nothing)", "land": "Godless Shrine", "casts": [], "actions": [] },
     { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 7, "decision": {
-  "decision_index": 2,
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
   "type": "main_phase",
   "turn": 2,
   "phase": "pre_main",
@@ -45,19 +31,32 @@
   "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 2, "is_land": false }, { "name": "Grove of the Burnwillows", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Temple Garden", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
   "opponent": { "life": 21, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "is_land": false }] },
   "plans": [
-    { "index": 0, "summary": "land=Godless Shrine; cast: Aria of Flame", "land": "Godless Shrine", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
-    { "index": 1, "summary": "land=Temple Garden; cast: Aria of Flame", "land": "Temple Garden", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
-    { "index": 2, "summary": "land=Godless Shrine; cast: (nothing)", "land": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 0, "summary": "land=Godless Shrine; cast: Ignoble Hierarch, Ignoble Hierarch", "land": "Godless Shrine", "casts": ["Ignoble Hierarch", "Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=Temple Garden; cast: Ignoble Hierarch, Ignoble Hierarch", "land": "Temple Garden", "casts": ["Ignoble Hierarch", "Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 2, "summary": "land=none; cast: Ignoble Hierarch, Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch", "Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Ignoble Hierarch" }] },
     { "index": 3, "summary": "land=Godless Shrine; cast: Ignoble Hierarch", "land": "Godless Shrine", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
-    { "index": 4, "summary": "land=Godless Shrine; cast: Ignoble Hierarch, Ignoble Hierarch", "land": "Godless Shrine", "casts": ["Ignoble Hierarch", "Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Ignoble Hierarch" }] },
-    { "index": 5, "summary": "land=Temple Garden; cast: (nothing)", "land": "Temple Garden", "casts": [], "actions": [] },
-    { "index": 6, "summary": "land=Temple Garden; cast: Ignoble Hierarch", "land": "Temple Garden", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
-    { "index": 7, "summary": "land=Temple Garden; cast: Ignoble Hierarch, Ignoble Hierarch", "land": "Temple Garden", "casts": ["Ignoble Hierarch", "Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Ignoble Hierarch" }] },
-    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
-    { "index": 9, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
-    { "index": 10, "summary": "land=none; cast: Ignoble Hierarch, Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch", "Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Ignoble Hierarch" }] }
+    { "index": 4, "summary": "land=Temple Garden; cast: Ignoble Hierarch", "land": "Temple Garden", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 5, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 6, "summary": "land=Godless Shrine; cast: Aria of Flame", "land": "Godless Shrine", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 7, "summary": "land=Temple Garden; cast: Aria of Flame", "land": "Temple Garden", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 8, "summary": "land=Godless Shrine; cast: (nothing)", "land": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Temple Garden; cast: (nothing)", "land": "Temple Garden", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "land_entry",
+  "source": "Temple Garden",
+  "turn": 2,
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 2, "is_land": false }, { "name": "Grove of the Burnwillows", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Temple Garden", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 21, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "is_land": false }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
 }
 },
     { "chosen": 0, "decision": {
@@ -91,6 +90,19 @@
 },
     { "chosen": 1, "decision": {
   "decision_index": 4,
+  "type": "land_entry",
+  "source": "Godless Shrine",
+  "turn": 3,
+  "me": { "life": 18, "battlefield": [{ "name": "Birds of Paradise", "idx": 2, "is_land": false }, { "name": "Grove of the Burnwillows", "idx": 1, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "is_land": false }, { "name": "Temple Garden", "idx": 4, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Idyllic Tutor", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "is_land": false }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
@@ -114,12 +126,12 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 5,
+  "decision_index": 6,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
   "on_the_play": true,
-  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −10 life (via Tainted Remedy)" }],
+  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −10 life (via Tainted Remedy)" }, { "turn": 4, "kind": "damage", "text": "🔥 Aria of Flame (1 verse): 1 to opponent (7→6)" }],
   "me": { "life": 16, "battlefield": [{ "name": "Aria of Flame", "idx": 10, "is_land": false, "counters": [{ "kind": "verse", "label": "verse", "count": 1 }] }, { "name": "Birds of Paradise", "idx": 2, "tapped": true, "is_land": false }, { "name": "Godless Shrine", "idx": 8, "tapped": true, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 1, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "tapped": true, "is_land": false }, { "name": "Plague Drone", "idx": 9, "is_land": false }, { "name": "Temple Garden", "idx": 4, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Idyllic Tutor"], "library_size": 49 },
   "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "is_land": false }] },
   "plans": [
@@ -128,20 +140,30 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 1, "decision": {
-  "decision_index": 6,
+    { "chosen": 9, "decision": {
+  "decision_index": 7,
   "type": "main_phase",
   "turn": 5,
   "phase": "pre_main",
   "on_the_play": true,
-  "drew": [{ "turn": 5, "card": "Plague Drone" }],
+  "drew": [{ "turn": 5, "card": "Marsh Flats" }],
   "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Plague Drone (5) — 5 to opponent (6→1)" }],
-  "me": { "life": 16, "battlefield": [{ "name": "Aria of Flame", "idx": 10, "is_land": false, "counters": [{ "kind": "verse", "label": "verse", "count": 1 }] }, { "name": "Birds of Paradise", "idx": 2, "is_land": false }, { "name": "Godless Shrine", "idx": 8, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 1, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "is_land": false }, { "name": "Plague Drone", "idx": 9, "is_land": false }, { "name": "Temple Garden", "idx": 4, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 34, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Idyllic Tutor"], "library_size": 48 },
+  "me": { "life": 16, "battlefield": [{ "name": "Aria of Flame", "idx": 10, "is_land": false, "counters": [{ "kind": "verse", "label": "verse", "count": 1 }] }, { "name": "Birds of Paradise", "idx": 2, "is_land": false }, { "name": "Godless Shrine", "idx": 8, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 1, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "is_land": false }, { "name": "Plague Drone", "idx": 9, "is_land": false }, { "name": "Temple Garden", "idx": 4, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 30, "name": "Marsh Flats", "cost": "", "mv": 0, "kind": "land" }, { "num": 34, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Idyllic Tutor"], "library_size": 48 },
   "opponent": { "life": 1, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "is_land": false }] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: Plague Drone", "land": null, "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
-    { "index": 1, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
-    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 0, "summary": "land=Marsh Flats; cast: Aria of Flame, Plague Drone", "land": "Marsh Flats", "casts": ["Aria of Flame", "Plague Drone"], "actions": [{ "card": "Aria of Flame" }, { "card": "Plague Drone" }] },
+    { "index": 1, "summary": "land=Marsh Flats; cast: Plague Drone, Aria of Flame", "land": "Marsh Flats", "casts": ["Plague Drone", "Aria of Flame"], "actions": [{ "card": "Plague Drone" }, { "card": "Aria of Flame" }] },
+    { "index": 2, "summary": "land=Marsh Flats; cast: Aria of Flame, Plague Drone", "land": "Marsh Flats", "casts": ["Aria of Flame", "Plague Drone"], "actions": [{ "card": "Aria of Flame" }, { "card": "Plague Drone" }] },
+    { "index": 3, "summary": "land=Marsh Flats; cast: Plague Drone, Aria of Flame", "land": "Marsh Flats", "casts": ["Plague Drone", "Aria of Flame"], "actions": [{ "card": "Plague Drone" }, { "card": "Aria of Flame" }] },
+    { "index": 4, "summary": "land=Marsh Flats; cast: Plague Drone", "land": "Marsh Flats", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 5, "summary": "land=Marsh Flats; cast: Plague Drone", "land": "Marsh Flats", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 6, "summary": "land=none; cast: Plague Drone", "land": null, "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 7, "summary": "land=Marsh Flats; cast: Aria of Flame", "land": "Marsh Flats", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 8, "summary": "land=Marsh Flats; cast: Aria of Flame", "land": "Marsh Flats", "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 9, "summary": "land=none; cast: Aria of Flame", "land": null, "casts": ["Aria of Flame"], "actions": [{ "card": "Aria of Flame" }] },
+    { "index": 10, "summary": "land=Marsh Flats; cast: (nothing)", "land": "Marsh Flats", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Marsh Flats; cast: (nothing)", "land": "Marsh Flats", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }

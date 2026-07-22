@@ -238,3 +238,448 @@ discount from the count (`HinataGenericDiscount(def,state,x,count)` SpellEffects
 `MTG_MAGMA_FAITHFUL` behind-the-hatch behavior = the LETHALITY-GATED SPREAD (measured +0.026, the worse
 one). It is to be REPLACED by the two-variant model above. Default OFF ⇒ all GT byte-identical (d0 OFF =
 7.4760 verified). Committed so it's not lost; the two-variant is the next step.
+
+---
+
+## 2026-07-19 (session 3): IMPLEMENTED — general "scaled cast" mechanism, model in the provider
+
+### Architectural pivot (user directive)
+The user reframed the invasive part to be **general**: "treat this case similarly to how you would scale
+{X} spells if you have extra mana." Magma's opponent-face damage is a scaled OUTPUT (like {X}) — more
+face ⇒ fewer distinct spread/tap targets ⇒ less Hinata discount ⇒ more mana. The rules:
+- **No card-specific branches in general logic.** The engine gets a general **scaled-cast** mechanism
+  (emit one mutually-exclusive cast per output level, thread the committed level to resolution, deal it);
+  the whole Magma MODEL (which face levels, what each costs) lives in the **HinataProvider** — "within the
+  deck-specific heuristics we can do whatever card-specific logic we want."
+- **The search picks by default; a heuristic may narrow** (like `XCandidates`). With several scaling
+  spells in hand (Crackle {X} + Magma face) the search allocates spare mana across them — Crackle's X
+  moves in 3-mana steps, Magma's face in 1-mana steps, so the fine-grained face soaks up mana the coarse
+  X can't. "By default the search must pick, but we'll override with a heuristic here."
+
+### What was built (all behind `MTG_MAGMA_FAITHFUL`, default OFF ⇒ byte-identical)
+- **`DecisionProvider.h`**: general `struct ScaledCastVariant { int face; ManaCost cost; }` + Hook 28
+  `ScaledCastVariants(state, def)` (base returns `{}` ⇒ every other deck's single-line cast, byte-identical).
+- **`HinataProvider::ScaledCastVariants`** (`DecisionProviders.cpp`): the DECK-SPECIFIC cost model.
+  Gated on the flag + Magma-by-DATA (`damage_divided && discount_targets_permanents`) + Hinata in play.
+  For each face `F` in `1..damage`: `distinct(F) = 1 (face) + min(damage−F, 1+#creatures) (spread) +
+  min(2, #perms) (tap)`; `discount(F) = min(discount_max_targets, distinct(F))`;
+  `cost.generic = printed − discount(F)`. Dominated levels (a HIGHER face at the SAME cost) are dropped.
+- **`TurnSolver::CollectActions`**: a general block — for a `DirectDamage && damage_divided` spell, ask
+  the provider for variants; if non-empty, emit one cast per `{face, cost}` (thread the face on
+  `crackle_targets`, the searched-scalar carrier) and `continue`; else fall through (byte-identical).
+- **Lockstep**: the committed face rides on `crackle_targets` (Magma is not `IsCrackleCountSpell`, so no
+  Crackle resolution fires). Resolution deals `face` in `EffectHandler::ResolveDirectDamage` and
+  `ApplyPlanDirect` (gated on `damage_divided && crackle_targets>=0`). The cost is recomputed from the
+  committed face via the provider on the CURRENT board at BOTH the rollout (`apply_one`) and the executor
+  (`CastSpellFromHand`) — the same recompute-from-the-searched-count pattern as Soulfire/Crackle — so
+  enumeration/CanPay/rollout/executor price the same face identically. `cast_by_name` gate extended to set
+  `entry.crackle_targets` for a scaled Magma variant.
+- **Removed** the old single-line `IsMagmaFaithful` / `MagmaFaithfulPlan` (SpellEffects.h) + its two
+  resolution overrides; `HinataAvailableTargets` reverts to the plain over-count as the OFF fallback.
+
+### Measured (Hinata; metric = mean turn-to-win, unwon=max+1; lower better)
+| depth | seeds | games | OFF (== GT) | ON (scaled) | Δ | per-game win-turn changes |
+|-------|-------|-------|-------------|-------------|-----|---------------------------|
+| d0 (greedy) | 1001 | 1000 | 7.4760 | 7.4840 | **+0.008** | 14 (11 slower, 3 FASTER) |
+| d5 (search) | 1001 |   75  | 6.0400 | 6.0400 | 0.000 | 0 changed *(small-sample fluke — see below)* |
+| **d5 (search)** | **4004/5005/6006/7007** | **1200** | **6.1467** | **6.1633** | **+0.0167** | **22 (20 slower, 2 FASTER)** |
+
+Per held-out seed the ON delta is CONSISTENTLY positive (+0.0134 / +0.0167 / +0.0133 / +0.0234), so the
+tiny 75-game d5 "0 changed" at seed 1001 was a **small-sample fluke, not true neutrality**. At the real
+held-out scale (1200 d5 games) the faithful model is a **small, consistent GT-negative of ~+0.017** — the
+same magnitude as the concentrate single-line's d0 +0.015.
+
+**Honest conclusion: no faithful Magma model beats the over-count for the goldfish.** The over-count is
+doubly over-rated — it lets Magma be BOTH cheap (`{U}{R}`) AND deal 4-to-face, an impossible line that
+genuinely wins ~0.017 turns faster on average. The two-variant/scaled model is the *least-negative* and
+*most correct* faithful option (far better than concentrate +0.015 / spread +0.026 as single lines, and
+only 22/1200 games move — 20 slower by 1 turn, 2 faster), but it is **NOT free**. Adoption is therefore a
+genuine correctness-vs-goldfish-speed tradeoff, not a free win.
+
+**Mechanism verified** (60 games, d0, ON): Magma cast-cost distribution `{3}{U}{R}`×8 (concentrate 4-face
+when affordable), `{U}{R}`×1 (cheap spread to free mana), `{6}{U}{R}`×2 (no Hinata ⇒ provider returns `{}`
+⇒ generic path, full cost, byte-identical). The search genuinely picks the face level per plan.
+
+### Per-game audit of all 22 changed d5 games (user criterion: adopt iff the faster OFF lines are impossible)
+Reproduced every changed held-out d5 game single-threaded (`--seed job.seed+gi --game-index gi`, matches
+the batch for all Magma-casting games):
+- **17 games — OFF's faster win used a PROVABLY IMPOSSIBLE Magma line.** Every one cast Magma at `{U}{R}`
+  (2 mana) dealing 4-to-face. Legal cost for 4-to-face = 1 target + 2 tap = 3 distinct = `{3}{U}{R}` (5
+  mana). The over-count credited a `{1}` discount for all ~6 permanents it never targeted AND dealt the
+  full 4 to the face — a line that cannot be played. These +1-turn "regressions" are the correct removal
+  of an illegal free lunch.
+- **5 games — batch noise, not real** (4004/213, 5005/283, 5005/291, 7007/122, 7007/264): none cast Magma
+  in the OFF line, and in deterministic single-thread repro they are NEUTRAL (OFF == ON) or don't even
+  reproduce the batch win turn (283: batch OFF won T8, repro OFF unwon). Known CPU-oversubscription
+  nondeterminism flipping borderline games, unrelated to the Magma change.
+
+**INITIAL conclusion (WRONG, corrected below): "every reproducible faster OFF line is impossible → adopt."**
+
+### CORRECTION 2026-07-19 (session 3b): the +1 games are SEARCH OVER-CONCENTRATION, not cheat-removal
+The over-count's specific line ({U}{R} for 4-to-face) IS impossible, but the WIN it reached was usually
+LEGALLY reachable a turn sooner — the audit's "impossible" framing missed that. Worked example gi163 (OFF
+T6 → faithful T7): OFF cast Magma cheap ({U}{R}, chip) and the **Crackle combo** did the kill (opp 12→-3);
+the faithful SEARCH instead paid `{3}{U}{R}` (concentrate, 5 mana) for Magma's 4-face, **starving the
+lethal Crackle** → slipped to T7. So a legal T6 line existed (cheap 1-face Magma + bigger Crackle) and the
+search didn't pick it. Eval-neutralising the variants (removing `eval=face*100`) recovered NONE — the
+over-concentration isn't an eval-pruning artifact.
+
+**Fix (user directive): Crackle-reserve rule** — when a Crackle is in hand it competes with Magma for
+mana, and Crackle is the better sink (3 mana → 5 damage vs Magma's 3 mana → +3 face), so RESERVE mana for
+Crackle: Magma emits ONLY the cheap 1-to-face variant when a Crackle is in hand. Implemented in
+`HinataProvider::ScaledCastVariants` (off-switch `MTG_NO_MAGMA_RESERVE`). Recovers **11/17** audited d5
+games. BUT d0 aggregate got WORSE (over-count 7.4760 → faithful-no-reserve 7.4840 → faithful+reserve
+7.4920): "always reserve" helps the d5 SEARCH (uses the reserved mana for Crackle) but hurts greedy d0 (no
+lookahead to spend it). The **net d5 aggregate with reserve is UNMEASURED** (the +0.017 held-out d5
+validation predates the reserve rule).
+
+### Adoption status: UN-ADOPTED 2026-07-19 — faithful+reserve is OPT-IN (`MTG_MAGMA_FAITHFUL`), default OFF
+Reverted the premature adoption: default is the over-count single line again (original GT restored,
+smoke back to 7.4760/6.0133/6.0400). All the work — the general scaled-cast mechanism + the Crackle-reserve
+rule — is preserved behind `MTG_MAGMA_FAITHFUL` (enables faithful+reserve; add `MTG_NO_MAGMA_RESERVE` to
+A/B the reserve rule). **NEXT: re-measure the held-out d5 aggregate WITH the reserve rule** (vs over-count);
+audit the residual 6 still-slower games (4004_115, 5005_73, 5005_189, 7007_1, 7007_107, 7007_269 — are
+these forced, or a different search miss?); only then decide adoption + rebaseline. The bincache
+(`26683d9`) and the general mechanism are independent and stay.
+
+### RE-MEASURED 2026-07-20 (session 3c): faithful+reserve is STILL net-negative; over-count speed is MOSTLY legally reachable
+**Held-out d5 aggregate (seeds 4004/5005/6006/7007, 300g each, value_play d5):**
+
+| seed | over-count | faithful+reserve | Δ |
+|------|-----------|------------------|-----|
+| 4004 | 6.1133 | 6.1233 | +0.0100 |
+| 5005 | 6.0833 | 6.1000 | +0.0167 |
+| 6006 | 6.1467 | 6.1567 | +0.0100 |
+| 7007 | 6.2433 | 6.2567 | +0.0134 |
+| **mean** | **6.1466** | **6.1591** | **+0.0125** |
+
+Reserve helped vs no-reserve (6.1633 → 6.1591) but did NOT flip d5 to net-better. Consistent +0.010..+0.017
+every seed. (over-count arm reproduced the prior held-out OFF 6.1467 exactly.)
+
+**Residual-6 audit — all FORCED.** For 4004_115/5005_73/5005_189/7007_1/7007_107/7007_269, T_ship == T_fnr5
+(no-reserve) == T_budget2000 (100× the built-in 20ms budget, same value_play d5) == T_off+1 for ALL six.
+None recover T_off across reserve / no-reserve / 100×-budget. The OFF logs show why: every one cast Magma
+for `{U}{R}` (2 mana) yet dealt the FULL 4-to-face — a free +3 damage. Under correct pricing you either pay
+`{3}{U}{R}` for the 4-face (starves the rest of the lethal line — e.g. 5005_73 has 6 mana, needs 8 for
+Soulfire + concentrate-Magma) or cast cheap for 1-face (loses 3 damage). Neither legal branch reaches T_off.
+These six ARE "impossible faster lines" → per the user's criterion they'd justify the model. BUT 6 games
+≈ +0.005 of the +0.0125 — they are NOT the whole story.
+
+**Full 3-way per-game diff (seed 4004, off / reserve / no-reserve; the definitive attribution):** only 8
+games differ, and they split three ways — 1 FORCED (gi115: both faithful slower), 4 RESERVE-RECOVERS
+(gi49/55/68/163: no-reserve slow, reserve fixes to =off — legally-reachable search-misses), 2
+RESERVE-REGRESSIONS (gi72/135: no-reserve =off, reserve WRONGLY forces cheap Magma and slows — the "always
+reserve when Crackle in hand" heuristic mis-firing where concentrate was the faster line), and 1 where
+no-reserve BEATS the over-count (gi213: 7→6). Reserve's +0.010 on this seed = gi72+gi115+gi135, i.e. only
+**1 of 3 is a genuine impossible-line; the other 2 are the reserve heuristic's own mistakes.** And 7 of the
+8 changed games are search-related, not impossible.
+
+**Conclusion / recommendation (session 3c): DO NOT adopt faithful+reserve as default.**
+1. Metric: consistent net-negative (+0.0125 held-out d5, +0.016 d0 7.4760→7.4920) with NO gain.
+2. The user's adopt criterion is "faster lines IMPOSSIBLE with a correct model → adopt." FALSE for ~7/8
+   changed games — the over-count's speed is MOSTLY legally reachable (search-misses), not fiction. Only
+   ~1/seed is truly forced.
+3. The reserve heuristic is blunt: net-positive vs no-reserve but 2/3 of its residual seed-4004 cost is
+   its OWN regressions (gi72/135), not impossible-line-removal.
+4. KEEP it opt-in behind `MTG_MAGMA_FAITHFUL` (current state) for the viewer / correctness. If pursuing
+   correctness adoption later, the reserve rule must become lethality-aware (reserve for Crackle ONLY when
+   cheap-Magma + Crackle is the better lethal line, else let the search concentrate) — more work, still
+   likely net-negative. GT unchanged (default = over-count), so no rebaseline needed. Data:
+   `logs/magma_scaled/` (d5_remeasure.out, fast_audit.out, budget_probe.out, gl_off/gl_faith/gl_fnr .wins).
+
+### SESSION 3d 2026-07-20: the combo slowdown is a CANTRIP-RANK bug, not the Magma model (UNCOMMITTED)
+Chased two wrong levers first (a plan-space dominance prune, then a single-Magma "spend-all leftover
+fill") to recover the combo games (gi163: over-count wins T6, faithful T7). BOTH failed. Diagnosis
+(gi163, seed 4167 game-index 163, budget 200ms so it is not 20ms noise):
+- The fill = a single cheapest Magma candidate + fill its face from the plan's LEFTOVER mana in
+  eval_and_push / Solve::consider (spend-all; the searched Crackle X takes its 3-mana chunks first). It is
+  BYTE-IDENTICAL off, fixes the hand-reserve regressions, but is behaviorally == no-reserve (per-game
+  byte-identical on 300 games) -- so it does NOT recover the combos and the faithful aggregate stays
+  ~6.163 (no-reserve), worse than hand-reserve's 6.1591.
+- NOT budget (faithful stays T7 at 8000ms), NOT enumeration width (narrowing Magma to one candidate did
+  not help). A T6-WINNING plan IS enumerated but not realized at the root.
+- **USER human-reviewed the saved traces (`logs/magma_review/`) and found the REAL cause: the lines
+  diverge EARLY via the CANTRIP (Ponder/Preordain) selection heuristic + sequencing.** On the combo turn
+  the Hinata card-rank (`HinataProvider::SituationalCardRank`, the single source of truth for dig-ORDER +
+  scry-KEEP) makes misplays: (a) a 2nd Reality Spasm is demoted to `kRankDuplicate` (150, below the
+  keep-threshold 300) and BOTTOMED, even though Reality Spasm is STACKABLE ramp (the lethal line untaps
+  twice); (b) a mana DORK (Ornithopter of Paradise: produces every colour but not flagged `mana_rock`) is
+  treated as `kRankInert` (100), ranked below a land; (c) an Izzet Boilerworks that enters TAPPED with no
+  usable mana this turn is KEPT (`kRankExtraLand` 380) over the combo piece. The mana to win T6 IS there
+  (15 mana: cheap Magma + 2x Reality Spasm + Crackle x4 = 20 = lethal); the search wanders into the bad
+  cantrip play only in the faithful trajectory (the over-count avoids it on these seeds), but the bug is
+  general.
+
+**FIX (UNCOMMITTED, behind `MTG_HINATA_RANK_FIX`, default OFF => current GT):** in
+`HinataProvider::SituationalCardRank` (DecisionProviders.cpp), user-shaped ranking:
+- 2nd+ Reality Spasm -> new `kRankExtraSpasm` = 730 (above Irencrag/Soulfire, below Crackle + the 1st
+  Spasm) -- stackable ramp, "straight up better than Irencrag even in multiples".
+- mana dork (`!produces.empty() && !is_land && !mana_rock`) treated as ramp like a rock (kRankRamp/DigPast).
+- FOUR land categories on (mana level x can-play-now), user-specified: `total_sources` = hand+board
+  mana-makers; `usable_now` = land_drop_open && !enters_tapped. (1) screwed(<=3) + usable_now ->
+  `kRankScrewedLandNow` 950 (top keep); (2) screwed + tapped/already-dropped -> `kRankScrewedLandLate` 560
+  (below live pieces); (3) okay-mana + usable_now -> kRankExtraLand 380; (4) okay-mana + can't-use ->
+  kRankDigPastLand 250 (dug past). A tapped Boilerworks now demotes correctly.
+- **RESULT: gi163 faithful+rankfix T7 -> T6 (RECOVERED); over-count unchanged.** gi49 stays T4/T5 -- it
+  ALSO needs the separate turn-3 Hinata-not-played sequencing fix (user-flagged) + Sol Ring ramp.
+
+**NEXT (post-compaction):** (1) measure the rank-fix aggregate -- does `MTG_HINATA_RANK_FIX` help the
+DEFAULT (over-count) deck generally (it is a general cantrip fix, not Magma-specific)? seed-4004 3-arm
+per-game run RUNNING (gl_bid=default byte-id / gl_rankfix=over-count+rankfix / gl_faithfix=faithful+fill+
+rankfix); then held-out seeds. (2) verify byte-identity default (both flags off). (3) the turn-3 Hinata
+sequencing (gi49). (4) DECIDE adoption of the rank fix in the archetype provider (drop the flag) on
+approval + rebaseline Hinata GT. The FAITHFUL Magma model (fill) is a separate, still-net-negative
+question -- parked; keep opt-in. User todo: a "really need land" indicator could be sharper still; viewer
+should show draws from effects (Magma cast_draw) which are invisible in the log viewer.
+
+## SESSION 3e (2026-07-20): rank-fix refinements (all still behind `MTG_HINATA_RANK_FIX`, default OFF)
+
+User co-designed further `SituationalCardRank` refinements (still gated; legacy path verified
+byte-identical to prior GT via flag-off run == `gl_bid`). Final ordering (values are the contract only
+relatively; keep-threshold = 300):
+
+- `kRankSolRingScrewed` 1100 — Sol Ring while mana-short (above even a screwed land; 2 mana off one {1}
+  rock, and every Reality Spasm untaps it for 2 more — it compounds with the combo). Detected as
+  `mana_rock && produces_amount >= 2`. Mana-OK Sol Ring → `kRankSolRing` 695 (over all but combo pieces).
+- `kRankScrewedLandNow` 1050 / `kRankScrewedLandLate` 560 — now **colour-aware**. "Screwed" = can't yet
+  cast Hinata ({1}{U}{R}{W}) AND this land advances that goal: it supplies a still-MISSING Hinata colour
+  OR raw count is binding (`4 - total_sources > missing_colours`). A redundant-colour land when only one
+  source short does NOT count (3 srcs + no white + non-white land → not screwed; 2 srcs same → screwed;
+  only-blue + red land → always screwed, missing colour short-circuits). Colours gathered from board+hand
+  `params.produces` (approx: filters credited as their listed colours). Hinata colours hard-coded W/U/R.
+- `kRankIrencragFix` 710 — Irencrag collapsed to a SINGLE tier ABOVE Soulfire (was split short/long in
+  legacy). A slightly-worse, harder-to-cast Reality Spasm stand-in.
+- `kRankMagmaFix` 470 — Magma Opus moved UNDER the cantrips (deck runs a single copy; not a piece to dig
+  for). Still >= keep-threshold so kept on scry, just ordered late in a dig.
+- `kRankEarlyRamp` 660 — a non-Sol-Ring rock/dork on T1–T2 while short ranks just under the combo pieces
+  (accelerate); reverts to `kRankRamp` 450 past turn 2. `ramp_rank()` lambda; `s.turn_number <= 2`.
+- `kRankExtraSoulfire` 170 — a 2nd+ Soulfire Eruption (dup by `damage_equals_top_mv` in hand) drops to
+  just above a strict duplicate (below keep-threshold → bottomed on scry). "You normally don't want
+  multiples; only a rare Reality-Spasm chain affords two."
+
+Implementation: all new returns gated `if (rank_fix)`; the `is_solring` bool and `ramp_rank` lambda are
+inert when the flag is off. gi163 still recovers T6 under both over-count+rankfix and faithful+fill+rankfix;
+flag-off gi163 unchanged.
+
+**MEASUREMENT (seed 4004, value_play d5, paired per-game vs `gl_bid` = prior flag-off baseline; capture =
+`MTG_DUMP_WINS` stderr `[win] gi wt`, wt<=0 => unwon=9). `logs/magma_scaled/rankfix_measure3.sh`:**
+- **BYTE-IDENTITY off:** new flag-off == `gl_bid` on the 40-game slice (win-turns); legacy path unchanged
+  (also provable by inspection — no legacy enum value moved, every new tier gated). Digest-level identity
+  deferred to the `--accept` rebaseline at adoption.
+- **rankfix HELPS the DEFAULT (over-count) deck:** paired over 199/200 games, **off 6.1407 → rankfix 6.1055,
+  delta −0.0352** (20 faster, 8 slower, netΔ −7 turns). So the cantrip fix is a GENERAL play improvement, not
+  Magma-specific. Slower games: gi16,61,76,102,158,160,164,179 (reordering costs a few). Preliminary 197-game
+  read was −0.0457; settles ~−0.035.
+- **⚠ SEARCH-COST OUTLIER gi74:** unwon under off (wt=-1) but under rankfix the d5 search ran >18 min (8 cores)
+  without finishing — the elevated tiers (2nd Spasm 730, Sol Ring, single-Irencrag) widen
+  `CapGroupsBySituationalRank`, exploding breadth on that combo hand. Aggregate-neutral (can only match/beat
+  the unwon 9) but a real perf regression to bound BEFORE adoption. **TODO: investigate the breadth blowup**
+  (cap the high-tier group count, or confirm it's an isolated deep-but-terminating search).
+- faithfix (faithful+fill+rankfix) arm was still pending when reported; the faithful Magma model stays parked.
+
+Open decisions: (a) validate on held-out (overnight) seeds; (b) gi49 turn-3 Hinata sequencing; (c) DECIDE
+adoption (drop flag, `--accept` rebaseline Hinata GT) on approval. "Sharper really-need-land" is now the
+colour-aware rule.
+
+### gi74 "search-cost blowup" — RESOLVED as a misattribution (2026-07-20)
+The 20-min gi74 straggler in the rankfix batch was NOT a rankfix regression. Single-game timing (seed 4078,
+game-index 74, default value_play d5, 1 core): **off is ALSO >12 min and still going**; rankfix similar. gi74
+is an inherently expensive UNWON combo game — the deck's known "enumeration dominates a few games" cost
+(EnumeratePlans over a large subset×X space every rollout node, no win to short-circuit). The batch made it
+look flag-specific only because gi74 was the last straggler and grabbed leaf-parallel worker threads once it
+was the only game left. **So it is a pre-existing, flag-independent deck cost, NOT a blocker for rankfix
+adoption.** (Separate, longstanding perf item for the deck.)
+
+### SPASM GATE (`MTG_HINATA_SPASM_GATE`, default OFF) — user rule 2026-07-20
+`HinataProvider::ShouldEmitUntapRitual` now (under the flag) emits Reality Spasm only when **Crackle with
+Power is in hand**, not just whenever Hinata is online. Rationale (user): Reality Spasm is a RAMP ritual whose
+only worthwhile sink is Crackle — like a Dragonstorm deck only casting rituals when it will cast
+Dragonstorm/Apex. Motivating misplay the user saw in the viewer ("Faithful"): a Reality Spasm WASTED to cast
+Magma Opus (which Hinata already discounts — pure loss). The Crackle-in-hand proxy preserves the "draw then
+play Crackle" line because the engine RE-COLLECTS actions after each draw (AIEngine chooser re-fires
+post-draw): on a Ponder→Crackle turn, Reality Spasm is suppressed at turn start but emitted after Ponder draws
+Crackle. A Soulfire→Reality Spasm→Crackle "restore mana mid-combo" line also survives (Crackle in hand or
+staged by the Soulfire dig). Only casting Reality Spasm BEFORE the dig is forbidden (fungible).
+- **Verified: gi163 combo SURVIVES** under over-count+rankfix+gate (T6). Faithful+rankfix+gate slips T6→T7
+  (faithful is parked; note it).
+- **NOT a gi74 fix:** gi74's cost is LEGITIMATE Crackle-containing combo enumeration (the prune keeps those
+  subsets), so neither the emission gate nor the plan prune speeds it up (off+gate and plan-prune both still
+  minutes). gi74 is real combo search, inherent to the deck.
+- **Plan-level prune added** (`SubsetWastesRampRitual` in TurnSolver `consider` + `eval_and_push`): reject any
+  plan casting a ramp ritual (Reality Spasm OR Irencrag Feat, `IsManaRitual`) without Crackle with Power in
+  the SAME plan -- even when Crackle is in hand (which the emission gate cannot). Covers Irencrag per user.
+
+**HELD-OUT VALIDATION of the RANK FIX (seed 7000, paired off vs rankfix, GoldFishRunner): CONFIRMED.** Over
+140 games **off 6.2786 -> rankfix 6.2429, delta -0.0357 (7 faster, 3 slower)** -- essentially IDENTICAL to the
+-0.035 on seed 4004. The rank fix GENERALIZES across seeds; it is a validated improvement, ready for the
+adoption decision (drop `MTG_HINATA_RANK_FIX`, `--accept` rebaseline Hinata GT) on user approval.
+
+**REPRO-CONVENTION BUG FOUND (2026-07-20):** the single-game convention `--seed (base+gi) --game-index gi`
+is WRONG -- BOTH `--game-index N` AND `--log-dir` perturb the RNG/card-numbering and reproduce a DIFFERENT
+game. Correct standalone repro of batch game gi = **`--seed (base+gi) --games 1`** (no --game-index, no
+--log-dir). Verified: `--seed 4049 --games 1` off = wt 7 = gl_bid[45]. (The rank-fix AGGREGATE used
+`--seed 4004 --games N` for both arms, so it is unaffected; but prior per-game gi163/gi49 traces that used
+--game-index may have been the wrong game -- re-verify any per-game claim with the corrected repro.)
+
+**"NON-DETERMINISM" ROOT-CAUSED (2026-07-20): it is NOT non-determinism -- it is a single-game REPRO-CONFIG
+mismatch. The engine IS deterministic (SearchBudget::FromVirtualMs = a fixed NODE budget, not wall-clock;
+the per-game search has NO internal threading; batch parallelism is across games, 1 thread/game). Batch and
+GoldFishRunner seed identically (base+gi) with the same opponent spawn (`PATTERNS[game_index%10]`). Batch-vs-
+single flips came from repro errors, NOT the engine:**
+1. **Opponent spawn**: single-game repro MUST pass `--game-index gi` (sets `PATTERNS[gi%10]`); dropping it
+   uses `PATTERNS[0]` -> a different opponent board -> a different game on edge-sensitive games.
+2. **Value-leaf / depth gap (the big one)**: a d<5 batch case runs `AIEngine(job.profile, job.depth, ...)` =
+   explicit depth WITH the deck's value_play VALUE MODEL applied at the leaves. But the CLI cannot express
+   "depth 3 + value model": value_play OWNS the depth (rejects `--depth`), and `--ignore-play-profile` drops
+   BOTH the depth lock AND the value model. **`test/explain_game.py` (line 72-79) reproduces every game with
+   `--ignore-play-profile --depth <d> --log-dir` -> value model OFF + card-numbering perturbation -> it
+   reproduces a DIFFERENT game than the batch for any value_play deck (Hinata).** So the per-game audit's d3/d5
+   explanations for Hinata are on mismatched games; draw-divergence/"KEPT HANDS DIFFER" verdicts there are
+   suspect. d5 CAN be matched single-game via value_play (omit --depth, keep the profile) + `--game-index gi`.
+
+**Consequences:** the BATCH measurements (gate offgate +0.052, rank-fix -0.035/-0.036 held-out, the GT digests)
+are DETERMINISTIC and RELIABLE -- the earlier "gate numbers unreliable / true effect ~neutral" note was WRONG;
+the gate really is goldfish net-negative (it removes sometimes-optimal reckless-tempo lines). The per-game
+AUDIT tooling, however, cannot faithfully reproduce Hinata's value_play games -> per-game root-causing via
+explain_game is unreliable for this deck (a harness limitation worth fixing: teach explain_game/the CLI a
+"depth-N + value-model" mode, or reproduce value_play decks via the batch manifest with games=1).
+
+**CONFIRMED (2026-07-20):** d5_s2002 gi60 with the CORRECT repro (`--seed 2062 --game-index 60 --games 1
+--budget-ms 20 --lookahead-bottoming`, value_play so the VALUE MODEL stays on) = **9.0 (loss) = the batch**.
+The earlier "gi60 wins T8 single-game" was the WRONG repro (explain_game's `--ignore-play-profile` dropped the
+value model). So gi60 IS a real deterministic batch loss (a benign horizon-edge game); root cause fully closed.
+
+## SESSION 3g PLAN (post-compaction, user-ordered 2026-07-20)
+State: rank fix ADOPTED in code (flag `MTG_HINATA_RANK_FIX` dropped; new ranking is default; enum cleaned;
+builds; gi163=T6). **Smoke GT ACCEPTED** (test/regression_gt.txt + test/gt_logs/hinata_smoke_d{0,3,5}_s1001.wins
+= uncommitted). Regression run DONE (net +: searched 10 loss->win / 78 earlier vs 4 win->loss / 27 later) but
+NOT accepted (the 4 win->loss: d3_s3003 gi27, d3_s3003 gi165, d3_s2002 gi60, d5_s2002 gi60). Spasm gate
+(`MTG_HINATA_SPASM_GATE`, emission gate in DecisionProviders + plan-prune `SubsetWastesRampRitual` in
+TurnSolver) still OPT-IN, uncommitted, NOT adopted. Nothing committed this session.
+NEXT (in order):
+1. **FIX the per-game audit** so value_play decks reproduce faithfully: give the CLI/explain_game a
+   "depth-N + value-model" mode (run explicit depth WITHOUT dropping the value leaf), OR have explain_game
+   reproduce value_play decks via a 1-game batch manifest. Then the Hinata d3/d5 audits become trustworthy.
+2. **Reproduce the other issues** with the fixed audit + correct repro (`--seed base+gi --game-index gi`,
+   value_play for d5; NO --log-dir/--game-index-drop). Re-examine the 4 regression win->loss faithfully.
+3. **ROOT-SOURCE the gate** (user: "need an actual explanation"): the gate's -0.052 is RELIABLE and goldfish-
+   negative. WHY, exactly? Candidates: (a) it removes reckless-tempo lines that genuinely win faster vs a
+   passive goldfish (a real, honest tradeoff), vs (b) a plan-prune BUG removing GOOD plans. Also measure the
+   expected PERF/node-count win (user expects one). Need the concrete per-game explanation on a faithfully-
+   reproduced game before the next step. Then decide the regression-GT accept + commit + gate keep/drop.
+
+**GATE MEASUREMENT -> NET-NEGATIVE in goldfish (do NOT fold into the default path).** offgate (gate alone,
+over-count) paired vs `gl_bid` over 134 finished games: **off 6.0149 -> gate 6.0672, delta +0.0522, 0 faster
+/ 6 slower** (gi45 even went win->loss 7->9). STRUCTURAL reason: the gate only ever REMOVES options
+(ritual-without-Crackle plans), so in the race-a-do-nothing-opponent metric it can only be slower-or-neutral,
+never faster -- and spending a ritual on immediate tempo (Magma Opus draw-2+tokens, or a Soulfire dig)
+sometimes wins FASTER. The gate encodes a REAL-PLAY (1v1) principle -- don't waste a Reality Spasm you need
+for the combo later -- that goldfish structurally cannot reward (and mildly penalises). Per
+[[metric-avg-loss-as-9]] goldfish is the only metric we have, so by it the gate is a small loss. Also made
+66/200 games stragglers (a search-cost tail of its own). **Recommendation: keep the gate OPT-IN behind
+`MTG_HINATA_SPASM_GATE` (default off, byte-identical); its value is the future 1v1 mode, not goldfish. Do NOT
+adopt into the default goldfish path.** rfgate arm (rankfix+gate) not run -- the structural argument makes it
+very likely also net-negative on top of rankfix. The RANK FIX (separate, `MTG_HINATA_RANK_FIX`) remains the
+net-POSITIVE, adoptable change (-0.035).
+
+--- (superseded) original adoption note below ---
+### (superseded) Adoption status: ADOPTED 2026-07-19
+Committed behind `MTG_MAGMA_FAITHFUL` (default OFF ⇒ byte-identical) at `4658d4f`. Adopting = flip the
+default (drop the gate, add an `MTG_LEGACY` escape hatch) + `regression.sh --accept` to rebaseline Hinata
+GT (d0/d3/d5 avg + all play digests move). **The held-out d5 validation shows adoption costs ~+0.017 avg
+turn-to-win** (consistent across the 4 overnight seeds) — small but real, not free. So this is a
+correctness call, not a metric win:
+- **FOR adopting**: the over-count models an IMPOSSIBLE line (Magma cheap AND 4-to-face); the faithful
+  model is honest, prices each face level correctly, and the search still picks sensibly (concentrate
+  when it can afford it, cheap spread to free mana for Crackle). Only 22/1200 d5 games move.
+- **AGAINST**: it's a ~+0.017 goldfish slowdown at every depth, with no compensating metric gain — the
+  goldfish genuinely wins faster on the fiction.
+Presented to the user for the decision (per `heuristic-optimization.md`: adopt only on approval).
+
+---
+
+## GOING FORWARD (2026-07-21 user directive) — faithful Magma should be default-ON; first root-cause the regression
+
+The user's decision on the above: **faithful Magma should NOT stay off-by-default** — the honest model
+(no impossible "cheap AND 4-to-face" line) is the one we want live. But the ~+0.0167 goldfish slowdown is
+a *regression to explain*, not a cost to accept blindly: **before flipping the default, root-cause WHY the
+faithful model loses ~0.017 turn-to-win.** The suspicion is that the goldfish metric rewards the fiction
+(the search wins a hair faster when Magma is mispriced cheap), i.e. the "loss" is the metric preferring an
+illegal line — in which case adopting is correct despite the number. Confirm that attribution rather than
+assume it.
+
+**This is now an investigation under the MERGED engine** (as of the 2026-07-21 merge of origin's escalation
+feature `eded828` into the numbering/rank branch). Escalation changes deep-search line selection, so the
+Magma faithful vs over-count delta must be *re-measured on the merged binary* — the prior +0.0167 predates
+escalation and may shift. Sequence (per `.claude/skills/heuristic-optimization.md` +
+`.claude/skills/regression-testing.md`):
+1. Re-measure faithful (`MTG_MAGMA_FAITHFUL=1`) vs default on the merged binary, Hinata train seeds, then
+   held-out overnight seeds — get the current delta and its per-game decomposition.
+2. **Attribute the slowdown**: for the games that get slower, confirm the over-count line the goldfish
+   prefers is the *impossible* one (Magma cheap AND 4-to-face) — i.e. the metric is rewarding a fiction.
+   If so, the faithful slowdown is a metric artifact and adoption is the correct call.
+3. Flip the default to faithful + add an `MTG_LEGACY_MAGMA` escape hatch (byte-identical off), rebaseline
+   Hinata GT via `--accept`, and disclose. Do NOT adopt until the attribution in (2) is measured, not
+   assumed.
+
+## 2026-07-21 root-cause — faithful is NOT adoptable as-is (the +0.017 is MISSING IMPLEMENTATION, not fiction) — ⚠️ SUPERSEDED, WRONG; see the ADOPTED section at the bottom
+
+Re-measured on the merged (escalation) binary: faithful is **+0.017 slower** on all 5 Hinata train cases
+(d0 +0.013, d3 +0.010/+0.030, d5 +0.010/+0.020); escalation did not flip the sign. Only ~3 d5 games move
+per seed (+1 turn). Attribution step (2) done game-by-game and **the "fiction" framing was wrong** — it's
+two implementation gaps:
+
+1. **The Crackle-first mana-allocation prune is a PHANTOM.** `ScaledCastVariants` emits the full Magma
+   face-ladder (face 4 = `{3}{U}{R}` … face 1 = `{U}{R}`) and PUNTS the Magma-vs-Crackle allocation to
+   `SubsetMisallocatesScalingMana` "in TurnSolver" — **which does not exist.** The string appears in exactly
+   one place in the repo: the comment at `DecisionProviders.cpp:1889` (entered in `f2ee9d7`, never as code).
+   The earlier real "Crackle in hand → force face 1" reserve (`fb5238f`) was removed and "replaced" by this
+   non-existent prune. With nothing routing mana to Crackle first, the search over-pays for the expensive
+   Magma-4-face instead of minimal-Magma + big-Crackle.
+2. **Opponent creatures are undercounted in the discount.** `spread_capacity = 1 + own creatures` ignores
+   the opponent's creatures, which are legal Magma damage targets that feed the Hinata `{1}`/target discount
+   — contradicting the code's own comment ("every creature, own first, opponent's as a last resort").
+
+Game evidence (unbounded `--budget-ms 0` confirms): **gi4** (default T5, opp −3) — dropping Magma 4→1 face
+(3 less, same `{U}{R}` cost, 2 own creatures) leaves opp at exactly **0 = dead**, so the honest T5 exists at
+the same cost; faithful stays T6 even unbounded ⇒ **search/allocation bug**. **gi69** (opp −8) — faithful
+UNBOUNDED recovers T5 via `RS + Crackle`, no Magma ⇒ search-miss + opp-creature undercount. **gi47** (opp
+−1) — honest lethal needs Magma-3-face at `{2}` more mana ⇒ **possibly genuine fiction**.
+
+**⇒ Build first, then re-measure:** (a) implement the Crackle-first scaling-mana allocation the comment
+describes (plan-level co-optimization of Magma face + Crackle X — route mana to the efficient sink first,
+Magma takes the leftover face); (b) fix `spread_capacity` to count both sides' creatures. Both are Rule-0
+CORRECTNESS fixes (`mtg-rules.md`), not heuristic tunes. Only after they land is the true residual (gi47-type
+genuine fiction) measurable and the adopt/flip-default decision meaningful. If gi4 does not recover after the
+fixes, hand the winning-line log to the user to inspect.
+
+## 2026-07-21 VERDICT — ADOPTED default-ON (the +0.02 is honest cost-of-correction + search variance, NOT a bug)
+
+The section above is **wrong on every point** — it was written from stale compaction notes and a broken A/B.
+Corrected findings, verified against the current merged binary:
+
+- **Test-env bug that produced the false picture:** the gate is `getenv("MTG_MAGMA_FAITHFUL") != nullptr`, so
+  `MTG_MAGMA_FAITHFUL=0` (non-null string "0") **enables** faithful. The default arm must **unset** the var
+  (`env -u MTG_MAGMA_FAITHFUL`). With that fixed, the movers reappear (gi4 default T5 / faithful T6, etc.).
+- **Both "bugs" refuted.** (1) The opponent-creature "undercount" does not exist — `ScaledCastVariants`'
+  creature loop has no controller filter and already counts both sides (opponent spawns/lands enter the shared
+  `s.battlefield` with `controller_index=1`; unchanged since `4658d4f`). (2) `SubsetMisallocatesScalingMana`
+  is comment-only, but the allocation it describes **is implemented** — `FillScaledCastFace` (TurnSolver.cpp)
+  emits Magma at min face and fills the face from leftover **after** the searched Crackle X ("Crackle first,
+  Magma the remainder"). The missing prune was only a redundant perf-prune.
+- **The whole "+0.017" is ~9 games in 400 (d5, seeds 2002/3003/4004/5005), every one exactly +1 turn, ZERO
+  faster** (avg delta ≈ +0.022). A model that only *removes over-counted damage* can only push a Magma-kill a
+  turn later, never earlier — "all +1, none faster" is the fingerprint of correcting a fiction, not a bug.
+- **Every mover is one of two honest shapes** (per-game verified via `logs/audit_fix/magma2/{showline,divergence}.py`):
+  **genuine cost** (gi47 — the one same-board case; overkill only 1, honest kill needs Magma-3-face at +2 mana
+  that wasn't there), or **search variance** (gi4, gi69, gi46, gi55, gi68 — the honest cost reshapes *early*
+  lookahead decisions, e.g. gi69 loses its Gamble→Sol-Ring ramp, so faithful walks to a different, slightly
+  slower board; several don't even cast Magma). Confirmed **not** budget-recoverable (gi4 stays T6 at budget
+  2000 and unbounded, depth 5 — and depth is locked to 5 for value_play decks) and **not** the value model
+  (T6 with `MTG_VALUE_MODEL=0`). gi4's honest T5 line exists at the same mana but is not on faithful's board.
+
+**Decision (user-approved 2026-07-21): ADOPT default-ON.** Gate flipped in `ScaledCastVariants` /
+`DecisionProviders.h`: faithful is the default; `MTG_LEGACY_MAGMA` restores the over-count single line
+(byte-identical to the pre-adoption GT). `MTG_MAGMA_FAITHFUL` retired. Hinata GT rebaselined across
+smoke/regression/overnight via `regression.sh --accept`. The only GT movement is the ~2% Hinata Magma
+games above (all +1 turn); every other deck is byte-identical.

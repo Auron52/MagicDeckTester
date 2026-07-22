@@ -1,8 +1,38 @@
 cmake_minimum_required(VERSION 3.20)
+
+# Guard against the silent -O0 footgun: a bare `cmake -S . -B build/Release` with no
+# -DCMAKE_BUILD_TYPE leaves the type EMPTY, which compiles with NO optimization (~10x
+# slower -- this cost us a ~26h Hinata gen chunk that should have been ~2h). Default an
+# unset type to Release so even an unqualified configure is optimized. The canonical
+# entry point is ./build.sh, which always sets an explicit optimized build type.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING
+      "Build type (Release / RelWithDebInfo)" FORCE)
+  message(STATUS "CMAKE_BUILD_TYPE was unset -> defaulting to Release (optimized). "
+                 "Prefer ./build.sh to choose a mode.")
+endif()
+
 project(MagicDeckTester CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# A "Profile" configuration = Release (-O3) + debug symbols, for FAITHFUL profiling: -g does not
+# change codegen, so this is instruction-identical to the shipped Release binary plus symbols. It is
+# kept SEPARATE from RelWithDebInfo (which stays CMake-standard -O2 -g for friendlier crash stacks),
+# so profiling reflects the real binary while debugging keeps its faithful stacks. Registered on
+# multi-config generators (Ninja Multi-Config / MSVC) as `--config Profile`; `./build.sh profile` uses it.
+if(CMAKE_CONFIGURATION_TYPES AND NOT "Profile" IN_LIST CMAKE_CONFIGURATION_TYPES)
+  list(APPEND CMAKE_CONFIGURATION_TYPES Profile)
+  set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING "" FORCE)
+endif()
+set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
+set(CMAKE_C_FLAGS_PROFILE   "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
+set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "" CACHE STRING "")
+set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "" CACHE STRING "")
+set(CMAKE_STATIC_LINKER_FLAGS_PROFILE "" CACHE STRING "")
+mark_as_advanced(CMAKE_CXX_FLAGS_PROFILE CMAKE_C_FLAGS_PROFILE
+  CMAKE_EXE_LINKER_FLAGS_PROFILE CMAKE_SHARED_LINKER_FLAGS_PROFILE CMAKE_STATIC_LINKER_FLAGS_PROFILE)
 
 # Opt-in deterministic hot-path profiling (see src/ai/Profiler.h). OFF by default
 # so normal builds carry zero instrumentation overhead. Enable a separate build

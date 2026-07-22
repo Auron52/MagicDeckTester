@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="3" name="Melira, Sylvok Outcast"/>
+        <card number="4" name="Kitchen Finks"/>
+        <card number="2" name="Murderous Redcap"/>
+        <card number="4" name="Birthing Pod"/>
+        <card number="4" name="Ignoble Hierarch"/>
+        <card number="1" name="Reveillark"/>
+        <card number="1" name="Voice of Resurgence"/>
+        <card number="1" name="Reclamation Sage"/>
+        <card number="1" name="Ranger of Eos"/>
+        <card number="1" name="Ravenous Chupacabra"/>
+        <card number="4" name="Carrion Feeder"/>
+        <card number="4" name="Blooming Marsh"/>
+        <card number="4" name="Razorverge Thicket"/>
+        <card number="1" name="Recruiter of the Guard"/>
+        <card number="2" name="Birds of Paradise"/>
+        <card number="1" name="Felidar Guardian"/>
+        <card number="2" name="Darkbore Pathway"/>
+        <card number="4" name="Branchloft Pathway"/>
+        <card number="1" name="Scavenging Ooze"/>
+        <card number="1" name="Vizier of Remedies"/>
+        <card number="4" name="Llanowar Wastes"/>
+        <card number="1" name="Orzhov Basilica"/>
+        <card number="3" name="Chord of Calling"/>
+        <card number="1" name="Severance Priest"/>
+        <card number="2" name="Caves of Koilos"/>
+        <card number="1" name="Forest"/>
+        <card number="1" name="Bloodthrone Vampire"/>
+        <card number="1" name="Celes, Rune Knight"/>
+    </zone>
+</cockatrice_deck>

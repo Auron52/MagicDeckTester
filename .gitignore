@@ -95,3 +95,6 @@ __pycache__/
 # decks/**/ reaches into per-deck folders (decks/<name>/<name>.keepmodel.exhaustive.*.json).
 decks/**/*.keepmodel.exhaustive*.json
 scripts/*.so
+
+# Parsed-sidecar binary cache (derived; rebuilt from the .gz on demand)
+*.bincache

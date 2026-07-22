@@ -6,9 +6,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MagicDeckTester simulates Magic: The Gathering games to compare card and deck performance. The goal is to let users build or modify decks and run simulated games to evaluate how different card choices affect outcomes.
 
-## Project Status
+## Building — ALWAYS use `./build.sh` (never raw `cmake`)
 
-The application is in early development — no build system, test runner, or source files exist yet. When commands are established, update this file with how to build, run, and test the project.
+Build with the repo-root script, which produces an **optimized** binary every time:
+
+```
+./build.sh                 # Release (-O3)  -> build/Release          (DEFAULT; use this for almost everything)
+./build.sh relwithdebinfo  # -O2 + symbols  -> build/RelWithDebInfo   (debugging a crash with a faithful stack)
+./build.sh profile         # -O3 + symbols  -> build/Profile          (faithful profiling: Release codegen + symbols)
+```
+
+**Do NOT run `cmake` directly.** A bare `cmake -S . -B build/Release` leaves `CMAKE_BUILD_TYPE`
+empty, which compiles with **no optimization (`-O0`) — a silent ~10x slowdown** (it once turned a
+~2h Hinata gen chunk into ~26h). `build.sh` sets an explicit build type per mode, each in its own
+directory, so an unoptimized binary cannot happen by accident. A CMake guard also defaults an unset
+build type to Release as a backstop. There is deliberately **no Debug (`-O0`) mode** — if one is ever
+needed it must be a separate, deliberate route (`cmake -DCMAKE_BUILD_TYPE=Debug -B build/Debug`), never
+the default. `scripts/analyze_deck.py` rebuilds via the same multi-config `build/` tree (always
+optimized); the regression harness expects a pre-built binary at `build/Release/mtg` — build it with
+`./build.sh` first.
 
 ## Repository Conventions
 

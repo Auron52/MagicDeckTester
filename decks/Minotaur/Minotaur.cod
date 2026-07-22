@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments>l1
+l</comments>
+    <zone name="main">
+        <card number="2" name="Boros Reckoner"/>
+        <card number="3" name="Fanatic of Mogis"/>
+        <card number="4" name="Rageblood Shaman"/>
+        <card number="4" name="Kragma Warcaller"/>
+        <card number="4" name="Deathbellow Raider"/>
+        <card number="2" name="Blood Crypt"/>
+        <card number="5" name="Mountain"/>
+        <card number="2" name="Rakdos Carnarium"/>
+        <card number="4" name="Ragemonger"/>
+        <card number="4" name="Gnarled Scarhide"/>
+        <card number="3" name="Neheb, the Worthy"/>
+        <card number="4" name="Burning-Fist Minotaur"/>
+        <card number="4" name="Unclaimed Territory"/>
+        <card number="4" name="Slaughter-Priest of Mogis"/>
+        <card number="2" name="Bloodstained Mire"/>
+        <card number="2" name="Sethron, Hurloon General"/>
+        <card number="2" name="Aether Vial"/>
+        <card number="4" name="Secluded Courtyard"/>
+        <card number="1" name="Cavern of Souls"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Dragonskull Summit"/>
+        <card number="1" name="Boros Strike-Captain"/>
+        <card number="1" name="Blackcleave Cliffs"/>
+        <card number="2" name="Blood Crypt"/>
+        <card number="2" name="Bloodstained Mire"/>
+    </zone>
+</cockatrice_deck>

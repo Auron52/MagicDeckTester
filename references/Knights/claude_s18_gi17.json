@@ -1,0 +1,149 @@
+{
+  "seed": 18, "game_index": 17, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [4] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 45, "name": "Tournament Grounds" }, { "num": 33, "name": "Plains" }, { "num": 25, "name": "Knight Exemplar" }, { "num": 6, "name": "Aether Vial" }, { "num": 46, "name": "Tournament Grounds" }, { "num": 1, "name": "Acclaimed Contender" }, { "num": 29, "name": "Marshal of Zhalfir" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 29, "name": "Marshal of Zhalfir" }, { "num": 37, "name": "Plains" }, { "num": 54, "name": "Venerable Knight" }, { "num": 4, "name": "Acclaimed Contender" }, { "num": 46, "name": "Tournament Grounds" }, { "num": 53, "name": "Venerable Knight" }, { "num": 25, "name": "Knight Exemplar" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 29, "name": "Marshal of Zhalfir", "win_optimal": true }, { "num": 37, "name": "Plains", "win_optimal": true }, { "num": 54, "name": "Venerable Knight", "win_optimal": true }, { "num": 4, "name": "Acclaimed Contender", "win_optimal": true }, { "num": 46, "name": "Tournament Grounds", "win_optimal": true }, { "num": 53, "name": "Venerable Knight", "win_optimal": true }, { "num": 25, "name": "Knight Exemplar", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 4, "name": "Acclaimed Contender" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 37, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 46, "name": "Tournament Grounds", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Venerable Knight", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Venerable Knight", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Tournament Grounds; cast: Venerable Knight", "land": "Tournament Grounds", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 1, "summary": "land=Plains; cast: Venerable Knight", "land": "Plains", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 2, "summary": "land=Tournament Grounds; cast: (nothing)", "land": "Tournament Grounds", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Venerable Knight" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "is_land": false }], "vial_counters": [], "hand": [{ "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Tournament Grounds", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Venerable Knight", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Venerable Knight", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Tournament Grounds; cast: Venerable Knight, Venerable Knight", "land": "Tournament Grounds", "casts": ["Venerable Knight", "Venerable Knight"], "actions": [{ "card": "Venerable Knight" }, { "card": "Venerable Knight" }] },
+    { "index": 1, "summary": "land=Tournament Grounds; cast: Venerable Knight", "land": "Tournament Grounds", "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 2, "summary": "land=none; cast: Venerable Knight", "land": null, "casts": ["Venerable Knight"], "actions": [{ "card": "Venerable Knight" }] },
+    { "index": 3, "summary": "land=Tournament Grounds; cast: (nothing)", "land": "Tournament Grounds", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Dauntless Bodyguard" }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Venerable Knight (2) — 2 to opponent (20→18)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "is_land": true }, { "name": "Tournament Grounds", "idx": 2, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "is_land": false }, { "name": "Venerable Knight", "idx": 3, "is_land": false }, { "name": "Venerable Knight", "idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 17, "name": "Dauntless Bodyguard", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dauntless Bodyguard", "land": null, "casts": ["Dauntless Bodyguard"], "actions": [{ "card": "Dauntless Bodyguard" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Aether Vial" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Venerable Knight (2), Venerable Knight (2), Venerable Knight (2) — 6 to opponent (18→12)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Dauntless Bodyguard", "idx": 6, "is_land": false }, { "name": "Plains", "idx": 0, "is_land": true }, { "name": "Tournament Grounds", "idx": 2, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "is_land": false }, { "name": "Venerable Knight", "idx": 3, "is_land": false }, { "name": "Venerable Knight", "idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 7,
+  "type": "vial_charge",
+  "turn": 5,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 7,
+  "heuristic_default": 1,
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 7, "is_land": false }, { "name": "Dauntless Bodyguard", "idx": 6, "is_land": false }, { "name": "Plains", "idx": 0, "is_land": true }, { "name": "Tournament Grounds", "idx": 2, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "is_land": false }, { "name": "Venerable Knight", "idx": 3, "is_land": false }, { "name": "Venerable Knight", "idx": 4, "is_land": false }], "vial_counters": [0], "hand": [{ "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Plains" }],
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Venerable Knight (2), Venerable Knight (2), Venerable Knight (2), Dauntless Bodyguard (2) — 8 to opponent (12→4)" }],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Dauntless Bodyguard", "idx": 6, "is_land": false }, { "name": "Plains", "idx": 0, "is_land": true }, { "name": "Tournament Grounds", "idx": 2, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "is_land": false }, { "name": "Venerable Knight", "idx": 3, "is_land": false }, { "name": "Venerable Knight", "idx": 4, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 25, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Marshal of Zhalfir", "cost": "{W}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Knight Exemplar", "land": "Plains", "casts": ["Knight Exemplar"], "actions": [{ "card": "Knight Exemplar" }] },
+    { "index": 1, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

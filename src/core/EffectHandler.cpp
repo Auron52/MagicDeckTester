@@ -271,13 +271,13 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         }
     }
 
-    // Magma Opus faithful spread (opt-in): the search targets only the opponent's face, which takes just
-    // the plan's face damage -- 1 when spreading the 4 across distinct targets for the cheap Hinata
-    // discount, or the full `damage` when concentrating for a lethal hit (see MagmaFaithfulPlan).
-    // Lockstep with the HinataAvailableTargets discount + ApplyPlanDirect.
-    if (IsMagmaFaithful(def.params))
+    // A scaled divided-damage spell (Magma Opus) commits only the searched face level to the opponent's
+    // face (carried on the stack via crackle_targets; the rest was spread onto inert targets to earn the
+    // Hinata discount and is not simulated). Unset for a normal cast / the model off -> full damage.
+    // Lockstep with the committed cost + ApplyPlanDirect.
+    if (def.params.damage_divided && entry.crackle_targets.has_value())
     {
-        damage = MagmaFaithfulPlan(def, state).opp_face_damage;
+        damage = entry.crackle_targets.value();
     }
 
     for (const Target& t : entry.targets)
