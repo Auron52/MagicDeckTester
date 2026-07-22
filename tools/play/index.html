@@ -119,6 +119,13 @@
   .hand .thumb.staged img { box-shadow:0 0 0 2px #9a6ad1; }
   .hand .thumb .stagedbadge { position:absolute; top:2px; left:2px; background:rgba(154,106,209,.95); color:#0c1116;
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
+  /* Exile zone: NON-playable exiled cards (suspended + Apex-exiled lands) — dimmed, with their own badge */
+  .zone.exile h3 { color:#8fa0c0; }
+  .thumb.staged .stagedbadge { position:absolute; top:2px; left:2px; background:rgba(154,106,209,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
+  .thumb.noplay img { opacity:.5; filter:grayscale(.35); box-shadow:0 0 0 2px #6b7280; }
+  .stagedbadge.susp   { background:rgba(90,150,225,.95) !important; }
+  .stagedbadge.noplay { background:rgba(150,155,165,.95) !important; }
   /* Aether Vial: the permanent is a clickable deploy source; matching-MV hand creatures light up */
   .thumb.vial-src { cursor:pointer; box-shadow:0 0 0 1px var(--acc) inset; }
   .thumb.vial-src.active img { box-shadow:0 0 0 2px var(--acc), 0 0 10px rgba(90,169,230,.55); }
@@ -607,6 +614,22 @@ function renderBoard() {
          zoneRow(plannedLE.length?plannedLE:[])+`</div>`;
   }
   h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
+  // Exile — NON-playable exiled cards you should still SEE: SUSPENDED cards (Lotus Bloom, with a ⌛
+  // time-counter = turns to arrival) and Apex-of-Power-exiled LANDS (⊘ — Apex lets you cast SPELLS
+  // from among the exiled cards, so a land is stuck in exile, never playable). Playable staged spells
+  // stay in the Hand (purple ▸T badge); these are the ones you canNOT act on now. Emitted by the
+  // engine only when non-empty (me.exile).
+  if (me.exile && me.exile.length) {
+    const exThumbs = me.exile.map(c=>{
+      const badge = c.reason==='suspend'
+        ? `<span class="stagedbadge susp" title="suspended — arrives turn ${c.arrive_turn} (${c.time_counters} time counter${c.time_counters===1?'':'s'} left)">⌛${c.time_counters}</span>`
+        : `<span class="stagedbadge noplay" title="exiled by Apex of Power — a land can't be cast (spells only), so it stays in exile">⊘</span>`;
+      return `<span class="thumb staged ${c.kind==='land'?'land':'spell'} noplay" data-name="${esc(c.name)}" title="${esc(c.name)} — exiled, not playable now">`+
+        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/>`+
+        badge+`<em>${esc(c.name)}</em></span>`;
+    });
+    h += `<div class="zone exile"><h3>Exile — not playable now (${me.exile.length})</h3>`+zoneRow(exThumbs)+`</div>`;
+  }
   h += `</div>`;  // /playfield
   // Hand sits ABOVE the graveyard: it is the most-used zone, so keeping it high (right under your
   // field) means the turn bar and hand are visible together without scrolling. The graveyard (less

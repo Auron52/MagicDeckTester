@@ -265,11 +265,18 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     // Hand as {name, cost, mv} objects so the player judges affordability from the real
     // card data, not memory (the slivers false positives came from guessing costs).
     os << ", \"hand\": [";
+    bool hand_first = true;
     for (size_t i = 0; i < hand.size(); ++i)
     {
-        if (i) { os << ", "; }
         const Card* hc = hand[i];
         const CardDefinition* d = CardDatabase::Instance().Lookup(hc->m_name);
+        // Apex-of-Power-exiled LANDS are unplayable ("cast SPELLS from among them"; a land is played,
+        // not cast). m_impulse_no_land is set on ALL of Apex's exiled cards but only MATTERS for lands,
+        // so filter ONLY a staged LAND out of the hand (staged SPELLS stay, with their is_staged badge);
+        // the removed land is re-emitted under "exile" below so the player still SEES it stuck in exile.
+        if (hc->m_impulse_no_land && d && d->card.IsLand()) { continue; }
+        if (!hand_first) { os << ", "; }
+        hand_first = false;
         os << "{ \"num\": " << hc->m_number << ", \"name\": "; JsonStr(os, hc->m_name);
         os << ", \"cost\": "; JsonStr(os, d ? d->card.m_mana_cost.ToString() : std::string());
         os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0);
@@ -284,6 +291,36 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         os << " }";
     }
     os << "]";
+    // Exile display: non-playable exiled cards the player should SEE but can't play now --
+    // (a) Apex-exiled LANDS (m_impulse_no_land staged lands: stuck in exile, never playable), and
+    // (b) SUSPENDED cards (Lotus Bloom) with remaining time counters (arrive_turn - current turn;
+    // 0 = arrives this upkeep). Playable staged SPELLS stay in the hand (purple badge) and are NOT
+    // repeated here. Emitted only when the exile zone has something to show -> byte-identical for
+    // every deck/state without an Apex-exiled land or a suspended card.
+    {
+        bool have_exile = false;
+        auto open_or_sep = [&]() {
+            if (!have_exile) { os << ", \"exile\": ["; have_exile = true; } else { os << ", "; }
+        };
+        for (const Card& c : me.hand)
+        {
+            const CardDefinition* dc = CardDatabase::Instance().Lookup(c.m_name);
+            if (!(c.m_impulse_no_land && dc && dc->card.IsLand())) { continue; }   // Apex-exiled land only
+            open_or_sep();
+            os << "{ \"name\": "; JsonStr(os, c.m_name);
+            os << ", \"kind\": \"land\", \"reason\": \"apex_land\", \"staged_until\": " << c.m_staged_expiry << " }";
+        }
+        for (const SuspendedCard& sc : me.suspended_cards)
+        {
+            int counters = sc.arrive_turn - s.turn_number;
+            if (counters < 0) { counters = 0; }
+            open_or_sep();
+            os << "{ \"name\": "; JsonStr(os, sc.card.m_name);
+            os << ", \"kind\": \"suspend\", \"reason\": \"suspend\", \"time_counters\": " << counters
+               << ", \"arrive_turn\": " << sc.arrive_turn << " }";
+        }
+        if (have_exile) { os << "]"; }
+    }
     os << ", \"graveyard\": "; JsonNameArray(os, gy);
     // Retrace: graveyard spells castable from the yard (pay cost + discard a land). The GUI makes
     // these clickable in the graveyard zone; absent when the yard holds no retrace card.
