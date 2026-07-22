@@ -1,30 +1,41 @@
 # Hinata spasm gate — root-cause (measured)
 
-**Status:** ROOT-CAUSED. Only `off / strict(=1) / soft(=2)` are committed (opt-in, `MTG_HINATA_SPASM_GATE`,
-default OFF, `f2ee9d7`) — and both non-off modes were **rejected**. The variant actually kept (≈0 quality /
-~0.5% perf) was a *full-turn "ritual but no Win and no Crackle"* guard that **was never saved** — see the
-next section. NOT adopted; the keeper is unimplemented.
+**Status:** ROOT-CAUSED. Committed modes are only `off / strict(=1) / soft(=2)` (opt-in,
+`MTG_HINATA_SPASM_GATE`, default OFF, `f2ee9d7`) — both non-off modes were **rejected**. The variant
+actually kept (≈0 quality change / ~0.5% perf) — a *full-turn, order-aware "ritual but no Win and no
+Crackle"* prune — was stashed, the stash was dropped, then **RECOVERED 2026-07-22** from dangling commit
+`eef4575` and preserved (branch `recovered/hinata-spasm-gate-redesign` + `stash@{0}` +
+`logs/spasm_remeasure/spasm-gate-redesign.eef4575.patch`). NOT adopted; not in the working tree. See next section.
 
-## 2026-07-22 — the keeper variant (from memory; THE CODE NO LONGER EXISTS)
+## 2026-07-22 — the keeper variant: RECOVERED (was a dropped stash, not lost)
 
-Per the user's recollection, the variant actually settled on — measured at **literally no quality change
-and a ~0.5% speedup** (too small to distinguish from noise, so not worth chasing further) — was a
-full-turn guard, NOT either committed mode:
+The variant actually settled on — measured at **≈0 quality change and a ~0.5% speedup** (within noise) —
+is a *full-turn, order-aware* Crackle-payoff-sink prune, NOT either committed mode. It was implemented,
+stashed, and the stash was later dropped; **recovered 2026-07-22** from dangling stash commit **`eef4575`**
+and preserved three ways: branch **`recovered/hinata-spasm-gate-redesign`** (pushed), re-stashed at
+`stash@{0}`, and `logs/spasm_remeasure/spasm-gate-redesign.eef4575.patch`. Touches `TurnSolver.cpp`,
+`DecisionProviders.cpp`, `GameEngine.cpp`, `GameState.h` (+ this doc).
 
-> **Disallow a *full-turn* line that contains a mana ritual (Reality Spasm or Irencrag Feat) but contains
-> neither a Win nor a Crackle.** Emit always; no `HinataCrackleInHand` check.
-> Predicate: `has_ritual && !has_win && !has_crackle`. It removes only genuinely-wasteful lines (a ritual
-> floats mana that empties unused when the turn casts no sink and does not win), which is why it was
-> quality-neutral with only a tiny enumeration win.
+**What it does (from the recovered code):**
+> Prune a *whole-turn* line iff it cast a mana ritual (Reality Spasm / Irencrag Feat, `IsManaRitual`), cast
+> **no Crackle payoff** (`x_damage_multiplier > 1`) after the ritual, **and did not win** — the genuinely-
+> wasted case (the ritual's mana must be spent this turn or it evaporates). A ritual that funds a Crackle —
+> even a **sub-lethal** one — is KEPT (sub-lethal Crackle is load-bearing chip damage that reaches the same
+> optimal win a turn or two later). Applied at the turn boundary in `SimulateEndAndStartNextTurn`; a false
+> return in the FSLine line-finder means "this line has no win, try another" (an INVALID line, not a slow
+> one). **Order-aware:** a fresh ritual resets `crackle_since_ritual` (it now needs a Crackle *after* it); a
+> Crackle sets it; both reset each turn; byte-identical off. **Rollout-safe:** disabled inside
+> `SimulateToEnd` ranking rollouts (`g_in_rollout_eval`) — a false "no win" there poisons candidate ranking,
+> the exact confound that lost gi10/gi46 in earlier attempts.
 
-**This code was never saved** — it is not in the source, any stash, or git history (confirmed 2026-07-22).
-The two committed modes are NOT it and were both rejected: `strict (=1)` has no Win escape and fires on
-subsets (killing the "accelerate → dig → Crackle-later" lines the user wanted kept); `soft (=2)` adds an
-*inverted* `HinataCrackleInHand` check. **Not rebuilt** (user: "if it's not there, it's fine"). If ever
-revisited, implement the predicate above as a full-turn guard behind the existing `MTG_HINATA_SPASM_GATE`.
+**Why the committed modes are NOT it:** `strict (=1)` has no Win escape and fires on subsets (killing
+"accelerate → dig → Crackle-later"); `soft (=2)`'s `HinataCrackleInHand` check is inverted. The recovered
+redesign is the cleaner whole-turn, order-aware, rollout-safe formulation.
 
-_(The original `strict`/`soft` tables below were measured under `b3f0bd5`+`f2ee9d7` and are stale: a
-2026-07-22 re-check under `1290f68` put `strict` at ~1.8× perf / +0.04 tempo and `soft` at ~neutral.)_
+**Status:** RECOVERED + preserved, **not adopted, not in the working tree** (user 2026-07-22: not worth
+rebuilding for ~0.5% within noise). To revisit: `git stash apply stash@{0}` (or check out
+`recovered/hinata-spasm-gate-redesign`), rebuild, A/B, adopt behind `MTG_HINATA_SPASM_GATE` only on a
+measured win. The `strict`/`soft` tables below are stale (2026-07-22 re-check: strict ~1.8× / +0.04, soft ~neutral).
 
 ## What the gate is
 
