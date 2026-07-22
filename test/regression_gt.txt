@@ -1,4 +1,4 @@
-# Regression ground truth -- commit aaf3878  date 2026-07-21
+# Regression ground truth -- commit c958f27  date 2026-07-22
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -8,8 +8,8 @@ slivers_smoke_d0_s1001=4.6500/d21516cb1002bf68
 slivers_smoke_d3_s1001=4.2520/1a6d473f7e28dce4
 slivers_smoke_d5_s1001=4.1933/578aae42ccc881d1
 burn_smoke_d0_s1001=4.5830/bb9efdf465009c20
-burn_smoke_d3_s1001=4.3533/07099e18d00b06c8
-burn_smoke_d5_s1001=4.3640/3e68a95ac5d9955c
+burn_smoke_d3_s1001=4.3533/a38dae5c6ea18138
+burn_smoke_d5_s1001=4.3640/7dd163eb237624f1
 th_smoke_d0_s1001=5.4780/bc0e73033910b09a
 th_smoke_d3_s1001=4.2333/a96a12b4eb049b89
 th_smoke_d5_s1001=4.1600/3e3e7622e6151006
@@ -19,9 +19,12 @@ knights_smoke_d5_s1001=4.4000/def7d65ff1283926
 antilife_smoke_d0_s1001=5.5820/b8f0a980a8a99381
 antilife_smoke_d3_s1001=4.2200/142a40e97cc48f60
 antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
-hinata_smoke_d0_s1001=7.3720/bdd813703c59c379
-hinata_smoke_d3_s1001=5.6600/7c21dae09e82586a
-hinata_smoke_d5_s1001=5.7333/be81d83cbacbb5eb
+hinata_smoke_d0_s1001=7.2930/48ff4924e46f59b5
+hinata_smoke_d3_s1001=5.6667/110f22b3916616c4
+hinata_smoke_d5_s1001=5.7333/92d5555de09f82f5
+dragonstorm_smoke_d0_s1001=7.2400/fec0655b17ffe0f8
+dragonstorm_smoke_d3_s1001=4.7000/830677ea92880989
+dragonstorm_smoke_d5_s1001=4.7200/6dd6056dd9ee14ad
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6830/b07b4b048d5a2517
@@ -30,10 +33,10 @@ slivers_regression_d3_s3003=4.2500/24d896323f86724a
 slivers_regression_d5_s2002=4.2233/01f7dedffbf6b62e
 slivers_regression_d5_s3003=4.2500/1f410dfa5627d943
 burn_regression_d0_s2002=4.5530/bb5297f293a22283
-burn_regression_d3_s2002=4.3520/2c66771da5d09f94
-burn_regression_d3_s3003=4.2500/7b2444f49dfbcaf7
-burn_regression_d5_s2002=4.3520/2c66771da5d09f94
-burn_regression_d5_s3003=4.2500/c776f41aa202ee5a
+burn_regression_d3_s2002=4.3520/42b540346bbc06a9
+burn_regression_d3_s3003=4.2500/11661746205ded82
+burn_regression_d5_s2002=4.3520/42b540346bbc06a9
+burn_regression_d5_s3003=4.2500/698dd7b37ebba01e
 th_regression_d0_s2002=5.4830/ee4b00aa76d9c5a3
 th_regression_d3_s2002=4.3040/01e2d83ec2171d5c
 th_regression_d3_s3003=4.1300/daa99b13901f368e
@@ -49,11 +52,16 @@ antilife_regression_d3_s2002=4.2900/0aaa7a8d6999f9df
 antilife_regression_d3_s3003=4.2733/b8aee22e65838e70
 antilife_regression_d5_s2002=4.3160/80e88e4ad09954a2
 antilife_regression_d5_s3003=4.2560/e4d7273b75ec2273
-hinata_regression_d0_s2002=7.4510/951c91d19785e707
-hinata_regression_d3_s2002=5.7650/33d060584ebf70c1
-hinata_regression_d3_s3003=5.8250/efe3a67b913f91b4
-hinata_regression_d5_s2002=5.7000/cc2f0b8a04c775fb
-hinata_regression_d5_s3003=5.7600/d0319781dc40c0f3
+hinata_regression_d0_s2002=7.3830/dc15b5f739065992
+hinata_regression_d3_s2002=5.7500/6ac3783ba16749fb
+hinata_regression_d3_s3003=5.8300/d7c3dbc9877aaa2b
+hinata_regression_d5_s2002=5.7200/e2f9501879c6096e
+hinata_regression_d5_s3003=5.7500/3eff2577b2254d65
+dragonstorm_regression_d0_s2002=7.1050/b3dde1b4350a4c1f
+dragonstorm_regression_d3_s2002=4.7000/96dd420c35d41ada
+dragonstorm_regression_d3_s3003=4.7100/26d92c9a9ab1dad7
+dragonstorm_regression_d5_s2002=4.6480/1c85fc86b76c54e4
+dragonstorm_regression_d5_s3003=4.6960/d307af1ae52c0e82
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6445/60e754b51fb1b8a0
