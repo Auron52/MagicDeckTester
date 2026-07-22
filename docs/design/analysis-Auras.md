@@ -7,7 +7,21 @@ and Light-Paws (cast aura → tutor+attach a cheaper aura).
 
 Deck file: `decks/Auras/Auras.cod`. Branch: `phase-1-2-deck-analyzer`.
 
-## >>> RESUME HERE (post-compaction handoff) <<<
+## >>> STATUS: COMMITTED + Stage-6 REPORTED (d00e045 auras, 8d4bdef analyzer) — 2026-07-22 <<<
+Auras analysis COMPLETE + committed + Stage-6 delivered. Card-scores-only profile shipped
+(`decks/Auras/Auras.profile.json`). Analyzer simplified: analyze now generates ONLY card scores
+(mulligan optimisation / land-grid DELETED per user).
+
+**Stage-6 headline (representative, 200 games/seed 700001, budget 20ms):** avg turn-to-win
+**d0(greedy)=4.740 · d3=4.465 · d5=4.465** (THE metric, unwon=max+1; lower=better). d3 and d5 share
+digest `dca0f3a86f64c939` → search CONVERGES by depth 3 (deeper lookahead buys nothing on this
+low-branching linear aggro deck); search over greedy = −0.275t. Monotone non-increasing, plausible
+Bogles T4–5 clock. nonconv=0, fd-diverge≈0 (1/100 residual = accepted Light-Paws shuffle variance).
+
+Optional remaining (non-blocking): 100-game 5d claude-play sweep SCOPED OUT (user "no agents" + cost —
+deck otherwise fully verified). NOT pushed (left for user).
+
+## >>> (historical resume notes) <<<
 **DONE + verified:** aura-attach mechanic + all 22 cards (build clean, coverage clean, costs/P-T/keywords
 match Scryfall); fd-diverge systematic bug FIXED (rollout `m_number` stamp, TurnSolver.cpp `cast_number`
 ×3) — residual 1/100 = accepted Light-Paws shuffle draw-variance; nonconv=0; provider routing FIXED
@@ -202,6 +216,7 @@ unchanged (still g_treasure; th-detection value identical by construction — re
 
 ## Progress
 - [x] Stage 1 coverage. [x] Stage 2 engine + 22 cards. [x] Stage 3 coverage clean. [x] 2d-bis audits.
-- [~] Stage 4 profile (blocked on fd-diverge fix -> regenerate after).
-- [~] Stage 5 verify: nonconv=0; fd-diverge OPEN (root-causing); multi-depth/5d/5h pending.
-- [ ] Stage 6 report.
+- [x] Stage 4 profile — card-scores-only (24 scores, NO_GATE), regenerated post fd-diverge fix.
+- [x] Stage 5 verify: nonconv=0; fd-diverge fixed (≈0, 1/100 accepted variance); multi-depth monotone
+      (d0=4.740, d3=d5=4.465 converged); 5h viewer surface wired (enchant_target variants). 5d sweep scoped out.
+- [x] Stage 6 report — delivered to user 2026-07-22 (headline avg above; 6a disclosure below).
