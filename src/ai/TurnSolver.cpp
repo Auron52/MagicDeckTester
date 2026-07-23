@@ -1116,19 +1116,29 @@ static bool GroupChoiceOverSplices(const GameState& state,
         if (is_base) { *out_j = j; }
         return is_base;
     };
-    std::vector<std::string> names;
+    // Reuse per-thread buffers + dedup by candidate INDEX (not a string copy). This splice-prune is called
+    // per choice in the plan-enumeration inner loop; the old per-call vector<string> names (+ string copies)
+    // and per-name vector<int> ks were heap-allocated every call (profiled hot -- ~9% + string churn). Store
+    // one representative candidate index per unique card name and compare names by reference. Byte-identical:
+    // the outer loop is an OR over names, so representative order can't change the result. Non-re-entrant
+    // leaf -> one buffer per thread is safe; thread_local keeps the batch/gen worker pool race-free.
+    static thread_local std::vector<int> name_reps;   // representative cand index per unique splice-base name
+    name_reps.clear();
     for (size_t g = 0; g < groups.size(); ++g)
     {
         int j;
         if (!sel_base(g, &j)) { continue; }
-        if (std::find(names.begin(), names.end(), cands[j].card_name) == names.end())
-        { names.push_back(cands[j].card_name); }
+        bool seen = false;
+        for (int r : name_reps) { if (cands[r].card_name == cands[j].card_name) { seen = true; break; } }
+        if (!seen) { name_reps.push_back(j); }
     }
-    if (names.empty()) { return false; }
+    if (name_reps.empty()) { return false; }
     const Player& ap = state.ActivePlayer();
-    for (const std::string& nm : names)
+    static thread_local std::vector<int> ks;
+    for (int rep : name_reps)
     {
-        std::vector<int> ks;
+        const std::string& nm = cands[rep].card_name;
+        ks.clear();
         for (size_t g = 0; g < groups.size(); ++g)
         {
             int j;
