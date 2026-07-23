@@ -1173,19 +1173,19 @@ static bool GroupChoiceOverSplices(const GameState& state,
 // is choice-INDEPENDENT (min effective cost over the group's ritual-cast options + the group's unique
 // hand_index as tiebreak) so the sort is stable across every odometer position. Callers gate on a one-time
 // any_accel flag so a deck with no ritual accelerant pays nothing.
-static bool GroupChoiceNonPrefixAccel(const GameState& /*state*/,
-                                      const std::vector<Action>& cands,
-                                      const std::vector<std::vector<int>>& groups,
-                                      const std::vector<int>& group_hand_index,
-                                      const std::vector<int>& choice)
+// Choice-INDEPENDENT precompute for the collapse: order the accelerant GROUPS cheapest-first by
+// (min ritual-cast ManaValue over the group, group hand_index). Depends only on cands/groups/
+// group_hand_index -- all fixed across a Solve's odometer -- so build it ONCE per plan enumeration
+// instead of the old per-choice recompute+sort (profiled ~21% of rollout even after the alloc fix,
+// dominated by this choice-independent work). Fills order_out with the accelerant group indices in
+// that order; < 2 groups means the prefix rule can never fire (leave order_out empty).
+static void BuildAccelPrefixOrder(const std::vector<Action>& cands,
+                                  const std::vector<std::vector<int>>& groups,
+                                  const std::vector<int>& group_hand_index,
+                                  std::vector<int>& order_out)
 {
-    struct AccelG { int base_mv; int hand_index; bool cast; };
-    // Reuse a per-thread buffer instead of heap-allocating a fresh vector on every call: this helper is
-    // a leaf prefix-prune called millions of times in the plan-enumeration inner loop (profiled at ~39%
-    // of rollout instructions, dominated by this per-call allocation). clear() keeps the capacity, so
-    // after warmup there is no allocation. Not re-entrant (no nested call), so one buffer per thread is
-    // safe; thread_local keeps the batch/gen worker pool race-free. Byte-identical results.
-    static thread_local std::vector<AccelG> accel;
+    struct AccelG { int base_mv; int hand_index; int group; };
+    static thread_local std::vector<AccelG> accel;   // synchronous (completes before the odometer) -> safe
     accel.clear();
     for (size_t g = 0; g < groups.size(); ++g)
     {
@@ -1200,19 +1200,27 @@ static bool GroupChoiceNonPrefixAccel(const GameState& /*state*/,
             }
         }
         if (base_mv < 0) { continue; }   // not an accelerant group
-        accel.push_back({ base_mv, group_hand_index[g], choice[g] > 0 });
+        accel.push_back({ base_mv, group_hand_index[g], static_cast<int>(g) });
     }
-    if (accel.size() < 2) { return false; }   // 0/1 accelerant -> every selection is trivially a prefix
+    order_out.clear();
+    if (accel.size() < 2) { return; }   // 0/1 accelerant -> every selection is trivially a prefix
     std::sort(accel.begin(), accel.end(), [](const AccelG& a, const AccelG& b) {
         if (a.base_mv != b.base_mv) { return a.base_mv < b.base_mv; }
         return a.hand_index < b.hand_index;
     });
-    // Cheapest-first prefix: once a cheaper accelerant is left UN-cast, no more-expensive one may be cast.
+    for (const AccelG& a : accel) { order_out.push_back(a.group); }
+}
+
+// Per-CHOICE check (cheap -- just a walk of the precomputed order): the CAST accelerant groups are NOT a
+// cheapest-first prefix iff a cast group sits AFTER an un-cast cheaper one. Empty order (< 2 accelerant
+// groups) never fires. Byte-identical to the old GroupChoiceNonPrefixAccel (same order, same cast test).
+static inline bool NonPrefixAccelViolated(const std::vector<int>& accel_order, const std::vector<int>& choice)
+{
     bool saw_uncast = false;
-    for (const AccelG& a : accel)
+    for (int g : accel_order)
     {
-        if (a.cast) { if (saw_uncast) { return true; } }
-        else        { saw_uncast = true; }
+        if (choice[g] > 0) { if (saw_uncast) { return true; } }
+        else               { saw_uncast = true; }
     }
     return false;
 }
@@ -2749,6 +2757,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     };
 
     const int mana_bound = ManaPruneBound(pool, cands);   // total-mana prune (byte-identical); see helper
+    // Precompute the accelerant-prefix order ONCE (choice-independent); the per-choice check is then a cheap
+    // walk. Empty when the collapse is off / < 2 accelerant groups. See BuildAccelPrefixOrder.
+    std::vector<int> accel_order;
+    if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
     std::vector<int> choice(num_groups, 0);
     bool done = false;
     while (!done)
@@ -2766,7 +2778,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Dragonstorm acceleration-prefix collapse (HEURISTIC, gated by accel_prefix_on/any_accel above):
         // reject a group choice whose cast accelerants are not a cheapest-first prefix. Off/absent -> true.
         const bool accel_ok = !(accel_prefix_on && any_accel)
-                           || !GroupChoiceNonPrefixAccel(state, cands, groups, group_hand_index, choice);
+                           || !NonPrefixAccelViolated(accel_order, choice);
         if (gcost <= mana_bound && splice_ok && accel_ok)
         {
             for (int imask = 0; imask < (1 << num_ind); ++imask)
@@ -5991,6 +6003,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // groups[g][v-1]), crossed with the 2^num_ind powerset of independent actions.
     // The empty combination (skip everything) is not a plan and is dropped.
     const int mana_bound = ManaPruneBound(pool, cands);   // total-mana prune (byte-identical); see helper
+    // Precompute the accelerant-prefix order ONCE (choice-independent); per-choice check is a cheap walk.
+    std::vector<int> accel_order;
+    if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
     std::vector<int> choice(num_groups, 0);
     std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-combo alloc)
     bool done = false;
@@ -6008,7 +6023,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Dragonstorm acceleration-prefix collapse (HEURISTIC, gated by accel_prefix_on/any_accel above;
         // mirrors Solve): reject a group choice whose cast accelerants are not a cheapest-first prefix.
         const bool accel_ok = !(accel_prefix_on && any_accel)
-                           || !GroupChoiceNonPrefixAccel(state, cands, groups, group_hand_index, choice);
+                           || !NonPrefixAccelViolated(accel_order, choice);
         if (gcost <= mana_bound && splice_ok && accel_ok)
         {
             for (int imask = 0; imask < (1 << num_ind); ++imask)
