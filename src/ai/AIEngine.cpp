@@ -1775,8 +1775,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Pay the mana cost first; abort cleanly (graveyard untouched) if unpayable.
         ManaPool available = BuildAvailableMana(state);
         ManaCost effective = EffectiveCost(*def, state);
-        if (!available.CanPay(effective)) { return; }
-        if (!TapForCost(state, effective, available, def->card.IsCreature())) { return; }
+        if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
+        if (!available.CanPay(effective))
+        { if (AffordAuditOn()) { g_afford_real_fails.fetch_add(1, std::memory_order_relaxed); } return; }
+        if (!TapForCost(state, effective, available, def->card.IsCreature()))
+        { if (AffordAuditOn()) { g_afford_real_fails.fetch_add(1, std::memory_order_relaxed); } return; }
 
         // Additional cost: discard `discard_lands` land cards from hand to the graveyard.
         // (Autonomous ExecutePlan path -- claude-play executes retrace via TurnSolver::ApplyPlan,

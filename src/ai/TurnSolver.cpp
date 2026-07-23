@@ -3669,7 +3669,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (const ScaledCastVariant& v : ResolveProvider(state).ScaledCastVariants(state, def))
             { if (v.face == crackle_targets) { ec = v.cost; break; } }
         }
-        if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
+        if (!free_cast && !alt_cost)
+        {
+            if (AffordAuditOn()) { g_afford_rollout_attempts.fetch_add(1, std::memory_order_relaxed); }
+            if (!TapForCostDirect(state, ec, is_creature))
+            {
+                if (AffordAuditOn()) { g_afford_rollout_fails.fetch_add(1, std::memory_order_relaxed); }
+                return;
+            }
+        }
         // Apex of Power cast-from-hand gate (captured BEFORE the erase invalidates `it`): a hand copy
         // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
         // another Apex's staged exile has m_is_staged == true -> false (float withheld). Inert otherwise.

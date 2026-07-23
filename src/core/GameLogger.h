@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
+#include <atomic>
 #include <map>
 #include <string>
 #include <utility>
@@ -503,6 +504,18 @@ inline bool HumanPlayActive()
     static const bool s_env = std::getenv("MTG_HUMAN_PLAY") != nullptr;
     return s_env && !g_human_play_suppressed;
 }
+
+// ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
+// Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
+// cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit
+// symptom). Split by path: `rollout` = search scoring (ApplyPlanDirect::apply_one, TurnSolver.cpp);
+// `real` = the actually-executed move (AIEngine::CastSpellFromHand). Purely additive counters -- game
+// logic and every digest are byte-identical whether or not the audit is on. Dumped to stderr at exit.
+bool AffordAuditOn();
+extern std::atomic<long> g_afford_rollout_fails;
+extern std::atomic<long> g_afford_rollout_attempts;
+extern std::atomic<long> g_afford_real_fails;
+extern std::atomic<long> g_afford_real_attempts;
 
 // RAII: suppress human-play (and, in a claude-play session, unpruned) semantics for the current
 // scope. Placed at the top of RolloutWinTurn so the engine's clairvoyant playouts match the

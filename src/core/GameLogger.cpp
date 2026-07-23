@@ -1,5 +1,7 @@
 #include "GameLogger.h"
 #include <fstream>
+#include <cstdio>
+#include <cstdlib>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
@@ -22,6 +24,29 @@ thread_local LightPawsChooser* g_play_lightpaws_chooser = nullptr;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;
 thread_local bool g_human_play_suppressed = false;
+
+// Affordability audit (MTG_AFFORD_AUDIT): plan-cast payment-failure counters, dumped at process exit.
+std::atomic<long> g_afford_rollout_fails{0};
+std::atomic<long> g_afford_rollout_attempts{0};
+std::atomic<long> g_afford_real_fails{0};
+std::atomic<long> g_afford_real_attempts{0};
+bool AffordAuditOn() { static const bool on = std::getenv("MTG_AFFORD_AUDIT") != nullptr; return on; }
+namespace {
+struct AffordAuditDump
+{
+    ~AffordAuditDump()
+    {
+        if (AffordAuditOn())
+        {
+            std::fprintf(stderr,
+                "AFFORD_AUDIT  rollout: fails=%ld / attempts=%ld   real: fails=%ld / attempts=%ld\n",
+                g_afford_rollout_fails.load(), g_afford_rollout_attempts.load(),
+                g_afford_real_fails.load(), g_afford_real_attempts.load());
+        }
+    }
+};
+AffordAuditDump g_afford_audit_dump;
+}  // namespace
 
 void GameLogger::StartGame(const std::string& run_id, int game_number,
                             const std::string& deck_id, uint64_t seed,
