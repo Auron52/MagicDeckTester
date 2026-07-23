@@ -50,6 +50,8 @@
       font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; }
   #planbar .chip.land .nm { color:var(--land); } #planbar .chip.spell .nm { color:var(--spell); }
   #planbar .chip .x { cursor:pointer; color:var(--muted); margin-left:2px; } #planbar .chip .x:hover { color:var(--bad); }
+  #planbar .chip.aura { cursor:grab; } #planbar .chip.aura:active { cursor:grabbing; }   /* drag onto a creature to (re)aim */
+  .enchgroup .aura-plan { cursor:grab; }
   #planbar .empty { color:var(--muted); font-size:12px; flex:1; }
 
   /* big result banner */
@@ -506,6 +508,18 @@ function enchantPrefFor(auraName) {
   const e = (S.plan||[]).find(p=>p.name===auraName && p.targetName);
   return e ? e.targetName : null;
 }
+// Re-aim an ALREADY-PLANNED Aura by dragging its plan chip (or its board overlap) onto a legal
+// creature. Unlike tryEnchantDrop (which queues a fresh copy from hand), this just re-stamps the
+// existing plan entry's target — so dragging a mis-aimed queued aura moves it, never duplicates it.
+function retargetPlanAura(planIdx, num) {
+  const e = S.plan[planIdx]; if (!e) return false;
+  const tgts = enchantTargetsFor(e.name);
+  if (!(num in tgts)) { flashHint(`${e.name} can’t enchant that creature.`); return false; }
+  e.target = num; e.targetName = tgts[num];
+  flashHint(`Enchanting ${tgts[num]} with ${e.name}.`);
+  renderBoard();
+  return true;
+}
 function clearPlan() { S.plan=[]; S.leMode=false; S.vialMode=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
@@ -601,7 +615,7 @@ function auraAttThumb(o, z, top) {
 // A PLANNED aura (dragged onto this creature this turn, not yet cast) — same stack, planned styling +
 // an order badge and a remove ✕ (reuses the .thumb.planned .rm[data-rm] handler wired after render).
 function plannedAuraThumb(entry, planIdx, ord, z, top) {
-  return `<span class="thumb spell planned aura-plan" style="z-index:${z};top:${top}px" data-name="${esc(entry.name)}" title="${esc(entry.name)} — queued">`+
+  return `<span class="thumb spell planned aura-plan" draggable="true" data-pi="${planIdx}" style="z-index:${z};top:${top}px" data-name="${esc(entry.name)}" title="${esc(entry.name)} — queued; drag onto a creature to re-aim">`+
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(entry.name)}</em></span>`;
 }
@@ -842,7 +856,10 @@ function renderPlanbar() {
     if (p.kind==='le') return '';
     const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='land'?'land':'spell');
     const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':'') + (p.targetName?` → ${esc(p.targetName)}`:'');
-    return `<span class="chip ${cls}"><span class="n">${i+1}</span>`+
+    // An Aura chip (something with legal enchant targets) is draggable onto a creature to (re)aim it.
+    const isAura = p.kind!=='land' && Object.keys(enchantTargetsFor(p.name)).length>0;
+    const drag = isAura ? ` draggable="true" data-pi="${i}" title="drag onto a creature to enchant it"` : '';
+    return `<span class="chip ${cls}${isAura?' aura':''}"${drag}><span class="n">${i+1}</span>`+
       `<span class="nm" data-name="${esc(p.name)}">${esc(p.name)}${tag}</span><span class="x" data-rm="${i}">✕</span></span>`;
   }).join('');
   const nLE = leCount();
@@ -867,6 +884,14 @@ function renderPlanbar() {
   $('committurn').onclick = commitTurn;
   if ($('clearp')) $('clearp').onclick = clearPlan;
   pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
+  // Aura chips: drag onto a creature in the field to (re)assign the enchant target (routes through
+  // the #playfield drop handler via the stamped text/planidx; see retargetPlanAura).
+  pb.querySelectorAll('.chip[data-pi]').forEach(ch=>{
+    ch.addEventListener('dragstart', e=>{ const i=+ch.dataset.pi;
+      e.dataTransfer.setData('text/planidx', String(i));
+      S._dragCard=null; S._dragKind=null; S._dragTargets=enchantTargetsFor(S.plan[i].name); });
+    ch.addEventListener('dragend', ()=>{ S._dragCard=null; S._dragKind=null; S._dragTargets=null; clearEnchDropHi(); });
+  });
 }
 
 function renderHand() {
@@ -937,6 +962,14 @@ function wireBoard() {
   // remove ✕ on planned cards in the field
   $('board').querySelectorAll('.thumb.planned .rm[data-rm]').forEach(x =>
     x.onclick = e => { e.stopPropagation(); removePlanAt(+x.dataset.rm); });
+  // A planned Aura overlapping its host can be dragged onto ANOTHER creature to re-aim it (same
+  // path as the plan-bar chip: stamp text/planidx, retargetPlanAura reassigns; never duplicates).
+  $('board').querySelectorAll('.thumb.aura-plan[data-pi]').forEach(t=>{
+    t.addEventListener('dragstart', e=>{ e.stopPropagation(); const i=+t.dataset.pi;
+      e.dataTransfer.setData('text/planidx', String(i));
+      S._dragCard=null; S._dragKind=null; S._dragTargets=enchantTargetsFor(S.plan[i].name); });
+    t.addEventListener('dragend', ()=>{ S._dragCard=null; S._dragKind=null; S._dragTargets=null; clearEnchDropHi(); });
+  });
   // click the Land's Edge permanent (the ability source) to enter/exit discard mode
   $('board').querySelectorAll('.thumb[data-le]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); toggleLeMode(); });
@@ -2319,10 +2352,14 @@ async function loadDecks() {
   document.addEventListener('dragleave', e=>{ if(e.target.closest('#playfield') && !(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('#playfield'))){ pf()&&pf().classList.remove('drop-hi'); clearEnchDropHi(); } });
   document.addEventListener('drop', e=>{ if(!e.target.closest('#playfield')) return; e.preventDefault();
     pf()&&pf().classList.remove('drop-hi'); clearEnchDropHi();
+    const ct=e.target.closest('#playfield .thumb[data-num]');
+    // A PLANNED aura (dragged from its plan chip / board overlap) carries text/planidx -> re-aim it
+    // in place. Must be checked before the hand-card path so it never queues a duplicate.
+    const pi=e.dataTransfer.getData('text/planidx');
+    if(pi!==''){ if(ct) retargetPlanAura(+pi, +ct.dataset.num); return; }
     const card=e.dataTransfer.getData('text/card'); if(!card) return;
     const kind=e.dataTransfer.getData('text/kind')||'permanent';
     // Dropped ON a legal creature -> enchant it; otherwise queue the card as a plain play.
-    const ct=e.target.closest('#playfield .thumb[data-num]');
     if(ct && tryEnchantDrop(card, kind, +ct.dataset.num)) return;
     queueCard(card, kind); });
 })();
