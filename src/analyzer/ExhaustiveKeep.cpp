@@ -262,11 +262,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             {
                 const std::string nm = trim(raw);
                 if (nm.empty()) { continue; }
+                // Match the full member name OR its pre-comma segment, so a card whose name CONTAINS a
+                // comma (e.g. "Karrthus, Tyrant of Jund", "Lathliss, Dragon Queen") is addressable by its
+                // leading name ("Karrthus", "Lathliss") -- the group delimiter is ',' so the full comma
+                // name can't be written literally. Comma-free names still match exactly (unchanged).
                 int found = -1;
                 for (std::size_t c = 0; c < eq.classes.size(); ++c)
                     if (!removed[c])
                         for (const std::string& mem : eq.classes[c].members)
-                            if (mem == nm) { found = static_cast<int>(c); break; }
+                            if (mem == nm || mem.substr(0, mem.find(',')) == nm)
+                            { found = static_cast<int>(c); break; }
                 if (found < 0) { std::cerr << "[keepgen]   force-merge: card not found: '" << nm << "'\n"; continue; }
                 if (keep_cls < 0) { keep_cls = found; }
                 else if (found != keep_cls)

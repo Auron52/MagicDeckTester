@@ -36,8 +36,13 @@ cd "$(dirname "$0")/.."
 DECK=${KM_DECK:-decks/treasure_hunt/treasure_hunt.txt}
 CARDS=${KM_CARDS:-src/cards/data/cards.json}
 TARGET_R=${KM_TARGET_R:-40}      # target effective R on the live frontier
-ROUND_R=${KM_ROUND_R:-5}         # R added to every non-frozen cell per round
-CHUNK_R=${KM_CHUNK_R:-5}         # R of each pre-existing uniform base chunk (for BASE_R accounting)
+# RULE: chunks/rounds are size 1 by default. A round runs uniform (R_FLOOR==ROLLOUTS -> no mid-round
+# checkpoint), so it is atomic: nothing banks until the round's round_s*.raw.json is written. R=1 makes
+# that atomic unit as SMALL as possible, so an interrupt (kill/reboot/session-drop) loses at most one R=1
+# pass instead of a big R=5 block -- maximally saving results on a long/expensive deck. Accumulate R by
+# running more rounds (each banks + pools). Override KM_ROUND_R only with a reason.
+ROUND_R=${KM_ROUND_R:-1}         # R added to every non-frozen cell per round (size-1 chunks: see RULE above)
+CHUNK_R=${KM_CHUNK_R:-1}         # R of each pre-existing uniform base chunk (for BASE_R accounting)
 MAXMULL=${KM_MAXMULL:-6}         # "all the way" — mulligan to the floor (was 3; mm6 is now the standard)
 PRUNE_EPS=${KM_PRUNE_EPS:-0.005} # freeze gate: smaller = stricter (freeze fewer, safer)
 CKPT_SEC=${KM_CKPT_SEC:-1800}
