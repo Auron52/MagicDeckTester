@@ -232,13 +232,85 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Bucketing uses the FIXED equiv_seed (not the rollout seed) so the clustering is byte-identical
     // across machines -- a precondition for pooling their raw tables.
     const auto t_bucket = std::chrono::steady_clock::now();
-    std::cerr << "[keepgen] equivalence discovery: " << cfg.probes << " probes, depth " << cfg.depth
-              << " ...\n" << std::flush;
-    EquivReport eq = DiscoverEquivalence(deck, profile, cfg.probes, cfg.depth, cfg.budget_ms,
-                                         cfg.threshold, cfg.equiv_seed, cfg.max_turns);
-    std::cerr << "[keepgen] equivalence discovery done: " << eq.classes.size() << " raw buckets ("
-              << static_cast<long long>(std::chrono::duration<double>(
-                     std::chrono::steady_clock::now() - t_bucket).count()) << "s)\n" << std::flush;
+    // Discovery CACHE (MTG_EQUIV_CACHE=<path>): the equivalence classes are a deterministic function of
+    // (deck cards, probes, depth, budget_ms, threshold, equiv_seed, max_turns, play commit), yet the
+    // chunked gen re-invokes the analyzer once PER ROUND with identical params -- so every round otherwise
+    // re-derives the same (minutes-long) bucketing. Fingerprint-gate a JSON cache: a hit skips discovery;
+    // any spec/commit change re-discovers and overwrites. Absent -> unchanged (always discovers).
+    EquivReport eq;
+    uint64_t eq_deck_fp = 1469598103934665603ULL;
+    {
+        std::vector<std::string> dn;
+        for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
+        std::sort(dn.begin(), dn.end());
+        for (const std::string& n : dn) { eq_deck_fp = Fnv(n + ",", eq_deck_fp); }
+    }
+    const std::string eq_commit = []{ const char* s = std::getenv("MTG_COMMIT"); return s ? std::string(s) : std::string(); }();
+    const long long   eq_thr_x1e6 = static_cast<long long>(std::llround(cfg.threshold * 1e6));
+    const char*       eq_cache    = std::getenv("MTG_EQUIV_CACHE");
+    bool eq_loaded = false;
+    if (eq_cache && *eq_cache && std::filesystem::exists(eq_cache))
+    {
+        std::ifstream cf(eq_cache);
+        nlohmann::json cj; bool ok = true;
+        try { cf >> cj; } catch (...) { ok = false; }
+        if (ok && cj.contains("meta") && cj.contains("classes"))
+        {
+            const auto& m = cj["meta"];
+            const bool match = m.value("deck_fp", 0ULL) == eq_deck_fp
+                            && m.value("probes", -1) == cfg.probes
+                            && m.value("depth", -1) == cfg.depth
+                            && m.value("budget_ms", -1) == cfg.budget_ms
+                            && m.value("threshold_x1e6", ~0LL) == eq_thr_x1e6
+                            && m.value("equiv_seed", ~0ULL) == cfg.equiv_seed
+                            && m.value("max_turns", -1) == cfg.max_turns
+                            && m.value("commit", std::string("\x01")) == eq_commit;
+            if (match)
+            {
+                eq.probes         = m.value("probes", 0);
+                eq.distinct_cards = m.value("distinct_cards", 0);
+                for (const auto& jc : cj["classes"])
+                {
+                    EquivClass ec;
+                    ec.members   = jc.value("members", std::vector<std::string>{});
+                    ec.signature = jc.value("signature", std::vector<int>{});
+                    eq.classes.push_back(std::move(ec));
+                }
+                eq_loaded = true;
+                std::cerr << "[keepgen] equivalence discovery: CACHE HIT (" << eq.classes.size()
+                          << " buckets from " << eq_cache << ") -- skipped\n" << std::flush;
+            }
+            else
+            { std::cerr << "[keepgen] equivalence cache " << eq_cache
+                        << " fingerprint MISMATCH -- re-discovering\n" << std::flush; }
+        }
+    }
+    if (!eq_loaded)
+    {
+        std::cerr << "[keepgen] equivalence discovery: " << cfg.probes << " probes, depth " << cfg.depth
+                  << " ...\n" << std::flush;
+        eq = DiscoverEquivalence(deck, profile, cfg.probes, cfg.depth, cfg.budget_ms,
+                                 cfg.threshold, cfg.equiv_seed, cfg.max_turns);
+        std::cerr << "[keepgen] equivalence discovery done: " << eq.classes.size() << " raw buckets ("
+                  << static_cast<long long>(std::chrono::duration<double>(
+                         std::chrono::steady_clock::now() - t_bucket).count()) << "s)\n" << std::flush;
+        if (eq_cache && *eq_cache)
+        {
+            nlohmann::json cj;
+            cj["meta"] = { {"deck_fp", eq_deck_fp}, {"probes", cfg.probes}, {"depth", cfg.depth},
+                           {"budget_ms", cfg.budget_ms}, {"threshold_x1e6", eq_thr_x1e6},
+                           {"equiv_seed", cfg.equiv_seed}, {"max_turns", cfg.max_turns},
+                           {"commit", eq_commit}, {"distinct_cards", eq.distinct_cards} };
+            nlohmann::json jclasses = nlohmann::json::array();
+            for (const EquivClass& ec : eq.classes)
+            { jclasses.push_back({ {"members", ec.members}, {"signature", ec.signature} }); }
+            cj["classes"] = std::move(jclasses);
+            const std::string tmp = std::string(eq_cache) + ".tmp";
+            { std::ofstream of(tmp); of << cj.dump(); }
+            std::error_code wec; std::filesystem::rename(tmp, eq_cache, wec);
+            if (!wec) { std::cerr << "[keepgen] equivalence cache WROTE " << eq_cache << "\n" << std::flush; }
+        }
+    }
 
     // MANUAL force-merge (MTG_EQUIV_FORCE_MERGE): union the classes containing each ";"-group's cards into
     // one bucket. Deliberate near-equivalent collapse (e.g. the fetchlands) the strict distance threshold

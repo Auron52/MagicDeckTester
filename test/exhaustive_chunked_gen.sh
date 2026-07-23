@@ -116,7 +116,7 @@ while :; do
   if MTG_KEEP_EXHAUSTIVE=1 \
        MTG_KEEP_ROLLOUTS=$ROUND_R MTG_KEEP_R_FLOOR=$ROUND_R MTG_KEEP_MAXMULL=$MAXMULL \
        MTG_KEEP_PRUNE_SET="$OUT/prune.json" MTG_KEEP_CARRY_MODE=skip \
-       MTG_KEEP_CHECKPOINT_SEC=$CKPT_SEC MTG_COMMIT="$HEAD" \
+       MTG_KEEP_CHECKPOINT_SEC=$CKPT_SEC MTG_COMMIT="$HEAD" MTG_EQUIV_CACHE="$OUT/equiv_cache.json" \
        MTG_KEEP_OUT_RAW="$tmp" MTG_KEEP_OUT_PROFILE="$OUT/round_s${seed}.profile.json" \
        "$BIN" "$DECK" --cards-json "$CARDS" --max-turns 8 --seed "$seed" --threads 0 \
        > "$OUT/round_s${seed}.log" 2>&1
