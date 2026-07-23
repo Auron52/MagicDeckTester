@@ -83,7 +83,9 @@ own-target **count** (`soulfire_own_targets`) still rides the `main_phase` plan 
 
 Plan-variant sub-decisions ride the `main_phase` plan list rather than their own `type`
 (the human picks a plan index): `tutor_target`, `fetch_target`, `chosen_x`, `ponder_keep`,
-`soulfire_own_targets` (count), `enchant_target` (which creature an Aura enchants — Bogles).
+`soulfire_own_targets` (count), `enchant_target` (which creature an Aura enchants — Bogles),
+`land_face` (which face of a modal double-faced Pathway land to play — Branchloft {G} vs
+Boulderloft {W}).
 For these the only per-deck work is confirming **every** legal option appears as a distinct plan
 variant (human-play runs unpruned). `enchant_target` is emitted directly by `CollectActions`
 (one variant per `LegalEnchantTargets`, no provider narrowing) and labeled in `SummarizePlan`
@@ -93,6 +95,13 @@ so distinct placements are human-distinguishable. NB the human-play `plan_signat
 or plans differing only in the aura's target collapse to the first-enumerated creature — a
 dead-decision bug the Auras claude-play sweep caught (2026-07-23) and fixed. The autonomous dedup
 still keys on cast NAMES only (byte-identical GT), delegating the target to the heuristic there.
+`land_face` follows the same pattern: `EnumeratePlansWithLand` emits one land-play variant per face
+(both carry the front hand-card `land_to_play`, so both survive `CheckLine`'s land-name match and
+surface as a `face` choose sub); the DB synthesizes the back face (`mdfc_back_name`/`mdfc_back_produces`)
+and `PlayLandByName`/`TryPlaySpecificLand` enter the chosen face's identity in lockstep (fd-diverge 0).
+The human-play `plan_signature` keys on `|face=` so the two faces don't collapse; the autonomous dedup
+stays cast-name-only (this IS a modeling change, so autonomous GT shifts — Pathway now commits to one
+colour instead of a dual).
 
 ## Surfacing options (viewer "⚙ Options" menu)
 

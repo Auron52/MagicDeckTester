@@ -231,6 +231,14 @@ public:
         // [[heuristic-then-search]] "heuristic narrows, search decides" land choice.
         std::string fetch_target;
 
+        // Modal double-faced LAND (Pathway) face choice: when land_to_play is an MDFC land
+        // (params.mdfc_back_name set), the land enumeration emits one Plan variant per face,
+        // each carrying "" / "front" (play the front, e.g. Branchloft {G}) or "back" (play the
+        // back, e.g. Boulderloft {W}) here. PlayLandByName / TryPlaySpecificLand swap the entering
+        // permanent's identity to the chosen face so its colour locks. Empty == front (default /
+        // non-MDFC). Parallels fetch_target: a plan-level land sub-decision, searched not narrowed.
+        std::string land_face;
+
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
         // cards. Top-level (triggered by the main plan); each entry nests its own

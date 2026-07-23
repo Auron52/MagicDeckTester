@@ -1649,7 +1649,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 else
                 {
-                    TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target);
+                    TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target, plan.land_face);
                 }
             }
         }
@@ -2288,7 +2288,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 // Play a specific named land from hand. Mirrors TryPlayLand's per-card logic;
 // used by the land search in TakeTurn to apply the chosen candidate.
 bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
-                                   const std::string& fetch_target)
+                                   const std::string& fetch_target, const std::string& land_face)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
@@ -2326,9 +2326,19 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
             PerformFetch(state, state.active_player_index, def->params, fetch_target);
             return true;
         }
+        // Modal double-faced land (Pathway): enter the chosen FACE's identity (locks its colour),
+        // mirroring the rollout's PlayLandByName EXACTLY so the committed line replays identically
+        // (a face mismatch between executor and rollout would desync = fd-diverge). face_def == def
+        // for "" / "front" and every non-MDFC land -> byte-identical for all existing decks.
+        const CardDefinition* face_def = def;
+        if (land_face == "back" && !def->params.mdfc_back_name.empty())
+        {
+            const CardDefinition* bd = CardDatabase::Instance().Lookup(def->params.mdfc_back_name);
+            if (bd) { face_def = bd; }
+        }
         bool tapped = LandEntersTapped(state, *def);
         Permanent perm;
-        perm.card              = def->card;
+        perm.card              = face_def->card;   // chosen face -> locks colour
         perm.card.m_number     = it->m_number;
         perm.controller_index  = state.active_player_index;
         perm.owner_index       = state.active_player_index;

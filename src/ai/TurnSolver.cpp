@@ -3188,7 +3188,8 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
 // a specific named land; SimulateLandPlay is the greedy fallback used when a plan did
 // not search the land (depth-0 static plans).
 static bool PlayLandByName(GameState& state, const std::string& name,
-                           const std::string& fetch_target = "", bool allow_shock_pay = true);
+                           const std::string& fetch_target = "", bool allow_shock_pay = true,
+                           const std::string& land_face = "");
 static std::string SimulateLandPlay(GameState& state);
 
 // Provider cast-order rank for a hand cast by name (lower = cast earlier). Thin lookup
@@ -3454,7 +3455,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             { allow_shock_pay = true; break; }
                         }
                     }
-                    PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay);
+                    PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay, plan.land_face);
                 }
             }
         }
@@ -5302,7 +5303,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 // (SimulateLandPlay) and the searched land fold (ApplyPlanDirect) so both produce
 // byte-identical placement for the same card.
 static bool PlayLandByName(GameState& state, const std::string& name,
-                           const std::string& fetch_target, bool allow_shock_pay)
+                           const std::string& fetch_target, bool allow_shock_pay,
+                           const std::string& land_face)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
@@ -5349,6 +5351,19 @@ static bool PlayLandByName(GameState& state, const std::string& name,
             return true;
         }
 
+        // Modal double-faced land (Pathway): play the chosen FACE. The back face is a distinct
+        // single-colour land identity synthesized in the DB (mdfc_back_*); entering the permanent AS
+        // that identity locks its colour, which every mana site reads live off the permanent's name.
+        // Pathway faces share all OTHER characteristics (untapped, no ETB), so only the identity
+        // differs and the tapped/ETB logic below reads the front `def` unchanged. Face "" / "front"
+        // (and every non-MDFC land) keeps face_def == def -> byte-identical for all existing decks.
+        const CardDefinition* face_def = def;
+        if (land_face == "back" && !def->params.mdfc_back_name.empty())
+        {
+            const CardDefinition* bd = CardDatabase::Instance().Lookup(def->params.mdfc_back_name);
+            if (bd) { face_def = bd; }
+        }
+
         // Resolve "as this land enters" choices while the card is still in hand. Human play
         // (g_play_land_entry_chooser set, and a real choice present) lets the user pick whether to
         // pay the shock life / reveal to enter untapped; otherwise the autonomous heuristic stands
@@ -5369,7 +5384,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
             tapped = LandEntersTapped(state, *def, allow_shock_pay);
         }
         Permanent perm;
-        perm.card              = def->card;
+        perm.card              = face_def->card;   // chosen face's identity -> locks its colour
         perm.controller_index  = state.active_player_index;
         perm.owner_index       = state.active_player_index;
         perm.entered_this_turn = true;
@@ -6244,6 +6259,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (const std::string& x : sub) { sig += '#'; sig += x; }
             if (p.land_decided)            { sig += "|land="  + p.land_to_play; }
             if (!p.fetch_target.empty())   { sig += "|fetch=" + p.fetch_target; }
+            if (!p.land_face.empty())      { sig += "|face="  + p.land_face; }
         }
         return sig;
     };
@@ -6535,6 +6551,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         // Fetchlands with different target colours are NOT interchangeable; distinguish
         // them. Empty for ordinary lands -> sig unchanged (other decks byte-identical).
         for (const std::string& ft : pp.fetch_land_types) { s += "f" + ft; }
+        // MDFC (Pathway) lands are NOT interchangeable with a plain single-colour land of the same
+        // FRONT colour: they can also play their back face for a different colour. Distinguish them
+        // by the back face so the front is never deduped against, say, a basic Forest. Empty for
+        // ordinary lands -> sig unchanged (every non-MDFC deck stays byte-identical).
+        if (!pp.mdfc_back_name.empty())
+        {
+            s += "m" + pp.mdfc_back_name;
+            std::vector<int> bprod;
+            for (Color c : pp.mdfc_back_produces) { bprod.push_back(static_cast<int>(c)); }
+            std::sort(bprod.begin(), bprod.end());
+            for (int c : bprod) { s += "b" + std::to_string(c); }
+        }
         return s;
     };
 
@@ -6600,11 +6628,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 
     std::vector<TurnSolver::Plan> all;
 
-    auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target)
+    auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target,
+                            const std::string& land_face = "")
     {
         PROF_INC(gamestate_copies);
         GameState copy = state;
-        if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target)) { return; }
+        if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target, true, land_face)) { return; }
 
         // "Play this land, cast nothing" baseline (neutral value 0).
         TurnSolver::Plan idle;
@@ -6612,6 +6641,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         idle.land_decided = true;
         idle.land_to_play = land_name;
         idle.fetch_target = fetch_target;
+        idle.land_face    = land_face;
         all.push_back(std::move(idle));
 
         std::vector<TurnSolver::Plan> plans = EnumeratePlans(copy, is_pre_combat);
@@ -6620,6 +6650,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             p.land_decided = true;
             p.land_to_play = land_name;
             p.fetch_target = fetch_target;
+            p.land_face    = land_face;
             all.push_back(std::move(p));
         }
     };
@@ -6635,6 +6666,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     for (const std::string& ln : land_names)
     {
         const CardDefinition* ld = CardDatabase::Instance().Lookup(ln);
+        if (ld && !ld->params.mdfc_back_name.empty())
+        {
+            // Modal double-faced land (Pathway): emit BOTH faces as distinct land-play options
+            // (front colour vs back colour). The search picks the face that pays the turn; human
+            // play surfaces a "which face?" choose grid (CheckLine 'face' sub). Never a fetchland.
+            add_for_land(ln, "", "front");
+            add_for_land(ln, "", "back");
+            continue;
+        }
         if (ld && !ld->params.fetch_land_types.empty())
         {
             std::vector<std::string> cands =
@@ -9586,6 +9626,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         }
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
         if (!p.fetch_target.empty()) { addSub(p.land_to_play + " fetches " + p.fetch_target, p.land_to_play + " fetches", p.fetch_target, p.fetch_target, "fetch"); }
+        // MDFC (Pathway) face is a plan-level sub-decision: both faces carry land_to_play == the hand
+        // (front) name, so they survive the land-name match above and surface here as a "which face?"
+        // choose grid. `card` = the face's real name so the GUI shows the front vs back Scryfall art.
+        if (!p.land_face.empty())
+        {
+            std::string faceName = p.land_to_play;   // "" / "front" -> the front (hand) card
+            if (p.land_face == "back")
+            {
+                const CardDefinition* fd = CardDatabase::Instance().Lookup(p.land_to_play);
+                if (fd && !fd->params.mdfc_back_name.empty()) { faceName = fd->params.mdfc_back_name; }
+            }
+            addSub(p.land_to_play + " face " + faceName, p.land_to_play + " face", faceName, faceName, "face");
+        }
         // Sort the derived token strings so plans differing only in cast order share a signature.
         // The label preserves the old " → "/" X="/" +N own"/" fetches " spacing (key already ends
         // with the operator, choice follows a single space) so displayed labels are unchanged.

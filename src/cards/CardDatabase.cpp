@@ -104,6 +104,23 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         for (const std::string& s : def.params.tap_token_subtypes)    { reg.Intern(s); }
         for (const std::string& s : def.params.cast_token_subtypes)   { reg.Intern(s); }
         m_def_hash[def.card.m_name] = CardDefHash(entry);
+        // Synthesize the BACK face of a modal double-faced LAND (Pathway) as its own DB entry: a
+        // single-colour land the player may choose to play instead of the front. Derived entirely
+        // from the front's mdfc_back_* params, so no second JSON entry is hand-authored, and its
+        // colour is read live off the played permanent's name like any other land (see PlayLandByName).
+        if (!def.params.mdfc_back_name.empty())
+        {
+            const std::string bn = def.params.mdfc_back_name;
+            CardDefinition back = def;                      // Land type/subtypes copied from the front
+            back.card.m_name = bn;                          // InternedName assign
+            back.card.m_def  = nullptr;                     // name-derived def cache must reset
+            back.card.RehashName();
+            back.params.produces = def.params.mdfc_back_produces;
+            back.params.mdfc_back_name.clear();             // the back face has no further face
+            back.params.mdfc_back_produces.clear();
+            m_def_hash[bn] = CardDefHash(entry) ^ std::hash<std::string>{}(bn);
+            m_cards[bn] = std::move(back);
+        }
         m_cards[def.card.m_name] = std::move(def);
     }
 }
@@ -326,6 +343,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& c : params.value("produces", json::array()))
     {
         p.produces.push_back(ColorFromString(c));
+    }
+    p.mdfc_back_name = params.value("mdfc_back_name", std::string{});
+    for (const std::string& c : params.value("mdfc_back_produces", json::array()))
+    {
+        p.mdfc_back_produces.push_back(ColorFromString(c));
     }
     for (const std::string& s : params.value("subtypes_affected", json::array()))
     {

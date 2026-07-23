@@ -33,6 +33,15 @@ struct CardParams
     bool sacrifice_land = false;              // additional cost: sacrifice a land (e.g. Shard Volley)
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
+    // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face
+    // is this card (name + `produces` above); the BACK face is a distinct single-color land the
+    // player may CHOOSE to play instead. When `mdfc_back_name` is set the DB synthesizes a back-face
+    // CardDefinition of that name that taps for `mdfc_back_produces`, and land enumeration offers BOTH
+    // faces as distinct land-play options (the played permanent's IDENTITY locks its colour, read live
+    // by name). Empty name = not an MDFC. In hand the card counts as its FRONT `produces` for colour
+    // eval (a minor, disclosed simplification for Pathway lands; the played battlefield face is exact).
+    std::string        mdfc_back_name;
+    std::vector<Color> mdfc_back_produces;
     std::vector<std::string> subtypes_affected;  // for lord effects
 
     // On-cast trigger: when the controller casts a spell with MV <= on_cast_trigger_max_mv,

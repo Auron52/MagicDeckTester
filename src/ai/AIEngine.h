@@ -315,7 +315,8 @@ private:
     // to apply a chosen candidate to the real state or a search copy. fetch_target names
     // the searched fetchland target (Plan::fetch_target); empty -> heuristic top pick.
     bool TryPlaySpecificLand(GameState& state, const std::string& name,
-                             const std::string& fetch_target = "");
+                             const std::string& fetch_target = "",
+                             const std::string& land_face = "");
 
     // "Dig when stuck" land abilities: cycling (e.g. Lonely Sandbar) and sacrifice-to-draw
     // (e.g. Fiery Islet) to draw toward Treasure Hunt. Gated by ShouldConsiderDig (no draw

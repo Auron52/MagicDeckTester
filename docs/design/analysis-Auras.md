@@ -31,6 +31,22 @@ Scout correctly excluded — no aura). 3 faster-than-search WEAK-signal games (g
 unwon-in-10; gi=21/47 claude T7 vs search T8) = the d5/200ms search budget missing a fast line on
 slow-draw games, NOT a bug — noted for a future search-quality look. NOT pushed (left for user).
 
+## >>> Viewer session (2026-07-23, pushed on phase-1-2) <<<
+User played Auras in the play viewer and reported two UX gaps; both fixed:
+1. **Aura enchant-target chooser** (`d5ffedb`): `CheckLine` didn't emit an `enchant_target` sub, so
+   aura casts silently used the heuristic target. Added the `enchant` choose sub → the viewer shows a
+   click-the-creature grid. Viewer-only, autonomous byte-identical.
+2. **MDFC Pathway lands modeled faithfully** (this commit): Branchloft // Boulderloft is now a real MDFC
+   — play EITHER face (front {G} / back {W}). New DB params `mdfc_back_name`/`mdfc_back_produces` +
+   synthesized back-face def; face enumerated as a searched plan variant + a viewer `face` choose sub.
+   **This is a modeling change → Auras d5 s700001 digest dca0f3a86f64c939 → 995ca5e30c33f51d, avg
+   4.465→4.475 (+0.010t); fd-diverge 0, nonconv 0.** (The Stage-6 headline above is the pre-MDFC dual
+   measurement.) Auras is not in the regression suite, so no GT rebaseline needed.
+
+Also captured the recurring plan-vs-frozen-snapshot design defect (the `legal_not_enumerated` reject +
+the enchant-target band-aid family) as a DEFERRED spec: `docs/design/sequential-plan-evaluation.md` —
+to tackle after Auras (user's call).
+
 ## >>> (historical resume notes) <<<
 **DONE + verified:** aura-attach mechanic + all 22 cards (build clean, coverage clean, costs/P-T/keywords
 match Scryfall); fd-diverge systematic bug FIXED (rollout `m_number` stamp, TurnSolver.cpp `cast_number`
@@ -102,7 +118,7 @@ lifegain infra all already exist; auras just need to feed `EffectivePower()` + l
 | Horizon Canopy | {T},pay 1 life: G/W + {1},{T},Sac: draw. → per-tap life + `sacrifice_draw_cost`. |
 | Razorverge Thicket | enters tapped unless ≤2 other lands; {T}: G/W. → **fastland** conditional-tapped (new param). |
 | Brushland | {T}: C free; {T}: G/W deal 1 to you. → painland (free-C option). |
-| Branchloft Pathway // Boulderloft | MDFC: front {T}:G, back {T}:W. → **[PARTIAL: modeled as GW dual; real card commits to one color at play. Overstates fixing marginally; deck is mono-pip-heavy]** — surface to user in 6a. |
+| Branchloft Pathway // Boulderloft | MDFC: front {T}:G, back {T}:W. → **[MODELED FAITHFULLY (2026-07-23): proper MDFC — play EITHER face (front {G} / back {W}), enters untapped, commits to one colour. `mdfc_back_name`/`mdfc_back_produces` params; face is a searched plan variant + viewer `face` choose. In-hand counts as front {G} (disclosed). avg +0.010t, fd 0.]** |
 | Forest / Plains | already covered. |
 
 ## Inert-keyword collapse (disclose 6a, user-approved 2026-07-22)
@@ -208,8 +224,11 @@ unchanged (still g_treasure; th-detection value identical by construction — re
 - **Slippery Bogle {G/U}** modeled as {G} (deck runs no blue; hybrid parser → first colour).
 - **Brushland** modeled as a G/W painland; free {C} mode not modeled (our life loss is inert for the
   opponent-life clock; only matters to a future life-total deck).
-- **Branchloft Pathway** modeled as a G/W dual (real card is an MDFC committing to one colour at play) —
-  marginal fixing overstatement, near-inert in this mono-pip-heavy deck. **← flag to user.**
+- **Branchloft Pathway** now modeled as a proper **modal double-faced land** (user chose faithful, 2026-07-23):
+  play EITHER front Branchloft ({G}) OR back Boulderloft ({W}); the chosen face enters untapped and taps
+  for its one colour, committing to one colour like the real card (was a G/W dual). In HAND it still counts
+  as its front colour ({G}) for mulligan/colour eval — a minor, disclosed understatement (the played
+  battlefield face is exact). Impact on the clock: avg 4.465→4.475 (+0.010t), fd-diverge 0, nonconv 0.
 
 **3. Deck/archetype DecisionProvider heuristics:**
 - Routes to **GenericProvider** (after the `th`-signature fix) → **overrides nothing** = pure search within

@@ -2027,9 +2027,9 @@
             "types": ["Land"],
             "subtypes": [],
             "keywords": [],
-            "oracle_text": "{T}: Add {G}. // Boulderloft Pathway: {T}: Add {W}. [MDFC modelled as a G/W dual. The real card is a modal double-faced land that commits to ONE colour when played; modelling it as a dual overstates fixing marginally, but the deck is mono-pip-heavy so this is near-inert for the clock.]",
+            "oracle_text": "{T}: Add {G}. // Boulderloft Pathway: {T}: Add {W}. [Modal double-faced LAND: play EITHER Branchloft ({G}) OR Boulderloft ({W}); the chosen face enters untapped and taps for its one colour, committing to one colour like the real card. In hand it counts as its FRONT colour ({G}) for mulligan/colour eval (minor disclosed simplification); the played battlefield face is exact.]",
             "template": "basic_land",
-            "parameters": { "produces": ["G", "W"] }
+            "parameters": { "produces": ["G"], "mdfc_back_name": "Boulderloft Pathway", "mdfc_back_produces": ["W"] }
         }
     ]
 }

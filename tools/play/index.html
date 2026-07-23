@@ -936,7 +936,7 @@ function renderChooseDialog(v, line){
   const variants=(v.variants||[]).slice();
   // Fallback: a variant with no structured subs can't be decomposed (degenerate / older engine).
   if (!variants.length || variants.some(x=>!x.subs || !x.subs.length)) return renderChooseFlat(v, line);
-  const KIND={fetch:0,tutor:1,enchant:1.5,x:2,soulfire:3,crackle:4,splice:5};
+  const KIND={face:-1,fetch:0,tutor:1,enchant:1.5,x:2,soulfire:3,crackle:4,splice:5};
   const kindPri=k=>(KIND[k]===undefined?9:KIND[k]);
   const subOf=(x,key)=>(x.subs||[]).filter(s=>s.key===key)[0];
   const choiceOf=(x,key)=>{ const s=subOf(x,key); return s?s.choice:'—'; };

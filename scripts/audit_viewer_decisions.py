@@ -96,6 +96,9 @@ MANIFEST = {
     # (WriteDragonDecisionJson / dragonPanelHtml). Was `main_phase` while the selection was search-only.
     "tutor_to_battlefield":  ("dragon",               truthy),
     "fetch_land_types":      ("main_phase",           truthy),
+    # MDFC (Pathway) land: playing it offers a "which face?" choice surfaced as main_phase plan
+    # variants (a `face` choose sub, one variant per face) -- not its own decision type.
+    "mdfc_back_name":        ("main_phase",           truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -164,6 +167,7 @@ INERT_PARAMS = {
     "tutor_types": "tutor detail (rides tutor)", "subtypes_affected": "lord/replicate subtype list",
     # mana production (color/source auto-resolved in the payment engine, not a surfaced choice today)
     "produces": "mana production (color auto-resolved in payment)", "produces_amount": "mana amount",
+    "mdfc_back_produces": "MDFC back-face mana (colour auto-resolves once the face is picked; the face pick itself rides main_phase via mdfc_back_name)",
     "mana_rock": "mana source (color auto-resolved)", "is_filter": "mana filter (color auto-resolved)",
     "ramp_filter": "mana filter (color auto-resolved)", "reflecting": "Reflecting-Pool mana (auto-resolved)",
     "ritual_floating_mana": "ritual mana added",
