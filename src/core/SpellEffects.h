@@ -1095,21 +1095,58 @@ inline void PerformLightPawsAttach(GameState& state, int controller, int cast_au
                 if (q.card.m_number == lp.card.m_number && q.controller_index == controller) { return q; }
             return state.battlefield[li];
         };
+        // Eligibility of a library Aura as a Light-Paws fetch: an Aura with MV <= the cast Aura's, a
+        // name not already among the Auras you control, and whose own enchant restriction Light-Paws
+        // itself satisfies right now. Shared by the heuristic pick and the human-play chooser view so
+        // the two can never disagree on which Auras are fetchable.
+        auto eligible = [&](int i, const CardDefinition* d) -> bool {
+            if (!d || !d->params.is_aura) { return false; }
+            if (d->card.m_mana_cost.ManaValue() > cast_aura_mv) { return false; }
+            if (controlled_aura_names.count(ap.library[i].m_name)) { return false; }
+            if (d->params.aura_enchant_requires == "another_aura" && !CreatureHasAura(lp_now(), state)) { return false; }
+            if (d->params.aura_enchant_requires == "modified"     && !CreatureIsModified(lp_now(), state)) { return false; }
+            return true;
+        };
         int best_idx = -1, best_pw = -1;
         for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
-            if (!d || !d->params.is_aura) { continue; }
-            if (d->card.m_mana_cost.ManaValue() > cast_aura_mv) { continue; }
-            if (controlled_aura_names.count(ap.library[i].m_name)) { continue; }
-            if (d->params.aura_enchant_requires == "another_aura" && !CreatureHasAura(lp_now(), state)) { continue; }
-            if (d->params.aura_enchant_requires == "modified"     && !CreatureIsModified(lp_now(), state)) { continue; }
+            if (!eligible(i, d)) { continue; }
             int contrib = d->params.aura_power_bonus + d->params.aura_scale_power;   // static rank
             if (contrib > best_pw || (contrib == best_pw && d->card.m_mana_cost.ManaValue() >
                                       (best_idx >= 0 ? CardDatabase::Instance().LookupCached(ap.library[best_idx])->card.m_mana_cost.ManaValue() : -1)))
             { best_pw = contrib; best_idx = i; }
         }
         if (best_idx < 0) { continue; }   // no eligible aura -> no put
+
+        // Human play (--claude-play/viewer): let the player choose WHICH Aura Light-Paws fetches (or
+        // decline -- it is a "may search"). Nulled by RevealLogPause for every search/rollout scope, so
+        // this fires only for the REAL resolution and autonomous play is byte-identical (chooser null ->
+        // the heuristic best_idx path is untouched, no allocation). Show the whole library Aura pool (a
+        // search reveals the library) with the fetchable ones flagged legal; the reply is an index into
+        // that pool, or -1 to fetch nothing. Following the AI default (heur_pool_idx) reproduces best_idx.
+        if (g_play_lightpaws_chooser)
+        {
+            std::vector<Card> pool; std::vector<int> pool_lib_index, legal;
+            int heur_pool_idx = -1;
+            for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+                if (!d || !d->params.is_aura) { continue; }
+                int pi = static_cast<int>(pool.size());
+                pool.push_back(ap.library[i]);
+                pool_lib_index.push_back(i);
+                if (eligible(i, d)) { legal.push_back(pi); }
+                if (i == best_idx) { heur_pool_idx = pi; }
+            }
+            int picked = (*g_play_lightpaws_chooser)(state, controller, lp.card.m_name.str(),
+                                                     pool, legal, heur_pool_idx);
+            bool ok = (picked == -1);
+            for (int li : legal) { if (li == picked) { ok = true; break; } }
+            if (ok && picked == -1) { continue; }           // human declined the optional search
+            if (ok) { best_idx = pool_lib_index[picked]; }   // else out-of-range reply -> keep heuristic
+        }
+
         Card fetched = ap.library[best_idx];
         ap.library.erase(ap.library.begin() + best_idx);
         Permanent perm;

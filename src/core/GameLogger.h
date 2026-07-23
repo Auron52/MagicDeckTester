@@ -283,6 +283,21 @@ using DigChooser = std::function<int(const GameState& state, int controller, con
                                      const std::vector<int>& legal_indices, int heuristic_pick)>;
 extern thread_local DigChooser* g_play_dig_chooser;
 
+// ---- Human-play Light-Paws tutor-attach chooser (which Aura Light-Paws fetches) -----------
+// Light-Paws, Emperor's Voice: whenever an Aura you CAST resolves, search your library for an Aura
+// (mana value <= the cast Aura's, a name different from every Aura you control, and whose own enchant
+// restriction Light-Paws itself satisfies) and put it onto the battlefield attached to Light-Paws.
+// Autonomously PerformLightPawsAttach picks the highest static-power eligible Aura; under --claude-play
+// the human picks WHICH Aura (or -1 to decline -- it is a "may search"). The chooser receives the
+// library Auras (library order, so the human sees the searchable pool like a real tutor), the indices
+// (into `aura_pool`) that are legal fetches, and the heuristic's pick (an index into `aura_pool`); it
+// returns the chosen index into `aura_pool`, or -1 to fetch nothing. Nulled by RevealLogPause for every
+// search/rollout/enumeration scope -> autonomous byte-identical. Inert (heuristic) unless set.
+using LightPawsChooser = std::function<int(const GameState& state, int controller, const std::string& source,
+                                           const std::vector<Card>& aura_pool,
+                                           const std::vector<int>& legal_indices, int heuristic_pick)>;
+extern thread_local LightPawsChooser* g_play_lightpaws_chooser;
+
 // ---- Human-play cleanup-discard chooser (which card to discard to hand size) ------------
 // The cleanup step discards down to maximum hand size. Autonomously AIEngine::ChooseDiscard
 // picks; under --claude-play the human picks WHICH hand card to discard (one per over-limit
@@ -441,6 +456,7 @@ struct RevealLogPause
     ReplicateChooser* saved_repchooser;
     LandEntryChooser* saved_lechooser;
     DragonChooser* saved_dragchooser;
+    LightPawsChooser* saved_lpchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
@@ -448,12 +464,13 @@ struct RevealLogPause
                        saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
                        saved_evsink(g_play_event_sink), saved_sacchooser(g_play_sacrifice_chooser),
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
-                       saved_dragchooser(g_play_dragon_chooser)
+                       saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
       g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_sacrifice_chooser = nullptr;
-      g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr; }
+      g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
+      g_play_lightpaws_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
@@ -461,7 +478,7 @@ struct RevealLogPause
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
                         g_play_event_sink = saved_evsink; g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
-                        g_play_dragon_chooser = saved_dragchooser; }
+                        g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

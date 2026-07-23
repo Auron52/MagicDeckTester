@@ -99,6 +99,11 @@ MANIFEST = {
     # MDFC (Pathway) land: playing it offers a "which face?" choice surfaced as main_phase plan
     # variants (a `face` choose sub, one variant per face) -- not its own decision type.
     "mdfc_back_name":        ("main_phase",           truthy),
+    # Light-Paws, Emperor's Voice: on an Aura you CAST resolving, search your library for an Aura and
+    # attach it to Light-Paws. WHICH Aura is now a real human choice -- its own `lightpaws` type
+    # (WriteLightPawsDecisionJson / lightPawsPanelHtml), a resolution-time chooser (g_play_lightpaws_chooser).
+    # Was a heuristic-picked known gap while the fetch was engine-only.
+    "aura_cast_tutor_attach": ("lightpaws",            truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -250,7 +255,6 @@ MAINPHASE_PARAMS = {
 # Known unwired decision gaps, DEFERRED with the user's sign-off (disclosed in Stage 6a).
 DEFERRED_PARAMS = {
     "cascade_max_mv":       "cascade SEARCH target -- heuristic-picked (DECISIONS.md known gap)",
-    "aura_cast_tutor_attach": "Light-Paws fetch target -- heuristic-picked (disclosed 6a known gap, like cascade)",
     "untap_x_mana_sources": "Reality Spasm untap mode -- needs an engine-model change (phase-2 gap)",
     # Dragonstorm: pump + ping are real player choices but currently search-resolved. User (2026-07-19)
     # signed off on deferring the WIRING to the planned viewer options-menu toggle system ("every choice

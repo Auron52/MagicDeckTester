@@ -994,6 +994,36 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     os << "}\n";
 }
 
+// Light-Paws tutor-attach decision (Light-Paws, Emperor's Voice): the player picks WHICH library Aura
+// Light-Paws fetches and attaches to itself (or declines -- it is a "may search"). Emits the library
+// Aura pool as image options with a `legal` flag (only fetchable Auras are pickable -- MV <= the cast
+// Aura, a name you don't already control, whose restriction Light-Paws satisfies); reply = a pool
+// index to fetch, or -1 to fetch nothing.
+static void WriteLightPawsDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                       const std::vector<Card>& pool, const std::vector<int>& legal,
+                                       int heuristic_default, int decision_index)
+{
+    std::vector<bool> is_legal(pool.size(), false);
+    for (int li : legal) { if (li >= 0 && li < static_cast<int>(pool.size())) { is_legal[li] = true; } }
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"lightpaws\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"pool\": [";
+    for (size_t i = 0; i < pool.size(); ++i)
+    {
+        if (i) os << ", ";
+        os << "{ \"index\": " << i << ", \"legal\": " << (is_legal[i] ? "true" : "false")
+           << ", \"name\": "; JsonStr(os, pool[i].m_name.str()); os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
 // Dragonstorm put-order decision (the Dragon override dialog): the player picks WHICH library Dragons
 // enter the battlefield (up to `max_puts`); the engine keeps the rule's fixed play order (Lathliss ->
 // Scourges -> Utvara -> haste). Emits the candidate Dragon copies as image options IN THAT ORDER, each
@@ -1723,6 +1753,40 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_dig_chooser = &dig_chooser;
 
+    // Light-Paws tutor-attach (Light-Paws, Emperor's Voice): the player picks which library Aura it
+    // fetches + attaches to itself (or -1 to decline). Shares the --choices stream; the reply is a pool
+    // index, or -1. Default = the engine's heuristic pick (the highest static-power eligible Aura).
+    LightPawsChooser lightpaws_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<Card>& pool, const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                bool ok = (chosen == -1);
+                for (int li : legal) { if (li == chosen) { ok = true; break; } }
+                if (!ok) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteLightPawsDecisionJson(ss, s, source, pool, legal, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteLightPawsDecisionJson(std::cout, s, source, pool, legal, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_lightpaws_chooser = &lightpaws_chooser;
+
     // Dragonstorm put override (the Dragon dialog): the player picks WHICH library Dragons enter (up to
     // max_puts); the engine keeps the rule's play order. Reply = one int per candidate (1 = put this
     // copy), read positionally like the divide / Soulfire decisions (any subset up to max_puts is
@@ -2030,6 +2094,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_replicate_chooser = nullptr;
     g_play_land_entry_chooser = nullptr;
     g_play_dragon_chooser = nullptr;
+    g_play_lightpaws_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;

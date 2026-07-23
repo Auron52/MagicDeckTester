@@ -532,7 +532,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1238,7 +1238,8 @@ function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
-                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'; // centered card-image modals
+                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'
+                || dec==='lightpaws'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1251,6 +1252,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='mulligan' ? mulliganPanelHtml(d)
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : dec==='dragon' ? dragonPanelHtml(d)
+                  : dec==='lightpaws' ? lightPawsPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -1310,6 +1312,26 @@ function digPanelHtml(d){
   });
   h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
      `<button class="ghost" data-opt="-1">Take nothing</button></div>`;
+  return h;
+}
+// Light-Paws tutor-attach panel (Light-Paws, Emperor's Voice): IMAGE-based central modal, SINGLE-SELECT.
+// An Aura you CAST resolved -> search your library for an Aura and attach it to Light-Paws. The library
+// Aura pool is shown as art; the fetchable ones (MV within range, a name you don't already control,
+// whose restriction Light-Paws satisfies) are clickable, the rest dimmed/non-pickable, and "Fetch
+// nothing" declines. The AI's pick is tagged. The fetched Aura enters attached to Light-Paws this turn.
+function lightPawsPanelHtml(d){
+  let h=`<h3>Light-Paws — fetch an Aura</h3>`;
+  h+=`<div class="sub">You cast an Aura, so <b>${esc(d.source||'Light-Paws')}</b> searches your library for an Aura to put onto the battlefield attached to itself. Click a highlighted Aura to fetch it (a duplicate name, too-high mana value, or unmet restriction is not a legal pick), or fetch nothing.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.pool||[]).forEach(c=>{
+    const def=c.index===d.heuristic_default;
+    const cls=c.legal?'tdig'+(def?' def':''):'tdig illegal';
+    h+=`<span class="cardmini ${cls}"${c.legal?` data-opt="${c.index}"`:''} data-name="${esc(c.name)}" title="${esc(c.name)}${c.legal?'':' — not a legal fetch'}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+     `<button class="ghost" data-opt="-1">Fetch nothing</button></div>`;
   return h;
 }
 // Cleanup-discard panel (#2): IMAGE-based central modal, MULTI-SELECT. The hand is shown as art; the
@@ -1625,6 +1647,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>commitVial(d, +b.dataset.v));
   else if (dec==='dig')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDig(d, +b.dataset.opt));
+  else if (dec==='lightpaws')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLightPaws(d, +b.dataset.opt));
   else if (dec==='discard'){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleDiscard(d, +b.dataset.opt));
     const ai=panel.querySelector('#discardai'); if (ai) ai.onclick=()=>{ S.discardSel=new Set(aiDiscardSet(d)); renderDecisionPanel(d,'discard'); };
@@ -1675,6 +1699,10 @@ function commitVial(d, v){ pushChoice(d, v, v?'Vial: +counter':'Vial: hold'); }
 function commitDig(d, oi){
   const c=(d.examined||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source}: ${oi<0||!c?'take nothing':'take '+c.name}`);
+}
+function commitLightPaws(d, oi){
+  const c=(d.pool||[]).find(x=>x.index===oi);
+  pushChoice(d, oi, `${d.source}: ${oi<0||!c?'fetch nothing':'fetch '+c.name}`);
 }
 // Multi-select cleanup discard: toggle a card in/out of the discard set (capped at over_by), then
 // commit all at once. The engine still reads one hand-index per discard decision, so we submit the

@@ -43,9 +43,25 @@ User played Auras in the play viewer and reported two UX gaps; both fixed:
    4.465→4.475 (+0.010t); fd-diverge 0, nonconv 0.** (The Stage-6 headline above is the pre-MDFC dual
    measurement.) Auras is not in the regression suite, so no GT rebaseline needed.
 
+3. **Sequential-plan-eval increment 1** (`63f7ffd`, human-play-gated): the within-turn Ethereal-Armor-
+   then-Daybreak-Coronet line (Coronet needs "another Aura"; Lion Umbra needs "modified") now enumerates
+   as a real `choose` plan instead of a `legal_not_enumerated` reject. Autonomous byte-identical (995ca5e3,
+   smoke 21/21). See `docs/design/sequential-plan-evaluation.md`; increment 2 (autonomous canonical-order
+   apply, GT-affecting) still pending.
+4. **Light-Paws tutor-attach chooser** (this commit): the `aura_cast_tutor_attach` fetch (which Aura
+   Light-Paws searches for when an Aura you cast resolves) is now the wired `lightpaws`
+   resolution-time decision type (`g_play_lightpaws_chooser`, modeled on the `dig` chooser: the modal
+   shows the whole library Aura pool with fetchable copies clickable + higher-MV/duplicate ones LOCKED +
+   "Fetch nothing"). WHICH Aura is now the human's choice, not the highest-power heuristic. Viewer-only,
+   **autonomous byte-identical** (chooser nulled by `RevealLogPause` in every search/rollout → Auras d5
+   s700001 digest `995ca5e30c33f51d` unchanged; smoke 21/21). Live-verified at seed 900001 T3 (Light-Paws
+   + a 1-MV aura): the fetch decision surfaces the pool, honors a non-default pick (Audacity fetched
+   instead of the default Rancor) and honors decline (`-1` → library unchanged), and each cast Aura
+   triggers its own fetch decision. Was a heuristic-picked DECISIONS.md "known gap"; no longer a gap.
+
 Also captured the recurring plan-vs-frozen-snapshot design defect (the `legal_not_enumerated` reject +
-the enchant-target band-aid family) as a DEFERRED spec: `docs/design/sequential-plan-evaluation.md` —
-to tackle after Auras (user's call).
+the enchant-target band-aid family) as a spec: `docs/design/sequential-plan-evaluation.md` (increment 1
+DONE; increment 2 = autonomous canonical-order apply, pending).
 
 ## >>> (historical resume notes) <<<
 **DONE + verified:** aura-attach mechanic + all 22 cards (build clean, coverage clean, costs/P-T/keywords

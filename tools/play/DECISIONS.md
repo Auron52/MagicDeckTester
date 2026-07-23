@@ -62,6 +62,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `replicate` | `g_play_replicate_chooser` (`ReplicateChooser`) | `ApplyPlan` `apply_one` replicate loop | `WriteReplicateDecisionJson` | `replicatePanelHtml` | modal |
 | `land_entry` | `g_play_land_entry_chooser` (`LandEntryChooser`) | `TurnSolver::PlayLandByName` (shared land drop) | `WriteLandEntryDecisionJson` | `landEntryPanelHtml` | modal |
 | `dragon` | `g_play_dragon_chooser` (`DragonChooser`) | `PerformTutorToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteDragonDecisionJson` | `dragonPanelHtml` | modal |
+| `lightpaws` | `g_play_lightpaws_chooser` (`LightPawsChooser`) | `PerformLightPawsAttach` (SpellEffects.h, shared executor+rollout) | `WriteLightPawsDecisionJson` | `lightPawsPanelHtml` | modal |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
 
 **Dragonstorm `dragon` put override:** the human picks WHICH library Dragons enter (Dragonstorm's
@@ -71,6 +72,16 @@ reply is ONE int per candidate (1 = put this copy), read positionally like `divi
 subset is expressible; `heuristic_subset` / `ai_set` = the rule's default (pre-checked). The
 `tutor_to_battlefield` param maps to `dragon` in the auditor manifest (was `main_phase` while the
 selection was search-only). The SELECTION is the human's; the ORDER stays the rule's.
+
+**Light-Paws `lightpaws` tutor-attach:** when an Aura you CAST resolves, Light-Paws, Emperor's Voice
+searches your library for an Aura (MV ≤ the cast Aura's, a name you don't already control, whose own
+enchant restriction Light-Paws satisfies) and puts it onto the battlefield attached to itself. The human
+picks WHICH Aura — the panel shows the whole library Aura pool (a search reveals your library) with the
+fetchable copies clickable and the rest LOCKED, plus a "Fetch nothing" (it is a *may* search). Reply = a
+pool index, or `-1` to decline; `heuristic_default` = the engine's highest-static-power eligible Aura.
+Each Aura you cast in a turn triggers its own fetch → its own decision. Autonomously byte-identical (the
+chooser is nulled in every search/rollout by `RevealLogPause`; `aura_cast_tutor_attach` maps to
+`lightpaws` in the auditor manifest, was a heuristic-picked known gap while the fetch was engine-only).
 
 **Soulfire Eruption / Crackle with Power full-board targeting** does NOT use a distinct type:
 the `g_play_soulfire_chooser` (`SoulfireTargetChooser`) lambda in `main.cpp` **reuses the generic
@@ -123,6 +134,4 @@ fully wired (all four sites) regardless of the menu default.
   engine-model change (de-abstract the untap float into literal targets), not viewer wiring.
 - **Cascade / Retrace SEARCH target** — which card the flip casts. Heuristic-picked today;
   build a type only when a deck needs it.
-- **Light-Paws fetch target** (Bogles/Auras) — which Aura the `aura_cast_tutor_attach` trigger
-  tutors onto Light-Paws. Heuristic-picked (highest power contribution), like the cascade target;
-  build a type only if a deck needs it surfaced.
+  <!-- Light-Paws fetch target is now the wired `lightpaws` type (see Registry), no longer a gap. -->
