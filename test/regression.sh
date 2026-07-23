@@ -17,7 +17,8 @@
 #     (avg = mean turn-to-win, an unwon game scored max_turns+1; win/loss is not reported),
 #   * compare that fingerprint to the committed ground truth in regression_gt.txt
 #     (keyed <deck>_<mode>_d<depth>_s<seed>).
-# The won-count catches win<->loss flips that barely move the avg win turn
+# An unwon game folds into the avg at max_turns+1 (the loss-penalized metric), so a game going
+# from a win to unwon shows up directly as a worse avg -- no separate win-count needed
 # (important for decks like Treasure Hunt that do not always win).
 #
 # Usage (run from repo root, after building Release):
@@ -49,7 +50,7 @@ THREADS=${THREADS:-0}
 MODE=regression
 ACCEPT=0
 ACCEPT_ACK=""     # --accept-with-regressions=<note>: same as --accept (promote, no re-run/re-audit);
-                  # the note is recorded in the GT provenance header to document intended win->loss.
+                  # the note is recorded in the GT provenance header to document an intended slowdown.
 DECK_ONLY=""      # --deck=<name>: restrict this run to one deck's cases (see regression_cases.sh)
 for arg in "$@"; do
   case "$arg" in
@@ -111,8 +112,8 @@ if [ "$ACCEPT" = 1 ]; then
   # --accept means "I have inspected this run and these results are the new ground truth" -- so it
   # ONLY promotes; it does NOT re-run the games and does NOT re-run the per-game audit. Inspect the
   # audit in the RUN output first (a plain `regression.sh <mode>` prints the per-game audit + the
-  # searched-depth win->loss list at the end), decide there, then --accept to promote. The optional
-  # --accept-with-regressions="<note>" records WHY any accepted win->loss are intended into the GT
+  # searched-depth SLOWER list at the end), decide there, then --accept to promote. The optional
+  # --accept-with-regressions="<note>" records WHY any accepted slowdowns are intended into the GT
   # provenance header (below) -- it is documentation, not a gate.
   [ -n "$ACCEPT_ACK" ] && echo "Accepting with recorded note: $ACCEPT_ACK"
   # shellcheck disable=SC1090
@@ -345,8 +346,8 @@ done
 
 # ---- per-game audit (split by depth) -- makes the pre-accept analysis unmissable ----------
 # The fingerprint compare above governs PASS/FAIL; this appends the per-game breakdown the aggregate
-# hides -- every SLOWER game (worse loss-penalized score; a win->loss is just the maximal slowdown,
-# not a special category) split searched vs d0 -- so an ordinary run already surfaces what to analyze
+# hides -- every SLOWER game (worse loss-penalized score; a win becoming unwon is just the maximal
+# slowdown, not a special category) split searched vs d0 -- so an ordinary run already surfaces what to analyze
 # before --accept. The metric is the loss-penalized avg (loss = max_turns+1); the accept decision is a
 # human judgement on the NET delta, not a per-game gate. See docs/design/auto-audit-integration.md.
 if [ -f "$HERE/audit_changed_games.py" ] && command -v python3 >/dev/null 2>&1; then

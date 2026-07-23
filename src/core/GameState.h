@@ -166,6 +166,15 @@ struct GameState
     // first-main dedup boundary and the combo never spans one). Byte-identical for every deck without
     // a tutor_to_battlefield card: the field is written but read by nothing else and folded nowhere.
     int                      spells_cast_this_turn = 0;
+    // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
+    // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
+    // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later
+    // cast (hand OR staged, e.g. an Apex-of-Power-exiled Dragonstorm), and blocks a cast at 0. The static
+    // subset checks in EnumeratePlans/consider only APPROXIMATE this (rank-based + blind to staged casts),
+    // so this is the authoritative enforcement. Turn-scoped: reset to -1 at every turn start alongside
+    // spells_cast_this_turn. Read by nothing else and folded into NO state key -> byte-identical for every
+    // deck without a max_casts_after card (stays -1, so the guard and update below are inert).
+    int                      casts_remaining_this_turn = -1;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
     uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
                                                           // deterministic mid-game shuffle (ShuffleAfterSearch).

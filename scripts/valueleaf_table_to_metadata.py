@@ -38,6 +38,7 @@ NAME2VALUE = {
     "burn":     "decks/burn/burn.value.json",
     "knights":  "decks/Knights/Knights.value.json",
     "hinata":   "decks/Hinata2/Hinata2.value.json",
+    "dragonstorm": "decks/Dragonstorm/Dragonstorm.value.json",
 }
 
 HDR = re.compile(r"games=(\d+)\s+seeds=\[([^\]]+)\]\s+value_min_depth=(\d+)")

@@ -108,7 +108,7 @@
   .thumb .cnt.p1p1{ background:var(--good); } .thumb .cnt.m1m1{ background:var(--bad); }
   .thumb .cnt.loyalty{ background:var(--warn); } .thumb .cnt.poison{ background:#9a6ad1; }
   .thumb .cnt.depletion{ background:var(--land); } .thumb .cnt.charge{ background:var(--acc); }
-  .thumb .cnt.verse{ background:#e69a5a; }
+  .thumb .cnt.verse{ background:#e69a5a; } .thumb .cnt.storage{ background:#e3b23c; }
   /* floating (unspent) mana, shown beside the Lands header */
   .floatmana { margin-left:10px; display:inline-flex; gap:3px; vertical-align:middle; }
   .mpip { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px;
@@ -119,6 +119,17 @@
   .hand .thumb.staged img { box-shadow:0 0 0 2px #9a6ad1; }
   .hand .thumb .stagedbadge { position:absolute; top:2px; left:2px; background:rgba(154,106,209,.95); color:#0c1116;
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
+  /* Suspend zone (incoming, beside lands) + Exiled-unusable zone (gone-for-good, beside graveyard) */
+  .zone.suspend h3 { color:#7fb0e0; }
+  .zone.exiledead h3 { color:#8fa0c0; } .zone.exiledead { opacity:.75; }
+  .fieldrow .lands, .fieldrow .gy { flex:1; min-width:0; }
+  .fieldrow .suspend, .fieldrow .exiledead { width:210px; flex:none; border-left:1px solid var(--line); padding-left:14px; }
+  .thumb.staged .stagedbadge { position:absolute; top:2px; left:2px; background:rgba(154,106,209,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; }
+  .thumb.pending img { box-shadow:0 0 0 2px #5a96e1; }                                   /* suspended — incoming */
+  .thumb.noplay img { opacity:.5; filter:grayscale(.35); box-shadow:0 0 0 2px #6b7280; } /* exiled — unusable */
+  .stagedbadge.susp   { background:rgba(90,150,225,.95) !important; }
+  .stagedbadge.noplay { background:rgba(150,155,165,.95) !important; }
   /* Aether Vial: the permanent is a clickable deploy source; matching-MV hand creatures light up */
   .thumb.vial-src { cursor:pointer; box-shadow:0 0 0 1px var(--acc) inset; }
   .thumb.vial-src.active img { box-shadow:0 0 0 2px var(--acc), 0 0 10px rgba(90,169,230,.55); }
@@ -365,7 +376,6 @@
   <h1>MagicDeckTester — Play</h1>
   <label>Deck <select id="deck"></select></label>
   <label>Seed <input id="seed" type="number" value="1"/></label>
-  <label>Game # <input id="gi" type="number" value="0"/></label>
   <label>Max turns <input id="maxturns" type="number" value="8"/></label>
   <button id="newgame" class="primary">New game</button>
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
@@ -407,7 +417,7 @@ let S = { choices:[], history:[], decision:null, prev:null, over:false, result:n
 
 function cfg(extra) {
   return Object.assign({
-    deck:$('deck').value, seed:+$('seed').value, gameIndex:+$('gi').value,
+    deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
   }, extra || {});
 }
@@ -519,7 +529,7 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -607,7 +617,26 @@ function renderBoard() {
          `${S.leMode?` <span class="lehint">click lands to add · click Land’s Edge to finish</span>`:''}</h3>`+
          zoneRow(plannedLE.length?plannedLE:[])+`</div>`;
   }
-  h += `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
+  // Exiled/suspended cards you should still SEE. Split by kind (engine tags each via `reason`):
+  //   SUSPENDED  (Lotus Bloom, ⌛ time-counter to arrival) -> INCOMING resource, shown beside the Lands.
+  //   Apex-exiled LANDS (⊘, "cast SPELLS from among them" -> a land is stuck in exile) -> GONE-for-good,
+  //     shown beside the Graveyard (below). Playable staged SPELLS stay in the Hand (purple ▸T badge).
+  const exThumb = c => {
+    const susp = c.reason==='suspend';
+    const badge = susp
+      ? `<span class="stagedbadge susp" title="suspended — arrives turn ${c.arrive_turn} (${c.time_counters} time counter${c.time_counters===1?'':'s'} left)">⌛${c.time_counters}</span>`
+      : `<span class="stagedbadge noplay" title="exiled by Apex of Power — a land can't be cast (spells only), so it stays in exile">⊘</span>`;
+    return `<span class="thumb staged ${c.kind==='land'?'land':'spell'} ${susp?'pending':'noplay'}" data-name="${esc(c.name)}" `+
+      `title="${esc(c.name)} — ${susp?`suspended, arrives T${c.arrive_turn}`:'exiled, not playable'}">`+
+      `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/>`+
+      badge+`<em>${esc(c.name)}</em></span>`;
+  };
+  const suspendCards = (me.exile||[]).filter(c=>c.reason==='suspend');
+  const exiledDead   = (me.exile||[]).filter(c=>c.reason!=='suspend');
+  const landsZone = `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
+  if (suspendCards.length)
+    h += `<div class="fieldrow">${landsZone}<div class="zone suspend"><h3>Suspended (${suspendCards.length})</h3>`+zoneRow(suspendCards.map(exThumb))+`</div></div>`;
+  else h += landsZone;
   h += `</div>`;  // /playfield
   // Hand sits ABOVE the graveyard: it is the most-used zone, so keeping it high (right under your
   // field) means the turn bar and hand are visible together without scrolling. The graveyard (less
@@ -646,7 +675,17 @@ function renderBoard() {
         `<span class="rtbadge" title="Retrace — cast from here, discarding a land">↩</span><em>${esc(n)}</em></span>`
       : bfThumb({name:n,is_land:false}));
     const hint = rset.size ? ` <span class="help">↩ click a Retrace card to cast it from here (discards a land)</span>` : '';
-    h += `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})${hint}</h3>`+zoneRow(gyThumbs)+`</div>`;
+    var gyZone = `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})${hint}</h3>`+zoneRow(gyThumbs)+`</div>`;
+  }
+  // Exiled — unusable: Apex-exiled LANDS (gone for good), shown beside the graveyard (a "second
+  // graveyard" of cards you can never use). Suspended cards live beside the Lands instead.
+  {
+    var gy = (typeof gyZone === 'string') ? gyZone : '';
+    var deadZone = exiledDead.length
+      ? `<div class="zone exiledead"><h3>Exiled — unusable (${exiledDead.length})</h3>`+zoneRow(exiledDead.map(exThumb))+`</div>`
+      : '';
+    if (gy && deadZone) h += `<div class="fieldrow">${gy}${deadZone}</div>`;
+    else h += gy + deadZone;
   }
   // sticky commit/turn-plan footer, last so its position:sticky bottom:0 docks to the viewport.
   if (isMain) h += `<div id="planbar"></div>`;
@@ -897,7 +936,7 @@ function renderChooseDialog(v, line){
   const variants=(v.variants||[]).slice();
   // Fallback: a variant with no structured subs can't be decomposed (degenerate / older engine).
   if (!variants.length || variants.some(x=>!x.subs || !x.subs.length)) return renderChooseFlat(v, line);
-  const KIND={fetch:0,tutor:1,x:2,soulfire:3,crackle:4};
+  const KIND={fetch:0,tutor:1,x:2,soulfire:3,crackle:4,splice:5};
   const kindPri=k=>(KIND[k]===undefined?9:KIND[k]);
   const subOf=(x,key)=>(x.subs||[]).filter(s=>s.key===key)[0];
   const choiceOf=(x,key)=>{ const s=subOf(x,key); return s?s.choice:'—'; };
@@ -1025,6 +1064,13 @@ function applyAccepted(planIndex, label) {
 function handleVerdict(v, line) {
   if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line);
   if (v.verdict==='choose') return renderChooseDialog(v, line);   // central image dialog, not the side panel
+  // REJECT (illegal / legal_not_enumerated / unsupported): the committed line did NOT play, so a
+  // pending "Pass turn" skip (S.commitTurn, set by the Commit-turn button) must be dropped -- otherwise
+  // picking an ALTERNATE plan from the menu below inherits the skip and auto-passes the rest of THIS
+  // turn (advanceTo), so the user never gets the same turn's post_main decision to cast e.g. Apex of
+  // Power. A reject means "your intended turn didn't happen" -> hand control back; the user re-declares
+  // Pass phase / Pass turn on the next decision. (Commit-phase never sets the flag, so it's unaffected.)
+  S.commitTurn = null; S.commitTurnPasses = 0;
   const cls=v.verdict==='legal_not_enumerated'?'legal':(v.verdict==='unsupported'?'unsupported':'illegal');
   const tag=v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
   const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
@@ -1189,7 +1235,7 @@ function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
-                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry'; // centered card-image modals
+                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1201,6 +1247,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='land_entry' ? landEntryPanelHtml(d)
                   : dec==='mulligan' ? mulliganPanelHtml(d)
                   : dec==='bottom' ? bottomPanelHtml(d)
+                  : dec==='dragon' ? dragonPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -1289,6 +1336,32 @@ function discardPanelHtml(d){
   h+=`<div class="pbtns"><span class="pcount">${n} / ${over} selected</span>`+
      `<button class="ghost" id="discardai">Follow AI</button><span class="spacer"></span>`+
      `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Discard ${over} card${over===1?'':'s'}</button></div>`;
+  return h;
+}
+// Dragonstorm put-override panel (#6): IMAGE-based central modal, MULTI-SELECT. The candidate library
+// Dragons are shown as art IN THE ORDER they'll enter (Lathliss + Scourges first — order-dependent);
+// the AI's rule pick (d.ai_set) is preselected and badged. Click to toggle WHICH Dragons enter (capped
+// at d.max_puts = the storm count); the engine keeps the shown order. Commit puts them all in one step.
+function aiDragonSet(d){ return (d.ai_set && d.ai_set.length) ? d.ai_set.slice() : []; }
+function dragonPanelHtml(d){
+  const cap=d.max_puts||0;
+  // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
+  if (S._dragonFor !== d.decision_index){ S._dragonFor=d.decision_index; S.dragonSel=new Set(aiDragonSet(d)); }
+  const sel=S.dragonSel, aiSet=new Set(aiDragonSet(d));
+  let h=`<h3>Dragonstorm — put which Dragons?</h3>`;
+  h+=`<div class="sub">Choose up to <b>${cap}</b> Dragon${cap===1?'':'s'} to put onto the battlefield. They enter in the order shown (Lathliss and Scourges first — they trigger off every later Dragon). The AI’s picks are preselected.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.candidates||[]).forEach(c=>{
+    const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+    h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div>`;
+  const n=sel.size, ok=(n<=cap);
+  h+=`<div class="pbtns"><span class="pcount">${n} / ${cap} selected</span>`+
+     `<button class="ghost" id="dragonai">Follow AI</button><span class="spacer"></span>`+
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Put ${n} Dragon${n===1?'':'s'}</button></div>`;
   return h;
 }
 // Retrace-discard panel (Throes of Chaos): IMAGE-based central modal. Casting a retrace spell from
@@ -1554,6 +1627,11 @@ function wireDecisionPanel(d, dec){
     const ai=panel.querySelector('#discardai'); if (ai) ai.onclick=()=>{ S.discardSel=new Set(aiDiscardSet(d)); renderDecisionPanel(d,'discard'); };
     const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDiscardBatch(d);
   }
+  else if (dec==='dragon'){
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleDragon(d, +b.dataset.opt));
+    const ai=panel.querySelector('#dragonai'); if (ai) ai.onclick=()=>{ S.dragonSel=new Set(aiDragonSet(d)); renderDecisionPanel(d,'dragon'); };
+    const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDragonBatch(d);
+  }
   else if (dec==='divide')
     { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDivide(d); }
   else if (dec==='expressive_iteration')
@@ -1612,6 +1690,23 @@ function commitDiscardBatch(d){
   const names=desc.map(i=>{ const c=(d.options||[]).find(x=>x.index===i); return c?c.name:'card'; });
   S._discardFor=null; S.discardSel=null;      // clear the per-decision selection guard
   pushChoices(d, desc, `discard: ${names.join(', ')}`);
+}
+// Multi-select Dragonstorm put override: toggle a candidate Dragon in/out of the put set (capped at
+// max_puts), then commit all at once. The engine reads ONE int per candidate (1 = put), in candidate
+// order, so we send a 0/1 flag per candidate (like divide/Soulfire). The engine keeps the shown order.
+function toggleDragon(d, oi){
+  const cap=d.max_puts||0, sel=S.dragonSel||(S.dragonSel=new Set());
+  if (sel.has(oi)) { sel.delete(oi); }
+  else { if (sel.size>=cap){ flashHint(`Up to ${cap} — deselect one first.`); return; } sel.add(oi); }
+  renderDecisionPanel(d,'dragon');
+}
+function commitDragonBatch(d){
+  const cap=d.max_puts||0, sel=S.dragonSel||new Set();
+  if (sel.size>cap){ flashHint(`Pick up to ${cap} Dragon${cap===1?'':'s'}.`); return; }
+  const flags=(d.candidates||[]).map(c=>sel.has(c.index)?1:0);
+  const names=(d.candidates||[]).filter(c=>sel.has(c.index)).map(c=>c.name);
+  S._dragonFor=null; S.dragonSel=null;        // clear the per-decision selection guard
+  pushChoices(d, flags, `Dragonstorm: put ${names.length?names.join(', '):'nothing'}`);
 }
 // Divide: send one integer per legal target (in legal order = the order the engine reads them).
 function commitDivide(d){
@@ -1813,6 +1908,12 @@ function autoResolveDecision(dec){
   return true;
 }
 function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
+  // When this decision was reached by an UNDO (user stepping back), suppress the forward-play
+  // auto-advance below for THIS one decision: the dead-opponent auto-pass / commit-turn skip exist to
+  // spare a FORWARD player clicking through a decided game, but on undo they would instantly re-commit
+  // back to the win -- so you could never land INSIDE the winning turn to inspect the board (e.g. "where
+  // did Lathliss go"). Consume the flag so normal forward interaction resumes on the next decision.
+  const undoing = S.undoing; S.undoing = false;
   // Undo checkpoint: snapshot the history length + graveyard/hand diff state BEFORE this decision's
   // draws/gy are logged. A single forward step appends a VARIABLE number of history lines (draw
   // lines + gy lines + the action), so undo can't just pop one -- it truncates back to this
@@ -1829,12 +1930,12 @@ function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=
   // re-prompt in the SAME main -- e.g. Anti-Lifegain seed 1 game 0, which re-prompts a pre_main at
   // turn 4 with the opponent at -1). Don't make the user click through a decided game -- auto-pass an
   // empty line to fetch the result. Fires on ANY main decision with a dead opponent (both phases).
-  if (isDeadOpponentMain(dec)) { S.plan=[]; commitLine(); return; }
+  if (!undoing && isDeadOpponentMain(dec)) { S.plan=[]; commitLine(); return; }
   // "Commit turn": auto-pass every remaining MAIN-phase decision of the same turn (a post-combat
   // Main 2, or a draw-breakpoint re-prompt) so the user jumps to the next turn without clicking
   // through the rest of this one. Stops as soon as the turn advances, a non-main decision appears
   // (needs a real choice), or the game ends (result -> showResult clears the flag). Capped defensively.
-  if (S.commitTurn != null) {
+  if (!undoing && S.commitTurn != null) {
     if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
       S.commitTurnPasses = (S.commitTurnPasses||0) + 1; S.plan=[]; commitLine(); return;
     }
@@ -1857,6 +1958,9 @@ function flashHint(msg) { const ve=$('verdict'); ve.className=''; ve.style.displ
 
 function showResult(r) {
   S.over=true; S.result=r; S.commitTurn=null;   // game over -> end any in-progress turn-skip
+  // Keep Undo usable AFTER a win (the win can arrive via commitLine/showResult, which bypasses step()
+  // where the button state is otherwise set) so the user can step back into the winning turn to inspect.
+  $('undo').disabled = !(S.steps && S.steps.length);
   logEventList(r.events);   // the winning turn's combat/damage/life events (after the last decision)
   S.history.push({ turn:r.won?r.win_turn:'—', label:r.won?`WON turn ${r.win_turn}`:'no win', win:r.won });
   renderHistory(); renderBoard(); hideVerdict(); $('vialslot').innerHTML='';
@@ -1927,10 +2031,10 @@ async function newGame() {
   S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
-// Bump Seed + Game# and start the next game — for playing several in a row.
+// Bump Seed and start the next game — for playing several in a row. (Game index is always 0;
+// each distinct seed IS a distinct game, so seed alone selects the game — no separate Game # field.)
 async function nextGame() {
   $('seed').value = (+$('seed').value || 0) + 1;
-  $('gi').value   = (+$('gi').value   || 0) + 1;
   await newGame();
 }
 // Pop the last-committed decision's state: drop its choices, roll history + gy/hand diff state back
@@ -1955,6 +2059,7 @@ function rollbackStep() {
 }
 async function undo() {
   if (!rollbackStep()) return;
+  S.undoing = true;   // land INSIDE the replayed decision (suppress the dead-opponent/commit-turn auto-advance once)
   renderHistory(); await step();
 }
 // Auto-reject: the committed line dropped a cast it couldn't pay for (detectDropped). Roll the whole
@@ -1982,10 +2087,10 @@ async function checkReference() {
   const el=$('refnote'); if(!el) return;
   const deck=$('deck').value;
   if(!deck){ el.style.display='none'; return; }
-  const seed=+$('seed').value||0, gi=+$('gi').value||0;
+  const seed=+$('seed').value||0, gi=Math.max(0,seed-1);
   try {
     const j=await (await fetch(`/api/reference-exists?deck=${encodeURIComponent(deck)}&seed=${seed}&gi=${gi}`)).json();
-    if (j && j.exists){ el.style.display=''; el.title=j.path||''; el.textContent=`✓ reference saved for seed ${seed} · game ${gi} — skip, or play again`; }
+    if (j && j.exists){ el.style.display=''; el.title=j.path||''; el.textContent=`✓ reference saved for seed ${seed} — skip, or play again`; }
     else if (j && j.suboptimal){ el.style.display=''; el.title=j.suboptimalPath||''; el.textContent=`⚠ suboptimal target saved for seed ${seed} · game ${gi} — try to win it faster`; }
     else { el.style.display='none'; el.textContent=''; el.title=''; }
   } catch(e){ el.style.display='none'; }
@@ -2013,7 +2118,6 @@ $('saveref').onclick=()=>saveRef(false); $('saveref-sub').onclick=()=>saveRef(tr
 // Refresh the reference badge whenever the game selector changes.
 $('deck').addEventListener('change', checkReference);
 $('seed').addEventListener('input', checkReference);
-$('gi').addEventListener('input', checkReference);
 
 // Scryfall hover popover
 const pop=document.createElement('div'); pop.id='pop'; pop.innerHTML='<img alt=""/>'; document.body.appendChild(pop);

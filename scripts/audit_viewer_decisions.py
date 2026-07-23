@@ -91,7 +91,10 @@ MANIFEST = {
     # listed here so the self-guard treats them as MAPPED (not unknown choice params).
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
-    "tutor_to_battlefield":  ("main_phase",           truthy),   # Dragonstorm: which Dragon to put onto bf
+    # Dragonstorm: WHICH Dragons to put onto the battlefield -- a real multi-pick decision (the human
+    # picks the subset; the engine keeps the rule's play order). Surfaces as its own `dragon` type
+    # (WriteDragonDecisionJson / dragonPanelHtml). Was `main_phase` while the selection was search-only.
+    "tutor_to_battlefield":  ("dragon",               truthy),
     "fetch_land_types":      ("main_phase",           truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
@@ -399,9 +402,23 @@ def pick(d):
             return -1
         # Prefer a plan that casts something (longest summary ~ most actions).
         return max(plans, key=lambda p: len(p.get("summary", "")))["index"]
+    if t == "dragon":
+        # Dragonstorm put override: a MULTI-int reply (one 0/1 flag per candidate). Follow the AI
+        # default (ai_set) -- return a list; the driver's append helper extends the choices stream.
+        ai = set(d.get("ai_set") or [])
+        return [1 if c.get("index") in ai else 0 for c in (d.get("candidates") or [])]
     if "heuristic_default" in d:
         return d["heuristic_default"]
     return 0
+
+
+def push_choice(choices, choice):
+    """Append a decision's reply to the --choices stream. Most decisions reply a single int; the
+    multi-int ones (dragon put override) reply a LIST of ints, extended positionally."""
+    if isinstance(choice, list):
+        choices.extend(choice)
+    else:
+        choices.append(choice)
 
 
 def pick_toward(d, target_lc):
@@ -446,12 +463,12 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             if any(str(c.get("name", "")).lower() == target_lc for c in hand):
                 in_hand_here = True
             choice = pick_toward(d, target_lc)
-            if t == "main_phase" and choice is not None and choice >= 0:
+            if t == "main_phase" and isinstance(choice, int) and choice >= 0:
                 for pl in d.get("plans", []):
                     if pl.get("index") == choice and target_lc in pl.get("summary", "").lower():
                         cast_here = True
                         break
-            choices.append(choice)
+            push_choice(choices, choice)
         if in_hand_here:
             drawn_games += 1
         if cast_here:
@@ -490,12 +507,12 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns):
                 break
             observed[d.get("type", "?")] += 1
             choice = pick(d)
-            if d.get("type") == "main_phase" and choice is not None and choice >= 0:
+            if d.get("type") == "main_phase" and isinstance(choice, int) and choice >= 0:
                 for pl in d.get("plans", []):
                     if pl.get("index") == choice:
                         cast_text.append(pl.get("summary", "").lower())
                         break
-            choices.append(choice)
+            push_choice(choices, choice)
         if guard >= GUARD:
             stuck += 1
     return observed, cast_text, stuck

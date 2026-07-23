@@ -257,9 +257,15 @@ inline PlaySettings ResolvePlaySettings(const MulliganProfile& p,
     }
     if (depth_given || budget_given)
     {
-        // No enabled block, or --ignore-play-profile: explicit CLI wins; omitted half -> normal default (0).
-        return { depth_given ? req_depth : 0, budget_given ? req_budget : 0,
-                 ignore_play ? "cli(--ignore-play-profile)" : "cli" };
+        // No enabled block, or --ignore-play-profile. Explicit CLI wins per field; an OMITTED depth falls
+        // to the built-in default depth (d5), NOT 0 -- a model-less deck asked to search (a budget given
+        // with no --depth) must not silently collapse to greedy depth 0, which ignores the budget. This
+        // makes the "budget given, depth omitted" case consistent with the fully-bare d5/20 default below.
+        // An explicit --depth still wins ("unless we specify otherwise" -- e.g. the d0/d3 coverage cases).
+        const int def_depth = MulliganProfile::BuiltinDefaultPlay().target_depth;
+        return { depth_given ? req_depth : def_depth, budget_given ? req_budget : 0,
+                 ignore_play ? "cli(--ignore-play-profile)"
+                             : (depth_given ? "cli" : "default(depth)+cli(budget)") };
     }
     // Fully bare run, no enabled block: the built-in d5/20 default.
     const ValuePlay d = MulliganProfile::BuiltinDefaultPlay();

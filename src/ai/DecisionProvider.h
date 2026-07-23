@@ -357,7 +357,32 @@ public:
     // docs/design/dragonstorm-search-pruning.md (Step 2).
     virtual bool UseAccelPrefixCollapse() const { return false; }
 
-    // Hook 28 -- SCALED-CAST variants: for a spell whose cost depends on how much output it commits,
+    // Hook 28 -- cast-ORDERING search gate. When true, EnumeratePlansWithLand expands each action set
+    // into the DISTINCT orderings of its non-sacrifice hand casts (deduped by end-of-phase state) and
+    // the search scores each, committing the best via Plan::searched_order (the executor replays that
+    // vector order -> lockstep). The archetype opt-in for the global MTG_SEARCH_ORDER knob. Dragonstorm's
+    // combo turns leave a lot on the table under the fixed CastOrderRank (rituals@15/Irencrag@18/payoff@20)
+    // -- a specific interleave (fund -> reducer -> discounted rest, or a Dragon hard-cast between rituals)
+    // routinely beats the canonical bucket -- so letting the search FIND the order recovers it. Measured
+    // (regression): d3 5.56->4.95, d5 5.36->4.82 (~0.55 turns) at ~+47% makespan. EXPENSIVE (applies each
+    // tried ordering on a copy, k! capped at 120), so it lives in the archetype provider; base returns
+    // false -> every non-Dragonstorm deck stays byte-identical. Also openable globally via MTG_SEARCH_ORDER
+    // / MTG_UNPRUNED (UnprunedGate::SearchOrder) for the standing A/B.
+    virtual bool WantsCastOrderingSearch() const { return false; }
+
+    // Hook 29 -- payoff-prune gate (the ritual-guard's search-side analog; the user's spec). A mana
+    // ritual is a ONE-TURN accelerant: its float empties at end of turn (identical to Hinata's Reality
+    // Spasm untap). So a plan that casts a ritual but no PAYOFF -- a Dragon (creature), Dragonstorm
+    // (tutor_to_battlefield), or Apex of Power (impulse_exile) -- burns the ritual for nothing (the mana
+    // has no same-turn sink; storm count doesn't carry across turns). When true, both Solve::consider
+    // (leaf) and EnumeratePlans (search branch list) DROP those accelerant-only subsets, focusing the
+    // search budget on payoff lines. Deliberately NOT enabled for Hinata: there the ritual IS a useful
+    // mid-combo accelerant (it powers a bigger cantrip/dig turn), so the same prune measured -0.05 tempo
+    // (see docs/design/hinata-spasm-gate-rootcause.md). Dragonstorm has no such mana sink, so the prune
+    // should net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
+    virtual bool PrunesAcceleratorWithoutPayoff() const { return false; }
+
+    // Hook 30 -- SCALED-CAST variants: for a spell whose cost depends on how much output it commits,
     // the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage
     // analogue of XCandidates (Hook 18): Magma Opus deals 4 damage divided among any number of
     // targets, and committing more of it to the opponent's FACE leaves fewer distinct spread/tap

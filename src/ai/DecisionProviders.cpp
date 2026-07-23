@@ -45,6 +45,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"searchorder",UnprunedGate::SearchOrder},{"redirect",  UnprunedGate::Redirect},
     {"drawengine", UnprunedGate::DrawEngine}, {"saccolor", UnprunedGate::SacColor},
     {"accelprefix",UnprunedGate::AccelPrefix},
+    {"payoffprune",UnprunedGate::PayoffPrune},
 };
 
 const char* GateName(UnprunedGate g)
@@ -1978,7 +1979,12 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
                                                 const CardParams& pp, int max_puts) const
 {
     if (max_puts <= 0) { return {}; }
-    if (DecisionUnpruned(UnprunedGate::Tutor)) { return {}; }   // search-primary: heuristic off
+    // Heuristic OFF only for the autonomous SEARCH audit (MTG_UNPRUNED opens the full library-order
+    // enumeration so the Stage-5 tutor audit can branch the whole space). Human play ALSO sets
+    // MTG_UNPRUNED, but there the fallback = raw library order, which drops whatever Dragons sit on top
+    // of the library (e.g. 3 Scourge + 1 Utvara) instead of the rule pick (Lathliss + reserved haste-
+    // Dragon). So the carve-out: in HUMAN play keep the rule ON as the default the viewer resolves to.
+    if (DecisionUnpruned(UnprunedGate::Tutor) && !HumanPlayActive()) { return {}; }
 
     // --- Inventory: classify library Dragons (matching pp.tutor_types) by role + count copies. ---
     std::string L, S, U, K, G;                 // the actual card names per role (as found)
@@ -2021,7 +2027,20 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
         if (add > 0)         { sel += add; }
     };
 
-    if (has_haste && has_lathliss)          // Case A -- Ideal
+    if (max_puts <= 2)                      // SMALL-N (1-2 Dragons) -- SELECTION priority (what you GET)
+    {
+        // Distinct from the play ORDER below (Lathliss/Scourge stay front there because they are
+        // order-dependent). With only 1-2 Dragons lethal is usually out of reach and the Scourge ping
+        // scales with Dragon count, so it is DEPRIORITIZED here; a haste-Dragon (same-turn attack) and
+        // the token engines are worth more. Priority: haste -> Lathliss -> Utvara -> Scourge -> 2nd
+        // haste (user rule). The defensive fill below still tops up from any leftover inventory.
+        if (nK > 0) { pick(sK, nK, 1); } else { pick(sG, nG, 1); }  // haste 1 (Karrthus preferred)
+        pick(sL, nL, 1);                    // Lathliss
+        pick(sU, nU, 1);                    // Utvara
+        pick(sS, nS, 1);                    // Scourge (low at small N -- weak ping)
+        if (nK > 0) { pick(sG, nG, 1); } else { pick(sK, nK, 1); }  // haste 2 (the other haste-Dragon)
+    }
+    else if (has_haste && has_lathliss)     // Case A -- Ideal (>=3 Dragons: ping scales -> max Scourges)
     {
         if (nK > 0) { pick(sK, nK, 1); } else { pick(sG, nG, 1); }  // reserve the preferred haste-Dragon
         pick(sL, nL, 1);                    // Lathliss (token engine)
@@ -2057,6 +2076,27 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
     for (int i = 0; i < sK; ++i) { put.push_back(K); }
     for (int i = 0; i < sG; ++i) { put.push_back(G); }
     return put;
+}
+
+int DragonstormProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    // Irencrag Feat restricts further casts ("you can cast only one more spell this turn"), so it must
+    // be the LAST ritual: after the other rituals (15) but BEFORE the payoff (Dragonstorm, 20), so the
+    // only spell that follows it is the payoff. (Mirrors HinataProvider's Irencrag handling.)
+    if (def.params.max_casts_after >= 0) { return 18; }
+    // Ruby Medallion (a red cost reducer) must be cast BEFORE Irencrag: casting it as the single spell
+    // allowed AFTER Irencrag discounts nothing and wastes the "one more spell" (the payoff should take
+    // that slot). Rank it just after the rituals (16) -- funded by their floating mana, on the board to
+    // discount the post-Irencrag payoff, and never trailing Irencrag. This governs the fixed-order/d0
+    // path AND the post-Apex STAGED re-solve (where the ordering search can't reach the exiled casts).
+    if (!def.params.reduces_spell_color.empty()) { return 16; }
+    // A mana ritual (Seething Song / Pyretic Ritual / Rite of Flame / Irencrag burst) must resolve
+    // BEFORE the payoff so its floating mana is available to pay Dragonstorm / a hard-cast Dragon /
+    // another Apex. Rank between creatures (10) and other noncreatures (20). Without this the canonical
+    // order can cast the payoff first and strand the mana-positive rituals (the dropped-cast rollback
+    // the user hit; a self-stranded go-off autonomously). Everything else uses the generic order.
+    if (IsManaRitual(def)) { return 15; }
+    return GenericProvider::CastOrderRank(s, def);
 }
 
 // ---- instances + selection --------------------------------------------------

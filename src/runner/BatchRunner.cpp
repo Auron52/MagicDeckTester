@@ -89,8 +89,9 @@ Job ParseJob(const json& jspec)
     AttachValueSidecar(j.profile, profile_path);  // ... and its learned leaf value sidecar if present
 
     // Resolve the effective play settings from the manifest's explicit depth/budget + the deck's value_play.
-    // A case that OMITS both depth and budget_ms falls to value_play (or the built-in d5/20 default); a case
-    // that pins them uses them (byte-identical). ParseJob throwing on a lock-conflict aborts the batch loudly.
+    // A case that OMITS depth falls to value_play, or -- with no enabled model -- the built-in default depth
+    // (d5), NEVER greedy depth 0 (so a model-less "d5" case that pins only budget_ms actually searches at 5,
+    // not 0). A case that pins depth uses it verbatim (byte-identical). ParseJob throwing aborts loudly.
     {
         const bool depth_given  = jspec.contains("depth");
         const bool budget_given = jspec.contains("budget_ms");

@@ -61,7 +61,16 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `retrace_discard` | `g_play_retrace_chooser` (`RetraceDiscardChooser`) | `ApplyPlan` `apply_one` retrace | `WriteRetraceDiscardDecisionJson` | `retraceDiscardPanelHtml` | modal |
 | `replicate` | `g_play_replicate_chooser` (`ReplicateChooser`) | `ApplyPlan` `apply_one` replicate loop | `WriteReplicateDecisionJson` | `replicatePanelHtml` | modal |
 | `land_entry` | `g_play_land_entry_chooser` (`LandEntryChooser`) | `TurnSolver::PlayLandByName` (shared land drop) | `WriteLandEntryDecisionJson` | `landEntryPanelHtml` | modal |
+| `dragon` | `g_play_dragon_chooser` (`DragonChooser`) | `PerformTutorToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteDragonDecisionJson` | `dragonPanelHtml` | modal |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
+
+**Dragonstorm `dragon` put override:** the human picks WHICH library Dragons enter (Dragonstorm's
+tutor-to-battlefield), up to `max_puts` (the storm count); the engine keeps the rule's fixed play
+ORDER (`DragonstormProvider::TutorToBattlefieldPutOrder` — Lathliss → Scourges → Utvara → haste). The
+reply is ONE int per candidate (1 = put this copy), read positionally like `divide` / Soulfire, so any
+subset is expressible; `heuristic_subset` / `ai_set` = the rule's default (pre-checked). The
+`tutor_to_battlefield` param maps to `dragon` in the auditor manifest (was `main_phase` while the
+selection was search-only). The SELECTION is the human's; the ORDER stays the rule's.
 
 **Soulfire Eruption / Crackle with Power full-board targeting** does NOT use a distinct type:
 the `g_play_soulfire_chooser` (`SoulfireTargetChooser`) lambda in `main.cpp` **reuses the generic

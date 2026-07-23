@@ -68,8 +68,8 @@ def reg(m): return sum((m[g] if m[g]>0 else loss) for g in gis)/len(gis)
 def won(m): return sum(1 for g in gis if m[g]>0)
 def avg(m):
     w=[m[g] for g in gis if m[g]>0]; return sum(w)/len(w) if w else 0
-# Loss-penalized: score a loss (v<=0) worse than any win, so a win->loss folds into "slower"
-# (tracked in slg = the maximal slowdowns) and a loss->win into "faster". No win->loss category.
+# Loss-penalized: score a loss (v<=0) worse than any win, so a game becoming unwon folds into "slower"
+# (tracked in slg = the maximal slowdowns) and an unwon game winning into "faster". No special category.
 def _sc(v): return v if v>0 else 10000
 fa=sl=0; slg=[]
 for g in gis:

@@ -425,6 +425,56 @@ static int SameTurnAffinityGenericCredit(const GameState& state, const std::vect
     return credit;
 }
 
+// Same-turn cost-reducer generic credit (Ruby Medallion: "Red spells you cast cost {1} less"). A
+// spell's per-Action cost (EffectiveCost) only credits reducers ALREADY in play; a reducer cast in
+// the SAME subset is deferred here (the ManaPruneBound bail already disables the scalar prune for
+// such subsets). When the plan casts a reducer, the executor casts it before the spells it discounts
+// (Apex-containing sets are OrderingOpaque -> plan-action order; a same-turn Medallion resolves
+// ahead of the later red casts, whose per-cast EffectiveCost then sees it in play). Returns the extra
+// generic discount to subtract from the subset's combined cost so an affordable
+// "Medallion + discounted rituals + Apex" line is ENUMERATED instead of dropped as too costly. Each
+// matching same-colour spell's generic drops by 1 per same-turn reducer (floored at its generic;
+// colour pips never reduce -- matching "cost {1} less"). The credit is OPTIMISTIC (it assumes the
+// reducer precedes every discounted cast); that is SOUND because it can only ADD plans -- a plan the
+// executor's realised order cannot actually pay rolls out to a non-win and the search discards it, so
+// over-crediting never picks an unpayable line. Returns 0 unless the subset holds a reducer, so every
+// non-reducer deck/seed is byte-identical. Only Ruby Medallion sets reduces_spell_color today, so the
+// whole path is Dragonstorm-scoped.
+static int SameTurnReducerGenericCredit(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    (void)state;
+    // Count same-turn reducers per colour in the subset (only "R" exists today, but generalise).
+    int red = 0, white = 0, blue = 0, black = 0, green = 0;
+    for (int j : sel)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (!d || d->params.reduces_spell_color.empty()) { continue; }
+        const std::string& rc = d->params.reduces_spell_color;
+        if      (rc == "R") { ++red; }   else if (rc == "W") { ++white; }
+        else if (rc == "U") { ++blue; }  else if (rc == "B") { ++black; }
+        else if (rc == "G") { ++green; }
+    }
+    if (red + white + blue + black + green == 0) { return 0; }
+    int credit = 0;
+    for (int j : sel)
+    {
+        const CardDefinition* dj = cands[j].def;
+        if (!dj || cands[j].cost.generic <= 0) { continue; }   // nothing to discount
+        const ManaCost& mc = dj->card.m_mana_cost;             // printed pips (colour set by the card)
+        int reducers = 0;
+        if (mc.red   > 0) { reducers += red; }
+        if (mc.white > 0) { reducers += white; }
+        if (mc.blue  > 0) { reducers += blue; }
+        if (mc.black > 0) { reducers += black; }
+        if (mc.green > 0) { reducers += green; }
+        // A reducer never discounts itself (its own printed cost carries no matching colour pip -- a
+        // Ruby Medallion is {2}, colourless), so no self-exclusion is needed here.
+        credit += std::min(reducers, cands[j].cost.generic);
+    }
+    return credit;
+}
+
 // Forward decl of the real backtracking mana payment (defined below); used by the filter
 // affordability fallback so enumeration can recognize filter/depletion/ramp-land lines.
 static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
@@ -843,6 +893,29 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
     return !has_enabler;   // removal present, no enabler live and none cast this turn -> unbacked
 }
 
+// Payoff-prune (DecisionProvider Hook 29 -- the ritual-guard's search-side analog; the user's spec).
+// A mana ritual is a ONE-TURN accelerant: its float empties at end of turn (identical to Reality Spasm's
+// untap) and storm count does not carry across turns, so a subset that casts a ritual (ritual_float > 0)
+// but no PAYOFF -- a Dragon (creature), Dragonstorm (tutor_to_battlefield), or Apex of Power
+// (impulse_exile) -- burns the ritual for nothing (no same-turn sink). Callers gate this on
+// ResolveProvider(state).PrunesAcceleratorWithoutPayoff() so ONLY Dragonstorm prunes; Hinata (whose
+// ritual is a useful cantrip/dig accelerant) is untouched. A ritual-only subset deals no damage, so it
+// can never be a winning line -> pruning it never drops a lethal plan. Inert (no ritual) -> unchanged.
+static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    bool has_ritual = false, has_payoff = false;
+    for (int j : sel)
+    {
+        if (cands[j].ritual_float > 0) { has_ritual = true; }
+        const CardDefinition* d = cands[j].def;
+        if (d && (d->card.IsCreature() || d->params.tutor_to_battlefield || d->params.impulse_exile > 0))
+        {
+            has_payoff = true;
+        }
+    }
+    return has_ritual && !has_payoff;
+}
+
 // Reject a subset that selects two SacForMana actions for the SAME source (its colour variants are
 // mutually exclusive -- a given Lotus can be tapped+sacrificed for exactly one colour, once). The
 // colour variants are enumerated as independent actions, so this is the analogue of the Vial per-charge
@@ -1114,49 +1187,43 @@ static bool GroupChoiceNonPrefixAccel(const GameState& /*state*/,
 // and Apex of Power's 10-of-one-colour). The set = every colour appearing in the active player's
 // NONLAND spell costs across hand / library / graveyard / battlefield (so an off-colour combo line
 // stays reachable), or ALL FIVE under MTG_UNPRUNED(SacColor) so the full-search oracle can open every
-// colour. Never empty (defensive red fallback for a degenerate all-colourless deck). Returns W,U,B,R,G
-// order. Shared so both float sources enumerate the identical colour set. NOT hardcoded red.
+// colour. Never empty (defensive red fallback for a degenerate all-colourless deck).
+//
+// ORDER = descending coloured-pip DEMAND (how many pips of that colour the active player's spells
+// want), tiebroken W,U,B,R,G. So the colour the deck most needs is FIRST -- and "add N of any one
+// colour" defaults to it: that colour WEAKLY DOMINATES every other (a coloured mana pays generic pips
+// just as well, PLUS its own pips), so the search picks it in every value-tie and the human-play
+// enumeration collapses to it. This is why a mono-red deck floats RED, never a dead off-colour (the
+// old W,U,B,R,G order defaulted ties to White). Shared so both float sources enumerate the identical
+// ordered set. NOT hardcoded red -- a blue deck floats blue, etc.
 static std::vector<std::string> ChosenFloatColorCandidates(const GameState& state)
 {
     const Player& ap = state.players[state.active_player_index];
     const bool open_all = DecisionUnpruned(UnprunedGate::SacColor);
-    bool present[5] = { false, false, false, false, false };   // W,U,B,R,G
-    if (open_all) { present[0] = present[1] = present[2] = present[3] = present[4] = true; }
-    else
+    int demand[5] = { 0, 0, 0, 0, 0 };   // W,U,B,R,G : total coloured pips across AP nonland spell costs
+    auto scan = [&](const Card& card)
     {
-        auto scan_zone = [&](auto begin_it, auto end_it)
-        {
-            for (auto it = begin_it; it != end_it; ++it)
-            {
-                const CardDefinition* cd = CardDatabase::Instance().LookupCached(*it);
-                if (!cd || cd->card.IsLand()) { continue; }
-                const ManaCost& mc = cd->card.m_mana_cost;
-                if (mc.white > 0) { present[0] = true; }
-                if (mc.blue  > 0) { present[1] = true; }
-                if (mc.black > 0) { present[2] = true; }
-                if (mc.red   > 0) { present[3] = true; }
-                if (mc.green > 0) { present[4] = true; }
-            }
-        };
-        scan_zone(ap.hand.begin(), ap.hand.end());
-        scan_zone(ap.library.begin(), ap.library.end());
-        scan_zone(ap.graveyard.begin(), ap.graveyard.end());
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
-            if (!cd || cd->card.IsLand()) { continue; }
-            const ManaCost& mc = cd->card.m_mana_cost;
-            if (mc.white > 0) { present[0] = true; }
-            if (mc.blue  > 0) { present[1] = true; }
-            if (mc.black > 0) { present[2] = true; }
-            if (mc.red   > 0) { present[3] = true; }
-            if (mc.green > 0) { present[4] = true; }
-        }
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(card);
+        if (!cd || cd->card.IsLand()) { return; }
+        const ManaCost& mc = cd->card.m_mana_cost;
+        demand[0] += mc.white; demand[1] += mc.blue; demand[2] += mc.black;
+        demand[3] += mc.red;   demand[4] += mc.green;
+    };
+    for (const Card& c : ap.hand)      { scan(c); }
+    for (const Card& c : ap.library)   { scan(c); }
+    for (const Card& c : ap.graveyard) { scan(c); }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        scan(p.card);
     }
     static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
+    std::vector<int> idx;                                      // candidate colour indices, W,U,B,R,G order
+    for (int c = 0; c < 5; ++c) { if (open_all || demand[c] > 0) { idx.push_back(c); } }
+    // Stable sort by DESCENDING demand -> equal-demand colours keep their W,U,B,R,G tiebreak order.
+    std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return demand[a] > demand[b]; });
     std::vector<std::string> colors;
-    for (int c = 0; c < 5; ++c) { if (present[c]) { colors.push_back(kColorLetters[c]); } }
+    for (int c : idx) { colors.push_back(kColorLetters[c]); }
     if (colors.empty()) { colors.push_back("R"); }
     return colors;
 }
@@ -2115,6 +2182,14 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // NOTE: the same-turn cost-reducer (Ruby Medallion) generic credit is applied ONLY in
+    // EnumeratePlans (the search's / viewer's plan list), NOT here in Solve's greedy consider(). The
+    // credit is an OPTIMISTIC affordability hint (it assumes the reducer resolves before the spells it
+    // discounts); that is sound only when a ROLLOUT validates the line -- every EnumeratePlans plan is
+    // rollout-scored by the search or user-selected in the viewer, so an unrealisable Medallion+Apex
+    // line rolls out to a non-win and is discarded. Solve's d0 greedy pick has NO rollout, so crediting
+    // it here let the greedy commit an Apex line the executor then stranded on (smoke gi523 8->loss).
+    // Leaving Solve uncredited keeps the d0 decision + every rollout leaf byte-identical.
     // Any splice-onto-Arcane base among the candidates? Gates the odometer's generate-time over-splice
     // skip (GroupChoiceOverSplices) so every non-splice deck pays nothing and stays byte-identical.
     bool any_splice = false;
@@ -2170,6 +2245,21 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     const MidGameEvaluator* ev = (UseLearnedEval() && state.m_evaluator && !state.m_evaluator->empty())
                                ? state.m_evaluator : nullptr;
 
+    // d0/rollout "rituals-for-payoff" guard (HEURISTIC; default ON, opt-out MTG_NO_RITUAL_PAYOFF_GUARD).
+    // A mana ritual (Rite of Flame, Desperate/Pyretic Ritual, Lotus sac -- anything with ritual_float > 0)
+    // should only be cast to the extent its floated mana funds a same-turn payoff. On a non-winning plan
+    // the scoring-site check below rejects a subset that casts a SURPLUS ritual (one removable with the
+    // rest still payable) -- so a plan never spends "10 mana of rituals to hard-cast a 4-mana Scourge",
+    // nor floats mana nothing uses (lost card + Sandstone depletion; the Dragonstorm setup-turn misplays
+    // the user flagged). EXCEPTION (storm gate): a plan containing a tutor_to_battlefield storm wincon
+    // (Dragonstorm) keeps ALL rituals -- extra spells = extra dragons; measured decisive. This is a
+    // GREEDY/ROLLOUT policy fix only -- Solve is the d0 decision and every rollout leaf, so curbing waste
+    // here improves both direct d0 play and the leaf win-turns the search reads. It deliberately does NOT
+    // touch EnumeratePlans (the search's branch list): a ritual is still OFFERED as a branch and kept in
+    // hand for a future turn. Gated on any_ritual -> byte-identical for non-ritual decks. Measured:
+    // Dragonstorm d0 ~0.9 turns faster / search ~0.05-0.08; Hinata +0.05; burn byte-identical; work down.
+    static const bool s_ritual_payoff_guard = std::getenv("MTG_NO_RITUAL_PAYOFF_GUARD") == nullptr;
+
     // Evaluate one selected combination of candidate indices and, if it is the new optimum,
     // record it. The optimum is ordered by (wins, value, SMALLEST action mask): a winning plan
     // beats a non-winner; higher eval beats lower; among equals the numerically smallest mask
@@ -2182,6 +2272,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        // Payoff-prune (Hook 29): drop a ritual-accelerant subset that casts no payoff
+        // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
+        // gated; inert for every other deck -> byte-identical.
+        if (ResolveProvider(state).PrunesAcceleratorWithoutPayoff()
+            && !DecisionUnpruned(UnprunedGate::PayoffPrune)
+            && SubsetWastesAccelerant(cands, sel)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
@@ -2288,6 +2384,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
             }
         }
+        // (No same-turn reducer credit here -- see the note at the any_affinity flag above; the
+        // Medallion credit is EnumeratePlans-only so Solve's greedy/leaf stays byte-identical.)
         const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                        : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
@@ -2351,6 +2449,69 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             extra_lethal = provider.ExtraLethalDamage(state, casting);
         }
         bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
+
+        // Rituals-for-payoff guard (see the flag above), with the STORM heuristic gate the user asked for.
+        // Question: may this plan spend MORE ritual mana than the payoff's cost? Default NO -- so we reject
+        // a non-winning subset with a SURPLUS ritual (one whose removal still leaves everything payable):
+        // over-paying a fixed-cost spell (the user's "10 mana of rituals to hard-cast a 4-mana Scourge")
+        // just burns a card + Sandstone depletion for nothing. But a STORM wincon breaks that: Dragonstorm
+        // puts min(spells_cast_this_turn, ...) dragons, so EXTRA rituals ARE the payoff (more dragons) --
+        // measured decisive (ungated count-minimisation robbed storm lethality, dLP -0.008 vs -0.804). So
+        // when the plan contains a tutor_to_battlefield (storm) card we DON'T minimise -- keep every
+        // ritual. Never blocks a winning plan; gated on any_ritual -> byte-identical for non-ritual decks.
+        if (s_ritual_payoff_guard && any_ritual && !wins)
+        {
+            bool wants_excess = false;   // storm wincon in the plan -> extra rituals buy dragons, keep all
+            for (int j : sel)
+            {
+                if (cands[j].def && cands[j].def->params.tutor_to_battlefield) { wants_excess = true; break; }
+            }
+            if (!wants_excess)
+            {
+                // Is ANY selected ritual surplus -- removable with everything else still payable? The
+                // credited pool `eff` treats ritual float as wild, so removing a ritual reduces wild by its
+                // float (triangular gy-self bonus recomputed for Rite chains) and drops its own cost from
+                // the target. A cheap ritual can be the load-bearing bootstrap for an expensive one, so we
+                // test EACH ritual (linear, two CanPay each -- not a powerset). SubsetPayable need not be
+                // rechecked: dropping a ritual only shrinks color demand and the full subset already passed
+                // it. Subsumes the zero-payoff case (all rituals removable). Runs only on the credited/pool
+                // path (mana_ok), not the filter fallback.
+                if (mana_ok)
+                {
+                    int flat_sum = 0, gy = 0;
+                    for (int j : sel)
+                    {
+                        if (cands[j].ritual_float <= 0) { continue; }
+                        flat_sum += cands[j].ritual_float;
+                        if (cands[j].def && cands[j].def->params.ritual_float_gy_self_bonus) { ++gy; }
+                    }
+                    const int full_credit = flat_sum + gy * (gy - 1) / 2;   // == the wild credited into eff
+                    for (int r : sel)
+                    {
+                        if (cands[r].ritual_float <= 0) { continue; }
+                        const bool r_gy   = cands[r].def && cands[r].def->params.ritual_float_gy_self_bonus;
+                        const int  gy_r   = gy - (r_gy ? 1 : 0);
+                        const int  cred_r = (flat_sum - cands[r].ritual_float) + gy_r * (gy_r - 1) / 2;
+
+                        ManaPool ewr = eff, encwr = eff_nc;
+                        ewr.wild   = std::max(0, ewr.wild   - (full_credit - cred_r));
+                        encwr.wild = std::max(0, encwr.wild - (full_credit - cred_r));
+
+                        const ManaCost& rc = cands[r].cost;
+                        ManaCost cwr = combined, ncwr = noncreature_combined;
+                        cwr.white -= rc.white; cwr.blue -= rc.blue; cwr.black -= rc.black; cwr.red -= rc.red;
+                        cwr.green -= rc.green; cwr.colorless -= rc.colorless; cwr.generic = std::max(0, cwr.generic - rc.generic);
+                        if (cands[r].is_noncreature)
+                        {
+                            ncwr.white -= rc.white; ncwr.blue -= rc.blue; ncwr.black -= rc.black; ncwr.red -= rc.red;
+                            ncwr.green -= rc.green; ncwr.colorless -= rc.colorless; ncwr.generic = std::max(0, ncwr.generic - rc.generic);
+                        }
+
+                        if (ewr.CanPay(cwr) && encwr.CanPay(ncwr)) { return; }   // r is surplus -> hold it
+                    }
+                }
+            }
+        }
 
         // Learned ranking for NON-lethal plans (lethal stays exact and dominates, so the model never
         // ranks a win). rank_value replaces total_eval in the compare + best.value; it IS total_eval
@@ -2802,7 +2963,10 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
             if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
-            const std::vector<Color>& prod = EffectiveProduces(state, active, *def);  // RP-aware
+            // ProducesForPayment: a colored_creature_only land (Unclaimed Territory / Cavern of Souls)
+            // yields only {C} for a non-creature spell -> a coloured pip won't match below, but a
+            // generic pip still taps it for {C}. RP-aware; identity for every other source.
+            const std::vector<Color>& prod = ProducesForPayment(state, active, *def, for_creature);
             Color col;
             if (any)
             {
@@ -3427,12 +3591,37 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // and the two early-returns (not in zone / unknown def) yield the same outcome in either
         // order.
         std::vector<Card>& zone = from_graveyard ? ap.graveyard : ap.hand;
-        std::vector<Card>::iterator it = std::find_if(zone.begin(), zone.end(),
-            [&name](const Card& c) { return c.m_name == name; });
+        // Choose WHICH copy of `name` to cast: prefer the EARLIEST-EXPIRING copy, so a staged
+        // (exiled, expires end-of-turn) copy is spent before a persistent hand copy. Otherwise the
+        // staged copy lapses unplayed while a hand copy that would keep for a later turn is wasted --
+        // the Dragonstorm s26 Scourge (1 hand + 2 staged): casting hand+staged stranded a staged copy
+        // that expired, costing the T5 follow-up cast. Mirrors TryPlaySpecificLand and the executor's
+        // AIEngine::cast_by_name (kept in lockstep so the committed line replays exactly). A staged
+        // copy is preferred over a non-staged one, and among staged copies the earlier m_staged_expiry
+        // wins. Falls to the first match when no copy is staged -> byte-identical for decks without
+        // staged duplicates of `name`.
+        std::vector<Card>::iterator it = zone.end();
+        for (auto c = zone.begin(); c != zone.end(); ++c)
+        {
+            if (c->m_name != name) { continue; }
+            if (it == zone.end()) { it = c; continue; }             // first match (fallback)
+            if (c->m_is_staged && (!it->m_is_staged || c->m_staged_expiry < it->m_staged_expiry))
+            {
+                it = c;                                             // earlier-expiring staged copy wins
+            }
+        }
         if (it == zone.end()) { return; }
         const CardDefinition* opt = CardDatabase::Instance().LookupCached(*it);
         if (!opt) { return; }
         const CardDefinition& def = *opt;
+
+        // Irencrag Feat "you can cast only one more spell this turn": once a restrictor has resolved, the
+        // turn-scoped budget counts down; at 0 no further spell may be cast -- hand OR staged (an Apex-of-
+        // Power-exiled Dragonstorm is still a spell cast this turn). This is the EXECUTION-TIME enforcement
+        // the static subset checks only approximate; without it the search finds illegal Irencrag -> Apex ->
+        // (dump the whole exile) lines. Checked before any mutation. Inert (budget == -1) for every deck
+        // without a max_casts_after card. See GameState::casts_remaining_this_turn.
+        if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
 
         // Cast-time guard for a risky alt payload (Reverent Silence): the search may commit it
         // from a node whose enabler diverges away in the realized line (commit-the-line
@@ -3499,6 +3688,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // draw-breakpoint cast is its own apply_one so it self-counts. Read only by Dragonstorm's
         // resolution (below) + no BuildSimKey fold -> byte-identical for every non-storm deck.
         ++state.spells_cast_this_turn;
+
+        // Maintain the "one more spell" budget in lockstep with the storm counter (same per-cast site).
+        // A non-restrictor spends one (when a budget is active); the restrictor itself (Irencrag) INSTALLS
+        // its budget -- decrement FIRST (its own cast is governed by any PRIOR budget, already checked
+        // above), THEN take the min with its max_casts_after so two Irencrags compose correctly. Inert
+        // (budget stays -1) for every deck without a max_casts_after card.
+        if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+        if (def.params.max_casts_after >= 0)
+        {
+            state.casts_remaining_this_turn =
+                (state.casts_remaining_this_turn < 0)
+                    ? def.params.max_casts_after
+                    : std::min(state.casts_remaining_this_turn, def.params.max_casts_after);
+        }
 
         // Alternative cost paid as "an opponent gains alt_lifegain life" (Invigorate / Skyshroud
         // Cutter / Reverent Silence) -> reversed to damage by a Tainted Remedy / Plague Drone.
@@ -4161,7 +4364,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // already counts Dragonstorm itself = storm copies + the original = the put count. Empty
             // preferred = provider (TutorCandidates) order, identical to EffectHandler (lockstep).
             PerformTutorToBattlefield(state, state.active_player_index, def.params,
-                                      state.spells_cast_this_turn);
+                                      state.spells_cast_this_turn, /*preferred=*/{},
+                                      def.card.m_name.str());
         }
         else if (def.params.impulse_exile > 0)
         {
@@ -4997,6 +5201,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
+    state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
 
@@ -5243,10 +5448,115 @@ static std::string SimulateLandPlay(GameState& state)
 // heuristic batches wrong (enabler / destroy-all-payload rebuilds) are reachable. Off by
 // default => byte-identical (canonical order). On via MTG_SEARCH_ORDER or the global
 // MTG_UNPRUNED. Expensive (applies each tried ordering on a copy); run with a high budget.
-static bool OrderingSearchEnabled()
+static bool OrderingSearchEnabled(const GameState& state)
 {
-    static const bool v = (std::getenv("MTG_SEARCH_ORDER") != nullptr) || DecisionUnpruned(UnprunedGate::SearchOrder);
-    return v;
+    // Global A/B knob (env / MTG_UNPRUNED), cached once.
+    static const bool global = (std::getenv("MTG_SEARCH_ORDER") != nullptr) || DecisionUnpruned(UnprunedGate::SearchOrder);
+    // Archetype opt-in (Hook 28): Dragonstorm searches its combo cast order by default. Provider-scoped
+    // so every other deck stays byte-identical (base hook returns false). Cheap per-call vtable check --
+    // the real cost is the k! applies below, gated behind this.
+    return global || ResolveProvider(state).WantsCastOrderingSearch();
+}
+
+// Targeted cast-ORDERING candidates for Dragonstorm (Hook 28; see docs/design/dragonstorm-cast-order-search.md).
+// The combo is a CHEAPEST-FIRST self-funding ritual chain with only a few real degrees of freedom, so we
+// enumerate a handful of principled orderings instead of all k! permutations (which the caller caps at 120,
+// SKIPPING the biggest go-off hands). The rules (user-specified):
+//   * mana rituals -> cheapest-first (each funds the next); never searched among themselves;
+//   * Irencrag Feat ("cast only one more spell") -> immediately before the finisher;
+//   * finisher (Dragonstorm / Apex / a closing Dragon) -> last;
+//   * multiple Desperate Ritual vs Seething Song -> two variants: splice-AFTER (preferred, splice the
+//     Desperates once Seething's mana is up) and interleaved-by-cost (fallback, cast individually);
+//   * Ruby Medallion -> the one genuinely SEARCHED position: tried at every slot so the rollout keeps the
+//     earliest that still goes off (earlier discounts more red rituals).
+// The identity (given) order is always included so the search can never do worse than the canonical line.
+// Returns index-orderings over `reorder`; the caller applies + dedups-by-end-state + scores each.
+static std::vector<std::vector<int>>
+DragonstormCastOrderings(const std::vector<Action>& reorder)
+{
+    const int n = static_cast<int>(reorder.size());
+    // Apex of Power is an ENABLER (adds 10 mana + lets you cast 7 exiled cards this turn), NOT a
+    // closer: it belongs BEFORE Irencrag. Irencrag ("cast only one more spell") before Apex is the
+    // trap (Apex's mana + exiled spells are then unusable) -> never generate it. Dragonstorm / a
+    // closing Dragon are the true closers -> AFTER Irencrag (Apex -> Irencrag -> Dragonstorm is the
+    // golden line). See docs/design/gi22-durdle-and-irencrag-apex.md rules 2-3.
+    std::vector<int> medallion, irencrag, apex, closer, ritual_splice, ritual_plain, other;
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = reorder[i].def;
+        if (!d)                                       { other.push_back(i); continue; }
+        const CardParams& p = d->params;
+        if (!p.reduces_spell_color.empty())           { medallion.push_back(i); }      // Ruby Medallion
+        else if (p.max_casts_after >= 0)              { irencrag.push_back(i); }        // Irencrag Feat
+        else if (p.impulse_exile > 0)                 { apex.push_back(i); }            // Apex of Power (enabler, BEFORE Irencrag)
+        else if (p.tutor_to_battlefield || d->card.IsCreature())
+                                                      { closer.push_back(i); }          // Dragonstorm / closing Dragon (AFTER Irencrag)
+        else if (p.ritual_floating_mana > 0 && p.splice_onto_arcane) { ritual_splice.push_back(i); } // Desperate
+        else if (p.ritual_floating_mana > 0)          { ritual_plain.push_back(i); }    // Rite/Pyretic/Seething
+        else                                          { other.push_back(i); }
+    }
+    auto cheapest = [&](std::vector<int>& v) {
+        std::stable_sort(v.begin(), v.end(), [&](int a, int b) { return reorder[a].card_mv < reorder[b].card_mv; });
+    };
+    cheapest(ritual_plain); cheapest(ritual_splice); cheapest(apex); cheapest(closer); cheapest(other);
+
+    // Build a base chain (Medallion NOT yet inserted). splice_after=true keeps the Desperates after the
+    // plain rituals (splice line); false merges them cheapest-first (individual line).
+    auto build_base = [&](bool splice_after) {
+        std::vector<int> chain;
+        if (splice_after)
+        {
+            chain.insert(chain.end(), ritual_plain.begin(),  ritual_plain.end());
+            chain.insert(chain.end(), ritual_splice.begin(), ritual_splice.end());
+        }
+        else
+        {
+            std::vector<int> merged = ritual_plain;
+            merged.insert(merged.end(), ritual_splice.begin(), ritual_splice.end());
+            cheapest(merged);
+            chain = merged;
+        }
+        chain.insert(chain.end(), other.begin(),    other.end());
+        chain.insert(chain.end(), apex.begin(),     apex.end());       // Apex enables mana+casts: BEFORE Irencrag (never Irencrag->Apex)
+        chain.insert(chain.end(), irencrag.begin(), irencrag.end());   // second-to-last: gates the one closing spell
+        chain.insert(chain.end(), closer.begin(),   closer.end());     // Dragonstorm / closing Dragon: last
+        return chain;
+    };
+    std::vector<std::vector<int>> bases;
+    bases.push_back(build_base(true));                                 // preferred: splice after Seething
+    if (!ritual_splice.empty() && !ritual_plain.empty()) { bases.push_back(build_base(false)); }
+    // Always offer the given (canonical) order too, so search can't underperform the fixed line.
+    { std::vector<int> ident(n); for (int i = 0; i < n; ++i) { ident[i] = i; } bases.push_back(std::move(ident)); }
+
+    if (medallion.empty()) { return bases; }
+    std::vector<std::vector<int>> out;
+    for (const std::vector<int>& base : bases)
+    {
+        // `base` excludes the medallion(s) unless it is the identity order; drop them so we insert once.
+        std::vector<int> stripped;
+        stripped.reserve(base.size());
+        for (int idx : base) { if (reorder[idx].def && reorder[idx].def->params.reduces_spell_color.empty()) { stripped.push_back(idx); } }
+        const int m = static_cast<int>(stripped.size());
+        // Ruby Medallion must never be the post-Irencrag "one more spell": a cost reducer cast after
+        // Irencrag discounts nothing and burns the single allowed cast (the payoff should have it).
+        // Cap insertion to BEFORE the restrictor (earliest-first search among the legal slots is kept).
+        // No restrictor in this base -> irc == m -> all positions stay open (byte-identical there).
+        int irc = m;
+        for (int i = 0; i < m; ++i)
+        {
+            const CardDefinition* d = reorder[stripped[i]].def;
+            if (d && d->params.max_casts_after >= 0) { irc = i; break; }
+        }
+        for (int pos = 0; pos <= irc; ++pos)
+        {
+            std::vector<int> cand; cand.reserve(n);
+            for (int i = 0; i < pos; ++i)   { cand.push_back(stripped[i]); }
+            for (int mi : medallion)        { cand.push_back(mi); }         // medallion(s) as a block
+            for (int i = pos; i < m; ++i)   { cand.push_back(stripped[i]); }
+            out.push_back(std::move(cand));
+        }
+    }
+    return out;
 }
 
 // Defined after EnumeratePlans; used here only as an end-of-phase STATE signature for
@@ -5360,6 +5670,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // Same-turn cost reducer (Ruby Medallion) castable this turn? Gates the reducer generic credit
+    // (mirrors Solve). Inert unless a reducer is a candidate -> every non-reducer deck byte-identical.
+    bool any_reducer = false;
+    for (const Action& ra : cands) { if (ra.def && !ra.def->params.reduces_spell_color.empty()) { any_reducer = true; break; } }
     // Any splice-onto-Arcane base? Gates the over-splice odometer skip (mirrors Solve); non-splice decks
     // pay nothing and stay byte-identical.
     bool any_splice = false;
@@ -5492,6 +5806,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        // Payoff-prune (Hook 29): drop a ritual-accelerant subset that casts no payoff
+        // (Dragon/Dragonstorm/Apex) from the SEARCH branch list -- this is where the freed budget
+        // comes from. Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-gated; inert
+        // for every other deck -> byte-identical.
+        if (ResolveProvider(state).PrunesAcceleratorWithoutPayoff()
+            && !DecisionUnpruned(UnprunedGate::PayoffPrune)
+            && SubsetWastesAccelerant(cands, sel)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
@@ -5600,6 +5921,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 combined.generic             = std::max(0, combined.generic - acred);
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
+            }
+        }
+        // Same-turn cost reducer (Ruby Medallion): subtract the extra generic discount it gives the
+        // later same-colour casts in this subset, so the Medallion-discounted go-off enumerates.
+        if (any_reducer)
+        {
+            int rcred = SameTurnReducerGenericCredit(state, cands, sel);
+            if (rcred > 0)
+            {
+                combined.generic             = std::max(0, combined.generic - rcred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - rcred);
             }
         }
         const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
@@ -5950,7 +6282,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Cast-ordering search (C): expand each action set into the DISTINCT orderings of its
     // non-sacrifice hand casts, deduped by end-of-phase state. Off by default => return
     // the canonical-order sets unchanged (byte-identical). See OrderingSearchEnabled.
-    if (!OrderingSearchEnabled()) { return deduped; }
+    if (!OrderingSearchEnabled(state)) { return deduped; }
 
     std::vector<TurnSolver::Plan> ordered;
     ordered.reserve(deduped.size());
@@ -5966,22 +6298,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         if (reorder.size() < 2) { ordered.push_back(std::move(p)); continue; }
 
-        // Bound the work: permutations grow as k! (distinct end-states are far fewer, but we
-        // still APPLY each tried ordering). Beyond the cap keep the canonical order only.
-        long long perms = 1; bool too_many = false;
-        for (size_t i = 2; i <= reorder.size(); ++i)
-        { perms *= static_cast<long long>(i); if (perms > 120) { too_many = true; break; } }
-        if (too_many) { ordered.push_back(std::move(p)); continue; }
-
-        // Permute reorderable casts by NAME (next_permutation over a name-sorted index list
-        // yields each distinct multiset ordering once -- identical copies don't multiply).
-        std::vector<int> idx(reorder.size());
-        for (size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
-        auto by_name = [&](int x, int y) { return reorder[x].card_name < reorder[y].card_name; };
-        std::sort(idx.begin(), idx.end(), by_name);
+        // Candidate orderings to try. Dragonstorm (Hook 28) uses the TARGETED generator (cheapest-first
+        // chain + Irencrag-before-finisher + Medallion-position + Desperate/Seething splice variants) --
+        // O(k) principled orderings, and it covers the big go-off hands the k! cap below would skip. The
+        // global A/B knob (MTG_SEARCH_ORDER on a non-Dragonstorm deck) keeps the full-permutation search.
+        std::vector<std::vector<int>> orderings;
+        if (ResolveProvider(state).WantsCastOrderingSearch())
+        {
+            orderings = DragonstormCastOrderings(reorder);
+        }
+        else
+        {
+            // Bound the work: permutations grow as k! (distinct end-states are far fewer, but we still
+            // APPLY each tried ordering). Beyond the cap keep the canonical order only.
+            long long perms = 1; bool too_many = false;
+            for (size_t i = 2; i <= reorder.size(); ++i)
+            { perms *= static_cast<long long>(i); if (perms > 120) { too_many = true; break; } }
+            if (too_many) { ordered.push_back(std::move(p)); continue; }
+            // Permute reorderable casts by NAME (next_permutation over a name-sorted index list yields
+            // each distinct multiset ordering once -- identical copies don't multiply).
+            std::vector<int> idx(reorder.size());
+            for (size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
+            auto by_name = [&](int x, int y) { return reorder[x].card_name < reorder[y].card_name; };
+            std::sort(idx.begin(), idx.end(), by_name);
+            do { orderings.push_back(idx); } while (std::next_permutation(idx.begin(), idx.end(), by_name));
+        }
 
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> seen_states;
-        do
+        for (const std::vector<int>& idx : orderings)
         {
             TurnSolver::Plan cand = p;
             cand.actions.clear();
@@ -5994,14 +6338,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             ApplyPlanDirect(copy, cand, is_pre_combat);
             if (seen_states.insert(BuildSimKey(copy, 0, 0, false)).second)
             {
-                // Combat is order-independent, so inherit the base plan's combat-based
-                // win; a reordering can only ADD direct damage (e.g. the rebuild), so also
-                // mark a win if this ordering kills outright. Keeps winning orderings
-                // sorted first (not cut under budget).
+                // Combat is order-independent, so inherit the base plan's combat-based win; a reordering
+                // can only ADD direct damage (e.g. the rebuild), so also mark a win if this ordering
+                // kills outright. Keeps winning orderings sorted first (not cut under budget).
                 cand.wins_this_turn = p.wins_this_turn || (copy.Opponent().life <= 0);
                 ordered.push_back(std::move(cand));
             }
-        } while (std::next_permutation(idx.begin(), idx.end(), by_name));
+        }
     }
 
     return ordered;
@@ -9124,7 +9467,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // target). The land + the plan index come along so we can both honour the player's ORDER and
     // surface genuine sub-decision choices.
     struct Cand { int idx; std::vector<std::string> order; std::string sig, label;
-                  std::vector<std::string> cards; std::vector<SubChoice> subs; };
+                  std::vector<std::string> cards; std::vector<SubChoice> subs; int sacs; };
     std::vector<Cand> cands;
     for (size_t i = 0; i < plans.size(); ++i)
     {
@@ -9136,13 +9479,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //   ActivateVial       -> creature names vs spec.vial_deploys (free Vial deploy)
         //   CastFromGraveyard  -> spell names vs spec.retrace_casts (retrace)
         //   everything else    -> the plain hand-cast multiset vs spec.casts (order honoured)
-        int planLE = 0;
+        //   SacForMana         -> an IMPLICIT one-shot mana source (Lotus Bloom): tap+sacrifice for a
+        //                         float, exactly like auto-tapping a land. The human declares the SPELLS
+        //                         they want to cast; the engine sacs Lotus to help pay when (and only
+        //                         when) the line needs the mana -- so it is NOT part of the declared cast
+        //                         multiset. planSacs counts them so a line affordable WITHOUT saccing
+        //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
+        int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames;
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
             if (a.kind == Action::Kind::ActivateVial)       { vialNames.push_back(a.card_name); continue; }
             if (a.kind == Action::Kind::CastFromGraveyard)  { retraceNames.push_back(a.card_name); continue; }
+            if (a.kind == Action::Kind::SacForMana)         { ++planSacs; continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
@@ -9204,6 +9554,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                            a.card_name + " extra targets", "+" + std::to_string(a.crackle_targets),
                            a.card_name, "crackle");
                 }
+                // Splice (Desperate Ritual, splice_onto_arcane): a base Arcane cast may splice k OTHER
+                // copies onto itself (cost + red float scale by k+1; the spliced copies STAY IN HAND, so
+                // they do NOT appear as separate casts in orderNames). Without a sub, the k-variants share
+                // an empty signature and the dedup below collapses them to the FIRST enumerated (k=0) --
+                // silently dropping the human's splice (the same failure the float_color/soulfire subs
+                // fix). Emit for EVERY count >= 0 (like Soulfire/Crackle) so a multi-copy hand surfaces a
+                // clean per-count picker; a single-copy hand has only k=0 -> one variant -> Accept, no dialog.
+                if (adef && adef->params.splice_onto_arcane && a.splice_count >= 0)
+                {
+                    addSub(a.card_name + " splice+" + std::to_string(a.splice_count),
+                           a.card_name + " splice", "+" + std::to_string(a.splice_count),
+                           a.card_name, "splice");
+                }
             }
         }
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
@@ -9215,7 +9578,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         std::string sig, label;
         for (size_t t = 0; t < toks.size(); ++t) { sig += "|" + toks[t]; label += (t?"; ":"") + toks[t]; }
         if (label.empty()) { label = LineSummaryOfPlan(p); }
-        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs });
+        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs, planSacs });
     }
 
     // Honour the player's ORDER: prefer candidates whose cast sequence equals the queued order, so
@@ -9225,6 +9588,51 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     std::vector<const Cand*> pool;
     for (const Cand& c : cands) { if (c.order == spec.casts) { pool.push_back(&c); } }
     if (pool.empty()) { for (const Cand& c : cands) { pool.push_back(&c); } }
+    // Choose the representative among cast-multiset matches by (1) PAYABLE first, then (2) FEWER
+    // one-shot sacrifices (Lotus Bloom's sac-for-mana). The enumerator OVER-generates: it lists a
+    // spell subset WITHOUT the mana actions (a Lotus Bloom sac -- a one-shot "depletion" source) needed
+    // to pay it, so a 0-sac candidate can be UNPAYABLE -- applied literally its casts drop and stay in
+    // hand (the seed-23 3-ritual + Dragonstorm combo: the no-sac plan can't pay {8}{R}, the Lotus-sac
+    // plan can). Because the sac is implicit (not a declared cast) the no-sac and sac plans share a
+    // signature; the OLD sacs-only sort kept the no-sac plan, so the viewer committed an unpayable line
+    // and rolled it back ("not enough mana"). Now: trial-apply each candidate on a COPY (ApplyPlan ==
+    // the commit path, and with default null sinks it has NO global side effects) and keep the ones
+    // whose DECLARED casts actually left the hand; prefer those. The sacs tiebreak still SAVES Lotus
+    // when the line pays without it (both plans payable -> fewer sacs wins), and spends it when the
+    // line needs the mana to go off. CheckLine is viewer-only -> GT-neutral; byte-identical ordering
+    // when every candidate is payable (payable-first is then a no-op).
+    auto handCountOf = [](const GameState& gs, const std::string& nm) {
+        int n = 0; for (const Card& c : gs.ActivePlayer().hand) { if (c.m_name == nm) { ++n; } } return n;
+    };
+    auto plan_pays = [&](int plan_idx) -> bool {
+        GameState sc = state;                       // work on a copy (ApplyPlan mutates)
+        {
+            // Resolve any sub-decisions (Dragonstorm's Dragon put, a tutor target, ...) via AI defaults
+            // rather than the live g_play_* choosers -- otherwise the trial-apply would read the choices
+            // stream / EMIT a decision (the combo casts Dragonstorm mid-check, which fires the dragon-put
+            // chooser and exits 70). RevealLogPause saves+nulls every g_play_* chooser AND the draw/event
+            // sinks for the scope, so the trial-apply is fully side-effect-free; it restores on exit.
+            RevealLogPause pause_io;
+            ApplyPlan(sc, plans[plan_idx], is_pre_combat);
+        }
+        for (const std::string& nm : spec.casts)
+        {
+            int declared = 0; for (const std::string& n2 : spec.casts) { if (n2 == nm) { ++declared; } }
+            if (handCountOf(state, nm) - handCountOf(sc, nm) < declared) { return false; }  // a cast dropped
+        }
+        return true;
+    };
+    std::vector<int> payableIdx;
+    for (const Cand* c : pool) { if (plan_pays(c->idx)) { payableIdx.push_back(c->idx); } }
+    auto isPayable = [&](int idx) {
+        return std::find(payableIdx.begin(), payableIdx.end(), idx) != payableIdx.end();
+    };
+    std::stable_sort(pool.begin(), pool.end(),
+                     [&](const Cand* a, const Cand* b) {
+                         bool pa = isPayable(a->idx), pb = isPayable(b->idx);
+                         if (pa != pb) { return pa; }        // payable before unpayable
+                         return a->sacs < b->sacs;           // then save one-shot sources when we can
+                     });
 
     std::vector<std::string> seenSig;
     for (const Cand* c : pool)
@@ -9391,6 +9799,84 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         if (pc.has_spectacle && spectacle_on) { return pc.spectacle_cost; }
         return pc.full_cost;
     };
+    // Add `amt` mana of colour `col` (one-letter W/U/B/R/G/C, empty = wild) to a working pool --
+    // mirrors AddChosenColorFloat but on a local ManaPool; credits a resolved ritual's float.
+    auto addColorToPool = [](ManaPool& p, const std::string& col, int amt) {
+        if (amt <= 0) { return; }
+        if      (col == "W") { p.white     += amt; }
+        else if (col == "U") { p.blue      += amt; }
+        else if (col == "B") { p.black     += amt; }
+        else if (col == "R") { p.red       += amt; }
+        else if (col == "G") { p.green     += amt; }
+        else if (col == "C") { p.colorless += amt; }
+        else                 { p.wild      += amt; }   // empty / unknown -> wild
+    };
+    // A cast is a mana PRODUCER if it's a rock OR a mana ritual (Seething Song / Pyretic Ritual /
+    // Rite of Flame / Irencrag Feat). Producers are cast FIRST (phase 0) and their output credited so
+    // a ritual-ramp line into an expensive spell (Dragonstorm) is not wrongly rejected as unpayable --
+    // the rituals ADD mana (viewer issue #8). IsManaRitual is the same param test the enumerator /
+    // executor use (ApplyRitualFloat on resolution), so the credit matches the real float.
+    auto is_producer = [](const PendingCast& pc) -> bool {
+        return pc.rock || (pc.def && IsManaRitual(*pc.def));
+    };
+
+    // --- Declared-order affordability: honor the human's EXACT cast order first -----------------
+    // The producers-first greedy below is order-INDEPENDENT (rituals cast before everything), which
+    // is right for a mis-clicked order but WRONG for a same-turn cost reducer: a Ruby Medallion cast
+    // early in the line makes the later red spells cheaper, but the greedy casts the rituals BEFORE
+    // the Medallion and loses the discount -- wrongly rejecting a payable line (viewer artifact: a
+    // Ruby-Medallion + ritual chain into Apex of Power, "can't pay {7}{R}{R}{R}"). The user orders
+    // correctly (a ritual for the Medallion -> Medallion -> discounted rituals -> payoff), so an
+    // IN-ORDER walk that applies same-turn reduces_spell_color discounts positionally pays for it.
+    // If the declared order does NOT pay, fall through to the greedy (order-tolerant). CheckLine is
+    // viewer-only (sole caller --validate-line), so this is GT-neutral and only ever ACCEPTS more.
+    {
+        ManaPool p = BuildPool(s);
+        bool spec = s.opponent_lost_life_this_turn;
+        std::vector<std::string> reducers;   // reduces_spell_color of Medallions cast so far in-line
+        bool ok = true;
+        for (const PendingCast& pc : pending)
+        {
+            ManaCost cost = pc.alt_free ? ManaCost{}
+                          : (pc.has_spectacle && spec) ? pc.spectacle_cost
+                          : pc.full_cost;
+            if (!cost.has_x && pc.def)   // same-turn Ruby-Medallion discount (generic -1 per matching reducer)
+            {
+                const ManaCost& mc = pc.def->card.m_mana_cost;   // printed pips
+                int disc = 0;
+                for (const std::string& rc : reducers)
+                {
+                    const bool matches =
+                          (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
+                        || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
+                        || (rc == "G" && mc.green > 0);
+                    if (matches) { ++disc; }
+                }
+                cost.generic = std::max(0, cost.generic - disc);
+            }
+            if (!p.CanPay(cost)) { ok = false; break; }
+            DeductPayable(p, cost);
+            if (pc.rock && pc.def) { AddSourceToPool(p, s, *pc.def); }
+            else if (pc.def && IsManaRitual(*pc.def))
+            {
+                addColorToPool(p, pc.def->params.ritual_float_color,
+                               RitualFloatAmount(s, *pc.def, /*chosen_x=*/0));
+            }
+            if (pc.def && !pc.def->params.reduces_spell_color.empty())
+            {
+                reducers.push_back(pc.def->params.reduces_spell_color);
+            }
+            if (pc.def && deals_opponent_damage(*pc.def)) { spec = true; }
+        }
+        if (ok)
+        {
+            out.verdict = V::LegalNotEnumerated;
+            out.reason  = "rules-legal in your cast order (a same-turn cost reducer makes it "
+                          "payable), but the search never enumerated this line";
+            return out;
+        }
+    }
+
     std::vector<bool> done(pending.size(), false);
     size_t remaining = pending.size();
     bool progress = true;
@@ -9399,14 +9885,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         progress = false;
         for (int phase = 0; phase < 2 && !progress; ++phase)
         {
-            const bool want_rock = (phase == 0);
+            const bool want_producer = (phase == 0);
             for (size_t k = 0; k < pending.size(); ++k)
             {
-                if (done[k] || pending[k].rock != want_rock) { continue; }
+                if (done[k] || is_producer(pending[k]) != want_producer) { continue; }
                 const ManaCost cost = cur_cost(pending[k]);
                 if (!avail.CanPay(cost)) { continue; }
                 DeductPayable(avail, cost);
                 if (pending[k].rock) { AddSourceToPool(avail, s, *pending[k].def); }
+                else if (IsManaRitual(*pending[k].def))    // ritual floats mana ON resolution (issue #8)
+                {
+                    addColorToPool(avail, pending[k].def->params.ritual_float_color,
+                                   RitualFloatAmount(s, *pending[k].def, /*chosen_x=*/0));
+                }
                 if (deals_opponent_damage(*pending[k].def)) { spectacle_on = true; }  // enable later spectacle
                 done[k] = true; --remaining; progress = true; break;
             }

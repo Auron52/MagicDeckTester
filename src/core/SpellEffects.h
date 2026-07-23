@@ -562,7 +562,8 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
 // same order and reshuffle with the same seed. No-op for any card without tutor_to_battlefield.
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
                                       int max_puts,
-                                      const std::vector<std::string>& preferred = {})
+                                      const std::vector<std::string>& preferred = {},
+                                      const std::string& source_name = {})
 {
     if (max_puts <= 0 || pp.tutor_types.empty()) { return; }
     Player& ap = state.players[controller];
@@ -585,6 +586,75 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         put_pref = ResolveProvider(state).TutorToBattlefieldPutOrder(state, controller, pp, max_puts);
     }
 
+    // Human-play override: let the player pick WHICH library Dragons enter (the engine keeps the rule's
+    // play ORDER). Fires only on the REAL resolution -- g_play_dragon_chooser is nulled by RevealLogPause
+    // for every search/rollout/enumeration scope, so the autonomous + search default is the rule ->
+    // byte-identical. See GameLogger.h DragonChooser. `human_override` then SKIPS the TutorCandidates
+    // fill pass below, so a human who deselects Dragons puts fewer than max_puts (never topped back up).
+    bool human_override = false;
+    if (g_play_dragon_chooser && max_puts > 0)
+    {
+        // Role rank = the provider's fixed play ORDER (Lathliss, Scourges, Utvara, Karrthus, Kolaghan);
+        // the same classification DragonstormProvider::TutorToBattlefieldPutOrder uses. Duplicated here
+        // (human-play only, guarded by the chooser) so PerformTutorToBattlefield stays deck-agnostic.
+        auto role_rank = [](const CardParams& cp, const std::string& nm) -> int {
+            if (cp.etb_other_subtype_creates_tokens)       { return 0; }   // Lathliss (token engine)
+            if (cp.dragon_ping_on_enter)                   { return 1; }   // Scourge (pinger)
+            if (cp.attack_per_matching_creates_tokens > 0) { return 2; }   // Utvara (attack tokens)
+            if (cp.grants_haste) { return nm.find("Karrthus") != std::string::npos ? 3 : 4; } // haste
+            return 5;                                                      // other Dragon (defensive)
+        };
+        // Candidate library Dragon copies, sorted into that play order (role, then name, then library
+        // index) -- so the human's chosen indices, taken in ascending order, already ARE in play order.
+        std::vector<int> lib_idx;
+        for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+        { if (matches_types(ap.library[i])) { lib_idx.push_back(i); } }
+        auto rank_of = [&](int i) -> int {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+            return d ? role_rank(d->params, ap.library[i].m_name.str()) : 5;
+        };
+        std::stable_sort(lib_idx.begin(), lib_idx.end(), [&](int a, int b) {
+            int ra = rank_of(a), rb = rank_of(b);
+            if (ra != rb) { return ra < rb; }
+            if (ap.library[a].m_name != ap.library[b].m_name)
+            { return ap.library[a].m_name.str() < ap.library[b].m_name.str(); }
+            return a < b;
+        });
+        std::vector<Card> candidates;
+        candidates.reserve(lib_idx.size());
+        for (int i : lib_idx) { candidates.push_back(ap.library[i]); }
+
+        // No Dragons left in library -> nothing to pick; leave the rule (human_override stays false).
+        if (!candidates.empty())
+        {
+            // Default subset = the rule's put_pref mapped to candidate copies (first unused copy per name).
+            std::vector<int> heur_subset;
+            std::vector<bool> used(candidates.size(), false);
+            for (const std::string& nm : put_pref)
+            {
+                for (int i = 0; i < static_cast<int>(candidates.size()); ++i)
+                { if (!used[i] && candidates[i].m_name == nm) { used[i] = true; heur_subset.push_back(i); break; } }
+            }
+            std::sort(heur_subset.begin(), heur_subset.end());
+
+            const std::string src = source_name.empty() ? std::string("Dragonstorm") : source_name;
+            std::vector<int> chosen =
+                (*g_play_dragon_chooser)(state, controller, src, candidates, max_puts, heur_subset);
+            // Validate: unique in-range indices, ascending (= play order), capped at max_puts.
+            std::sort(chosen.begin(), chosen.end());
+            chosen.erase(std::unique(chosen.begin(), chosen.end()), chosen.end());
+            std::vector<std::string> picked;
+            for (int i : chosen)
+            {
+                if (i >= 0 && i < static_cast<int>(candidates.size())
+                    && static_cast<int>(picked.size()) < max_puts)
+                { picked.push_back(candidates[i].m_name.str()); }
+            }
+            put_pref = picked;          // may be empty (human declined every Dragon) -> put nothing
+            human_override = true;
+        }
+    }
+
     // Remaining library copies per matching name (decremented as we commit puts).
     std::unordered_map<std::string, int> remaining;
     for (const Card& c : ap.library) { if (matches_types(c)) { ++remaining[c.m_name]; } }
@@ -601,6 +671,9 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // 2) Fill any remaining slots from the provider's TutorCandidates (library order), expanding each
     //    name to its STILL-AVAILABLE copies. With an empty put_pref (every non-Dragonstorm deck +
     //    Dragonstorm unpruned) this reproduces the pre-provider flat loop exactly -> byte-identical.
+    //    SKIPPED when the human made an explicit override selection (else deselected Dragons would be
+    //    topped back up, defeating the pick-fewer choice); their picks stand exactly as chosen.
+    if (!human_override)
     {
         std::vector<std::string> prov =
             ResolveProvider(state).TutorCandidates(state, controller, pp);
@@ -2876,6 +2949,26 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
     return ReflectedColors(state, controller, in_hand);
 }
 
+// Colours a source may produce to pay for THIS spell (payment context -> for_creature is known).
+// Identical to EffectiveProduces for every source EXCEPT a colored_creature_only source (Unclaimed
+// Territory / Cavern of Souls: {C} free, coloured only for a creature spell of the chosen type,
+// simplified to any creature): when the spell is NOT a creature it yields only {Colorless}, so its
+// coloured mana can't pay a coloured/{C}-typed... no: only its {C} survives, which pays generic pips
+// but not coloured pips. for_creature == true (or the flag off) -> the full EffectiveProduces list.
+// Returns a thread_local buffer when it strips (safe like ReflectedColors: consumed within one
+// source's loop, never held across another Produces* call). Byte-identical for every deck without a
+// colored_creature_only source.
+inline const std::vector<Color>& ProducesForPayment(const GameState& state, int controller,
+                                                    const CardDefinition& def, bool for_creature)
+{
+    const std::vector<Color>& base = EffectiveProduces(state, controller, def);
+    if (!def.params.colored_creature_only || for_creature) { return base; }
+    static thread_local std::vector<Color> only_c;
+    only_c.clear();
+    for (Color c : base) { if (c == Color::Colorless) { only_c.push_back(c); } }
+    return only_c;
+}
+
 // Hand-context variant for mulligan / bottoming evaluation, where the relevant "other lands" are
 // the ones in the passed-in candidate `hand` (not state's hand). A Reflecting Pool reflects the
 // union of the OTHER non-reflecting lands in this hand -- so an all-Reflecting-Pool hand reads as
@@ -4089,7 +4182,20 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)
         if (def->params.reflecting && !rp_ready)
         { rp_colors = &ReflectedColors(state, active, /*in_hand=*/false); rp_ready = true; }
-        const std::vector<Color>& produces = def->params.reflecting ? *rp_colors : def->params.produces;
+        const std::vector<Color>& produces_base = def->params.reflecting ? *rp_colors : def->params.produces;
+        // colored_creature_only (Unclaimed Territory / Cavern of Souls): a non-creature spell may take
+        // only {C} from this source (its coloured mana is creature-only). Strip the colours here so the
+        // pip-matching below can pay a generic pip with {C} but never a coloured pip. Keeps the reflecting
+        // hoist above (these lands are never reflecting). Identity for every other source -> byte-identical.
+        static thread_local std::vector<Color> ccov;
+        const std::vector<Color>* produces_ptr = &produces_base;
+        if (def->params.colored_creature_only && !for_creature)
+        {
+            ccov.clear();
+            for (Color c : produces_base) { if (c == Color::Colorless) { ccov.push_back(c); } }
+            produces_ptr = &ccov;
+        }
+        const std::vector<Color>& produces = *produces_ptr;
         // Undo across this source's options. `activate` only ever modifies THIS source (its
         // tapped flag + a depletion counter); deeper recursion taps OTHER sources but each level
         // self-restores on failure ("returns false => state unchanged", by induction over the

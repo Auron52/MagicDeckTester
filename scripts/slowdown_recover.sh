@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Root-cause the overnight searched win->loss games: re-run each single-game at 1x/4x/16x its case budget
+# Root-cause the overnight searched SLOWER games (a game becoming unwon = the maximal slowdown under
+# loss=max_turns+1): re-run each single-game at 1x/4x/16x its case budget
 # (budget-churn check) and once at a LIFTED horizon (max_turns=16) at 1x budget (horizon-edge check).
 # recovers to a win at higher budget => budget churn (benign); wins only at lifted horizon => horizon-edge
 # (benign, the marginally-slower line just crosses T8); stays -1 everywhere => variance/real (dig further).
@@ -13,7 +14,7 @@ win() { # deck prof seed gi budget maxturns  -> win turn (-1 loss)
 }
 declare -A F=( [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod [hinata]=decks/Hinata2/Hinata2.cod [th]=decks/treasure_hunt/treasure_hunt.txt )
 declare -A P=( [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json [hinata]=decks/Hinata2/Hinata2.profile.json [th]=decks/treasure_hunt/treasure_hunt.profile.json )
-# deck seed gi budget  (the 8 overnight win->loss)
+# deck seed gi budget  (the 8 overnight slower games)
 CASES=(
   "th 6006 590 80"  "th 6006 662 80"
   "antilife 5005 330 20" "antilife 5005 334 20" "antilife 5005 854 20" "antilife 7007 801 20"

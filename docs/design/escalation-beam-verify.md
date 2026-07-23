@@ -7,7 +7,7 @@
 > auto-derived integer per deck: `escalation_cap = target_depth` (emitted by `valueleaf_table_to_metadata.py`);
 > R and the climb are engine defaults. Set in all 6 decks' `.value.json`. **Validation:** smoke/regression clean
 > (no win→loss); overnight NET-NEUTRAL — 8 searched d5 win→loss are ALL budget-edge CHURN (each recovers to a win
-> at 4× case budget, `scripts/winloss_recover.sh`), offset by 3 loss→win + 7 turn-earlier; d0/d3 + light decks
+> at 4× case budget, `scripts/slowdown_recover.sh`), offset by 3 loss→win + 7 turn-earlier; d0/d3 + light decks
 > BYTE-IDENTICAL. GT rebaselined (`--accept-with-regressions`). **Escalation work −20..−38%** on the on-policy d5
 > decisions (heaviest saving on antilife). Key mechanism findings: (a) R must be HIGH to protect light decks (a
 > low hint over-shoots → fallback-thrash explosion 173–945%); the climb recovers depth UPWARD where affordable.

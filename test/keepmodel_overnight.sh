@@ -104,8 +104,8 @@ for fn,dd in ((sys.argv[1],gt),(sys.argv[2],nw)):
             a=ln.split()
             if len(a)>=2: dd[int(a[0])]=int(a[1])
     except FileNotFoundError: pass
-# Loss-penalized: a loss (v<=0) scores worse than any win, so win->loss folds into "slower"
-# (tracked in slg = the maximal slowdowns) and loss->win into "faster". No win->loss category.
+# Loss-penalized: a loss (v<=0) scores worse than any win, so a game becoming unwon folds into "slower"
+# (tracked in slg = the maximal slowdowns) and an unwon game winning into "faster". No special category.
 def _sc(v): return v if v>0 else 10000
 f=sl=0; slg=[]
 for gi in gt:

@@ -85,6 +85,14 @@ static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_E
 // resolves against the true order (see g_honest_teacher). Without this, rollout_depth>0 is a
 // clairvoyant deep search (reads the real future) and is WORSE than greedy. See learned-d0-policy.md.
 static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != nullptr;
+// MTG_SEARCHED_DISCARD: make the REAL cleanup discard a lookahead search (roll out each candidate
+// discard, keep the one that preserves the earliest clairvoyant win; heuristic breaks ties) instead
+// of the highest-MV heuristic. DEFAULT OFF (heuristic) => byte-identical. Measured (smoke 1001):
+// neutral on every deck except Treasure Hunt, which got slightly WORSE (d3 +0.007, d5 +0.013 avg) --
+// a train/serve mismatch (rollouts assume heuristic discards later, the real game searches them) plus
+// clairvoyance, at real compute cost -- so it ships OFF pending a reproduced combo-discard win (the
+// Dragonstorm "don't pitch Apex/Dragonstorm" case is absent from seed 1001). See ChooseDiscard.
+static const bool  s_searched_discard = std::getenv("MTG_SEARCHED_DISCARD") != nullptr;
 
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
 {
@@ -1714,8 +1722,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (auto c = ap.hand.begin(); c != ap.hand.end(); ++c)
         {
             if (c->m_name != name) { continue; }
-            if (it == ap.hand.end()) { it = c; }                 // first match (fallback)
-            if (c->m_is_staged) { it = c; break; }               // prefer the expiring staged copy
+            if (it == ap.hand.end()) { it = c; continue; }       // first match (fallback)
+            // Prefer a staged (expiring) copy over a persistent hand copy, and among staged copies the
+            // EARLIEST-EXPIRING one (kept in lockstep with ApplyPlanDirect's apply_one). Byte-identical
+            // when no staged copy of `name` is in hand.
+            if (c->m_is_staged && (!it->m_is_staged || c->m_staged_expiry < it->m_staged_expiry))
+            {
+                it = c;
+            }
         }
         if (it == ap.hand.end()) { return; }
         ManaPool available = BuildAvailableMana(state);
@@ -1905,10 +1919,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // turn re-solves this many times after draws, and this is the no-win greedy-pilot fallback whose
     // drift is already documented as harmless, so capping the chain only stops a pathological loop --
     // it never abandons a win (the win paths use the bounded committed-line replay, not this).
-    constexpr int kMaxDrawBreakpointDepth = 40;
+    constexpr int  kMaxDrawBreakpointDepth = 40;
+    // The depth cap alone does NOT bound this recursion against a NO-PROGRESS loop. Observed at
+    // Dragonstorm d0: the greedy re-solve returns an UNREALIZABLE draw-engine line (cast Apex of Power off
+    // ritual float the board can't actually pay for), the executor no-ops it, and the state is left
+    // FROZEN (hand/mana/float identical every level). But the recursion at line ~1943 fires on
+    // is_draw_engine(NAME) regardless of whether the cast happened, so it re-solves the same frozen state
+    // -> same phantom plan -> recurses forever (re-entered from the outer cast loop -> millions of no-op
+    // calls, a hang). A TOTAL per-main-phase invocation budget bounds it. This is the harmless no-win
+    // greedy fallback (wins replay the committed line, not this path); a real draw chain is deep at most
+    // (each real cast consumes its card), well under the budget, so the cap only stops the phantom spin.
+    constexpr long kMaxDrawBreakpointCalls = 4096;
+    long rdb_calls = 0;
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
-        if (bp_depth >= kMaxDrawBreakpointDepth) { return; }
+        if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -2753,7 +2778,9 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
                 else if (def->params.ramp_filter) { continue; }
                 else
                 {
-                    const std::vector<Color>& prod = EffectiveProduces(state, active, *def);
+                    // ProducesForPayment: a colored_creature_only land makes only {C} for a non-creature
+                    // spell, so it is NOT selected for a coloured pip there (but still pays a generic pip).
+                    const std::vector<Color>& prod = ProducesForPayment(state, active, *def, for_creature);
                     bool makes = false;
                     if (any) { makes = !prod.empty(); }
                     else { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
@@ -2768,7 +2795,9 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
             const CardDefinition* bdef = CardDatabase::Instance().LookupCached(bp.card);
             if (best_kind == 1)
             {
-                const std::vector<Color>& prod = EffectiveProduces(state, active, *bdef);
+                // {C}-only for a non-creature colored_creature_only land -> the generic tap uses {C}
+                // (prod[0]) rather than a colour that could leak to pay a coloured pip.
+                const std::vector<Color>& prod = ProducesForPayment(state, active, *bdef, for_creature);
                 tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, prod[0]) : needed);
                 return true;
             }
@@ -3134,6 +3163,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     auto def = CardDatabase::Instance().LookupCached(hand_card);
     if (!def) { return; }
 
+    // Irencrag Feat "you can cast only one more spell this turn": mirror TurnSolver::apply_one's
+    // execution-time budget in the REAL executor so a replayed line OR the post-Apex staged re-solve
+    // cannot cast past the limit (an Apex-exiled Dragonstorm is still a spell cast this turn). Keeps the
+    // executor in lockstep with the enforced rollout. Inert (budget == -1) for every deck without a
+    // max_casts_after card. See GameState::casts_remaining_this_turn.
+    if (state.casts_remaining_this_turn == 0) { return; }   // budget spent: this cast is illegal
+
     StackEntry entry;
     entry.type             = StackEntry::EntryType::Spell;
     entry.source           = def->card;
@@ -3396,6 +3432,19 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // resolution + folded into no state key -> byte-identical for every non-storm deck.
     ++state.spells_cast_this_turn;
 
+    // Maintain the "one more spell" budget in lockstep with TurnSolver::apply_one (same per-cast site):
+    // a non-restrictor spends one (when a budget is active); the restrictor (Irencrag) installs its own
+    // (decrement FIRST -- its cast is governed by any prior budget checked above -- then min). Inert
+    // (budget stays -1) for every deck without a max_casts_after card.
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    if (def->params.max_casts_after >= 0)
+    {
+        state.casts_remaining_this_turn =
+            (state.casts_remaining_this_turn < 0)
+                ? def->params.max_casts_after
+                : std::min(state.casts_remaining_this_turn, def->params.max_casts_after);
+    }
+
     state.stack.push_back(std::move(entry));
 
     // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
@@ -3442,12 +3491,57 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         throw std::runtime_error("ChooseDiscard called with empty hand");
     }
 
-    // The victim-selection policy (land-outlet ammo, required-piece protection, staged-last)
-    // is the SHARED SelectCleanupDiscardIndex so the search rollout's cleanup sheds the same
-    // card. required_pieces comes from this engine's profile (the rollout reads the identical
-    // set via GameState::m_required_pieces, stamped in HandleMulligan).
-    int idx = SelectCleanupDiscardIndex(state, &m_profile.required_pieces);
-    return &ap.hand[idx];
+    // Heuristic victim (land-outlet ammo, required-piece protection, highest-MV, staged-last): the
+    // SHARED SelectCleanupDiscardIndex, so the search rollout's cleanup (TurnSolver) sheds the same
+    // card and the greedy/d0 path is byte-identical. It is also the FALLBACK + the tie-break for the
+    // searched pass below. required_pieces comes from this engine's profile (the rollout reads the
+    // identical set via GameState::m_required_pieces, stamped in HandleMulligan).
+    const int heur = SelectCleanupDiscardIndex(state, &m_profile.required_pieces);
+    const int hand_size = static_cast<int>(ap.hand.size());
+
+    // SEARCHED cleanup discard (mirrors the lookahead bottomer, BottomCards): roll out a full
+    // clairvoyant game for discarding each candidate (the card truly goes to the GRAVEYARD, unlike
+    // bottoming which puts it on the library bottom) and keep only the discards that preserve the
+    // EARLIEST win; the heuristic then breaks ties among them. This stops the myopic highest-MV rule
+    // from pitching the deck's only combo payoff (e.g. Dragonstorm/Apex of Power) -- a discard that
+    // strands the win rolls out to a later/no win and is excluded, while a redundant/stray card
+    // (a spare Dragon, excess mana, a second payoff) preserves it.
+    //   * Only with lookahead (m_lookahead_depth > 0); at d0 this is inert => byte-identical greedy.
+    //   * NEVER inside a rollout (m_in_rollout): RolloutWinTurn -> GameEngine::PlayOut reaches this
+    //     same cleanup, so a nested searched pass would blow up exponentially. Rollout cleanups use
+    //     the heuristic (as before), so rollout labels are unchanged and this only refines the REAL
+    //     top-level discard decision.
+    if (s_searched_discard && LookaheadBottoming() && !m_in_rollout && hand_size > 1)
+    {
+        std::vector<int> win_turn(hand_size, 0);
+        int best_win = std::numeric_limits<int>::max();
+        for (int j = 0; j < hand_size; ++j)
+        {
+            GameState trial = state;
+            Player& tap = trial.ActivePlayer();
+            tap.graveyard.push_back(tap.hand[j]);
+            tap.hand.erase(tap.hand.begin() + j);
+            win_turn[j] = RolloutWinTurn(std::move(trial), m_max_turns);
+            if (win_turn[j] < best_win) { best_win = win_turn[j]; }
+        }
+        if (TurnSolver::GetTraceSolve())
+        {
+            std::cerr << "[discard_trace depth=" << m_lookahead_depth << "]\n";
+            for (int j = 0; j < hand_size; ++j)
+            {
+                std::cerr << "  discard " << ap.hand[j].m_name << " -> win=" << win_turn[j]
+                          << (win_turn[j] == best_win ? " *" : "") << "\n";
+            }
+        }
+        // Tie-break among the win-optimal discards: prefer the heuristic pick if it is win-optimal,
+        // else the first win-optimal card (stable, index order).
+        if (win_turn[heur] == best_win) { return &ap.hand[heur]; }
+        for (int j = 0; j < hand_size; ++j)
+        {
+            if (win_turn[j] == best_win) { return &ap.hand[j]; }
+        }
+    }
+    return &ap.hand[heur];
 }
 
 // ============================================================

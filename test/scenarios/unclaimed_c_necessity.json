@@ -1,0 +1,13 @@
+{
+  "_comment": "{C}-NECESSITY test. Board = 8 Mountains + 1 Unclaimed Territory = 9 sources. Dragonstorm {8}{R} = 9 mana. It is payable ONLY if Unclaimed contributes its {C} to the generic (8 Mountains alone = 8 < 9), AND the {R} pip is taken from a Mountain (not Unclaimed, which can't make red for this non-creature). Dragonstorm tutors Utvara Hellkite (6/6 flying), which kills opp (6 life) next turn. PASS(win T5) => {C} counted + ordering OK. FAIL(no win) => {C} not counted (the bug hypothesis).",
+  "deck": "decks/Dragonstorm/Dragonstorm.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 6,
+  "battlefield": [
+    { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Mountain" },
+    { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Mountain" },
+    { "name": "Unclaimed Territory" }
+  ],
+  "hand": [ "Dragonstorm" ],
+  "library_filler": "Utvara Hellkite", "library_size": 40,
+  "depth": 5, "budget_ms": 300, "max_turns": 5, "expect_win_turn": 5
+}
