@@ -21,6 +21,7 @@ DECKS = {
     "knights":  ("references/Knights",        "decks/Knights.cod"),
     "TH":       ("references/treasure_hunt",  "decks/treasure_hunt.txt"),
     "hinata":   ("references/Hinata2",        "decks/Hinata2.cod"),
+    "auras":    ("references/Auras",          "decks/Auras/Auras.cod"),
 }
 
 
@@ -37,14 +38,17 @@ def run_one(deck_file, seed, gi, mull, depth, max_turns, nc):
         p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=180)
     except subprocess.TimeoutExpired:
         sys.stderr.write("TIMEOUT seed=%d gi=%d nc=%s\n" % (seed, gi, nc)); return "TMO"
-    m = re.search(r"Games won\s*:\s*(\d+)", p.stdout)
+    # Single-game summary: "avg (turns) : T" where T is the win turn, or max_turns+1 on a loss
+    # (the loss-penalised avg collapses to those two cases for --games 1).
+    m = re.search(r"avg \(turns\)\s*:\s*([\d.]+)", p.stdout)
     if m is None:
         sys.stderr.write("PARSE-FAIL rc=%d seed=%d gi=%d nc=%s\n  cmd=%s\n  stderr=%s\n" % (
             p.returncode, seed, gi, nc, " ".join(cmd), p.stderr.strip()[-400:]))
         return "ERR"
-    if int(m.group(1)):
-        return int(float(re.search(r"Avg win turn\s*:\s*([\d.]+)", p.stdout).group(1)))
-    return None  # loss
+    v = float(m.group(1))
+    if v >= max_turns + 1 - 1e-9:
+        return None  # unwon within max_turns
+    return int(round(v))
 
 
 def main():
