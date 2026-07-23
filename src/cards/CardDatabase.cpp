@@ -125,6 +125,18 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
     }
 }
 
+std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
+{
+    std::vector<std::string> out;
+    for (const auto& [name, def] : m_cards)
+    {
+        if (!def.params.mdfc_back_name.empty()) { out.push_back(def.params.mdfc_back_name); }
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+}
+
 void CardDatabase::Register(const std::string& name, CardFactory factory)
 {
     CardDefinition def = factory();

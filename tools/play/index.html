@@ -408,7 +408,10 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small');
+// Names the engine flags as MDFC back faces (e.g. "Boulderloft Pathway"). A back face's default
+// Scryfall image is its FRONT, so we must ask for &face=back. Populated from each decision's mdfc_backs.
+const MDFC_BACKS = new Set();
+const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small')+(MDFC_BACKS.has(name)?'&face=back':'');
 
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
@@ -1907,7 +1910,8 @@ function autoResolveDecision(dec){
   pushChoice(dec, def, lab);   // appends the choice, records history, hides the panel, re-steps
   return true;
 }
-function advanceTo(dec) { S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
+function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
+  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
   // When this decision was reached by an UNDO (user stepping back), suppress the forward-play
   // auto-advance below for THIS one decision: the dead-opponent auto-pass / commit-turn skip exist to
   // spare a FORWARD player clicking through a decided game, but on undo they would instantly re-commit

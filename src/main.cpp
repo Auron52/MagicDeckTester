@@ -251,6 +251,14 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
 {
     const Player& me  = s.ActivePlayer();
     int           opp = 1 - s.active_player_index;
+    // MDFC back-face names, so the viewer can request the correct Scryfall FACE image (a back face's
+    // default image is its front -> the GUI appends face=back for these). DB-global, computed once.
+    {
+        static const std::vector<std::string> mdfc_backs = CardDatabase::Instance().MdfcBackFaceNames();
+        os << "  \"mdfc_backs\": [";
+        for (size_t i = 0; i < mdfc_backs.size(); ++i) { if (i) { os << ", "; } JsonStr(os, mdfc_backs[i]); }
+        os << "],\n";
+    }
     // Iterate hand Cards (not just names) so per-instance flags (m_is_staged / expiry) survive.
     std::vector<const Card*> hand;
     for (const Card& c : me.hand) { hand.push_back(&c); }

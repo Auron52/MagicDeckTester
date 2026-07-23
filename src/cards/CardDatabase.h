@@ -704,6 +704,11 @@ public:
     // Look up a card by name (case-sensitive, matches Scryfall name).
     const CardDefinition* Lookup(const std::string& name) const;
 
+    // Names of every modal double-faced (MDFC) BACK face known to the DB (e.g. "Boulderloft
+    // Pathway"). The play viewer uses this to request the correct Scryfall face image -- a back
+    // face's default image is its FRONT, so it must ask for face=back. Empty without MDFC lands.
+    std::vector<std::string> MdfcBackFaceNames() const;
+
     // Look up a card's definition via its memoized pointer (Card::m_def), falling
     // back to a by-name Lookup (and caching the result) the first time. Prefer this
     // over Lookup(c.m_name) on the hot path: a card resolved once carries its def
