@@ -8,14 +8,18 @@
   cannot see that mana is typed and that a credit is only realizable if a payment *sequence* exists
   (the stranding case). So affordability needs real ordering too, same as legality; the aggregate is
   demoted to an optimistic pre-filter + a source of role tags.
-- **Increment 2 — SCOPED, not yet implemented** (needs an explicit go-ahead; it is GT-affecting):
-  1. **Port the aura legality-ordering into the autonomous search** (topological, K=1).
-  2. **Affordability exact check**: an optimistic aggregate pre-filter, then a cheap canonical order
-     (reducer-as-early-as-feasible → acceleration cheapest-first → payoffs) whose only search is a
-     **linear reducer-insertion scan** (O(#accelerants), not n!).
+- **Increment 2 — IN PROGRESS** (GT-affecting):
+  1. **Port the aura legality-ordering into the autonomous search** (topological, K=1) — **DONE**
+     (`SeqAuraOrderingEnabled()`, default on, `MTG_LEGACY_NO_SEQ_AURA` hatch). Auras d5 s700001
+     `995ca5e30c33f51d → 1c7117c8a6f2f66c`, avg **4.4750 → 4.4650 (−0.010t faster)**; legacy hatch
+     byte-identical; every other deck byte-identical (smoke 21/21, 0 play-changed).
+  2. **Affordability exact check** (NEXT, conditional): an optimistic aggregate pre-filter, then a cheap
+     canonical order (reducer-as-early-as-feasible → acceleration cheapest-first → payoffs) whose only
+     search is a **linear reducer-insertion scan** (O(#accelerants), not n!). Build **only if** the
+     oracle (3) finds the aggregate is actually wrong — measure first.
   3. **`MTG_ORDER_ORACLE` exhaustive reference** (the ordering analog of `MTG_UNPRUNED`): measures how
-     often the aggregate/canonical order is wrong and confirms the exact check matches full-permutation
-     truth.
+     often the aggregate is wrong and confirms any exact check matches full-permutation truth. Build
+     BEFORE (2) so it drives whether (2) is needed.
 - **Deferred (future, user-requested):** a per-deck **ordering-analysis step** that generates the
   candidate orderings a deck needs. See *Deferred: per-deck ordering-analysis step*.
 

@@ -59,9 +59,15 @@ User played Auras in the play viewer and reported two UX gaps; both fixed:
    instead of the default Rancor) and honors decline (`-1` → library unchanged), and each cast Aura
    triggers its own fetch decision. Was a heuristic-picked DECISIONS.md "known gap"; no longer a gap.
 
+5. **Sequential-plan-eval increment 2(a)** — the aura legality-ordering ported into the **autonomous**
+   search (`SeqAuraOrderingEnabled()`, default on, `MTG_LEGACY_NO_SEQ_AURA` hatch). The search now plays
+   the within-turn Coronet-after-enabler line, not just the viewer. **GT-affecting (Auras): d5 s700001
+   `995ca5e30c33f51d → 1c7117c8a6f2f66c`, avg 4.4750 → 4.4650 (−0.010t faster).** Legacy hatch
+   byte-identical; every other deck byte-identical (smoke 21/21, 0 play-changed). This is the new recorded
+   Auras d5 s700001 fingerprint. (2)/(3) affordability + `MTG_ORDER_ORACLE` still pending.
+
 Also captured the recurring plan-vs-frozen-snapshot design defect (the `legal_not_enumerated` reject +
-the enchant-target band-aid family) as a spec: `docs/design/sequential-plan-evaluation.md` (increment 1
-DONE; increment 2 = autonomous canonical-order apply, pending).
+the enchant-target band-aid family) as a spec: `docs/design/sequential-plan-evaluation.md`.
 
 ## >>> (historical resume notes) <<<
 **DONE + verified:** aura-attach mechanic + all 22 cards (build clean, coverage clean, costs/P-T/keywords

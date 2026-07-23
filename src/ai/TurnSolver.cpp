@@ -5649,8 +5649,22 @@ namespace branchstats
 // The frozen-snapshot enumerator only offers a restricted aura (Daybreak Coronet "another Aura"; Lion
 // Umbra "modified") on creatures ALREADY legal at start of phase. So casting Ethereal Armor -> X then
 // Daybreak Coronet -> X the SAME turn -- rules-legal, since Armor enables Coronet -- is never enumerated,
-// and the viewer rejects the human's line as legal_not_enumerated. These two helpers add, under
-// HumanPlayActive() ONLY (so the autonomous search + GT stay byte-identical), the missing sequenced plans.
+// and the viewer rejects the human's line as legal_not_enumerated. These helpers add the missing
+// sequenced plans; SeqAuraOrderingEnabled() gates them.
+
+// Increment 2(a): within-turn aura legality ordering (Daybreak Coronet after an enabling aura cast this
+// turn; Lion Umbra on a creature made "modified" this turn). Increment 1 ran this under HumanPlayActive()
+// ONLY (the viewer); the port makes it the autonomous default too -- a capability expansion, so it is
+// GT-AFFECTING for decks with restricted auras (Auras). It stays byte-identical for every OTHER deck: no
+// restricted aura in hand -> AppendSequencedAuraCandidates injects nothing -> the reject and the
+// enabler-first sort are no-ops. MTG_LEGACY_NO_SEQ_AURA reverts to the increment-1 behavior (viewer-only),
+// so a legacy autonomous run is byte-identical to pre-port AND the viewer keeps the feature.
+inline bool SeqAuraOrderingEnabled()
+{
+    static const bool s_legacy = std::getenv("MTG_LEGACY_NO_SEQ_AURA") != nullptr;
+    if (s_legacy) { return HumanPlayActive(); }
+    return true;
+}
 
 // (1) For each restricted aura in hand, inject a cast candidate targeting each controlled creature that
 // is NOT frozen-legal but could be ENABLED by another aura cast this turn. Mirrors CollectActions' aura
@@ -5658,7 +5672,7 @@ namespace branchstats
 // when the hand holds >= 2 auras (a restricted one + a separate enabler).
 static void AppendSequencedAuraCandidates(const GameState& state, std::vector<Action>& cands)
 {
-    if (!HumanPlayActive()) { return; }
+    if (!SeqAuraOrderingEnabled()) { return; }
     const Player& ap    = state.ActivePlayer();
     const int     active = state.active_player_index;
     int aura_count = 0;
@@ -5942,9 +5956,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
-        // Human-play only: reject a sequenced restricted aura (injected above) with no in-subset enabler
-        // on its target. Autonomous subsets never contain such a candidate -> gated call is byte-identical.
-        if (HumanPlayActive() && SubsetHasUnenabledRestrictedAura(state, cands, sel)) { return; }
+        // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
+        // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
+        // otherwise. Gated by SeqAuraOrderingEnabled() (default on; MTG_LEGACY_NO_SEQ_AURA = viewer-only).
+        if (SeqAuraOrderingEnabled() && SubsetHasUnenabledRestrictedAura(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
         for (int j : sel)
         {
@@ -6109,11 +6124,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
-        // Human-play only: a sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature)
-        // must resolve AFTER its enabler aura, so stable-sort those conditional payoffs to the end (key 1
-        // vs 0). Apply's own clean-set sort is rank-equal for auras (all rank 20) and stable, so it
-        // preserves this order. Autonomous plans hold no such action (gated injection) -> order unchanged.
-        if (HumanPlayActive())
+        // A sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature) must resolve AFTER
+        // its enabler aura, so stable-sort those conditional payoffs to the end (key 1 vs 0). Apply's own
+        // clean-set sort is rank-equal for auras (all rank 20) and stable, so it preserves this order. A
+        // plan with no such action (every non-aura-deck plan) is order-unchanged (stable, all keys equal).
+        if (SeqAuraOrderingEnabled())
         {
             std::stable_sort(plan.actions.begin(), plan.actions.end(),
                 [&](const Action& x, const Action& y)
