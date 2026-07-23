@@ -5645,6 +5645,108 @@ namespace branchstats
     inline Dumper g_dumper;
 }
 
+// ---- Human-play sequential aura enumeration (increment 1; docs/design/sequential-plan-evaluation.md) ----
+// The frozen-snapshot enumerator only offers a restricted aura (Daybreak Coronet "another Aura"; Lion
+// Umbra "modified") on creatures ALREADY legal at start of phase. So casting Ethereal Armor -> X then
+// Daybreak Coronet -> X the SAME turn -- rules-legal, since Armor enables Coronet -- is never enumerated,
+// and the viewer rejects the human's line as legal_not_enumerated. These two helpers add, under
+// HumanPlayActive() ONLY (so the autonomous search + GT stay byte-identical), the missing sequenced plans.
+
+// (1) For each restricted aura in hand, inject a cast candidate targeting each controlled creature that
+// is NOT frozen-legal but could be ENABLED by another aura cast this turn. Mirrors CollectActions' aura
+// Action exactly (same hand_index -> joins that card's mutually-exclusive group). Bounded: only fires
+// when the hand holds >= 2 auras (a restricted one + a separate enabler).
+static void AppendSequencedAuraCandidates(const GameState& state, std::vector<Action>& cands)
+{
+    if (!HumanPlayActive()) { return; }
+    const Player& ap    = state.ActivePlayer();
+    const int     active = state.active_player_index;
+    int aura_count = 0;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.is_aura) { ++aura_count; }
+    }
+    if (aura_count < 2) { return; }   // need a restricted aura AND a separate enabler aura in hand
+
+    for (size_t i = 0; i < ap.hand.size(); ++i)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (!def || !def->params.is_aura) { continue; }
+        if (def->params.aura_enchant_requires != "another_aura"
+            && def->params.aura_enchant_requires != "modified") { continue; }
+        const std::vector<int> frozen = LegalEnchantTargets(state, active, def->params);
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || !p.card.IsCreature()) { continue; }
+            const int num = p.card.m_number;
+            if (num <= 0) { continue; }
+            if (std::find(frozen.begin(), frozen.end(), num) != frozen.end()) { continue; }  // already legal
+            Action a;
+            a.kind           = Action::Kind::CastFromHand;
+            a.card_name      = ap.hand[i].m_name;
+            a.hand_index     = static_cast<int>(i);
+            a.cost           = EffectiveCost(*def, state);
+            a.eval           = EvalCard(*def, state);
+            a.is_noncreature = true;
+            a.card_mv        = def->card.m_mana_cost.ManaValue();
+            a.enchant_target = num;
+            cands.push_back(std::move(a));
+        }
+    }
+}
+
+// (2) Reject a subset that casts a restricted aura on a creature NOT frozen-legal UNLESS the same subset
+// casts an ENABLER aura on that SAME creature -- a plain aura, or a restricted aura whose own target IS
+// frozen-legal (it resolves first, per the enabler-first order key at plan-build). Mirrors the other
+// Subset* rejects; caller gates on HumanPlayActive() so autonomous enumeration never pays for it.
+static bool SubsetHasUnenabledRestrictedAura(const GameState& state,
+                                             const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const int active = state.active_player_index;
+    auto frozen_legal = [&](const CardParams& pp, int tgt) {
+        const std::vector<int> f = LegalEnchantTargets(state, active, pp);
+        return std::find(f.begin(), f.end(), tgt) != f.end();
+    };
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        if (!cd || !cd->params.is_aura) { continue; }
+        if (cd->params.aura_enchant_requires != "another_aura"
+            && cd->params.aura_enchant_requires != "modified") { continue; }
+        if (frozen_legal(cd->params, c.enchant_target)) { continue; }   // no enabler needed
+        bool enabled = false;
+        for (int jdx : sel)
+        {
+            if (jdx == idx) { continue; }
+            const Action& d = cands[jdx];
+            if (d.kind != Action::Kind::CastFromHand || d.enchant_target != c.enchant_target) { continue; }
+            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            if (!dd || !dd->params.is_aura) { continue; }
+            // A valid enabler is legal on that creature itself: plain aura, or restricted-but-frozen-legal.
+            if (dd->params.aura_enchant_requires.empty()
+                || frozen_legal(dd->params, d.enchant_target)) { enabled = true; break; }
+        }
+        if (!enabled) { return true; }
+    }
+    return false;
+}
+
+// True iff `a` is a restricted aura cast whose enchant target is NOT legal against the frozen state (so
+// it must resolve AFTER its in-plan enabler). Used only to order plan.actions under human play.
+static bool IsConditionalRestrictedAura(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+    if (!d || !d->params.is_aura) { return false; }
+    if (d->params.aura_enchant_requires != "another_aura"
+        && d->params.aura_enchant_requires != "modified") { return false; }
+    const std::vector<int> f = LegalEnchantTargets(state, state.active_player_index, d->params);
+    return std::find(f.begin(), f.end(), a.enchant_target) == f.end();
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -5665,6 +5767,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Shared enumeration of all action sources (hand casts + Vial + retrace; LE in a
     // later phase). The subset machinery below reads the per-Action valuation scalars.
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
+    // Human-play only: inject sequenced restricted-aura candidates (e.g. Daybreak Coronet on a creature
+    // that an Ethereal Armor cast this same turn will enable) so the viewer can play within-turn-dependent
+    // aura lines. No-op in the autonomous search (HumanPlayActive() false) -> byte-identical.
+    AppendSequencedAuraCandidates(state, cands);
     int n = static_cast<int>(ap.hand.size());
 
     // Lands in hand: the shared budget for additional discard costs (retrace, LE).
@@ -5836,6 +5942,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
+        // Human-play only: reject a sequenced restricted aura (injected above) with no in-subset enabler
+        // on its target. Autonomous subsets never contain such a candidate -> gated call is byte-identical.
+        if (HumanPlayActive() && SubsetHasUnenabledRestrictedAura(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
         for (int j : sel)
         {
@@ -6000,6 +6109,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
+        // Human-play only: a sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature)
+        // must resolve AFTER its enabler aura, so stable-sort those conditional payoffs to the end (key 1
+        // vs 0). Apply's own clean-set sort is rank-equal for auras (all rank 20) and stable, so it
+        // preserves this order. Autonomous plans hold no such action (gated injection) -> order unchanged.
+        if (HumanPlayActive())
+        {
+            std::stable_sort(plan.actions.begin(), plan.actions.end(),
+                [&](const Action& x, const Action& y)
+                { return IsConditionalRestrictedAura(state, x) < IsConditionalRestrictedAura(state, y); });
+        }
         plans.push_back(std::move(plan));
     };
 

@@ -1,17 +1,27 @@
 # Sequential plan evaluation — fixing "all actions vs. the frozen start-of-phase state"
 
-**Status:** ACTIVE (user asked to start now, 2026-07-23, rather than defer).
-**Refined plan — do it in two increments, safest first:**
-1. **Human-play-gated sequential enumeration (FIRST, GT-safe).** Widen the enumeration ONLY under
-   `HumanPlayActive()` so within-turn-dependent casts (Daybreak Coronet after Ethereal Armor; Lion
-   Umbra's "modified" target after an earlier aura) become real enumerated plans with plan indices —
-   so the viewer accepts and replays them via the existing `--choices` stream. Because it is gated
-   (like `MTG_UNPRUNED` / the enchant-target widenings), the autonomous search + GT stay
-   **byte-identical** (no rebaseline). This is the "viewer: respect the user's order" half and fixes
-   the `legal_not_enumerated` reject the user hit.
+**Status:** Increment 1 DONE (2026-07-23); increment 2 PENDING.
+**Two increments, safest first:**
+1. **Human-play-gated sequential enumeration — DONE.** Widened the enumeration ONLY under
+   `HumanPlayActive()` so within-turn-dependent aura casts (Daybreak Coronet after Ethereal Armor;
+   Lion Umbra's "modified" target after an earlier aura) become real enumerated plans with plan
+   indices — the viewer accepts and replays them via the existing `--choices` stream. GT-safe:
+   autonomous search stays byte-identical (Auras d5 s700001 `995ca5e30c33f51d` unchanged; smoke
+   21/21). Implemented in `TurnSolver.cpp::EnumeratePlans` as 3 gated pieces: (a)
+   `AppendSequencedAuraCandidates` injects the not-yet-legal restricted-aura targets as candidates;
+   (b) `SubsetHasUnenabledRestrictedAura` rejects any subset lacking an in-subset enabler aura on the
+   same creature; (c) an enabler-first `std::stable_sort` of `plan.actions` (`IsConditionalRestrictedAura`).
+   No new decision type / signature key (the existing `enchant_target` sub covers it). **Verified:**
+   the exact rejected line (`logs/play/rejections/Auras_cod_s1_gi0_t3.json`) now enumerates; with 3
+   white it's a `choose` (both auras on one creature) that replays with both attached; with only 2
+   white it's correctly `illegal` (which also validates the faithful MDFC colour modeling).
+   **Known limits (increment-1 conservative under-approximations, never false accepts):** chained
+   conditionals (two restricted auras, neither frozen-legal) and a Light-Paws-*fetched* enabler are
+   not credited → those specific lines still read `legal_not_enumerated`; fold into increment 2.
 2. **Autonomous canonical-order sequential apply (LATER, GT-affecting).** Let the search itself apply a
    plan's casts in one canonical/logical order with state updating between each, so the AI also plays
-   these lines. This shifts GT (more lines enumerable) → measure + rebaseline + keep a legacy gate.
+   these lines (and general within-turn dependencies beyond auras). This shifts GT (more lines
+   enumerable) → measure + rebaseline + keep a legacy gate.
 
 ## The core defect
 
