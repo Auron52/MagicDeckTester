@@ -102,6 +102,23 @@ later ETB). The hook (`GoOffSim`, mirroring `SpellEffects.h OnDragonEnters`) pro
   (neutral). Adopted default-on (off-switch `MTG_NO_STORM_HOLD`), regression + smoke rebaselined,
   containment held (Dragonstorm-only, no other deck moved). This is worked example #2 — how to make an
   option-prune safe.
+- **Storm-hold reachability refinement (REJECTED 2026-07-23, worked example #3 — a CORRECT human
+  heuristic the engine doesn't reward)**: the pilot noted the unconditional storm-hold over-holds — with
+  a storm in hand but mana-light, a human deploys an early dragon instead, *if* the dragon is >=3 turns
+  earlier than the storm turn (2 turns early "probably not," 1 turn "certainly not"). We built a faithful
+  turns-to-storm estimator (board lands at real yield incl. Sandstone=2 / storage-counter ramp, hand
+  lands one-drop-per-turn, ritual burst, Lotus timing incl. suspend arrival, Medallion discount) and held
+  only when the storm was <=2 turns out. **Result: shipped d5 IDENTICAL to unconditional (4.8533/4.6367,
+  both seeds) and blind d0 slightly WORSE (+0.003..+0.04).** Reverted. Why the (correct) heuristic doesn't
+  help the engine: (1) *the d5 search already makes this call* — it rollout-scores every land/dragon/hold
+  plan, so when an early dragon genuinely beats waiting it already finds that line; encoding it in greedy
+  changes nothing the search does (d5 byte-identical proves the search fully absorbs the greedy change).
+  (2) *the blind rollout can't capitalize on an early dragon* — it plays the rest greedily and can't
+  leverage the early board into a faster storm, so "deploy more" just re-introduces ritual waste → d0
+  slightly worse. **The sharpened lesson: the rollout policy benefits from anti-WASTE rules (hold rituals
+  = stop wasting) but NOT from smart-FOLLOW-UP rules (deploy early + capitalize) — the latter needs
+  lookahead the rollout doesn't have, and the search already covers it. A heuristic that is correct for
+  optimal play still fails adoption when the decision lives inside the search's horizon.**
 - **Non-clairvoyant reference (blocked)** — a blind-search reference would be a *cleaner* hypothesis
   generator than the clairvoyant d5 (step 5). The attempt to get one via `MTG_SHUFFLE_SALT_SEARCH=N`
   was inconclusive: the salt gave LP identical to clairvoyant in the measured config (it did not
