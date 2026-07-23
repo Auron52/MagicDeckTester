@@ -632,6 +632,28 @@ A burn spell must emit `target`, a Karoo must emit `bounce`, a scry must emit `s
 
 **Gate:** no card in the deck has an interactive choice the viewer silently auto-resolves — each is surfaced, or is a Stage 6a-disclosed known gap the user has signed off on as provably inert for goldfishing.
 
+### 5i. Rollout-quality diagnosis — d0-vs-search divergence digest (optional; rollout-only decks)
+
+**When to run:** a **rollout-only** deck (no `value_leaf`/`value_play` model in its profile) whose greedy
+**d0 loss-penalized avg-win-turn is far worse than the search** (e.g. Dragonstorm's d0 ~7.1 vs d5 ~4.8).
+Because the search finishes every leaf with the greedy d0 policy, that gap poisons the search at every
+depth — so closing it is the highest-leverage tuning available. This is the **d0-specific complement to
+5g**: 5g mines what the *optimal* play is (earliest-win); this finds where the *rollout policy itself*
+misplays, which is exactly where leaves are mis-evaluated. Full method + two worked examples:
+[docs/design/dragonstorm-d0-divergence-digest.md](docs/design/dragonstorm-d0-divergence-digest.md).
+
+The loop (each step's tool is committed):
+1. **Instrument** — `MTG_DIVERGENCE_LOG=<file>` (inert unless set; [src/ai/AIEngine.cpp](src/ai/AIEngine.cpp)) logs, per real pre-combat decision, the search's plan vs what greedy d0 would do at the SAME state. Run single-threaded, a few hundred games over ≥2 train seeds.
+2. **Digest** — `python3 scripts/rollout_divergence_digest.py <file.jsonl> …` clusters the divergences (rate by turn, greedy-idles-vs-over-acts shape, cards the search plays that greedy misses / greedy wastes). These are **HINTS, not payoffs**.
+3. **Hypothesize** — map a surviving pattern to an **archetype** `DecisionProvider` hook (`ExtraLethalDamage`/`HasExtraLethalModel` for an unrecognized wincon, `CastOrderRank` for sequencing, `ArchetypeCardValue` for valuation) — never `GenericProvider`. Keep it cheap (d0 runs in every rollout): integer math, no `GameState` copy.
+4. **Cost-test** — build behind a temp env gate; measure LP on/off on the train seeds, then validate on the regression suite (per the heuristic-optimization skill) and adopt default-on with an off-switch.
+
+**Two guardrails the digest cannot enforce for you — both cost real retreads to learn:**
+- **COUNT ≠ COST.** The digest counts divergences; a tie (two lethal lines, same win turn) counts the same as a blunder. A high count is a hint, not a payoff — cost-weight by win-turn impact and validate on LP, never the count. *(The Lotus-Bloom guard had 500+ counts and was a measured NO-OP — the "wasted" plays were free suspends.)*
+- **BLIND d0 LP VALIDATES ONLY INFORMATION-ADDING RULES.** A rule that ADDS lethality/board information (the go-off recognizer: recognize a wincon the leaf would actually execute) helps d0 AND the search — monotone, safe. A rule that PRUNES a greedy option can improve blind d0 while WORSENING the shipped search, because the rollout's job is **faithful simulation, not optimal play**: a blind short-horizon leaf that "correctly" holds a resource just durdles (never reaches the payoff it can't foresee), so the search reads worse leaf win-turns. *(The slow-dragon guard: blind d0 −0.73 but shipped d5 +0.37 — rejected.)* **Judge option-prunes on the SHIPPED-config LP, not d0. Prefer information-adding rules.**
+
+Worked example #1 (shipped): Dragonstorm's `DragonstormProvider::ExtraLethalDamage` — the rollout never saw the storm go-off as lethal (Dragonstorm has `direct_damage 0`; its dragons' Scourge ETB resolves later), so every leaf cast it late as board-dev and the search couldn't tell a T3 kill from a T5 durdle. The hook projects the go-off burst → d0 −0.33, d3/d5 −0.05..−0.10, zero searched-depth slowdowns. **As with 5g, these are PROPOSALS, never auto-shipped** — each survives the regression A/B (with every per-game move explained) or is dropped.
+
 ### Convergence criteria
 
 Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
