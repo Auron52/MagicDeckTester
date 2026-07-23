@@ -28,6 +28,12 @@
   3. **Ordering oracle — ALREADY EXISTED.** `MTG_SEARCH_ORDER` is the full-permutation cast-ordering search
      (the ordering analog of `MTG_UNPRUNED`); Dragonstorm routes to the targeted generator, which matches
      and slightly beats it (it covers the k≥6 hands the k! cap skips).
+- **REMAINING (not yet generalized): the payoff / trigger-ETB-value ordering** (kind 3 of the three
+  ordering kinds below — e.g. Lathliss → Scourge → other Dragons). This is currently **hand-coded per
+  deck** (`DragonstormProvider::TutorToBattlefieldPutOrder`), not a general, value-sign-aware mechanism
+  ("beneficial on-other-ETB sources lead; harmful ones trail"). The **cost** part (affordability ordering)
+  and the **legality** part (aura restriction ordering) are both done — see increment 2 above; the
+  **payoff** part is the next piece to generalize, and ties into the deferred analysis step.
 - **Deferred (future, user-requested):** a per-deck **ordering-analysis step** that generates the
   candidate orderings a deck needs. See *Deferred: per-deck ordering-analysis step*.
 
