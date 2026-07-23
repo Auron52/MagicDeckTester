@@ -933,6 +933,15 @@ inline MidGameEvaluator EvalModelFromJsonObj(const nlohmann::json& j)
             if (!tree.empty()) { e.trees.push_back(std::move(tree)); }
         }
     }
+    // A/B knob (docs/design/value-model-shrink.md): keep only the first N boosted trees. A GBDT is
+    // additive (Score = intercept + linear + Sum trees), so the first N trees form a valid *weaker*
+    // model -- this lets us measure the play-quality vs rollout-speed trade of a smaller value leaf
+    // without retraining. Unset / <=0 / >=count => the full model (byte-identical load).
+    if (const char* mt = std::getenv("MTG_EVAL_MAX_TREES"))
+    {
+        const int keep = std::atoi(mt);
+        if (keep > 0 && keep < static_cast<int>(e.trees.size())) { e.trees.resize(static_cast<size_t>(keep)); }
+    }
     return e;
 }
 
