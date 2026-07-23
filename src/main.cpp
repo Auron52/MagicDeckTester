@@ -201,6 +201,11 @@ static std::string EnchantTargetName(const GameState& s, int m_number)
         if (p.controller_index == s.active_player_index && p.card.IsCreature()
             && p.card.m_number == m_number)
         { return p.card.m_name.str(); }
+    // A same-turn creature target (cast this turn to carry the Aura) is still in hand at enumeration, so
+    // resolve its name there too -- else the plan reads "-> #38" instead of "-> Light-Paws".
+    for (const Card& c : s.ActivePlayer().hand)
+        if (c.m_number == m_number)
+        { return c.m_name.str(); }
     return "#" + std::to_string(m_number);
 }
 

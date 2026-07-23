@@ -5797,6 +5797,124 @@ static bool IsConditionalRestrictedAura(const GameState& state, const Action& a)
     return std::find(f.begin(), f.end(), a.enchant_target) == f.end();
 }
 
+// Within-turn creature target: a plain Aura can enchant a creature you CAST earlier this same turn.
+// Card numbers are stable from setup, so the Aura targets the creature's number and attaches once the
+// creature (cast FIRST -- CastOrderRank 10 creatures precede rank-20 Auras in apply) is on the
+// battlefield. The frozen-snapshot LegalEnchantTargets misses this (the creature isn't in play at start
+// of phase), so a just-cast creature could never carry a same-turn Aura -- and with NO prior creature the
+// Aura was entirely uncastable. Default on; MTG_LEGACY_NO_AURA_NEW_CREATURE reverts (byte-identical:
+// injects nothing). Restricted Auras (another_aura/modified) are OUT of scope here -- a fresh creature
+// satisfies those only via other same-turn casts, which the aura-aura sequencing already models.
+inline bool AuraOnNewCreatureEnabled()
+{
+    static const bool s_off = std::getenv("MTG_LEGACY_NO_AURA_NEW_CREATURE") != nullptr;
+    return !s_off;
+}
+
+// For each plain Aura in hand, inject a cast candidate targeting each CREATURE in hand (by its stable
+// m_number). Shares the Aura's hand_index so it joins the same mutually-exclusive group (one Aura, one
+// target). Bounded by auras x hand-creatures. A subset is valid only if it also casts that creature
+// (SubsetHasAuraOnUncastCreature). No-op without >=1 aura AND >=1 creature in hand -> byte-identical.
+static void AppendCreatureTargetAuraCandidates(const GameState& state, std::vector<Action>& cands)
+{
+    if (!AuraOnNewCreatureEnabled()) { return; }
+    const Player& ap = state.ActivePlayer();
+    std::vector<int> hand_creatures;   // hand indices of creatures castable this turn
+    for (size_t i = 0; i < ap.hand.size(); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (d && d->card.IsCreature() && ap.hand[i].m_number > 0) { hand_creatures.push_back((int)i); }
+    }
+    if (hand_creatures.empty()) { return; }
+    for (size_t i = 0; i < ap.hand.size(); ++i)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (!def || !def->params.is_aura) { continue; }
+        if (!def->params.aura_enchant_requires.empty()) { continue; }   // plain auras only (see note above)
+        for (int ci : hand_creatures)
+        {
+            Action a;
+            a.kind           = Action::Kind::CastFromHand;
+            a.card_name      = ap.hand[i].m_name;
+            a.hand_index     = (int)i;
+            a.cost           = EffectiveCost(*def, state);
+            a.eval           = EvalCard(*def, state);
+            a.is_noncreature = true;   // enchantments are noncreature spells
+            a.card_mv        = def->card.m_mana_cost.ManaValue();
+            a.enchant_target = ap.hand[ci].m_number;   // resolves once the creature (cast first) is in play
+            cands.push_back(std::move(a));
+        }
+    }
+}
+
+// Reject a subset whose Aura targets a creature NEITHER on the battlefield (frozen) NOR cast in this
+// subset -- i.e. an AppendCreatureTargetAuraCandidates candidate whose creature isn't being cast. No-op
+// unless such a candidate was injected -> byte-identical otherwise.
+static bool SubsetHasAuraOnUncastCreature(const GameState& state,
+                                          const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const Player& ap     = state.ActivePlayer();
+    const int     active = state.active_player_index;
+    auto on_bf = [&](int num) {
+        for (const Permanent& p : state.battlefield)
+            if (p.controller_index == active && p.card.IsCreature() && p.card.m_number == num) { return true; }
+        return false;
+    };
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        if (!cd || !cd->params.is_aura) { continue; }
+        if (on_bf(c.enchant_target)) { continue; }   // existing creature -> the normal path handles it
+        bool cast_here = false;
+        for (int jdx : sel)
+        {
+            const Action& d = cands[jdx];
+            if (d.kind != Action::Kind::CastFromHand || d.hand_index < 0
+                || d.hand_index >= (int)ap.hand.size()) { continue; }
+            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            if (dd && dd->card.IsCreature() && ap.hand[d.hand_index].m_number == c.enchant_target)
+            { cast_here = true; break; }
+        }
+        if (!cast_here) { return true; }
+    }
+    return false;
+}
+
+// True iff `a` is an Aura cast whose target creature is NOT on the battlefield (frozen) -- i.e. a
+// creature cast THIS turn. Such an Aura must resolve AFTER its target, so it is stable-sorted to the end
+// of plan.actions (the apply honours plan-action order here). Plain Auras only (the injector's scope).
+static bool IsAuraOnNewCreature(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+    if (!d || !d->params.is_aura) { return false; }
+    for (const Permanent& p : state.battlefield)
+        if (p.controller_index == state.active_player_index && p.card.IsCreature()
+            && p.card.m_number == a.enchant_target) { return false; }   // existing creature -> normal order
+    return true;
+}
+
+// True iff `acts` (in order) casts an Aura on a this-turn creature BEFORE that creature is cast. Such an
+// ordering is invalid: the Aura resolves with no such creature in play and mis-attaches (falls back to an
+// existing creature). Used to drop those orderings from the human-play cast-ordering expansion.
+static bool OrderingPlacesAuraBeforeCreature(const GameState& state, const std::vector<Action>& acts)
+{
+    const Player& ap = state.ActivePlayer();
+    std::unordered_set<int> cast_nums;   // hand m_numbers of creatures cast so far in this ordering
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (a.enchant_target > 0 && IsAuraOnNewCreature(state, a) && !cast_nums.count(a.enchant_target))
+        { return true; }   // Aura targets a this-turn creature not yet cast in this ordering
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(a.card_name);
+        if (cd && cd->card.IsCreature() && a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+        { cast_nums.insert(ap.hand[a.hand_index].m_number); }
+    }
+    return false;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -5821,6 +5939,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // that an Ethereal Armor cast this same turn will enable) so the viewer can play within-turn-dependent
     // aura lines. No-op in the autonomous search (HumanPlayActive() false) -> byte-identical.
     AppendSequencedAuraCandidates(state, cands);
+    // Also: a plain Aura targeting a creature CAST this same turn (its stable number). No-op unless the
+    // hand holds both an Aura and a creature -> byte-identical for every other deck/state.
+    AppendCreatureTargetAuraCandidates(state, cands);
     int n = static_cast<int>(ap.hand.size());
 
     // Lands in hand: the shared budget for additional discard costs (retrace, LE).
@@ -5996,6 +6117,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
         // otherwise. Gated by SeqAuraOrderingEnabled() (default on; MTG_LEGACY_NO_SEQ_AURA = viewer-only).
         if (SeqAuraOrderingEnabled() && SubsetHasUnenabledRestrictedAura(state, cands, sel)) { return; }
+        // Reject an Aura targeting a this-turn creature that the subset does not actually cast. No-op
+        // unless AppendCreatureTargetAuraCandidates injected such a candidate -> byte-identical otherwise.
+        if (AuraOnNewCreatureEnabled() && SubsetHasAuraOnUncastCreature(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
         for (int j : sel)
         {
@@ -6204,6 +6328,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             std::stable_sort(plan.actions.begin(), plan.actions.end(),
                 [&](const Action& x, const Action& y)
                 { return IsConditionalRestrictedAura(state, x) < IsConditionalRestrictedAura(state, y); });
+        }
+        // An Aura targeting a creature CAST this turn must resolve after that creature (the apply honours
+        // plan-action order), so stable-sort such Auras to the end (key 1 vs 0). No-op unless the injector
+        // added one -> byte-identical otherwise. Both this and the sort above key plain-vs-conditional
+        // disjointly (an injected Aura is plain), so they compose.
+        if (AuraOnNewCreatureEnabled())
+        {
+            std::stable_sort(plan.actions.begin(), plan.actions.end(),
+                [&](const Action& x, const Action& y)
+                { return IsAuraOnNewCreature(state, x) < IsAuraOnNewCreature(state, y); });
         }
         plans.push_back(std::move(plan));
     };
@@ -6553,6 +6687,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (int j : idx)            { cand.actions.push_back(reorder[j]); }
             for (const Action& a : fixed){ cand.actions.push_back(a); }
             cand.searched_order = true;
+            // Drop an ordering that casts an Aura on a this-turn creature BEFORE that creature (it would
+            // mis-attach to an existing creature). No-op unless such an Aura+creature line is present.
+            if (AuraOnNewCreatureEnabled() && OrderingPlacesAuraBeforeCreature(state, cand.actions)) { continue; }
 
             // Apply this ordering on a copy; dedup by the resulting end-of-phase state.
             GameState copy = state;
@@ -9795,6 +9932,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     if (perm.controller_index == state.active_player_index && perm.card.IsCreature()
                         && perm.card.m_number == a.enchant_target)
                     { etn = perm.card.m_name.str(); break; }
+                // A same-turn creature target (AppendCreatureTargetAuraCandidates) is still in hand here;
+                // resolve its name from hand so the choose grid offers it (else the sub is dropped).
+                if (etn.empty())
+                    for (const Card& hc : state.ActivePlayer().hand)
+                        if (hc.m_number == a.enchant_target) { etn = hc.m_name.str(); break; }
                 if (!etn.empty())
                     addSub(a.card_name + " \xE2\x86\x92 " + etn, a.card_name + " \xE2\x86\x92", etn, etn, "enchant");
             }
