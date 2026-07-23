@@ -8,18 +8,26 @@
   cannot see that mana is typed and that a credit is only realizable if a payment *sequence* exists
   (the stranding case). So affordability needs real ordering too, same as legality; the aggregate is
   demoted to an optimistic pre-filter + a source of role tags.
-- **Increment 2 — IN PROGRESS** (GT-affecting):
-  1. **Port the aura legality-ordering into the autonomous search** (topological, K=1) — **DONE**
-     (`SeqAuraOrderingEnabled()`, default on, `MTG_LEGACY_NO_SEQ_AURA` hatch). Auras d5 s700001
+- **Increment 2 — DONE** (only (a) was new; (b)/(c) already existed):
+  1. **Aura legality-ordering ported to the autonomous search** — **DONE** (`SeqAuraOrderingEnabled()`,
+     default on, `MTG_LEGACY_NO_SEQ_AURA` hatch; commit `185f609`). Auras d5 s700001
      `995ca5e30c33f51d → 1c7117c8a6f2f66c`, avg **4.4750 → 4.4650 (−0.010t faster)**; legacy hatch
      byte-identical; every other deck byte-identical (smoke 21/21, 0 play-changed).
-  2. **Affordability exact check** (NEXT, conditional): an optimistic aggregate pre-filter, then a cheap
-     canonical order (reducer-as-early-as-feasible → acceleration cheapest-first → payoffs) whose only
-     search is a **linear reducer-insertion scan** (O(#accelerants), not n!). Build **only if** the
-     oracle (3) finds the aggregate is actually wrong — measure first.
-  3. **`MTG_ORDER_ORACLE` exhaustive reference** (the ordering analog of `MTG_UNPRUNED`): measures how
-     often the aggregate is wrong and confirms any exact check matches full-permutation truth. Build
-     BEFORE (2) so it drives whether (2) is needed.
+  2. **Affordability ordering — ALREADY EXISTED + adopted.** `DragonstormCastOrderings()` (Hook 28,
+     2026-07-21; see `dragonstorm-cast-order-search.md`) is the targeted cast-ordering search that
+     implements *exactly* the canonical order below — Medallion = the one searched slot (earliest-first),
+     rituals cheapest-first, Irencrag before the closer, splice variants, identity floor. **Measured: no
+     affordability correctness bug** — the `MTG_AFFORD_AUDIT` diagnostic (commit `6a396ac`) showed the real
+     move applies through the *same* `apply_one` as scoring (`ApplyPlan == ApplyPlanDirect`), so the chosen
+     plan plays out exactly as scored (rollout 13% cast-drops are self-consistent enumeration optimism).
+     Theory review found one hole — the ≥2-Medallion **block** insertion never generates a **staggered**
+     line ("M1 → discounted ritual → M2"), and the oracle's k!≤120 cap skips those hands — so it was tried
+     behind `MTG_MEDALLION_SPLIT` and **measured ~+0.005t WORSE** on Dragonstorm d5 (s700001/2/3): the
+     subset enumerator already offers 1-/2-Medallion lines (so "play one" is a plan-selection choice), and
+     the extra orderings cost search budget with no realized upside. **Not adopted; reverted.**
+  3. **Ordering oracle — ALREADY EXISTED.** `MTG_SEARCH_ORDER` is the full-permutation cast-ordering search
+     (the ordering analog of `MTG_UNPRUNED`); Dragonstorm routes to the targeted generator, which matches
+     and slightly beats it (it covers the k≥6 hands the k! cap skips).
 - **Deferred (future, user-requested):** a per-deck **ordering-analysis step** that generates the
   candidate orderings a deck needs. See *Deferred: per-deck ordering-analysis step*.
 

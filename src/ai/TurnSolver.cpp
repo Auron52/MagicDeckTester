@@ -5494,6 +5494,14 @@ static bool OrderingSearchEnabled(const GameState& state)
 //     earliest that still goes off (earlier discounts more red rituals).
 // The identity (given) order is always included so the search can never do worse than the canonical line.
 // Returns index-orderings over `reorder`; the caller applies + dedups-by-end-state + scores each.
+//
+// NOTE (2026-07-23): the >=2-Medallion block insertion below is a theoretical hole -- it never generates a
+// STAGGERED line ("one Medallion early to discount the red rituals, the next once the cheaper chain funds
+// it"), and the full-permutation oracle's k!<=120 cap skips exactly those k>=6 hands. Tried behind
+// MTG_MEDALLION_SPLIT (non-decreasing per-Medallion slot placement) and MEASURED uniformly ~+0.005t WORSE
+// on Dragonstorm d5 (s700001/2/3): the extra orderings cost search budget with no realized upside -- the
+// subset enumerator already offers single-/no-Medallion lines, so "just play one" (usually best) is
+// handled by plan selection, and "M1 -> ritual -> M2" is rarely optimal. NOT adopted; block insertion kept.
 static std::vector<std::vector<int>>
 DragonstormCastOrderings(const std::vector<Action>& reorder)
 {
