@@ -1170,7 +1170,13 @@ static bool GroupChoiceNonPrefixAccel(const GameState& /*state*/,
                                       const std::vector<int>& choice)
 {
     struct AccelG { int base_mv; int hand_index; bool cast; };
-    std::vector<AccelG> accel;
+    // Reuse a per-thread buffer instead of heap-allocating a fresh vector on every call: this helper is
+    // a leaf prefix-prune called millions of times in the plan-enumeration inner loop (profiled at ~39%
+    // of rollout instructions, dominated by this per-call allocation). clear() keeps the capacity, so
+    // after warmup there is no allocation. Not re-entrant (no nested call), so one buffer per thread is
+    // safe; thread_local keeps the batch/gen worker pool race-free. Byte-identical results.
+    static thread_local std::vector<AccelG> accel;
+    accel.clear();
     for (size_t g = 0; g < groups.size(); ++g)
     {
         int base_mv = -1;   // min effective MV over this group's ritual-cast options (choice-independent)
