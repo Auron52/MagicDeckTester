@@ -1112,7 +1112,27 @@ inline void PerformLightPawsAttach(GameState& state, int controller, int cast_au
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
             if (!eligible(i, d)) { continue; }
-            int contrib = d->params.aura_power_bonus + d->params.aura_scale_power;   // static rank
+            // Rank by the power this Aura would REALIZE if fetched now (attached to Light-Paws), not by a
+            // static coefficient. A scaling Aura grants aura_scale_power PER matching permanent, so on a
+            // wide board (All That Glitters = +1/artifact+enchantment, Ethereal Armor = +1/enchantment,
+            // Ancestral Mask = +2/other-enchantment) its true contribution dwarfs a flat +N Aura -- the
+            // old "aura_power_bonus + aura_scale_power" undervalued exactly these payoff Auras. The fetched
+            // Aura will itself be an enchantment you control, so it adds one to its own count (the
+            // "other_enchantments" kind excludes itself, but CountAuraScaleUnits' built-in -1 assumes the
+            // Aura is already on the battlefield -- not yet true here -- so +1 corrects all three kinds).
+            // MTG_LEGACY_LIGHTPAWS_STATIC reverts to the old static coefficient rank (byte-identical A/B).
+            static const bool lp_static = std::getenv("MTG_LEGACY_LIGHTPAWS_STATIC") != nullptr;
+            int contrib;
+            if (lp_static) { contrib = d->params.aura_power_bonus + d->params.aura_scale_power; }
+            else
+            {
+                contrib = d->params.aura_power_bonus;
+                if (!d->params.aura_scale_kind.empty())
+                {
+                    int units = CountAuraScaleUnits(d->params.aura_scale_kind, lp_now(), state, controller) + 1;
+                    contrib += d->params.aura_scale_power * units;
+                }
+            }
             if (contrib > best_pw || (contrib == best_pw && d->card.m_mana_cost.ManaValue() >
                                       (best_idx >= 0 ? CardDatabase::Instance().LookupCached(ap.library[best_idx])->card.m_mana_cost.ManaValue() : -1)))
             { best_pw = contrib; best_idx = i; }
