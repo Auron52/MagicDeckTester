@@ -165,8 +165,18 @@ line before it is scored) is a real gap.** Per-deck patches exist only to stop u
 3. **Rely on the existing scoring apply** (9446/9467) as the real feasibility gate — it is already there,
    already runs, and already rejects over-credited infeasible lines. **No probe, nothing new in the rollout.**
 4. **Lean on existing pruning** (`ManaPruneBound`, subset-reject filters, payoff-prune) to cull the extra
-   optimistic candidates. **A hard total-candidate cap is a LAST RESORT** — add it only if measurement shows
-   a blow-up (user: "only if absolutely necessary").
+   optimistic candidates. The enumeration already **dedups near-identical candidates by end-of-phase state**
+   (`BuildSimKey` / `seen_states`) — the "~99 % same result" collapse — so many optimistic extras vanish for
+   free. **A hard total-candidate cap is a LAST RESORT** — add it only if measurement shows a blow-up (user:
+   "only if absolutely necessary").
+5. **DOMINANCE prune (the principled count-bounder, preferred over a hard cap).** An old optimization idea
+   (discussed before, no home yet — this may be its home): keep a candidate only if it is **not strictly
+   dominated** by another — where A dominates B when A reaches the **same resulting state** as B but is
+   **≥ on every auxiliary axis** (more opponent damage, more mana/cards left) and **>** on at least one.
+   This generalises the existing end-of-phase-state dedup (which already collapses *identical* results) and
+   the scaled-cast "dominated level" drop (`DecisionProviders.cpp` ~1921). It caps the optimistic blow-up
+   *without* discarding any genuinely-better line. Implement only if measurement shows the dedup alone is
+   insufficient.
 
 **The pattern for new decks (the actual treadmill-kill):** implement the cost mechanic in the executor
 (needed anyway), let enumeration credit it *optimistically* (or simply not drop the interacting subset), and
