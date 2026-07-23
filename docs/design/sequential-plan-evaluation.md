@@ -1,7 +1,17 @@
 # Sequential plan evaluation — fixing "all actions vs. the frozen start-of-phase state"
 
-**Status:** DEFERRED (agreed 2026-07-23, to start *after* the Auras deck is finished).
-**Trigger to pick up:** user request. This doc is the self-contained spec.
+**Status:** ACTIVE (user asked to start now, 2026-07-23, rather than defer).
+**Refined plan — do it in two increments, safest first:**
+1. **Human-play-gated sequential enumeration (FIRST, GT-safe).** Widen the enumeration ONLY under
+   `HumanPlayActive()` so within-turn-dependent casts (Daybreak Coronet after Ethereal Armor; Lion
+   Umbra's "modified" target after an earlier aura) become real enumerated plans with plan indices —
+   so the viewer accepts and replays them via the existing `--choices` stream. Because it is gated
+   (like `MTG_UNPRUNED` / the enchant-target widenings), the autonomous search + GT stay
+   **byte-identical** (no rebaseline). This is the "viewer: respect the user's order" half and fixes
+   the `legal_not_enumerated` reject the user hit.
+2. **Autonomous canonical-order sequential apply (LATER, GT-affecting).** Let the search itself apply a
+   plan's casts in one canonical/logical order with state updating between each, so the AI also plays
+   these lines. This shifts GT (more lines enumerable) → measure + rebaseline + keep a legacy gate.
 
 ## The core defect
 
