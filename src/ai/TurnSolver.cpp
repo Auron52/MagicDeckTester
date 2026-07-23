@@ -5900,6 +5900,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // human-play. Autonomous dedup keys only on cast NAMES (the 's' bucket above), so distinct
                 // k collapse to the first-enumerated representative -- exactly the chosen_x precedent.
                 if (act.splice_count > 0)        { sub.push_back("k" + act.card_name + "=" + std::to_string(act.splice_count)); }
+                // Aura enchant TARGET: which creature the Aura attaches to is a human choice (Bogles piles
+                // auras on one creature, but Daybreak Coronet / Lion Umbra restrictions and simple threat
+                // choice make the target meaningful). Keyed on the stable target m_number so plans differing
+                // only in placement survive as distinct variants instead of collapsing to the first-enumerated
+                // target. Autonomous dedup keys only on cast NAMES (the 's' bucket), so distinct targets
+                // collapse to the heuristic's best-first pick there -- exactly the tutor_target precedent.
+                if (act.enchant_target > 0)      { sub.push_back("e" + act.card_name + ">" + std::to_string(act.enchant_target)); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }

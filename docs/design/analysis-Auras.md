@@ -18,8 +18,18 @@ digest `dca0f3a86f64c939` → search CONVERGES by depth 3 (deeper lookahead buys
 low-branching linear aggro deck); search over greedy = −0.275t. Monotone non-increasing, plausible
 Bogles T4–5 clock. nonconv=0, fd-diverge≈0 (1/100 residual = accepted Light-Paws shuffle variance).
 
-Optional remaining (non-blocking): 100-game 5d claude-play sweep SCOPED OUT (user "no agents" + cost —
-deck otherwise fully verified). NOT pushed (left for user).
+**Stage-5d claude-play sweep DONE (2026-07-23, 50 games, seeds 900001..900050, Sonnet players):**
+50/50 played, 50/50 Claude wins, 0 agent errors, ~9.6 min, **802,669 output tokens** (≈16k/game — the
+cost the 100-game run blew; 50 is affordable). **1 verified engine bug found + FIXED:** the human-play
+`plan_signature` dedup (`TurnSolver::EnumeratePlans` ~L5885) keyed on tutor_target/chosen_x/… but NOT
+`enchant_target`, so plans differing only in an aura's target collapsed to the first-enumerated creature
+— a dead-decision bug hiding legal (sometimes better) aura targets from human/claude-play (the real
+Solve() search was unaffected, so no GT/win-turn impact). Fix = add `enchant_target` to the human-play
+sub-signature (human-play-gated → autonomous byte-identical: Stage-6 d5 digest `dca0f3a86f64c939`
+unchanged). Verified at gi=0 T4: Ancestral Mask now offers all 3 creatures, Daybreak Coronet 2 (Gladecover
+Scout correctly excluded — no aura). 3 faster-than-search WEAK-signal games (gi=14 claude T8 vs search
+unwon-in-10; gi=21/47 claude T7 vs search T8) = the d5/200ms search budget missing a fast line on
+slow-draw games, NOT a bug — noted for a future search-quality look. NOT pushed (left for user).
 
 ## >>> (historical resume notes) <<<
 **DONE + verified:** aura-attach mechanic + all 22 cards (build clean, coverage clean, costs/P-T/keywords
@@ -218,5 +228,16 @@ unchanged (still g_treasure; th-detection value identical by construction — re
 - [x] Stage 1 coverage. [x] Stage 2 engine + 22 cards. [x] Stage 3 coverage clean. [x] 2d-bis audits.
 - [x] Stage 4 profile — card-scores-only (24 scores, NO_GATE), regenerated post fd-diverge fix.
 - [x] Stage 5 verify: nonconv=0; fd-diverge fixed (≈0, 1/100 accepted variance); multi-depth monotone
-      (d0=4.740, d3=d5=4.465 converged); 5h viewer surface wired (enchant_target variants). 5d sweep scoped out.
+      (d0=4.740, d3=d5=4.465 converged); 5h viewer surface wired (enchant_target variants).
+- [x] Stage 5d claude-play sweep — 50 games, 1 bug found+fixed (enchant_target dedup), see below.
 - [x] Stage 6 report — delivered to user 2026-07-22 (headline avg above; 6a disclosure below).
+
+## Claude-play sweep
+- commit: `<HEAD after the enchant_target dedup fix>`
+- seeds: 900001 (50 games, seeds 900001..900050); Sonnet players; 802,669 output tokens
+- flags: 0 unresolved
+  - [RESOLVED] enchant_target human-play dedup collapse — `TurnSolver::EnumeratePlans` `plan_signature`
+    did not key on `enchant_target`, so multi-target aura plans collapsed to the first-enumerated
+    creature in the human/claude-play menu (autonomous search unaffected, GT byte-identical). Fixed by
+    adding `enchant_target` to the human-play sub-signature. Verified at gi=0 T4 (all legal targets now
+    surface; Daybreak Coronet restriction still respected).

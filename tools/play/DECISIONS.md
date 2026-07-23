@@ -79,7 +79,11 @@ For these the only per-deck work is confirming **every** legal option appears as
 variant (human-play runs unpruned). `enchant_target` is emitted directly by `CollectActions`
 (one variant per `LegalEnchantTargets`, no provider narrowing) and labeled in `SummarizePlan`
 ("Rancor → Kor Spiritdancer") + the per-action JSON (`enchant_target` + `enchant_target_name`),
-so distinct placements are human-distinguishable.
+so distinct placements are human-distinguishable. NB the human-play `plan_signature` dedup
+(`TurnSolver::EnumeratePlans`) must key on `enchant_target` alongside `tutor_target`/`chosen_x`/etc,
+or plans differing only in the aura's target collapse to the first-enumerated creature — a
+dead-decision bug the Auras claude-play sweep caught (2026-07-23) and fixed. The autonomous dedup
+still keys on cast NAMES only (byte-identical GT), delegating the target to the heuristic there.
 
 ## Surfacing options (viewer "⚙ Options" menu)
 
