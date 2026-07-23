@@ -108,6 +108,18 @@ later ETB). The hook (`GoOffSim`, mirroring `SpellEffects.h OnDragonEnters`) pro
   decouple the main d5 search there). Needs the correct rollout-path plumbing
   (`TurnSolver.cpp` rollout entry points) or a reshuffle-averaged search before it can answer "how does
   blind play differ."
-- **Codify into `analyze-deck`** — once 2–3 rules are proven by this loop (go-off = #1), add a
-  "rollout-quality diagnosis" step to the analyze-deck workflow that runs the divergence log, digests
-  it, and surfaces the top cost-weighted patterns as candidate provider hooks for review.
+- **Codify into `analyze-deck`** — DONE (Stage 5i + `scripts/rollout_divergence_digest.py`). The loop
+  runs the divergence log, digests it, and surfaces candidate patterns for review.
+- **Residual gap after go-off + storm-hold (analyzed 2026-07-23; d0 ~6.25 vs d5 ~4.6 ≈ 1.6t)** — a fresh
+  digest (post-storm-hold binary) shows the remaining gap is now **lookahead-bound, not rule-shaped**.
+  Of the go-off turns greedy under-builds: ~76% are multi-turn / optimistic-mana assembly greedy can't
+  replicate without a rollout; ~24% are the **same-turn Ruby Medallion discount** — which greedy
+  DELIBERATELY omits (`SameTurnReducerCredit` is `EnumeratePlans`-only; crediting a same-turn reducer in
+  `Solve` stranded greedy on an unrealizable Apex line, `smoke gi523 8→loss`). An in-play Medallion IS
+  credited (shared cost fn). The raw "greedy wastes" count is still dominated by Lotus Bloom (~300 free
+  suspends = non-cost noise). **Conclusion: the cheap information-adding wins are taken; the remaining
+  candidates are all the optimistic-same-turn-mana class that backfires in a rollout-less greedy — this
+  is where the value-leaf / lookahead earns its keep, not more d0 rules.** d0 ~6.25 is the honest floor
+  for a non-stranding rollout policy on this deck. (A scoped same-turn-Medallion credit COULD be
+  re-tested now that the go-off recognizer + executor arbitration exist — the gi523 strand predates them
+  — but it is a small slice with a documented regression risk; low priority.)
