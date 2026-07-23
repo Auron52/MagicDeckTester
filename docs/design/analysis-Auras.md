@@ -233,7 +233,7 @@ unchanged (still g_treasure; th-detection value identical by construction — re
 - [x] Stage 6 report — delivered to user 2026-07-22 (headline avg above; 6a disclosure below).
 
 ## Claude-play sweep
-- commit: `<HEAD after the enchant_target dedup fix>`
+- commit: `9b2284c`
 - seeds: 900001 (50 games, seeds 900001..900050); Sonnet players; 802,669 output tokens
 - flags: 0 unresolved
   - [RESOLVED] enchant_target human-play dedup collapse — `TurnSolver::EnumeratePlans` `plan_signature`
