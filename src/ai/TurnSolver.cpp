@@ -900,21 +900,33 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
 // ResolveProvider(state).PrunesAcceleratorWithoutPayoff() so ONLY Dragonstorm prunes; Hinata (whose
 // ritual is a useful cantrip/dig accelerant) is untouched. A ritual-only subset deals no damage, so it
 // can never be a winning line -> pruning it never drops a lethal plan. Inert (no ritual) -> unchanged.
-// NB (slow-dragon rule, REJECTED 2026-07-23): making a fair hard-cast Dragon NOT count as `has_payoff`
-// (only Dragonstorm/Apex justify a ritual) was cost-tested and rejected. It improved BLIND d0 LP a lot
-// (~-0.73 turns) but WORSENED the shipped d5-value search (~+0.37) and d3 (~+0.36). Lesson: the rollout
-// policy's job is FAITHFUL SIMULATION, not optimal play -- a blind short-horizon leaf that "correctly"
-// holds a ritual just durdles (never reaches the storm it can't foresee), so the search reads worse
-// leaf win-turns. Blind d0 LP validates only INFORMATION-ADDING rules (the go-off recognizer), not
-// OPTION-PRUNING ones. See docs/design/dragonstorm-d0-divergence-digest.md.
-static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel)
+// Storm-hold rule (ADOPTED 2026-07-23; default ON, off-switch MTG_NO_STORM_HOLD). REFINES the
+// UNCONDITIONAL slow-dragon rule that was REJECTED (making a fair Dragon never a payoff improved BLIND
+// d0 ~-0.73 but WORSENED the shipped d5 search ~+0.37: a blind leaf that always holds its ritual
+// durdles, never reaching the storm it can't foresee). The fix, per the deck's human pilot: only hold
+// when a storm payoff (Dragonstorm/Apex) is ALREADY IN HAND -- then the leaf CAN see the payoff it is
+// saving the ritual for, so it doesn't durdle. A subset that spends a ritual on a FAIR Dragon is pruned
+// ONLY when a storm is in hand (the Dragon can still be cast off lands -- a ritual-free subset never
+// trips this). Measured (train 4004/5005): blind d0 -0.60, shipped d5 -0.005 (NEUTRAL, no search
+// regression -- the storm-in-hand gate is what makes an option-prune safe for the search). Applied to
+// the greedy/rollout POLICY only; the search's root branch list is untouched (see the 2nd call site).
+// See docs/design/dragonstorm-d0-divergence-digest.md.
+static const bool s_storm_hold = std::getenv("MTG_NO_STORM_HOLD") == nullptr;
+
+static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                   bool storm_in_hand)
 {
+    // A fair creature justifies a ritual by default; under the storm-hold rule, when a storm payoff is
+    // in hand, it does NOT -- only the storm finishers (Dragonstorm/Apex) do, so the ritual is held.
+    const bool creature_pays = !(s_storm_hold && storm_in_hand);
     bool has_ritual = false, has_payoff = false;
     for (int j : sel)
     {
         if (cands[j].ritual_float > 0) { has_ritual = true; }
         const CardDefinition* d = cands[j].def;
-        if (d && (d->card.IsCreature() || d->params.tutor_to_battlefield || d->params.impulse_exile > 0))
+        if (!d) { continue; }
+        if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0
+            || (creature_pays && d->card.IsCreature()))
         {
             has_payoff = true;
         }
@@ -2156,6 +2168,19 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // the pool's CanPay. False for every non-ritual deck -> byte-identical.
     bool any_ritual = false;
     for (const Action& ra : cands) { if (ra.ritual_float > 0) { any_ritual = true; break; } }
+    // Storm-hold rule (see SubsetWastesAccelerant): is a storm payoff (Dragonstorm/Apex) already in
+    // hand? Scans the FULL hand (not just castable cands -- the case that matters is a storm in hand but
+    // not yet castable). Gated on the flag so it is a zero-cost no-op (storm_in_hand=false) by default.
+    bool storm_in_hand = false;
+    if (s_storm_hold)
+    {
+        for (const Card& c : ap.hand)
+        {
+            auto od = CardDatabase::Instance().LookupCached(c);
+            if (od && (od->params.tutor_to_battlefield || od->params.impulse_exile > 0))
+            { storm_in_hand = true; break; }
+        }
+    }
     // Same-turn mana-rock ramp: any non-creature rock (Sol Ring) stamped with its production?
     // Cheap scan -> the credit below is inert for every deck without such a rock.
     bool any_rock = false;
@@ -2255,10 +2280,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
         // Payoff-prune (Hook 29): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
-        // gated; inert for every other deck -> byte-identical.
+        // gated; inert for every other deck -> byte-identical. storm_in_hand feeds the storm-hold rule
+        // (a fair Dragon stops justifying a ritual when a storm is in hand); off by default.
         if (ResolveProvider(state).PrunesAcceleratorWithoutPayoff()
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
-            && SubsetWastesAccelerant(cands, sel)) { return; }
+            && SubsetWastesAccelerant(cands, sel, storm_in_hand)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
@@ -5764,10 +5790,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Payoff-prune (Hook 29): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex) from the SEARCH branch list -- this is where the freed budget
         // comes from. Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-gated; inert
-        // for every other deck -> byte-identical.
+        // for every other deck -> byte-identical. storm_in_hand=false here on purpose: the storm-hold
+        // rule biases the greedy/rollout POLICY (Solve's consider) only, leaving the search's root
+        // branch list intact so it can still arbitrate the cast-a-dragon-now line.
         if (ResolveProvider(state).PrunesAcceleratorWithoutPayoff()
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
-            && SubsetWastesAccelerant(cands, sel)) { return; }
+            && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }

@@ -66,6 +66,18 @@ gap that no amount of depth closed, because the leaves themselves couldn't see t
    d0 play" ≠ "better rollout evaluator." Rules that *add lethality/board information* are the safe,
    monotone class; prefer them.
 
+   **How to RESCUE an option-prune (worked example #2, the storm-hold rule): gate the prune on the held
+   resource's payoff being VISIBLE.** The slow-dragon prune durdled because a blind leaf held a ritual
+   for a storm it couldn't foresee. The fix (from the deck's human pilot): only hold when a storm payoff
+   (Dragonstorm/Apex) is ALREADY IN HAND — then the leaf *can* see the payoff it is saving for, so it
+   doesn't durdle, and the search's leaf win-turns don't degrade. Same code (a fair Dragon stops being a
+   payoff in `SubsetWastesAccelerant`), now gated on `storm_in_hand`. Result: blind d0 −0.60 AND shipped
+   d5 −0.005 (NEUTRAL, no regression) — adopted. The gate converts an unsafe option-prune into a safe
+   one by removing the blind-durdle failure mode. General rule: an option-prune is safe when the leaf can
+   *observe* the reason for it; unsafe when it holds on faith. Apply it only to the greedy/rollout policy
+   (Solve's `consider`), not the search's root branch list, so the search can still arbitrate the pruned
+   line at the root.
+
 6. **Validate + adopt** — sweep the regression suite (train seeds) for the searched-depth deltas,
    confirm no other deck moves and zero searched-depth slowdowns, then adopt default-on with an
    off-switch and rebaseline GT (per the regression-testing + heuristic-optimization skills). Report the
@@ -83,10 +95,13 @@ later ETB). The hook (`GoOffSim`, mirroring `SpellEffects.h OnDragonEnters`) pro
 
 ## Open threads (next applications of the loop)
 
-- ~~**Slow-dragon rule**~~ **(REJECTED 2026-07-23)**: making a fair hard-cast Dragon not count as a
-  storm payoff in `SubsetWastesAccelerant` improved blind d0 LP ~−0.73t but worsened the shipped
-  d5-value search ~+0.37t (see the step-5 CAVEAT above — it is an option-pruning rule, not
-  information-adding). Left as an NB comment in `TurnSolver.cpp` so it isn't retreaded.
+- **Slow-dragon rule → storm-hold rule (REJECTED then RESCUED + ADOPTED 2026-07-23)**: the
+  *unconditional* slow-dragon prune (a fair Dragon never justifies a ritual) improved blind d0 ~−0.73t
+  but worsened the shipped d5 search ~+0.37t — an option-prune that durdled (step-5 CAVEAT). Gating it on
+  a storm payoff being IN HAND (`storm_in_hand`) removed the durdle: blind d0 −0.60, shipped d5 −0.005
+  (neutral). Adopted default-on (off-switch `MTG_NO_STORM_HOLD`), regression + smoke rebaselined,
+  containment held (Dragonstorm-only, no other deck moved). This is worked example #2 — how to make an
+  option-prune safe.
 - **Non-clairvoyant reference (blocked)** — a blind-search reference would be a *cleaner* hypothesis
   generator than the clairvoyant d5 (step 5). The attempt to get one via `MTG_SHUFFLE_SALT_SEARCH=N`
   was inconclusive: the salt gave LP identical to clairvoyant in the measured config (it did not
