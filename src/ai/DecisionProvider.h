@@ -400,3 +400,16 @@ public:
     virtual std::vector<ScaledCastVariant>
     ScaledCastVariants(const GameState& /*s*/, const CardDefinition& /*def*/) const { return {}; }
 };
+
+// ---------------------------------------------------------------------------------------------------
+// Payoff / ETB-value ordering primitive (shared, deck-agnostic). Given a multiset of card NAMES that
+// will enter the battlefield together -- a mass-ETB put list (Dragonstorm) or a within-turn sequence
+// of entering permanents -- return them reordered so an "on-other-ETB" trigger sees the MOST later
+// entries: beneficial on-other-ETB sources lead, harmful ones trail. STABLE within each band, so the
+// caller's own order among order-independent picks is preserved. Param-driven (CardParams), so a NEW
+// deck gets correct payoff-ordering just by handing its selected set here, in any order. Names may
+// repeat (multiplicity honoured). This is the value/kind-3 ordering; the LEGALITY kind (Daybreak
+// Coronet "another aura", topological/K=1) is a SEPARATE mechanism in TurnSolver (aura sequencing).
+// See DecisionProviders.cpp for the band rules + the harmful-trigger extension point, and
+// docs/design/sequential-plan-evaluation.md.
+std::vector<std::string> OrderEntriesByEtbValue(std::vector<std::string> names);

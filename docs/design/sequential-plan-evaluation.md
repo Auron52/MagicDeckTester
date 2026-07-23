@@ -28,12 +28,30 @@
   3. **Ordering oracle — ALREADY EXISTED.** `MTG_SEARCH_ORDER` is the full-permutation cast-ordering search
      (the ordering analog of `MTG_UNPRUNED`); Dragonstorm routes to the targeted generator, which matches
      and slightly beats it (it covers the k≥6 hands the k! cap skips).
-- **REMAINING (not yet generalized): the payoff / trigger-ETB-value ordering** (kind 3 of the three
-  ordering kinds below — e.g. Lathliss → Scourge → other Dragons). This is currently **hand-coded per
-  deck** (`DragonstormProvider::TutorToBattlefieldPutOrder`), not a general, value-sign-aware mechanism
-  ("beneficial on-other-ETB sources lead; harmful ones trail"). The **cost** part (affordability ordering)
-  and the **legality** part (aura restriction ordering) are both done — see increment 2 above; the
-  **payoff** part is the next piece to generalize, and ties into the deferred analysis step.
+- **Payoff / trigger-ETB-value ordering (kind 3) — GENERALIZED** (2026-07-23). The value-sign-aware
+  "beneficial on-other-ETB sources lead; harmful ones trail" rule now lives in a shared, param-driven
+  primitive `OrderEntriesByEtbValue(names)` (declared in `DecisionProvider.h`, defined in
+  `DecisionProviders.cpp`), a **stable band partition** (beneficial-producer → beneficial-other →
+  neutral → harmful) keyed on `CardParams` — so a NEW deck gets correct payoff-ordering by handing its
+  entering set in, in any order. `DragonstormProvider::TutorToBattlefieldPutOrder` now routes its
+  selected put-list through it (byte-identical: the list was already banded, so the stable reorder is a
+  no-op; smoke 21/21, 0 play-changed, every digest unchanged). The producer-vs-non-producer tiebreak is
+  the heuristic piece a future analysis step could measure/override; "beneficial leads neutral" is the
+  well-founded core. So all THREE ordering kinds now have a general mechanism: legality (2a, aura
+  sequencing, param-driven on `aura_enchant_requires`), cost (affordability aggregate), payoff
+  (`OrderEntriesByEtbValue`).
+- **NEXT (emerging direction, user-driven 2026-07-23): kill the per-deck patching treadmill for cost +
+  legality.** The affordability aggregate is an order-free scalar relaxation whose accuracy is
+  maintained by per-deck credit patches (`SameTurnReducerDiscount`, `SameTurnAffinityGenericCredit`) and
+  the aura legality widening — each new deck's cost/legality interaction risks a new patch. The user
+  (deck 8 of a 100+ backlog) wants a **general** mechanism instead of per-deck patches. Direction:
+  demote the aggregate to a cheap *over*-optimistic pre-filter (never drops a feasible line) and add ONE
+  authoritative gate that **applies the plan on a scratch state via the real executor** and keeps it iff
+  every intended cast resolves (nothing strands) — deck-agnostic by construction (uses the real rules),
+  subsuming the credit patches AND the aura legality widening. Plausibly perf-neutral-or-better (it
+  prunes infeasible over-credited lines *before* their wasted rollout). GT-affecting only in the recover
+  direction → rebaseline + legacy gate; `MTG_ORDER_ORACLE` (full-permutation) becomes the guard rail.
+  To be written up as its own design doc (`enumeration-feasibility-via-executor.md`) before implementing.
 - **Deferred (future, user-requested):** a per-deck **ordering-analysis step** that generates the
   candidate orderings a deck needs. See *Deferred: per-deck ordering-analysis step*.
 
@@ -138,11 +156,16 @@ same-turn board growth → it **under-credits** and drops affordable lines: one 
 needs the sequential/reservation-aware check. Not implemented (no Elves/Defenders deck, no count-scaling
 mana param); folded in when such a deck is added.
 
-### Trigger / ETB value — hand-coded per deck where it matters
+### Trigger / ETB value — now a shared, param-driven primitive (was hand-coded)
 
-Dragonstorm's put order is bespoke: `DragonstormProvider::TutorToBattlefieldPutOrder` (Lathliss →
-Scourges → Utvara → haste). Correct, but hand-written per deck — exactly what the deferred analysis step
-should *derive* instead.
+`OrderEntriesByEtbValue(names)` (2026-07-23) is the deck-agnostic payoff-ordering primitive: a stable
+band partition (beneficial-producer → beneficial-other → neutral → harmful) classified from `CardParams`
+(`etb_other_subtype_creates_tokens` → producer, `dragon_ping_on_enter` → beneficial-other; a harmful
+on-other-ETB param is the documented extension point). `DragonstormProvider::TutorToBattlefieldPutOrder`
+still owns the *selection* (which Dragons, haste-reservation) but hands its selected multiset to the
+primitive for the *order* — byte-identical there (already banded), and any future mass-ETB deck gets the
+ordering by handing its set in. The remaining per-deck knowledge (the producer-vs-non-producer tiebreak,
+and non-ETB selection tiebreaks) is what a future analysis step could measure/override.
 
 ### Legality / restriction — NOT handled autonomously (the gap)
 

@@ -3,6 +3,7 @@
 #include <utility>
 #include <atomic>
 #include <cstdint>
+#include <algorithm>   // std::stable_sort (OrderEntriesByEtbValue payoff-ordering primitive)
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
@@ -1937,6 +1938,62 @@ HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def
 
 // ---- DragonstormProvider ----------------------------------------------------
 
+// ===================================================================================================
+// Payoff / ETB-value ordering -- the shared "trigger ordering" primitive (kind 3 of the three
+// within-turn ordering kinds; see docs/design/sequential-plan-evaluation.md). DECK-AGNOSTIC and
+// param-driven, so a NEW deck gets correct payoff-ordering by handing its entering set here.
+//
+// A permanent with a "whenever another X enters" trigger wants to be on the battlefield BEFORE the
+// entries it cares about, so it sees the most of them. The rule is value-SIGN-aware -- it only holds
+// when the trigger HELPS you; a harmful on-other-ETB permanent flips it (enter LAST, minimise
+// exposure). Bands (lower = earlier), a STABLE partition so the caller's intra-band tiebreak survives:
+//
+//   0  beneficial on-other-ETB PRODUCER      -- trigger creates permanents that themselves re-trigger
+//                                               on-other-ETB sources, so placing it first MULTIPLIES
+//                                               later triggers (Lathliss: each later Dragon makes a 5/5
+//                                               token that re-pings Scourge). "Put the maker of
+//                                               triggerers ahead of the things it triggers."
+//   1  beneficial on-other-ETB non-producer  -- beneficial trigger, creates nothing that re-triggers
+//                                               (Scourge: pure face ping).
+//   2  neutral                               -- no on-other-ETB trigger; order-independent here.
+//   3  harmful on-other-ETB                  -- trigger hurts you; trail so it sees the FEWEST entries.
+//                                               (No such param in the pool yet -- EXTENSION POINT: add
+//                                               the param + a sign check to ClassifyEtbOrder, NOT a new
+//                                               mechanism.)
+//
+// The producer-vs-non-producer split (bands 0 vs 1) is a HEURISTIC default (Rule 0: no single correct
+// order, only measurably-better) validated on Dragonstorm and the piece a future per-deck ordering-
+// analysis step would MEASURE/override; "beneficial leads neutral" (0/1 vs 2) is the well-founded core.
+namespace {
+enum class EtbOrderBand { BeneficialProducer = 0, BeneficialOther = 1, Neutral = 2, Harmful = 3 };
+
+EtbOrderBand ClassifyEtbOrder(const CardParams& p)
+{
+    if (p.etb_other_subtype_creates_tokens) { return EtbOrderBand::BeneficialProducer; } // Lathliss
+    if (p.dragon_ping_on_enter)             { return EtbOrderBand::BeneficialOther; }     // Scourge
+    // (Harmful on-other-ETB: no param yet -- add it here when a card needs it.)
+    return EtbOrderBand::Neutral;
+}
+} // namespace
+
+std::vector<std::string> OrderEntriesByEtbValue(std::vector<std::string> names)
+{
+    // Stable partition by band: an already-banded input (Dragonstorm's put list) is unchanged
+    // (byte-identical); a set handed in any order comes back beneficial-on-other-ETB-first. The
+    // comparator only orders by band, so std::stable_sort keeps every within-band (order-independent)
+    // pick in the caller's order.
+    std::stable_sort(names.begin(), names.end(),
+        [](const std::string& a, const std::string& b)
+        {
+            const CardDefinition* da = CardDatabase::Instance().Lookup(a);
+            const CardDefinition* db = CardDatabase::Instance().Lookup(b);
+            const EtbOrderBand ba = da ? ClassifyEtbOrder(da->params) : EtbOrderBand::Neutral;
+            const EtbOrderBand bb = db ? ClassifyEtbOrder(db->params) : EtbOrderBand::Neutral;
+            return static_cast<int>(ba) < static_cast<int>(bb);
+        });
+    return names;
+}
+
 // Tutor-to-battlefield SELECTION + put-ORDER for Dragonstorm (user-shaped 2026-07-18; see
 // docs/design/analysis-Dragonstorm.md "DRAGONSTORM tutor-to-battlefield SELECTION HEURISTIC" +
 // "ORDER RULE" + the KILL PATTERN section). Given N = max_puts (storm total, already capped at the
@@ -2067,7 +2124,14 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
     // Defensive fill: any leftover inventory up to N (more bodies is never worse in a goldfish).
     pick(sL, nL, nL); pick(sS, nS, nS); pick(sU, nU, nU); pick(sK, nK, nK); pick(sG, nG, nG);
 
-    // --- ORDER: Lathliss, then all Scourges, then Utvara, Karrthus, Kolaghan (fixed). ---
+    // --- ORDER: emit the selected multiset, then route it through the shared payoff-ordering
+    // primitive (OrderEntriesByEtbValue): beneficial on-other-ETB sources lead so they see the most
+    // later entries -- Lathliss (token PRODUCER, band 0) first, then the Scourge ping (band 1), then
+    // the order-independent bodies (Utvara, Karrthus, Kolaghan; band 2). The selection order below is
+    // already banded, so the stable reorder is a NO-OP here (BYTE-IDENTICAL); the point of routing
+    // through the helper is that it now OWNS the cross-band payoff rule, so a future mass-ETB deck
+    // gets it by handing its set here in any order. The intra-band tiebreak (Utvara before the
+    // haste-Dragons; Karrthus before Kolaghan) is a caller decision the stable sort preserves. ---
     std::vector<std::string> put;
     put.reserve(sL + sS + sU + sK + sG);
     for (int i = 0; i < sL; ++i) { put.push_back(L); }
@@ -2075,7 +2139,7 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
     for (int i = 0; i < sU; ++i) { put.push_back(U); }
     for (int i = 0; i < sK; ++i) { put.push_back(K); }
     for (int i = 0; i < sG; ++i) { put.push_back(G); }
-    return put;
+    return OrderEntriesByEtbValue(std::move(put));
 }
 
 int DragonstormProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
