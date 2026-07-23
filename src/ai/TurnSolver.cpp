@@ -9525,6 +9525,21 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         for (const Action& a : p.actions)
         {
             if (!a.tutor_target.empty())   { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
+            // Aura enchant TARGET: which creature this Aura attaches to. Emit a sub per legal target so the
+            // viewer surfaces a "choose creature" art-grid (mirrors tutor_target) instead of silently taking
+            // the heuristic's first-enumerated pick -- the human IS the decision-maker here. Resolve the
+            // stable m_number to the creature's name for the grid art; the target is one of the player's
+            // creatures on the battlefield (LegalEnchantTargets), so this always resolves.
+            if (a.enchant_target > 0)
+            {
+                std::string etn;
+                for (const Permanent& perm : state.battlefield)
+                    if (perm.controller_index == state.active_player_index && perm.card.IsCreature()
+                        && perm.card.m_number == a.enchant_target)
+                    { etn = perm.card.m_name.str(); break; }
+                if (!etn.empty())
+                    addSub(a.card_name + " \xE2\x86\x92 " + etn, a.card_name + " \xE2\x86\x92", etn, etn, "enchant");
+            }
             if (a.chosen_x > 0)            { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
             // NOTE: a.ponder_keep is deliberately NOT a variant token. The Ponder reorder (keep-top
             // vs shuffle, and the full ordering) is re-asked at REAL resolution via the look-at-top
