@@ -213,6 +213,22 @@
   #playfield.drop-hi { border-color:var(--good); background:rgba(90,209,122,.06); }
   #playfield .dh { color:var(--good); font-size:11px; opacity:0; transition:opacity .1s; }
   #playfield.drop-hi .dh { opacity:1; }
+  /* Aura enchanting a creature: the auras fan behind the creature (right + slightly down), like
+     tucking them under the card in paper. The creature (.base) stays on top and fully visible; each
+     Aura peeks out. A drop-target creature highlights while dragging an Aura from hand. */
+  .enchgroup { position:relative; display:inline-block; vertical-align:top; }
+  .enchgroup .thumb.base { position:relative; z-index:40; display:inline-block; width:90px; }  /* inline-block so width applies outside a flex row (else img width:100% blows up) */
+  .enchgroup .aura-att, .enchgroup .aura-plan { position:absolute; left:0; width:90px; }  /* full size (== creature) so the name reads; stacked behind, top-bar peeks */
+  .enchgroup .aura-att em, .enchgroup .aura-plan em { display:none; }   /* only the top bar (name) shows */
+  .enchgroup .aura-att img  { box-shadow:0 0 0 1px rgba(230,200,120,.6), 0 2px 5px rgba(0,0,0,.5); }   /* resolved: gold */
+  .enchgroup .aura-plan img { box-shadow:0 0 0 2px var(--good), 0 2px 5px rgba(0,0,0,.5); }             /* queued: green */
+  .enchgroup .enchbadge { position:absolute; left:-6px; z-index:60; background:rgba(230,200,120,.95);
+    color:#0c1116; border-radius:9px; font-size:10px; font-weight:800; padding:1px 5px; box-shadow:0 1px 3px rgba(0,0,0,.5); }
+  .thumb.enchdrop img { box-shadow:0 0 0 3px var(--good), 0 0 12px rgba(90,209,122,.6) !important; cursor:copy; }
+  /* Light-Paws picker: the "not fetchable" section sits below the real choices, dimmer and smaller. */
+  .illsub { margin-top:12px; padding-top:8px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); }
+  .illgrid .cardmini { width:52px; opacity:.42; filter:grayscale(.4); }
+  .illgrid .cardmini em { font-size:9px; }
 
   /* card thumbnails inside the choose-variant picker */
   #verdict .vthumbs { display:flex; gap:6px; margin:4px 0 2px; flex-wrap:wrap; }
@@ -441,13 +457,47 @@ function plannedCount(name){ return LB.plannedCount(S.plan, name); }
 function leCount()         { return LB.leCount(S.plan); }
 function leMax()           { return LB.leMax(S.decision, S.plan); }
 function encodeLine()      { return LB.encodeLine(S.plan); }
-function queueCard(name, kind) {
+function queueCard(name, kind, target, targetName) {
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;  // UI guard (browser-only state)
   hideVerdict();
+  const before = S.plan.length;
   S.plan = LB.queueCard(S.decision, S.plan, name, kind);
+  // If a drag chose a specific enchant target, stamp it on the entry LB.queueCard just appended (it
+  // pushes at the end). At commit, encodeLine stays target-free; renderChooseDialog auto-resolves the
+  // aura's enchant sub to this target (see enchantPrefFor), so the drag picks the creature end-to-end.
+  if (target != null && S.plan.length > before) {
+    const e = S.plan[S.plan.length-1];
+    if (e && e.name===name) { e.target = target; e.targetName = targetName || null; }
+  }
   renderBoard();
 }
 function removePlanAt(i) { S.plan.splice(i,1); renderBoard(); }
+// Legal enchant targets a hand Aura can attach to, harvested from the enumerated plans (every
+// (aura, target) the engine offers appears as an action with enchant_target). Returns a map
+// num -> creature name; empty for a non-Aura (so drop-to-enchant only fires for real auras).
+function enchantTargetsFor(name) {
+  const d = S.decision, out = {};
+  if (!d || !Array.isArray(d.plans)) return out;
+  d.plans.forEach(pl => (pl.actions||[]).forEach(a => {
+    if (a.card===name && a.enchant_target>0) out[a.enchant_target] = a.enchant_target_name || ('#'+a.enchant_target);
+  }));
+  return out;
+}
+// Attempt a drag-drop of hand card `name` onto the creature with m_number `num`. Only auras with `num`
+// among their legal targets enchant; anything else falls through so the caller queues it normally.
+function tryEnchantDrop(name, kind, num) {
+  const tgts = enchantTargetsFor(name);
+  if (!(num in tgts)) return false;
+  queueCard(name, kind, num, tgts[num]);
+  flashHint(`Enchanting ${tgts[num]} with ${name}.`);
+  return true;
+}
+// The creature name the user dragged `auraName` onto this turn (null if it was queued without a drag).
+// Used by the choose dialog to auto-resolve the aura's enchant target instead of re-asking.
+function enchantPrefFor(auraName) {
+  const e = (S.plan||[]).find(p=>p.name===auraName && p.targetName);
+  return e ? e.targetName : null;
+}
 function clearPlan() { S.plan=[]; S.leMode=false; S.vialMode=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
@@ -512,8 +562,12 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
               : isVial ? ` data-vial="${charge.count}" title="click to deploy a creature with mana value ${charge.count} via this Vial"`
               : canSac ? ` data-sacdig="${esc(o.name)}" title="click to sacrifice ${esc(o.name)} to draw a card"` : '';
   const idxAttr = (o.idx!=null) ? ` data-idx="${o.idx}"` : '';
+  // data-num = stable m_number; it is the drop target key for drag-to-enchant (a creature only — lands
+  // have num 0). enchantTargetsFor()/tryEnchantDrop() gate to legal aura targets, so a non-creature num
+  // is simply never a match.
+  const numAttr = (o.num) ? ` data-num="${o.num}"` : '';
   const tcls = o.tapped ? ' tapped' : '';   // #9: show tapped (used / enters-tapped) permanents
-  return `<span class="thumb ${cls}${vcls}${tcls}" data-name="${esc(o.name)}"${idxAttr}${attrs}>`+
+  return `<span class="thumb ${cls}${vcls}${tcls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
     (canSac?`<span class="digbadge" title="sacrifice ${esc(o.name)} to draw a card">🩸 sac</span>`:'')+
@@ -528,6 +582,37 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
     src+`<em>${esc(entry.name)}</em></span>`;
+}
+// A RESOLVED aura stacked BEHIND its host, shifted up so its top bar (name) peeks out identifiably.
+function auraAttThumb(o, z, top) {
+  return `<span class="thumb spell aura-att" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}" title="${esc(o.name)} — enchanting">`+
+    `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(o.name)}</em></span>`;
+}
+// A PLANNED aura (dragged onto this creature this turn, not yet cast) — same stack, planned styling +
+// an order badge and a remove ✕ (reuses the .thumb.planned .rm[data-rm] handler wired after render).
+function plannedAuraThumb(entry, planIdx, ord, z, top) {
+  return `<span class="thumb spell planned aura-plan" style="z-index:${z};top:${top}px" data-name="${esc(entry.name)}" title="${esc(entry.name)} — queued">`+
+    `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
+    `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(entry.name)}</em></span>`;
+}
+// A creature plus the Auras (resolved + planned) attached to it, STACKED UPWARD behind it: the creature
+// (.base) sits at the bottom on top, and each aura is offset up by PEEK px so only its top bar (card
+// name) shows above the card in front of it — identifiable without hovering. The group reserves PEEK*N
+// of head-room above the creature via padding-top; auras are absolutely placed into it.
+function enchantedGroup(host, auras, planned) {
+  const items = auras.map(o=>({att:o})).concat(planned.map(pl=>({plan:pl})));
+  const n = items.length, PEEK = 30;         // px of each aura's TOP that stays visible
+  const fanH = n * PEEK;
+  const base = bfThumb(host).replace('class="thumb ', 'class="thumb base ');
+  let html = '';
+  items.forEach((it,i)=>{
+    const top = fanH - (i+1)*PEEK;           // i=0 nearest the creature (lowest/front); higher i tucks up+back
+    const z   = 39 - i;
+    html += it.att ? auraAttThumb(it.att, z, top)
+                   : plannedAuraThumb(it.plan.entry, it.plan.planIdx, it.plan.ord, z, top);
+  });
+  return `<span class="enchgroup" style="padding-top:${fanH}px">${html}${base}`+
+    `<span class="enchbadge" style="top:${fanH}px" title="${n} aura${n>1?'s':''} on ${esc(host.name)}">🔗${n}</span></span>`;
 }
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
@@ -559,16 +644,31 @@ function renderBoard() {
   const ord = S.plan.map((_,i)=>i+1);
   const plannedLands = [], plannedPerms = [], plannedSpells = [], plannedLE = [];
   S.plan.forEach((p,i)=>{
-    const t=plannedThumb(p,i,ord[i]);
-    if(p.kind==='le') plannedLE.push(t);           // discarded to Land's Edge -> its own zone
-    else if(p.kind==='land') plannedLands.push(t);
-    else if(p.kind==='retrace') plannedSpells.push(t);   // retrace = sorcery/instant from the yard
-    else if(p.kind==='nonpermanent') plannedSpells.push(t);
-    else plannedPerms.push(t); });   // 'vial' deploy is a creature -> the permanents zone
+    if(p.kind==='le'){ plannedLE.push(plannedThumb(p,i,ord[i])); return; }        // discarded to Land's Edge
+    if(p.kind==='land'){ plannedLands.push(plannedThumb(p,i,ord[i])); return; }
+    if(p.kind==='retrace'||p.kind==='nonpermanent'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
+    if(p.target){ return; }   // aura dragged onto a creature -> drawn overlapping its host (below)
+    plannedPerms.push(plannedThumb(p,i,ord[i])); });   // 'vial' deploy is a creature -> the permanents zone
 
   const meBf = me.battlefield||[];
   const meLands = meBf.filter(x=>x.is_land).map(bfThumb);
-  const mePerms = meBf.filter(x=>!x.is_land).map(bfThumb);
+  // Group attached Auras UNDER their host creature (by m_number). Planned Auras dragged onto a creature
+  // this turn attach too. A host with no Aura renders as a plain thumb; an Aura whose host isn't found
+  // falls back to a standalone thumb so nothing is ever hidden.
+  const mePermsRaw = meBf.filter(x=>!x.is_land);
+  const aurasByHost = {};
+  mePermsRaw.forEach(p=>{ if(p.is_aura && p.attached_to>0){ (aurasByHost[p.attached_to]=aurasByHost[p.attached_to]||[]).push(p); } });
+  const plannedAurasByHost = {};
+  S.plan.forEach((p,i)=>{ if(p.target && p.kind!=='land' && p.kind!=='le'){ (plannedAurasByHost[p.target]=plannedAurasByHost[p.target]||[]).push({entry:p, planIdx:i, ord:ord[i]}); } });
+  const hostNums = new Set(mePermsRaw.filter(p=>!(p.is_aura && p.attached_to>0)).map(p=>p.num));
+  const mePerms = mePermsRaw
+    .filter(p=>!(p.is_aura && p.attached_to>0))
+    .map(host=>{
+      const at = aurasByHost[host.num]||[], pl = plannedAurasByHost[host.num]||[];
+      return (at.length||pl.length) ? enchantedGroup(host, at, pl) : bfThumb(host);
+    });
+  // Orphan attached auras (host not on my field — shouldn't happen) render standalone.
+  mePermsRaw.forEach(p=>{ if(p.is_aura && p.attached_to>0 && !hostNums.has(p.attached_to)) mePerms.push(bfThumb(p)); });
 
   // Result banner FIRST (sticky top) so the outcome is the most prominent thing on the board,
   // not buried below the turn bar / tucked into the History panel on the right.
@@ -715,7 +815,7 @@ function renderPlanbar() {
   const chips = S.plan.map((p,i)=>{
     if (p.kind==='le') return '';
     const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='land'?'land':'spell');
-    const tag = p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':'';
+    const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':'') + (p.targetName?` → ${esc(p.targetName)}`:'');
     return `<span class="chip ${cls}"><span class="n">${i+1}</span>`+
       `<span class="nm" data-name="${esc(p.name)}">${esc(p.name)}${tag}</span><span class="x" data-rm="${i}">✕</span></span>`;
   }).join('');
@@ -799,9 +899,13 @@ function renderHand() {
     t.addEventListener('click', () => { if (S._clickT) return;
       S._clickT = setTimeout(()=>{ S._clickT=null; activateAbility(card); }, 220); });
     t.addEventListener('dblclick', () => { if (S._clickT){ clearTimeout(S._clickT); S._clickT=null; } queueCard(card, kind); });
-    t.addEventListener('dragstart', e => { e.dataTransfer.setData('text/card', card); e.dataTransfer.setData('text/kind', kind); });
+    t.addEventListener('dragstart', e => { e.dataTransfer.setData('text/card', card); e.dataTransfer.setData('text/kind', kind);
+      S._dragCard=card; S._dragKind=kind; S._dragTargets=enchantTargetsFor(card); });   // stash for creature drop-highlight
+    t.addEventListener('dragend', () => { S._dragCard=null; S._dragKind=null; S._dragTargets=null; clearEnchDropHi(); });
   });
 }
+// Remove the drop highlight from every creature (dragend / after a drop).
+function clearEnchDropHi(){ document.querySelectorAll('.thumb.enchdrop').forEach(t=>t.classList.remove('enchdrop')); }
 
 function wireBoard() {
   // remove ✕ on planned cards in the field
@@ -971,6 +1075,16 @@ function renderChooseDialog(v, line){
       const minChoice=choices.map(c=>c.choice).sort((a,b)=>(parseInt((a+'').replace('+',''))||0)-(parseInt((b+'').replace('+',''))||0))[0];
       const next=remaining.filter(x=>choiceOf(x,dim.key)===minChoice);
       return stepChoose(next, picks.concat([{key:dim.key, choice:minChoice}]));
+    }
+    // Drag-to-enchant: if the user dragged this Aura onto a specific creature, auto-resolve its enchant
+    // target to that creature (skip the manual pick), mirroring the crackle/soulfire auto-commit above.
+    // The dimension key is "<Aura> →"; strip the arrow to get the aura name.
+    if (dim.kind==='enchant'){
+      const aura = dim.key.replace(/\s*→\s*$/,'').trim();
+      const pref = enchantPrefFor(aura);
+      const hit  = pref && choices.find(c=>c.choice===pref);
+      if (hit){ const next=remaining.filter(x=>choiceOf(x,dim.key)===hit.choice);
+                return stepChoose(next, picks.concat([{key:dim.key, choice:hit.choice}])); }
     }
     renderDimPick(dim, choices, remaining, picks);
   }
@@ -1320,17 +1434,35 @@ function digPanelHtml(d){
 // whose restriction Light-Paws satisfies) are clickable, the rest dimmed/non-pickable, and "Fetch
 // nothing" declines. The AI's pick is tagged. The fetched Aura enters attached to Light-Paws this turn.
 function lightPawsPanelHtml(d){
+  const pool=d.pool||[];
+  // Separate the fetchable Auras from the rest. Dedup by name (identical copies fetch the same card): a
+  // name is fetchable if ANY copy is legal (use that copy's index); names with no legal copy are shown
+  // dimmed BELOW so the search is still visible without cluttering the real choices.
+  const legal=[], seenLegal=new Set(), illegal=[], seenAll=new Set();
+  pool.forEach(c=>{ if(c.legal && !seenLegal.has(c.name)){ seenLegal.add(c.name); seenAll.add(c.name); legal.push(c); } });
+  pool.forEach(c=>{ if(!c.legal && !seenLegal.has(c.name) && !seenAll.has(c.name)){ seenAll.add(c.name); illegal.push(c); } });
+  const defName=(pool.find(c=>c.index===d.heuristic_default)||{}).name;
   let h=`<h3>Light-Paws — fetch an Aura</h3>`;
-  h+=`<div class="sub">You cast an Aura, so <b>${esc(d.source||'Light-Paws')}</b> searches your library for an Aura to put onto the battlefield attached to itself. Click a highlighted Aura to fetch it (a duplicate name, too-high mana value, or unmet restriction is not a legal pick), or fetch nothing.</div>`;
+  h+=`<div class="sub">You cast an Aura, so <b>${esc(d.source||'Light-Paws')}</b> searches your library for an Aura to put onto the battlefield attached to itself. Click one to fetch it, or fetch nothing.</div>`;
   h+=`<div class="tutgrid">`;
-  (d.pool||[]).forEach(c=>{
-    const def=c.index===d.heuristic_default;
-    const cls=c.legal?'tdig'+(def?' def':''):'tdig illegal';
-    h+=`<span class="cardmini ${cls}"${c.legal?` data-opt="${c.index}"`:''} data-name="${esc(c.name)}" title="${esc(c.name)}${c.legal?'':' — not a legal fetch'}">`+
+  if(!legal.length) h+=`<span class="hint">No legal Aura to fetch.</span>`;
+  legal.forEach(c=>{
+    const def=c.name===defName;
+    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
        (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
   });
-  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+  h+=`</div>`;
+  if(illegal.length){
+    h+=`<div class="sub illsub">Not fetchable — a duplicate of an Aura you control, mana value too high, or restriction unmet:</div>`;
+    h+=`<div class="tutgrid illgrid">`;
+    illegal.forEach(c=>{
+      h+=`<span class="cardmini tdig illegal" data-name="${esc(c.name)}" title="${esc(c.name)} — not a legal fetch">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em></span>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
      `<button class="ghost" data-opt="-1">Fetch nothing</button></div>`;
   return h;
 }
@@ -2012,8 +2144,19 @@ async function step() {
   S.busy=false; $('undo').disabled = S.choices.length===0;
   if (res.kind==='decision') {
     advanceTo(res.decision);
-    const dropped=detectDropped((res.decision||{}).me);
-    if (dropped.length) return rollbackLine(dropped);
+    // Defer the dropped-cast check while the committed plan is STILL APPLYING. A resolution-time
+    // sub-decision (Light-Paws / dig / scry / target / sacrifice / ...) is returned MID-plan, before the
+    // plan's later casts resolve. E.g. Ethereal Armor + Daybreak Coronet: Ethereal Armor resolves, triggers
+    // Light-Paws, and the engine PAUSES here with Daybreak Coronet still in hand -- judging droppedness now
+    // wrongly flags Coronet as unpayable and rolls the line back, pre-empting the very trigger the user
+    // never gets to see. _intendedCasts persists across the sub-decision reply (pushChoices does not clear
+    // it), so the check runs once the plan is fully resolved: the next non-sub decision, or a result. A
+    // genuinely dropped cast produces no trigger, so it never lands on a sub-decision -- it surfaces at the
+    // plan's end and is still caught there.
+    if (!SUBDECISIONS.includes((res.decision||{}).type)) {
+      const dropped=detectDropped((res.decision||{}).me);
+      if (dropped.length) return rollbackLine(dropped);
+    }
   } else if (res.kind==='result') {
     const dropped=detectDropped((res.result||{}).me);
     if (dropped.length) return rollbackLine(dropped);
@@ -2087,6 +2230,9 @@ function rollbackStep() {
   (S.checkpoints||[]).length=S.steps.length;   // drop this + the returned decision's cp; advanceTo recreates it
   S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null; hideDecPanel();
+  // Clear the dropped-cast snapshot: since the drop-check is now deferred across mid-plan sub-decisions,
+  // it can outlive a single step -- an undo mid-plan must not leave a stale snapshot to mis-fire later.
+  S._intendedCasts=null; S._preHandCounts=null; S._preGyCounts=null; S._preBfCounts=null;
   return true;
 }
 async function undo() {
@@ -2137,11 +2283,22 @@ async function loadDecks() {
 // drag from hand onto YOUR FIELD (#playfield) — the area where cards get played — queues the card
 (function(){
   const pf=()=>$('playfield');
-  document.addEventListener('dragover', e=>{ if(e.target.closest('#playfield')){ e.preventDefault(); pf()&&pf().classList.add('drop-hi'); } });
-  document.addEventListener('dragleave', e=>{ if(e.target.closest('#playfield') && !(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('#playfield'))) pf()&&pf().classList.remove('drop-hi'); });
+  // The creature thumb (data-num) under the cursor, IF the dragged Aura can legally enchant it.
+  const enchTargetUnder=e=>{ const t=e.target.closest('#playfield .thumb[data-num]');
+    if(!t || !S._dragTargets) return null; const num=+t.dataset.num; return (num in S._dragTargets) ? t : null; };
+  document.addEventListener('dragover', e=>{ if(!e.target.closest('#playfield')) return; e.preventDefault();
+    pf()&&pf().classList.add('drop-hi');
+    // Highlight the specific creature when dropping here would enchant it (drag an Aura from hand).
+    clearEnchDropHi(); const ct=enchTargetUnder(e); if(ct) ct.classList.add('enchdrop'); });
+  document.addEventListener('dragleave', e=>{ if(e.target.closest('#playfield') && !(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('#playfield'))){ pf()&&pf().classList.remove('drop-hi'); clearEnchDropHi(); } });
   document.addEventListener('drop', e=>{ if(!e.target.closest('#playfield')) return; e.preventDefault();
-    pf()&&pf().classList.remove('drop-hi');
-    const card=e.dataTransfer.getData('text/card'); if(card) queueCard(card, e.dataTransfer.getData('text/kind')||'permanent'); });
+    pf()&&pf().classList.remove('drop-hi'); clearEnchDropHi();
+    const card=e.dataTransfer.getData('text/card'); if(!card) return;
+    const kind=e.dataTransfer.getData('text/kind')||'permanent';
+    // Dropped ON a legal creature -> enchant it; otherwise queue the card as a plain play.
+    const ct=e.target.closest('#playfield .thumb[data-num]');
+    if(ct && tryEnchantDrop(card, kind, +ct.dataset.num)) return;
+    queueCard(card, kind); });
 })();
 
 $('newgame').onclick=newGame; $('nextgame').onclick=nextGame; $('undo').onclick=undo;

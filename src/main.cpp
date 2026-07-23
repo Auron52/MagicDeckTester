@@ -99,7 +99,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     // a human label (tooltip), and the count. A permanent may carry several kinds at once
     // (e.g. a depletion land that also caught a +1/+1), hence a vector.
     struct Cnt { const char* kind; const char* label; int count; };
-    struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped; };
+    struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped;
+                 int num; bool is_aura; int attached_to; };
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -131,7 +132,11 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (p.charge_counters)  { cs.push_back({ "charge",    "charge",    p.charge_counters }); }
         if (p.verse_counters)   { cs.push_back({ "verse",     "verse",     p.verse_counters }); }
         if (p.storage_counters) { cs.push_back({ "storage",   "storage",   p.storage_counters }); }
-        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped });
+        // num = stable per-copy id; is_aura + attached_to let the viewer draw an Aura overlapping the
+        // creature (m_number) it enchants (0 = unattached / not an Aura). Additive display fields.
+        bool is_aura = d && d->params.is_aura;
+        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
+                         p.card.m_number, is_aura, p.aura_attached_to });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -141,7 +146,10 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (i) { os << ", "; }
         os << "{ \"name\": "; JsonStr(os, rows[i].name);
         os << ", \"idx\": " << rows[i].idx;
+        os << ", \"num\": " << rows[i].num;
         if (rows[i].tapped) { os << ", \"tapped\": true"; }
+        if (rows[i].is_aura) { os << ", \"is_aura\": true"; }
+        if (rows[i].attached_to > 0) { os << ", \"attached_to\": " << rows[i].attached_to; }
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
         if (!rows[i].counters.empty())
