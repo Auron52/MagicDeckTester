@@ -462,12 +462,20 @@ function queueCard(name, kind, target, targetName) {
   hideVerdict();
   const before = S.plan.length;
   S.plan = LB.queueCard(S.decision, S.plan, name, kind);
-  // If a drag chose a specific enchant target, stamp it on the entry LB.queueCard just appended (it
-  // pushes at the end). At commit, encodeLine stays target-free; renderChooseDialog auto-resolves the
-  // aura's enchant sub to this target (see enchantPrefFor), so the drag picks the creature end-to-end.
-  if (target != null && S.plan.length > before) {
+  if (S.plan.length > before) {
     const e = S.plan[S.plan.length-1];
-    if (e && e.name===name) { e.target = target; e.targetName = targetName || null; }
+    // If a drag chose a specific enchant target, stamp it on the entry LB.queueCard just appended (it
+    // pushes at the end). At commit, encodeLine stays target-free; renderChooseDialog auto-resolves the
+    // aura's enchant sub to this target (see enchantPrefFor), so the drag picks the creature end-to-end.
+    if (target != null && e && e.name===name) { e.target = target; e.targetName = targetName || null; }
+    // Stamp the stable card number of the hand copy being played, so a queued CREATURE is itself a
+    // drop target for a same-turn Aura (drag Rancor onto a Bogle you're casting this turn). Pick a hand
+    // copy of this name not already claimed by another queued entry.
+    if (e && e.name===name && e.kind!=='land' && e.num==null) {
+      const used = new Set(S.plan.filter(p=>p.num!=null).map(p=>p.num));
+      const hc = (((S.decision||{}).me||{}).hand||[]).find(c=>c.name===name && !used.has(c.num));
+      if (hc) e.num = hc.num;
+    }
   }
   renderBoard();
 }
@@ -578,7 +586,9 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
 function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
   const src = entry.kind==='vial'    ? `<span class="srcbadge vial" title="deployed via Aether Vial (free)">⚡</span>`
             : entry.kind==='retrace' ? `<span class="srcbadge retrace" title="cast from graveyard via Retrace (discards a land)">↩</span>` : '';
-  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}" data-name="${esc(entry.name)}">`+
+  // data-num on a queued creature makes it a drop target for a same-turn Aura (drag Rancor onto it).
+  const numAttr = (entry.num && !entry.target) ? ` data-num="${entry.num}"` : '';
+  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}" data-name="${esc(entry.name)}"${numAttr}>`+
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
     src+`<em>${esc(entry.name)}</em></span>`;
@@ -595,24 +605,32 @@ function plannedAuraThumb(entry, planIdx, ord, z, top) {
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(entry.name)}</em></span>`;
 }
-// A creature plus the Auras (resolved + planned) attached to it, STACKED UPWARD behind it: the creature
-// (.base) sits at the bottom on top, and each aura is offset up by PEEK px so only its top bar (card
-// name) shows above the card in front of it — identifiable without hovering. The group reserves PEEK*N
-// of head-room above the creature via padding-top; auras are absolutely placed into it.
-function enchantedGroup(host, auras, planned) {
+// Stack Auras UPWARD behind a host thumb: the host (.base) sits at the bottom on top, and each aura is
+// offset up by PEEK px so only its top bar (card name) shows above the card in front of it — identifiable
+// without hovering. Reserves PEEK*N head-room via padding-top; auras are absolutely placed into it.
+// `baseHtml` is the host's thumb (a resolved creature or a queued one); `auras`/`planned` are its Auras.
+function enchStack(baseHtml, hostName, auras, planned) {
   const items = auras.map(o=>({att:o})).concat(planned.map(pl=>({plan:pl})));
-  const n = items.length, PEEK = 30;         // px of each aura's TOP that stays visible
+  const n = items.length, PEEK = 30;
   const fanH = n * PEEK;
-  const base = bfThumb(host).replace('class="thumb ', 'class="thumb base ');
   let html = '';
   items.forEach((it,i)=>{
-    const top = fanH - (i+1)*PEEK;           // i=0 nearest the creature (lowest/front); higher i tucks up+back
+    const top = fanH - (i+1)*PEEK;           // i=0 nearest the host (lowest/front); higher i tucks up+back
     const z   = 39 - i;
     html += it.att ? auraAttThumb(it.att, z, top)
                    : plannedAuraThumb(it.plan.entry, it.plan.planIdx, it.plan.ord, z, top);
   });
-  return `<span class="enchgroup" style="padding-top:${fanH}px">${html}${base}`+
-    `<span class="enchbadge" style="top:${fanH}px" title="${n} aura${n>1?'s':''} on ${esc(host.name)}">🔗${n}</span></span>`;
+  return `<span class="enchgroup" style="padding-top:${fanH}px">${html}${baseHtml}`+
+    `<span class="enchbadge" style="top:${fanH}px" title="${n} aura${n>1?'s':''} on ${esc(hostName)}">🔗${n}</span></span>`;
+}
+// A RESOLVED creature on the battlefield + its (resolved + planned) Auras.
+function enchantedGroup(host, auras, planned) {
+  return enchStack(bfThumb(host).replace('class="thumb ', 'class="thumb base '), host.name, auras, planned);
+}
+// A QUEUED creature (cast this turn) + the Auras dragged onto it this turn (all planned).
+function plannedEnchantGroup(entry, planIdx, ord, planned) {
+  return enchStack(plannedThumb(entry, planIdx, ord).replace('class="thumb planned ', 'class="thumb base planned '),
+                   entry.name, [], planned);
 }
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
@@ -642,24 +660,32 @@ function renderBoard() {
 
   // order map: planIdx -> order number (1-based, in queue order)
   const ord = S.plan.map((_,i)=>i+1);
+  // Planned Auras dragged onto a creature this turn -> grouped by their host num (a BOARD creature or a
+  // creature also queued this turn). Computed first so the planned-perms loop can group a queued host.
+  const plannedAurasByHost = {};
+  S.plan.forEach((p,i)=>{ if(p.target && p.kind!=='land' && p.kind!=='le'){ (plannedAurasByHost[p.target]=plannedAurasByHost[p.target]||[]).push({entry:p, planIdx:i, ord:ord[i]}); } });
+  const meBf = me.battlefield||[];
+  const boardHostNums = new Set(meBf.filter(x=>!x.is_land && !(x.is_aura&&x.attached_to>0)).map(x=>x.num));
+
   const plannedLands = [], plannedPerms = [], plannedSpells = [], plannedLE = [];
   S.plan.forEach((p,i)=>{
     if(p.kind==='le'){ plannedLE.push(plannedThumb(p,i,ord[i])); return; }        // discarded to Land's Edge
     if(p.kind==='land'){ plannedLands.push(plannedThumb(p,i,ord[i])); return; }
     if(p.kind==='retrace'||p.kind==='nonpermanent'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
-    if(p.target){ return; }   // aura dragged onto a creature -> drawn overlapping its host (below)
-    plannedPerms.push(plannedThumb(p,i,ord[i])); });   // 'vial' deploy is a creature -> the permanents zone
+    if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
+    // A queued CREATURE that has queued Auras on it (and isn't already a board creature) renders as a
+    // planned enchant group; otherwise a plain planned thumb. ('vial' deploy is a creature -> perms zone.)
+    if(p.num && !boardHostNums.has(p.num) && (plannedAurasByHost[p.num]||[]).length){
+      plannedPerms.push(plannedEnchantGroup(p, i, ord[i], plannedAurasByHost[p.num])); return;
+    }
+    plannedPerms.push(plannedThumb(p,i,ord[i])); });
 
-  const meBf = me.battlefield||[];
   const meLands = meBf.filter(x=>x.is_land).map(bfThumb);
-  // Group attached Auras UNDER their host creature (by m_number). Planned Auras dragged onto a creature
-  // this turn attach too. A host with no Aura renders as a plain thumb; an Aura whose host isn't found
-  // falls back to a standalone thumb so nothing is ever hidden.
+  // Group attached Auras UNDER their host creature (by m_number). A host with no Aura renders as a plain
+  // thumb; an Aura whose host isn't found falls back to a standalone thumb so nothing is ever hidden.
   const mePermsRaw = meBf.filter(x=>!x.is_land);
   const aurasByHost = {};
   mePermsRaw.forEach(p=>{ if(p.is_aura && p.attached_to>0){ (aurasByHost[p.attached_to]=aurasByHost[p.attached_to]||[]).push(p); } });
-  const plannedAurasByHost = {};
-  S.plan.forEach((p,i)=>{ if(p.target && p.kind!=='land' && p.kind!=='le'){ (plannedAurasByHost[p.target]=plannedAurasByHost[p.target]||[]).push({entry:p, planIdx:i, ord:ord[i]}); } });
   const hostNums = new Set(mePermsRaw.filter(p=>!(p.is_aura && p.attached_to>0)).map(p=>p.num));
   const mePerms = mePermsRaw
     .filter(p=>!(p.is_aura && p.attached_to>0))
