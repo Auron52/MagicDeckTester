@@ -261,6 +261,18 @@ public:
     // standing MTG_UNPRUNED / MTG_UNPRUNE=payoffprune audit reverts to the full (unpruned) branch set.
     // Measured (train+held-out): ~-0.055 turns, -42% rollout calls. See docs/design/dragonstorm-payoff-prune.md.
     bool PrunesAcceleratorWithoutPayoff() const override { return true; }
+
+    // Go-off lethal model (Hook 14). The Dragonstorm storm go-off (rituals -> Dragonstorm -> N Dragons
+    // -> Scourge ETB pings) IS this turn's lethal, but Dragonstorm the spell has direct_damage 0 and its
+    // dragons resolve later, so the engine's generic win-check (attack + direct) never sees it. Without
+    // this the greedy/rollout `wins` check misses every go-off, so each leaf casts Dragonstorm late by
+    // board-dev and the search can't tell a T3 kill from a T5 durdle (flat win-turn signal). This projects
+    // the storm-put Dragons' ETB burst so `wins` fires for real go-offs; execution stays the arbiter (an
+    // over-projection only STEERS the pick, never fabricates a win). See
+    // docs/design/dragonstorm-goff-lethal-recognition.md.
+    bool HasExtraLethalModel() const override;   // default ON; off-switch MTG_NO_DRAGONSTORM_GOFF
+    int  ExtraLethalDamage(const GameState&,
+                           const std::vector<const CardDefinition*>&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

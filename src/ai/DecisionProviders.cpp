@@ -2078,6 +2078,91 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
     return put;
 }
 
+namespace
+{
+    // Cheap integer model of the Dragonstorm go-off's this-turn ETB burst, mirroring SpellEffects.h
+    // OnDragonEnters EXACTLY: for each entering NONTOKEN Dragon, every OTHER Lathliss first makes a 5/5
+    // Dragon token (which itself enters -> pings), then every Scourge in play deals `dragons` (the current
+    // count) to the opponent. Pure integer recursion (no GameState copy, tiny N) -> safe on the rollout
+    // hot path. Dragons already in play seed the counts (they don't re-enter but scale the ping X and
+    // their Scourges/Lathliss fire for the new entrants).
+    struct GoOffSim
+    {
+        long long dmg      = 0;
+        int       dragons  = 0;   // Dragons currently controlled
+        int       scourges = 0;   // Scourge of Valkas in play (pingers)
+        int       lathliss = 0;   // Lathliss in play (token engines)
+        void enter(bool is_scourge, bool is_lathliss, bool is_token)
+        {
+            ++dragons;
+            if (!is_token) { if (is_scourge) { ++scourges; } if (is_lathliss) { ++lathliss; } }
+            if (!is_token)                                  // STEP 1: other Lathliss each make a 5/5 token
+            {
+                const int makers = lathliss - (is_lathliss ? 1 : 0);
+                for (int k = 0; k < makers; ++k) { enter(false, false, true); }
+            }
+            dmg += static_cast<long long>(scourges) * dragons;   // STEP 2: this entrant's Scourge pings
+        }
+    };
+    // ADOPTED default ON: the go-off win-now model. MTG_NO_DRAGONSTORM_GOFF restores the pre-fix behavior
+    // (byte-identical -- the engine skips building `casting` when HasExtraLethalModel is false) for A/B.
+    // Measured (train seeds 4004/5005): d0 -0.33, d3/d5 -0.05..-0.10, no regressions, no other deck moves.
+    const bool s_goff_lethal = std::getenv("MTG_NO_DRAGONSTORM_GOFF") == nullptr;
+}  // namespace
+
+bool DragonstormProvider::HasExtraLethalModel() const
+{
+    return s_goff_lethal;
+}
+
+int DragonstormProvider::ExtraLethalDamage(const GameState& s,
+        const std::vector<const CardDefinition*>& casting) const
+{
+    if (!s_goff_lethal) { return 0; }
+    // Fire only for the storm go-off: a plan that casts Dragonstorm (tutor_to_battlefield). Apex's impulse
+    // lethal is a separate cast decision and is left to execution (no storm card -> 0, byte-identical intent).
+    const CardDefinition* storm = nullptr;
+    for (const CardDefinition* c : casting)
+    {
+        if (c && c->params.tutor_to_battlefield) { storm = c; break; }
+    }
+    if (!storm) { return 0; }
+
+    const int me = s.active_player_index;
+
+    // Seed with the Dragons already in play (count + Scourge/Lathliss roles).
+    GoOffSim sim;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !CardHasSubtype(p.card, "Dragon")) { continue; }
+        ++sim.dragons;
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.dragon_ping_on_enter)             { ++sim.scourges; }
+        if (d && d->params.etb_other_subtype_creates_tokens) { ++sim.lathliss; }
+    }
+
+    // Hard-cast Dragons in THIS plan resolve BEFORE Dragonstorm (creatures cast before the rank-20
+    // payoff), so they are in play for the storm puts' pings -- enter them first.
+    for (const CardDefinition* c : casting)
+    {
+        if (!c || c == storm || !CardHasSubtype(c->card, "Dragon")) { continue; }
+        sim.enter(c->params.dragon_ping_on_enter, c->params.etb_other_subtype_creates_tokens, false);
+    }
+
+    // Storm count -> Dragons put. spells_cast_this_turn is ++'d per cast; this plan adds casting.size()
+    // spells and Dragonstorm (cast last by CastOrderRank) puts that many, capped at the library inventory.
+    // Reuse the picker for the EXACT ordered put-list execution will use (lockstep, ping-maximising order).
+    const int projected_storm = s.spells_cast_this_turn + static_cast<int>(casting.size());
+    const std::vector<std::string> put = TutorToBattlefieldPutOrder(s, me, storm->params, projected_storm);
+    for (const std::string& nm : put)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        sim.enter(d && d->params.dragon_ping_on_enter, d && d->params.etb_other_subtype_creates_tokens, false);
+    }
+
+    return sim.dmg > 1000000 ? 1000000 : static_cast<int>(sim.dmg);   // clamp: never overflow the win-check
+}
+
 int DragonstormProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     // Irencrag Feat restricts further casts ("you can cast only one more spell this turn"), so it must

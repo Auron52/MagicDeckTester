@@ -1,6 +1,12 @@
-# Dragonstorm: the search doesn't recognize its own go-off as lethal (ROOT-CAUSED)
+# Dragonstorm: the search doesn't recognize its own go-off as lethal (FIXED + ADOPTED)
 
-**Status: root-caused 2026-07-22, fix not yet implemented.** Found while investigating the Unclaimed
+**Status: root-caused 2026-07-22; primary fix built + adopted 2026-07-23** (default ON, off-switch
+`MTG_NO_DRAGONSTORM_GOFF`). `DragonstormProvider::ExtraLethalDamage`/`HasExtraLethalModel` now project the
+go-off's ETB burst (`src/ai/DecisionProviders.cpp`, `GoOffSim`). Measured on train seeds 4004/5005: d0
+−0.33, d3/d5 −0.05..−0.10 (every config faster, none slower); regression + smoke rebaselined with ZERO
+searched-depth slowdowns and no other deck moved (GT accepted). The divergence-digest METHOD that isolated
+this as the right fix — and how the same loop generalizes to other decks — is
+`docs/design/dragonstorm-d0-divergence-digest.md`. Found while investigating the Unclaimed
 Territory `colored_creature_only` regression (see `unclaimed-territory-restricted-mana.md`). The user
 reframed that regression: it is **mostly the search wasting rituals / mis-sequencing**, not a faithful
 mana correction — and the Unclaimed change merely *exposed/amplified* a pre-existing Dragonstorm

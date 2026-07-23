@@ -93,6 +93,15 @@ static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != n
 // clairvoyance, at real compute cost -- so it ships OFF pending a reproduced combo-discard win (the
 // Dragonstorm "don't pitch Apex/Dragonstorm" case is absent from seed 1001). See ChooseDiscard.
 static const bool  s_searched_discard = std::getenv("MTG_SEARCHED_DISCARD") != nullptr;
+// MTG_DIVERGENCE_LOG=<file>: DIAGNOSTIC (diagnosis only, no play change). On the search-driven path,
+// at each real pre-combat main decision, ALSO compute the greedy d0 plan (TurnSolver::Solve) for the
+// SAME untouched state and append one JSONL record {seed,turn,diverge,search_land,search,greedy,feat[]}.
+// A state where the search and greedy plans differ is one the greedy rollout policy would misplay --
+// the raw material for classifying the d0/rollout gap as rule-shaped (state-determined) vs lookahead-
+// bound (draw-dependent). The game CONTINUES on the search plan (state is untouched here). Features are
+// the non-clairvoyant ExtractMidGameFeatures for clustering. Run SINGLE-THREADED for readable output.
+// Inert unless set. See docs/design/dragonstorm-d0-divergence-digest.md.
+static const char* s_divergence_log = std::getenv("MTG_DIVERGENCE_LOG");
 
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
 {
@@ -1578,6 +1587,63 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                       &committed_win, &committed_sub_depth);
             }
             PROF_ADD_NODES(budget.Used());
+
+            // Divergence log (MTG_DIVERGENCE_LOG): on the search-driven path, compare the search's
+            // committed plan to what greedy d0 would do at this SAME untouched state (diagnosis only;
+            // the game continues on `plan`). See s_divergence_log / dragonstorm-d0-divergence-digest.md.
+            if (s_divergence_log && !m_in_rollout && is_pre_combat_main)
+            {
+                const TurnSolver::Plan greedy = TurnSolver::Solve(state, is_pre_combat_main);
+                auto casts_of = [](const TurnSolver::Plan& p) {
+                    std::vector<std::string> v;
+                    for (const Action& a : p.actions)
+                    {
+                        const char* k = a.kind == Action::Kind::ActivateVial       ? "vial:"
+                                      : a.kind == Action::Kind::CastFromGraveyard  ? "retrace:"
+                                      : a.kind == Action::Kind::DiscardToLandsEdge ? "LE:"
+                                      : "";
+                        std::string t = std::string(k) + a.card_name;
+                        if (!a.tutor_target.empty()) { t += ">" + a.tutor_target; }
+                        if (a.chosen_x > 0)          { t += "@X" + std::to_string(a.chosen_x); }
+                        v.push_back(t);
+                    }
+                    return v;
+                };
+                std::vector<std::string> sc = casts_of(plan), gc = casts_of(greedy);
+                std::vector<std::string> scs = sc, gcs = gc;
+                std::sort(scs.begin(), scs.end()); std::sort(gcs.begin(), gcs.end());
+                const bool diverge = (scs != gcs);
+                auto join = [](const std::vector<std::string>& v) {
+                    std::string s;
+                    for (size_t i = 0; i < v.size(); ++i) { if (i) { s += ", "; } s += v[i]; }
+                    return s.empty() ? std::string("(idle)") : s;
+                };
+                const std::vector<int> feat = ExtractMidGameFeatures(state, MidGamePlanSummary{});
+                static std::mutex s_dv_mtx;
+                std::lock_guard<std::mutex> lk(s_dv_mtx);
+                static std::ofstream dv_out(s_divergence_log, std::ios::app);
+                static bool dv_header = false;
+                if (dv_out.good())
+                {
+                    if (!dv_header)
+                    {
+                        dv_out << "# featnames:";
+                        for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
+                        { dv_out << (i ? "," : " ") << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
+                        dv_out << "\n";
+                        dv_header = true;
+                    }
+                    dv_out << "{\"seed\":" << state.game_seed
+                           << ",\"turn\":" << state.turn_number
+                           << ",\"diverge\":" << (diverge ? 1 : 0)
+                           << ",\"search_land\":\"" << (plan.land_decided ? plan.land_to_play : std::string())
+                           << "\",\"search\":\"" << join(sc) << "\""
+                           << ",\"greedy\":\"" << join(gc) << "\",\"feat\":[";
+                    for (size_t i = 0; i < feat.size(); ++i) { dv_out << (i ? "," : "") << feat[i]; }
+                    dv_out << "]}\n";
+                    dv_out.flush();
+                }
+            }
 
             // Non-convergence detection: only meaningful for real-game pre-combat
             // decisions (not the rollout's own searches, not second mains).
