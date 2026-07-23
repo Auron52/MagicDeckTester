@@ -127,3 +127,55 @@ ordering) — the gate checks feasibility in the executor's order, exactly as sc
 
 The win condition: onboarding decks 9…100+ needs **no** new cost/legality enumeration patch — the executor
 already knows the rules.
+
+---
+
+## Reframe (2026-07-23, MEASURED) — the leaf-apply gate is a DEAD END; the real change is much smaller
+
+The "add a feasibility gate that applies each plan on a scratch state" design above (Layer 2 / the
+`PlanFeasibleOnScratch` probe) was **built behind `MTG_FEASIBILITY_GATE` and measured. It is a dead end
+for two independently fatal reasons:**
+
+1. **Catastrophic perf — the probe was in the rollout leaf.** Placed in `Solve::consider` (the d0 greedy /
+   rollout leaf), the full `ApplyPlanDirect` probe is called per-subset × per-turn × per-rollout × per-game.
+   The smoke went from **143 s to wedged >270 s with only 10/21 cases done** — Dragonstorm, Hinata, and the
+   d0 1000-game cases never finished. **Rule learned: NOTHING slow may live in the rollout.** (User,
+   2026-07-23.)
+2. **Zero value on top of the existing patches.** Every deck that *did* finish came back **byte-identical** —
+   the probe found **no strands**, because the per-deck credit patches already prevent them. Measuring
+   "no divergence" was measuring the *patches' output*, not the approach.
+
+### What the measurement revealed — the change is tiny
+
+Over-credit is **already** self-corrected everywhere by the **existing scoring apply**: `SolveWithLookahead`
+applies every candidate via `ApplyPlanDirect` at 9446/9467, and this session's `MTG_AFFORD_AUDIT` proved an
+over-credited infeasible line **strands on that apply** (~13 % cast-drop) and scores worse → is not picked.
+So there is **no need for any new apply/probe** — not in the rollout, not anywhere. The asymmetry from the
+top of this doc is the whole story: **over-credit is free-safe; only *under*-credit (dropping a feasible
+line before it is scored) is a real gap.** Per-deck patches exist only to stop under-crediting.
+
+**Refined plan (nothing added to the rollout; search-candidate-level only):**
+
+1. **Make the enumeration pre-filter crudely OVER-optimistic** for interacting subsets (reducer / ritual /
+   affinity / rock / any future cost mechanic): credit the *maximum conceivable* same-turn discount so it
+   **never drops a feasible line**. It still rejects the genuinely hopeless (over-budget even at max
+   discount), so candidate counts stay bounded.
+2. **Delete the accurate per-deck credit patches** (`SameTurnReducerDiscount`,
+   `SameTurnAffinityGenericCredit`) — the crude bound + the existing scoring apply replace them.
+3. **Rely on the existing scoring apply** (9446/9467) as the real feasibility gate — it is already there,
+   already runs, and already rejects over-credited infeasible lines. **No probe, nothing new in the rollout.**
+4. **Lean on existing pruning** (`ManaPruneBound`, subset-reject filters, payoff-prune) to cull the extra
+   optimistic candidates. **A hard total-candidate cap is a LAST RESORT** — add it only if measurement shows
+   a blow-up (user: "only if absolutely necessary").
+
+**The pattern for new decks (the actual treadmill-kill):** implement the cost mechanic in the executor
+(needed anyway), let enumeration credit it *optimistically* (or simply not drop the interacting subset), and
+**never** write an order-accurate validated hand-patch. The executor's scoring apply is the feasibility
+oracle.
+
+**Cost/GT:** GT-affecting only in the *recover* direction (feasible lines the old patches missed become
+reachable); measure candidate-count/makespan + audit; rebaseline + `MTG_LEGACY_*` gate. The `d0` greedy
+config (no scoring apply of its own committed plan) is the one place over-credit is not self-corrected — but
+it is a non-primary baseline, so it keeps the current conservative aggregate (or a cheap once-per-turn check)
+rather than the loosening. The `MTG_ORDER_ORACLE` remains the offline guard rail for the residual
+non-canonical-order cases; it is **not** shipped in-play.
