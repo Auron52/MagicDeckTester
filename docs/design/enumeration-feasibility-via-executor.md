@@ -189,3 +189,55 @@ config (no scoring apply of its own committed plan) is the one place over-credit
 it is a non-primary baseline, so it keeps the current conservative aggregate (or a cheap once-per-turn check)
 rather than the loosening. The `MTG_ORDER_ORACLE` remains the offline guard rail for the residual
 non-canonical-order cases; it is **not** shipped in-play.
+
+---
+
+## Experiment result (2026-07-23): reframe built + MEASURED — partial, well-characterized
+
+The reframe was **built behind flags and measured** with the user's test method: strip an existing deck of
+its manual cost tricks (`MTG_NO_COST_TRICKS`) and see whether the general over-optimistic enumeration
+(`MTG_COST_REFRAME`) recovers the same quality — a proxy for onboarding a new deck patch-free. Flags,
+default off, are **byte-identical** (smoke 21/21 across every round). Three variants were tried: (1) crude
+"assume all generic covered" bound; (2) + a dominance/resulting-state dedup in the `SolveWithLookahead`
+scoring loop; (3) a tighter "max real discount (reducer + affinity)" bound. **All three converged.**
+
+| case | tricks on (GT) | tricks off | tricks off + reframe |
+|---|---|---|---|
+| Slivers d5 (affinity) | 4.1933 | 4.2267 | **4.1933 — full recover** |
+| Slivers d3 | 4.2560 | 4.2800 | 4.2640 — ~full |
+| Dragonstorm d5 (reducer+ritual) | 4.8133 | 4.8400 | 4.8267 — partial |
+| Dragonstorm d3 | 4.7067 | 4.7533 | 4.7600 — partial |
+| makespan | ~150 s | ~185 s | ~290 s |
+
+**Verdict — a partial, characterized treadmill-kill:**
+- **Full patch-replacement for NARROW / self-discount mechanics** (affinity-class): Slivers recovered
+  *exactly*, cheaply. Most decks fall here → no patch needed.
+- **NOT for HIGH-DISCOUNT combos** (reducer + ritual / storm). **Root cause (triangulated 3 ways):** the
+  reframe (offer-then-validate) offers a *superset* of the accurate aggregate — the affordable set *plus*
+  over-optimistic extras. On a **fixed node budget** those extra distinct candidates dilute the search
+  (worse play + higher makespan). The tighter bound didn't help because combo discounts are *large*
+  (`generic − discount ≈ 0` → still broad); the dominance dedup didn't help because the extras reach
+  *distinct* states, not strand-equivalent ones. The **accurate aggregate is simply more budget-efficient**
+  on combo, so it keeps a ~0.01–0.05 t edge.
+
+### The tool for the combo case (so we do NOT re-invent per deck)
+
+The combo handling is already a **tool, not a per-deck patch**, on two levels:
+
+1. **Generic, param-driven accurate credits (the FIX).** `SameTurnReducerGenericCredit` (keyed on
+   `reduces_spell_color`), `SameTurnAffinityGenericCredit` (`affinity_for_subtype`), and ritual float
+   (`ritual_floating_mana`) are **per-mechanic**, not per-card/per-deck. A new combo deck reusing any of
+   these mechanics is handled with **zero new code**. A *novel* high-discount mechanic needs **one** generic
+   credit function — written once, reusable for every future deck with that mechanic. And because the
+   reframe still *offers* the line, the deck **works** (just sub-optimally on a tight budget) even before
+   that credit exists — it never silently breaks.
+2. **The A/B rig (the DIAGNOSTIC).** `MTG_NO_COST_TRICKS` + `MTG_COST_REFRAME` is a permanent, deck-agnostic
+   probe: run the deck with tricks off ± reframe and read the avg-turn delta. If reframe-alone recovers the
+   tricks (narrow-discount deck) → ship patch-free. If a gap remains (high-discount combo) → that deck wants
+   the accurate aggregate, and you know *which mechanic* to check/add. This belongs in the analyze process
+   as the "does this deck need an accurate cost aggregate?" check.
+
+**So the analyze rule:** default new decks to the reframe (patch-free); run the A/B diagnostic; only for a
+deck the diagnostic flags as a high-discount combo do you confirm/add the (generic, per-mechanic) accurate
+credit. The rig stays committed behind flags (`MTG_COST_REFRAME` default off) as both the tool and the
+diagnostic.

@@ -396,6 +396,26 @@ static bool SubsetPayable(const bool have[5], const std::vector<Action>& cands,
 // Only creatures cast BEFORE the affinity card (lower CastOrderRank) count -- matching the order the
 // executor realises. Capped at each affinity card's remaining generic. Returns 0 unless the subset
 // holds an affinity card, so every non-affinity deck/seed is byte-identical.
+// MTG_NO_COST_TRICKS (default: tricks ON): disables the per-deck same-turn cost-credit patches
+// (SameTurnReducerGenericCredit + SameTurnAffinityGenericCredit). Set to TEST whether the general
+// cost-reframe recovers their value on an EXISTING deck stripped of its hand-patches -- a proxy for
+// onboarding a NEW deck patch-free. See docs/design/enumeration-feasibility-via-executor.md.
+static bool CostTricksEnabled()
+{
+    static const bool on = []{ const char* e = std::getenv("MTG_NO_COST_TRICKS"); return !(e && std::string(e) == "1"); }();
+    return on;
+}
+// MTG_COST_REFRAME (default OFF -> byte-identical): the deck-agnostic over-optimistic enumeration
+// relaxation. In EnumeratePlans, offer an INTERACTING subset the flat-pool aggregate rejects -- assume its
+// generic is same-turn-coverable (what reducers/affinity cut, or rituals float), require only the COLOURED
+// pips to be really payable -- and let the scoring apply (SolveWithLookahead 9446/9467) validate for real.
+// Replaces per-deck credit patches: a new deck's cost mechanic is offered without one.
+static bool CostReframeEnabled()
+{
+    static const bool on = []{ const char* e = std::getenv("MTG_COST_REFRAME"); return e && std::string(e) == "1"; }();
+    return on;
+}
+
 static int SameTurnAffinityGenericCredit(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel)
 {
@@ -2377,7 +2397,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
         {
-            int acred = SameTurnAffinityGenericCredit(state, cands, sel);
+            int acred = CostTricksEnabled() ? SameTurnAffinityGenericCredit(state, cands, sel) : 0;
             if (acred > 0)
             {
                 combined.generic             = std::max(0, combined.generic - acred);
@@ -6071,7 +6091,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
         {
-            int acred = SameTurnAffinityGenericCredit(state, cands, sel);
+            int acred = CostTricksEnabled() ? SameTurnAffinityGenericCredit(state, cands, sel) : 0;
             if (acred > 0)
             {
                 combined.generic             = std::max(0, combined.generic - acred);
@@ -6082,7 +6102,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // later same-colour casts in this subset, so the Medallion-discounted go-off enumerates.
         if (any_reducer)
         {
-            int rcred = SameTurnReducerGenericCredit(state, cands, sel);
+            int rcred = CostTricksEnabled() ? SameTurnReducerGenericCredit(state, cands, sel) : 0;
             if (rcred > 0)
             {
                 combined.generic             = std::max(0, combined.generic - rcred);
@@ -6092,7 +6112,42 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                        : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
-        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { return; }
+        bool mana_reject = !mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel));
+        if (mana_reject && CostReframeEnabled())
+        {
+            // Cost reframe (MTG_COST_REFRAME): an INTERACTING subset (reducer/ritual/affinity/rock) the
+            // flat-pool aggregate rejects may still be payable once its same-turn discount/float RESOLVES in
+            // the executor. Offer it under a crude OVER-optimistic bound -- assume the generic (what
+            // reducers/affinity cut, or rituals float) is fully same-turn-coverable, require only the
+            // COLOURED pips to be really payable -- and let the scoring apply (SolveWithLookahead 9446/9467)
+            // validate for real (a truly unaffordable line strands + scores worse -> not picked). This is the
+            // deck-agnostic replacement for per-deck credit patches. See
+            // docs/design/enumeration-feasibility-via-executor.md.
+            bool interacts = false;
+            for (int j : sel)
+            {
+                const Action& c = cands[j];
+                if (c.ritual_float > 0 || c.rock_mana.Total() > 0
+                    || (c.def && c.def->params.affinity_for_subtype)
+                    || (c.def && !c.def->params.reduces_spell_color.empty())) { interacts = true; break; }
+            }
+            if (interacts)
+            {
+                // Tighter bound: subtract the MAX same-turn generic discount these casts could actually give
+                // (reducer + affinity, computed order-aware even with the aggregate credit gated off), not
+                // "all generic covered". Ritual float is already in `eff`/`pool`. Far fewer over-optimistic
+                // candidates than the crude bound -> less budget dilution on combo decks; the scoring apply
+                // validates for real.
+                const int disc = SameTurnAffinityGenericCredit(state, cands, sel)
+                               + SameTurnReducerGenericCredit(state, cands, sel);
+                ManaCost oc    = combined;              oc.generic    = std::max(0, combined.generic - disc);
+                ManaCost oc_nc = noncreature_combined;  oc_nc.generic = std::max(0, noncreature_combined.generic - disc);
+                const ManaPool& opt    = credited ? eff    : pool;
+                const ManaPool& opt_nc = credited ? eff_nc : pool_noncreature;
+                if (opt.CanPay(oc) && opt_nc.CanPay(oc_nc)) { mana_reject = false; }
+            }
+        }
+        if (mana_reject) { return; }
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
@@ -9403,6 +9458,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                       << "  candidates=" << candidates.size() << "\n";
         }
 
+        // Cost-reframe count-bounder (dominance / resulting-state dedup): the over-optimistic relaxation
+        // offers many INFEASIBLE interacting candidates; applied, their unpayable casts STRAND, collapsing
+        // them to the SAME resulting state as a smaller feasible candidate. Dedup by post-apply state
+        // (BuildSimKey) so each distinct outcome is rolled out ONCE -- the flood no longer dilutes the fixed
+        // node budget. Reuses the apply already done below (no extra apply). Off (default) -> set never
+        // consulted -> byte-identical. Per sub_depth pass. See docs/design/enumeration-feasibility-via-executor.md.
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> reframe_seen;
         for (const Plan& plan : candidates)
         {
             // --- Overrun guard: finish if almost done, else abort + roll back ---
@@ -9435,6 +9497,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (is_pre_combat)
             {
                 ApplyPlanDirect(copy, plan, true);
+                // Count-bounder: skip this candidate's rollout if its post-apply state was already scored
+                // by an earlier candidate this pass (a dominated/strand-equivalent line). Reframe-only.
+                if (CostReframeEnabled() && !reframe_seen.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
                 SimulateAnimateLands(copy);
                 SimulateTapTokens(copy);
 
@@ -9457,6 +9522,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 ApplyPlanDirect(copy, plan, false);
                 if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
+                // Count-bounder (post-combat main): dedup by post-apply state AFTER the win check so a
+                // unique winner is never skipped. Reframe-only. See the pre-combat branch above.
+                if (CostReframeEnabled() && !reframe_seen.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
             }
 
             // End of this turn + start of next. The next turn's land drop is searched
