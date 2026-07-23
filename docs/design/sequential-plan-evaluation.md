@@ -1,106 +1,267 @@
-# Sequential plan evaluation — fixing "all actions vs. the frozen start-of-phase state"
+# Within-turn ordering in the main-phase enumerator (a.k.a. "sequential plan evaluation")
 
-**Status:** Increment 1 DONE (2026-07-23); increment 2 PENDING.
-**Two increments, safest first:**
-1. **Human-play-gated sequential enumeration — DONE.** Widened the enumeration ONLY under
-   `HumanPlayActive()` so within-turn-dependent aura casts (Daybreak Coronet after Ethereal Armor;
-   Lion Umbra's "modified" target after an earlier aura) become real enumerated plans with plan
-   indices — the viewer accepts and replays them via the existing `--choices` stream. GT-safe:
-   autonomous search stays byte-identical (Auras d5 s700001 `995ca5e30c33f51d` unchanged; smoke
-   21/21). Implemented in `TurnSolver.cpp::EnumeratePlans` as 3 gated pieces: (a)
-   `AppendSequencedAuraCandidates` injects the not-yet-legal restricted-aura targets as candidates;
-   (b) `SubsetHasUnenabledRestrictedAura` rejects any subset lacking an in-subset enabler aura on the
-   same creature; (c) an enabler-first `std::stable_sort` of `plan.actions` (`IsConditionalRestrictedAura`).
-   No new decision type / signature key (the existing `enchant_target` sub covers it). **Verified:**
-   the exact rejected line (`logs/play/rejections/Auras_cod_s1_gi0_t3.json`) now enumerates; with 3
-   white it's a `choose` (both auras on one creature) that replays with both attached; with only 2
-   white it's correctly `illegal` (which also validates the faithful MDFC colour modeling).
-   **Known limits (increment-1 conservative under-approximations, never false accepts):** chained
-   conditionals (two restricted auras, neither frozen-legal) and a Light-Paws-*fetched* enabler are
-   not credited → those specific lines still read `legal_not_enumerated`; fold into increment 2.
-2. **Autonomous canonical-order sequential apply (LATER, GT-affecting).** Let the search itself apply a
-   plan's casts in one canonical/logical order with state updating between each, so the AI also plays
-   these lines (and general within-turn dependencies beyond auras). This shifts GT (more lines
-   enumerable) → measure + rebaseline + keep a legacy gate.
+**Status (2026-07-23):**
+- **Increment 1 — DONE** (commit `63f7ffd`): human-play-gated aura legality-ordering for the *viewer*.
+- **Scoping spike — DONE** (2026-07-23): settled what is actually missing (see *Spike findings*).
+  Nuance corrected after review: affordability is currently *approximated* by an order-free scalar
+  aggregate (`BuildPool` float + `SameTurnReducerDiscount`), which is **not exact** — a scalar sum
+  cannot see that mana is typed and that a credit is only realizable if a payment *sequence* exists
+  (the stranding case). So affordability needs real ordering too, same as legality; the aggregate is
+  demoted to an optimistic pre-filter + a source of role tags.
+- **Increment 2 — SCOPED, not yet implemented** (needs an explicit go-ahead; it is GT-affecting):
+  1. **Port the aura legality-ordering into the autonomous search** (topological, K=1).
+  2. **Affordability exact check**: an optimistic aggregate pre-filter, then a cheap canonical order
+     (reducer-as-early-as-feasible → acceleration cheapest-first → payoffs) whose only search is a
+     **linear reducer-insertion scan** (O(#accelerants), not n!).
+  3. **`MTG_ORDER_ORACLE` exhaustive reference** (the ordering analog of `MTG_UNPRUNED`): measures how
+     often the aggregate/canonical order is wrong and confirms the exact check matches full-permutation
+     truth.
+- **Deferred (future, user-requested):** a per-deck **ordering-analysis step** that generates the
+  candidate orderings a deck needs. See *Deferred: per-deck ordering-analysis step*.
 
-## The core defect
+---
 
-In Magic you cast/play one thing at a time and **state updates after each** — the next
-spell's cost, castability, legal targets, and any restriction are evaluated against the
-board *as it is now*, including everything resolved earlier this turn.
+## The plan model, and the real question
 
-Our main-phase engine breaks that invariant. A **plan** is a set of actions
-(`land` + N casts), and the enumerator (`CollectActions` / `EnumeratePlans` in
-`src/ai/TurnSolver.cpp`) builds and legality-checks that set against **one snapshot** —
-the start-of-phase `GameState`. `ApplyPlan`'s `apply_one` then executes the actions, but
-the **enumeration and cost/legality decisions were already frozen** against the snapshot.
-The dedup (`plan_signature`, and the `CheckLine` variant signature) keys on cast *names* +
-a few per-action sub-tokens, which further erases per-action ordering context.
+A **plan** is a *set* of actions (a land drop + N casts), built by `CollectActions` and enumerated by
+`EnumeratePlans` in `src/ai/TurnSolver.cpp`; `ApplyPlan` / `ApplyPlanDirect` then execute it. The set is
+legality/affordability-checked, and the dedup signature keys on cast *names* plus a few per-action
+sub-tokens — so **ordering context inside a plan is largely erased**.
 
-So any **within-turn state dependency** is mis-modeled:
+The real question this doc is about: **within-turn dependencies**, where a later cast's cost, castability,
+legal targets, or value depends on an *earlier cast this turn having resolved*. In real Magic you cast one
+thing at a time and state updates after each; a set-based plan checked against one snapshot can mis-model
+that. There are **three distinct kinds**, and they are NOT the same problem.
 
-- **Restriction that turns on after a prior cast.** Daybreak Coronet enchants "a creature
-  with **another Aura**." Casting `Ethereal Armor → Bogle` then `Daybreak Coronet → Bogle`
-  in one turn is rules-legal (Coronet sees the just-attached Ethereal Armor), but the
-  enumerator checks Coronet's target legality against the *start-of-phase* Bogle (no aura),
-  so the two-aura line is **never enumerated**. The viewer's line-checker classifies the
-  hand-built line as `legal_not_enumerated` (real, reproduced: `logs/play/rejections/Auras_cod_s1_gi0_t3.json`).
-- **Target legality / scaling that depends on prior casts.** Same root: `LegalEnchantTargets`
-  and scaling counts are computed once, not after each intra-turn cast.
-- **Cost reducers that turn on mid-sequence.** Partially mitigated already: `CheckLine`'s
-  step-2 affordability sim *does* credit same-turn ramp (a rock cast this turn) via a pool
-  independent of `BuildPool` — but that is affordability only, not target-legality or
-  restriction re-checks, and it lives in the viewer path, not the search.
+### The three kinds of within-turn ordering dependency
 
-These keep surfacing as one-off patches (the enchant-target dedup fix in `plan_signature`
-and `CheckLine`; the crackle/soulfire/splice count subs before it). Each patch re-adds a
-per-action dimension the frozen-snapshot model dropped. The real fix is to evaluate a plan
-by **applying its actions in sequence**, updating state between each, and deriving
-cost/castability/target-legality from the running state.
+1. **Legality / restriction ordering.** Daybreak Coronet enchants "a creature with **another Aura**";
+   Lion Umbra needs a **modified** creature. Casting `Ethereal Armor → Bogle` then `Daybreak Coronet →
+   Bogle` is legal (Coronet sees the just-attached Armor), but only in that order. **A canonical order
+   always exists: enabler before payoff (topological). K = 1** — no order search needed; the reverse
+   order is simply illegal.
 
-## Proposed direction (agreed)
+2. **Affordability ordering.** Ruby Medallion (a red-spell cost reducer) + rituals in a storm turn. The
+   order changes whether you can *pay*, and it is **not locally decidable**: you might be able to drop
+   Ruby Medallion with 2 mana but thereby strand the ritual that would have netted you *more* mana, so
+   Medallion-first is sometimes right (it even discounts the red rituals) and sometimes strands your
+   acceleration. Deciding it requires whole-line feasibility, not a per-spell affordability check.
 
-Two different consumers, two different ordering policies:
+3. **Trigger / ETB value ordering.** Lathliss → Scourge → other Dragons. Permanents with a "whenever
+   another X enters" trigger want to enter *first* so they see every later X. **This rule is
+   value-sign-aware**: it holds only when the trigger *helps you*. A harmful on-other-ETB permanent
+   flips it — you want it last, or you sequence the triggerers to minimise exposure. So the rule is
+   "**beneficial** on-other-ETB sources lead; harmful ones trail," never pure syntax.
 
-### Search (autonomous + the plan MENU)
-Don't enumerate every ordering (combinatorial blow-up — the whole reason the snapshot model
-exists). Instead, for each candidate action **set**, choose ONE **canonical, logical order**
-and apply all rulings (cost, "can this be cast", legal targets, restrictions) by walking that
-order and **updating a working `GameState` after each action**. Candidate order heuristics to
-evaluate:
-- mana sources / cost-reducers first, then **enablers** (auras/permanents that satisfy later
-  restrictions), then **payoffs** (Daybreak Coronet, Ancestral Mask scaling, lethal);
-- or a **dependency-aware** order: if action B's legality/cost depends on A's resolution,
-  order A before B (topological on the intra-turn dependency graph), breaking ties by a
-  stable heuristic.
-The set is *kept* (enumerated) iff it is executable in that canonical order. This widens the
-enumerated space to include genuinely-legal sequenced lines (e.g. Ethereal-Armor-then-Coronet)
-without exploring permutations. **This changes autonomous behavior → NOT byte-identical**; it
-is a capability expansion, so ground truth for affected decks must be re-measured and
-rebaselined, not asserted byte-identical.
+---
 
-### Viewer (human play)
-**Respect the user's literal order.** The human queued the casts in a specific sequence; apply
-them one at a time in that order, updating state after each, and validate legality
-incrementally (accept iff each step is legal against the running state). No canonical-order
-guessing — the human already expressed the order. This also removes most `legal_not_enumerated`
-rejects: a rules-legal human sequence just plays. `CheckLine` becomes an incremental replay of
-the declared line rather than a match against snapshot-enumerated plans. (Plan-index stability
-for the `--choices` replay stream needs a story here — likely the accepted human line is
-recorded as its own resolved action sequence rather than an index into the snapshot enumeration.)
+## What the engine ALREADY does (spike-verified)
+
+### Affordability — currently an ORDER-FREE APPROXIMATION (not exact)
+
+The autonomous enumerator does not enumerate cast orderings for affordability. It uses a **scalar
+aggregate** that credits same-turn ramp and reduction into the budget without trying any order:
+
+- [`BuildPool` (TurnSolver.cpp:256)](../../src/ai/TurnSolver.cpp#L256) credits **ritual float + retained
+  over-production** — "spendable on later same-phase casts, so it counts toward affordability."
+- [`SameTurnReducerDiscount` (~TurnSolver.cpp:429)](../../src/ai/TurnSolver.cpp#L429) credits a **reducer
+  cast in the same subset** (Ruby Medallion) against the rest of that subset's combined cost.
+- Ritual accelerants are powerset-ed as a subset dimension
+  ([~TurnSolver.cpp:1133](../../src/ai/TurnSolver.cpp#L1133)).
+
+All of this lives in the **shared** `Solve` / `EnumeratePlans` path (not human-play-gated), and Dragonstorm
+goes off autonomously (regression smoke d5 ≈ 4.81). But the aggregate `subset_cost − reducer_discount −
+ritual_float ≤ budget` is a **scalar relaxation of a typed + sequenced feasibility problem, and cannot be
+exact**: a credit is only realizable if a payment *order* exists that pays each cost from then-available
+mana of the right colours. Casting the reducer can tap the exact mana the ritual needed (the **stranding
+case**) — no order realizes both credits, but the scalar sum grants them anyway. It bites even in mono-colour
+decks when upfront mana is tight. The tell that this is an *unprincipled* relaxation: `SameTurnReducerDiscount`
+exists **because the plain aggregate was dropping affordable lines** — a per-symptom hand-patch nudging it
+optimistic. Dragonstorm winning only means the relaxation is optimistic enough that enough *truly-feasible*
+lines survive; the latent hazard is the search selecting an **over-credited, infeasible** line (scores
+lethal, isn't) that `ApplyPlan` then can't sequence. So affordability needs real ordering too — but cheaply
+(see the canonical order below). The multiple orderings in `--claude-play` dumps are a viewer artifact.
+
+### The canonical execution order (deterministic backbone; ONE movable point)
+
+The full order is fixed by simple rules, with a **single** searched degree of freedom — the reducer's slot:
+
+1. **Lands / mana sources first** — play, tap for mana. *Exception:* a **bounce land** (returns a land to
+   hand) — float the outgoing land's mana *before* playing it, so it can go early without losing the mana.
+   Deterministic, not a search axis. (Whether to *defer* a land to later in the turn is a separate
+   plan/fragment decision — expressed as `land=none` in this fragment — not a reorder within the plan.)
+2. **Enablers** (legality) — an aura/permanent that satisfies a later restriction goes before the payoff
+   that needs it (topological; K = 1). Deterministic.
+3. **Acceleration** (rituals / rocks) — **cheapest-first** (minimises upfront cost at each step, so running
+   mana is maximised). Deterministic.
+4. **Cost reduction — the ONLY movable point.** Insert the reducer at its **earliest feasible position** in
+   the acceleration sequence (earliest = most discount realized; slide later only when doing it sooner
+   strands the acceleration). A **linear insertion scan** — O(#accelerants), not n!.
+5. **Payoffs** — Coronet / Dragonstorm / lethal, at the now-reduced costs.
+
+Worked: 2-mana stranding case → reducer can't sit at position 0, slides past the ritual (`ritual →
+Medallion → payoffs`); 4-mana case → reducer sits at position 0 and also discounts the red ritual
+(`Medallion → ritual → payoffs`). Same rule, both outcomes. The residuals it can't express (multiple
+reducers, colour-specific float conflicts, an accelerant that is also a payoff) are what the exhaustive
+oracle exists to catch.
+
+**Future case — count-scaling mana sources (currently UNMODELED).** Priest of Titania / Elvish Archdruid
+(tap for #Elves), Overgrown Battlement / Axebane Guardian (tap for #Defenders): the source's yield grows
+with the board, so the general principle *"realize the yield-boosting board actions before you draw on the
+boosted mana"* applies — deploy the cheap subtype creatures early, **pay for them from non-scaling sources
+so the scaling creatures stay untapped ("as much as possible"), then tap the scaling sources last at the
+grown count** (fall back to tapping one at the lower count only when forced). The cast-order stays the
+canonical sequence; the new part is a **payment/tap-order reservation** — a natural extension of
+[mana-source-reservation.md](mana-source-reservation.md) (reserve the yield-sensitive sources, prefer fixed
+sources for early payments), not a new subsystem. Note (i) **summoning sickness** bounds it — the scaling
+source must be pre-existing to tap this turn; this-turn boosters raise its count but can't tap themselves —
+and (ii) the order-free aggregate would tap a scaling source at the *start-of-phase* count, blind to
+same-turn board growth → it **under-credits** and drops affordable lines: one more reason affordability
+needs the sequential/reservation-aware check. Not implemented (no Elves/Defenders deck, no count-scaling
+mana param); folded in when such a deck is added.
+
+### Trigger / ETB value — hand-coded per deck where it matters
+
+Dragonstorm's put order is bespoke: `DragonstormProvider::TutorToBattlefieldPutOrder` (Lathliss →
+Scourges → Utvara → haste). Correct, but hand-written per deck — exactly what the deferred analysis step
+should *derive* instead.
+
+### Legality / restriction — NOT handled autonomously (the gap)
+
+Aura target-legality/restriction is checked against the **frozen start-of-phase snapshot**. Increment 1
+widened enumeration to include the enabler-first line **only under `HumanPlayActive()`** (the viewer). The
+autonomous search still cannot enumerate `Ethereal-Armor-then-Coronet`.
+
+---
+
+## Increment 2 (this pass) — three pieces on one sequential-apply core
+
+All three share a single primitive: **apply a plan's casts in a *given* order, updating a working
+`GameState` after each** (deriving cost / castability / target-legality from the running state). Given
+that, (a) walks the topological order, (b) walks the canonical order with the linear reducer-insertion
+scan, and (c) walks all orders.
+
+### (a) Port aura legality-ordering into the autonomous search — the capability win
+
+Give the autonomous enumerator the same enabler-first widening increment 1 gave the viewer, applied in a
+single **canonical topological order** (enabler → payoff; K = 1, no permutation search). This is
+GT-affecting (more legal lines become enumerable → the search may play a faster line), so:
+- **measure + rebaseline** the affected decks (Auras at minimum; it is not currently in the suite, so add
+  it or measure the d5 s700001 digest directly), and
+- keep an `MTG_LEGACY_*` gate so the frozen-snapshot behaviour stays A/B-comparable, per the repo's
+  byte-identical-hatch convention.
+
+Increment 1's helpers (`AppendSequencedAuraCandidates`, `SubsetHasUnenabledRestrictedAura`, the
+enabler-first `stable_sort`) already encode the detection; the port lifts the `HumanPlayActive()` gate for
+these and folds them behind the legacy gate instead.
+
+### (b) Affordability exact check — canonical order + linear reducer-insertion scan
+
+Demote the scalar aggregate to an **optimistic pre-filter** (drop obviously-unaffordable subsets fast; it
+over-credits, so few false negatives) *and* the **source of role tags** (it already knows which cast is the
+reducer / the accelerants and their float). On the survivors, run the exact check: build the **canonical
+execution order** above and, for the reducer's single movable slot, do the **linear insertion scan** —
+keep the plan iff a feasible order exists, and stamp that order onto the plan so `ApplyPlan` executes what
+enumeration approved (no enumerate/execute mismatch). Also GT-affecting (fixes over-credited infeasible
+lines and recovers under-credited feasible ones) → measure + rebaseline + legacy gate, same as (a).
+
+### (c) `MTG_ORDER_ORACLE` — the exhaustive-order reference (the ordering `MTG_UNPRUNED`)
+
+The pre-filter + canonical order is a **prune** of true sequential feasibility. It can still fall short on
+the residuals the linear scan can't express: multiple reducers, colour-specific float conflicts, an
+accelerant that is also a payoff. Keep an unpruned A/B reference to measure it, exactly as the codebase
+validates every prune:
+
+- **`MTG_ORDER_ORACLE=exhaustive`**: for each plan, actually try cast **orders** with running sequential
+  state, and keep the best *feasible* (and best-scoring) one. Default (unset) = the canonical-order exact
+  check from (b).
+- **A/B via the regression harness** over train (regression) seeds, validate the winner on overnight
+  seeds. **Lossless iff `exhaustive` never beats the canonical-order check on avg-turn-to-win** (the
+  metric); any flagged game names the residual the linear scan missed.
+- **Offline-only.** The oracle is a *validation harness*, never an in-play mechanism, so the factorial
+  cost is paid once per validation run, not per production game.
+
+**Taming the factorial** (lever order, biggest first):
+1. **Outcome-dedup by resulting-state digest** — symmetric casts (three ritual floats of the same
+   colorless) collapse from n! to a handful of distinct outcomes.
+2. **Only decisions where order can matter** — ≥2 *interacting* casts (a reducer / ritual / enabler /
+   restriction present). Most decisions are 0–1 casts and skip instantly.
+3. **Cap plan size ≤ N casts, and `log()` every skip** — no silent truncation; coverage stays honest.
+4. **Sampled-K-permutation fallback** for over-cap plans — deterministic (seed + decision-index, no RNG).
+
+The oracle is "enumerate all orders, take best"; the shipped path (b) is "canonical order + linear
+reducer-insertion scan." Same primitive, so build them together and keep the oracle as the permanent
+ordering A/B.
+
+---
+
+## Deferred: per-deck ordering-analysis step (future, user-requested)
+
+Hand-coding per-deck order rules (Lathliss-first) does not scale, and generic *syntactic* rules are wrong
+(the value-sign point above). The future direction is an **offline analysis step that generates the
+orderings a deck needs** — in the spirit of the analyze-deck / heuristic-optimization skills. Per deck it
+would:
+
+- **classify each card's order role(s):** mana / cost-reducer / enabler (satisfies a later restriction) /
+  on-other-ETB source (**with a measured value sign**) / payoff / resource-scarce. Most of this derives
+  from existing params (`produces`, `reduces_spell_color`, `ritual_floating_mana`, `aura_enchant_requires`,
+  targeting); tricky cards get an explicit tag/override.
+- **derive the per-deck ordering rules and the affordability "frontier"** — the small set of casts whose
+  order actually changes affordability or value — by simulating the going-off turns and **measuring**
+  where a naive order loses a line or value versus the `MTG_ORDER_ORACLE` exhaustive run.
+- **emit the candidate orderings the in-play search should try** ("generate orderings **as needed**"), so
+  the search evaluates a small precomputed set instead of searching orders live.
+
+This keeps the **search-primary** bar: the analysis *narrows* the ordering space to a small candidate set
+(a prune); the search still decides among them; the oracle stays as the lossless A/B. "As needed" is
+frequency-driven — only generate/keep orderings for the decks and turns where the oracle shows order
+actually matters.
+
+---
+
+## Two consumers, two ordering policies (unchanged from increment 1)
+
+- **Viewer (human play):** respect the user's literal cast order; apply one at a time against the running
+  state; accept iff each step is legal. Done for auras in increment 1.
+- **Search (autonomous):** use a canonical / bounded-candidate order (do not enumerate every permutation).
+  The legality case is a single topological order; the affordability case is the order-free aggregate,
+  validated by the oracle.
+
+---
+
+## Spike findings (evidence, 2026-07-23)
+
+Method: a parallelised `--claude-play` driver, 24 seeds per deck, driven greedily through the going-off
+window. **Caveat:** `--claude-play` runs viewer-widened (`MTG_HUMAN_PLAY`) enumeration, so the plan dumps
+show the *viewer* enumeration; the autonomous-vs-viewer question was settled by reading the enumerator, not
+from the dumps.
+
+| | Auras | Dragonstorm |
+|---|---|---|
+| main-phase decisions | 121 | 221 |
+| avg plans / decision | 11.9 | 17.3 |
+| **legality-ordering** (restricted-aura plan present) | **22 (18.2%)** | 0 |
+| multi-aura plan (≥2 auras) | 28 (23.1%) | 0 |
+| **affordability-ordering** (ritual+reducer plan) | 0 | **32 (14.5%)** |
+| ritual + ≥2 payoff plan | 0 | 25 (11.3%) |
+
+- **Auras:** the enumerator emitted *both* orderings of the same aura set (`Coronet → X, Hyena Umbra → X`
+  **and** the reverse); only enabler-first is sequentially legal → **legality ordering is K = 1** and a
+  genuine *autonomous* gap (increment 1 only fixed the viewer).
+- **Dragonstorm:** full go-off lines (`Ruby Medallion, Pyretic Ritual, Desperate Ritual, Irencrag Feat,
+  Dragonstorm`) are enumerated intact → affordability is already sequenced. The enumerator read confirmed
+  this is the **order-free aggregate** (`BuildPool` float + `SameTurnReducerDiscount`), autonomous.
+
+The two kinds separate cleanly by deck (legality → Auras, affordability → Dragonstorm), and both are
+frequent (~15–18% of going-off decisions).
+
+---
 
 ## Scope / risk
-Touches the hot path: `CollectActions` / `EnumeratePlans` (search), `CheckLine` + the viewer
-line protocol, and `ApplyPlan`. Performance matters — applying actions sequentially per
-candidate set is more work than a snapshot check; measure against the search-perf budget.
-Expect GT churn (more lines enumerable). Keep an `MTG_*` legacy gate so the snapshot behavior
-stays A/B-comparable while validating, per the repo's byte-identical-hatch convention.
 
-## Relationship to current band-aids
-The enchant-target dedup subs (`plan_signature` + `CheckLine`, 2026-07-23), crackle/soulfire/
-splice count subs, and the same-turn affordability sim are all partial compensations for the
-frozen snapshot. Under sequential evaluation, target/restriction/cost legality would fall out
-of the running state and several of these special-cases could collapse into the general
-mechanism. MDFC land-face selection (in progress for Auras) is **separable** — it is a single
-land-play choice (like shock/Frostboil `land_entry`), not an intra-turn cast dependency — so it
-is being finished under the current model and is not blocked on this redesign.
+Increment 2(a) touches the hot enumeration path and shifts GT — measure against the search-perf budget,
+rebaseline the affected decks, keep a legacy gate. Increment 2(b) is offline. The band-aids the aura
+`enchant_target` chooser/dedup added (`plan_signature` + `CheckLine`, and the Light-Paws / crackle /
+soulfire / splice subs) are partial compensations for the frozen snapshot on the *legality/target* axis;
+under the topological legality port several could collapse into the general mechanism. MDFC land-face
+selection is separable (a single land-play choice, not an intra-turn cast dependency) and already shipped.
