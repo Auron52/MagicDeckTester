@@ -41,13 +41,30 @@ gap that no amount of depth closed, because the leaves themselves couldn't see t
    go-off), `ArchetypeCardValue` (board-dev valuation), `CastOrderRank` (sequencing), etc. This keeps
    the fix archetype-scoped, never in the shared `GenericProvider`.
 
-5. **Cost-test on the blind d0 LP** — the clairvoyant d5 search is only a *hypothesis generator*: it is
-   messy (it takes suboptimal lines it knows it won't be punished for because it can see the draws), so
-   its suggested "holds" can't all be replicated by a blind player. The clean **validator** is the blind
-   d0 loss-penalized avg-win-turn: build the hook behind a temporary env gate, measure d0 LP on/off over
-   train seeds. This is self-correcting — it rejected the Lotus guard (NO-OP) and confirmed the go-off
-   recognizer (−0.33). d0 must not get materially more expensive (it runs in every rollout); prefer
-   integer math with no `GameState` copy (`GoOffSim` is pure integer recursion).
+5. **Cost-test on the blind d0 LP — AND the shipped-config LP.** The clairvoyant d5 search is only a
+   *hypothesis generator*: it is messy (it takes suboptimal lines it knows it won't be punished for
+   because it can see the draws), so its suggested "holds" can't all be replicated by a blind player. The
+   blind d0 loss-penalized avg-win-turn is a cheap first **validator**: build the hook behind a temporary
+   env gate, measure d0 LP on/off over train seeds. It is self-correcting — it rejected the Lotus guard
+   (NO-OP) and confirmed the go-off recognizer (−0.33). d0 must not get materially more expensive (it
+   runs in every rollout); prefer integer math with no `GameState` copy (`GoOffSim` is pure integer
+   recursion).
+
+   **CAVEAT (learned the hard way, 2026-07-23): blind d0 LP validates only INFORMATION-ADDING rules, not
+   OPTION-PRUNING ones — always confirm on the SHIPPED config too.** The rollout policy's real job is
+   *faithful simulation of a plausible continuation*, not optimal standalone play. An information-adding
+   rule (the go-off recognizer: recognize a lethal the leaf would actually execute) is monotone — it
+   helps the leaf both as a standalone player and as a search evaluator, so d0 LP and search move
+   together. An option-pruning rule can *split* them: the **slow-dragon guard** (don't let a fair
+   hard-cast Dragon justify a ritual; hold it for the storm) improved blind d0 LP by ~−0.73 turns but
+   WORSENED the shipped d5-value search by ~+0.37 and d3 by ~+0.36 — a clean reject. Why: a real d0 game
+   runs many turns and eventually draws Dragonstorm and spends the saved ritual, so holding helps; but a
+   blind, short-horizon rollout LEAF that holds the ritual just **durdles** (it can't foresee the future
+   Dragonstorm draw), never reaches the storm, and returns worse/flatter leaf win-turns — so the search
+   reads the pruned leaves as worse and picks worse lines. The takeaway for the loop: a candidate that
+   only *removes* a greedy option must be measured on the shipped search config, because "better blind
+   d0 play" ≠ "better rollout evaluator." Rules that *add lethality/board information* are the safe,
+   monotone class; prefer them.
 
 6. **Validate + adopt** — sweep the regression suite (train seeds) for the searched-depth deltas,
    confirm no other deck moves and zero searched-depth slowdowns, then adopt default-on with an
@@ -66,10 +83,10 @@ later ETB). The hook (`GoOffSim`, mirroring `SpellEffects.h OnDragonEnters`) pro
 
 ## Open threads (next applications of the loop)
 
-- **Slow-dragon rule** (confirmed ~14% of divergences): greedy burns rituals to hard-cast a *fair*
-  dragon while the search holds/develops, because the ritual-payoff guard (`SubsetWastesAccelerant`,
-  `TurnSolver.cpp`) counts ANY creature as a storm payoff. Candidate: a fair hard-cast dragon must NOT
-  justify rituals (only Dragonstorm/Apex do). Cost-test on d0 LP per step 5.
+- ~~**Slow-dragon rule**~~ **(REJECTED 2026-07-23)**: making a fair hard-cast Dragon not count as a
+  storm payoff in `SubsetWastesAccelerant` improved blind d0 LP ~−0.73t but worsened the shipped
+  d5-value search ~+0.37t (see the step-5 CAVEAT above — it is an option-pruning rule, not
+  information-adding). Left as an NB comment in `TurnSolver.cpp` so it isn't retreaded.
 - **Non-clairvoyant reference (blocked)** — a blind-search reference would be a *cleaner* hypothesis
   generator than the clairvoyant d5 (step 5). The attempt to get one via `MTG_SHUFFLE_SALT_SEARCH=N`
   was inconclusive: the salt gave LP identical to clairvoyant in the measured config (it did not

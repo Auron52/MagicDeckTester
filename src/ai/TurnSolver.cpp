@@ -900,6 +900,13 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
 // ResolveProvider(state).PrunesAcceleratorWithoutPayoff() so ONLY Dragonstorm prunes; Hinata (whose
 // ritual is a useful cantrip/dig accelerant) is untouched. A ritual-only subset deals no damage, so it
 // can never be a winning line -> pruning it never drops a lethal plan. Inert (no ritual) -> unchanged.
+// NB (slow-dragon rule, REJECTED 2026-07-23): making a fair hard-cast Dragon NOT count as `has_payoff`
+// (only Dragonstorm/Apex justify a ritual) was cost-tested and rejected. It improved BLIND d0 LP a lot
+// (~-0.73 turns) but WORSENED the shipped d5-value search (~+0.37) and d3 (~+0.36). Lesson: the rollout
+// policy's job is FAITHFUL SIMULATION, not optimal play -- a blind short-horizon leaf that "correctly"
+// holds a ritual just durdles (never reaches the storm it can't foresee), so the search reads worse
+// leaf win-turns. Blind d0 LP validates only INFORMATION-ADDING rules (the go-off recognizer), not
+// OPTION-PRUNING ones. See docs/design/dragonstorm-d0-divergence-digest.md.
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel)
 {
     bool has_ritual = false, has_payoff = false;
