@@ -9,8 +9,12 @@
 #   * FORCE_MERGE Karrthus+Kolaghan -> K=17 (C(23,7)=245,157 cells, ~29% fewer than natural K=18). Both
 #     are hard-to-cast off-red haste-dragon payoffs; merging them is the established Dragonstorm config.
 #   * R=40 cap, r0=2 floor, MAXMULL=3, bottoming always on.
-#   * Frozen commit f2a56b1 (post float-colour-collapse; the scheduler commits since are byte-identical
-#     to rollout results). Fresh discovery cache on this commit (the old cache predates float-collapse).
+#   * Frozen commit baa53d4 (adds the storm go-off short-circuit 324896d + Lotus accel-prefix collapse).
+#     Fresh discovery cache on this commit (the tractability cuts change play, so old caches are stale).
+#   * TRACTABILITY CUTS: the go-off short-circuit ships default-on; MTG_LOTUS_PREFIX=1 turns on the Lotus
+#     collapse as a GEN COST-LEVER (kept opt-in for normal play). Measured on the captured slow rollouts:
+#     Lotus+Dragonstorm hands 136s->3s (~46x), Apex hands 640s->131s (~4.9x). This IS the mulligan-gen-vs-
+#     ideal-play "give up a little quality to bring down cost" difference the user wanted encoded here.
 #   * Continuous pool w/ floor speculation + sub-table fusion (43f3f2b, 30fee8b) + per-cell journal.
 set -uo pipefail
 cd /workspaces/MagicDeckTester2
@@ -29,14 +33,15 @@ echo "[dragonstorm-keepgen] RAW=$RAW"
 echo "[dragonstorm-keepgen] log=$GENDIR/gen_${SEED_BASE}.log"
 
 exec env \
+  MTG_LOTUS_PREFIX=1 \
   MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_CONTINUOUS=1 \
   MTG_EQUIV_PROBES=400 MTG_EQUIV_THRESHOLD=0.01 MTG_EQUIV_DEPTH=3 MTG_EQUIV_BUDGET=10 \
   MTG_EQUIV_SEED=20260701 \
   MTG_EQUIV_FORCE_MERGE="Karrthus,Dragonlord Kolaghan" \
   MTG_EQUIV_CACHE="$CACHE" \
   MTG_KEEP_ROLLOUTS=40 MTG_KEEP_R_FLOOR=2 MTG_KEEP_MAXMULL=3 \
-  MTG_COMMIT="$HASH" \
+  MTG_COMMIT="${HASH}+lotusprefix" \
   MTG_KEEP_OUT_RAW="$RAW" MTG_KEEP_OUT_PROFILE="$PROF" \
-  MTG_KEEP_SLOW_MS=120000 \
+  MTG_KEEP_SLOW_MS=30000 MTG_KEEP_SLOW_LOG="$GENDIR/slow_captures_${HASH}.txt" \
   ./build/Release/mtg-analyze "$DECK" --cards-json src/cards/data/cards.json \
     --max-turns 8 --seed "$SEED_BASE" --threads 0
