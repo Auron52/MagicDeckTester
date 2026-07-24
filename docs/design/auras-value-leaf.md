@@ -49,6 +49,17 @@ escalation_cap:5}`. **Adopted default-on** — Auras is NOT in the regression su
 to rebaseline; the leaf is validated neutral. The byte-identical escape hatch is
 `--ignore-play-profile` (`MTG_VALUE_MODEL=0` alone does not override an enabled `value_play` block).
 
+## Binary-freshness correction (important)
+
+The first pass ran on a binary built **before** commit `f408f64` (same-turn creature→aura
+enumeration, −0.02t on Auras). The whole pipeline was **regenerated on a `build.sh`-fresh binary**
+that includes it; the depth matrix and adoption A/B came out **essentially identical** (H3=4.4700,
+V5=4.4712, V5−H_conv=+0.0012; A/B mean −0.0042t; ~6.8× unbounded) — so the value-leaf result is
+robust to that change (which affects specific aura plays, not the aggregate depth-matrix LP). The
+committed model is the fresh-binary one. NB: on the fresh binary the value-rows dump exposed a
+**slow same-turn-aura search on some complex Auras boards** (one dump game's single decision ran
+K=8 `EnumerateEarliestWins` for >100s) — a perf item worth a look, unrelated to the value-leaf.
+
 ## Caveats to revisit
 
 - PROVISIONAL 2-seed/400g table, hdepths capped at 3 → trust=5 is within noise of UNSET (escalate-
