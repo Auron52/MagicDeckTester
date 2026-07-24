@@ -21,6 +21,17 @@ get wrong. The gen is **always**:
 
 Every other `MTG_KEEP_*` / `MTG_EQUIV_*` knob and the uniform/round/wave code paths are to be **removed**.
 
+**Persistence = per-cell incremental, NOT periodic full-snapshot checkpoints (user insight 2026-07-24).**
+Because a cell completes atomically (cnt=0 or fully sampled), the right durability model is to persist each
+cell's result the moment it finishes — an append log of per-cell records (JSONL: {H, comp, pd, sum, sumsq,
+cnt}) — and reconstruct "what's done" from that log on resume. Then there is no "checkpoint" event at all:
+completion IS persistence. This is strictly better than the interim periodic write_raw_atomic snapshot
+(committed b7f33b0): no periodic ~50–100 MB full-raw write (eliminates the checkpoint-write stall — the last
+residual idle source), and a crash loses only the few in-flight cells, not a whole interval of completed
+ones. Compact the append log into the final raw JSON at the end; the pooling merge is already
+order-independent so it can read any set of records (handles out-of-order completion by construction). The
+interim periodic-snapshot code is the fallback until this lands.
+
 **Orthogonal problem (separate from the pool):** even a perfect single pool leaves the final end-tail =
 the slowest single game. Dragonstorm has degenerate *games* — individual rollouts of certain combo hands
 (Dragonstorm + rituals + payoff) take MINUTES (pathological deterministic search; the `SearchBudget` is a
