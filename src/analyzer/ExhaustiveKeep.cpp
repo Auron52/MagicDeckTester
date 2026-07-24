@@ -975,6 +975,69 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         return wt;
     };
 
+    // ---- REPLAY one captured rollout (root-cause a degenerate game in isolation) -----------------
+    // MTG_KEEP_REPLAY="<hand from slow.log>" (+ _R rollout index, _PD 1=play/0=draw) reconstructs and
+    // runs EXACTLY one keep-rollout via run_one (byte-identical to the gen), times it, then EXITS. The
+    // hand string is the slow.log form "Label xN; Label xM; ..." (labels are bucket reps); _R/_PD plus
+    // this run's --seed pin the exact rs = f(seed,r,w,pd). Point MTG_EQUIV_CACHE at the capture's cache
+    // so discovery is a fast hit. Pure diagnostic -> never runs in a normal gen (unset => skipped).
+    if (const char* rp = std::getenv("MTG_KEEP_REPLAY"); rp && *rp)
+    {
+        const long long rr = []{ const char* s = std::getenv("MTG_KEEP_REPLAY_R");
+            return (s && *s) ? std::atoll(s) : 0LL; }();
+        const int rpd = []{ const char* s = std::getenv("MTG_KEEP_REPLAY_PD");
+            return (s && *s) ? std::atoi(s) : 1; }();
+        std::map<std::string, int> want;                          // parse "Label xN; ..." -> counts
+        std::string spec = rp; std::size_t pos = 0;
+        while (pos < spec.size())
+        {
+            std::size_t semi = spec.find(';', pos);
+            std::string e = spec.substr(pos, semi == std::string::npos ? std::string::npos : semi - pos);
+            pos = (semi == std::string::npos) ? spec.size() : semi + 1;
+            std::size_t a = e.find_first_not_of(" \t"), z = e.find_last_not_of(" \t");
+            if (a == std::string::npos) { continue; }
+            e = e.substr(a, z - a + 1);
+            std::size_t xp = e.rfind(" x");
+            if (xp == std::string::npos) { continue; }
+            int cnt = std::atoi(e.c_str() + xp + 2);
+            if (cnt > 0) { want[e.substr(0, xp)] += cnt; }
+        }
+        std::vector<int> comp(K, 0); int H = 0; bool ok = true;
+        std::map<std::string, int> label_to_b;
+        for (int b = 0; b < K; ++b) { label_to_b[label[b]] = b; }
+        for (const auto& kv : want)
+        {
+            auto it = label_to_b.find(kv.first);
+            if (it == label_to_b.end())
+            { std::cerr << "[replay] unknown bucket label: '" << kv.first << "'\n"; ok = false; break; }
+            comp[it->second] += kv.second; H += kv.second;
+        }
+        int w = -1;
+        if (ok && (H < min_size || H > HAND))
+        { std::cerr << "[replay] hand size " << H << " out of [" << min_size << "," << HAND << "]\n"; ok = false; }
+        if (ok)
+        {
+            auto& t = tables[HAND - H];
+            auto it = t.index.find(comp);
+            if (it == t.index.end()) { std::cerr << "[replay] comp not found in size-" << H << " table\n"; ok = false; }
+            else { w = work_idx[HAND - H][it->second]; }
+        }
+        if (ok && w >= 0)
+        {
+            AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            ai.SetSearchPostCombat(second_main);
+            std::cerr << "[replay] H=" << H << " pd=" << rpd << " r=" << rr << " w=" << w
+                      << " depth=" << cfg.depth << " budget=" << cfg.budget_ms << " -> running...\n" << std::flush;
+            const auto t0 = std::chrono::steady_clock::now();
+            const double wt = run_one(ai, w, rpd, rr);
+            const double ms = std::chrono::duration<double, std::milli>(
+                                  std::chrono::steady_clock::now() - t0).count();
+            std::cerr << "[replay] DONE win_turn=" << wt << " elapsed=" << static_cast<long long>(ms)
+                      << "ms\n" << std::flush;
+        }
+        return;   // diagnostic -> never proceed to the full gen
+    }
+
     const int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
                                               static_cast<int>(work.size())));
     // Progress logging to STDERR (never stdout -> never corrupts the report; never affects rollouts,

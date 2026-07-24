@@ -1242,6 +1242,30 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
 {
     const Player& ap = state.players[state.active_player_index];
     const bool open_all = DecisionUnpruned(UnprunedGate::SacColor);
+    static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
+    // Provider float-colour collapse (Lotus Bloom): RED by default -- add an off-colour ONLY when a HASTE
+    // creature castable THIS turn demands it. ap.hand includes Apex-staged exile cards (m_is_staged), so
+    // this covers both "haste Dragon in hand" and "haste Dragon castable from an Apex exile". A floated
+    // colour empties end of turn, so a haste creature is the only sink worth an off-colour sac (a non-haste
+    // Dragon can wait for lands / a Dragonstorm tutor-to-battlefield). Red WEAKLY DOMINATES (pays generic +
+    // red pips), so it is always kept and listed first. Collapses the per-colour Lotus fan-out to RED on
+    // the vast majority of turns. HEURISTIC (not byte-identical); off under MTG_UNPRUNED(SacColor).
+    if (!open_all && ResolveProvider(state).RestrictSacColorsToHasteAndRed())
+    {
+        bool need[5] = { false, false, false, true, false };   // R (index 3) always on
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            if (!cd || !cd->card.IsCreature() || !cd->card.HasKeyword(Keyword::Haste)) { continue; }
+            const ManaCost& mc = cd->card.m_mana_cost;
+            if (mc.white) { need[0] = true; } if (mc.blue)  { need[1] = true; }
+            if (mc.black) { need[2] = true; } if (mc.green) { need[4] = true; }
+        }
+        std::vector<std::string> colors;
+        colors.push_back("R");   // dominant default, first
+        for (int c : { 0, 1, 2, 4 }) { if (need[c]) { colors.push_back(kColorLetters[c]); } }
+        return colors;
+    }
     int demand[5] = { 0, 0, 0, 0, 0 };   // W,U,B,R,G : total coloured pips across AP nonland spell costs
     auto scan = [&](const Card& card)
     {
@@ -1259,7 +1283,6 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
         if (p.controller_index != state.active_player_index) { continue; }
         scan(p.card);
     }
-    static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
     std::vector<int> idx;                                      // candidate colour indices, W,U,B,R,G order
     for (int c = 0; c < 5; ++c) { if (open_all || demand[c] > 0) { idx.push_back(c); } }
     // Stable sort by DESCENDING demand -> equal-demand colours keep their W,U,B,R,G tiebreak order.
@@ -1681,7 +1704,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         // budget would over-project mana that isn't yet available). Inert for every non-impulse deck.
         if (def.params.impulse_exile > 0)
         {
-            for (const std::string& col : ChosenFloatColorCandidates(state))
+            // Provider float-colour collapse: a red-primary archetype (Dragonstorm) floats RED only for
+            // Apex -- its mono-red chain never needs another colour and one colour can't fund a multicolour
+            // card anyway. Opened to the full candidate set for other decks and under MTG_UNPRUNED(SacColor).
+            std::vector<std::string> apex_colors;
+            if (ResolveProvider(state).ImpulseFloatColorRedOnly()
+                && !DecisionUnpruned(UnprunedGate::SacColor))
+            { apex_colors.push_back("R"); }
+            else
+            { apex_colors = ChosenFloatColorCandidates(state); }
+            for (const std::string& col : apex_colors)
             {
                 Action a;
                 a.kind               = Action::Kind::CastFromHand;
@@ -2106,6 +2138,105 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     long long b = pool.Total();
     for (const Action& a : cands) { b += a.ritual_float; b += a.rock_mana.Total(); }
     return (b >= std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max() : static_cast<int>(b);
+}
+
+// Feasible-aware EARLY ritual-drop -- the group-level, before-the-odometer analog of the late
+// SubsetWastesAccelerant payoff-prune (Hook 29; the user's spec). SubsetWastesAccelerant drops a
+// ritual-bearing SUBSET with no same-turn payoff LATE, inside consider()/eval_and_push(), only AFTER the
+// odometer has already enumerated the entire 2^k ritual x splice powerset -- the confirmed durdle on
+// Dragonstorm's no-land combo hands (e.g. "Dragonstorm x2; Desperate Ritual x4", ~7.6s single-thread).
+// When the hand cannot reach ANY payoff this turn even at its bootstrap-feasible mana MAX, every
+// ritual-bearing subset is already doomed: it either casts no payoff (SubsetWastesAccelerant drops it) or
+// casts a payoff the mana can never afford (consider()'s CanPay drops it). So we drop the ritual GROUPS
+// from the odometer up front and skip the whole enumeration, BYTE-IDENTICALLY.
+//
+// The payoff set counts Dragons (creatures) ALWAYS -- the most permissive set -> smallest min-cost payoff
+// -> the STRICTEST condition to fire -> we drop ONLY when even a fair Dragon is out of reach, never
+// dropping a line either late-prune callsite would keep (Solve's uses the real storm_in_hand, which makes
+// a fair Dragon a NON-payoff when a storm is in hand -> even MORE aggressive; EnumeratePlans' uses
+// storm_in_hand=false -> creatures pay -> exactly our set). So our removals are a subset of both, in
+// every storm state.
+//
+// SOUNDNESS -- the feasibility bound MUST match the engine's own affordability model exactly, or it drops
+// lines the search keeps. consider()/eval_and_push credit a ritual's GROSS float UNCONDITIONALLY
+// (eff.wild += Σ ritual_float [+ the Rite-of-Flame gy_self triangular escalation]) while the ritual's own
+// cost sits in the combined cost -> affordability is the SIMULTANEOUS total pool + Σgross >= Σcost, with
+// NO check that each ritual is castable in SEQUENCE. So the exact max mana any subset can leave for a
+// payoff is feasible_net = pool + Σ(gross - cost) over net-positive ramps (+ the same gy_self bonus) --
+// NON-sequenced. (A "bootstrap ideal cast-order" that only credits rituals affordable from a running
+// total is STRICTLY TIGHTER, so at 0-1 lands it drops ritual+payoff plans the engine still keeps -- this
+// is NOT byte-identical and cost a Dragonstorm regression; do NOT reintroduce it as a byte-identical
+// change.) If feasible_net < cheapest_payoff, eff.CanPay fails for every ritual+payoff subset -> dropping
+// the rituals is byte-identical. feasible_net is color-blind (totals) => an UPPER bound on the color-aware
+// CanPay (and filters only convert colour, never add total) => still sound. A same-turn cost reducer (Ruby
+// Medallion) / affinity makes the scalar bound unsound (mirrors ManaPruneBound's bail) -> we do NOT drop.
+// Provider-gated (PrunesAcceleratorWithoutPayoff = Dragonstorm only) + the same MTG_UNPRUNED(payoffprune)
+// toggle as the late prune, plus an independent MTG_NO_RITUAL_EARLY_DROP opt-out for the speedup A/B.
+// Inert for every other deck and whenever a payoff is reachable -> byte-identical.
+static const bool s_ritual_early_drop = std::getenv("MTG_NO_RITUAL_EARLY_DROP") == nullptr;
+
+static void DropRitualGroupsIfNoPayoff(const GameState& state, const ManaPool& pool,
+                                       const std::vector<Action>& cands,
+                                       std::vector<std::vector<int>>& groups,
+                                       std::vector<int>& group_hand_index,
+                                       std::vector<int>& independent)
+{
+    if (!s_ritual_early_drop)                                    { return; }
+    if (!ResolveProvider(state).PrunesAcceleratorWithoutPayoff()) { return; }
+    if (DecisionUnpruned(UnprunedGate::PayoffPrune))             { return; }
+    // Single pass over cands: detect a ritual (else nothing to drop); bail on a same-turn cost reducer /
+    // affinity (they make the scalar bound unsound, mirroring ManaPruneBound's bail); find the cheapest
+    // reachable PAYOFF cost; and accumulate feasible_net = pool + Σ NET (gross - cost) of every net-positive
+    // ramp -- the MAX mana any subset can leave for a payoff after paying the rituals' own costs. Payoff =
+    // Dragonstorm(tutor_to_battlefield) / Apex(impulse_exile) / Dragon(creature), mirroring
+    // SubsetWastesAccelerant (params off def, IsCreature off def->card), creatures ALWAYS counting (the
+    // permissive, conservative set). cheapest_payoff stays LLONG_MAX when NO payoff is castable at all (the
+    // "no payoff in hand" case) -> the test below fires unconditionally.
+    bool      any_ritual      = false;
+    long long cheapest_payoff = std::numeric_limits<long long>::max();
+    long long feasible_net    = pool.Total();
+    int       gy_self         = 0;
+    for (const Action& a : cands)
+    {
+        const long long gross = static_cast<long long>(a.ritual_float) + a.rock_mana.Total();
+        const long long cost  = a.cost.ManaValue();
+        if (a.ritual_float > 0) { any_ritual = true; }
+        if (gross > cost)       { feasible_net += gross - cost; }   // net-positive ramp credit (non-seq)
+        const CardDefinition* d = a.def;
+        if (!d) { continue; }
+        if (d->params.affinity_for_subtype)          { return; }
+        if (!d->params.reduces_spell_color.empty())  { return; }
+        if (d->params.ritual_float_gy_self_bonus)    { ++gy_self; }   // Rite of Flame graveyard escalation
+        if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0 || d->card.IsCreature())
+        { cheapest_payoff = std::min<long long>(cheapest_payoff, cost); }
+    }
+    if (!any_ritual) { return; }   // no ritual group exists -> nothing to drop
+    feasible_net += static_cast<long long>(gy_self) * (gy_self - 1) / 2;   // mirror the eval_and_push credit
+    if (feasible_net >= cheapest_payoff) { return; }   // a payoff IS reachable -> keep the rituals
+    // Drop every group all of whose options are rituals (ritual_float > 0) -- exactly the actions the late
+    // prune governs; a mixed / non-ritual group is untouched. (A ritual card's group holds only its own
+    // ritual + splice variants, so this removes the whole ritual card from the odometer.)
+    std::vector<std::vector<int>> kept_groups;
+    std::vector<int>              kept_hand_index;
+    for (int g = 0; g < static_cast<int>(groups.size()); ++g)
+    {
+        bool all_ritual = !groups[g].empty();
+        for (int idx : groups[g]) { if (cands[idx].ritual_float <= 0) { all_ritual = false; break; } }
+        if (all_ritual) { continue; }   // drop this pure-ritual group
+        kept_groups.push_back(std::move(groups[g]));
+        kept_hand_index.push_back(group_hand_index[g]);
+    }
+    groups.swap(kept_groups);
+    group_hand_index.swap(kept_hand_index);
+    // Also drop independent ritual actions -- notably the in-play Lotus Bloom SacForMana (hand_index < 0,
+    // ritual_float = sac_for_mana_amount > 0), which its own group can never hold. BootstrapFeasibleMana's
+    // .net already credits their float (Lotus sac: cost 0, gross 3, net +3), so a fired drop means even
+    // WITH all Lotus mana no payoff is affordable -> every Lotus+payoff subset fails CanPay and every
+    // Lotus-without-payoff subset is late-pruned -> byte-identical. This is what collapses the Lotus-heavy
+    // no-payoff hands (the 31-min class).
+    std::vector<int> kept_independent;
+    for (int j : independent) { if (cands[j].ritual_float <= 0) { kept_independent.push_back(j); } }
+    independent.swap(kept_independent);
 }
 
 // --- Learned mid-game plan scoring (see docs/design/learned-d0-policy.md) ---------------------
@@ -2735,6 +2866,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // short-circuit above, so a non-lethal turn -- the only kind that reaches here -- never drops a
     // win). Shared with EnumeratePlans; see CapGroupsBySituationalRank.
     CapGroupsBySituationalRank(state, cands, groups, group_hand_index);
+
+    // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
+    // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
+    DropRitualGroupsIfNoPayoff(state, pool, cands, groups, group_hand_index, independent);
 
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
@@ -5801,6 +5936,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // multi-turn search and the per-turn leaf rollout (SolveWithLookahead), so capping it is what
     // attacks the rollout-bound no-win games. See CapGroupsBySituationalRank.
     CapGroupsBySituationalRank(state, cands, groups, group_hand_index);
+
+    // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
+    // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
+    DropRitualGroupsIfNoPayoff(state, pool, cands, groups, group_hand_index, independent);
 
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());

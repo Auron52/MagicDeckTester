@@ -262,6 +262,14 @@ public:
     // Measured (train+held-out): ~-0.055 turns, -42% rollout calls. See docs/design/dragonstorm-payoff-prune.md.
     bool PrunesAcceleratorWithoutPayoff() const override { return true; }
 
+    // Float-colour collapse (Hook: ImpulseFloatColorRedOnly / RestrictSacColorsToHasteAndRed). Apex of
+    // Power floats RED only; Lotus Bloom floats RED unless a HASTE Dragon (Karrthus {4}{B}{R}{G} /
+    // Kolaghan {4}{B}{R}) is castable this turn (in hand or Apex-staged). Collapses the per-colour
+    // Lotus/Apex cast fan-out (the top branch-stats driver, ~590k plans/node) to ~1 on most turns.
+    // HEURISTIC -- validated on avg-win-turn, not byte-identical. See docs/design + the branch-stats capture.
+    bool ImpulseFloatColorRedOnly()       const override { return true; }
+    bool RestrictSacColorsToHasteAndRed() const override { return true; }
+
     // Go-off lethal model (Hook 14). The Dragonstorm storm go-off (rituals -> Dragonstorm -> N Dragons
     // -> Scourge ETB pings) IS this turn's lethal, but Dragonstorm the spell has direct_damage 0 and its
     // dragons resolve later, so the engine's generic win-check (attack + direct) never sees it. Without

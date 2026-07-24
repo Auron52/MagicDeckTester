@@ -382,6 +382,20 @@ public:
     // should net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
     virtual bool PrunesAcceleratorWithoutPayoff() const { return false; }
 
+    // Float-colour collapse for "add N mana of ANY ONE colour" effects (HEURISTIC, provider-owned; NOT
+    // byte-identical). These effects emit one cast/sac variant PER candidate colour, and with several Lotus
+    // Blooms + Apex in play the per-colour fan-out is the top enumeration driver (branch-stats: up to
+    // ~590k plans in a single node). For a red-primary archetype the off-colours are almost never worth it:
+    //   * ImpulseFloatColorRedOnly: Apex of Power always floats RED -- its mono-red chain never needs
+    //     another colour, and one colour can't fund a multicolour card by itself.
+    //   * RestrictSacColorsToHasteAndRed: Lotus Bloom floats RED unless a HASTE creature castable THIS turn
+    //     (in hand, which includes Apex-staged exile cards) demands an off-colour -- the only time an
+    //     immediate off-colour Dragon (Karrthus/Kolaghan) is worth the sacrifice. Most turns => RED only.
+    // Both open to the full candidate set under MTG_UNPRUNED(SacColor). Base returns false -> the old
+    // library-scoped, all-colour behaviour, byte-identical for every other deck.
+    virtual bool ImpulseFloatColorRedOnly()       const { return false; }
+    virtual bool RestrictSacColorsToHasteAndRed() const { return false; }
+
     // Hook 30 -- SCALED-CAST variants: for a spell whose cost depends on how much output it commits,
     // the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage
     // analogue of XCandidates (Hook 18): Magma Opus deals 4 damage divided among any number of
