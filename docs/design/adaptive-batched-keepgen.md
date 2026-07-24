@@ -234,7 +234,9 @@ snapshot stores `cnt` not the frozen flag).
   uninterrupted. `logs/cont_validate/floorspec_ab.sh` + `floorspec_resume.sh`.
 - **Sub-table fusion (2026-07-24):** Slivers R=8 — fusion ON == ON-rerun == OFF (`MTG_KEEP_NO_SUB_FUSE=1`,
   separate Pass A) all byte-identical raw; data == pre-fusion binary (0 cnt/sum/sumsq diffs); 12174 sub-cap
-  batches fused into the size-7 pool. `logs/cont_validate/fuse_ab.sh`.
+  batches fused into the size-7 pool. Interrupt→resume killed **mid-floor** (8289 floor records, no REFS
+  record yet — the fused-floor resume path) → final data byte-identical to uninterrupted.
+  `logs/cont_validate/fuse_ab.sh` + `fuse_resume.sh`.
 
 ## Open / next
 
