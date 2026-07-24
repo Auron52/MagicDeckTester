@@ -55,11 +55,32 @@ degenerate SEARCH, not a degenerate SCHEDULE. Root-cause it from CAPTURED games 
 (instrument: `MTG_KEEP_SLOW_MS` logs hand+side+seed+elapsed for any rollout over the threshold). Capturing
 first, hypothesizing second.
 
-**Current state vs target:** DONE — barrier-free floor (b7f33b0) and per-cell journal persistence (the
-snapshot-write stall is gone). REMAINING idle sources / gaps to the one-way method: the floor→refine barrier
-(the producer waits `in_flight==0` before fixing refs), the sub-refine waves (`run_refine_waves(sub_only)` for
-`sub_floor` cases), single-threaded discovery, and depth/budget still being env flags rather than read from
-the play profile. Low-prob prune is present but opt-in (`CUTOFF_P`/`CUTOFF_R`), not default-on.
+**Current state vs target:** DONE — barrier-free floor (b7f33b0), per-cell journal persistence (the
+snapshot-write stall is gone), and the **floor→refine barrier removed via speculate-then-reconcile
+(2026-07-24)** — see the dedicated section below. REMAINING idle sources / gaps to the one-way method: the
+sub-refine waves (`run_refine_waves(sub_only)` for `sub_floor` cases), single-threaded discovery, and
+depth/budget still being env flags rather than read from the play profile. Low-prob prune is present but
+opt-in (`CUTOFF_P`/`CUTOFF_R`), not default-on.
+
+**Floor→refine barrier removed — speculate-then-reconcile (SHIPPED 2026-07-24).** The old barrier stranded
+the whole pool while the slowest cell finished its `r0` floor rollouts (every other cell sat at `r0` with
+nothing to feed, since the floor phase only fed to `r0`). Now, while the floor is still incomplete, the
+producer feeds already-floored cells up to `r0 + spec_budget` (= `cont_lookahead`) **speculatively** — the
+worker folds them but does **not** freeze (the freeze test is gated on `refs_ready`, still false). When the
+floor completes (`!any_below_floor`; the `in_flight==0` wait is **gone**), `compute_refs` (a) pools `vg_ref`
+from per-cell **r0 snapshots** (`floor_sum/floor_sumsq/floor_cnt`, captured at the exact `r0`-crossing —
+NOT the live speculated `cnt`, so the fixed refs don't move as speculation runs ahead), (b) fixes
+`Dopt_ref` (sub-tables only, as before), then (c) **reconciles**: for each speculated cell it replays the
+freeze test over `(r0, cnt]` in fixed order from the r0 snapshot and freezes+truncates at the first hit —
+byte-identical to where the barrier path's fold would have stopped. All three happen under `fold_mtx` and
+publish `refs_ready` last, so no worker can fold-with-refs against an un-reconciled cell. **Speculation is
+provably harmless to the raw:** rollouts below a cell's freeze level are real refine work pulled forward;
+rollouts above it are truncated → the final `cnt`/`sum` per cell is scheduling-independent. Validated on
+Slivers (R=8): floor-spec ON == ON-rerun == OFF (`MTG_KEEP_NO_FLOOR_SPEC=1`, old barrier) all **byte-identical
+raw**, and the data matches the pre-change binary (only `engine_fp` moved). `in_flight` was 213 during the
+floor phase — real refine work the old barrier would have blocked on. Opt-out: `MTG_KEEP_NO_FLOOR_SPEC=1`
+(temporary A/B knob; the target design is speculation-always). See `logs/cont_validate/floorspec_ab.sh` +
+`floorspec_resume.sh`.
 
 ---
 
@@ -94,11 +115,15 @@ queue never starves and cores stay full to the last live cell.
 The determinism-vs-CPU tension (a wall-clock sweep makes freezing timing-dependent) is resolved by
 **removing all cross-cell timing coupling**:
 
-1. **Floor phase.** Feed every size-7 cell to the floor `r0`. No freezing yet (`refs_ready=false`).
-2. **Fix the refs, once, from the complete floor.** When every cell has folded to `≥ r0` and nothing is
-   in flight, compute `Dopt_ref` (the keep/mull thresholds) and `vg_ref` (per-table pooled variance)
-   from that complete snapshot and **freeze them for the rest of the run**. `Dopt` reads only the
-   sub-tables (see below) — never size-7 V — so it is exact at this point.
+1. **Floor phase.** Feed every size-7 cell to the floor `r0`. No freezing yet (`refs_ready=false`). While
+   the floor is incomplete, floored cells are fed a little past `r0` **speculatively** to keep cores busy
+   (see "Floor→refine barrier removed" above); those extra rollouts fold without freezing.
+2. **Fix the refs, once, from the complete floor.** When every cell has folded to `≥ r0` (no `in_flight`
+   wait — speculation may still be running), compute `Dopt_ref` (the keep/mull thresholds) and `vg_ref`
+   (per-table pooled variance). `vg_ref` pools from the per-cell **r0 snapshots**, not the live (possibly
+   speculated) `cnt`, so the fixed refs are independent of how far speculation ran. Then **reconcile** the
+   speculation (replay the freeze test over `(r0, cnt]` and truncate) before publishing `refs_ready`.
+   `Dopt` reads only the sub-tables (see below) — never size-7 V — so it is exact at this point.
 3. **Refine phase, per-cell independent freeze.** Each worker, after committing a rollout, folds its
    cell's contiguous prefix in fixed `r`-order and — at each new level `c ≥ r0` — evaluates the freeze
    test against the **fixed** refs: freeze iff `flip = ½·erfc(|mean − Dopt_ref|/(se·√2)) ≤ flip_eps`,
@@ -160,7 +185,10 @@ snapshot stores `cnt` not the frozen flag).
 
 - `MTG_KEEP_CONTINUOUS=1` — select the continuous pool (requires `adaptive`, i.e. `r0 < r_max`). Unset →
   wave/barrier path (byte-identical; smoke/regression and every other deck unaffected).
-- `MTG_KEEP_CONTINUOUS_LOOKAHEAD` (default 4) — max rollouts a cell may be fed past its committed prefix.
+- `MTG_KEEP_CONTINUOUS_LOOKAHEAD` (default 4) — max rollouts a cell may be fed past its committed prefix
+  (also the floor-tail speculation budget `spec_budget`).
+- `MTG_KEEP_NO_FLOOR_SPEC=1` — disable floor-tail speculation (revert to the old floor→refine barrier:
+  `in_flight==0` wait, no speculation). Byte-identical to speculation-on; temporary A/B knob.
 - `MTG_KEEP_JOURNAL` (default 1 for the continuous path) — per-cell journal persistence. `=0` reverts to the
   periodic full-raw snapshot (A/B + fallback). Temporary knob: the target design (top) is journal-only.
 - `MTG_KEEP_SWEEP_SEC` (default 20) — snapshot interval, used only by the `MTG_KEEP_JOURNAL=0` fallback.
@@ -176,6 +204,10 @@ snapshot stores `cnt` not the frozen flag).
   ≈ nproc sustained; ~18 % faster (Slivers R=6).
 - **Sub-table path (`adaptive_bottom`):** wave-vs-continuous policy parity + run-to-run byte-identity
   (Slivers, `subtable_ab.sh`).
+- **Floor-tail speculation (2026-07-24):** Slivers R=8 — floor-spec ON == ON-rerun == OFF
+  (`MTG_KEEP_NO_FLOOR_SPEC=1`) all byte-identical raw; data == pre-change binary (only `engine_fp` moved);
+  interrupt→resume killed mid-refine (596 terminal records incl. reconcile-frozen) → data byte-identical to
+  uninterrupted. `logs/cont_validate/floorspec_ab.sh` + `floorspec_resume.sh`.
 
 ## Open / next
 

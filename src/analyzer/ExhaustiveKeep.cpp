@@ -1739,16 +1739,36 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const long long cutoff_R = []{ const char* s = std::getenv("MTG_KEEP_CUTOFF_R");
             return (s && *s) ? std::atoll(s) : 0LL; }();
         const double se_prior = cfg.se_prior, flip_eps = cfg.flip_eps;
+        // Floor-tail speculation (kills the floor->refine barrier): while a slow cell finishes its floor
+        // rollouts, feed already-floored cells up to r0+spec_budget speculatively (no freezing yet -> the
+        // fold is refs-agnostic), then RECONCILE (replay the freeze test + truncate) once refs are fixed.
+        // Speculation is provably harmless to the raw: rollouts below the freeze level are real refine work,
+        // rollouts above it are truncated -> final cnt/sum per cell is scheduling-independent (byte-identical
+        // run-to-run and vs the barrier path). Opt-out MTG_KEEP_NO_FLOOR_SPEC=1 restores the old barrier.
+        const bool floor_spec = std::getenv("MTG_KEEP_NO_FLOOR_SPEC") == nullptr;
+        const long long spec_budget = cont_lookahead;   // max speculative rollouts past r0 per cell
 
         const std::size_t SL = static_cast<std::size_t>(NC) * 2 * static_cast<std::size_t>(r_max);
         std::vector<double> slot(SL, 0.0);
         std::vector<char>   have(SL, 0);
         std::vector<long long> fed(static_cast<std::size_t>(NC) * 2, 0);
         std::vector<std::atomic<char>> afroze(static_cast<std::size_t>(NC) * 2);   // lock-free view for producer
+        // Floor snapshot (sum/sumsq/cnt at exactly c==r0), captured at the r0-crossing under fold_mtx. vg_ref
+        // is pooled from THESE (not the live, possibly-speculated cnt) so the fixed refs are independent of
+        // how far speculation ran -> byte-identical to the barrier path. Also the base for reconcile replay.
+        std::vector<double>    floor_sum(static_cast<std::size_t>(NC) * 2, 0.0);
+        std::vector<double>    floor_sumsq(static_cast<std::size_t>(NC) * 2, 0.0);
+        std::vector<long long> floor_cnt(static_cast<std::size_t>(NC) * 2, 0);
         for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
         { const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
           fed[k] = S7.cnt[i][pd];                                    // resume: continue past reloaded cnt
-          afroze[k].store(frozen7[i][pd] ? 1 : 0, std::memory_order_relaxed); }
+          afroze[k].store(frozen7[i][pd] ? 1 : 0, std::memory_order_relaxed);
+          // Resumed floored/terminal cells already carry cnt>=r0 (no r0-crossing will re-fire). Seed the
+          // snapshot with their reloaded accumulators so a vg recompute mirrors the old non-journal reload
+          // (mean=sum/cnt); on journal resume refs are restored (not recomputed), so this is unused there.
+          // A fresh run has cnt==0 here (Pass A skips size-7), so the true r0 snapshot is captured below.
+          if (S7.cnt[i][pd] >= r0) { floor_sum[k] = S7.sum[i][pd]; floor_sumsq[k] = S7.sumsq[i][pd];
+                                     floor_cnt[k] = S7.cnt[i][pd]; } }
         auto SLOT = [&](int i, int pd, long long r) -> std::size_t
         { return ((static_cast<std::size_t>(i) * 2 + pd) * static_cast<std::size_t>(r_max)) + static_cast<std::size_t>(r); };
 
@@ -1762,6 +1782,21 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::mutex prod_mtx; std::condition_variable prod_cv;
         std::array<std::vector<double>, 2> Dopt_ref{ std::vector<double>{}, std::vector<double>{} };
         std::array<double, 2> vg_ref{ 0.0, 0.0 };
+
+        // The freeze test for level c given that cell's prefix (sum_c/sumsq_c at exactly c samples). Shared
+        // by the inline fold (refine) and the reconcile replay (post-speculation) so the two can never drift.
+        auto freeze_hit = [&](int i, int pd, long long c, double sum_c, double sumsq_c) -> bool
+        {
+            if (c >= r_max) { return true; }
+            if (cutoff_P > 0.0 && cutoff_R > 0 && P[i] < cutoff_P && c >= cutoff_R) { return true; }
+            const double mean = sum_c / c;
+            const double vc   = c > 1 ? std::max(0.0, sumsq_c / c - mean * mean) : vg_ref[pd];
+            const double vs   = (c * vc + se_prior * vg_ref[pd]) / (c + se_prior);
+            const double se   = std::sqrt(vs / c);
+            const double d    = std::abs(mean - Dopt_ref[pd][1]);
+            const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * SQRT2)) : (d == 0 ? 0.5 : 0.0);
+            return flip <= flip_eps;
+        };
 
         // WORKER: run one rollout, then fold its cell's committed prefix in fixed r-order. Once refs are
         // ready, evaluate freeze AT EACH new level c (>=r0) inside the fold; freeze at the first confident
@@ -1791,6 +1826,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 bool jfloor = false, jterm = false; double js = 0.0, jq = 0.0; long long jn = 0;
                 {
                     std::lock_guard<std::mutex> fk(fold_mtx);
+                    const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
                     slot[SLOT(i, pd, r)] = wt; have[SLOT(i, pd, r)] = 1;
                     long long& c = S7.cnt[i][pd];
                     const long long c_before = c;
@@ -1800,24 +1836,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         const double v = slot[SLOT(i, pd, c)];
                         S7.sum[i][pd] += v; S7.sumsq[i][pd] += v * v; ++c;
-                        if (refine && c >= r0)
-                        {
-                            bool fr = (c >= r_max)
-                                || (cutoff_P > 0.0 && cutoff_R > 0 && P[i] < cutoff_P && c >= cutoff_R);
-                            if (!fr)
-                            {
-                                const double mean = S7.sum[i][pd] / c;
-                                const double vc   = c > 1 ? std::max(0.0, S7.sumsq[i][pd] / c - mean * mean)
-                                                          : vg_ref[pd];
-                                const double vs   = (c * vc + se_prior * vg_ref[pd]) / (c + se_prior);
-                                const double se   = std::sqrt(vs / c);
-                                const double d    = std::abs(mean - Dopt_ref[pd][1]);
-                                const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * SQRT2)) : (d == 0 ? 0.5 : 0.0);
-                                if (flip <= flip_eps) { fr = true; }
-                            }
-                            if (fr) { frozen7[i][pd] = true;
-                                      afroze[static_cast<std::size_t>(i) * 2 + pd].store(1, std::memory_order_release); }
-                        }
+                        // Capture the exact r0-prefix the instant the fold crosses r0 (during the floor phase
+                        // this is c==r0, since speculation for a cell can't start until it is floored). vg_ref
+                        // pools from these snapshots, so the fixed refs don't move as speculation runs ahead.
+                        if (c_before < r0 && c == r0)
+                        { floor_sum[k] = S7.sum[i][pd]; floor_sumsq[k] = S7.sumsq[i][pd]; floor_cnt[k] = r0; }
+                        // Freeze only in the refine phase. During floor speculation (refine==false) the fold
+                        // just advances the prefix; reconcile applies the freeze test to [r0,c) once refs fix.
+                        if (refine && c >= r0 && freeze_hit(i, pd, c, S7.sum[i][pd], S7.sumsq[i][pd]))
+                        { frozen7[i][pd] = true; afroze[k].store(1, std::memory_order_release); }
                     }
                     if (journal_on)
                     {
@@ -1834,25 +1861,52 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             }
         };
 
-        // Fix Dopt/vg from the COMPLETE floor (every cell at >= r0). Called once, under fold_mtx.
+        // Reconcile terminal records: cells frozen by the post-speculation replay (not by a worker), to be
+        // journaled by the producer after compute_refs returns (journal I/O stays off the fold path).
+        struct RTerm { int i; int pd; double s; double q; long long n; };
+        std::vector<RTerm> reconcile_terms;
+
+        // Fix Dopt/vg from the COMPLETE floor, then RECONCILE any floor-tail speculation, then publish
+        // refs_ready -- all under fold_mtx so no worker can fold-with-refs against an un-reconciled cell.
+        // vg pools from the r0 snapshots (floor_*), NOT the live cnt, so speculation never perturbs the
+        // fixed refs. Called once.
         auto compute_refs = [&]()
         {
             std::lock_guard<std::mutex> fk(fold_mtx);
-            for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
-            {
-                const long long c = S7.cnt[i][pd]; if (c <= 0) { continue; }
-                const double mean = S7.sum[i][pd] / c;
-                const double var  = c > 1 ? std::max(0.0, S7.sumsq[i][pd] / c - mean * mean) : 0.0;
-                S7.V[i][pd] = mean; S7.se[i][pd] = c > 1 ? std::sqrt(var / c) : 0.0;
-            }
             std::array<double, 2> vg{ 0.0, 0.0 }; std::array<long long, 2> ng{ 0, 0 };
             for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
-            { const long long c = S7.cnt[i][pd];
-              if (c > 1) { const double mn = S7.V[i][pd];
-                           vg[pd] += std::max(0.0, S7.sumsq[i][pd] / c - mn * mn); ++ng[pd]; } }
+            { const std::size_t k = static_cast<std::size_t>(i) * 2 + pd; const long long c = floor_cnt[k];
+              if (c > 1) { const double mn = floor_sum[k] / c;
+                           vg[pd] += std::max(0.0, floor_sumsq[k] / c - mn * mn); ++ng[pd]; } }
             for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[pd] /= ng[pd]; } }
             vg_ref = vg;
             Dopt_ref = { compute_Dopt(0), compute_Dopt(1) };
+
+            // Reconcile: for each live cell speculated past r0, replay the freeze test over (r0, cnt] in
+            // fixed order from the r0 snapshot; freeze + truncate at the first hit (byte-identical to the
+            // barrier path, which would have stopped the fold there). A cell at cnt==r0 (unspeculated) is a
+            // no-op, so this is inert when floor speculation is off.
+            for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+            {
+                const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
+                if (frozen7[i][pd]) { continue; }
+                const long long c_cur = S7.cnt[i][pd];
+                if (c_cur <= r0) { continue; }
+                double rs = floor_sum[k], rq = floor_sumsq[k];   // sum/sumsq at c==r0
+                for (long long tc = r0 + 1; tc <= c_cur; ++tc)
+                {
+                    const double v = slot[SLOT(i, pd, tc - 1)]; rs += v; rq += v * v;
+                    if (freeze_hit(i, pd, tc, rs, rq))
+                    {
+                        frozen7[i][pd] = true;
+                        afroze[k].store(1, std::memory_order_release);
+                        S7.sum[i][pd] = rs; S7.sumsq[i][pd] = rq; S7.cnt[i][pd] = tc;   // truncate
+                        if (journal_on) { reconcile_terms.push_back({ i, pd, rs, rq, tc }); }
+                        break;
+                    }
+                }
+            }
+            refs_ready.store(true, std::memory_order_release);   // publish AFTER reconcile
         };
         auto checkpoint = [&]()
         { if (cfg.out_raw.empty()) { return; }
@@ -1892,35 +1946,70 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
         auto t_last_ck = std::chrono::steady_clock::now();
         long long fed_total = 0, last_report = 0;
+        bool any_fed = false;
+        auto feed_upto = [&](int i, int pd, long long limit)   // enqueue rollouts [fed, limit) for a cell
+        {
+            long long& f = fed[static_cast<std::size_t>(i) * 2 + pd];
+            while (f < limit)
+            {
+                { std::unique_lock<std::mutex> lk(qmtx);
+                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                  q.push_back({ static_cast<long long>(i), static_cast<long long>(pd), f }); }
+                q_ne.notify_one();
+                ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
+            }
+        };
         for (;;)
         {
             const bool refine = refs_ready.load();
-            bool any_below_floor = false, any_live = false, any_fed = false;
-            for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+            bool any_below_floor = false, any_live = false; any_fed = false;
+            if (!refine)
             {
-                if (afroze[static_cast<std::size_t>(i) * 2 + pd].load()) { continue; }
-                const long long c = S7.cnt[i][pd];                          // racy read (x86-64 atomic); benign
-                if (c >= r_max) { continue; }
-                any_live = true;
-                long long limit;
-                if (!refine) { limit = r0; if (c < r0) { any_below_floor = true; } }   // floor: fill to r0 only
-                else         { limit = std::min<long long>(r_max, c + cont_lookahead); }
-                long long& f = fed[static_cast<std::size_t>(i) * 2 + pd];
-                while (f < limit)
+                // Floor pass 1 (mandatory): drive every cell to r0. The slow floor cell's rollouts are
+                // enqueued the instant it is seen below floor, before any speculation -> never starved.
+                for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
                 {
-                    { std::unique_lock<std::mutex> lk(qmtx);
-                      q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                      q.push_back({ static_cast<long long>(i), static_cast<long long>(pd), f }); }
-                    q_ne.notify_one();
-                    ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
+                    if (afroze[static_cast<std::size_t>(i) * 2 + pd].load()) { continue; }
+                    const long long c = S7.cnt[i][pd];                      // racy read (x86-64 atomic); benign
+                    if (c >= r_max) { continue; }
+                    any_live = true;
+                    if (c < r0) { any_below_floor = true; feed_upto(i, pd, r0); }
+                }
+                // Floor pass 2 (speculation filler): only while the floor is INCOMPLETE (a slow cell still
+                // finishing r0) -> feed already-floored cells up to r0+spec_budget so idle cores stay busy.
+                // No freezing happens yet; compute_refs reconciles this speculation. Off => old barrier.
+                if (floor_spec && any_below_floor)
+                {
+                    for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+                    {
+                        if (afroze[static_cast<std::size_t>(i) * 2 + pd].load()) { continue; }
+                        const long long c = S7.cnt[i][pd];
+                        if (c >= r0 && c < r_max)
+                        { feed_upto(i, pd, std::min<long long>(r_max, r0 + spec_budget)); }
+                    }
                 }
             }
-            // Floor complete (every cell folded to >= r0, nothing in flight) -> fix refs, enter refine.
-            if (!refine && !any_below_floor && in_flight.load() == 0)
+            else
             {
-                compute_refs();
+                for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+                {
+                    if (afroze[static_cast<std::size_t>(i) * 2 + pd].load()) { continue; }
+                    const long long c = S7.cnt[i][pd];
+                    if (c >= r_max) { continue; }
+                    any_live = true;
+                    feed_upto(i, pd, std::min<long long>(r_max, c + cont_lookahead));
+                }
+            }
+            // Floor complete (every cell folded to >= r0) -> fix refs + reconcile floor-tail speculation +
+            // publish refs_ready (all inside compute_refs, under fold_mtx). NO in_flight wait: speculation
+            // still in flight is harmless (reconcile handles folded prefixes; later folds test inline).
+            if (!refine && !any_below_floor)
+            {
+                compute_refs();     // fixes Dopt/vg, reconciles speculation, sets refs_ready
                 journal_refs();     // persist the fixed refs (byte-identical resume marker)
-                refs_ready.store(true, std::memory_order_release);
+                for (const RTerm& rt : reconcile_terms)   // journal cells frozen during reconcile
+                { journal_append(HAND, rt.i, rt.pd, rt.s, rt.q, rt.n, 1); }
+                reconcile_terms.clear();
                 std::cerr << "[keepgen]   continuous: floor complete, refs fixed -> refine ("
                           << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
                 continue;
