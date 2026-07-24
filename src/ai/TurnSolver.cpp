@@ -1225,6 +1225,66 @@ static inline bool NonPrefixAccelViolated(const std::vector<int>& accel_order, c
     return false;
 }
 
+// Forward decl so the storm go-off short-circuit in Solve/EnumeratePlans can VERIFY a projected win by
+// actually simulating the line (ApplyPlanDirect is defined later). Default arg lives here (the earliest
+// declaration) so those callsites can omit out_breakpoint.
+static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
+                            std::vector<Action>* out_breakpoint = nullptr);
+
+// MTG_NO_GOFF_SHORTCIRCUIT: isolation toggle for the Dragonstorm storm go-off short-circuit (below);
+// default on, disables ONLY that cut for a clean perf/GT A/B (the full search still finds the same win
+// via the go-off lethal model, just after paying for the ritual/Lotus powerset).
+static const bool s_no_goff_shortcircuit = std::getenv("MTG_NO_GOFF_SHORTCIRCUIT") != nullptr;
+
+// Construct the canonical Dragonstorm storm go-off line for the lethal short-circuit (see the callsites in
+// Solve / EnumeratePlans): one representative per mana-ritual hand card (plain cast, splice_count==0) + one
+// SacForMana per distinct Lotus source + exactly one Dragonstorm (tutor_to_battlefield) payoff. This is the
+// "cast every accelerant, then storm" line -- every ritual is +1 storm count and net-nonnegative mana, the
+// Lotus sacs fund it (no storm), and Irencrag Feat rides along (CastOrderRank sequences it right before the
+// payoff, and consider()/eval_and_push enforce its one-more-spell legality). Fills `combo` with cand indices
+// and returns the Dragonstorm cand index, or -1 if no Dragonstorm is castable (no line to try). De-dups by
+// hand_index / sac_source_id so a card is never listed twice (a double-listing would over-project the storm
+// count and mis-flag a false lethal). We do NOT add hard-cast Dragons / other non-ritual spells: 3 Dragons
+// is lethal and >=2 rituals already reach storm >=3, so the minimal line wins on its own; if it does not
+// (too few rituals, or the library is short on Dragons) the callsite falls through to the full search, which
+// still finds the pad-with-a-spell line. Pure over cands (called before the odometer builds its groups).
+static int BuildStormGoffLine(const std::vector<Action>& cands, std::vector<int>& combo)
+{
+    combo.clear();
+    int payoff = -1;
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const Action& c = cands[j];
+        const CardDefinition* d = c.def;
+        if (!d) { continue; }
+        if (d->params.tutor_to_battlefield && c.kind == Action::Kind::CastFromHand)
+        {
+            if (payoff < 0) { payoff = j; }   // one Dragonstorm suffices for lethal (3 Dragons)
+            continue;
+        }
+        if (c.ritual_float <= 0) { continue; }   // accelerants only (cast rituals + Lotus sac)
+        if (c.kind == Action::Kind::CastFromHand)
+        {
+            if (c.splice_count != 0) { continue; }   // the plain-cast representative of this ritual card
+            bool dup = false;
+            for (int k : combo) { if (cands[k].hand_index == c.hand_index) { dup = true; break; } }
+            if (!dup) { combo.push_back(j); }
+        }
+        else if (c.kind == Action::Kind::SacForMana)
+        {
+            bool dup = false;
+            for (int k : combo)
+            {
+                if (cands[k].kind == Action::Kind::SacForMana
+                    && cands[k].sac_source_id == c.sac_source_id) { dup = true; break; }
+            }
+            if (!dup) { combo.push_back(j); }
+        }
+    }
+    if (payoff >= 0) { combo.push_back(payoff); }
+    return payoff;
+}
+
 // Candidate single COLOURS for a "add N mana of ONE chosen colour" float (Lotus Bloom's SacForMana
 // and Apex of Power's 10-of-one-colour). The set = every colour appearing in the active player's
 // NONLAND spell costs across hand / library / graveyard / battlefield (so an off-colour combo line
@@ -2754,6 +2814,53 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         }
     }
 
+    // ---- Dragonstorm storm go-off short-circuit (sibling of the Hinata combo-line cut) --------------
+    // A storm go-off turn is structurally fixed: cast every ritual + sac every Lotus to build storm count
+    // and mana, then Dragonstorm -- whose min(storm, #Dragons-left) puts and Scourge/Lathliss ETB pings are
+    // this turn's lethal (ExtraLethalDamage). The full search ALREADY finds this win; it just pays for the
+    // entire ritual/Lotus powerset first (the Apex/Lotus straggler -- the R=40 gen atom). So evaluate JUST
+    // the maximal go-off line via the same consider() and, when it WINS, skip the powerset -- a turn-winning
+    // plan dominates every plan this turn, so nothing is lost; when it does NOT win (e.g. the library is
+    // nearly out of Dragons -> the storm puts too few) fall through to the full enumeration (`best` merely
+    // pre-seeded, like move ordering). Correct-by-construction: we assert only that a lethal this-turn line
+    // is optimal, not that the maximal line is. Inert for every non-Dragonstorm deck (has_extra_lethal +
+    // no tutor payoff -> BuildStormGoffLine returns -1); rides the Hinata cut's MTG_NO_COMBO_LINE +
+    // MTG_UNPRUNED(ComboLine) toggles plus its own MTG_NO_GOFF_SHORTCIRCUIT.
+    // Only at the TOP-LEVEL main phase (nothing cast yet this turn), never inside a draw-breakpoint
+    // re-solve. Inside Apex's mid-turn re-solve the go-off model's win projection AND an isolated
+    // ApplyPlanDirect re-sim both disagree with how the breakpoint handler actually replays the line (a
+    // staged-Dragonstorm quirk -- the "much harder" Apex-pile case), which turned a T8 win into a loss.
+    // At spells_cast_this_turn==0 no staged cards can exist (staging needs a prior cast), so the
+    // constructed line is always a coherent opening-main line and the re-sim is a faithful oracle.
+    if (any_ritual && has_extra_lethal && state.spells_cast_this_turn == 0
+        && !s_no_goff_shortcircuit && !s_no_combo_line
+        && !DecisionUnpruned(UnprunedGate::ComboLine))
+    {
+        std::vector<int> goff;
+        if (BuildStormGoffLine(cands, goff) >= 0)
+        {
+            // Purely additive + SOUND. consider() builds/pre-seeds `best` from the constructed line and
+            // PROJECTS its win (ExtraLethalDamage). But that projection is optimistic for the Apex-staged
+            // Dragonstorm case (storm/library/mana quirks in the mid-turn re-solve): it once claimed a lethal
+            // that fizzled, turning a T8 win into a loss at greedy d0 (no root re-simulation to catch it). So
+            // do NOT trust the projection -- when it flags a win, VERIFY by actually simulating the line
+            // (ApplyPlanDirect on a copy) and only short-circuit when the opponent is truly dead. Snapshot
+            // `best`/`best_mask` and restore on any non-verified outcome so the fall-through is byte-identical
+            // to the full search. Cost: one plan application, trivially cheap versus the powerset it skips.
+            const Plan saved_best = best;
+            const int  saved_mask = best_mask;
+            consider(goff);
+            if (best.wins_this_turn)
+            {
+                GameState copy = state;
+                ApplyPlanDirect(copy, best, is_pre_combat);
+                if (copy.Opponent().life <= 0) { return best; }   // verified lethal -> skip the powerset
+            }
+            best      = saved_best;
+            best_mask = saved_mask;
+        }
+    }
+
     // The default enumeration replaces the 2^m action powerset with the PRODUCT of per-hand-card
     // choices {skip, cast, deploy-via-Vial} (same-charge Vial deploys collapse to one
     // representative, bounded by an aggregate per-charge capacity) crossed with the 2^independent
@@ -3525,7 +3632,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 }
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
-                            std::vector<Action>* out_breakpoint = nullptr)
+                            std::vector<Action>* out_breakpoint)   // default arg on the forward decl
 {
     PROF_INC(applyplan_calls);
     Player& ap  = state.ActivePlayer();
@@ -5808,6 +5915,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // search also enumerates the ritual->payoff combo. False for non-ritual decks -> byte-identical.
     bool any_ritual = false;
     for (const Action& ra : cands) { if (ra.ritual_float > 0) { any_ritual = true; break; } }
+    // Dragonstorm go-off lethal model present? (mirrors Solve) Gates the storm go-off short-circuit below.
+    const bool has_extra_lethal = ResolveProvider(state).HasExtraLethalModel();
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
@@ -6145,6 +6254,40 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Precompute the accelerant-prefix order ONCE (choice-independent); per-choice check is a cheap walk.
     std::vector<int> accel_order;
     if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
+    // Dragonstorm storm go-off short-circuit (mirrors Solve): the search also enumerates the ritual/Lotus
+    // powerset at every node, so when the maximal go-off line WINS this turn, emit JUST that plan and skip
+    // the odometer -- a turn-winning branch dominates, so the search commits it and needs no others. When it
+    // does not win we discard the trial and enumerate normally. Same has_extra_lethal + MTG_UNPRUNED(ComboLine)
+    // + MTG_NO_GOFF_SHORTCIRCUIT gating; inert for every non-Dragonstorm deck. (`plans` is empty here -- the
+    // odometer + Plan-B below are the only producers -- so returning just the winner drops nothing.)
+    if (any_ritual && has_extra_lethal && state.spells_cast_this_turn == 0
+        && !s_no_goff_shortcircuit && !DecisionUnpruned(UnprunedGate::ComboLine))
+    {
+        std::vector<int> goff;
+        if (BuildStormGoffLine(cands, goff) >= 0)
+        {
+            const size_t before = plans.size();
+            eval_and_push(goff);
+            if (plans.size() > before)
+            {
+                // VERIFY the projected win by simulation (the projection is optimistic for the Apex-staged
+                // Dragonstorm case -- see the Solve sibling). Only a truly-lethal line short-circuits the
+                // powerset; otherwise discard the trial and enumerate fully (byte-identical to the full search,
+                // which re-simulates at the root anyway).
+                if (plans.back().wins_this_turn)
+                {
+                    GameState copy = state;
+                    ApplyPlanDirect(copy, plans.back(), is_pre_combat);
+                    if (copy.Opponent().life <= 0)
+                    {
+                        return { std::move(plans.back()) };   // verified lethal -> skip powerset + Plan-B
+                    }
+                }
+                plans.pop_back();   // not a verified win -> enumerate normally
+            }
+        }
+    }
+
     std::vector<int> choice(num_groups, 0);
     std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-combo alloc)
     bool done = false;

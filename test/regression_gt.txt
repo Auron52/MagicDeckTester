@@ -1,6 +1,5 @@
-# Regression ground truth -- commit 0511387  date 2026-07-24
+# Regression ground truth -- commit a445ce5  date 2026-07-24
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (regression, 2026-07-24): float-colour collapse (Apex->red; Lotus->red unless a haste Dragon is castable, hand incl Apex-staged) + byte-identical feasible-aware ritual-drop. 25-180x faster on the durdle hands (31-min keep-gen atom -> ~11s); net avg-win-turn NEUTRAL (+0.001 across 5 dragonstorm seed/depth cases); per-game deltas are combo-timing/Apex-exile/Dragonstorm-shuffle variance, not strategic losses. Other decks byte-identical (provider-gated).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -23,7 +22,7 @@ antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
 hinata_smoke_d0_s1001=7.2930/48ff4924e46f59b5
 hinata_smoke_d3_s1001=5.6667/110f22b3916616c4
 hinata_smoke_d5_s1001=5.7333/92d5555de09f82f5
-dragonstorm_smoke_d0_s1001=6.2770/5f2a5608fda97ec8
+dragonstorm_smoke_d0_s1001=6.2500/efd4d7b6e991a219
 dragonstorm_smoke_d3_s1001=4.6800/3fff75c88fd3a7f3
 dragonstorm_smoke_d5_s1001=4.6800/7b926591e39b51f5
 
@@ -58,7 +57,7 @@ hinata_regression_d3_s2002=5.7500/6ac3783ba16749fb
 hinata_regression_d3_s3003=5.8300/d7c3dbc9877aaa2b
 hinata_regression_d5_s2002=5.7200/e2f9501879c6096e
 hinata_regression_d5_s3003=5.7500/3eff2577b2254d65
-dragonstorm_regression_d0_s2002=6.2530/fd550292e1fcf230
+dragonstorm_regression_d0_s2002=6.2280/6e692c58a0b97f8a
 dragonstorm_regression_d3_s2002=4.6800/9ff2c5e2e7434004
 dragonstorm_regression_d3_s3003=4.7200/ca08cdcb2923d508
 dragonstorm_regression_d5_s2002=4.6080/86c172815f651594
