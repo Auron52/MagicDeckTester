@@ -21,16 +21,31 @@ get wrong. The gen is **always**:
 
 Every other `MTG_KEEP_*` / `MTG_EQUIV_*` knob and the uniform/round/wave code paths are to be **removed**.
 
-**Persistence = per-cell incremental, NOT periodic full-snapshot checkpoints (user insight 2026-07-24).**
-Because a cell completes atomically (cnt=0 or fully sampled), the right durability model is to persist each
-cell's result the moment it finishes — an append log of per-cell records (JSONL: {H, comp, pd, sum, sumsq,
-cnt}) — and reconstruct "what's done" from that log on resume. Then there is no "checkpoint" event at all:
-completion IS persistence. This is strictly better than the interim periodic write_raw_atomic snapshot
-(committed b7f33b0): no periodic ~50–100 MB full-raw write (eliminates the checkpoint-write stall — the last
-residual idle source), and a crash loses only the few in-flight cells, not a whole interval of completed
-ones. Compact the append log into the final raw JSON at the end; the pooling merge is already
-order-independent so it can read any set of records (handles out-of-order completion by construction). The
-interim periodic-snapshot code is the fallback until this lands.
+**Persistence = per-cell incremental journal, NOT periodic full-snapshot checkpoints — SHIPPED 2026-07-24.**
+Because a cell completes atomically (floor reached, or terminal freeze/cap), durability is a per-cell append
+log: persist each cell-side the moment it finishes. Records key by `(H, cell-index, pd)` — valid because a
+matching fingerprint ⇒ identical discovery ⇒ identical comp ordering ⇒ stable indices (validated on resume;
+out-of-range indices ignored) — and carry `{s:sum, q:sumsq, n:cnt, f:frozen}` (doubles at 17 sig figs, so
+they round-trip exactly). A record is appended: at floor completion (`f=0`), at a terminal freeze/cap
+(`f=1`), for each sub-table cell's final sample (via `run_batch`, `f=0`), plus a one-time **REFS record**
+(`{refs:1, dopt0, dopt1, vg}`) when `Dopt`/`vg` are fixed from the complete floor. Completion IS persistence:
+there is no "checkpoint" event. This is strictly better than the interim periodic `write_raw_atomic` snapshot
+(b7f33b0): no periodic ~40–100 MB full-raw write held under `fold_mtx` (eliminates the snapshot-write stall —
+the last residual idle source), and a crash loses only the few in-flight cells.
+
+Resume replay is **order-independent** (apply the highest-`cnt` record per cell-side, so a later lower-`cnt`
+record can't clobber a completed one) and **byte-identical + zero-waste**: terminal (`f=1`) size-7 cells set
+`frozen7` and are skipped; floored cells re-refine from `r0` with the SAME fixed refs (restored from the REFS
+record, NOT recomputed from the partially-refined state — which would differ). The authoritative poolable raw
+is still written once at the end from the complete accumulators; the journal is then **deleted** (superseded).
+Default ON for the continuous path; `MTG_KEEP_JOURNAL=0` reverts to the periodic snapshot (kept as A/B +
+fallback). Implemented in `src/analyzer/ExhaustiveKeep.cpp` (journal_append / journal replay / journal_refs).
+
+**Validated (Slivers, R=8):** `jA==jA2` raw byte-identical (journaling deterministic); `jA==snB` raw
+byte-identical (journal changes PERSISTENCE only, never results); wall-clock 452s (journal) vs 495s (snapshot)
+— journaling is **not more expensive** even where the snapshot is cheap (~1 MB raw); interrupt→resume killed
+mid-refine (refs fixed, 158 terminal cells) reloaded 27690 cell-sides + fixed refs and produced a
+**byte-identical** final raw. See `logs/cont_validate/journal_ab.sh` + `journal_resume.sh`.
 
 **Orthogonal problem (separate from the pool):** even a perfect single pool leaves the final end-tail =
 the slowest single game. Dragonstorm has degenerate *games* — individual rollouts of certain combo hands
@@ -40,9 +55,11 @@ degenerate SEARCH, not a degenerate SCHEDULE. Root-cause it from CAPTURED games 
 (instrument: `MTG_KEEP_SLOW_MS` logs hand+side+seed+elapsed for any rollout over the threshold). Capturing
 first, hypothesizing second.
 
-**Current state vs target:** the continuous pool below covers only the size-7 REFINE; sub-tables still use
-the 32-group barrier floor pass; there is a floor→refine barrier; discovery is single-threaded; depth/
-budget are still env flags. So it is a building block, NOT the one-way method yet.
+**Current state vs target:** DONE — barrier-free floor (b7f33b0) and per-cell journal persistence (the
+snapshot-write stall is gone). REMAINING idle sources / gaps to the one-way method: the floor→refine barrier
+(the producer waits `in_flight==0` before fixing refs), the sub-refine waves (`run_refine_waves(sub_only)` for
+`sub_floor` cases), single-threaded discovery, and depth/budget still being env flags rather than read from
+the play profile. Low-prob prune is present but opt-in (`CUTOFF_P`/`CUTOFF_R`), not default-on.
 
 ---
 
@@ -129,27 +146,24 @@ only change is a `!sub_only` guard on the m=0 branch and the wave label).
 
 ## Resumability
 
-The checkpoint is the cumulative raw (per-cell `sum/sumsq/cnt`) written atomically (tmp + rename) every
-`MTG_KEEP_SWEEP_SEC`. Resume reloads it (when `out_raw` exists and its meta fingerprint — deck, buckets,
-`seed_base`, cap `R` — matches) and seeds the `fed[]` cursor from the reloaded `S7.cnt`. Stopping at any R
-(e.g. R=20) yields a valid profile at that point — finer than the section idea, which produced nothing
-until a 5/10 boundary.
-
-**Resume is policy-safe but not yet byte-identical / zero-waste.** The checkpoint stores `cnt`, not the
-per-cell frozen flag, so on resume a cell that had *frozen* below the cap is indistinguishable from one
-merely interrupted there — it gets re-fed toward the cap. Validated (Slivers R=4): resuming a completed
-run reloaded all 27690 cell-sides, re-refined the frozen-below-cap cells to the cap (+7830 rollouts), and
-produced a profile with **KEEP diffs=0, BOTTOM diffs=0** vs the reference. So resume never loses work and
-never changes the policy; it just re-does the frozen cells' remaining rollouts. Byte-identical, zero-waste
-resume is future work: persist `frozen7` + the fixed `Dopt_ref`/`vg_ref` (e.g. a `continuous.frozen`
-sidecar, leaving the poolable raw format untouched) and restore them on resume.
+The continuous path resumes from the **per-cell journal** (see the SHIPPED persistence note above): replay
+applies the highest-`cnt` record per cell-side, restores `frozen7` from terminal (`f=1`) size-7 records, and
+loads the fixed `Dopt_ref`/`vg_ref` from the REFS record. This is **byte-identical + zero-waste** — killed
+mid-refine and resumed, the final raw matches an uninterrupted run exactly (validated Slivers R=8). Stopping
+at any point yields a valid low-R profile via the authoritative raw. The old comp-based `out_raw` reload
+(cumulative raw, tmp+rename every `MTG_KEEP_SWEEP_SEC`) remains as the **fallback**: it is used when
+journaling is off (`MTG_KEEP_JOURNAL=0`) or no journal is present (e.g. a completed prior run / merged pool),
+and is policy-safe but not byte-identical (it re-refines frozen-below-cap cells toward the cap, since the
+snapshot stores `cnt` not the frozen flag).
 
 ## Flags
 
 - `MTG_KEEP_CONTINUOUS=1` — select the continuous pool (requires `adaptive`, i.e. `r0 < r_max`). Unset →
   wave/barrier path (byte-identical; smoke/regression and every other deck unaffected).
 - `MTG_KEEP_CONTINUOUS_LOOKAHEAD` (default 4) — max rollouts a cell may be fed past its committed prefix.
-- `MTG_KEEP_SWEEP_SEC` (default 20) — checkpoint interval.
+- `MTG_KEEP_JOURNAL` (default 1 for the continuous path) — per-cell journal persistence. `=0` reverts to the
+  periodic full-raw snapshot (A/B + fallback). Temporary knob: the target design (top) is journal-only.
+- `MTG_KEEP_SWEEP_SEC` (default 20) — snapshot interval, used only by the `MTG_KEEP_JOURNAL=0` fallback.
 - Reuses `MTG_KEEP_CUTOFF_P` / `MTG_KEEP_CUTOFF_R` (low-prob freeze arm), `MTG_KEEP_R_FLOOR`,
   `MTG_KEEP_ROLLOUTS`, `MTG_KEEP_ADAPTIVE_BOTTOM`.
 

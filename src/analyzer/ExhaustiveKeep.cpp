@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -821,6 +822,48 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         { std::ofstream f(sl, std::ios::app); f << line << "\n"; }
     };
 
+    // ---- Per-cell JOURNAL (crash-recovery for the continuous pool) --------------------------------
+    // Instead of periodically snapshotting the whole raw (a fold-blocking multi-MB write every sweep --
+    // the last idle source), append one compact record the moment a cell-side completes: its floor
+    // (f=0), a terminal freeze/cap (f=1), a sub-table cell's final sample, plus a one-time REFS record
+    // when Dopt/vg are fixed. Completion IS persistence -> no fold_mtx-held snapshot, and a crash loses
+    // only the few in-flight cells (not a whole interval). Records key by (H, cell-index, pd): a matching
+    // fingerprint => identical discovery => identical comp ordering => stable indices (validated on
+    // resume; out-of-range indices are ignored). The authoritative poolable raw is still written once at
+    // the end (accumulators are complete there); the journal is then deleted. See
+    // docs/design/adaptive-batched-keepgen.md.  Default ON for the continuous path; MTG_KEEP_JOURNAL=0
+    // reverts to the periodic full-raw snapshot (kept for A/B and as a fallback).
+    bool journal_on = false;                 // set once continuous is known (below)
+    std::string journal_path;                // cfg.out_raw + ".journal"
+    std::mutex journal_mtx;
+    std::ofstream journal_f;
+    // Refs fixed from the complete floor, restored on resume so the run is byte-identical (compute_refs
+    // must see the r0-floor snapshot, not the current cnt): persisted in the REFS record and reloaded.
+    bool refs_loaded = false;
+    std::array<std::vector<double>, 2> loaded_Dopt{ std::vector<double>{}, std::vector<double>{} };
+    std::array<double, 2> loaded_vg{ 0.0, 0.0 };
+    auto journal_append = [&](int H, int idx, int pd, double s, double q, long long n, int f)
+    {
+        if (!journal_on) { return; }
+        std::lock_guard<std::mutex> lk(journal_mtx);
+        if (!journal_f.is_open()) { return; }
+        journal_f << "{\"H\":" << H << ",\"i\":" << idx << ",\"p\":" << pd
+                  << ",\"s\":" << s << ",\"q\":" << q << ",\"n\":" << n << ",\"f\":" << f << "}\n";
+        journal_f.flush();   // push to the OS page cache -> a process kill (not power loss) keeps it
+    };
+    auto compute_fps = [&](uint64_t& bucket_fp, uint64_t& deck_fp)
+    {
+        bucket_fp = 1469598103934665603ULL;
+        for (int b = 0; b < K; ++b)
+        { bucket_fp = Fnv("|", bucket_fp);
+          for (const std::string& n : eq.classes[b].members) { bucket_fp = Fnv(n + ",", bucket_fp); } }
+        std::vector<std::string> dn;
+        for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
+        std::sort(dn.begin(), dn.end());
+        deck_fp = 1469598103934665603ULL;
+        for (const std::string& n : dn) { deck_fp = Fnv(n + ",", deck_fp); }
+    };
+
     auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
     {
         const int H = work[w].H, idx = work[w].idx;
@@ -878,6 +921,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             sum += wt; sumsq += wt * wt;
         }
         SizeTable& t = tables[HAND - H];
+        double js; double jq; long long jn;
         {
             // Consistent with a concurrent mid-flight checkpoint read (write_raw_atomic under acc_mtx):
             // a cell is committed atomically (all four fields together) or not at all -> the checkpoint
@@ -888,7 +932,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             t.sumsq[idx][pd] += sumsq;
             if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
             t.cnt[idx][pd]   += (r1 - r0);
+            js = t.sum[idx][pd]; jq = t.sumsq[idx][pd]; jn = t.cnt[idx][pd];
         }
+        // Journal this commit (continuous path only -> journal_on; sub-tables here, size-7 lands via the
+        // pool's worker). f is unused for sub-tables on resume (Pass A skips a cell once cnt>=cell_init).
+        journal_append(H, idx, pd, js, jq, jn, 0);
     };
 
     // Single rollout r of cell w, mode pd -> win-turn (does NOT commit; the continuous path stores the
@@ -1146,6 +1194,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         return (s && *s) ? std::max<long long>(1, std::strtoll(s, nullptr, 10)) : 4LL; }();
     const double sweep_sec = []{ const char* s = std::getenv("MTG_KEEP_SWEEP_SEC");
         return (s && *s) ? std::max(1.0, std::atof(s)) : 20.0; }();
+    // Per-cell journal is the continuous path's persistence (replaces the fold-blocking periodic full-raw
+    // snapshot). MTG_KEEP_JOURNAL=0 reverts to that snapshot (A/B + fallback). journal_on is captured by
+    // reference in run_batch/journal_append (defined earlier), so setting it here takes effect for Pass A.
+    journal_on = continuous && !cfg.out_raw.empty()
+              && !(std::getenv("MTG_KEEP_JOURNAL") && std::string(std::getenv("MTG_KEEP_JOURNAL")) == "0");
+    if (journal_on) { journal_path = cfg.out_raw + ".journal"; }
     auto write_raw_atomic = [&](const std::string& path) -> bool
     {
         using json = nlohmann::json;
@@ -1213,7 +1267,75 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // it and start fresh (loud warning; never mis-apply). Disjoint from PRIOR_RAW change-detection
     // (that loads pri_V for a DIFFERENT commit; this reloads live accumulators for the SAME run).
     long long resume_loaded = 0;
-    if (!cfg.out_raw.empty() && std::filesystem::exists(cfg.out_raw))
+    bool journal_resumed = false;
+    // ---- Journal replay (continuous path): prefer the per-cell journal over the out_raw snapshot -----
+    // Reconstructs "what's done" from the append log: apply the highest-cnt record per cell-side (so it is
+    // order-independent -- a later, lower-cnt record for the same cell can't clobber a completed one), set
+    // frozen7 from terminal (f=1) size-7 records (zero-waste, byte-identical resume), and load the fixed
+    // Dopt/vg from the one-time REFS record (so refine resumes with the ORIGINAL floor-derived refs rather
+    // than recomputing them from the partially-refined state). First line is the fingerprint header.
+    if (journal_on && !journal_path.empty() && std::filesystem::exists(journal_path))
+    {
+        std::ifstream jf(journal_path);
+        std::string firstline; bool matched = false;
+        if (std::getline(jf, firstline))
+        {
+            nlohmann::json hm;
+            try { hm = nlohmann::json::parse(firstline); } catch (...) { hm = nlohmann::json(); }
+            uint64_t jb, jd; compute_fps(jb, jd);
+            const auto& m = hm.contains("meta") ? hm["meta"] : hm;
+            matched = m.value("bucket_fp", 0ULL) == jb
+                   && m.value("deck_fp", 0ULL) == jd
+                   && m.value("seed_base", ~0ULL) == cfg.seed
+                   && m.value("K", -1) == K
+                   && m.value("max_mull", -1) == cfg.max_mull
+                   && m.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                   && m.value("R", -1LL) == static_cast<long long>(cfg.rollouts);
+        }
+        if (matched)
+        {
+            std::string line;
+            while (std::getline(jf, line))
+            {
+                if (line.empty()) { continue; }
+                nlohmann::json e;
+                try { e = nlohmann::json::parse(line); } catch (...) { continue; }
+                if (e.contains("refs"))
+                {
+                    loaded_Dopt[0] = e.value("dopt0", std::vector<double>{});
+                    loaded_Dopt[1] = e.value("dopt1", std::vector<double>{});
+                    if (e.contains("vg") && e["vg"].is_array() && e["vg"].size() == 2)
+                    { loaded_vg[0] = e["vg"][0].get<double>(); loaded_vg[1] = e["vg"][1].get<double>(); }
+                    refs_loaded = true;
+                    continue;
+                }
+                const int H = e.value("H", 0);
+                if (H > HAND || H < min_size) { continue; }
+                const int i = e.value("i", -1), pd = e.value("p", -1);
+                if (pd < 0 || pd > 1) { continue; }
+                SizeTable& t = tables[HAND - H];
+                if (i < 0 || i >= static_cast<int>(t.comps.size())) { continue; }
+                const long long n = e.value("n", 0LL);
+                if (n <= t.cnt[i][pd]) { continue; }   // keep the highest-cnt record (order-independent)
+                if (t.cnt[i][pd] == 0) { ++resume_loaded; }
+                t.sum[i][pd]   = e.value("s", 0.0);
+                t.sumsq[i][pd] = e.value("q", 0.0);
+                t.cnt[i][pd]   = n;
+                if (H == HAND && e.value("f", 0) == 1) { frozen7[i][pd] = true; }
+            }
+            recompute();
+            journal_resumed = (resume_loaded > 0) || refs_loaded;
+            std::cerr << "[keepgen] RESUME(journal): reloaded " << resume_loaded << " cell-sides"
+                      << (refs_loaded ? " + fixed refs" : "") << " from " << journal_path
+                      << " -> continuing\n" << std::flush;
+        }
+        else
+        {
+            std::cerr << "[keepgen] RESUME(journal): " << journal_path
+                      << " fingerprint MISMATCH -- ignoring (a fresh journal will overwrite it)\n" << std::flush;
+        }
+    }
+    if (!journal_resumed && !cfg.out_raw.empty() && std::filesystem::exists(cfg.out_raw))
     {
         std::ifstream rf(cfg.out_raw);
         nlohmann::json rj; bool ok_parse = true;
@@ -1274,6 +1396,34 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     }
 
+    // Open the journal for the continuous run BEFORE Pass A (so sub-table completions are journaled as
+    // they happen -> a crash mid-Pass-A loses only in-flight sub-cells). Append when we resumed one (keep
+    // its prior records + header); otherwise truncate and write a fresh fingerprint header on line 1.
+    if (journal_on && !journal_path.empty())
+    {
+        const bool keep = journal_resumed && std::filesystem::exists(journal_path);
+        journal_f.open(journal_path, keep ? (std::ios::out | std::ios::app) : std::ios::out);
+        if (!journal_f.is_open())
+        {
+            std::cerr << "[keepgen] WARNING: could not open journal " << journal_path
+                      << " -- journaling DISABLED (falling back to periodic snapshot)\n" << std::flush;
+            journal_on = false;
+        }
+        else
+        {
+            journal_f << std::setprecision(17);   // sticky: round-trippable doubles for byte-identical resume
+            if (!keep)
+            {
+                uint64_t jb, jd; compute_fps(jb, jd);
+                nlohmann::json meta = { { "commit", cfg.commit }, { "bucket_fp", jb }, { "deck_fp", jd },
+                    { "seed_base", cfg.seed }, { "R", static_cast<long long>(cfg.rollouts) },
+                    { "max_mull", cfg.max_mull }, { "K", K }, { "equiv_seed", cfg.equiv_seed } };
+                journal_f << nlohmann::json({ { "meta", meta } }).dump() << "\n";
+                journal_f.flush();
+            }
+        }
+    }
+
     // Sub-tables may start at the floor for adaptive keep-only profiles. With bottoming enabled the argmin
     // (which subhand to keep) normally needs the WHOLE sub-table accurate -- a true-argmin cell noisily-
     // high at the floor would never be marked -- so bottoming forces sub-tables to the cap up front. The
@@ -1324,7 +1474,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // join). Result-invariant: each task is independent, seeds are per-(w,pd,r); the final raw is
         // identical to the grouped path. Inert (plain single pass) unless a raw path + checkpointing set.
         const char* lbl = adaptive ? "floor-pass" : "full-pass";
-        if (!cfg.out_raw.empty() && checkpoint_sec > 0 && tasks.size() > 1)
+        // When journaling, Pass A's cells (sub-tables in the continuous path) are already persisted
+        // per-commit via run_batch -> skip the full-raw mid-flight checkpoint AND the post-pass snapshot
+        // (both redundant, and the mid-flight one stalls the fold under acc_mtx).
+        if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0 && tasks.size() > 1)
         {
             process_tasks(tasks, lbl, checkpoint_sec,
                           [&]{ std::lock_guard<std::mutex> lk(acc_mtx); write_raw_atomic(cfg.out_raw); });
@@ -1333,7 +1486,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // Complete-floor final write: the mid-flight loop's last snapshot predates the final cells by up
         // to one interval, so write once more now (workers have joined -> quiescent, no lock needed). The
         // old grouped path likewise checkpointed after its last group.
-        if (!cfg.out_raw.empty() && checkpoint_sec > 0) { write_raw_atomic(cfg.out_raw); }
+        if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0) { write_raw_atomic(cfg.out_raw); }
         recompute();
     }
 
@@ -1568,10 +1721,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 const int i = static_cast<int>(task[0]), pd = static_cast<int>(task[1]);
                 const long long r = task[2];
                 const double wt = run_one(ai, work_idx[0][i], pd, r);
+                // Journal a cell-side EXACTLY when it completes: its floor (c first reaches r0, f=0) or its
+                // terminal freeze/cap (frozen7 flips true, f=1). Both are mutually exclusive per fold (floor
+                // phase never freezes; refine phase is already past r0). Snapshot under fold_mtx, write
+                // outside it (journal I/O never blocks folding). See docs/design/adaptive-batched-keepgen.md.
+                bool jfloor = false, jterm = false; double js = 0.0, jq = 0.0; long long jn = 0;
                 {
                     std::lock_guard<std::mutex> fk(fold_mtx);
                     slot[SLOT(i, pd, r)] = wt; have[SLOT(i, pd, r)] = 1;
                     long long& c = S7.cnt[i][pd];
+                    const long long c_before = c;
+                    const bool was_frozen = frozen7[i][pd];
                     const bool refine = refs_ready.load(std::memory_order_acquire);
                     while (!frozen7[i][pd] && c < r_max && have[SLOT(i, pd, c)])
                     {
@@ -1596,7 +1756,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                                       afroze[static_cast<std::size_t>(i) * 2 + pd].store(1, std::memory_order_release); }
                         }
                     }
+                    if (journal_on)
+                    {
+                        if (!refine && c_before < r0 && c >= r0)
+                        { jfloor = true; js = S7.sum[i][pd]; jq = S7.sumsq[i][pd]; jn = c; }
+                        else if (!was_frozen && frozen7[i][pd])
+                        { jterm = true; js = S7.sum[i][pd]; jq = S7.sumsq[i][pd]; jn = c; }
+                    }
                 }
+                if (jfloor)      { journal_append(HAND, i, pd, js, jq, jn, 0); }
+                else if (jterm)  { journal_append(HAND, i, pd, js, jq, jn, 1); }
                 in_flight.fetch_sub(1);
                 prod_cv.notify_one();
             }
@@ -1626,12 +1795,37 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         { if (cfg.out_raw.empty()) { return; }
           std::lock_guard<std::mutex> fk(fold_mtx); write_raw_atomic(cfg.out_raw); };
 
+        // Append the one-time REFS record (fixed Dopt/vg) so a resumed run restores the ORIGINAL
+        // floor-derived refs instead of recomputing them from the partially-refined state (which would
+        // differ -> break byte-identical resume). Small, written once, outside fold_mtx.
+        auto journal_refs = [&]()
+        {
+            if (!journal_on) { return; }
+            std::lock_guard<std::mutex> lk(journal_mtx);
+            if (!journal_f.is_open()) { return; }
+            nlohmann::json r;
+            r["refs"] = 1;
+            r["dopt0"] = Dopt_ref[0]; r["dopt1"] = Dopt_ref[1];
+            r["vg"] = { vg_ref[0], vg_ref[1] };
+            journal_f << r.dump() << "\n"; journal_f.flush();
+        };
+
         std::vector<std::thread> pool;
         const int nw = std::max(1, nthreads);
         for (int t = 0; t < nw; ++t) { pool.emplace_back(worker); }
         std::cerr << "[keepgen] continuous size-7: " << NC << " cells, floor R=" << r0 << " cap R=" << r_max
                   << ", lookahead=" << cont_lookahead << ", ckpt=" << sweep_sec << "s on " << nw
                   << " threads\n" << std::flush;
+
+        // Resumed mid-refine: the journal carried the fixed refs -> restore them and skip the floor phase
+        // (the floored/terminal cells were reloaded; the producer continues refining live cells).
+        if (refs_loaded)
+        {
+            Dopt_ref = loaded_Dopt; vg_ref = loaded_vg;
+            refs_ready.store(true, std::memory_order_release);
+            std::cerr << "[keepgen]   continuous: refs restored from journal -> resuming refine ("
+                      << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
+        }
 
         auto t_last_ck = std::chrono::steady_clock::now();
         long long fed_total = 0, last_report = 0;
@@ -1662,13 +1856,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             if (!refine && !any_below_floor && in_flight.load() == 0)
             {
                 compute_refs();
+                journal_refs();     // persist the fixed refs (byte-identical resume marker)
                 refs_ready.store(true, std::memory_order_release);
                 std::cerr << "[keepgen]   continuous: floor complete, refs fixed -> refine ("
                           << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
                 continue;
             }
+            // Periodic full-raw snapshot: only when journaling is OFF (the journal already persists every
+            // completed cell incrementally, off the fold path -> no snapshot stall).
             const auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration<double>(now - t_last_ck).count() >= sweep_sec)
+            if (!journal_on && std::chrono::duration<double>(now - t_last_ck).count() >= sweep_sec)
             { checkpoint(); t_last_ck = now; }
             if (fed_total - last_report >= 20000)
             { last_report = fed_total;
@@ -1684,6 +1881,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (std::thread& th : pool) { th.join(); }
         recompute();
         if (!cfg.out_raw.empty()) { write_raw_atomic(cfg.out_raw); }
+        // The final raw is now the authoritative, complete state -> the journal is superseded. Close and
+        // remove it so a later invocation doesn't resume from a stale journal for an already-finished run.
+        if (journal_on && journal_f.is_open())
+        {
+            journal_f.close();
+            std::error_code ec; std::filesystem::remove(journal_path, ec);
+        }
         rollouts_done += fed_total;
         std::cerr << "[keepgen] continuous size-7 DONE: " << fed_total << " rollouts, "
                   << static_cast<long long>(gen_elapsed()) << "s total\n" << std::flush;
