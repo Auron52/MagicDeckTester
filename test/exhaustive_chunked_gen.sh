@@ -4,6 +4,9 @@
 #
 #   bash test/exhaustive_chunked_gen.sh            # TH: continue/build toward R=40 on LIVE cells
 #   KM_DECK=... KM_TARGET_R=40 KM_ROUND_R=5 bash test/exhaustive_chunked_gen.sh
+#   KM_CONTINUOUS=1 KM_DECK=... KM_TARGET_R=40 KM_FLOOR_R=2 bash test/exhaustive_chunked_gen.sh
+#       # single-process CONTINUOUS pool (one adaptive queue floor->cap; cores stay full to the last live
+#       # cell instead of stranding on combo-cell tails); stop/resume at any R. See the CONTINUOUS block.
 #
 # WHAT MAKES IT ADAPTIVE (the point): a cell whose size-7 keep/mull decision is already CONFIDENT
 # does not need more rollouts. Each round emits a PRUNE-SET of those confident cells; the next round
@@ -47,6 +50,12 @@ MAXMULL=${KM_MAXMULL:-6}         # "all the way" — mulligan to the floor (was 
 PRUNE_EPS=${KM_PRUNE_EPS:-0.005} # freeze gate: smaller = stricter (freeze fewer, safer)
 CKPT_SEC=${KM_CKPT_SEC:-1800}
 ROUND_SEED_BASE=${KM_ROUND_SEED_BASE:-30001000}   # distinct from the base chunks' seed space
+# --- CONTINUOUS mode (KM_CONTINUOUS=1): ONE adaptive pool floor->cap in a single process, replacing the
+# round loop (docs/design/adaptive-batched-keepgen.md). Cores stay full to the last live cell instead of
+# stranding on slow combo-cell tails; stop/resume at any R via the periodic raw checkpoint.
+FLOOR_R=${KM_FLOOR_R:-2}          # continuous floor R (must be < TARGET_R to be adaptive); cells start here
+LOOKAHEAD=${KM_LOOKAHEAD:-4}      # rollouts a cell may be fed past its committed prefix
+SWEEP_SEC=${KM_SWEEP_SEC:-60}     # continuous checkpoint interval (resumable raw sidecar)
 BIN=./build/Release/mtg-analyze
 
 # Pinned discovery params (identical across every chunk/round -> same bucket_fp; never change mid-target).
@@ -98,6 +107,34 @@ emit_prune(){
 NBASE=$(ls "$OUT"/chunk_s*.raw.json 2>/dev/null | wc -l)
 BASE_R=$(( NBASE * CHUNK_R ))
 log "deck=$STEM target_R=$TARGET_R round_R=$ROUND_R base_chunks=$NBASE base_R=$BASE_R prune_eps=$PRUNE_EPS commit=$HEAD"
+
+# ---- CONTINUOUS MODE: one adaptive pool floor->cap in a single process (resumable), then adopt ------
+# Independent of the round-based pooling above: it writes its own continuous.raw.json + .profile.json.
+# Kill/re-run resumes from the periodic checkpoint (the C++ reloads out_raw when its meta fp -- deck,
+# buckets, seed_base, cap R -- matches). Same commit-freeze as the round path.
+if [ -n "${KM_CONTINUOUS:-}" ]; then
+  (( FLOOR_R < TARGET_R )) || { echo "ERROR: KM_FLOOR_R ($FLOOR_R) must be < KM_TARGET_R ($TARGET_R) for adaptive continuous" >&2; exit 1; }
+  raw=$OUT/continuous.raw.json
+  prof=$OUT/continuous.profile.json
+  [ -f "$raw" ] && log "continuous: resuming from existing $raw"
+  log "continuous: floor R=$FLOOR_R -> cap R=$TARGET_R, lookahead=$LOOKAHEAD, sweep=${SWEEP_SEC}s, maxmull=$MAXMULL, seed=$ROUND_SEED_BASE  START"
+  cstart=$(date +%s)
+  if MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_CONTINUOUS=1 \
+       MTG_KEEP_ROLLOUTS=$TARGET_R MTG_KEEP_R_FLOOR=$FLOOR_R MTG_KEEP_MAXMULL=$MAXMULL \
+       MTG_KEEP_CONTINUOUS_LOOKAHEAD=$LOOKAHEAD MTG_KEEP_SWEEP_SEC=$SWEEP_SEC \
+       MTG_KEEP_CHECKPOINT_SEC=$CKPT_SEC MTG_COMMIT="$HEAD" MTG_EQUIV_CACHE="$OUT/equiv_cache.json" \
+       MTG_KEEP_OUT_RAW="$raw" MTG_KEEP_OUT_PROFILE="$prof" \
+       "$BIN" "$DECK" --cards-json "$CARDS" --max-turns 8 --seed "$ROUND_SEED_BASE" --threads 0 \
+       > "$OUT/continuous.log" 2>&1
+  then
+    log "continuous: DONE ($(( $(date +%s) - cstart ))s) -> $prof"
+    log "Validate (KEEP + confounded BOTTOM A/B) then adopt: gzip -c $prof > decks/${STEM}.keepmodel.exhaustive.profile.json.gz"
+    exit 0
+  else
+    log "continuous: FAILED/INTERRUPTED (see $OUT/continuous.log); partial checkpoint at $raw -- re-run to resume"
+    exit 1
+  fi
+fi
 
 while :; do
   ROUNDS_DONE=$(ls "$OUT"/round_s*.raw.json 2>/dev/null | wc -l)

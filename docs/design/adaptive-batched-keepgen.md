@@ -84,9 +84,19 @@ only change is a `!sub_only` guard on the m=0 branch and the wave label).
 ## Resumability
 
 The checkpoint is the cumulative raw (per-cell `sum/sumsq/cnt`) written atomically (tmp + rename) every
-`MTG_KEEP_SWEEP_SEC`. Resume reloads it and continues feeding non-frozen cells from `next_r = cnt` (the
-`fed[]` cursor is seeded from the reloaded `S7.cnt`). Stopping at any R (e.g. R=20) yields a valid
-profile at that point — finer than the section idea, which produced nothing until a 5/10 boundary.
+`MTG_KEEP_SWEEP_SEC`. Resume reloads it (when `out_raw` exists and its meta fingerprint — deck, buckets,
+`seed_base`, cap `R` — matches) and seeds the `fed[]` cursor from the reloaded `S7.cnt`. Stopping at any R
+(e.g. R=20) yields a valid profile at that point — finer than the section idea, which produced nothing
+until a 5/10 boundary.
+
+**Resume is policy-safe but not yet byte-identical / zero-waste.** The checkpoint stores `cnt`, not the
+per-cell frozen flag, so on resume a cell that had *frozen* below the cap is indistinguishable from one
+merely interrupted there — it gets re-fed toward the cap. Validated (Slivers R=4): resuming a completed
+run reloaded all 27690 cell-sides, re-refined the frozen-below-cap cells to the cap (+7830 rollouts), and
+produced a profile with **KEEP diffs=0, BOTTOM diffs=0** vs the reference. So resume never loses work and
+never changes the policy; it just re-does the frozen cells' remaining rollouts. Byte-identical, zero-waste
+resume is future work: persist `frozen7` + the fixed `Dopt_ref`/`vg_ref` (e.g. a `continuous.frozen`
+sidecar, leaving the poolable raw format untouched) and restore them on resume.
 
 ## Flags
 
