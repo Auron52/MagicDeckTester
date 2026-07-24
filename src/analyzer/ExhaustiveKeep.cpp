@@ -10,6 +10,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -792,6 +793,34 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Append rollouts [r0,r1) to cell `w`, mode `pd`, folding into its sum/sumsq/cnt accumulators.
     // Each (w,pd) is scheduled at most once per wave, so the direct writes are race-free. The seed is a
     // pure function of (seed_base, r, w, pd) -- extending r for a later batch never reuses a draw.
+    // Slow-rollout capture (diagnostic, off by default): time each rollout; if it exceeds
+    // MTG_KEEP_SLOW_MS, log the exact degenerate game -- hand (bucket composition), side, rollout index
+    // and the seed that fully reproduces it -- so the pathological combo game can be replayed/profiled.
+    // Threshold <= 0 disables it (a single steady_clock read per rollout is the only overhead). Appends
+    // to MTG_KEEP_SLOW_LOG if set (dedup/inspection), else stderr only.
+    const long long slow_ms = []{ const char* s = std::getenv("MTG_KEEP_SLOW_MS");
+        return (s && *s) ? std::atoll(s) : 0LL; }();
+    std::mutex slow_mtx;
+    // Guards the accumulator COMMIT in run_batch (t.sum/sumsq/cnt) so a mid-flight checkpoint can read a
+    // consistent snapshot WHILE workers keep running -- this is what lets the floor pass be one continuous
+    // process_tasks call (cores full to the end) instead of 32 barriered groups. Held only for the cheap
+    // 3-field commit (the multi-second rollout is outside it), so contention is negligible.
+    std::mutex acc_mtx;
+    auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
+    {
+        if (slow_ms <= 0 || ms < static_cast<double>(slow_ms)) { return; }
+        std::string hand;
+        for (int b = 0; b < K; ++b)
+        { if (comp[b] > 0) { hand += label[b] + " x" + std::to_string(comp[b]) + "; "; } }
+        const std::string line = "[keepgen] SLOW-ROLLOUT " + std::to_string(static_cast<long long>(ms))
+            + "ms  size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
+            + " seed=" + std::to_string(rs) + "  hand: " + hand;
+        std::lock_guard<std::mutex> lk(slow_mtx);
+        std::cerr << line << "\n" << std::flush;
+        if (const char* sl = std::getenv("MTG_KEEP_SLOW_LOG"); sl && *sl)
+        { std::ofstream f(sl, std::ios::app); f << line << "\n"; }
+    };
+
     auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
     {
         const int H = work[w].H, idx = work[w].idx;
@@ -836,6 +865,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // opening shuffle.
             ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
             double wt;
+            const auto t_roll = std::chrono::steady_clock::now();
             if (trace_on)
             {
                 std::fill(hit.begin(), hit.end(), 0);
@@ -843,13 +873,22 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } }
             }
             else { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
+            if (slow_ms > 0) { capture_slow(H, comp, pd, r, rs,
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count()); }
             sum += wt; sumsq += wt * wt;
         }
         SizeTable& t = tables[HAND - H];
-        t.sum[idx][pd]   += sum;
-        t.sumsq[idx][pd] += sumsq;
-        if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
-        t.cnt[idx][pd]   += (r1 - r0);
+        {
+            // Consistent with a concurrent mid-flight checkpoint read (write_raw_atomic under acc_mtx):
+            // a cell is committed atomically (all four fields together) or not at all -> the checkpoint
+            // never sees a torn cell. One thread owns each (cell,pd) per pass, so this doesn't serialize
+            // distinct cells' accumulation -- only the brief commit vs a checkpoint snapshot.
+            std::lock_guard<std::mutex> lk(acc_mtx);
+            t.sum[idx][pd]   += sum;
+            t.sumsq[idx][pd] += sumsq;
+            if (trace_on) { t.touched[idx][pd].insert(cell_touched.begin(), cell_touched.end()); }
+            t.cnt[idx][pd]   += (r1 - r0);
+        }
     };
 
     // Single rollout r of cell w, mode pd -> win-turn (does NOT commit; the continuous path stores the
@@ -881,7 +920,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             }
         }
         ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
-        return ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
+        const auto t_roll = std::chrono::steady_clock::now();
+        const double wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
+        if (slow_ms > 0) { capture_slow(H, comp, pd, r, rs,
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count()); }
+        return wt;
     };
 
     const int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
@@ -896,7 +939,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     long long rollouts_done = 0;   // cumulative across all passes, for a running rate
     // Run a wave of (w,pd,r0,r1) rollout tasks in parallel; each worker owns one AIEngine.
     struct Task { int w; int pd; long long r0; long long r1; };
-    auto process_tasks = [&](const std::vector<Task>& tasks, const char* label)
+    auto process_tasks = [&](const std::vector<Task>& tasks, const char* label,
+                             long long ckpt_sec = 0, const std::function<void()>& ckpt_cb = {})
     {
         if (tasks.empty()) { return; }
         long long batch_rollouts = 0;
@@ -943,7 +987,24 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         };
         std::vector<std::thread> pool;
         const int nt = std::max(1, std::min(nthreads, static_cast<int>(tasks.size())));
-        for (int t = 0; t < nt; ++t) { pool.emplace_back(th_worker); }
+        std::atomic<int> active{ nt };
+        for (int t = 0; t < nt; ++t)
+        { pool.emplace_back([&]{ th_worker(); active.fetch_sub(1); }); }
+        // Mid-flight checkpointing (no barrier): while the workers run, the launching thread periodically
+        // takes a consistent snapshot (write_raw_atomic under acc_mtx, inside ckpt_cb) and writes it, so a
+        // crash mid-pass loses at most one interval -- WITHOUT splitting the pass into barriered groups.
+        // Only the floor pass passes a callback; other callers just join (a single end-of-phase barrier).
+        if (ckpt_sec > 0 && ckpt_cb)
+        {
+            auto t_last = std::chrono::steady_clock::now();
+            while (active.load() > 0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                if (std::chrono::duration<double>(std::chrono::steady_clock::now() - t_last).count()
+                        >= static_cast<double>(ckpt_sec))
+                { ckpt_cb(); t_last = std::chrono::steady_clock::now(); }
+            }
+        }
         for (std::thread& th : pool) { th.join(); }
         rollouts_done += batch_rollouts;
         const double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_batch).count();
@@ -1256,29 +1317,23 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 tasks.push_back({ w, pd, 0, cell_init });
             }
         }
-        // Split the floor pass into groups so we can checkpoint at barriers (race-free) -- a crash mid-
-        // floor then loses at most one group + one checkpoint interval, not the whole ~day-long pass.
-        // Splitting is result-invariant (each task is independent; seeds are per-(w,pd,r)), and the whole
-        // scheme is inert unless a raw path + checkpointing are set -> the plain path stays byte-identical.
+        // ONE barrier-free pass over the whole floor: workers stay saturated to the very end (cores idle
+        // only on the final slow-cell tail), instead of the old 32 barriered groups that stranded ~21
+        // cores at EVERY group's slow-cell tail. Crash-safety comes from MID-FLIGHT checkpointing (the
+        // ckpt_cb snapshots the accumulators under acc_mtx and writes the raw WHILE workers run -- no
+        // join). Result-invariant: each task is independent, seeds are per-(w,pd,r); the final raw is
+        // identical to the grouped path. Inert (plain single pass) unless a raw path + checkpointing set.
         const char* lbl = adaptive ? "floor-pass" : "full-pass";
-        if (cfg.out_raw.empty() || checkpoint_sec <= 0 || tasks.size() <= 1)
+        if (!cfg.out_raw.empty() && checkpoint_sec > 0 && tasks.size() > 1)
         {
-            process_tasks(tasks, lbl);
+            process_tasks(tasks, lbl, checkpoint_sec,
+                          [&]{ std::lock_guard<std::mutex> lk(acc_mtx); write_raw_atomic(cfg.out_raw); });
         }
-        else
-        {
-            const std::size_t groups = std::min<std::size_t>(tasks.size(),
-                                                             static_cast<std::size_t>(floor_groups));
-            const std::size_t chunk  = (tasks.size() + groups - 1) / groups;
-            for (std::size_t off = 0; off < tasks.size(); off += chunk)
-            {
-                const std::size_t end = std::min(tasks.size(), off + chunk);
-                std::vector<Task> grp(tasks.begin() + static_cast<long>(off),
-                                      tasks.begin() + static_cast<long>(end));
-                process_tasks(grp, lbl);
-                maybe_checkpoint();   // throttled by MTG_KEEP_CHECKPOINT_SEC; race-free (barrier above)
-            }
-        }
+        else { process_tasks(tasks, lbl); }
+        // Complete-floor final write: the mid-flight loop's last snapshot predates the final cells by up
+        // to one interval, so write once more now (workers have joined -> quiescent, no lock needed). The
+        // old grouped path likewise checkpointed after its last group.
+        if (!cfg.out_raw.empty() && checkpoint_sec > 0) { write_raw_atomic(cfg.out_raw); }
         recompute();
     }
 

@@ -1,5 +1,40 @@
 # Adaptive batched keep-gen (continuous single queue)
 
+## TARGET DESIGN — the ONE way to run the gen (user spec, 2026-07-24)
+
+The goal is that there is exactly **one** way to run keep/bottom generation, so it cannot be run
+incorrectly (agents have repeatedly mis-invoked it: uniform R=1 instead of continuous, missing
+`MTG_EQUIV_*` cache-fingerprint params, etc.). One invocation — `analyze <deck>` — and nothing else to
+get wrong. The gen is **always**:
+
+1. **Continuous** — a single barrier-free pool over ALL cells (all hand sizes, floor + refine). Cores go
+   idle only at the very END of all processing — never at a group/wave/phase boundary. No 32-group floor
+   barrier, no per-wave refine barrier, no floor→refine barrier, and discovery must not leave cores idle.
+2. **Incremental + restartable** — resumable at any point; poolable across runs/machines.
+3. **Adaptive** — freeze confident keep/mull cells instead of over-sampling (size-7 keep decision).
+4. **Prune low-probability cells early** — on by default (the `CUTOFF_P`/`CUTOFF_R` mechanism, no longer
+   an opt-in flag).
+5. **Full bottoming ALWAYS** — sub-tables are always fully sampled (to the cap); bottoming is never
+   skipped. (So `adaptive_bottom` / any bottoming-off shortcut is NOT the direction — deleted.)
+6. **Depth & budget from the PLAY PROFILE** — the only tunable, encoded once in the deck's play profile
+   (not `MTG_EQUIV_DEPTH`/`MTG_EQUIV_BUDGET` on the command line). Set once, read from there.
+
+Every other `MTG_KEEP_*` / `MTG_EQUIV_*` knob and the uniform/round/wave code paths are to be **removed**.
+
+**Orthogonal problem (separate from the pool):** even a perfect single pool leaves the final end-tail =
+the slowest single game. Dragonstorm has degenerate *games* — individual rollouts of certain combo hands
+(Dragonstorm + rituals + payoff) take MINUTES (pathological deterministic search; the `SearchBudget` is a
+virtual work-quota with no wall bound — see `mulligan-gen-cost-value-model-lever` memory). This is a
+degenerate SEARCH, not a degenerate SCHEDULE. Root-cause it from CAPTURED games before any wall-clock cap
+(instrument: `MTG_KEEP_SLOW_MS` logs hand+side+seed+elapsed for any rollout over the threshold). Capturing
+first, hypothesizing second.
+
+**Current state vs target:** the continuous pool below covers only the size-7 REFINE; sub-tables still use
+the 32-group barrier floor pass; there is a floor→refine barrier; discovery is single-threaded; depth/
+budget are still env flags. So it is a building block, NOT the one-way method yet.
+
+---
+
 Status: **implemented + validated (size-7 + sub-tables), 2026-07-24**. Flag-gated
 (`MTG_KEEP_CONTINUOUS=1`); default path (wave/barrier) byte-unchanged. Supersedes both the
 section/window idea (rejected: no pruning inside a section, no resumable output until a boundary) and
