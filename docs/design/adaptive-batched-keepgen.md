@@ -56,11 +56,30 @@ degenerate SEARCH, not a degenerate SCHEDULE. Root-cause it from CAPTURED games 
 first, hypothesizing second.
 
 **Current state vs target:** DONE — barrier-free floor (b7f33b0), per-cell journal persistence (the
-snapshot-write stall is gone), and the **floor→refine barrier removed via speculate-then-reconcile
-(2026-07-24)** — see the dedicated section below. REMAINING idle sources / gaps to the one-way method: the
-sub-refine waves (`run_refine_waves(sub_only)` for `sub_floor` cases), single-threaded discovery, and
-depth/budget still being env flags rather than read from the play profile. Low-prob prune is present but
-opt-in (`CUTOFF_P`/`CUTOFF_R`), not default-on.
+snapshot-write stall is gone), the **floor→refine barrier removed via speculate-then-reconcile
+(2026-07-24)**, and the **Pass-A → size-7 barrier removed via sub-table fusion (2026-07-24)** — see the
+dedicated sections below. REMAINING idle sources / gaps to the one-way method: single-threaded discovery,
+the sub-*refine* waves (`run_refine_waves(sub_only)`, only for the `sub_floor`/`adaptive_bottom`/change-detect
+paths — inert for the default bottoming-on gen, which now fuses the sub-*cap*), and depth/budget still being
+env flags rather than read from the play profile. Low-prob prune is present but opt-in
+(`CUTOFF_P`/`CUTOFF_R`), not default-on.
+
+**Pass-A → size-7 barrier removed — sub-table fusion (SHIPPED 2026-07-24).** For the default gen
+(bottoming-on, `sub_floor=false`) Pass A used to cap every sub-table in its own worker pool and *join*
+before the size-7 continuous pool spawned — so the sub-cap tail (a few slow size-6/combo cells on a
+handful of cores) stranded the rest until size-7 started. Now those sub-cap batches are fed into the ONE
+size-7 pool as `kind=1` tasks (`fused_sub_tasks`): a worker runs the whole batch via `run_batch` (one
+thread, in-order accumulation → scheduling-independent, byte-identical to Pass A). The size-7 **floor**
+needs no sub-tables, so it runs concurrently with the sub-cap; the refs-fix gate is widened to
+`!any_below_floor && sub_remaining==0` (size-7 floor complete AND every sub-cap batch done, because `Dopt`
+reads sub-table V), and `compute_refs` recomputes the sub-table V (under `acc_mtx`) just before
+`compute_Dopt`. Critically, this **composes with floor speculation**: while the sub-cap tail drains, the
+already-floored size-7 cells speculate (the pass-2 trigger fires on `sub_remaining>0` too), so cores stay
+full through the whole floor+sub phase. Only the `sub_floor=false` case fuses; the `adaptive_bottom` /
+change-detect paths still Pass-A-floor the sub-tables and `run_refine_waves(sub_only)` them. Opt-out
+`MTG_KEEP_NO_SUB_FUSE=1` (temporary A/B knob). Validated (Slivers R=8): fusion ON == ON-rerun == OFF
+byte-identical raw; data == the pre-fusion binary (0 cnt/sum/sumsq diffs); 12174 sub-cap batches fused.
+See `logs/cont_validate/fuse_ab.sh`.
 
 **Floor→refine barrier removed — speculate-then-reconcile (SHIPPED 2026-07-24).** The old barrier stranded
 the whole pool while the slowest cell finished its `r0` floor rollouts (every other cell sat at `r0` with
@@ -143,9 +162,12 @@ last live cell. The per-rollout decision is one comparison inside the fold; the 
 V — the dependency is one-directional `sub-tables → Dopt → size-7 freeze`. So the size-7 pool can gate
 against an exact fixed `Dopt` as long as the sub-tables are final *before* step 2:
 
-- **Bottoming-on, no `adaptive_bottom` (the default gen):** Pass A drives every sub-table to the cap
-  (`sub_floor=false`), so they are already final → the size-7-only pool needs nothing extra. This is the
-  first-validated path.
+- **Bottoming-on, no `adaptive_bottom` (the default gen):** the sub-tables are driven to the cap
+  (`sub_floor=false`). As of 2026-07-24 this capping is **fused into the size-7 pool** (see "Pass-A →
+  size-7 barrier removed" above) instead of a separate Pass-A join: sub-cap batches run as filler
+  concurrent with the size-7 floor, and the refs-fix waits `sub_remaining==0`. (`MTG_KEEP_NO_SUB_FUSE=1`
+  restores the separate Pass A.) Sub-table V is still final before `Dopt` is fixed, so the size-7 freeze
+  gates against an exact `Dopt`.
 - **`sub_floor` cases (`MTG_KEEP_ADAPTIVE_BOTTOM`, or incremental change-detect):** Pass A only floors
   the sub-tables, so the continuous block first calls `run_refine_waves(sub_only=true)` — the shared
   refine loop with the m=0 size-7 gate skipped — to **converge the sub-tables** (and thus `Dopt`) before
@@ -189,6 +211,8 @@ snapshot stores `cnt` not the frozen flag).
   (also the floor-tail speculation budget `spec_budget`).
 - `MTG_KEEP_NO_FLOOR_SPEC=1` — disable floor-tail speculation (revert to the old floor→refine barrier:
   `in_flight==0` wait, no speculation). Byte-identical to speculation-on; temporary A/B knob.
+- `MTG_KEEP_NO_SUB_FUSE=1` — disable sub-table fusion (revert to the separate Pass-A sub-cap join, then
+  a size-7-only pool). Byte-identical to fusion-on; temporary A/B knob.
 - `MTG_KEEP_JOURNAL` (default 1 for the continuous path) — per-cell journal persistence. `=0` reverts to the
   periodic full-raw snapshot (A/B + fallback). Temporary knob: the target design (top) is journal-only.
 - `MTG_KEEP_SWEEP_SEC` (default 20) — snapshot interval, used only by the `MTG_KEEP_JOURNAL=0` fallback.
@@ -208,6 +232,9 @@ snapshot stores `cnt` not the frozen flag).
   (`MTG_KEEP_NO_FLOOR_SPEC=1`) all byte-identical raw; data == pre-change binary (only `engine_fp` moved);
   interrupt→resume killed mid-refine (596 terminal records incl. reconcile-frozen) → data byte-identical to
   uninterrupted. `logs/cont_validate/floorspec_ab.sh` + `floorspec_resume.sh`.
+- **Sub-table fusion (2026-07-24):** Slivers R=8 — fusion ON == ON-rerun == OFF (`MTG_KEEP_NO_SUB_FUSE=1`,
+  separate Pass A) all byte-identical raw; data == pre-fusion binary (0 cnt/sum/sumsq diffs); 12174 sub-cap
+  batches fused into the size-7 pool. `logs/cont_validate/fuse_ab.sh`.
 
 ## Open / next
 

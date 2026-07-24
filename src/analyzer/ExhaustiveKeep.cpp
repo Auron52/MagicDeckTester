@@ -1495,6 +1495,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // change-detection also needs every sub-table sampled at the floor first (as the detection batch),
     // even with bottoming on -- moved sub-cells are then refined to the cap, unmoved reuse the prior.
     const bool sub_floor = (adaptive && (!cfg.bottoming_enabled || cfg.adaptive_bottom)) || change_detect;
+    // Sub-table FUSION: when the continuous pool caps the sub-tables (not floors them), run that capping
+    // INSIDE the single size-7 pool instead of a separate Pass-A join -> the size-7 floor overlaps the
+    // sub-cap tail (no Pass-A -> size-7 barrier). Only the sub_floor=false case (bottoming-on, no
+    // adaptive_bottom, no change-detect); those still Pass-A-floor the sub-tables then refine-wave them.
+    // Opt-out MTG_KEEP_NO_SUB_FUSE=1 restores the separate Pass A (A/B; byte-identical). run_batch's
+    // whole-batch one-thread accumulation is scheduling-independent, so fusing is byte-identical.
+    const bool fuse_sub = continuous && !sub_floor && std::getenv("MTG_KEEP_NO_SUB_FUSE") == nullptr;
+    std::vector<Task> fused_sub_tasks;                 // sub-cap tasks handed to the continuous pool
     {   // Pass A: size-7 to the floor; sub-tables to the floor (keep-only) or straight to the cap.
         std::vector<Task> tasks;
         tasks.reserve(work.size() * 2);
@@ -1537,20 +1545,27 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // join). Result-invariant: each task is independent, seeds are per-(w,pd,r); the final raw is
         // identical to the grouped path. Inert (plain single pass) unless a raw path + checkpointing set.
         const char* lbl = adaptive ? "floor-pass" : "full-pass";
-        // When journaling, Pass A's cells (sub-tables in the continuous path) are already persisted
-        // per-commit via run_batch -> skip the full-raw mid-flight checkpoint AND the post-pass snapshot
-        // (both redundant, and the mid-flight one stalls the fold under acc_mtx).
-        if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0 && tasks.size() > 1)
+        // FUSION: hand the sub-cap tasks to the continuous pool instead of running (and joining on) them
+        // here. Defer the recompute too -- the sub-table V is computed inside compute_refs once the pool
+        // has driven them to the cap. (In fuse_sub, `tasks` holds only sub-cells: size-7 is skipped above.)
+        if (fuse_sub) { fused_sub_tasks = std::move(tasks); }
+        else
         {
-            process_tasks(tasks, lbl, checkpoint_sec,
-                          [&]{ std::lock_guard<std::mutex> lk(acc_mtx); write_raw_atomic(cfg.out_raw); });
+            // When journaling, Pass A's cells (sub-tables in the continuous path) are already persisted
+            // per-commit via run_batch -> skip the full-raw mid-flight checkpoint AND the post-pass snapshot
+            // (both redundant, and the mid-flight one stalls the fold under acc_mtx).
+            if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0 && tasks.size() > 1)
+            {
+                process_tasks(tasks, lbl, checkpoint_sec,
+                              [&]{ std::lock_guard<std::mutex> lk(acc_mtx); write_raw_atomic(cfg.out_raw); });
+            }
+            else { process_tasks(tasks, lbl); }
+            // Complete-floor final write: the mid-flight loop's last snapshot predates the final cells by up
+            // to one interval, so write once more now (workers have joined -> quiescent, no lock needed). The
+            // old grouped path likewise checkpointed after its last group.
+            if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0) { write_raw_atomic(cfg.out_raw); }
+            recompute();
         }
-        else { process_tasks(tasks, lbl); }
-        // Complete-floor final write: the mid-flight loop's last snapshot predates the final cells by up
-        // to one interval, so write once more now (workers have joined -> quiescent, no lock needed). The
-        // old grouped path likewise checkpointed after its last group.
-        if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0) { write_raw_atomic(cfg.out_raw); }
-        recompute();
     }
 
     // ---- change-detection: classify moved vs unmoved from the floor batch, then reuse the prior -----
@@ -1774,9 +1789,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
         std::mutex fold_mtx;                         // guards the fold (sum/sumsq/cnt + slot/have + frozen7)
         std::mutex qmtx; std::condition_variable q_ne, q_nf;
-        std::deque<std::array<long long, 3>> q;      // {i, pd, r}
+        // Task = {kind, x, pd, y}: kind 0 size-7 rollout {i, pd, r}; kind 1 sub-cap batch {w, pd, r1}
+        // (fusion filler -> worker runs run_batch(w,pd,0,r1), scheduling-independent). kind 1 only in fuse_sub.
+        std::deque<std::array<long long, 4>> q;
         const std::size_t QCAP = static_cast<std::size_t>(8 * nthreads);
         std::atomic<long long> in_flight{ 0 };
+        // Sub-cap tasks still to complete (fusion): the size-7 refs cannot be fixed until every sub-table is
+        // at the cap (Dopt reads sub-table V). Zero unless fuse_sub. Decremented after each run_batch commits.
+        std::atomic<long long> sub_remaining{ static_cast<long long>(fused_sub_tasks.size()) };
         std::atomic<bool> producing{ true };
         std::atomic<bool> refs_ready{ false };       // false = floor phase (no freezing); true = refine phase
         std::mutex prod_mtx; std::condition_variable prod_cv;
@@ -1808,7 +1828,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             ai.SetSearchPostCombat(second_main);
             for (;;)
             {
-                std::array<long long, 3> task;
+                std::array<long long, 4> task;
                 {
                     std::unique_lock<std::mutex> lk(qmtx);
                     q_ne.wait(lk, [&]{ return !q.empty() || !producing.load(); });
@@ -1816,8 +1836,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     task = q.front(); q.pop_front();
                 }
                 q_nf.notify_one();
-                const int i = static_cast<int>(task[0]), pd = static_cast<int>(task[1]);
-                const long long r = task[2];
+                if (task[0] == 1)   // sub-cap batch (fusion filler): whole batch on one thread, self-committing
+                {
+                    run_batch(ai, static_cast<int>(task[1]), static_cast<int>(task[2]), 0, task[3]);
+                    sub_remaining.fetch_sub(1);
+                    in_flight.fetch_sub(1);
+                    prod_cv.notify_one();
+                    continue;
+                }
+                const int i = static_cast<int>(task[1]), pd = static_cast<int>(task[2]);
+                const long long r = task[3];
                 const double wt = run_one(ai, work_idx[0][i], pd, r);
                 // Journal a cell-side EXACTLY when it completes: its floor (c first reaches r0, f=0) or its
                 // terminal freeze/cap (frozen7 flips true, f=1). Both are mutually exclusive per fold (floor
@@ -1873,6 +1901,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         auto compute_refs = [&]()
         {
             std::lock_guard<std::mutex> fk(fold_mtx);
+            // FUSION: the sub-tables were capped by this pool (not Pass A), so recompute their V now, before
+            // compute_Dopt reads them. Sub-cells are final here (gate waits sub_remaining==0). Under acc_mtx
+            // (run_batch's commit lock); lock order fold_mtx->acc_mtx is unique to compute_refs -> no cycle.
+            // Values are byte-identical to Pass A's recompute (same whole-batch run_batch accumulation).
+            if (fuse_sub)
+            {
+                std::lock_guard<std::mutex> ak(acc_mtx);
+                for (int H = HAND - 1; H >= min_size; --H)
+                {
+                    SizeTable& t = tables[HAND - H];
+                    for (std::size_t si = 0; si < t.comps.size(); ++si)
+                        for (int sp = 0; sp < 2; ++sp)
+                        {
+                            const long long cc = t.cnt[si][sp]; if (cc <= 0) { continue; }
+                            const double mean = t.sum[si][sp] / cc;
+                            const double var  = cc > 1 ? std::max(0.0, t.sumsq[si][sp] / cc - mean * mean) : 0.0;
+                            t.V[si][sp] = mean; t.se[si][sp] = cc > 1 ? std::sqrt(var / cc) : 0.0;
+                        }
+                }
+            }
             std::array<double, 2> vg{ 0.0, 0.0 }; std::array<long long, 2> ng{ 0, 0 };
             for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
             { const std::size_t k = static_cast<std::size_t>(i) * 2 + pd; const long long c = floor_cnt[k];
@@ -1910,7 +1958,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         };
         auto checkpoint = [&]()
         { if (cfg.out_raw.empty()) { return; }
-          std::lock_guard<std::mutex> fk(fold_mtx); write_raw_atomic(cfg.out_raw); };
+          std::lock_guard<std::mutex> fk(fold_mtx);
+          // FUSION: sub-tables commit under acc_mtx during the pool -> also hold it so the snapshot never
+          // reads a torn sub cell. Lock order fold_mtx->acc_mtx matches compute_refs (no cycle). Only the
+          // journal-OFF fallback reaches here; the default (journal) path skips the periodic snapshot.
+          std::unique_lock<std::mutex> ak(acc_mtx, std::defer_lock);
+          if (fuse_sub) { ak.lock(); }
+          write_raw_atomic(cfg.out_raw); };
 
         // Append the one-time REFS record (fixed Dopt/vg) so a resumed run restores the ORIGINAL
         // floor-derived refs instead of recomputing them from the partially-refined state (which would
@@ -1932,7 +1986,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (int t = 0; t < nw; ++t) { pool.emplace_back(worker); }
         std::cerr << "[keepgen] continuous size-7: " << NC << " cells, floor R=" << r0 << " cap R=" << r_max
                   << ", lookahead=" << cont_lookahead << ", ckpt=" << sweep_sec << "s on " << nw
-                  << " threads\n" << std::flush;
+                  << " threads" << (fuse_sub ? (" (+ " + std::to_string(fused_sub_tasks.size())
+                                              + " fused sub-cap batches)") : std::string())
+                  << "\n" << std::flush;
 
         // Resumed mid-refine: the journal carried the fixed refs -> restore them and skip the floor phase
         // (the floored/terminal cells were reloaded; the producer continues refining live cells).
@@ -1947,16 +2003,31 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         auto t_last_ck = std::chrono::steady_clock::now();
         long long fed_total = 0, last_report = 0;
         bool any_fed = false;
-        auto feed_upto = [&](int i, int pd, long long limit)   // enqueue rollouts [fed, limit) for a cell
+        auto feed_upto = [&](int i, int pd, long long limit)   // enqueue size-7 rollouts [fed, limit)
         {
             long long& f = fed[static_cast<std::size_t>(i) * 2 + pd];
             while (f < limit)
             {
                 { std::unique_lock<std::mutex> lk(qmtx);
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                  q.push_back({ static_cast<long long>(i), static_cast<long long>(pd), f }); }
+                  q.push_back({ 0, static_cast<long long>(i), static_cast<long long>(pd), f }); }
                 q_ne.notify_one();
                 ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
+            }
+        };
+        // FUSION: drain the sub-cap batch tasks into the same queue (kind 1). Filler that overlaps the
+        // size-7 floor with sub-table capping -> no Pass-A -> size-7 barrier. Empty unless fuse_sub.
+        std::size_t sub_cursor = 0;
+        auto feed_sub = [&]()
+        {
+            while (sub_cursor < fused_sub_tasks.size())
+            {
+                const Task& st = fused_sub_tasks[sub_cursor];
+                { std::unique_lock<std::mutex> lk(qmtx);
+                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                  q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd), st.r1 }); }
+                q_ne.notify_one();
+                ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true;
             }
         };
         for (;;)
@@ -1975,10 +2046,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     any_live = true;
                     if (c < r0) { any_below_floor = true; feed_upto(i, pd, r0); }
                 }
-                // Floor pass 2 (speculation filler): only while the floor is INCOMPLETE (a slow cell still
-                // finishing r0) -> feed already-floored cells up to r0+spec_budget so idle cores stay busy.
-                // No freezing happens yet; compute_refs reconciles this speculation. Off => old barrier.
-                if (floor_spec && any_below_floor)
+                // FUSION filler: drain sub-cap batch tasks into the pool (overlaps the size-7 floor with
+                // the sub-table capping the old Pass A did before the pool). No-op unless fuse_sub.
+                feed_sub();
+                // Floor pass 2 (speculation filler): while the floor phase is INCOMPLETE for EITHER reason
+                // (a size-7 cell still finishing r0, OR sub-tables still capping) -> feed already-floored
+                // size-7 cells up to r0+spec_budget so idle cores stay busy. No freezing yet; compute_refs
+                // reconciles this speculation. This is what keeps cores full during the sub-cap tail.
+                const bool floor_incomplete = any_below_floor || sub_remaining.load() > 0;
+                if (floor_spec && floor_incomplete)
                 {
                     for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
                     {
@@ -2000,10 +2076,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     feed_upto(i, pd, std::min<long long>(r_max, c + cont_lookahead));
                 }
             }
-            // Floor complete (every cell folded to >= r0) -> fix refs + reconcile floor-tail speculation +
-            // publish refs_ready (all inside compute_refs, under fold_mtx). NO in_flight wait: speculation
-            // still in flight is harmless (reconcile handles folded prefixes; later folds test inline).
-            if (!refine && !any_below_floor)
+            // Floor complete = every size-7 cell folded to >= r0 AND every sub-cap batch done (fusion:
+            // Dopt reads sub-table V, so refs cannot be fixed until the sub-tables are final). -> fix refs +
+            // reconcile floor-tail speculation + publish refs_ready (inside compute_refs, under fold_mtx).
+            // NO size-7 in_flight wait: speculation still in flight is harmless (reconcile handles it).
+            if (!refine && !any_below_floor && sub_remaining.load() == 0)
             {
                 compute_refs();     // fixes Dopt/vg, reconciles speculation, sets refs_ready
                 journal_refs();     // persist the fixed refs (byte-identical resume marker)
