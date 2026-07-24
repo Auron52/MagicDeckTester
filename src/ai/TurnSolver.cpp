@@ -1235,6 +1235,35 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 // default on, disables ONLY that cut for a clean perf/GT A/B (the full search still finds the same win
 // via the go-off lethal model, just after paying for the ritual/Lotus powerset).
 static const bool s_no_goff_shortcircuit = std::getenv("MTG_NO_GOFF_SHORTCIRCUIT") != nullptr;
+// Lotus-independent accel-prefix collapse is OPT-IN (default OFF, enable with MTG_LOTUS_PREFIX). The Lotus
+// sacs are fungible in mana, but the plan signature keys on sac_source_id, so collapsing their branches
+// churns the budget-limited search (measured a few searched slowdowns) -- so it is held behind a flag
+// pending a tractability-vs-GT decision, while the byte-identical go-off short-circuit ships by default.
+static const bool s_lotus_prefix         = std::getenv("MTG_LOTUS_PREFIX")         != nullptr;
+
+// Independent-accelerant (Lotus Bloom SacForMana) prefix collapse -- the fungible sibling of
+// NonPrefixAccelViolated for the odometer's 2^num_ind independent mask. The identical Lotus sacs
+// (ritual_float>0, +N of ONE colour, NO storm count) are interchangeable, so any k-subset produces the
+// same (mana, storm) as the first k -- keep ONLY the lowest-index prefix and drop the rest. Returns true
+// (skip) when a Lotus bit is set while an earlier Lotus bit is unset; non-accelerant independents
+// (graveyard retrace) are unconstrained. Collapses 2^L -> L+1. Same family as the ritual accel-prefix
+// collapse (here the subsets are effect-identical, not merely dominated), gated with it (accel_prefix_on)
+// + MTG_NO_LOTUS_PREFIX. Note: SacColor variants of one source are already mutually exclusive
+// (SubsetHasDuplicateSacSource / sac_source_id), so within the default red-only float each Lotus is one
+// independent -> this collapses the multi-Lotus fan-out the go-off short-circuit does not cover (non-win
+// building turns, and the Apex re-solve the short-circuit defers).
+static inline bool IndependentAccelPrefixViolated(const std::vector<Action>& cands,
+                                                  const std::vector<int>& independent, int imask)
+{
+    bool saw_uncast = false;
+    for (int b = 0; b < static_cast<int>(independent.size()); ++b)
+    {
+        if (cands[independent[b]].ritual_float <= 0) { continue; }   // only Lotus-style accelerants
+        if (imask & (1 << b)) { if (saw_uncast) { return true; } }
+        else                  { saw_uncast = true; }
+    }
+    return false;
+}
 
 // Construct the canonical Dragonstorm storm go-off line for the lethal short-circuit (see the callsites in
 // Solve / EnumeratePlans): one representative per mana-ritual hand card (plain cast, splice_count==0) + one
@@ -2452,6 +2481,15 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 && ra.kind == Action::Kind::CastFromHand) { any_accel = true; break; }
         }
     }
+    // Lotus-independent accelerant prefix collapse (see IndependentAccelPrefixViolated): fungible Lotus
+    // sacs -> keep only the cheapest-first (index) prefix of the 2^num_ind independent mask. Rides
+    // accel_prefix_on + MTG_NO_LOTUS_PREFIX; scanned once here so the per-imask check is a cheap walk.
+    bool has_ind_accel = false;
+    if (accel_prefix_on && s_lotus_prefix)
+    {
+        for (const Action& ra : cands)
+        { if (ra.ritual_float > 0 && ra.kind == Action::Kind::SacForMana) { has_ind_accel = true; break; } }
+    }
 
     int m = static_cast<int>(cands.size());
     Plan best;
@@ -3025,6 +3063,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         {
             for (int imask = 0; imask < (1 << num_ind); ++imask)
             {
+                if (has_ind_accel && IndependentAccelPrefixViolated(cands, independent, imask)) { continue; }
                 sel.clear();
                 int icost = 0;
                 for (int g = 0; g < num_groups; ++g)
@@ -5945,6 +5984,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 && ra.kind == Action::Kind::CastFromHand) { any_accel = true; break; }
         }
     }
+    // Lotus-independent accelerant prefix collapse (mirrors Solve; see IndependentAccelPrefixViolated).
+    bool has_ind_accel = false;
+    if (accel_prefix_on && s_lotus_prefix)
+    {
+        for (const Action& ra : cands)
+        { if (ra.ritual_float > 0 && ra.kind == Action::Kind::SacForMana) { has_ind_accel = true; break; } }
+    }
     // Filter/ramp land present? (mirrors Solve) Enables the real-payment affordability fallback.
     const bool any_filter = HasUntappedFilterSource(state);
 
@@ -6310,6 +6356,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         {
             for (int imask = 0; imask < (1 << num_ind); ++imask)
             {
+                if (has_ind_accel && IndependentAccelPrefixViolated(cands, independent, imask)) { continue; }
                 sel.clear();
                 int icost = 0;
                 for (int g = 0; g < num_groups; ++g)
