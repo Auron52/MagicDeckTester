@@ -5,11 +5,14 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <ostream>
 #include <set>
 #include <thread>
@@ -849,6 +852,38 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         t.cnt[idx][pd]   += (r1 - r0);
     };
 
+    // Single rollout r of cell w, mode pd -> win-turn (does NOT commit; the continuous path stores the
+    // result in a per-(cell,r) slot and folds it deterministically). Same seed stream as run_batch
+    // (pure function of seed_base,r,w,pd), so a cell's value is byte-identical to the wave path for the
+    // same rollout set. Trace is unsupported on this path (a diagnostic; off by default).
+    auto run_one = [&](AIEngine& ai, int w, int pd, long long r) -> double
+    {
+        const int H = work[w].H, idx = work[w].idx;
+        const std::vector<int>& comp = tables[HAND - H].comps[idx];
+        const uint64_t rs = cfg.seed + 21'000'000ULL
+                          + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(r) + 1)
+                          + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
+        GameState s = GoldFishRunner::SetupGame(deck, rs);
+        s.m_required_pieces = &rollout_profile.required_pieces;
+        s.vial_target_mv    = rollout_profile.vial_target_mv;
+        s.on_the_play       = (pd == 1);
+        Player& ap = s.ActivePlayer();
+        ap.hand.clear();
+        for (int b = 0; b < K; ++b)
+        {
+            int need = comp[b];
+            for (std::size_t k = 0; k < ap.library.size() && need > 0; )
+            {
+                auto bit = bof.find(ap.library[k].m_name.str());
+                if (bit != bof.end() && bit->second == b)
+                { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin() + k); --need; }
+                else { ++k; }
+            }
+        }
+        ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
+        return ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
+    };
+
     const int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
                                               static_cast<int>(work.size())));
     // Progress logging to STDERR (never stdout -> never corrupts the report; never affects rollouts,
@@ -1040,6 +1075,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // 32 (~1/32 of the floor per group); combined with MTG_KEEP_CHECKPOINT_SEC to bound write frequency.
     const long long floor_groups = []{ const char* s = std::getenv("MTG_KEEP_FLOOR_GROUPS");
         return (s && *s) ? std::max<long long>(1, std::strtoll(s, nullptr, 10)) : 32LL; }();
+    // Continuous adaptive batched keep-gen (docs/design/adaptive-batched-keepgen.md): one persistent
+    // pool over per-rollout tasks for the size-7 keep decision, freeze re-evaluated at periodic sweeps
+    // instead of at wave barriers -> cores stay full to the last live cell. Default OFF -> the wave path
+    // below is byte-identical. MTG_KEEP_CONTINUOUS_LOOKAHEAD bounds refine speculation past a cell's
+    // committed prefix; MTG_KEEP_SWEEP_SEC throttles the (whole-table) Dopt/freeze sweep.
+    const bool continuous = adaptive && std::getenv("MTG_KEEP_CONTINUOUS") != nullptr;
+    const long long cont_lookahead = []{ const char* s = std::getenv("MTG_KEEP_CONTINUOUS_LOOKAHEAD");
+        return (s && *s) ? std::max<long long>(1, std::strtoll(s, nullptr, 10)) : 4LL; }();
+    const double sweep_sec = []{ const char* s = std::getenv("MTG_KEEP_SWEEP_SEC");
+        return (s && *s) ? std::max(1.0, std::atof(s)) : 20.0; }();
     auto write_raw_atomic = [&](const std::string& path) -> bool
     {
         using json = nlohmann::json;
@@ -1181,6 +1226,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         tasks.reserve(work.size() * 2);
         for (int w = 0; w < static_cast<int>(work.size()); ++w)
         {
+            // Continuous mode owns the size-7 floor+refine (its own pool below); Pass A does sub-tables
+            // only, so the sub-table V it produces is ready for the continuous sweep's Dopt.
+            if (continuous && work[w].H == HAND) { continue; }
             const long long init = (work[w].H == HAND || sub_floor) ? r0 : r_max;
             const int Hw = work[w].H, iw = work[w].idx;
             for (int pd = 0; pd < 2; ++pd)
@@ -1308,13 +1356,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   << " moved (of " << n_tested << " prior cell-sides)\n" << std::flush;
     }
 
-    // Save the (expensive) floor investment immediately -- refine waves can be long, so don't wait for
-    // the first wave boundary. A complete-floor sidecar is already a valid (low-R) recoverable state.
-    if (adaptive) { maybe_checkpoint(); }
-
+    // Refine waves, shared by the continuous size-7 pool (sub_only=true, run FIRST to fix Dopt) and the
+    // non-continuous full path (sub_only=false). sub_only skips the m=0 size-7 gate so only sub-cells are
+    // refined. Dopt is one-directional off the sub-tables (compute_Dopt never reads size-7 V), so
+    // converging the sub-tables in isolation yields the SAME Dopt the full wave path converges to -> the
+    // continuous size-7 freeze can then gate against an exact, fixed threshold.
     int refine_waves = 0;
     long long refined_rollouts = 0;
-    if (adaptive)
+    auto run_refine_waves = [&](bool sub_only)
     {
         const double SQRT2 = 1.4142135623730951;
         for (;;)
@@ -1339,9 +1388,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             for (int pd = 0; pd < 2; ++pd)
                 for (std::size_t i = 0; i < H7.comps.size(); ++i)
                 {
-                    // m=0: size-7 flip gate. Pruned (frozen) or change-detection-RESOLVED (unmoved,
-                    // reusing the prior) cells are never refined.
-                    if (!frozen7[i][pd] && !resolved[0][i][pd] && H7.cnt[i][pd] < r_max)
+                    // m=0: size-7 flip gate. Skipped in sub_only mode (the continuous pool owns size-7).
+                    // Pruned (frozen) or change-detection-RESOLVED cells are never refined.
+                    if (!sub_only && !frozen7[i][pd] && !resolved[0][i][pd] && H7.cnt[i][pd] < r_max)
                     {
                         const double se = gate_se(H7, static_cast<int>(i), pd, vg[0][pd]);
                         const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
@@ -1384,14 +1433,213 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 refined_rollouts += add;
             }
             if (tasks.empty()) { break; }
-            const std::string wlabel = "refine-wave-" + std::to_string(refine_waves + 1);
+            const std::string wlabel = std::string(sub_only ? "sub-refine-wave-" : "refine-wave-")
+                                     + std::to_string(refine_waves + 1);
             process_tasks(tasks, wlabel.c_str());
             recompute();
             apply_prior_override();   // recompute derives V from fresh accumulators -> restore prior on resolved
             ++refine_waves;
             maybe_checkpoint();   // crash-safe: dump the raw sidecar every checkpoint_sec (post-floor)
         }
+    };
+
+    // ================= CONTINUOUS ADAPTIVE POOL (size-7 floor + refine in one batched queue) =========
+    // docs/design/adaptive-batched-keepgen.md. One persistent worker pool over per-rollout tasks; each
+    // rollout lands in its own slot and folds into the cell's sum in fixed r-order (deterministic value).
+    // DETERMINISM (no slowest-cell throttle): the floor pass fills every cell to r0, then Dopt/vg are
+    // FIXED from that complete floor snapshot; thereafter each cell freezes INDEPENDENTLY the first level
+    // its own confidence crosses (flip<=flip_eps / low-prob), evaluated inside the fold on the fixed
+    // refs. A cell's freeze level is a pure function of its own rollouts + the fixed refs, so two runs are
+    // byte-identical regardless of scheduling timing, and no cell waits on any other -> cores stay full
+    // to the last live cell. Sub-tables are already at their final values before Dopt is fixed: capped by
+    // Pass A (bottoming-on) or converged by run_refine_waves(sub_only) just below (sub_floor cases).
+    if (continuous)
+    {
+        // Converge sub-tables first so Dopt_ref (fixed after the size-7 floor below) is exact. Dopt is
+        // one-directional (reads only sub-tables), so this needs no size-7 samples. sub_floor is false for
+        // bottoming-on decks (Pass A already capped the sub-tables) -> skipped, and the validated
+        // size-7-only path stays byte-identical. Barrier-bound, but sub-tables are small vs size-7.
+        if (sub_floor) { run_refine_waves(true); }
+        const double SQRT2 = 1.4142135623730951;
+        SizeTable& S7 = tables[0];
+        const int NC  = static_cast<int>(S7.comps.size());
+        const double    cutoff_P = []{ const char* s = std::getenv("MTG_KEEP_CUTOFF_P");
+            return (s && *s) ? std::atof(s) : 0.0; }();
+        const long long cutoff_R = []{ const char* s = std::getenv("MTG_KEEP_CUTOFF_R");
+            return (s && *s) ? std::atoll(s) : 0LL; }();
+        const double se_prior = cfg.se_prior, flip_eps = cfg.flip_eps;
+
+        const std::size_t SL = static_cast<std::size_t>(NC) * 2 * static_cast<std::size_t>(r_max);
+        std::vector<double> slot(SL, 0.0);
+        std::vector<char>   have(SL, 0);
+        std::vector<long long> fed(static_cast<std::size_t>(NC) * 2, 0);
+        std::vector<std::atomic<char>> afroze(static_cast<std::size_t>(NC) * 2);   // lock-free view for producer
+        for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+        { const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
+          fed[k] = S7.cnt[i][pd];                                    // resume: continue past reloaded cnt
+          afroze[k].store(frozen7[i][pd] ? 1 : 0, std::memory_order_relaxed); }
+        auto SLOT = [&](int i, int pd, long long r) -> std::size_t
+        { return ((static_cast<std::size_t>(i) * 2 + pd) * static_cast<std::size_t>(r_max)) + static_cast<std::size_t>(r); };
+
+        std::mutex fold_mtx;                         // guards the fold (sum/sumsq/cnt + slot/have + frozen7)
+        std::mutex qmtx; std::condition_variable q_ne, q_nf;
+        std::deque<std::array<long long, 3>> q;      // {i, pd, r}
+        const std::size_t QCAP = static_cast<std::size_t>(8 * nthreads);
+        std::atomic<long long> in_flight{ 0 };
+        std::atomic<bool> producing{ true };
+        std::atomic<bool> refs_ready{ false };       // false = floor phase (no freezing); true = refine phase
+        std::mutex prod_mtx; std::condition_variable prod_cv;
+        std::array<std::vector<double>, 2> Dopt_ref{ std::vector<double>{}, std::vector<double>{} };
+        std::array<double, 2> vg_ref{ 0.0, 0.0 };
+
+        // WORKER: run one rollout, then fold its cell's committed prefix in fixed r-order. Once refs are
+        // ready, evaluate freeze AT EACH new level c (>=r0) inside the fold; freeze at the first confident
+        // level and stop folding (cnt truncates there -> deterministic; any in-flight lookahead rollouts
+        // for a frozen cell are left unfolded, capped at cont_lookahead of waste).
+        auto worker = [&]()
+        {
+            AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
+            ai.SetSearchPostCombat(second_main);
+            for (;;)
+            {
+                std::array<long long, 3> task;
+                {
+                    std::unique_lock<std::mutex> lk(qmtx);
+                    q_ne.wait(lk, [&]{ return !q.empty() || !producing.load(); });
+                    if (q.empty()) { if (!producing.load()) { break; } else { continue; } }
+                    task = q.front(); q.pop_front();
+                }
+                q_nf.notify_one();
+                const int i = static_cast<int>(task[0]), pd = static_cast<int>(task[1]);
+                const long long r = task[2];
+                const double wt = run_one(ai, work_idx[0][i], pd, r);
+                {
+                    std::lock_guard<std::mutex> fk(fold_mtx);
+                    slot[SLOT(i, pd, r)] = wt; have[SLOT(i, pd, r)] = 1;
+                    long long& c = S7.cnt[i][pd];
+                    const bool refine = refs_ready.load(std::memory_order_acquire);
+                    while (!frozen7[i][pd] && c < r_max && have[SLOT(i, pd, c)])
+                    {
+                        const double v = slot[SLOT(i, pd, c)];
+                        S7.sum[i][pd] += v; S7.sumsq[i][pd] += v * v; ++c;
+                        if (refine && c >= r0)
+                        {
+                            bool fr = (c >= r_max)
+                                || (cutoff_P > 0.0 && cutoff_R > 0 && P[i] < cutoff_P && c >= cutoff_R);
+                            if (!fr)
+                            {
+                                const double mean = S7.sum[i][pd] / c;
+                                const double vc   = c > 1 ? std::max(0.0, S7.sumsq[i][pd] / c - mean * mean)
+                                                          : vg_ref[pd];
+                                const double vs   = (c * vc + se_prior * vg_ref[pd]) / (c + se_prior);
+                                const double se   = std::sqrt(vs / c);
+                                const double d    = std::abs(mean - Dopt_ref[pd][1]);
+                                const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * SQRT2)) : (d == 0 ? 0.5 : 0.0);
+                                if (flip <= flip_eps) { fr = true; }
+                            }
+                            if (fr) { frozen7[i][pd] = true;
+                                      afroze[static_cast<std::size_t>(i) * 2 + pd].store(1, std::memory_order_release); }
+                        }
+                    }
+                }
+                in_flight.fetch_sub(1);
+                prod_cv.notify_one();
+            }
+        };
+
+        // Fix Dopt/vg from the COMPLETE floor (every cell at >= r0). Called once, under fold_mtx.
+        auto compute_refs = [&]()
+        {
+            std::lock_guard<std::mutex> fk(fold_mtx);
+            for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+            {
+                const long long c = S7.cnt[i][pd]; if (c <= 0) { continue; }
+                const double mean = S7.sum[i][pd] / c;
+                const double var  = c > 1 ? std::max(0.0, S7.sumsq[i][pd] / c - mean * mean) : 0.0;
+                S7.V[i][pd] = mean; S7.se[i][pd] = c > 1 ? std::sqrt(var / c) : 0.0;
+            }
+            std::array<double, 2> vg{ 0.0, 0.0 }; std::array<long long, 2> ng{ 0, 0 };
+            for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+            { const long long c = S7.cnt[i][pd];
+              if (c > 1) { const double mn = S7.V[i][pd];
+                           vg[pd] += std::max(0.0, S7.sumsq[i][pd] / c - mn * mn); ++ng[pd]; } }
+            for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[pd] /= ng[pd]; } }
+            vg_ref = vg;
+            Dopt_ref = { compute_Dopt(0), compute_Dopt(1) };
+        };
+        auto checkpoint = [&]()
+        { if (cfg.out_raw.empty()) { return; }
+          std::lock_guard<std::mutex> fk(fold_mtx); write_raw_atomic(cfg.out_raw); };
+
+        std::vector<std::thread> pool;
+        const int nw = std::max(1, nthreads);
+        for (int t = 0; t < nw; ++t) { pool.emplace_back(worker); }
+        std::cerr << "[keepgen] continuous size-7: " << NC << " cells, floor R=" << r0 << " cap R=" << r_max
+                  << ", lookahead=" << cont_lookahead << ", ckpt=" << sweep_sec << "s on " << nw
+                  << " threads\n" << std::flush;
+
+        auto t_last_ck = std::chrono::steady_clock::now();
+        long long fed_total = 0, last_report = 0;
+        for (;;)
+        {
+            const bool refine = refs_ready.load();
+            bool any_below_floor = false, any_live = false, any_fed = false;
+            for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+            {
+                if (afroze[static_cast<std::size_t>(i) * 2 + pd].load()) { continue; }
+                const long long c = S7.cnt[i][pd];                          // racy read (x86-64 atomic); benign
+                if (c >= r_max) { continue; }
+                any_live = true;
+                long long limit;
+                if (!refine) { limit = r0; if (c < r0) { any_below_floor = true; } }   // floor: fill to r0 only
+                else         { limit = std::min<long long>(r_max, c + cont_lookahead); }
+                long long& f = fed[static_cast<std::size_t>(i) * 2 + pd];
+                while (f < limit)
+                {
+                    { std::unique_lock<std::mutex> lk(qmtx);
+                      q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                      q.push_back({ static_cast<long long>(i), static_cast<long long>(pd), f }); }
+                    q_ne.notify_one();
+                    ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
+                }
+            }
+            // Floor complete (every cell folded to >= r0, nothing in flight) -> fix refs, enter refine.
+            if (!refine && !any_below_floor && in_flight.load() == 0)
+            {
+                compute_refs();
+                refs_ready.store(true, std::memory_order_release);
+                std::cerr << "[keepgen]   continuous: floor complete, refs fixed -> refine ("
+                          << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
+                continue;
+            }
+            const auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration<double>(now - t_last_ck).count() >= sweep_sec)
+            { checkpoint(); t_last_ck = now; }
+            if (fed_total - last_report >= 20000)
+            { last_report = fed_total;
+              std::cerr << "[keepgen]   continuous: " << fed_total << " rollouts fed, in_flight="
+                        << in_flight.load() << (refine ? " (refine)" : " (floor)") << " ("
+                        << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush; }
+            if (refine && !any_live && in_flight.load() == 0) { break; }
+            if (!any_fed)
+            { std::unique_lock<std::mutex> pk(prod_mtx);
+              prod_cv.wait_for(pk, std::chrono::milliseconds(100)); }
+        }
+        producing.store(false); q_ne.notify_all();
+        for (std::thread& th : pool) { th.join(); }
+        recompute();
+        if (!cfg.out_raw.empty()) { write_raw_atomic(cfg.out_raw); }
+        rollouts_done += fed_total;
+        std::cerr << "[keepgen] continuous size-7 DONE: " << fed_total << " rollouts, "
+                  << static_cast<long long>(gen_elapsed()) << "s total\n" << std::flush;
     }
+    // ================================================================================================
+
+    // Save the (expensive) floor investment immediately -- refine waves can be long, so don't wait for
+    // the first wave boundary. A complete-floor sidecar is already a valid (low-R) recoverable state.
+    if (adaptive && !continuous) { maybe_checkpoint(); }
+
+    if (adaptive && !continuous) { run_refine_waves(false); }
 
     if (adaptive)
     {
