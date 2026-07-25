@@ -1966,6 +1966,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
+            else if (a.kind == Action::Kind::SacForMana)
+            { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float); }
+            else if (a.kind == Action::Kind::Suspend)
+            { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
             { PerformDig(state, a.card_name, a.dig_sacrifice); }
             // Nested breakpoint casts this recorded draw engine (or dug Treasure Hunt) revealed.
@@ -2010,6 +2014,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             rp.hand.push_back(sc.card);
         }
         TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat_main);
+        // Lotus Bloom: apply any SacForMana (float the chosen colour) / Suspend this re-solve chose BEFORE
+        // the casts, mirroring TakeTurn's top-of-turn pre-pass. Without this a mid-turn Lotus sac was
+        // silently dropped in the fallback breakpoint re-solve, so the floated mana never materialised and
+        // the staged Dragonstorm/rituals it was meant to pay for no-op'd. Empty (no SacForMana) -> unchanged.
+        for (const Action& a : extra.actions)
+        {
+            if (a.kind == Action::Kind::SacForMana)
+            { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float); }
+            else if (a.kind == Action::Kind::Suspend)
+            { ApplySuspend(state, state.active_player_index, a.card_name); }
+        }
         for (const Action& a : extra.actions)
         { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
         for (const Action& a : extra.actions)

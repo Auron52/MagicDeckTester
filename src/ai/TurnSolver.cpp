@@ -4807,6 +4807,26 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                 play_breakpoint_land(my_bp_sink);
                 TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+                // Lotus Bloom: apply (and RECORD) any SacForMana / Suspend the re-solve chose BEFORE the
+                // casts, exactly as the top-level ApplyPlanDirect / TakeTurn pre-pass does. apply_plan_actions
+                // handles only vial/hand/sac-land/graveyard casts, so a mid-turn Lotus sac would otherwise be
+                // dropped -- the staged Dragonstorm/rituals then can't pay the floated mana (the executor's
+                // breakpoint replay had the same gap). Recording into the current sink keeps the committed-line
+                // replay (AIEngine::replay_recorded) in lockstep. Empty for every plan without a SacForMana.
+                for (const Action& a : extra.actions)
+                {
+                    if (a.kind == Action::Kind::SacForMana)
+                    {
+                        ApplySacForMana(state, state.active_player_index, a.sac_source_id,
+                                        a.chosen_float_color, a.ritual_float);
+                        if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
+                    }
+                    else if (a.kind == Action::Kind::Suspend)
+                    {
+                        ApplySuspend(state, state.active_player_index, a.card_name);
+                        if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
+                    }
+                }
                 apply_plan_actions(extra.actions, false);
                 if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
             }
