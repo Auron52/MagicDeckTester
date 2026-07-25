@@ -46,6 +46,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"drawengine", UnprunedGate::DrawEngine}, {"saccolor", UnprunedGate::SacColor},
     {"accelprefix",UnprunedGate::AccelPrefix},
     {"payoffprune",UnprunedGate::PayoffPrune},
+    {"splicecollapse",UnprunedGate::SpliceCollapse},
 };
 
 const char* GateName(UnprunedGate g)

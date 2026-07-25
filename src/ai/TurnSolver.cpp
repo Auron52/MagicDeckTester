@@ -1155,6 +1155,70 @@ static bool GroupChoiceOverSplices(const GameState& state,
     return false;
 }
 
+// Desperate Ritual SPLICE-count collapse (HEURISTIC; DragonstormProvider::UseSpliceCollapse() +
+// MTG_UNPRUNED(SpliceCollapse)). With the collapse on, CollectActions emits only two splice variants per
+// copy -- BARE (k=0) and ONE-SPLICE (k=1) -- so the splice count is CAPPED at 1 (the user's "one splice
+// per" model: the front-loaded max chain needs ~8 mana up front and overshoots this deck's typical lines;
+// a k=1 splice needs only 4 mana and each self-funds the next). Because same-named copies are identical, a
+// selection is fully described by (m = bases cast, s = how many splice one other), so we keep only the
+// canonical form: the cast bases occupy positions {0,1,...,m-1} AND the k values, read in position order,
+// are non-increasing (the s single-splices are the FIRST s of the cast prefix). That collapses every
+// symmetric/duplicate {0,1} mix -- e.g. {0,1,1,0} -> canonical {1,1,0,0} -- to one representative per
+// (m,s), while still letting the SEARCH pick the affordable (m,s) by ROLLING each out (a splice the mana
+// can't front simply fails in the rollout) -- i.e. mana-derived within the k<=1 bound, no deterministic
+// mana fill needed. The triangular legality (s <= N-1: the last cast copy has no other to splice) is
+// enforced by GroupChoiceOverSplices, which still runs alongside this. pos = # same-named copies in hand
+// BEFORE this base's hand_index. Called only when splice_collapse_on (implies any_splice). Returns true
+// (skip) for a non-prefix or non-canonical selection. thread_local scratch -> batch/gen worker pool safe.
+static bool SpliceCollapseViolated(const GameState& state,
+                                   const std::vector<Action>& cands,
+                                   const std::vector<std::vector<int>>& groups,
+                                   const std::vector<int>& choice)
+{
+    auto sel_base = [&](size_t g, int* out_j) -> bool {
+        if (choice[g] <= 0) { return false; }
+        int j = groups[g][choice[g] - 1];
+        const CardDefinition* d = cands[j].def;
+        bool is_base = d && d->params.splice_onto_arcane && cands[j].kind == Action::Kind::CastFromHand;
+        if (is_base) { *out_j = j; }
+        return is_base;
+    };
+    static thread_local std::vector<int> name_reps;   // representative cand index per unique splice-base name
+    name_reps.clear();
+    for (size_t g = 0; g < groups.size(); ++g)
+    {
+        int j;
+        if (!sel_base(g, &j)) { continue; }
+        bool seen = false;
+        for (int r : name_reps) { if (cands[r].card_name == cands[j].card_name) { seen = true; break; } }
+        if (!seen) { name_reps.push_back(j); }
+    }
+    if (name_reps.empty()) { return false; }
+    const Player& ap = state.ActivePlayer();
+    static thread_local std::vector<std::pair<int, int>> pk;   // (pos, k) of this name's cast bases
+    for (int rep : name_reps)
+    {
+        const std::string& nm = cands[rep].card_name;
+        pk.clear();
+        for (size_t g = 0; g < groups.size(); ++g)
+        {
+            int j;
+            if (!sel_base(g, &j) || cands[j].card_name != nm) { continue; }
+            int pos = 0;
+            for (int h = 0; h < cands[j].hand_index && h < static_cast<int>(ap.hand.size()); ++h)
+            { if (ap.hand[h].m_name == nm) { ++pos; } }
+            pk.emplace_back(pos, cands[j].splice_count);
+        }
+        std::sort(pk.begin(), pk.end());
+        // Cast bases must occupy positions {0,1,...,m-1} (a prefix; dedup of identical copies).
+        for (size_t t = 0; t < pk.size(); ++t) { if (pk[t].first != static_cast<int>(t)) { return true; } }
+        // Canonical (m,s): the splicers (k=1) are the FIRST s of the cast prefix -> k non-increasing in
+        // position order. Rejects e.g. {0,1} (== canonical {1,0}) so each (m,s) is enumerated once.
+        for (size_t t = 1; t < pk.size(); ++t) { if (pk[t].second > pk[t - 1].second) { return true; } }
+    }
+    return false;
+}
+
 // Dragonstorm acceleration-prefix collapse (HEURISTIC -- unlike GroupChoiceOverSplices this changes WHICH
 // action masks are enumerated, so it is NOT byte-identical: callers gate it behind
 // DragonstormProvider::UseAccelPrefixCollapse() && !DecisionUnpruned(UnprunedGate::AccelPrefix)). On a
@@ -1765,7 +1829,27 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             int others = 0;
             for (const Card& c : ap.hand) { if (c.m_name == ap.hand[i].m_name) { ++others; } }
             --others;   // exclude the base copy itself -> # of OTHER copies available to splice
-            for (int k = 0; k <= others; ++k)
+            // SPLICE-count collapse (HEURISTIC, DragonstormProvider::UseSpliceCollapse() +
+            // MTG_UNPRUNED(SpliceCollapse)). Full search emits every k = 0..others; the collapse CAPS the
+            // splice at 1, emitting only BARE (k=0) and ONE-SPLICE (k=1) per copy (the user's "one splice
+            // per" model -- a k=1 splice needs 4 mana up front vs 8 for the full chain, and self-funds the
+            // next). SpliceCollapseViolated then keeps only the canonical (m bases, s single-splices) mixes,
+            // so the SEARCH picks the affordable (m,s) by rolling each out (mana-derived within k<=1). The
+            // triangular s<=N-1 legality is enforced by GroupChoiceOverSplices. Off/other decks -> full k
+            // range (byte-identical).
+            const bool splice_collapse = ResolveProvider(state).UseSpliceCollapse()
+                                      && !DecisionUnpruned(UnprunedGate::SpliceCollapse);
+            std::vector<int> ks;
+            if (splice_collapse)
+            {
+                ks.push_back(0);                          // bare (k=0) -- "fewer than one splice" fallback
+                if (others >= 1) { ks.push_back(1); }     // one-splice (k=1); dedup/legality handled downstream
+            }
+            else
+            {
+                for (int k = 0; k <= others; ++k) { ks.push_back(k); }
+            }
+            for (int k : ks)
             {
                 Action a;
                 a.kind            = Action::Kind::CastFromHand;
@@ -2472,6 +2556,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // mirroring the any_splice fast path -> zero overhead when the gate is off or no accelerant is present.
     const bool accel_prefix_on = provider.UseAccelPrefixCollapse()
                               && !DecisionUnpruned(UnprunedGate::AccelPrefix);
+    // Desperate Ritual splice-count collapse (HEURISTIC, mirrors accel_prefix_on; see SpliceCollapseViolated
+    // + CollectActions' 2-variant emission). Gated on any_splice so non-splice decks skip it entirely.
+    const bool splice_collapse_on = any_splice && provider.UseSpliceCollapse()
+                                 && !DecisionUnpruned(UnprunedGate::SpliceCollapse);
     bool any_accel = false;
     if (accel_prefix_on)
     {
@@ -3054,7 +3142,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Likewise skip an over-splicing group choice (byte-identical: consider()'s SubsetHasIllegalSplice
         // would reject every extension anyway; splice legality is fixed by the group selection). any_splice
         // gates it off for every non-splice deck. Kills the Dragonstorm illegal-over-splice majority.
-        const bool splice_ok = !any_splice || !GroupChoiceOverSplices(state, cands, groups, choice);
+        const bool splice_ok = (!any_splice || !GroupChoiceOverSplices(state, cands, groups, choice))
+                            // Splice-count collapse (HEURISTIC): keep only bare-prefix / max-chain-prefix
+                            // selections of each splice name. Off/absent -> true. See SpliceCollapseViolated.
+                            && (!splice_collapse_on || !SpliceCollapseViolated(state, cands, groups, choice));
         // Dragonstorm acceleration-prefix collapse (HEURISTIC, gated by accel_prefix_on/any_accel above):
         // reject a group choice whose cast accelerants are not a cheapest-first prefix. Off/absent -> true.
         const bool accel_ok = !(accel_prefix_on && any_accel)
@@ -5975,6 +6066,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // GroupChoiceNonPrefixAccel + docs/design/dragonstorm-search-pruning.md.
     const bool accel_prefix_on = ResolveProvider(state).UseAccelPrefixCollapse()
                               && !DecisionUnpruned(UnprunedGate::AccelPrefix);
+    // Desperate Ritual splice-count collapse (HEURISTIC, mirrors Solve; see SpliceCollapseViolated).
+    const bool splice_collapse_on = any_splice && ResolveProvider(state).UseSpliceCollapse()
+                                 && !DecisionUnpruned(UnprunedGate::SpliceCollapse);
     bool any_accel = false;
     if (accel_prefix_on)
     {
@@ -6347,7 +6441,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         { if (choice[g] > 0) { gcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
         // Over-splice group choices are likewise skipped (byte-identical: eval_and_push()'s
         // SubsetHasIllegalSplice rejects every extension; splice legality is fixed by the group choice).
-        const bool splice_ok = !any_splice || !GroupChoiceOverSplices(state, cands, groups, choice);
+        const bool splice_ok = (!any_splice || !GroupChoiceOverSplices(state, cands, groups, choice))
+                            // Splice-count collapse (HEURISTIC, mirrors Solve). See SpliceCollapseViolated.
+                            && (!splice_collapse_on || !SpliceCollapseViolated(state, cands, groups, choice));
         // Dragonstorm acceleration-prefix collapse (HEURISTIC, gated by accel_prefix_on/any_accel above;
         // mirrors Solve): reject a group choice whose cast accelerants are not a cheapest-first prefix.
         const bool accel_ok = !(accel_prefix_on && any_accel)

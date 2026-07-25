@@ -11,10 +11,13 @@
 #   * R=40 cap, r0=2 floor, MAXMULL=3, bottoming always on.
 #   * Frozen commit baa53d4 (adds the storm go-off short-circuit 324896d + Lotus accel-prefix collapse).
 #     Fresh discovery cache on this commit (the tractability cuts change play, so old caches are stale).
-#   * TRACTABILITY CUTS: the go-off short-circuit ships default-on; MTG_LOTUS_PREFIX=1 turns on the Lotus
-#     collapse as a GEN COST-LEVER (kept opt-in for normal play). Measured on the captured slow rollouts:
-#     Lotus+Dragonstorm hands 136s->3s (~46x), Apex hands 640s->131s (~4.9x). This IS the mulligan-gen-vs-
-#     ideal-play "give up a little quality to bring down cost" difference the user wanted encoded here.
+#   * TRACTABILITY CUTS: the go-off short-circuit ships default-on; the Desperate Ritual splice collapse
+#     (Step 3, DragonstormProvider::UseSpliceCollapse, default-on -- caps splice at k=1, "one splice per")
+#     also ships default-on and needs no flag here; MTG_LOTUS_PREFIX=1 turns on the Lotus collapse as a GEN
+#     COST-LEVER (kept opt-in for normal play). Measured on the captured slow rollouts: Lotus+Dragonstorm
+#     hands 136s->3s (~46x), Apex hands 640s->131s (~4.9x), Desperate Ritual x4 hands 48-58s->2-7s (~6-26x).
+#     This IS the mulligan-gen-vs-ideal-play "give up a little quality to bring down cost" difference here
+#     (the splice collapse is score-identical at searched depth -- see docs/design/dragonstorm-search-pruning.md).
 #   * Continuous pool w/ floor speculation + sub-table fusion (43f3f2b, 30fee8b) + per-cell journal.
 set -uo pipefail
 cd /workspaces/MagicDeckTester2

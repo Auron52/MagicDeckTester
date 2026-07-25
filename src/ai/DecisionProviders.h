@@ -54,6 +54,9 @@ enum class UnprunedGate
                   // accelerant powerset instead of only the K+1 cheapest-first prefixes (DragonstormProvider)
     PayoffPrune,  // Dragonstorm payoff-prune disabled: keep the ritual-accelerant subsets that cast no
                   // payoff (Dragon/Dragonstorm/Apex) instead of dropping them (DragonstormProvider, Hook 29)
+    SpliceCollapse, // Dragonstorm Desperate Ritual splice-count collapse disabled: enumerate the full
+                  // k=0..N-1 splice fan-out per copy instead of only the bare + max-chain families
+                  // (DragonstormProvider, Hook 30)
     _Count
 };
 
@@ -247,6 +250,12 @@ public:
     // enumerated cheapest-first prefix-only rather than powerset. HEURISTIC, MTG_UNPRUNED(AccelPrefix)-
     // openable. See docs/design/dragonstorm-search-pruning.md (Step 2).
     bool UseAccelPrefixCollapse() const override { return true; }
+
+    // Opt in to the Desperate Ritual splice-count collapse (Hook 30): emit only the bare + max-chain
+    // splice families per copy and keep prefix selections, taming the splice-count powerset that
+    // dominates the go-off rollout after the accel/Lotus prefix collapses. HEURISTIC,
+    // MTG_UNPRUNED(SpliceCollapse)-openable. See docs/design/dragonstorm-search-pruning.md.
+    bool UseSpliceCollapse() const override { return true; }
 
     // Opt in to the cast-ORDERING search (Hook 28): let the search FIND the best cast order for a combo
     // turn instead of the fixed CastOrderRank bucket. The fixed order is needed for search/executor

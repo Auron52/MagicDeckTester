@@ -357,6 +357,22 @@ public:
     // docs/design/dragonstorm-search-pruning.md (Step 2).
     virtual bool UseAccelPrefixCollapse() const { return false; }
 
+    // Hook 30 -- Desperate Ritual SPLICE-count collapse gate. When true, TurnSolver's CollectActions
+    // emits only TWO splice variants per same-named splice_onto_arcane copy -- the BARE cast (k=0) and
+    // the position's MAX-CHAIN cast (k = N-1-pos, N = copies in hand) -- instead of the full k=0..N-1
+    // fan-out, and the odometer keeps only PREFIX selections of one family (bare-prefix OR max-chain
+    // prefix) via SpliceCollapseViolated. Splicing keeps the revealed copies in hand and adds no storm,
+    // so splice-then-cast is net-positive mana at the SAME eventual storm count -- the maximal splice
+    // chain {N-1,...,N-m} dominates every other size-m assignment on mana (user's directive: "if you can
+    // afford to splice you should; only search the bare line as a fallback when the spliced line can't be
+    // cast"). Collapses the go-off hand's ~N^N splice-count powerset (the residual atom after the accel /
+    // Lotus prefix collapses) to the 2 dominant families. HEURISTIC (it drops the intermediate splice
+    // assignments -> NOT byte-identical), so it lives in the archetype provider and is opened by
+    // MTG_UNPRUNED (UnprunedGate::SpliceCollapse) for the standing A/B, exactly like AccelPrefix. Base
+    // returns false -> every non-Dragonstorm deck (and Dragonstorm under MTG_UNPRUNED) enumerates the
+    // full splice fan-out unchanged; only DragonstormProvider opts in.
+    virtual bool UseSpliceCollapse() const { return false; }
+
     // Hook 28 -- cast-ORDERING search gate. When true, EnumeratePlansWithLand expands each action set
     // into the DISTINCT orderings of its non-sacrifice hand casts (deduped by end-of-phase state) and
     // the search scores each, committing the best via Plan::searched_order (the executor replays that

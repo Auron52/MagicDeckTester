@@ -65,6 +65,60 @@ maximizes storm-count/affordability per prefix, but a dearer ritual can net marg
 pure big-X (Crackle) payoff could in principle reach slightly more mana via a non-prefix subset — not
 observed.
 
+### Step 3 — Desperate Ritual splice-count collapse  (IMPLEMENTED, gated behind MTG_UNPRUNED)
+
+**The residual atom after Steps 1–2.** With the over-splice skip (Step 1) and the accel-prefix collapse
+(Step 2) in, the R=40 mulligan gen still stalled on `Desperate Ritual x4` hands. A `perf` capture of the
+worst rollout put ~35% of self-time in `GroupChoiceOverSplices` + ~8% in its `card_name` `memcmp` on top
+of the `Solve` recursion. Root cause: Step 2 deliberately leaves the **splice-k WITHIN a cast Desperate
+Ritual free** ("storm-vs-mana is still a search choice"), so each of the N=4 copies emits k=0..N-1 cast
+variants → the odometer powersets ~N^N splice-count assignments per node and rejects the illegal/dominated
+majority. That per-node blowup is the atom Steps 1–2 collapse *down to* but cannot remove.
+
+**Mechanism — cap the splice at k=1; a bounded (m, s) search.** Splicing Desperate Ritual onto an Arcane
+spell REVEALS the other copies (they stay in hand) and adds **no storm**, so the splice count is purely a
+*mana* lever with no storm cost — splice-then-cast is net-positive mana at the same eventual storm. The
+first design offered per storm level m two families, bare `{0,…,0}` and the full max chain `{N-1,…,N-m}`.
+The user (who owns this deck) rejected the max-chain end: a `k=3` splice needs **8 mana up front** — the
+line is unaffordable for most ramp turns, and betting on it overshoots the deck's typical mana. The *ideal*
+is to derive the splice count from the mana actually on the table (a `k=1` splice needs 4 mana → makes 6,
+`k=2` needs 6 → makes 9, each self-funding the next), but a deterministic mana-realizing fill would need the
+search projection and the executor replay kept in lockstep across color pips and a self-funding chain (the
+[[dragonstorm-d0-mana-realization-strand]] cost) for marginal gain, since the search already discards
+unaffordable splices in rollout. So we take the user's endorsed practical form — **cap the splice at k=1**
+("one splice per," which handles the majority) plus **bare** ("fewer than one splice"): `CollectActions`
+emits only `k∈{0,1}` per copy, and because same-named copies are identical a selection is fully described
+by **(m = bases cast, s = how many splice one)**. `SpliceCollapseViolated` keeps only the canonical
+representative of each (m, s) — cast bases occupy positions `{0..m-1}` and the k values are non-increasing
+in position order (the s single-splices are first) — so e.g. `{0,1,1,0}` and `{1,1,0,0}` collapse to one
+line. The SEARCH still picks the affordable (m, s) by **rolling each out** (a splice the mana can't front
+just fails in the rollout), i.e. mana-derived *within the k≤1 bound* with no fill machinery. Provider-owned
+via `DragonstormProvider::UseSpliceCollapse()` (Hook 30, base false → byte-identical everywhere else) and
+opened by `UnprunedGate::SpliceCollapse` (`MTG_UNPRUNE=splicecollapse` / `MTG_UNPRUNED=1`). Applied in BOTH
+`Solve` and `EnumeratePlans`; the triangular legality (s ≤ N−1: the last cast copy has no other to splice)
+is still enforced by Step 1's `GroupChoiceOverSplices`, which runs alongside. The go-off short-circuit is
+unaffected: `BuildStormGoffLine` still finds each copy's bare (`k=0`) representative. (The fully
+mana-derived unbounded fill — k up to 2, spliced exactly to the running mana — remains the theoretical
+ideal if its lockstep cost is ever worth paying; k≤1 is the measured-good practical form.)
+
+**Measured (captured slow rollouts, d3/b10 via `MTG_KEEP_REPLAY`, reusing the fada47c bucketing cache):**
+| hand (all `Desperate Ritual x4`) | collapse OFF | collapse ON (k≤1) | win_turn |
+| Lathliss + Karrthus x2 (durdle)  | 48.7 s | **7.5 s** (6.5×) | 9 = 9 |
+| Scourge + Lotus + Karrthus (**win**) | 58.0 s | **2.2 s** (26×) | **7 = 7** |
+The winning go-off is preserved at the same turn, and the durdle hands stop stalling the pool.
+
+**Gate results.** `MTG_UNPRUNE=splicecollapse` reproduces the full smoke GT (**21/0/0** byte-identical) →
+the collapse-off path is a proven no-op (the emission refactor changed nothing when off). Every
+non-Dragonstorm deck is byte-identical (splice cards live only in Dragonstorm). Dragonstorm is
+**score-identical at searched depth on all three seed sets** — avg win turn unchanged at d3/d5 for smoke
+(1001, also digest-identical) and regression (2002, 3003). Because k≤1 drops the k≥2 lines the full search
+sometimes picked, **4 searched games on the held-out seeds play a different splice mix at the SAME win turn**
+(audit `[searched] play-changed=4`, e.g. `gi191` d3 s2002 "score T5 unchanged, play differs") — a
+score-neutral line swap, the expected consequence of the cap and the only thing that changed. d0 (greedy,
+no lookahead) is net-neutral: smoke 6.2500 → 6.2480 (−0.002; 2 faster / 1 slower / 2 play-changed, **no
+game to unwon**), regression d0 score-identical. Adopting therefore rebaselines the Dragonstorm d0 + d3/d5
+GT digests (scores unchanged); non-Dragonstorm GT is untouched.
+
 ### Step 2 (original spec) — acceleration-ordering heuristic
 
 **User's model of the deck:** "On the turn you go off you just use a big burst of mana and win." The
