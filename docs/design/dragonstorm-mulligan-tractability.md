@@ -82,3 +82,45 @@ Artifacts: `logs/Dragonstorm_gen/slow_captures_f2a56b1.txt` (reproducer hands+se
 `logs/Dragonstorm_gen/partial_journal_f2a56b1.json` (partial floor, f2a56b1-only), launch script
 `scripts/dragonstorm_keepgen.sh`. See also `memory/dragonstorm-degenerate-game-capture.md` and
 `docs/design/dragonstorm-float-colour-collapse.md`.
+
+## Update 2026-07-25 (commit 365f3d3) — the Apex captures were contention-distorted; no byte-identical Apex cut
+
+A single-threaded replay of the captured worst Apex hands (via `MTG_KEEP_REPLAY`, `run_one` in
+`src/analyzer/ExhaustiveKeep.cpp:946-1039`; reverse-engineered `--seed 10000001`, d3/b10/max-turns 8,
+`MTG_LOTUS_PREFIX=1`) shows the `SLOW-ROLLOUT ms` ranking in the capture logs is **wall-clock under
+24-core contention, not algorithmic cost**:
+
+| hand | captured (all-cores) | true single-threaded @365f3d3 | win |
+|---|---|---|---|
+| Sandstone Needle x2; Apex of Power x4 | 91,719 ms | **~5.5 s** | T5 |
+| Pyretic Ritual x1; Apex of Power x2; Lotus Bloom x3 | 68,650 ms | **~24 s** | T6 |
+| Ruby Medallion x1; Pyretic Ritual x1; Apex of Power x3; Lotus Bloom x1 | 54,712 ms | **~23 s** | no-win |
+
+Consequences for the levers above:
+- **The multi-Apex CHAIN is the *cheapest* of the three** single-threaded — the opposite of the capture
+  ranking. The genuinely slow class is **ritual + Apex + Lotus**, whose cost is the Pyretic/Lotus
+  **plan-count powerset** that funds the Apex payoff (odometers 512–1024), NOT the chain. So lever (2)
+  as originally framed ("collapse the subset-of-exiled-cards powerset, possibly byte-identical") targets
+  the wrong thing; the ritual powerset (lever 1's territory) dominates.
+- **No byte-identical Apex cut exists.** With the first Apex's 10-of-one-colour float still up, casting a
+  *second* Apex (`cast_from_hand=false` → no float, `TurnSolver.cpp:4082/4798`; a pure 10-mana dig) can
+  reveal a castable Dragon/Dragonstorm and win *this* turn — a real line stopping at one Apex misses.
+  Only `CanPay`-failing subsets are safely prunable, and `consider()` already drops those. So any Apex
+  tractability lever is **result-changing (heuristic)**, adopted via the heuristic-optimization workflow
+  + explicit approval — same class as levers (1)/(3).
+- **All four existing collapses already reach the Apex-staged (`m_is_staged`) copies** (they operate on
+  `CollectActions` output, whose `ap.hand` includes merged staged cards — `TurnSolver.cpp:1400`, staged
+  pushed at `4790`, real-executor merge `AIEngine.cpp:1152-1166`). So the residual is not a coverage
+  gap; it is exactly what the prunes deliberately keep (staged Apex counts as a reachable payoff, and
+  `DropRitualGroupsIfNoPayoff`'s `feasible_net >= cheapest_payoff` test passes so all rituals stay).
+
+**Recommended Apex lever ("gate #2" — payoff-reachability gate):** keep a chained Apex — and keep ritual
+mana beyond `Apex-cost + 10` — only when a *real* payoff (Dragon/Dragonstorm) is reachable after paying
+for it; otherwise prune. Caps BOTH slow classes (Apex has no `{X}` → surplus ritual mana is wasted
+unless it funds a chained Apex or a dragon). Hook points (must stay in lockstep, like `OrderingOpaque`):
+staged-Apex candidate emit `TurnSolver.cpp:1878-1903`; group pre-drop beside `DropRitualGroupsIfNoPayoff`
+(`2355`/`3105`); per-subset `consider()` `2628`; chain recursion `AIEngine.cpp:2020` + `TurnSolver.cpp:4809`.
+Preferred over a blind chain-depth cap because it preserves dig-to-lethal lines precisely when a dragon
+is reachable. Branch-stats caveat: `MTG_BRANCH_STATS` fires only in `EnumeratePlans` (`TurnSolver.cpp:6693`),
+NOT in the rollout-leaf `Solve`, so the Sandstone chain's cost is invisible to it (lives in the leaf
+re-solve) — use `MTG_ROLLOUT_STATS` (SimulateToEnd count) + wall time for the leaf class.
