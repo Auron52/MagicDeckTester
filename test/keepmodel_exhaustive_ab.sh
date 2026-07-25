@@ -52,7 +52,11 @@ log "exhaustive profile: $EXH"
 # workaround for A/B baseline contamination.
 ab(){ local prof="$1" tag="$2" exb="$3"
   for d in $DEPTHS; do for s in $SEEDS; do
-    MTG_EXHAUSTIVE_PROFILE=none MTG_DUMP_WINS=1 MTG_EXHAUSTIVE_BOTTOM="$exb" "$BIN" "$DECK" --profile "$prof" --seed "$s" \
+    # --ignore-play-profile: take depth/budget from the CLI sweep even when the deck has an enabled
+    # value_play block (adopted value-leaf); without it the block forces its own depth and the engine
+    # rejects an explicit --depth. No-op for decks without value_play. The value leaf stays default-on,
+    # so both arms play shipped-equivalently and only the keep/bottom policy differs.
+    MTG_EXHAUSTIVE_PROFILE=none MTG_DUMP_WINS=1 MTG_EXHAUSTIVE_BOTTOM="$exb" "$BIN" "$DECK" --profile "$prof" --ignore-play-profile --seed "$s" \
       --games "$GAMES" --depth "$d" --budget-ms 20 --max-turns 8 --lookahead-bottoming --threads 0 \
       > "$OUT/wins_${tag}_d${d}_s${s}.wins" 2> "$OUT/err_${tag}_d${d}_s${s}.txt"
   done; done; }
