@@ -106,3 +106,39 @@ line evaluation. Candidate source-counting spots: `DecisionProviders.cpp:469,478
 
 Read `.claude/skills/mtg-rules.md` (mana abilities / restricted mana) and `.claude/skills/mtg-ai.md`
 (tap-order heuristic, `heuristic-optimization`) before changing the ranking.
+
+## Fix attempt #1 (2026-07-25) — PROMISING but a TRADEOFF, NOT adopted
+
+Tried the primary fix: in `ManaSourceRank` count only non-`Colorless` colours toward `ncol`:
+
+```cpp
+// was: const int ncol = static_cast<int>(prod.size());
+int ncol = 0;
+for (Color c : prod) { if (c != Color::Colorless) { ++ncol; } }
+int rank = ncol <= 1 ? 10 : ncol * 10;
+```
+
+Rebuilt + tested (CURRENT correct cards):
+- **Recovers 5/6** target d3 s4004 games to T4 (gi80/278/314/725/726). gi277 stays T5 → that one is
+  the **secondary (flag-only) bug**, not this path.
+- **Blast radius = slivers-only.** Full smoke vs GT: burn / th / knights / antilife / hinata /
+  **dragonstorm all byte-identical** (incl. dragonstorm's own colored_creature_only lands). The 3
+  `unclaimed_*` scenario tests still PASS.
+- **BUT it's a heuristic tradeoff, not a clean win.** At the smoke seed s1001 slivers gets slightly
+  *worse*: d0 4.6500→4.6570 (+0.007), d5 4.1933→4.2000 (+0.007), d3 unchanged. i.e. "spend Sliver
+  Hive earlier" (rank 50) helps the s4004 Mutavault-collision games but "save it" (rank 60) happens
+  to help some s1001 games. So `e6c1f2c`'s accidental rerank is a MIXED heuristic change, not a pure
+  correctness regression — EXCEPT that at s4004 the faster line is genuinely *unreachable at deep
+  search* (the tap-order is baked into rollouts, a real search-completeness concern), which the
+  s1001 "just slightly worse line" is not.
+
+**Conclusion:** treat this as a heuristic-optimization problem, not a one-line bug fix. Run the full
+regression + overnight A/B (train vs held-out seeds, avg9) per `.claude/skills/heuristic-optimization.md`
+before adopting; consider a MORE SURGICAL rank change (e.g. only prevent a coloured-producing land
+from crossing into the colourless-manland reserve tier, without otherwise moving it), and possibly
+gate it in the archetype provider rather than the root. The exact one-line patch above was **reverted**
+from the working tree (unvalidated); reapply from here on Monday.
+
+Still open: the **secondary (flag-only) bug** — the affordability/source path at `SpellEffects.h:4198,
+4235,4249` keys on `creature_mana_only`/`colored_creature_only && !for_creature`; find the CALLER that
+passes `for_creature=false` while evaluating an all-creature line (gi277, seed 4281, is the repro).
