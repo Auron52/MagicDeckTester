@@ -1,0 +1,185 @@
+{
+  "seed": 13, "game_index": 12, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [7, 27] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 42, "name": "Lion Umbra" }, { "num": 17, "name": "Daybreak Coronet" }, { "num": 9, "name": "Branchloft Pathway" }, { "num": 46, "name": "Rancor" }, { "num": 30, "name": "Gryff's Boon" }, { "num": 7, "name": "Armadillo Cloak" }, { "num": 21, "name": "Ethereal Armor" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 47, "name": "Rancor" }, { "num": 55, "name": "Slippery Bogle" }, { "num": 46, "name": "Rancor" }, { "num": 54, "name": "Slippery Bogle" }, { "num": 60, "name": "Spirit Mantle" }, { "num": 13, "name": "Brushland" }, { "num": 48, "name": "Rancor" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 12, "name": "Branchloft Pathway" }, { "num": 57, "name": "Slippery Bogle" }, { "num": 47, "name": "Rancor" }, { "num": 27, "name": "Gladecover Scout" }, { "num": 44, "name": "Plains" }, { "num": 7, "name": "Armadillo Cloak" }, { "num": 6, "name": "Ancestral Mask" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 12, "name": "Branchloft Pathway", "win_optimal": true }, { "num": 57, "name": "Slippery Bogle", "win_optimal": true }, { "num": 47, "name": "Rancor", "win_optimal": true }, { "num": 27, "name": "Gladecover Scout", "win_optimal": true }, { "num": 44, "name": "Plains", "win_optimal": true }, { "num": 7, "name": "Armadillo Cloak", "win_optimal": true }, { "num": 6, "name": "Ancestral Mask", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 7, "name": "Armadillo Cloak" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 12, "name": "Branchloft Pathway", "win_optimal": true }, { "num": 57, "name": "Slippery Bogle", "win_optimal": true }, { "num": 47, "name": "Rancor", "win_optimal": true }, { "num": 27, "name": "Gladecover Scout", "win_optimal": true }, { "num": 44, "name": "Plains", "win_optimal": true }, { "num": 6, "name": "Ancestral Mask", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 6, "name": "Ancestral Mask" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Ancestral Mask" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 6, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 12, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 57, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Branchloft Pathway; cast: Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 1, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Gladecover Scout" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Branchloft Pathway", "idx": 2, "num": 0, "is_land": true }, { "name": "Slippery Bogle", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 28, "name": "Gladecover Scout", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Gladecover Scout", "land": "Plains", "casts": ["Gladecover Scout"], "actions": [{ "card": "Gladecover Scout" }] },
+    { "index": 1, "summary": "land=none; cast: Gladecover Scout", "land": null, "casts": ["Gladecover Scout"], "actions": [{ "card": "Gladecover Scout" }] },
+    { "index": 2, "summary": "land=Plains; cast: Rancor → Slippery Bogle", "land": "Plains", "casts": ["Rancor"], "actions": [{ "card": "Rancor", "enchant_target": 57, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 3, "summary": "land=none; cast: Rancor → Slippery Bogle", "land": null, "casts": ["Rancor"], "actions": [{ "card": "Rancor", "enchant_target": 57, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 4, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Gladecover Scout" }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Slippery Bogle (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Branchloft Pathway", "idx": 2, "num": 0, "is_land": true }, { "name": "Plains", "idx": 6, "num": 0, "is_land": true }, { "name": "Rancor", "idx": 7, "num": 47, "is_aura": true, "attached_to": 57, "is_land": false }, { "name": "Slippery Bogle", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 28, "name": "Gladecover Scout", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Gladecover Scout", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gladecover Scout", "land": null, "casts": ["Gladecover Scout"], "actions": [{ "card": "Gladecover Scout" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Horizon Canopy" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Slippery Bogle (3) — 3 to opponent (17→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Branchloft Pathway", "idx": 2, "num": 0, "is_land": true }, { "name": "Gladecover Scout", "idx": 10, "num": 28, "is_land": false }, { "name": "Plains", "idx": 6, "num": 0, "is_land": true }, { "name": "Rancor", "idx": 7, "num": 47, "is_aura": true, "attached_to": 57, "is_land": false }, { "name": "Slippery Bogle", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 6, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 29, "name": "Gladecover Scout", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Horizon Canopy; cast: Gladecover Scout", "land": "Horizon Canopy", "casts": ["Gladecover Scout"], "actions": [{ "card": "Gladecover Scout" }] },
+    { "index": 1, "summary": "land=none; cast: Gladecover Scout", "land": null, "casts": ["Gladecover Scout"], "actions": [{ "card": "Gladecover Scout" }] },
+    { "index": 2, "summary": "land=Horizon Canopy; cast: Ancestral Mask → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 57, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 3, "summary": "land=Horizon Canopy; cast: Ancestral Mask → Gladecover Scout", "land": "Horizon Canopy", "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 28, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 4, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Gryff's Boon" }],
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Slippery Bogle (5), Gladecover Scout (1) — 6 to opponent (14→8)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 19, "battlefield": [{ "name": "Ancestral Mask", "idx": 12, "num": 6, "is_aura": true, "attached_to": 57, "is_land": false }, { "name": "Branchloft Pathway", "idx": 2, "num": 0, "is_land": true }, { "name": "Gladecover Scout", "idx": 10, "num": 28, "is_land": false }, { "name": "Horizon Canopy", "idx": 11, "num": 0, "is_land": true }, { "name": "Plains", "idx": 6, "num": 0, "is_land": true }, { "name": "Rancor", "idx": 7, "num": 47, "is_aura": true, "attached_to": 57, "is_land": false }, { "name": "Slippery Bogle", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 29, "name": "Gladecover Scout", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Gryff's Boon", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gladecover Scout, Gryff's Boon → Slippery Bogle", "land": null, "casts": ["Gladecover Scout", "Gryff's Boon"], "actions": [{ "card": "Gladecover Scout" }, { "card": "Gryff's Boon", "enchant_target": 57, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 1, "summary": "land=none; cast: Gryff's Boon → Slippery Bogle, Gladecover Scout", "land": null, "casts": ["Gryff's Boon", "Gladecover Scout"], "actions": [{ "card": "Gryff's Boon", "enchant_target": 57, "enchant_target_name": "Slippery Bogle" }, { "card": "Gladecover Scout" }] },
+    { "index": 2, "summary": "land=none; cast: Gladecover Scout, Gryff's Boon → Gladecover Scout", "land": null, "casts": ["Gladecover Scout", "Gryff's Boon"], "actions": [{ "card": "Gladecover Scout" }, { "card": "Gryff's Boon", "enchant_target": 28, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 3, "summary": "land=none; cast: Gryff's Boon → Gladecover Scout, Gladecover Scout", "land": null, "casts": ["Gryff's Boon", "Gladecover Scout"], "actions": [{ "card": "Gryff's Boon", "enchant_target": 28, "enchant_target_name": "Gladecover Scout" }, { "card": "Gladecover Scout" }] },
+    { "index": 4, "summary": "land=none; cast: Gladecover Scout, Gryff's Boon → Gladecover Scout", "land": null, "casts": ["Gladecover Scout", "Gryff's Boon"], "actions": [{ "card": "Gladecover Scout" }, { "card": "Gryff's Boon", "enchant_target": 29, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 5, "summary": "land=none; cast: Ancestral Mask → Slippery Bogle", "land": null, "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 57, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 6, "summary": "land=none; cast: Ancestral Mask → Gladecover Scout", "land": null, "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 28, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 7, "summary": "land=none; cast: Gladecover Scout", "land": null, "casts": ["Gladecover Scout"], "actions": [{ "card": "Gladecover Scout" }] },
+    { "index": 8, "summary": "land=none; cast: Gryff's Boon → Slippery Bogle", "land": null, "casts": ["Gryff's Boon"], "actions": [{ "card": "Gryff's Boon", "enchant_target": 57, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 9, "summary": "land=none; cast: Gryff's Boon → Gladecover Scout", "land": null, "casts": ["Gryff's Boon"], "actions": [{ "card": "Gryff's Boon", "enchant_target": 28, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 11, "summary": "sacrifice Horizon Canopy to draw", "land": null, "casts": [], "actions": [{ "card": "Horizon Canopy", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

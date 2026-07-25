@@ -125,6 +125,11 @@ struct StackEntry
                                         // (vs off another Apex's staged exile)? Stamped = !hand_card.m_is_staged
                                         // at the cast site; Apex adds its 10-of-one-colour float ONLY when
                                         // true. True/unused for every non-impulse spell.
+    int                 enchant_target = 0;         // Aura cast: the card.m_number of the creature this Aura
+                                        // enters attached to (a SEARCH decision -- one plan variant per legal
+                                        // creature). Set at the cast site from Action::enchant_target; read at
+                                        // resolution (EffectHandler default case) to set the aura permanent's
+                                        // aura_attached_to. 0 => not an aura / heuristic fallback pick.
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
 };
 

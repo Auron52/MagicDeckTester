@@ -104,8 +104,37 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         for (const std::string& s : def.params.tap_token_subtypes)    { reg.Intern(s); }
         for (const std::string& s : def.params.cast_token_subtypes)   { reg.Intern(s); }
         m_def_hash[def.card.m_name] = CardDefHash(entry);
+        // Synthesize the BACK face of a modal double-faced LAND (Pathway) as its own DB entry: a
+        // single-colour land the player may choose to play instead of the front. Derived entirely
+        // from the front's mdfc_back_* params, so no second JSON entry is hand-authored, and its
+        // colour is read live off the played permanent's name like any other land (see PlayLandByName).
+        if (!def.params.mdfc_back_name.empty())
+        {
+            const std::string bn = def.params.mdfc_back_name;
+            CardDefinition back = def;                      // Land type/subtypes copied from the front
+            back.card.m_name = bn;                          // InternedName assign
+            back.card.m_def  = nullptr;                     // name-derived def cache must reset
+            back.card.RehashName();
+            back.params.produces = def.params.mdfc_back_produces;
+            back.params.mdfc_back_name.clear();             // the back face has no further face
+            back.params.mdfc_back_produces.clear();
+            m_def_hash[bn] = CardDefHash(entry) ^ std::hash<std::string>{}(bn);
+            m_cards[bn] = std::move(back);
+        }
         m_cards[def.card.m_name] = std::move(def);
     }
+}
+
+std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
+{
+    std::vector<std::string> out;
+    for (const auto& [name, def] : m_cards)
+    {
+        if (!def.params.mdfc_back_name.empty()) { out.push_back(def.params.mdfc_back_name); }
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
 }
 
 void CardDatabase::Register(const std::string& name, CardFactory factory)
@@ -183,6 +212,9 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Suspend")       { return Keyword::Suspend; }   // inert tag; mechanic is param-modelled
     if (s == "Splice")        { return Keyword::Splice;  }   // inert tag; mechanic is param-modelled
     if (s == "Storm")         { return Keyword::Storm;   }   // inert tag; mechanic is param-modelled
+    if (s == "Hexproof")      { return Keyword::Hexproof; } // inert tag; provably inert vs passive opp
+    if (s == "Enchant")       { return Keyword::Enchant; }   // inert tag; aura attach is param-modelled
+    if (s == "Umbra armor")   { return Keyword::UmbraArmor; } // inert tag; provably inert vs passive opp
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -225,6 +257,25 @@ static ManaCost ManaCostFromString(const std::string& cost_str)
         else if (sym == "G") { ++cost.green; }
         else if (sym == "C") { ++cost.colorless; }
         else if (sym == "X") { cost.has_x = true; ++cost.x_pips; }
+        else if (sym.find('/') != std::string::npos)
+        {
+            // Two-colour hybrid pip ({G/U} etc.): the ManaPool has no hybrid support, so model it as
+            // its FIRST listed colour. The only hybrid card in the corpus is Slippery Bogle {G/U} in a
+            // green deck with no blue source, so the green side is the only payable one anyway (the
+            // simplification is disclosed on the card). A number/colour hybrid ({2/W}) or Phyrexian
+            // ({G/P}) is not used by any card; falls through to the first recognised colour, else 0.
+            std::string first = sym.substr(0, sym.find('/'));
+            if      (first == "W") { ++cost.white; }
+            else if (first == "U") { ++cost.blue; }
+            else if (first == "B") { ++cost.black; }
+            else if (first == "R") { ++cost.red; }
+            else if (first == "G") { ++cost.green; }
+            else if (first == "C") { ++cost.colorless; }
+            else { std::string second = sym.substr(sym.find('/') + 1);
+                   if      (second == "W") { ++cost.white; } else if (second == "U") { ++cost.blue; }
+                   else if (second == "B") { ++cost.black; } else if (second == "R") { ++cost.red; }
+                   else if (second == "G") { ++cost.green; } else if (second == "C") { ++cost.colorless; } }
+        }
         else
         {
             try { cost.generic += std::stoi(sym); }
@@ -305,6 +356,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     {
         p.produces.push_back(ColorFromString(c));
     }
+    p.mdfc_back_name = params.value("mdfc_back_name", std::string{});
+    for (const std::string& c : params.value("mdfc_back_produces", json::array()))
+    {
+        p.mdfc_back_produces.push_back(ColorFromString(c));
+    }
     for (const std::string& s : params.value("subtypes_affected", json::array()))
     {
         p.subtypes_affected.push_back(s);
@@ -347,6 +403,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.tap_token_requires_subtypes.push_back(s);
 
     p.enters_tapped       = params.value("enters_tapped",       false);
+    p.fastland_max_other_lands = params.value("fastland_max_other_lands", -1);
     p.no_max_hand_size    = params.value("no_max_hand_size",    false);
     p.discard_land_damage = params.value("discard_land_damage", 0);
     p.cascade_max_mv      = params.value("cascade_max_mv",      0);
@@ -467,6 +524,20 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.taps_spawn_opp_token      = params.value("taps_spawn_opp_token", false);
     p.expressive_iteration      = params.value("expressive_iteration", false);
     p.cast_draw                 = params.value("cast_draw", 0);
+
+    // Auras (attach-to-creature enchantments)
+    p.is_aura                   = params.value("is_aura", false);
+    p.aura_power_bonus          = params.value("aura_power_bonus", 0);
+    p.aura_tough_bonus          = params.value("aura_tough_bonus", 0);
+    p.aura_grants_lifelink      = params.value("aura_grants_lifelink", false);
+    p.aura_scale_kind           = params.value("aura_scale_kind", std::string());
+    p.aura_scale_power          = params.value("aura_scale_power", 0);
+    p.aura_scale_tough          = params.value("aura_scale_tough", 0);
+    p.aura_enchant_requires     = params.value("aura_enchant_requires", std::string());
+    p.aura_self_buff_power      = params.value("aura_self_buff_power", 0);
+    p.aura_self_buff_tough      = params.value("aura_self_buff_tough", 0);
+    p.draw_on_aura_cast         = params.value("draw_on_aura_cast", false);
+    p.aura_cast_tutor_attach    = params.value("aura_cast_tutor_attach", false);
 
     return p;
 }

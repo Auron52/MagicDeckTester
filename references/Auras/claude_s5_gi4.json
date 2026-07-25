@@ -1,0 +1,139 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 27, "name": "Gladecover Scout" }, { "num": 9, "name": "Branchloft Pathway" }, { "num": 59, "name": "Spirit Link" }, { "num": 54, "name": "Slippery Bogle" }, { "num": 43, "name": "Plains" }, { "num": 17, "name": "Daybreak Coronet" }, { "num": 1, "name": "All That Glitters" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Audacity" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "All That Glitters", "cost": "{1}{W}", "mv": 2, "kind": "permanent" }, { "num": 8, "name": "Audacity", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 9, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 27, "name": "Gladecover Scout", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Spirit Link", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Branchloft Pathway; cast: Gladecover Scout", "land": "Branchloft Pathway", "casts": ["Gladecover Scout"], "actions": [{ "card": "Gladecover Scout" }] },
+    { "index": 1, "summary": "land=Branchloft Pathway; cast: Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 2, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 9, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Ethereal Armor" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Branchloft Pathway", "idx": 1, "num": 0, "is_land": true }, { "name": "Gladecover Scout", "idx": 2, "num": 27, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "All That Glitters", "cost": "{1}{W}", "mv": 2, "kind": "permanent" }, { "num": 8, "name": "Audacity", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 17, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 21, "name": "Ethereal Armor", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 43, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Spirit Link", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Slippery Bogle, Spirit Link → Gladecover Scout", "land": "Plains", "casts": ["Slippery Bogle", "Spirit Link"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 1, "summary": "land=Plains; cast: Spirit Link → Gladecover Scout, Slippery Bogle", "land": "Plains", "casts": ["Spirit Link", "Slippery Bogle"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Slippery Bogle" }] },
+    { "index": 2, "summary": "land=Plains; cast: Ethereal Armor → Gladecover Scout, Slippery Bogle", "land": "Plains", "casts": ["Ethereal Armor", "Slippery Bogle"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Slippery Bogle" }] },
+    { "index": 3, "summary": "land=Plains; cast: Slippery Bogle, Ethereal Armor → Gladecover Scout", "land": "Plains", "casts": ["Slippery Bogle", "Ethereal Armor"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 4, "summary": "land=Plains; cast: Slippery Bogle", "land": "Plains", "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 5, "summary": "land=none; cast: Slippery Bogle", "land": null, "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 6, "summary": "land=Plains; cast: Audacity → Gladecover Scout, Spirit Link → Gladecover Scout", "land": "Plains", "casts": ["Audacity", "Spirit Link"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 7, "summary": "land=Plains; cast: Spirit Link → Gladecover Scout, Audacity → Gladecover Scout", "land": "Plains", "casts": ["Spirit Link", "Audacity"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 8, "summary": "land=Plains; cast: Audacity → Gladecover Scout, Ethereal Armor → Gladecover Scout", "land": "Plains", "casts": ["Audacity", "Ethereal Armor"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 9, "summary": "land=Plains; cast: Ethereal Armor → Gladecover Scout, Audacity → Gladecover Scout", "land": "Plains", "casts": ["Ethereal Armor", "Audacity"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 10, "summary": "land=Plains; cast: Spirit Link → Gladecover Scout", "land": "Plains", "casts": ["Spirit Link"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 11, "summary": "land=Plains; cast: All That Glitters → Gladecover Scout", "land": "Plains", "casts": ["All That Glitters"], "actions": [{ "card": "All That Glitters", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 12, "summary": "land=Plains; cast: Audacity → Gladecover Scout", "land": "Plains", "casts": ["Audacity"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 13, "summary": "land=Plains; cast: Ethereal Armor → Gladecover Scout", "land": "Plains", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 14, "summary": "land=none; cast: Audacity → Gladecover Scout", "land": null, "casts": ["Audacity"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 15, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Light-Paws, Emperor's Voice" }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Gladecover Scout (5) — 5 to opponent (20→15)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Audacity", "idx": 5, "num": 8, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Branchloft Pathway", "idx": 1, "num": 0, "is_land": true }, { "name": "Ethereal Armor", "idx": 4, "num": 21, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Gladecover Scout", "idx": 2, "num": 27, "is_land": false }, { "name": "Plains", "idx": 3, "num": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "All That Glitters", "cost": "{1}{W}", "mv": 2, "kind": "permanent" }, { "num": 17, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Spirit Link", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Light-Paws, Emperor's Voice", "land": null, "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 1, "summary": "land=none; cast: Slippery Bogle, Spirit Link → Gladecover Scout", "land": null, "casts": ["Slippery Bogle", "Spirit Link"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 2, "summary": "land=none; cast: Spirit Link → Gladecover Scout, Slippery Bogle", "land": null, "casts": ["Spirit Link", "Slippery Bogle"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Slippery Bogle" }] },
+    { "index": 3, "summary": "land=none; cast: Slippery Bogle", "land": null, "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 4, "summary": "land=none; cast: Spirit Link → Gladecover Scout", "land": null, "casts": ["Spirit Link"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 5, "summary": "land=none; cast: All That Glitters → Gladecover Scout", "land": null, "casts": ["All That Glitters"], "actions": [{ "card": "All That Glitters", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 22, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Branchloft Pathway" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Gladecover Scout (9) — 9 to opponent (15→6)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "All That Glitters", "idx": 6, "num": 1, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Audacity", "idx": 5, "num": 8, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Branchloft Pathway", "idx": 1, "num": 0, "is_land": true }, { "name": "Ethereal Armor", "idx": 4, "num": 21, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Gladecover Scout", "idx": 2, "num": 27, "is_land": false }, { "name": "Plains", "idx": 3, "num": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Spirit Link", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Branchloft Pathway; cast: Light-Paws, Emperor's Voice, Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Light-Paws, Emperor's Voice", "Slippery Bogle"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }, { "card": "Slippery Bogle" }] },
+    { "index": 1, "summary": "land=Branchloft Pathway; cast: Slippery Bogle, Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Slippery Bogle", "Light-Paws, Emperor's Voice"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 2, "summary": "land=Branchloft Pathway; cast: Light-Paws, Emperor's Voice, Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Light-Paws, Emperor's Voice", "Slippery Bogle"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }, { "card": "Slippery Bogle" }] },
+    { "index": 3, "summary": "land=Branchloft Pathway; cast: Slippery Bogle, Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Slippery Bogle", "Light-Paws, Emperor's Voice"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 4, "summary": "land=Branchloft Pathway; cast: Light-Paws, Emperor's Voice, Spirit Link → Gladecover Scout", "land": "Branchloft Pathway", "casts": ["Light-Paws, Emperor's Voice", "Spirit Link"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 5, "summary": "land=Branchloft Pathway; cast: Spirit Link → Gladecover Scout, Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Spirit Link", "Light-Paws, Emperor's Voice"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 6, "summary": "land=Branchloft Pathway; cast: Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 7, "summary": "land=Branchloft Pathway; cast: Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 8, "summary": "land=none; cast: Light-Paws, Emperor's Voice", "land": null, "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 9, "summary": "land=Branchloft Pathway; cast: Slippery Bogle, Spirit Link → Gladecover Scout", "land": "Branchloft Pathway", "casts": ["Slippery Bogle", "Spirit Link"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 10, "summary": "land=Branchloft Pathway; cast: Spirit Link → Gladecover Scout, Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Spirit Link", "Slippery Bogle"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Slippery Bogle" }] },
+    { "index": 11, "summary": "land=Branchloft Pathway; cast: Slippery Bogle, Spirit Link → Gladecover Scout", "land": "Branchloft Pathway", "casts": ["Slippery Bogle", "Spirit Link"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 12, "summary": "land=Branchloft Pathway; cast: Spirit Link → Gladecover Scout, Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Spirit Link", "Slippery Bogle"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Slippery Bogle" }] },
+    { "index": 13, "summary": "land=Branchloft Pathway; cast: Daybreak Coronet → Gladecover Scout, Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Daybreak Coronet", "Slippery Bogle"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Slippery Bogle" }] },
+    { "index": 14, "summary": "land=Branchloft Pathway; cast: Slippery Bogle, Daybreak Coronet → Gladecover Scout", "land": "Branchloft Pathway", "casts": ["Slippery Bogle", "Daybreak Coronet"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Daybreak Coronet", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 15, "summary": "land=none; cast: Slippery Bogle, Spirit Link → Gladecover Scout", "land": null, "casts": ["Slippery Bogle", "Spirit Link"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 16, "summary": "land=none; cast: Spirit Link → Gladecover Scout, Slippery Bogle", "land": null, "casts": ["Spirit Link", "Slippery Bogle"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Slippery Bogle" }] },
+    { "index": 17, "summary": "land=Branchloft Pathway; cast: Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 18, "summary": "land=Branchloft Pathway; cast: Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 19, "summary": "land=none; cast: Slippery Bogle", "land": null, "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 20, "summary": "land=Branchloft Pathway; cast: Spirit Link → Gladecover Scout", "land": "Branchloft Pathway", "casts": ["Spirit Link"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 21, "summary": "land=Branchloft Pathway; cast: Spirit Link → Gladecover Scout", "land": "Branchloft Pathway", "casts": ["Spirit Link"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 22, "summary": "land=Branchloft Pathway; cast: Daybreak Coronet → Gladecover Scout", "land": "Branchloft Pathway", "casts": ["Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 23, "summary": "land=none; cast: Spirit Link → Gladecover Scout", "land": null, "casts": ["Spirit Link"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 24, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 25, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 26, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

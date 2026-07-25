@@ -39,6 +39,9 @@ DECKS = {
     # dragonstorm (storm/combo): like hinata/antilife the deep heuristic is expensive; use capped --hdepths
     # and --vdepths 1..5 for the fallback calibration (V5-vs-H_conv). value model generated 2026-07-22.
     "dragonstorm": ("decks/Dragonstorm/Dragonstorm.cod",  "decks/Dragonstorm/Dragonstorm.value.json",     8),
+    # auras (Bogles hexproof-aura aggro): board-driven like burn/slivers -> the value leaf is inert on
+    # quality (win decided by visible board+hand, not library uncertainty), a pure search SPEED win.
+    "auras":    ("decks/Auras/Auras.cod",                 "decks/Auras/Auras.value.json",                 8),
 }
 
 

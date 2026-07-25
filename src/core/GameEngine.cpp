@@ -386,10 +386,17 @@ void GameEngine::CombatPhase(GameState& state)
             dynamic_pw = DynamicBasePower(*adef, state, state.active_player_index);
         }
         int base_power = animate_pw + dynamic_pw + attacker->EffectivePower() + lord_pb + exalted_bonus;
+        base_power += AuraBonusFor(*attacker, state).first;   // Bogles: attached auras + Kor self-buff
         int power = base_power * (ds ? 2 : 1);
         opp.life -= power;
         total_combat_dmg += power;
-        if (power > 0) { state.opponent_lost_life_this_turn = true; }
+        if (power > 0)
+        {
+            state.opponent_lost_life_this_turn = true;
+            // Lifelink (modeled): combat damage also gains the controller that much life.
+            if (CreatureHasLifelink(*attacker, state))
+            { state.players[state.active_player_index].life += power; }
+        }
         if (g_play_event_sink && power > 0)
         { atk_desc.push_back(attacker->card.m_name.str() + " (" + std::to_string(power) + ")"); }
         if (!attacker->card.HasKeyword(Keyword::Vigilance)) { attacker->tapped = true; }

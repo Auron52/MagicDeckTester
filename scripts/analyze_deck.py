@@ -24,6 +24,7 @@ Options:
 
 import argparse
 import json
+import os
 import platform
 import re
 import subprocess
@@ -40,6 +41,7 @@ BUILD_DIR    = REPO_ROOT / "build"
 # executable suffix differs by platform.
 EXE_SUFFIX   = ".exe" if platform.system() == "Windows" else ""
 ANALYZER_BIN = BUILD_DIR / "Release" / f"mtg-analyze{EXE_SUFFIX}"
+MTG_BIN      = BUILD_DIR / "Release" / f"mtg{EXE_SUFFIX}"   # goldfish binary (cost-diagnostic A/B)
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -54,6 +56,10 @@ def ParseArgs():
                    help="Skip cmake rebuild")
     p.add_argument("--cards-json",   default=None,
                    help="Override path to cards.json")
+    p.add_argument("--no-cost-diagnostic", action="store_true",
+                   help="Skip the same-turn cost-handling A/B diagnostic (reframe off vs on)")
+    p.add_argument("--cost-diag-games", type=int, default=200,
+                   help="Games per condition for the cost-diagnostic A/B (default 200)")
     return p.parse_args()
 
 # ---------------------------------------------------------------------------
@@ -318,6 +324,111 @@ def RunAnalyzer(deck_path: Path, cards_json: Path) -> dict:
     return json.loads(result.stdout)
 
 # ---------------------------------------------------------------------------
+# Cost-aggregate diagnostic (automated onboarding test)
+# ---------------------------------------------------------------------------
+#
+# Answers automatically the question the cost-reframe experiment left for onboarding: "does this
+# deck's same-turn COST handling need attention?" -- so a new deck's cost interactions are a
+# measured verdict, not tribal knowledge. See docs/design/enumeration-feasibility-via-executor.md.
+#
+# Each param below is a same-turn cost interaction that ALREADY has a generic, param-driven credit
+# in the engine (TurnSolver) -- handled per-MECHANIC, not per-deck. A deck using only these needs no
+# per-deck code. A cost-shaped param NOT listed here is a NOVEL mechanic (add a generic credit + list
+# it here); until then the reframe still OFFERS its lines, so the deck works, just sub-optimally.
+KNOWN_COST_MECHANICS = {
+    "reduces_spell_color":  "cost reducer (Medallion-style)",   # SameTurnReducerGenericCredit
+    "affinity_for_subtype": "affinity",                          # SameTurnAffinityGenericCredit
+    "ritual_floating_mana": "ritual float",                      # BuildPool float credit
+    "mana_rock":            "mana-rock ramp",                    # rock-ramp credit
+}
+
+def _CardsIndex(cards_json: Path) -> dict:
+    if not cards_json.exists():
+        return {}
+    with open(cards_json, encoding="utf-8") as f:
+        data = json.load(f)
+    return {c["name"]: c for c in data.get("cards", []) if "name" in c}
+
+def ScanCostMechanics(card_names: list[str], cards_json: Path) -> list[dict]:
+    """Same-turn cost-interaction mechanics this deck uses (pure param scan, no game run)."""
+    index = _CardsIndex(cards_json)
+    seen  = []
+    for name in card_names:
+        params = (index.get(name) or {}).get("parameters", {})
+        for p, mech in KNOWN_COST_MECHANICS.items():
+            v = params.get(p)
+            present = (v is True) \
+                or (isinstance(v, (int, float)) and not isinstance(v, bool) and v) \
+                or (isinstance(v, str) and v)
+            if present:
+                seen.append({"card": name, "param": p, "mechanic": mech})
+    return seen
+
+def RunGoldfishAvg(deck_path: Path, games: int, seed: int, depth: int, extra_env: dict) -> float:
+    """Run the goldfish binary and return the avg-turn-to-win metric (lower = better)."""
+    if not MTG_BIN.exists():
+        raise RuntimeError(f"goldfish binary not found: {MTG_BIN} (build first)")
+    env = os.environ.copy()
+    env.update(extra_env)
+    # --ignore-play-profile so a fixed --depth drives BOTH conditions consistently (a deck whose
+    # profile enables value_play depth otherwise rejects --depth). The A/B only needs a common,
+    # cheap depth; the deck's shipped play policy is irrelevant to the cost-offer question.
+    cmd = [str(MTG_BIN), str(deck_path), "--ignore-play-profile",
+           "--games", str(games), "--seed", str(seed), "--depth", str(depth)]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, env=env)
+    if result.returncode != 0:
+        raise RuntimeError(f"goldfish run exited {result.returncode}")
+    m = re.search(r"avg \(turns\)\s*:\s*([0-9.]+)", result.stdout)
+    if not m:
+        raise RuntimeError("could not parse 'avg (turns)' from goldfish output")
+    return float(m.group(1))
+
+def CostAggregateDiagnostic(deck_path: Path, cards_json: Path, card_names: list[str],
+                            games: int = 200, seed: int = 90001, depth: int = 3) -> dict:
+    """
+    Automated onboarding test for same-turn cost handling. Verdicts:
+      NO_COST_INTERACTIONS -- no cost-mechanic cards; base aggregate suffices (no game run).
+      COST_NEUTRAL         -- reframe changes nothing within noise; handled by generic credits.
+      REFRAME_HELPS        -- base aggregate under-credits; reframe recovers (faster avg). Enable
+                              MTG_COST_REFRAME for the deck, or add/verify the mechanic's credit.
+      HIGH_DISCOUNT_COMBO  -- reframe floods the fixed budget and plays worse; wants the ACCURATE
+                              aggregate (its generic credit), NOT the reframe.
+    Metric = avg-turn-to-win (lower = better); delta = reframe_on - base. seed disjoint from the
+    regression suite's (1001/2002/3003/700001) so the diagnostic never overlaps its ground truth.
+    """
+    mechanics = ScanCostMechanics(card_names, cards_json)
+    out = {"cost_mechanics": mechanics}
+    if not mechanics:
+        out["verdict"] = "NO_COST_INTERACTIONS"
+        out["detail"]  = "No same-turn cost-interaction cards; the base mana aggregate suffices."
+        return out
+    try:
+        base    = RunGoldfishAvg(deck_path, games, seed, depth, {"MTG_COST_REFRAME": "0"})
+        reframe = RunGoldfishAvg(deck_path, games, seed, depth, {"MTG_COST_REFRAME": "1"})
+    except RuntimeError as e:
+        out["verdict"] = "SKIPPED"
+        out["detail"]  = f"cost A/B skipped: {e}"
+        return out
+    delta = round(reframe - base, 4)
+    NOISE = 0.02
+    out.update({"avg_base": base, "avg_reframe": reframe, "delta": delta,
+                "games": games, "seed": seed, "depth": depth})
+    if delta <= -NOISE:
+        out["verdict"] = "REFRAME_HELPS"
+        out["detail"]  = ("base aggregate UNDER-credits this deck's same-turn cost lines; the reframe "
+                          "recovers them. Enable MTG_COST_REFRAME for this deck, or add/verify the "
+                          "generic credit for its mechanic(s).")
+    elif delta >= NOISE:
+        out["verdict"] = "HIGH_DISCOUNT_COMBO"
+        out["detail"]  = ("reframe floods the fixed-budget search and plays WORSE -- high-discount combo; "
+                          "keep the ACCURATE aggregate (generic credit), do NOT enable the reframe.")
+    else:
+        out["verdict"] = "COST_NEUTRAL"
+        out["detail"]  = ("reframe neither helps nor hurts within noise -- cost interactions are already "
+                          "handled by the base aggregate's generic credits.")
+    return out
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -391,6 +502,18 @@ def Main():
         UpdateDeckProfile(deck_path, profile_updates)
 
     report["analysis"] = analysis
+
+    # 7. Cost-aggregate diagnostic — automated onboarding test for same-turn cost handling.
+    if not args.no_cost_diagnostic:
+        print("  Running cost-aggregate diagnostic (reframe A/B)...", file=sys.stderr)
+        try:
+            diag = CostAggregateDiagnostic(deck_path, cards_json, existing,
+                                           games=args.cost_diag_games)
+        except Exception as e:  # never let the diagnostic sink the analysis
+            diag = {"verdict": "ERROR", "detail": str(e)}
+        report["cost_diagnostic"] = diag
+        print(f"  Cost diagnostic: {diag.get('verdict')} — {diag.get('detail', '')}", file=sys.stderr)
+
     print(json.dumps(report, indent=2))
 
 if __name__ == "__main__":

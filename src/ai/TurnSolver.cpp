@@ -396,6 +396,26 @@ static bool SubsetPayable(const bool have[5], const std::vector<Action>& cands,
 // Only creatures cast BEFORE the affinity card (lower CastOrderRank) count -- matching the order the
 // executor realises. Capped at each affinity card's remaining generic. Returns 0 unless the subset
 // holds an affinity card, so every non-affinity deck/seed is byte-identical.
+// MTG_NO_COST_TRICKS (default: tricks ON): disables the per-deck same-turn cost-credit patches
+// (SameTurnReducerGenericCredit + SameTurnAffinityGenericCredit). Set to TEST whether the general
+// cost-reframe recovers their value on an EXISTING deck stripped of its hand-patches -- a proxy for
+// onboarding a NEW deck patch-free. See docs/design/enumeration-feasibility-via-executor.md.
+static bool CostTricksEnabled()
+{
+    static const bool on = []{ const char* e = std::getenv("MTG_NO_COST_TRICKS"); return !(e && std::string(e) == "1"); }();
+    return on;
+}
+// MTG_COST_REFRAME (default OFF -> byte-identical): the deck-agnostic over-optimistic enumeration
+// relaxation. In EnumeratePlans, offer an INTERACTING subset the flat-pool aggregate rejects -- assume its
+// generic is same-turn-coverable (what reducers/affinity cut, or rituals float), require only the COLOURED
+// pips to be really payable -- and let the scoring apply (SolveWithLookahead 9446/9467) validate for real.
+// Replaces per-deck credit patches: a new deck's cost mechanic is offered without one.
+static bool CostReframeEnabled()
+{
+    static const bool on = []{ const char* e = std::getenv("MTG_COST_REFRAME"); return e && std::string(e) == "1"; }();
+    return on;
+}
+
 static int SameTurnAffinityGenericCredit(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel)
 {
@@ -555,6 +575,7 @@ static int PendingAttackDamage(const GameState& state)
             if (animated) { base_pw += adef->params.animate_power; }
             base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
+        base_pw += AuraBonusFor(p, state).first;                 // Bogles: attached auras + Kor self-buff
         dmg += base_pw * (ds ? 2 : 1);
         attackers.push_back(&p);
     }
@@ -1947,6 +1968,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             }
         }
 
+        // Aura (Bogles): the enchant TARGET is a SEARCH decision -- which creature carries the aura
+        // changes the clock (summoning sickness + Kor Spiritdancer's per-aura self-buff). Emit one
+        // CastFromHand variant per legal creature target (sharing hand_index -> mutually exclusive),
+        // so the search picks. No legal target -> uncastable (an aura can't enchant nothing,
+        // CR 601.2c) -> not emitted, the card stays in hand. Restriction-filtered in
+        // LegalEnchantTargets (Daybreak Coronet: a creature already carrying an aura; Lion Umbra: a
+        // modified creature). The provider is NOT the narrower here -- every legal target is emitted.
+        if (def.params.is_aura)
+        {
+            for (int tgt_num : LegalEnchantTargets(state, state.active_player_index, def.params))
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(def, state);
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = true;   // enchantments are noncreature spells
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.enchant_target = tgt_num;
+                actions.push_back(std::move(a));
+            }
+            continue;
+        }
+
         // Count damage that actually reaches the opponent's life total. A player/multi-target burn
         // deals its face damage directly (Searing Blaze: 1, or landfall 3). A creature-only burn
         // deals damage to a permanent -- EXCEPT Searing Blood, whose "when that creature dies" rider
@@ -2725,7 +2771,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
         {
-            int acred = SameTurnAffinityGenericCredit(state, cands, sel);
+            int acred = CostTricksEnabled() ? SameTurnAffinityGenericCredit(state, cands, sel) : 0;
             if (acred > 0)
             {
                 combined.generic             = std::max(0, combined.generic - acred);
@@ -3595,7 +3641,8 @@ static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for
 // a specific named land; SimulateLandPlay is the greedy fallback used when a plan did
 // not search the land (depth-0 static plans).
 static bool PlayLandByName(GameState& state, const std::string& name,
-                           const std::string& fetch_target = "", bool allow_shock_pay = true);
+                           const std::string& fetch_target = "", bool allow_shock_pay = true,
+                           const std::string& land_face = "");
 static std::string SimulateLandPlay(GameState& state);
 
 // Provider cast-order rank for a hand cast by name (lower = cast earlier). Thin lookup
@@ -3861,7 +3908,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             { allow_shock_pay = true; break; }
                         }
                     }
-                    PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay);
+                    PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay, plan.land_face);
                 }
             }
         }
@@ -3986,11 +4033,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
-                    const std::string& chosen_float_color)
+                    const std::string& chosen_float_color, int enchant_target)
     {
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
@@ -4075,11 +4122,26 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             for (const ScaledCastVariant& v : ResolveProvider(state).ScaledCastVariants(state, def))
             { if (v.face == crackle_targets) { ec = v.cost; break; } }
         }
-        if (!free_cast && !alt_cost && !TapForCostDirect(state, ec, is_creature)) { return; }
+        if (!free_cast && !alt_cost)
+        {
+            if (AffordAuditOn()) { g_afford_rollout_attempts.fetch_add(1, std::memory_order_relaxed); }
+            if (!TapForCostDirect(state, ec, is_creature))
+            {
+                if (AffordAuditOn()) { g_afford_rollout_fails.fetch_add(1, std::memory_order_relaxed); }
+                return;
+            }
+        }
         // Apex of Power cast-from-hand gate (captured BEFORE the erase invalidates `it`): a hand copy
         // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
         // another Apex's staged exile has m_is_staged == true -> false (float withheld). Inert otherwise.
         const bool cast_from_hand = !it->m_is_staged;
+        // Per-copy stable ID of the card being cast. The permanent must carry it (like the
+        // executor's EffectHandler::EnterBattlefield does via entry.source.m_number) so that
+        // aura attachment (Permanent::aura_attached_to == creature m_number) resolves to the
+        // SPECIFIC creature. Without this every rollout permanent kept the definition's m_number
+        // of 0, so ResolveEnchantTarget returned 0 and AuraBonusFor matched every aura (att 0)
+        // against every creature (m_number 0) -- a systematic aura over-count vs the executor.
+        const int cast_number = it->m_number;
         zone.erase(it);
 
         // STORM counter (Dragonstorm): the spell is now cast (committed to the "stack"). Count it
@@ -4453,6 +4515,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             Permanent perm;
             perm.card              = def.card;
+            perm.card.m_number     = cast_number;   // preserve per-copy ID (mirror EffectHandler)
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
@@ -4661,7 +4724,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{});
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0);
                 }
             }
         }
@@ -4876,10 +4939,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // -> reversed to damage by a Tainted Remedy / Plague Drone.
             Permanent perm;
             perm.card              = def.card;
+            perm.card.m_number     = cast_number;   // preserve per-copy ID (mirror EffectHandler)
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
             state.battlefield.push_back(perm);
+            // Aura (Bogles): attach to the searched creature (enchant_target), then fire Light-Paws.
+            // Set aura_attached_to BEFORE PerformLightPawsAttach push_backs the fetched aura. Lockstep
+            // with EffectHandler's executor enchantment-enter branch.
+            if (def.params.is_aura)
+            {
+                state.battlefield.back().aura_attached_to =
+                    ResolveEnchantTarget(state, state.active_player_index, enchant_target);
+                PerformLightPawsAttach(state, state.active_player_index,
+                                       def.card.m_mana_cost.ManaValue());
+            }
             if (def.params.etb_opponent_lifegain > 0)
             {
                 OpponentGainsLife(state, state.active_player_index, def.params.etb_opponent_lifegain);
@@ -4958,7 +5032,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                 }
             }
         }
@@ -4985,7 +5059,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); } }
+                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); } }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -5008,14 +5082,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[ai];
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color); }
+                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); }
                 }
             }
             else
@@ -5035,7 +5109,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                 }
             }
         }
@@ -5045,14 +5119,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
             }
         }
 
@@ -5178,7 +5252,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{});
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -5444,9 +5518,16 @@ static void SimulateCombat(GameState& state)
             if (animated) { base_pw += adef->params.animate_power; }
             base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
+        base_pw += AuraBonusFor(p, state).first;                 // Bogles: attached auras + Kor self-buff
         int power = base_pw * (ds ? 2 : 1);
         state.players[opp_idx].life -= power;
-        if (power > 0) { state.opponent_lost_life_this_turn = true; }
+        if (power > 0)
+        {
+            state.opponent_lost_life_this_turn = true;
+            // Lifelink (modeled): the enchanted creature's damage also gains its controller that
+            // much life. Inert vs the passive opponent's clock, tracked for life-total decks.
+            if (CreatureHasLifelink(p, state)) { state.players[active].life += power; }
+        }
         if (!p.card.HasKeyword(Keyword::Vigilance)) { p.tapped = true; }
         attackers.push_back(&p);
     }
@@ -5703,7 +5784,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 // (SimulateLandPlay) and the searched land fold (ApplyPlanDirect) so both produce
 // byte-identical placement for the same card.
 static bool PlayLandByName(GameState& state, const std::string& name,
-                           const std::string& fetch_target, bool allow_shock_pay)
+                           const std::string& fetch_target, bool allow_shock_pay,
+                           const std::string& land_face)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
@@ -5750,6 +5832,19 @@ static bool PlayLandByName(GameState& state, const std::string& name,
             return true;
         }
 
+        // Modal double-faced land (Pathway): play the chosen FACE. The back face is a distinct
+        // single-colour land identity synthesized in the DB (mdfc_back_*); entering the permanent AS
+        // that identity locks its colour, which every mana site reads live off the permanent's name.
+        // Pathway faces share all OTHER characteristics (untapped, no ETB), so only the identity
+        // differs and the tapped/ETB logic below reads the front `def` unchanged. Face "" / "front"
+        // (and every non-MDFC land) keeps face_def == def -> byte-identical for all existing decks.
+        const CardDefinition* face_def = def;
+        if (land_face == "back" && !def->params.mdfc_back_name.empty())
+        {
+            const CardDefinition* bd = CardDatabase::Instance().Lookup(def->params.mdfc_back_name);
+            if (bd) { face_def = bd; }
+        }
+
         // Resolve "as this land enters" choices while the card is still in hand. Human play
         // (g_play_land_entry_chooser set, and a real choice present) lets the user pick whether to
         // pay the shock life / reveal to enter untapped; otherwise the autonomous heuristic stands
@@ -5770,7 +5865,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
             tapped = LandEntersTapped(state, *def, allow_shock_pay);
         }
         Permanent perm;
-        perm.card              = def->card;
+        perm.card              = face_def->card;   // chosen face's identity -> locks its colour
         perm.controller_index  = state.active_player_index;
         perm.owner_index       = state.active_player_index;
         perm.entered_this_turn = true;
@@ -5872,6 +5967,14 @@ static bool OrderingSearchEnabled(const GameState& state)
 //     earliest that still goes off (earlier discounts more red rituals).
 // The identity (given) order is always included so the search can never do worse than the canonical line.
 // Returns index-orderings over `reorder`; the caller applies + dedups-by-end-state + scores each.
+//
+// NOTE (2026-07-23): the >=2-Medallion block insertion below is a theoretical hole -- it never generates a
+// STAGGERED line ("one Medallion early to discount the red rituals, the next once the cheaper chain funds
+// it"), and the full-permutation oracle's k!<=120 cap skips exactly those k>=6 hands. Tried behind
+// MTG_MEDALLION_SPLIT (non-decreasing per-Medallion slot placement) and MEASURED uniformly ~+0.005t WORSE
+// on Dragonstorm d5 (s700001/2/3): the extra orderings cost search budget with no realized upside -- the
+// subset enumerator already offers single-/no-Medallion lines, so "just play one" (usually best) is
+// handled by plan selection, and "M1 -> ritual -> M2" is rarely optimal. NOT adopted; block insertion kept.
 static std::vector<std::vector<int>>
 DragonstormCastOrderings(const std::vector<Action>& reorder)
 {
@@ -6031,6 +6134,240 @@ namespace branchstats
     inline Dumper g_dumper;
 }
 
+// ---- Human-play sequential aura enumeration (increment 1; docs/design/sequential-plan-evaluation.md) ----
+// The frozen-snapshot enumerator only offers a restricted aura (Daybreak Coronet "another Aura"; Lion
+// Umbra "modified") on creatures ALREADY legal at start of phase. So casting Ethereal Armor -> X then
+// Daybreak Coronet -> X the SAME turn -- rules-legal, since Armor enables Coronet -- is never enumerated,
+// and the viewer rejects the human's line as legal_not_enumerated. These helpers add the missing
+// sequenced plans; SeqAuraOrderingEnabled() gates them.
+
+// Increment 2(a): within-turn aura legality ordering (Daybreak Coronet after an enabling aura cast this
+// turn; Lion Umbra on a creature made "modified" this turn). Increment 1 ran this under HumanPlayActive()
+// ONLY (the viewer); the port makes it the autonomous default too -- a capability expansion, so it is
+// GT-AFFECTING for decks with restricted auras (Auras). It stays byte-identical for every OTHER deck: no
+// restricted aura in hand -> AppendSequencedAuraCandidates injects nothing -> the reject and the
+// enabler-first sort are no-ops. MTG_LEGACY_NO_SEQ_AURA reverts to the increment-1 behavior (viewer-only),
+// so a legacy autonomous run is byte-identical to pre-port AND the viewer keeps the feature.
+inline bool SeqAuraOrderingEnabled()
+{
+    static const bool s_legacy = std::getenv("MTG_LEGACY_NO_SEQ_AURA") != nullptr;
+    if (s_legacy) { return HumanPlayActive(); }
+    return true;
+}
+
+// (1) For each restricted aura in hand, inject a cast candidate targeting each controlled creature that
+// is NOT frozen-legal but could be ENABLED by another aura cast this turn. Mirrors CollectActions' aura
+// Action exactly (same hand_index -> joins that card's mutually-exclusive group). Bounded: only fires
+// when the hand holds >= 2 auras (a restricted one + a separate enabler).
+static void AppendSequencedAuraCandidates(const GameState& state, std::vector<Action>& cands)
+{
+    if (!SeqAuraOrderingEnabled()) { return; }
+    const Player& ap    = state.ActivePlayer();
+    const int     active = state.active_player_index;
+    int aura_count = 0;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.is_aura) { ++aura_count; }
+    }
+    if (aura_count < 2) { return; }   // need a restricted aura AND a separate enabler aura in hand
+
+    for (size_t i = 0; i < ap.hand.size(); ++i)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (!def || !def->params.is_aura) { continue; }
+        if (def->params.aura_enchant_requires != "another_aura"
+            && def->params.aura_enchant_requires != "modified") { continue; }
+        const std::vector<int> frozen = LegalEnchantTargets(state, active, def->params);
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || !p.card.IsCreature()) { continue; }
+            const int num = p.card.m_number;
+            if (num <= 0) { continue; }
+            if (std::find(frozen.begin(), frozen.end(), num) != frozen.end()) { continue; }  // already legal
+            Action a;
+            a.kind           = Action::Kind::CastFromHand;
+            a.card_name      = ap.hand[i].m_name;
+            a.hand_index     = static_cast<int>(i);
+            a.cost           = EffectiveCost(*def, state);
+            a.eval           = EvalCard(*def, state);
+            a.is_noncreature = true;
+            a.card_mv        = def->card.m_mana_cost.ManaValue();
+            a.enchant_target = num;
+            cands.push_back(std::move(a));
+        }
+    }
+}
+
+// (2) Reject a subset that casts a restricted aura on a creature NOT frozen-legal UNLESS the same subset
+// casts an ENABLER aura on that SAME creature -- a plain aura, or a restricted aura whose own target IS
+// frozen-legal (it resolves first, per the enabler-first order key at plan-build). Mirrors the other
+// Subset* rejects; caller gates on HumanPlayActive() so autonomous enumeration never pays for it.
+static bool SubsetHasUnenabledRestrictedAura(const GameState& state,
+                                             const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const int active = state.active_player_index;
+    auto frozen_legal = [&](const CardParams& pp, int tgt) {
+        const std::vector<int> f = LegalEnchantTargets(state, active, pp);
+        return std::find(f.begin(), f.end(), tgt) != f.end();
+    };
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        if (!cd || !cd->params.is_aura) { continue; }
+        if (cd->params.aura_enchant_requires != "another_aura"
+            && cd->params.aura_enchant_requires != "modified") { continue; }
+        if (frozen_legal(cd->params, c.enchant_target)) { continue; }   // no enabler needed
+        bool enabled = false;
+        for (int jdx : sel)
+        {
+            if (jdx == idx) { continue; }
+            const Action& d = cands[jdx];
+            if (d.kind != Action::Kind::CastFromHand || d.enchant_target != c.enchant_target) { continue; }
+            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            if (!dd || !dd->params.is_aura) { continue; }
+            // A valid enabler is legal on that creature itself: plain aura, or restricted-but-frozen-legal.
+            if (dd->params.aura_enchant_requires.empty()
+                || frozen_legal(dd->params, d.enchant_target)) { enabled = true; break; }
+        }
+        if (!enabled) { return true; }
+    }
+    return false;
+}
+
+// True iff `a` is a restricted aura cast whose enchant target is NOT legal against the frozen state (so
+// it must resolve AFTER its in-plan enabler). Used only to order plan.actions under human play.
+static bool IsConditionalRestrictedAura(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+    if (!d || !d->params.is_aura) { return false; }
+    if (d->params.aura_enchant_requires != "another_aura"
+        && d->params.aura_enchant_requires != "modified") { return false; }
+    const std::vector<int> f = LegalEnchantTargets(state, state.active_player_index, d->params);
+    return std::find(f.begin(), f.end(), a.enchant_target) == f.end();
+}
+
+// Within-turn creature target: a plain Aura can enchant a creature you CAST earlier this same turn.
+// Card numbers are stable from setup, so the Aura targets the creature's number and attaches once the
+// creature (cast FIRST -- CastOrderRank 10 creatures precede rank-20 Auras in apply) is on the
+// battlefield. The frozen-snapshot LegalEnchantTargets misses this (the creature isn't in play at start
+// of phase), so a just-cast creature could never carry a same-turn Aura -- and with NO prior creature the
+// Aura was entirely uncastable. Default on; MTG_LEGACY_NO_AURA_NEW_CREATURE reverts (byte-identical:
+// injects nothing). Restricted Auras (another_aura/modified) are OUT of scope here -- a fresh creature
+// satisfies those only via other same-turn casts, which the aura-aura sequencing already models.
+inline bool AuraOnNewCreatureEnabled()
+{
+    static const bool s_off = std::getenv("MTG_LEGACY_NO_AURA_NEW_CREATURE") != nullptr;
+    return !s_off;
+}
+
+// For each plain Aura in hand, inject a cast candidate targeting each CREATURE in hand (by its stable
+// m_number). Shares the Aura's hand_index so it joins the same mutually-exclusive group (one Aura, one
+// target). Bounded by auras x hand-creatures. A subset is valid only if it also casts that creature
+// (SubsetHasAuraOnUncastCreature). No-op without >=1 aura AND >=1 creature in hand -> byte-identical.
+static void AppendCreatureTargetAuraCandidates(const GameState& state, std::vector<Action>& cands)
+{
+    if (!AuraOnNewCreatureEnabled()) { return; }
+    const Player& ap = state.ActivePlayer();
+    std::vector<int> hand_creatures;   // hand indices of creatures castable this turn
+    for (size_t i = 0; i < ap.hand.size(); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (d && d->card.IsCreature() && ap.hand[i].m_number > 0) { hand_creatures.push_back((int)i); }
+    }
+    if (hand_creatures.empty()) { return; }
+    for (size_t i = 0; i < ap.hand.size(); ++i)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (!def || !def->params.is_aura) { continue; }
+        if (!def->params.aura_enchant_requires.empty()) { continue; }   // plain auras only (see note above)
+        for (int ci : hand_creatures)
+        {
+            Action a;
+            a.kind           = Action::Kind::CastFromHand;
+            a.card_name      = ap.hand[i].m_name;
+            a.hand_index     = (int)i;
+            a.cost           = EffectiveCost(*def, state);
+            a.eval           = EvalCard(*def, state);
+            a.is_noncreature = true;   // enchantments are noncreature spells
+            a.card_mv        = def->card.m_mana_cost.ManaValue();
+            a.enchant_target = ap.hand[ci].m_number;   // resolves once the creature (cast first) is in play
+            cands.push_back(std::move(a));
+        }
+    }
+}
+
+// Reject a subset whose Aura targets a creature NEITHER on the battlefield (frozen) NOR cast in this
+// subset -- i.e. an AppendCreatureTargetAuraCandidates candidate whose creature isn't being cast. No-op
+// unless such a candidate was injected -> byte-identical otherwise.
+static bool SubsetHasAuraOnUncastCreature(const GameState& state,
+                                          const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const Player& ap     = state.ActivePlayer();
+    const int     active = state.active_player_index;
+    auto on_bf = [&](int num) {
+        for (const Permanent& p : state.battlefield)
+            if (p.controller_index == active && p.card.IsCreature() && p.card.m_number == num) { return true; }
+        return false;
+    };
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
+        if (!cd || !cd->params.is_aura) { continue; }
+        if (on_bf(c.enchant_target)) { continue; }   // existing creature -> the normal path handles it
+        bool cast_here = false;
+        for (int jdx : sel)
+        {
+            const Action& d = cands[jdx];
+            if (d.kind != Action::Kind::CastFromHand || d.hand_index < 0
+                || d.hand_index >= (int)ap.hand.size()) { continue; }
+            const CardDefinition* dd = CardDatabase::Instance().Lookup(d.card_name);
+            if (dd && dd->card.IsCreature() && ap.hand[d.hand_index].m_number == c.enchant_target)
+            { cast_here = true; break; }
+        }
+        if (!cast_here) { return true; }
+    }
+    return false;
+}
+
+// True iff `a` is an Aura cast whose target creature is NOT on the battlefield (frozen) -- i.e. a
+// creature cast THIS turn. Such an Aura must resolve AFTER its target, so it is stable-sorted to the end
+// of plan.actions (the apply honours plan-action order here). Plain Auras only (the injector's scope).
+static bool IsAuraOnNewCreature(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+    if (!d || !d->params.is_aura) { return false; }
+    for (const Permanent& p : state.battlefield)
+        if (p.controller_index == state.active_player_index && p.card.IsCreature()
+            && p.card.m_number == a.enchant_target) { return false; }   // existing creature -> normal order
+    return true;
+}
+
+// True iff `acts` (in order) casts an Aura on a this-turn creature BEFORE that creature is cast. Such an
+// ordering is invalid: the Aura resolves with no such creature in play and mis-attaches (falls back to an
+// existing creature). Used to drop those orderings from the human-play cast-ordering expansion.
+static bool OrderingPlacesAuraBeforeCreature(const GameState& state, const std::vector<Action>& acts)
+{
+    const Player& ap = state.ActivePlayer();
+    std::unordered_set<int> cast_nums;   // hand m_numbers of creatures cast so far in this ordering
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (a.enchant_target > 0 && IsAuraOnNewCreature(state, a) && !cast_nums.count(a.enchant_target))
+        { return true; }   // Aura targets a this-turn creature not yet cast in this ordering
+        const CardDefinition* cd = CardDatabase::Instance().Lookup(a.card_name);
+        if (cd && cd->card.IsCreature() && a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+        { cast_nums.insert(ap.hand[a.hand_index].m_number); }
+    }
+    return false;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -6051,6 +6388,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Shared enumeration of all action sources (hand casts + Vial + retrace; LE in a
     // later phase). The subset machinery below reads the per-Action valuation scalars.
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
+    // Human-play only: inject sequenced restricted-aura candidates (e.g. Daybreak Coronet on a creature
+    // that an Ethereal Armor cast this same turn will enable) so the viewer can play within-turn-dependent
+    // aura lines. No-op in the autonomous search (HumanPlayActive() false) -> byte-identical.
+    AppendSequencedAuraCandidates(state, cands);
+    // Also: a plain Aura targeting a creature CAST this same turn (its stable number). No-op unless the
+    // hand holds both an Aura and a creature -> byte-identical for every other deck/state.
+    AppendCreatureTargetAuraCandidates(state, cands);
     int n = static_cast<int>(ap.hand.size());
 
     // Lands in hand: the shared budget for additional discard costs (retrace, LE).
@@ -6240,6 +6584,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
+        // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
+        // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
+        // otherwise. Gated by SeqAuraOrderingEnabled() (default on; MTG_LEGACY_NO_SEQ_AURA = viewer-only).
+        if (SeqAuraOrderingEnabled() && SubsetHasUnenabledRestrictedAura(state, cands, sel)) { return; }
+        // Reject an Aura targeting a this-turn creature that the subset does not actually cast. No-op
+        // unless AppendCreatureTargetAuraCandidates injected such a candidate -> byte-identical otherwise.
+        if (AuraOnNewCreatureEnabled() && SubsetHasAuraOnUncastCreature(state, cands, sel)) { return; }
         // Reject combinations whose Vial deploys exceed the per-charge capacity.
         for (int j : sel)
         {
@@ -6335,7 +6686,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
         {
-            int acred = SameTurnAffinityGenericCredit(state, cands, sel);
+            int acred = CostTricksEnabled() ? SameTurnAffinityGenericCredit(state, cands, sel) : 0;
             if (acred > 0)
             {
                 combined.generic             = std::max(0, combined.generic - acred);
@@ -6346,7 +6697,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // later same-colour casts in this subset, so the Medallion-discounted go-off enumerates.
         if (any_reducer)
         {
-            int rcred = SameTurnReducerGenericCredit(state, cands, sel);
+            int rcred = CostTricksEnabled() ? SameTurnReducerGenericCredit(state, cands, sel) : 0;
             if (rcred > 0)
             {
                 combined.generic             = std::max(0, combined.generic - rcred);
@@ -6356,7 +6707,42 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                        : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
-        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { return; }
+        bool mana_reject = !mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel));
+        if (mana_reject && CostReframeEnabled())
+        {
+            // Cost reframe (MTG_COST_REFRAME): an INTERACTING subset (reducer/ritual/affinity/rock) the
+            // flat-pool aggregate rejects may still be payable once its same-turn discount/float RESOLVES in
+            // the executor. Offer it under a crude OVER-optimistic bound -- assume the generic (what
+            // reducers/affinity cut, or rituals float) is fully same-turn-coverable, require only the
+            // COLOURED pips to be really payable -- and let the scoring apply (SolveWithLookahead 9446/9467)
+            // validate for real (a truly unaffordable line strands + scores worse -> not picked). This is the
+            // deck-agnostic replacement for per-deck credit patches. See
+            // docs/design/enumeration-feasibility-via-executor.md.
+            bool interacts = false;
+            for (int j : sel)
+            {
+                const Action& c = cands[j];
+                if (c.ritual_float > 0 || c.rock_mana.Total() > 0
+                    || (c.def && c.def->params.affinity_for_subtype)
+                    || (c.def && !c.def->params.reduces_spell_color.empty())) { interacts = true; break; }
+            }
+            if (interacts)
+            {
+                // Tighter bound: subtract the MAX same-turn generic discount these casts could actually give
+                // (reducer + affinity, computed order-aware even with the aggregate credit gated off), not
+                // "all generic covered". Ritual float is already in `eff`/`pool`. Far fewer over-optimistic
+                // candidates than the crude bound -> less budget dilution on combo decks; the scoring apply
+                // validates for real.
+                const int disc = SameTurnAffinityGenericCredit(state, cands, sel)
+                               + SameTurnReducerGenericCredit(state, cands, sel);
+                ManaCost oc    = combined;              oc.generic    = std::max(0, combined.generic - disc);
+                ManaCost oc_nc = noncreature_combined;  oc_nc.generic = std::max(0, noncreature_combined.generic - disc);
+                const ManaPool& opt    = credited ? eff    : pool;
+                const ManaPool& opt_nc = credited ? eff_nc : pool_noncreature;
+                if (opt.CanPay(oc) && opt_nc.CanPay(oc_nc)) { mana_reject = false; }
+            }
+        }
+        if (mana_reject) { return; }
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
@@ -6404,6 +6790,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
+        // A sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature) must resolve AFTER
+        // its enabler aura, so stable-sort those conditional payoffs to the end (key 1 vs 0). Apply's own
+        // clean-set sort is rank-equal for auras (all rank 20) and stable, so it preserves this order. A
+        // plan with no such action (every non-aura-deck plan) is order-unchanged (stable, all keys equal).
+        if (SeqAuraOrderingEnabled())
+        {
+            std::stable_sort(plan.actions.begin(), plan.actions.end(),
+                [&](const Action& x, const Action& y)
+                { return IsConditionalRestrictedAura(state, x) < IsConditionalRestrictedAura(state, y); });
+        }
+        // An Aura targeting a creature CAST this turn must resolve after that creature (the apply honours
+        // plan-action order), so stable-sort such Auras to the end (key 1 vs 0). No-op unless the injector
+        // added one -> byte-identical otherwise. Both this and the sort above key plain-vs-conditional
+        // disjointly (an injected Aura is plain), so they compose.
+        if (AuraOnNewCreatureEnabled())
+        {
+            std::stable_sort(plan.actions.begin(), plan.actions.end(),
+                [&](const Action& x, const Action& y)
+                { return IsAuraOnNewCreature(state, x) < IsAuraOnNewCreature(state, y); });
+        }
         plans.push_back(std::move(plan));
     };
 
@@ -6691,11 +7097,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // human-play. Autonomous dedup keys only on cast NAMES (the 's' bucket above), so distinct
                 // k collapse to the first-enumerated representative -- exactly the chosen_x precedent.
                 if (act.splice_count > 0)        { sub.push_back("k" + act.card_name + "=" + std::to_string(act.splice_count)); }
+                // Aura enchant TARGET: which creature the Aura attaches to is a human choice (Bogles piles
+                // auras on one creature, but Daybreak Coronet / Lion Umbra restrictions and simple threat
+                // choice make the target meaningful). Keyed on the stable target m_number so plans differing
+                // only in placement survive as distinct variants instead of collapsing to the first-enumerated
+                // target. Autonomous dedup keys only on cast NAMES (the 's' bucket), so distinct targets
+                // collapse to the heuristic's best-first pick there -- exactly the tutor_target precedent.
+                if (act.enchant_target > 0)      { sub.push_back("e" + act.card_name + ">" + std::to_string(act.enchant_target)); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }
             if (p.land_decided)            { sig += "|land="  + p.land_to_play; }
             if (!p.fetch_target.empty())   { sig += "|fetch=" + p.fetch_target; }
+            if (!p.land_face.empty())      { sig += "|face="  + p.land_face; }
         }
         return sig;
     };
@@ -6784,6 +7198,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (int j : idx)            { cand.actions.push_back(reorder[j]); }
             for (const Action& a : fixed){ cand.actions.push_back(a); }
             cand.searched_order = true;
+            // Drop an ordering that casts an Aura on a this-turn creature BEFORE that creature (it would
+            // mis-attach to an existing creature). No-op unless such an Aura+creature line is present.
+            if (AuraOnNewCreatureEnabled() && OrderingPlacesAuraBeforeCreature(state, cand.actions)) { continue; }
 
             // Apply this ordering on a copy; dedup by the resulting end-of-phase state.
             GameState copy = state;
@@ -6987,6 +7404,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         // Fetchlands with different target colours are NOT interchangeable; distinguish
         // them. Empty for ordinary lands -> sig unchanged (other decks byte-identical).
         for (const std::string& ft : pp.fetch_land_types) { s += "f" + ft; }
+        // MDFC (Pathway) lands are NOT interchangeable with a plain single-colour land of the same
+        // FRONT colour: they can also play their back face for a different colour. Distinguish them
+        // by the back face so the front is never deduped against, say, a basic Forest. Empty for
+        // ordinary lands -> sig unchanged (every non-MDFC deck stays byte-identical).
+        if (!pp.mdfc_back_name.empty())
+        {
+            s += "m" + pp.mdfc_back_name;
+            std::vector<int> bprod;
+            for (Color c : pp.mdfc_back_produces) { bprod.push_back(static_cast<int>(c)); }
+            std::sort(bprod.begin(), bprod.end());
+            for (int c : bprod) { s += "b" + std::to_string(c); }
+        }
         return s;
     };
 
@@ -7052,11 +7481,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 
     std::vector<TurnSolver::Plan> all;
 
-    auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target)
+    auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target,
+                            const std::string& land_face = "")
     {
         PROF_INC(gamestate_copies);
         GameState copy = state;
-        if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target)) { return; }
+        if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target, true, land_face)) { return; }
 
         // "Play this land, cast nothing" baseline (neutral value 0).
         TurnSolver::Plan idle;
@@ -7064,6 +7494,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         idle.land_decided = true;
         idle.land_to_play = land_name;
         idle.fetch_target = fetch_target;
+        idle.land_face    = land_face;
         all.push_back(std::move(idle));
 
         std::vector<TurnSolver::Plan> plans = EnumeratePlans(copy, is_pre_combat);
@@ -7072,6 +7503,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             p.land_decided = true;
             p.land_to_play = land_name;
             p.fetch_target = fetch_target;
+            p.land_face    = land_face;
             all.push_back(std::move(p));
         }
     };
@@ -7087,6 +7519,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     for (const std::string& ln : land_names)
     {
         const CardDefinition* ld = CardDatabase::Instance().Lookup(ln);
+        if (ld && !ld->params.mdfc_back_name.empty())
+        {
+            // Modal double-faced land (Pathway): emit BOTH faces as distinct land-play options
+            // (front colour vs back colour). The search picks the face that pays the turn; human
+            // play surfaces a "which face?" choose grid (CheckLine 'face' sub). Never a fetchland.
+            add_for_land(ln, "", "front");
+            add_for_land(ln, "", "back");
+            continue;
+        }
         if (ld && !ld->params.fetch_land_types.empty())
         {
             std::vector<std::string> cands =
@@ -9665,6 +10106,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                       << "  candidates=" << candidates.size() << "\n";
         }
 
+        // Cost-reframe count-bounder (dominance / resulting-state dedup): the over-optimistic relaxation
+        // offers many INFEASIBLE interacting candidates; applied, their unpayable casts STRAND, collapsing
+        // them to the SAME resulting state as a smaller feasible candidate. Dedup by post-apply state
+        // (BuildSimKey) so each distinct outcome is rolled out ONCE -- the flood no longer dilutes the fixed
+        // node budget. Reuses the apply already done below (no extra apply). Off (default) -> set never
+        // consulted -> byte-identical. Per sub_depth pass. See docs/design/enumeration-feasibility-via-executor.md.
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> reframe_seen;
         for (const Plan& plan : candidates)
         {
             // --- Overrun guard: finish if almost done, else abort + roll back ---
@@ -9697,6 +10145,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (is_pre_combat)
             {
                 ApplyPlanDirect(copy, plan, true);
+                // Count-bounder: skip this candidate's rollout if its post-apply state was already scored
+                // by an earlier candidate this pass (a dominated/strand-equivalent line). Reframe-only.
+                if (CostReframeEnabled() && !reframe_seen.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
                 SimulateAnimateLands(copy);
                 SimulateTapTokens(copy);
 
@@ -9719,6 +10170,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 ApplyPlanDirect(copy, plan, false);
                 if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
+                // Count-bounder (post-combat main): dedup by post-apply state AFTER the win check so a
+                // unique winner is never skipped. Reframe-only. See the pre-combat branch above.
+                if (CostReframeEnabled() && !reframe_seen.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
             }
 
             // End of this turn + start of next. The next turn's land drop is searched
@@ -9977,6 +10431,26 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         for (const Action& a : p.actions)
         {
             if (!a.tutor_target.empty())   { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
+            // Aura enchant TARGET: which creature this Aura attaches to. Emit a sub per legal target so the
+            // viewer surfaces a "choose creature" art-grid (mirrors tutor_target) instead of silently taking
+            // the heuristic's first-enumerated pick -- the human IS the decision-maker here. Resolve the
+            // stable m_number to the creature's name for the grid art; the target is one of the player's
+            // creatures on the battlefield (LegalEnchantTargets), so this always resolves.
+            if (a.enchant_target > 0)
+            {
+                std::string etn;
+                for (const Permanent& perm : state.battlefield)
+                    if (perm.controller_index == state.active_player_index && perm.card.IsCreature()
+                        && perm.card.m_number == a.enchant_target)
+                    { etn = perm.card.m_name.str(); break; }
+                // A same-turn creature target (AppendCreatureTargetAuraCandidates) is still in hand here;
+                // resolve its name from hand so the choose grid offers it (else the sub is dropped).
+                if (etn.empty())
+                    for (const Card& hc : state.ActivePlayer().hand)
+                        if (hc.m_number == a.enchant_target) { etn = hc.m_name.str(); break; }
+                if (!etn.empty())
+                    addSub(a.card_name + " \xE2\x86\x92 " + etn, a.card_name + " \xE2\x86\x92", etn, etn, "enchant");
+            }
             if (a.chosen_x > 0)            { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
             // NOTE: a.ponder_keep is deliberately NOT a variant token. The Ponder reorder (keep-top
             // vs shuffle, and the full ordering) is re-asked at REAL resolution via the look-at-top
@@ -10023,6 +10497,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         }
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
         if (!p.fetch_target.empty()) { addSub(p.land_to_play + " fetches " + p.fetch_target, p.land_to_play + " fetches", p.fetch_target, p.fetch_target, "fetch"); }
+        // MDFC (Pathway) face is a plan-level sub-decision: both faces carry land_to_play == the hand
+        // (front) name, so they survive the land-name match above and surface here as a "which face?"
+        // choose grid. `card` = the face's real name so the GUI shows the front vs back Scryfall art.
+        if (!p.land_face.empty())
+        {
+            std::string faceName = p.land_to_play;   // "" / "front" -> the front (hand) card
+            if (p.land_face == "back")
+            {
+                const CardDefinition* fd = CardDatabase::Instance().Lookup(p.land_to_play);
+                if (fd && !fd->params.mdfc_back_name.empty()) { faceName = fd->params.mdfc_back_name; }
+            }
+            addSub(p.land_to_play + " face " + faceName, p.land_to_play + " face", faceName, faceName, "face");
+        }
         // Sort the derived token strings so plans differing only in cast order share a signature.
         // The label preserves the old " → "/" X="/" +N own"/" fetches " spacing (key already ends
         // with the operator, choice follows a single space) so displayed labels are unchanged.

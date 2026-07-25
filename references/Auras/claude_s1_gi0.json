@@ -1,0 +1,196 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 54, "name": "Slippery Bogle" }, { "num": 21, "name": "Ethereal Armor" }, { "num": 17, "name": "Daybreak Coronet" }, { "num": 9, "name": "Branchloft Pathway" }, { "num": 38, "name": "Light-Paws, Emperor's Voice" }, { "num": 43, "name": "Plains" }, { "num": 13, "name": "Brushland" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Horizon Canopy" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 21, "name": "Ethereal Armor", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Brushland; cast: Slippery Bogle", "land": "Brushland", "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 1, "summary": "land=Branchloft Pathway; cast: Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 2, "summary": "land=Horizon Canopy; cast: Slippery Bogle", "land": "Horizon Canopy", "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 3, "summary": "land=Brushland; cast: (nothing)", "land": "Brushland", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Daybreak Coronet" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 19, "battlefield": [{ "name": "Brushland", "idx": 0, "num": 0, "is_land": true }, { "name": "Slippery Bogle", "idx": 1, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 18, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 21, "name": "Ethereal Armor", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Horizon Canopy; cast: Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 1, "summary": "land=Branchloft Pathway; cast: Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 2, "summary": "land=Branchloft Pathway; cast: Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 3, "summary": "land=Plains; cast: Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 4, "summary": "land=Horizon Canopy; cast: Ethereal Armor → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 5, "summary": "land=Branchloft Pathway; cast: Ethereal Armor → Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 6, "summary": "land=Branchloft Pathway; cast: Ethereal Armor → Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 7, "summary": "land=Plains; cast: Ethereal Armor → Slippery Bogle", "land": "Plains", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 8, "summary": "land=none; cast: Ethereal Armor → Slippery Bogle", "land": null, "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 9, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Daybreak Coronet" }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Slippery Bogle (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Brushland", "idx": 0, "num": 0, "is_land": true }, { "name": "Light-Paws, Emperor's Voice", "idx": 3, "num": 38, "is_land": false }, { "name": "Plains", "idx": 2, "num": 0, "is_land": true }, { "name": "Slippery Bogle", "idx": 1, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 18, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 19, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 21, "name": "Ethereal Armor", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 31, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Slippery Bogle, Ethereal Armor → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Daybreak Coronet", "Ethereal Armor"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }, { "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 1, "summary": "land=Horizon Canopy; cast: Ethereal Armor → Slippery Bogle, Daybreak Coronet → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Ethereal Armor", "Daybreak Coronet"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }, { "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 2, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Light-Paws, Emperor's Voice, Ethereal Armor → Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Daybreak Coronet", "Ethereal Armor"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Ethereal Armor", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 3, "summary": "land=Horizon Canopy; cast: Ethereal Armor → Light-Paws, Emperor's Voice, Daybreak Coronet → Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Ethereal Armor", "Daybreak Coronet"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 4, "summary": "land=Branchloft Pathway; cast: Daybreak Coronet → Slippery Bogle, Ethereal Armor → Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Daybreak Coronet", "Ethereal Armor"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }, { "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 5, "summary": "land=Branchloft Pathway; cast: Ethereal Armor → Slippery Bogle, Daybreak Coronet → Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Ethereal Armor", "Daybreak Coronet"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }, { "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 6, "summary": "land=Branchloft Pathway; cast: Daybreak Coronet → Light-Paws, Emperor's Voice, Ethereal Armor → Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Daybreak Coronet", "Ethereal Armor"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Ethereal Armor", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 7, "summary": "land=Branchloft Pathway; cast: Ethereal Armor → Light-Paws, Emperor's Voice, Daybreak Coronet → Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Ethereal Armor", "Daybreak Coronet"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 8, "summary": "land=Horizon Canopy; cast: Ethereal Armor → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 9, "summary": "land=Horizon Canopy; cast: Ethereal Armor → Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 10, "summary": "land=Branchloft Pathway; cast: Ethereal Armor → Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 11, "summary": "land=Branchloft Pathway; cast: Ethereal Armor → Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 12, "summary": "land=Branchloft Pathway; cast: Ethereal Armor → Slippery Bogle", "land": "Branchloft Pathway", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 13, "summary": "land=Branchloft Pathway; cast: Ethereal Armor → Light-Paws, Emperor's Voice", "land": "Branchloft Pathway", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 14, "summary": "land=none; cast: Ethereal Armor → Slippery Bogle", "land": null, "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 15, "summary": "land=none; cast: Ethereal Armor → Light-Paws, Emperor's Voice", "land": null, "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 16, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Boulderloft Pathway", "idx": 4, "num": 0, "tapped": true, "is_land": true }, { "name": "Brushland", "idx": 0, "num": 0, "tapped": true, "is_land": true }, { "name": "Ethereal Armor", "idx": 5, "num": 21, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 3, "num": 38, "is_land": false }, { "name": "Plains", "idx": 2, "num": 0, "tapped": true, "is_land": true }, { "name": "Slippery Bogle", "idx": 1, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 17, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 18, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 19, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "floating_mana": {"W": 2} },
+  "opponent": { "life": 19, "battlefield": [] },
+  "heuristic_default": 1,
+  "pool": [{ "index": 0, "legal": false, "name": "Ancestral Mask" }, { "index": 1, "legal": true, "name": "Rancor" }, { "index": 2, "legal": true, "name": "Rancor" }, { "index": 3, "legal": true, "name": "Audacity" }, { "index": 4, "legal": true, "name": "Gryff's Boon" }, { "index": 5, "legal": false, "name": "Lion Umbra" }, { "index": 6, "legal": false, "name": "Ancestral Mask" }, { "index": 7, "legal": false, "name": "All That Glitters" }, { "index": 8, "legal": false, "name": "Armadillo Cloak" }, { "index": 9, "legal": true, "name": "Rancor" }, { "index": 10, "legal": true, "name": "Hyena Umbra" }, { "index": 11, "legal": false, "name": "Ancestral Mask" }, { "index": 12, "legal": true, "name": "Spirit Link" }, { "index": 13, "legal": false, "name": "Ancestral Mask" }, { "index": 14, "legal": false, "name": "Ethereal Armor" }, { "index": 15, "legal": true, "name": "Rancor" }, { "index": 16, "legal": false, "name": "Ethereal Armor" }, { "index": 17, "legal": false, "name": "Alpha Authority" }, { "index": 18, "legal": false, "name": "Daybreak Coronet" }, { "index": 19, "legal": false, "name": "Ethereal Armor" }, { "index": 20, "legal": false, "name": "Spirit Mantle" }, { "index": 21, "legal": true, "name": "Spider Umbra" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 20, "decision": {
+  "decision_index": 5,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Boulderloft Pathway", "idx": 4, "num": 0, "tapped": true, "is_land": true }, { "name": "Brushland", "idx": 0, "num": 0, "tapped": true, "is_land": true }, { "name": "Daybreak Coronet", "idx": 7, "num": 17, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Ethereal Armor", "idx": 5, "num": 21, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 3, "num": 38, "is_land": false }, { "name": "Plains", "idx": 2, "num": 0, "tapped": true, "is_land": true }, { "name": "Rancor", "idx": 6, "num": 46, "is_aura": true, "attached_to": 38, "is_land": false }, { "name": "Slippery Bogle", "idx": 1, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 19, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "heuristic_default": 20,
+  "pool": [{ "index": 0, "legal": true, "name": "Alpha Authority" }, { "index": 1, "legal": true, "name": "Spider Umbra" }, { "index": 2, "legal": true, "name": "Audacity" }, { "index": 3, "legal": true, "name": "Lion Umbra" }, { "index": 4, "legal": false, "name": "Ancestral Mask" }, { "index": 5, "legal": false, "name": "Ancestral Mask" }, { "index": 6, "legal": true, "name": "Hyena Umbra" }, { "index": 7, "legal": false, "name": "Ethereal Armor" }, { "index": 8, "legal": false, "name": "Armadillo Cloak" }, { "index": 9, "legal": false, "name": "Ancestral Mask" }, { "index": 10, "legal": false, "name": "Ethereal Armor" }, { "index": 11, "legal": false, "name": "Daybreak Coronet" }, { "index": 12, "legal": false, "name": "Ancestral Mask" }, { "index": 13, "legal": false, "name": "Rancor" }, { "index": 14, "legal": true, "name": "Spirit Link" }, { "index": 15, "legal": false, "name": "Rancor" }, { "index": 16, "legal": false, "name": "Rancor" }, { "index": 17, "legal": false, "name": "Ethereal Armor" }, { "index": 18, "legal": true, "name": "Gryff's Boon" }, { "index": 19, "legal": true, "name": "Spirit Mantle" }, { "index": 20, "legal": true, "name": "All That Glitters" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 9, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Light-Paws, Emperor's Voice" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Slippery Bogle (8), Light-Paws, Emperor's Voice (8) — 16 to opponent (19→3)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 25, "battlefield": [{ "name": "All That Glitters", "idx": 8, "num": 1, "is_aura": true, "attached_to": 38, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 4, "num": 0, "is_land": true }, { "name": "Brushland", "idx": 0, "num": 0, "is_land": true }, { "name": "Daybreak Coronet", "idx": 7, "num": 17, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Ethereal Armor", "idx": 5, "num": 21, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 3, "num": 38, "is_land": false }, { "name": "Plains", "idx": 2, "num": 0, "is_land": true }, { "name": "Rancor", "idx": 6, "num": 46, "is_aura": true, "attached_to": 38, "is_land": false }, { "name": "Slippery Bogle", "idx": 1, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 18, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 19, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 47 },
+  "opponent": { "life": 3, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Slippery Bogle, Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Daybreak Coronet", "Light-Paws, Emperor's Voice"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }, { "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 1, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Light-Paws, Emperor's Voice, Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Daybreak Coronet", "Light-Paws, Emperor's Voice"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 2, "summary": "land=Horizon Canopy; cast: Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 3, "summary": "land=none; cast: Light-Paws, Emperor's Voice", "land": null, "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 4, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Slippery Bogle, Daybreak Coronet → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Daybreak Coronet", "Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }, { "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 5, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Light-Paws, Emperor's Voice, Daybreak Coronet → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Daybreak Coronet", "Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 6, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Light-Paws, Emperor's Voice, Daybreak Coronet → Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Daybreak Coronet", "Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 7, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 8, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 9, "summary": "land=none; cast: Daybreak Coronet → Slippery Bogle", "land": null, "casts": ["Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 10, "summary": "land=none; cast: Daybreak Coronet → Light-Paws, Emperor's Voice", "land": null, "casts": ["Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 11, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 7,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 25, "battlefield": [{ "name": "All That Glitters", "idx": 8, "num": 1, "is_aura": true, "attached_to": 38, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 4, "num": 0, "tapped": true, "is_land": true }, { "name": "Brushland", "idx": 0, "num": 0, "is_land": true }, { "name": "Daybreak Coronet", "idx": 7, "num": 17, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Daybreak Coronet", "idx": 9, "num": 18, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Ethereal Armor", "idx": 5, "num": 21, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 3, "num": 38, "is_land": false }, { "name": "Plains", "idx": 2, "num": 0, "tapped": true, "is_land": true }, { "name": "Rancor", "idx": 6, "num": 46, "is_aura": true, "attached_to": 38, "is_land": false }, { "name": "Slippery Bogle", "idx": 1, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 47 },
+  "opponent": { "life": 3, "battlefield": [] },
+  "heuristic_default": 2,
+  "pool": [{ "index": 0, "legal": true, "name": "Spirit Mantle" }, { "index": 1, "legal": true, "name": "Spider Umbra" }, { "index": 2, "legal": true, "name": "Lion Umbra" }, { "index": 3, "legal": false, "name": "Ethereal Armor" }, { "index": 4, "legal": false, "name": "Ancestral Mask" }, { "index": 5, "legal": false, "name": "Rancor" }, { "index": 6, "legal": false, "name": "Ancestral Mask" }, { "index": 7, "legal": false, "name": "Rancor" }, { "index": 8, "legal": false, "name": "Ethereal Armor" }, { "index": 9, "legal": false, "name": "Rancor" }, { "index": 10, "legal": true, "name": "Spirit Link" }, { "index": 11, "legal": true, "name": "Gryff's Boon" }, { "index": 12, "legal": true, "name": "Alpha Authority" }, { "index": 13, "legal": false, "name": "Armadillo Cloak" }, { "index": 14, "legal": true, "name": "Audacity" }, { "index": 15, "legal": false, "name": "Ancestral Mask" }, { "index": 16, "legal": false, "name": "Ancestral Mask" }, { "index": 17, "legal": false, "name": "Ethereal Armor" }, { "index": 18, "legal": false, "name": "Daybreak Coronet" }, { "index": 19, "legal": true, "name": "Hyena Umbra" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 25, "battlefield": [{ "name": "All That Glitters", "idx": 8, "num": 1, "is_aura": true, "attached_to": 38, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 4, "num": 0, "tapped": true, "is_land": true }, { "name": "Brushland", "idx": 0, "num": 0, "is_land": true }, { "name": "Daybreak Coronet", "idx": 7, "num": 17, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Daybreak Coronet", "idx": 9, "num": 18, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Ethereal Armor", "idx": 5, "num": 21, "is_aura": true, "attached_to": 54, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 3, "num": 38, "is_land": false }, { "name": "Lion Umbra", "idx": 10, "num": 42, "is_aura": true, "attached_to": 38, "is_land": false }, { "name": "Plains", "idx": 2, "num": 0, "tapped": true, "is_land": true }, { "name": "Rancor", "idx": 6, "num": 46, "is_aura": true, "attached_to": 38, "is_land": false }, { "name": "Slippery Bogle", "idx": 1, "num": 54, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Daybreak Coronet", "cost": "{W}{W}", "mv": 2, "kind": "permanent" }, { "num": 31, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 46 },
+  "opponent": { "life": 3, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Horizon Canopy; cast: Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 1, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Slippery Bogle", "land": "Horizon Canopy", "casts": ["Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 2, "summary": "land=Horizon Canopy; cast: Daybreak Coronet → Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Daybreak Coronet"], "actions": [{ "card": "Daybreak Coronet", "enchant_target": 38, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 3, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

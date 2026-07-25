@@ -71,3 +71,17 @@ by casting a *smaller* subset (Irencrag→Dragonstorm, no Rite) that the fixed o
 the ordering search leaves them unchanged. They fall to the subset/eval side (the value-leaf, a separate
 deferred item). The remaining ~17 regression slowdowns (vs the stale pre-fea3a2c GT) are these plus
 budget churn; net is overwhelmingly positive (851 faster).
+
+## Medallion block vs staggered insertion — tried, measured negative (2026-07-23)
+
+The `>=2`-Medallion insertion places the Medallions as a single **block** (all at one slot). That is a
+theoretical hole: it never generates a **staggered** line — "cast one Medallion early to discount the red
+rituals, then the next once the cheaper chain funds it" — and the full-permutation oracle's `k!<=120` cap
+skips exactly the `k>=6` hands (2–3 Medallions + rituals + Irencrag + closer) where it could bite, so it
+was never validated. Added a `MTG_MEDALLION_SPLIT` variant (each identical Medallion at any non-decreasing
+slot; block placements ⊂ this set) and A/B'd it: Dragonstorm d5 s700001/2/3 went **4.8300/4.8250/4.8200 →
+4.8350/4.8300/4.8250 — uniformly ~+0.005t WORSE**. Cause: the *subset* enumerator already powersets the
+Medallions, so 0-/1-/2-Medallion lines are separate plans ("play just one," usually correct, is a
+plan-selection choice, not an ordering one); the staggered "M1 → ritual → M2" line is rarely optimal, so
+the extra orderings only spend search budget (fewer nodes in 20ms) for no realized win. **Not adopted;
+block insertion kept.** The hole is real but empirically worthless. (Recorded so it is not re-tried.)

@@ -33,11 +33,13 @@ def run(deck, depth, games, seed, max_turns, threads, model, value_model=None):
            "--depth", str(depth), "--max-turns", str(max_turns), "--threads", str(threads)]
     out = subprocess.run(cmd, capture_output=True, text=True, env=env).stdout
     played = int(re.search(r"Games played\s*:\s*(\d+)", out).group(1))
-    won = int(re.search(r"Games won\s*:\s*(\d+)", out).group(1))
-    m = re.search(r"Avg win turn\s*:\s*([\d.]+)", out)
-    avg_won = float(m.group(1)) if m else float("nan")
-    lost = played - won
-    lp = (won * avg_won + lost * (max_turns + 1)) / played if won else float(max_turns + 1)
+    # Merged metric: the engine now prints only "avg (turns)" = the loss-penalised avg win turn
+    # (unwon = max_turns+1) -- the PRIMARY metric. The old "Games won"/"Avg win turn" lines are gone,
+    # so win%/avg_won(won) are no longer recoverable; report lp directly (index [3], what callers use).
+    m = re.search(r"avg \(turns\)\s*:\s*([\d.]+)", out)
+    lp = float(m.group(1)) if m else float("nan")
+    won = 0
+    avg_won = float("nan")
     return played, won, avg_won, lp
 
 

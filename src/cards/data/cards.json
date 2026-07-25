@@ -1801,6 +1801,235 @@
                 "impulse_expiry_this_turn": true,
                 "impulse_float_amount": 10
             }
+        },
+        {
+            "name": "Slippery Bogle",
+            "mana_cost": "{G/U}",
+            "types": ["Creature"],
+            "subtypes": ["Beast"],
+            "keywords": ["Hexproof"],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Hexproof (This creature can't be the target of spells or abilities your opponents control.) [{G/U} hybrid modelled as {G}: the deck runs no blue source, so the U side is never payable; the parser maps the hybrid pip to its first colour (green). Hexproof is inert vs the passive goldfish opponent (no targeted removal).]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Gladecover Scout",
+            "mana_cost": "{G}",
+            "types": ["Creature"],
+            "subtypes": ["Elf", "Scout"],
+            "keywords": ["Hexproof"],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Hexproof (This creature can't be the target of spells or abilities your opponents control.) [Hexproof inert vs the passive goldfish opponent.]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Kor Spiritdancer",
+            "mana_cost": "{1}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Kor", "Wizard"],
+            "keywords": [],
+            "power": 0,
+            "toughness": 2,
+            "oracle_text": "This creature gets +2/+2 for each Aura attached to it.\nWhenever you cast an Aura spell, you may draw a card. [Self-buff via aura_self_buff (AuraBonusFor); the draw fires in FireOnCastTriggers -- always drawn (card advantage), to hand for later turns (no same-turn re-solve).]",
+            "template": "vanilla_creature",
+            "parameters": { "aura_self_buff_power": 2, "aura_self_buff_tough": 2, "draw_on_aura_cast": true }
+        },
+        {
+            "name": "Light-Paws, Emperor's Voice",
+            "mana_cost": "{1}{W}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Fox", "Advisor"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Whenever an Aura you control enters, if you cast it, you may search your library for an Aura card with mana value less than or equal to that Aura and with a different name than each Aura you control, put that card onto the battlefield attached to Light-Paws, then shuffle. [Fires on a CAST aura resolving (bounded to one fetch per cast); the fetch target is a heuristic pick (highest power contribution) -- disclosed as a narrowed target, not yet a search decision.]",
+            "template": "vanilla_creature",
+            "parameters": { "aura_cast_tutor_attach": true }
+        },
+        {
+            "name": "Ethereal Armor",
+            "mana_cost": "{W}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 for each enchantment you control and has first strike. [Scales +1/+1 per enchantment you control (aura_scale_kind=enchantments, incl. itself). First strike inert vs the passive opponent.]",
+            "template": "custom",
+            "parameters": { "aura_scale_kind": "enchantments", "aura_scale_power": 1, "aura_scale_tough": 1, "is_aura": true }
+        },
+        {
+            "name": "Rancor",
+            "mana_cost": "{G}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +2/+0 and has trample.\nWhen this Aura is put into a graveyard from the battlefield, return it to its owner's hand. [Trample inert; the graveyard-return is inert vs the passive opponent (no removal/combat destroys our auras, so Rancor never leaves the battlefield).]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 2, "aura_tough_bonus": 0, "is_aura": true }
+        },
+        {
+            "name": "Daybreak Coronet",
+            "mana_cost": "{W}{W}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature with another Aura attached to it\nEnchanted creature gets +3/+3 and has first strike, vigilance, and lifelink. [Restriction modelled (aura_enchant_requires=another_aura). Lifelink modelled; first strike + vigilance inert.]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 3, "aura_tough_bonus": 3, "aura_grants_lifelink": true, "aura_enchant_requires": "another_aura", "is_aura": true }
+        },
+        {
+            "name": "Armadillo Cloak",
+            "mana_cost": "{1}{G}{W}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +2/+2 and has trample.\nWhenever enchanted creature deals damage, you gain that much life. [Lifelink modelled (\"deals damage -> gain that much life\"); trample inert.]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 2, "aura_tough_bonus": 2, "aura_grants_lifelink": true, "is_aura": true }
+        },
+        {
+            "name": "Hyena Umbra",
+            "mana_cost": "{W}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Umbra armor", "Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 and has first strike.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [First strike + umbra armor inert vs the passive opponent.]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 1, "aura_tough_bonus": 1, "is_aura": true }
+        },
+        {
+            "name": "Spirit Mantle",
+            "mana_cost": "{1}{W}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 and has protection from creatures. [Protection inert vs the passive opponent (nothing blocks or targets our creature).]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 1, "aura_tough_bonus": 1, "is_aura": true }
+        },
+        {
+            "name": "Spider Umbra",
+            "mana_cost": "{G}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Umbra armor", "Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 and has reach.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [Reach + umbra armor inert.]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 1, "aura_tough_bonus": 1, "is_aura": true }
+        },
+        {
+            "name": "Ancestral Mask",
+            "mana_cost": "{2}{G}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +2/+2 for each other enchantment on the battlefield. [Scales +2/+2 per OTHER enchantment on the battlefield (aura_scale_kind=other_enchantments); the goldfish opponent controls none.]",
+            "template": "custom",
+            "parameters": { "aura_scale_kind": "other_enchantments", "aura_scale_power": 2, "aura_scale_tough": 2, "is_aura": true }
+        },
+        {
+            "name": "Alpha Authority",
+            "mana_cost": "{1}{G}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature has hexproof and can't be blocked by more than one creature. [Grants NO P/T. Both abilities inert vs the passive opponent; the aura still counts as an enchantment (scaling auras) and an Aura (Kor / Daybreak restriction).]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 0, "aura_tough_bonus": 0, "is_aura": true }
+        },
+        {
+            "name": "Gryff's Boon",
+            "mana_cost": "{W}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +1/+0 and has flying.\n{3}{W}: Return this card from your graveyard to the battlefield attached to target creature. Activate only as a sorcery. [Flying inert; the graveyard-return ability is inert (the aura never reaches the graveyard vs the passive opponent).]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 1, "aura_tough_bonus": 0, "is_aura": true }
+        },
+        {
+            "name": "Audacity",
+            "mana_cost": "{G}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +2/+0 and has trample.\nWhen this Aura is put into a graveyard from the battlefield, draw a card. [Trample inert; the dies-draw trigger is inert (the aura never leaves the battlefield vs the passive opponent).]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 2, "aura_tough_bonus": 0, "is_aura": true }
+        },
+        {
+            "name": "All That Glitters",
+            "mana_cost": "{1}{W}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 for each artifact and/or enchantment you control. [Scales +1/+1 per artifact and/or enchantment you control (aura_scale_kind=artifacts_enchantments, incl. itself); the deck runs no artifacts.]",
+            "template": "custom",
+            "parameters": { "aura_scale_kind": "artifacts_enchantments", "aura_scale_power": 1, "aura_scale_tough": 1, "is_aura": true }
+        },
+        {
+            "name": "Spirit Link",
+            "mana_cost": "{W}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Enchant"],
+            "oracle_text": "Enchant creature\nWhenever enchanted creature deals damage, you gain that much life. [Grants NO P/T; lifelink modelled. The aura still counts as an enchantment/Aura for scaling / Kor / restrictions.]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 0, "aura_tough_bonus": 0, "aura_grants_lifelink": true, "is_aura": true }
+        },
+        {
+            "name": "Lion Umbra",
+            "mana_cost": "{G}{G}",
+            "types": ["Enchantment"],
+            "subtypes": ["Aura"],
+            "keywords": ["Umbra armor", "Enchant"],
+            "oracle_text": "Enchant modified creature (Equipment, Auras its controller controls, and counters are modifications.)\nEnchanted creature gets +3/+3 and has vigilance and reach.\nUmbra armor (If enchanted creature would be destroyed, instead remove all damage from it and destroy this Aura.) [Restriction modelled (aura_enchant_requires=modified: has an Aura you control or a +1/+1 counter). Vigilance + reach + umbra armor inert.]",
+            "template": "custom",
+            "parameters": { "aura_power_bonus": 3, "aura_tough_bonus": 3, "aura_enchant_requires": "modified", "is_aura": true }
+        },
+        {
+            "name": "Horizon Canopy",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life: Add {G} or {W}.\n{1}, {T}, Sacrifice this land: Draw a card.",
+            "template": "basic_land",
+            "parameters": { "produces": ["G", "W"], "tap_self_damage": 1, "sacrifice_draw_cost": "{1}" }
+        },
+        {
+            "name": "Razorverge Thicket",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {G} or {W}.",
+            "template": "basic_land",
+            "parameters": { "produces": ["G", "W"], "fastland_max_other_lands": 2 }
+        },
+        {
+            "name": "Brushland",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {C}.\n{T}: Add {G} or {W}. This land deals 1 damage to you. [Modelled as a G/W painland (tap_self_damage 1). The free {C} mode is not modelled -- our life loss is inert for the goldfish clock (opponent-life is the wincon); the {C} option would only matter for a life-total-sensitive deck.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["G", "W"], "tap_self_damage": 1 }
+        },
+        {
+            "name": "Branchloft Pathway",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {G}. // Boulderloft Pathway: {T}: Add {W}. [Modal double-faced LAND: play EITHER Branchloft ({G}) OR Boulderloft ({W}); the chosen face enters untapped and taps for its one colour, committing to one colour like the real card. In hand it counts as its FRONT colour ({G}) for mulligan/colour eval (minor disclosed simplification); the played battlefield face is exact.]",
+            "template": "basic_land",
+            "parameters": { "produces": ["G"], "mdfc_back_name": "Boulderloft Pathway", "mdfc_back_produces": ["W"] }
         }
     ]
 }

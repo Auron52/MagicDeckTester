@@ -96,6 +96,14 @@ MANIFEST = {
     # (WriteDragonDecisionJson / dragonPanelHtml). Was `main_phase` while the selection was search-only.
     "tutor_to_battlefield":  ("dragon",               truthy),
     "fetch_land_types":      ("main_phase",           truthy),
+    # MDFC (Pathway) land: playing it offers a "which face?" choice surfaced as main_phase plan
+    # variants (a `face` choose sub, one variant per face) -- not its own decision type.
+    "mdfc_back_name":        ("main_phase",           truthy),
+    # Light-Paws, Emperor's Voice: on an Aura you CAST resolving, search your library for an Aura and
+    # attach it to Light-Paws. WHICH Aura is now a real human choice -- its own `lightpaws` type
+    # (WriteLightPawsDecisionJson / lightPawsPanelHtml), a resolution-time chooser (g_play_lightpaws_chooser).
+    # Was a heuristic-picked known gap while the fetch was engine-only.
+    "aura_cast_tutor_attach": ("lightpaws",            truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -164,6 +172,7 @@ INERT_PARAMS = {
     "tutor_types": "tutor detail (rides tutor)", "subtypes_affected": "lord/replicate subtype list",
     # mana production (color/source auto-resolved in the payment engine, not a surfaced choice today)
     "produces": "mana production (color auto-resolved in payment)", "produces_amount": "mana amount",
+    "mdfc_back_produces": "MDFC back-face mana (colour auto-resolves once the face is picked; the face pick itself rides main_phase via mdfc_back_name)",
     "mana_rock": "mana source (color auto-resolved)", "is_filter": "mana filter (color auto-resolved)",
     "ramp_filter": "mana filter (color auto-resolved)", "reflecting": "Reflecting-Pool mana (auto-resolved)",
     "ritual_floating_mana": "ritual mana added",
@@ -202,6 +211,15 @@ INERT_PARAMS = {
     "firebreathing_power": "pump power-per-{R} detail (rides firebreathing_cost, DEFERRED)",
     "team_pump_power": "team pump power detail (rides team_pump_cost, DEFERRED)",
     "team_pump_subtypes": "team pump subtype filter detail (rides team_pump_cost, DEFERRED)",
+    # --- Auras (Bogles): effect/stat/trigger detail params -- no interactive player choice ---
+    "aura_power_bonus": "aura stat grant (rides is_aura)", "aura_tough_bonus": "aura stat grant (rides is_aura)",
+    "aura_grants_lifelink": "automatic lifelink grant, no choice",
+    "aura_scale_kind": "aura scaling selector (rides is_aura)", "aura_scale_power": "aura scaling stat (rides is_aura)",
+    "aura_scale_tough": "aura scaling stat (rides is_aura)",
+    "aura_enchant_requires": "aura enchant-target restriction (narrows the is_aura main_phase variants)",
+    "aura_self_buff_power": "Kor static per-aura self-buff, computed P/T", "aura_self_buff_tough": "Kor static per-aura self-buff, computed P/T",
+    "draw_on_aura_cast": "Kor may-draw auto-resolved as always-draw (strictly good in goldfish), no meaningful choice",
+    "fastland_max_other_lands": "static land property (conditional enters-tapped, Razorverge)",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -220,6 +238,7 @@ MAINPHASE_PARAMS = {
     "can_animate":         "capability flag; animate rides main_phase",
     "splice_onto_arcane":  "Desperate Ritual splice count = a main_phase plan variant (emitted in main.cpp)",
     "suspend_time_counters": "Lotus Bloom suspend = a {0} main_phase action; when-to-suspend is a plan variant",
+    "is_aura":             "Aura enchant-target = a main_phase plan variant (one per legal creature, offered unpruned; SummarizePlan labels it, main.cpp emits enchant_target)",
 }
 
 # DEFAULT after onboarding = SURFACE every decision (user 2026-07-17). "Let the AI decide" is a

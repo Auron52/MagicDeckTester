@@ -33,6 +33,15 @@ struct CardParams
     bool sacrifice_land = false;              // additional cost: sacrifice a land (e.g. Shard Volley)
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
+    // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face
+    // is this card (name + `produces` above); the BACK face is a distinct single-color land the
+    // player may CHOOSE to play instead. When `mdfc_back_name` is set the DB synthesizes a back-face
+    // CardDefinition of that name that taps for `mdfc_back_produces`, and land enumeration offers BOTH
+    // faces as distinct land-play options (the played permanent's IDENTITY locks its colour, read live
+    // by name). Empty name = not an MDFC. In hand the card counts as its FRONT `produces` for colour
+    // eval (a minor, disclosed simplification for Pathway lands; the played battlefield face is exact).
+    std::string        mdfc_back_name;
+    std::vector<Color> mdfc_back_produces;
     std::vector<std::string> subtypes_affected;  // for lord effects
 
     // On-cast trigger: when the controller casts a spell with MV <= on_cast_trigger_max_mv,
@@ -129,6 +138,12 @@ struct CardParams
     // If true, the permanent is placed on the battlefield tapped and cannot
     // produce mana until the next turn's untap step.
     bool enters_tapped = false;
+
+    // Fastland (Razorverge Thicket): "enters tapped UNLESS you control N or fewer OTHER lands."
+    // >= 0 gates it: enters untapped iff (other lands you control) <= this value (Razorverge: 2).
+    // Evaluated in LandWouldEnterTapped (the ETB authority). -1 = not a fastland (default) ->
+    // byte-identical for every other deck.
+    int fastland_max_other_lands = -1;
 
     // No maximum hand size (e.g. Reliquary Tower). If true, the cleanup-step discard
     // to 7 is skipped while this permanent is on the battlefield.
@@ -594,6 +609,64 @@ struct CardParams
     // Magma Opus: a non-draw spell that ALSO draws on resolution ("draw two cards"). Drawn to
     // hand in both cast paths (executor + rollout) -- deterministic, lockstep. 0 = no draw rider.
     int  cast_draw = 0;
+
+    // --- Auras (attach-to-creature enchantments; Bogles / hexproof-auras deck) ---
+    // An Aura is an Enchantment that, when cast, targets a creature and enters attached to it,
+    // granting the enchanted creature a P/T bonus and/or keyword. is_aura routes resolution to the
+    // attach path (EffectHandler / TurnSolver apply_one), and its grant is applied to the enchanted
+    // creature at every combat site via AuraBonusFor (SpellEffects.h). The enchant TARGET is a SEARCH
+    // decision (Action/StackEntry::enchant_target, one plan variant per legal creature), because which
+    // creature carries the auras changes the clock (summoning sickness + a Kor Spiritdancer's per-aura
+    // self-buff). false => not an aura (every other deck byte-identical).
+    bool is_aura = false;
+    int  aura_power_bonus = 0;   // flat +P granted to the enchanted creature (Rancor +2, Daybreak +3)
+    int  aura_tough_bonus = 0;   // flat +T (stored but currently INERT vs the passive goldfish opponent
+                                 // -- nothing damages our creatures; kept for future life-total fidelity)
+    // Lifelink grant (MODELED, per user 2026-07-22: life-total decks are coming). When true the enchanted
+    // creature has lifelink -- combat damage it deals also gains its controller that much life (applied at
+    // the combat sites). Daybreak Coronet, Armadillo Cloak ("deals damage -> gain that much life"), Spirit
+    // Link. Every OTHER aura keyword (trample/flying/first strike/vigilance/reach/hexproof/protection/umbra
+    // armor) is provably INERT vs the passive opponent and is NOT modeled (disclosed Stage 6a).
+    bool aura_grants_lifelink = false;
+    // Dynamic P/T scaling: the aura's grant grows with a board count. aura_scale_kind selects WHICH count
+    // multiplies aura_scale_power/tough:
+    //   "enchantments"            +N per enchantment you control, INCLUDING this aura (Ethereal Armor: 1/1)
+    //   "other_enchantments"      +N per OTHER enchantment on the battlefield, any controller (Ancestral
+    //                             Mask: 2/2; goldfish opp controls none -> = other enchantments you control)
+    //   "artifacts_enchantments"  +N per artifact and/or enchantment you control, incl. this aura (All That
+    //                             Glitters: 1/1)
+    // Empty => flat aura (no scaling). Computed in AuraBonusFor / CountAuraScaleUnits.
+    std::string aura_scale_kind;
+    int  aura_scale_power = 0;   // per-unit +P for the scaling term
+    int  aura_scale_tough = 0;   // per-unit +T for the scaling term
+    // Casting restriction on WHICH creature may be enchanted (CR 601.2c legality, enforced in
+    // LegalEnchantTargets so an aura with no legal target is uncastable and stays in hand):
+    //   "another_aura"  Daybreak Coronet: the creature must ALREADY have another Aura attached
+    //   "modified"      Lion Umbra: the creature must be MODIFIED (has an Aura you control, Equipment,
+    //                   or a +1/+1 counter). No equipment in this deck; = has an aura or a +1/+1 counter.
+    // Empty => any creature you control is a legal target.
+    std::string aura_enchant_requires;
+
+    // --- Kor Spiritdancer ---
+    // "This creature gets +N/+N for each Aura attached to it." Applied to THIS permanent in AuraBonusFor
+    // (per aura whose aura_attached_to == this creature's m_number). Kor: 2/2. 0 => no self-buff.
+    int  aura_self_buff_power = 0;
+    int  aura_self_buff_tough = 0;
+    // "Whenever you cast an Aura spell, you may draw a card." Fired in FireOnCastTriggers when the cast
+    // card is_aura, once per such permanent controlled. Drawn to hand (deterministic top-of-library,
+    // lockstep in executor + rollout); NO same-turn re-solve (the drawn card is a resource for later
+    // turns -- conservative, avoids an fd-diverge re-solve; disclosed 6a). false => no trigger.
+    bool draw_on_aura_cast = false;
+
+    // --- Light-Paws, Emperor's Voice ---
+    // "Whenever an Aura you control enters, if you cast it, search your library for an Aura card with mana
+    // value <= that Aura and with a different name than each Aura you control, put it onto the battlefield
+    // attached to Light-Paws, then shuffle." Fired when an Aura YOU CAST resolves (not for the auras
+    // Light-Paws itself puts into play -- the "if you cast it" intervening-if bounds the chain to one fetch
+    // per cast aura). The fetched aura enters attached to THIS permanent. WHICH aura is a heuristic pick
+    // (PerformLightPawsAttach: max power contribution; disclosed 6a as a heuristic-narrowed target, like a
+    // cascade target) -- a future search-decision candidate. false => no trigger.
+    bool aura_cast_tutor_attach = false;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.
@@ -630,6 +703,11 @@ public:
 
     // Look up a card by name (case-sensitive, matches Scryfall name).
     const CardDefinition* Lookup(const std::string& name) const;
+
+    // Names of every modal double-faced (MDFC) BACK face known to the DB (e.g. "Boulderloft
+    // Pathway"). The play viewer uses this to request the correct Scryfall face image -- a back
+    // face's default image is its FRONT, so it must ask for face=back. Empty without MDFC lands.
+    std::vector<std::string> MdfcBackFaceNames() const;
 
     // Look up a card's definition via its memoized pointer (Card::m_def), falling
     // back to a by-name Lookup (and caching the result) the first time. Prefer this

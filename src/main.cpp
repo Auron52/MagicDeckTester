@@ -99,7 +99,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     // a human label (tooltip), and the count. A permanent may carry several kinds at once
     // (e.g. a depletion land that also caught a +1/+1), hence a vector.
     struct Cnt { const char* kind; const char* label; int count; };
-    struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped; };
+    struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped;
+                 int num; bool is_aura; int attached_to; };
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -131,7 +132,11 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (p.charge_counters)  { cs.push_back({ "charge",    "charge",    p.charge_counters }); }
         if (p.verse_counters)   { cs.push_back({ "verse",     "verse",     p.verse_counters }); }
         if (p.storage_counters) { cs.push_back({ "storage",   "storage",   p.storage_counters }); }
-        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped });
+        // num = stable per-copy id; is_aura + attached_to let the viewer draw an Aura overlapping the
+        // creature (m_number) it enchants (0 = unattached / not an Aura). Additive display fields.
+        bool is_aura = d && d->params.is_aura;
+        rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
+                         p.card.m_number, is_aura, p.aura_attached_to });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -141,7 +146,10 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (i) { os << ", "; }
         os << "{ \"name\": "; JsonStr(os, rows[i].name);
         os << ", \"idx\": " << rows[i].idx;
+        os << ", \"num\": " << rows[i].num;
         if (rows[i].tapped) { os << ", \"tapped\": true"; }
+        if (rows[i].is_aura) { os << ", \"is_aura\": true"; }
+        if (rows[i].attached_to > 0) { os << ", \"attached_to\": " << rows[i].attached_to; }
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
         if (!rows[i].counters.empty())
@@ -185,7 +193,23 @@ static bool HandIsDraw(const CardDefinition* d)
 }
 
 // One-line human-readable summary of a candidate plan (land drop + casts).
-static std::string SummarizePlan(const TurnSolver::Plan& plan)
+// Resolve a creature's m_number (an aura's enchant_target) to its card name for display, so two
+// otherwise-identical aura casts read as distinct plans ("Rancor -> Kor Spiritdancer" vs "-> Bogle").
+static std::string EnchantTargetName(const GameState& s, int m_number)
+{
+    for (const Permanent& p : s.battlefield)
+        if (p.controller_index == s.active_player_index && p.card.IsCreature()
+            && p.card.m_number == m_number)
+        { return p.card.m_name.str(); }
+    // A same-turn creature target (cast this turn to carry the Aura) is still in hand at enumeration, so
+    // resolve its name there too -- else the plan reads "-> #38" instead of "-> Light-Paws".
+    for (const Card& c : s.ActivePlayer().hand)
+        if (c.m_number == m_number)
+        { return c.m_name.str(); }
+    return "#" + std::to_string(m_number);
+}
+
+static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& s)
 {
     std::ostringstream os;
     // Pure dig line (human play): cycle a land / sacrifice Fiery Islet to draw -- show just the
@@ -204,7 +228,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan)
         std::string tag;
         switch (a.kind)
         {
-            case Action::Kind::CastFromHand:      tag = a.card_name; break;
+            case Action::Kind::CastFromHand:
+                tag = a.card_name;
+                if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.enchant_target); }
+                break;
             case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
@@ -237,6 +264,14 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
 {
     const Player& me  = s.ActivePlayer();
     int           opp = 1 - s.active_player_index;
+    // MDFC back-face names, so the viewer can request the correct Scryfall FACE image (a back face's
+    // default image is its front -> the GUI appends face=back for these). DB-global, computed once.
+    {
+        static const std::vector<std::string> mdfc_backs = CardDatabase::Instance().MdfcBackFaceNames();
+        os << "  \"mdfc_backs\": [";
+        for (size_t i = 0; i < mdfc_backs.size(); ++i) { if (i) { os << ", "; } JsonStr(os, mdfc_backs[i]); }
+        os << "],\n";
+    }
     // Iterate hand Cards (not just names) so per-instance flags (m_is_staged / expiry) survive.
     std::vector<const Card*> hand;
     for (const Card& c : me.hand) { hand.push_back(&c); }
@@ -443,7 +478,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     {
         const TurnSolver::Plan& p = plans[i];
         os << "    { \"index\": " << i << ", \"summary\": ";
-        JsonStr(os, SummarizePlan(p));
+        JsonStr(os, SummarizePlan(p, s));
         // Structured land + cast list so the GUI can match a hand-assembled line against
         // the model's plans (and show, after a reject, exactly which lines it WOULD play).
         os << ", \"land\": ";
@@ -480,6 +515,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
             if (ac.soulfire_own_targets > 0) { os << ", \"soulfire_targets\": " << ac.soulfire_own_targets; }
             if (ac.splice_count > 0)      { os << ", \"splice_count\": " << ac.splice_count; }
+            // Aura enchant target: the creature (m_number + resolved name) this Aura attaches to, so
+            // the GUI shows WHICH creature when several plans cast the same aura on different targets.
+            if (ac.enchant_target > 0)
+            {
+                os << ", \"enchant_target\": " << ac.enchant_target
+                   << ", \"enchant_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.enchant_target));
+            }
             if (!ac.chosen_float_color.empty()) { os << ", \"float_color\": "; JsonStr(os, ac.chosen_float_color); }
             os << " }";
         }
@@ -962,6 +1004,36 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     }
     os << "],\n";
     os << "  \"note\": \"reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
+// Light-Paws tutor-attach decision (Light-Paws, Emperor's Voice): the player picks WHICH library Aura
+// Light-Paws fetches and attaches to itself (or declines -- it is a "may search"). Emits the library
+// Aura pool as image options with a `legal` flag (only fetchable Auras are pickable -- MV <= the cast
+// Aura, a name you don't already control, whose restriction Light-Paws satisfies); reply = a pool
+// index to fetch, or -1 to fetch nothing.
+static void WriteLightPawsDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                       const std::vector<Card>& pool, const std::vector<int>& legal,
+                                       int heuristic_default, int decision_index)
+{
+    std::vector<bool> is_legal(pool.size(), false);
+    for (int li : legal) { if (li >= 0 && li < static_cast<int>(pool.size())) { is_legal[li] = true; } }
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"lightpaws\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"pool\": [";
+    for (size_t i = 0; i < pool.size(); ++i)
+    {
+        if (i) os << ", ";
+        os << "{ \"index\": " << i << ", \"legal\": " << (is_legal[i] ? "true" : "false")
+           << ", \"name\": "; JsonStr(os, pool[i].m_name.str()); os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick.\"\n";
     os << "}\n";
 }
 
@@ -1694,6 +1766,40 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_dig_chooser = &dig_chooser;
 
+    // Light-Paws tutor-attach (Light-Paws, Emperor's Voice): the player picks which library Aura it
+    // fetches + attaches to itself (or -1 to decline). Shares the --choices stream; the reply is a pool
+    // index, or -1. Default = the engine's heuristic pick (the highest static-power eligible Aura).
+    LightPawsChooser lightpaws_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<Card>& pool, const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                bool ok = (chosen == -1);
+                for (int li : legal) { if (li == chosen) { ok = true; break; } }
+                if (!ok) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteLightPawsDecisionJson(ss, s, source, pool, legal, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteLightPawsDecisionJson(std::cout, s, source, pool, legal, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_lightpaws_chooser = &lightpaws_chooser;
+
     // Dragonstorm put override (the Dragon dialog): the player picks WHICH library Dragons enter (up to
     // max_puts); the engine keeps the rule's play order. Reply = one int per candidate (1 = put this
     // copy), read positionally like the divide / Soulfire decisions (any subset up to max_puts is
@@ -2001,6 +2107,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_replicate_chooser = nullptr;
     g_play_land_entry_chooser = nullptr;
     g_play_dragon_chooser = nullptr;
+    g_play_lightpaws_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;

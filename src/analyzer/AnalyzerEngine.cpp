@@ -62,28 +62,6 @@ const bool BUILD_KEEP_MODEL = []{
     const char* e = std::getenv("MTG_KEEP_MODEL");
     return e && *e && std::string(e) != "0";
 }();
-// MTG_SKIP_GRID: skip the expensive JOINT land x hand-score-gate grid (Phase 3b) and emit a
-// card-scores-only profile -- default land window + the deck's discovered required_pieces /
-// min_color_sources + the cheap per-card scores, with the hand-score gate DECLINED (NO_GATE).
-// The land grid is the analyzer's dominant cost (~4.5 h on Dragonstorm) and is SUPERSEDED by the
-// separate exhaustive mulligan profile; card_scores (the cheap ~2000-game pass) are the only piece
-// consumed in play we still want up front (bottoming tiebreak + optional keep gate). DEFAULT OFF so
-// a plain regeneration is byte-identical. Read once at startup.
-const bool SKIP_LAND_GRID = []{
-    const char* e = std::getenv("MTG_SKIP_GRID");
-    return e && *e && std::string(e) != "0";
-}();
-// MTG_CARD_SCORES_ONLY: the FASTEST light-analyze -- additionally skip Phase 1/2/2b (the baseline
-// scan, required-pieces confirmation, and colour-source confirmation, which are the dominant cost
-// after the land grid: each is a full multi-thousand-game RunForRecords batch and colour-sources
-// runs two per colour). Produce ONLY the cheap Phase 3a card scores, computed on the DEFAULT keep
-// profile (no discovered required_pieces / min_color_sources). Implies SKIP_LAND_GRID. The play path
-// tolerates the missing pieces (empty required_pieces = default keep; card_scores still drive the
-// bottoming tiebreak). DEFAULT OFF so a plain regeneration is byte-identical. Read once at startup.
-const bool CARD_SCORES_ONLY = []{
-    const char* e = std::getenv("MTG_CARD_SCORES_ONLY");
-    return e && *e && std::string(e) != "0";
-}();
 constexpr int ANALYSIS_BUDGET = 20;    // deterministic virtual-ms node budget; matches the
                                        // regression suite's proven-sufficient d5 budget (the
                                        // node budget is iterative-deepening refinement WITHIN
@@ -143,24 +121,6 @@ double AnalyzerEngine::AverageWinTurn(const std::vector<GameRecord>& records, in
     return records.empty() ? 0.0 : sum / static_cast<double>(records.size());
 }
 
-std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecordsSerial(
-    const Decklist& deck, const MulliganProfile& profile,
-    int num_games, uint64_t seed, int max_turns,
-    int depth, int timeout_ms)
-{
-    std::vector<GameRecord> records(num_games);
-    AIEngine   ai(profile, depth, timeout_ms);
-    ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
-    GameEngine engine(ai);
-    for (int i = 0; i < num_games; ++i)
-    {
-        GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(i));
-        state.vial_target_mv    = profile.vial_target_mv;
-        records[i].win_turn     = engine.RunGame(state, max_turns);
-        records[i].opening_hand = ai.GetKeptOpeningHand();
-    }
-    return records;
-}
 
 std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
     const Decklist& deck, const MulliganProfile& profile,
@@ -174,9 +134,6 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
     // is seeded by gi alone (seed + gi) and written to records[gi], so which worker
     // runs it cannot change the result. The budget is a deterministic node count
     // (virtual ms), thread-invariant by construction, so no per-thread scaling.
-    //
-    // Callers that are ALREADY parallel over their own units (e.g. GridSearchLands
-    // over configs) must use RunForRecordsSerial instead to avoid oversubscription.
     std::vector<GameRecord> records(num_games);
     if (num_games <= 0) { return records; }
 
@@ -208,44 +165,6 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
     return records;
 }
 
-std::map<std::string, double> AnalyzerEngine::ScanCardImpacts(
-    const std::vector<GameRecord>& records, int max_turns)
-{
-    // Collect all distinct non-land card names seen in opening hands.
-    std::set<std::string> all_cards;
-    for (const GameRecord& r : records)
-    {
-        for (const std::string& c : r.opening_hand) { all_cards.insert(c); }
-    }
-
-    std::map<std::string, double> impact;
-    for (const std::string& card : all_cards)
-    {
-        double sum_with = 0.0, sum_without = 0.0;
-        int    cnt_with = 0,   cnt_without  = 0;
-
-        for (const GameRecord& r : records)
-        {
-            double wt = (r.win_turn > 0) ? static_cast<double>(r.win_turn)
-                                         : static_cast<double>(max_turns + 1);
-            bool in_hand = false;
-            for (const std::string& c : r.opening_hand)
-            {
-                if (c == card) { in_hand = true; break; }
-            }
-            if (in_hand) { sum_with += wt;    ++cnt_with;    }
-            else         { sum_without += wt; ++cnt_without; }
-        }
-
-        if (cnt_with > 0 && cnt_without > 0)
-        {
-            double avg_with    = sum_with    / cnt_with;
-            double avg_without = sum_without / cnt_without;
-            impact[card] = avg_without - avg_with;  // positive = card helps when in hand
-        }
-    }
-    return impact;
-}
 
 std::map<std::string, std::vector<double>> AnalyzerEngine::ComputeCardScores(
     const std::vector<GameRecord>& records, int max_turns, double* threshold_out,
@@ -335,173 +254,12 @@ std::map<std::string, std::vector<double>> AnalyzerEngine::ComputeCardScores(
     return result;
 }
 
-MulliganProfile AnalyzerEngine::GridSearchLands(
-    const Decklist& deck, const MulliganProfile& base_profile,
-    int games_per_config, uint64_t seed, int max_turns,
-    const std::map<std::string, std::vector<double>>& card_scores,
-    const std::vector<double>& threshold_candidates,
-    double& best_win_turn)
-{
-    static const CurveCheck  CURVE_VALUES[] = {
-        CurveCheck::None, CurveCheck::TwoDrop,
-        CurveCheck::OneDrop, CurveCheck::OneAndTwo
-    };
-    static const BottomOrder BOTTOM_VALUES[] = {
-        BottomOrder::CountFirst, BottomOrder::TotalFirst
-    };
-
-    // The threshold gate only fires when card_scores is non-empty (see
-    // AIEngine::ShouldKeepHand). If a caller passes no scores or no candidates, fall
-    // back to a single "no gate" pass so this reduces to the original land-only grid.
-    std::vector<double> thresholds = threshold_candidates;
-    if (card_scores.empty() || thresholds.empty()) { thresholds = {0.0}; }
-
-    // Enumerate every config in a fixed order: land params CROSSED with each candidate
-    // hand-score threshold. card_scores is baked into every config so the score gate is
-    // exercised DURING the search -- land params and the gate are chosen JOINTLY, not in
-    // isolation (the bug that let a tight land grid + a separately-derived aggressive gate
-    // double-mulligan). Each config's seed offset is its index, so results are
-    // deterministic and order-independent.
-    std::vector<MulliganProfile> configs;
-    for (int min_l = 1; min_l <= 3; ++min_l)
-    for (int max_l = min_l; max_l <= 5; ++max_l)
-    for (int stop  = 3; stop  <= 5; ++stop)
-    for (CurveCheck  cc : CURVE_VALUES)
-    for (BottomOrder bo : BOTTOM_VALUES)
-    for (double thr : thresholds)
-    {
-        MulliganProfile profile  = base_profile;
-        profile.min_lands        = min_l;
-        profile.max_lands        = max_l;
-        profile.stop_at          = stop;
-        profile.curve_check      = cc;
-        profile.bottom_order     = bo;
-        profile.card_scores          = card_scores;
-        profile.hand_score_threshold = thr;
-        configs.push_back(profile);
-    }
-
-    // Evaluate configs in parallel -- they are independent. The inner game loop is
-    // SERIAL (RunForRecordsSerial) because this loop already saturates the cores;
-    // nesting a parallel game loop inside would oversubscribe.
-    const uint64_t seed_step = static_cast<uint64_t>(games_per_config);
-    std::vector<double> avgs(configs.size(), std::numeric_limits<double>::max());
-    // Progress: this is the single most expensive phase (e.g. ~1152 configs x ~1000 games at
-    // full scale = the multi-hour grind). Emit a line every ~5% of configs completed so the run
-    // is observable rather than a black box. Lossless -- the counter doesn't affect results.
-    const int          total_cfg     = static_cast<int>(configs.size());
-    const int          progress_step = std::max(1, total_cfg / 20);
-    std::atomic<int>   completed{0};
-    std::cerr << "    grid: " << total_cfg << " configs x " << games_per_config
-              << " games each...\n" << std::flush;
-    ParallelFor(total_cfg, [&](int ci)
-    {
-        std::vector<GameRecord> records = RunForRecordsSerial(
-            deck, configs[ci], games_per_config,
-            seed + static_cast<uint64_t>(ci) * seed_step, max_turns,
-            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
-        avgs[ci] = AverageWinTurn(records, max_turns);
-        const int done = ++completed;
-        if (done % progress_step == 0 || done == total_cfg)
-        {
-            std::cerr << "    grid: " << done << "/" << total_cfg
-                      << " configs (" << (100 * done / total_cfg) << "%)\n" << std::flush;
-        }
-    });
-
-    // Reduce in config order with strict-< so ties resolve to the first config,
-    // identical to the old serial scan.
-    MulliganProfile best = base_profile;
-    best_win_turn        = std::numeric_limits<double>::max();
-    for (std::size_t ci = 0; ci < configs.size(); ++ci)
-    {
-        if (avgs[ci] < best_win_turn)
-        {
-            best_win_turn = avgs[ci];
-            best          = configs[ci];
-        }
-    }
-    return best;
-}
 
 // ============================================================
 // Color source analysis helpers
 // ============================================================
 
-// Returns the maximum number of pips of each color across all card mana costs in the deck.
-// Only colors with at least one pip are included in the result.
-static std::map<Color, int> FindMaxPipsPerColor(const Decklist& deck)
-{
-    std::map<Color, int> max_pips;
-    for (const Card& c : deck.mainboard)
-    {
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-        if (!def) { continue; }
-        const ManaCost& cost = def->card.m_mana_cost;
-        if (cost.white > 0) { max_pips[Color::White] = std::max(max_pips[Color::White], cost.white); }
-        if (cost.blue  > 0) { max_pips[Color::Blue]  = std::max(max_pips[Color::Blue],  cost.blue);  }
-        if (cost.black > 0) { max_pips[Color::Black] = std::max(max_pips[Color::Black], cost.black); }
-        if (cost.red   > 0) { max_pips[Color::Red]   = std::max(max_pips[Color::Red],   cost.red);   }
-        if (cost.green > 0) { max_pips[Color::Green] = std::max(max_pips[Color::Green], cost.green); }
-    }
-    return max_pips;
-}
 
-// Tests min_count values from max_count down to 1 for the given color.
-// Returns the highest confirmed minimum (0 if requiring any minimum is not helpful).
-static int ConfirmColorSourceMin(
-    const Decklist& deck, const MulliganProfile& base_profile,
-    Color color, int max_count,
-    double baseline_avg, uint64_t& confirm_seed, int max_turns)
-{
-    const int        CONFIRM1_GAMES      = Scaled(3000);
-    const int        CONFIRM2_GAMES      = Scaled(5000);
-    constexpr double CONFIRM1_THRESHOLD  = 0.10;
-    constexpr double CONFIRM2_THRESHOLD  = 0.05;
-
-    for (int min_count = max_count; min_count >= 1; --min_count)
-    {
-        MulliganProfile test_profile = base_profile;
-        test_profile.min_color_sources[color] = min_count;
-
-        std::cerr << "  Color source {" << ColorToChar(color) << "} >= "
-                  << min_count << " — confirming...\n";
-
-        std::vector<AnalyzerEngine::GameRecord> c1 = AnalyzerEngine::RunForRecords(
-            deck, test_profile, CONFIRM1_GAMES, confirm_seed, max_turns,
-            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
-        double avg1     = AnalyzerEngine::AverageWinTurn(c1, max_turns);
-        double improve1 = baseline_avg - avg1;
-        confirm_seed   += CONFIRM1_GAMES;
-
-        if (improve1 < CONFIRM1_THRESHOLD)
-        {
-            std::cerr << "    Round 1 failed (improvement " << improve1
-                      << " < " << CONFIRM1_THRESHOLD << ") — skipping.\n";
-            continue;
-        }
-
-        std::vector<AnalyzerEngine::GameRecord> c2 = AnalyzerEngine::RunForRecords(
-            deck, test_profile, CONFIRM2_GAMES, confirm_seed, max_turns,
-            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
-        double avg2     = AnalyzerEngine::AverageWinTurn(c2, max_turns);
-        double improve2 = baseline_avg - avg2;
-        confirm_seed   += CONFIRM2_GAMES;
-
-        if (improve2 < CONFIRM2_THRESHOLD)
-        {
-            std::cerr << "    Round 2 failed (improvement " << improve2
-                      << " < " << CONFIRM2_THRESHOLD << ") — skipping.\n";
-            continue;
-        }
-
-        std::cerr << "    Confirmed min=" << min_count
-                  << " (round1 +" << improve1 << ", round2 +" << improve2 << " turns).\n";
-        return min_count;
-    }
-
-    return 0;
-}
 
 // ============================================================
 // Mulligan optimiser
@@ -540,218 +298,36 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     constexpr uint64_t OPT_SEED_OFFSET = 1'000'000ULL;
     uint64_t opt_seed = seed + OPT_SEED_OFFSET;
 
-    // Phase parameters.
-    // All optimisation phases run at ANALYSIS_DEPTH (d5) -- the depth the deck is
-    // actually played at -- so the mulligan profile is calibrated for real play, not
-    // greedy. This is far slower than the old d0 (the land grid alone is ~288k games),
-    // accepted for accuracy. Counts are sized so the standard error (~1.5/sqrt(N)) is
-    // well below each acceptance threshold.
-    const int        SCAN_GAMES        = Scaled(2000);  // std_err ≈ 0.034 turns (at scale 1)
-    const int        CONFIRM1_GAMES    = Scaled(3000);  // std_err ≈ 0.027 turns; threshold 0.10
-    const int        CONFIRM2_GAMES    = Scaled(5000);  // std_err ≈ 0.021 turns; threshold 0.05
-    const int        GRID_GAMES        = Scaled(1000);  // std_err ≈ 0.047 turns per config
-    constexpr int    MAX_CANDIDATES    = 5;
-    constexpr double SCAN_THRESHOLD    = 0.30;  // min correlation (turns) to enter pipeline
-    constexpr double CONFIRM1_THRESHOLD = 0.10; // min improvement to pass round 1
-    constexpr double CONFIRM2_THRESHOLD = 0.05; // min improvement to bake in
+    // Analyze produces a CARD-SCORES-ONLY baseline profile (user policy 2026-07-22; analyze-deck
+    // skill Stage 4): per-card scores on the default keep, the hand-score gate DECLINED (NO_GATE), and
+    // the default land window. The expensive mulligan OPTIMISATION that used to run here -- the baseline
+    // scan, required-piece confirmation, colour-source confirmation, and the joint land x hand-score-gate
+    // grid (hundreds of thousands of d5 games) -- was DELETED. That work is the separate, commit-bound,
+    // USER-INITIATED exhaustive-mulligan stage (mulligan-profile.md / ExhaustiveKeep), never part of
+    // analyze. See git history for the removed helpers (ScanCardImpacts / ConfirmColorSourceMin /
+    // GridSearchLands / FindMaxPipsPerColor) and the MTG_CARD_SCORES_ONLY / MTG_SKIP_GRID gates.
+    constexpr double NO_GATE = -1e18;   // ComputeHandScore is >= 0, so every hand clears it; serialises to JSON.
 
-    std::cerr << "Optimising mulligan profile...\n";
+    MulliganProfile profile;
+    profile.vial_target_mv = vial_target_mv;
 
-    // ---- Phase 1: baseline scan ------------------------------------------------
-    // MTG_CARD_SCORES_ONLY skips the baseline scan (and, below, the candidate + colour-source
-    // confirmation) entirely: leaving scan_records empty makes the Phase 2 loop over `sorted` a
-    // no-op, and Phase 2b is guarded directly. Only the cheap Phase 3a card scores then run, on the
-    // default keep profile -- a ~single-scoring-batch fast path (matches the baseline scan's cost).
-    MulliganProfile             baseline_profile;
-    baseline_profile.vial_target_mv = vial_target_mv;
-    std::vector<GameRecord>       scan_records;
-    double                        baseline_avg = 0.0;
-    std::map<std::string, double> impacts;
-    if (!CARD_SCORES_ONLY)
-    {
-        scan_records = RunForRecords(
-            deck, baseline_profile, SCAN_GAMES, opt_seed, max_turns,
-            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
-        baseline_avg = AverageWinTurn(scan_records, max_turns);
-        impacts      = ScanCardImpacts(scan_records, max_turns);
-    }
-    else
-    {
-        std::cerr << "  [MTG_CARD_SCORES_ONLY] Skipping baseline scan + required-pieces + "
-                     "colour-source confirmation; computing card scores on the default keep "
-                     "profile only.\n";
-    }
-
-    // Sort candidates by correlation strength (descending).
-    std::vector<std::pair<std::string, double>> sorted;
-    sorted.reserve(impacts.size());
-    for (const std::pair<const std::string, double>& kv : impacts) { sorted.push_back(kv); }
-    std::sort(sorted.begin(), sorted.end(),
-        [](const std::pair<std::string, double>& a, const std::pair<std::string, double>& b)
-        {
-            return a.second > b.second;
-        });
-
-    // ---- Phase 2: multi-round confirmation of candidates -----------------------
-    MulliganProfile              working_profile;
-    working_profile.vial_target_mv = vial_target_mv;
-    std::vector<RequiredPieceFlag> flags;
-    int                          confirmed = 0;
-    uint64_t confirm_seed = opt_seed + SCAN_GAMES;
-
-    for (const std::pair<std::string, double>& kv : sorted)
-    {
-        if (kv.second < SCAN_THRESHOLD) { break; }
-        if (confirmed >= MAX_CANDIDATES) { break; }
-
-        const std::string& card = kv.first;
-
-        // Skip lands — they're controlled by the grid search, not required_pieces.
-        const CardDefinition* opt = CardDatabase::Instance().Lookup(card);
-        if (opt && opt->card.IsLand()) { continue; }
-
-        std::cerr << "  Candidate: " << card
-                  << " (correlation " << kv.second << " turns) — confirming...\n";
-
-        // Build test profile that also requires this card.
-        MulliganProfile test_profile = working_profile;
-        test_profile.required_pieces.push_back(card);
-
-        // Round 1
-        std::vector<GameRecord> c1 = RunForRecords(
-            deck, test_profile, CONFIRM1_GAMES, confirm_seed, max_turns,
-            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
-        double avg1       = AverageWinTurn(c1, max_turns);
-        double improve1   = baseline_avg - avg1;
-        confirm_seed     += CONFIRM1_GAMES;
-
-        if (improve1 < CONFIRM1_THRESHOLD)
-        {
-            std::cerr << "    Round 1 failed (improvement " << improve1 << " < "
-                      << CONFIRM1_THRESHOLD << ") — skipping.\n";
-            continue;
-        }
-
-        // Round 2: deeper confirmation with a fresh seed
-        std::vector<GameRecord> c2 = RunForRecords(
-            deck, test_profile, CONFIRM2_GAMES, confirm_seed, max_turns,
-            ANALYSIS_DEPTH, ANALYSIS_BUDGET);
-        double avg2      = AverageWinTurn(c2, max_turns);
-        double improve2  = baseline_avg - avg2;
-        confirm_seed    += CONFIRM2_GAMES;
-
-        if (improve2 < CONFIRM2_THRESHOLD)
-        {
-            std::cerr << "    Round 2 failed (improvement " << improve2 << " < "
-                      << CONFIRM2_THRESHOLD << ") — skipping.\n";
-            continue;
-        }
-
-        std::cerr << "    Confirmed (round1 +" << improve1
-                  << ", round2 +" << improve2 << " turns).\n";
-
-        working_profile.required_pieces.push_back(card);
-        RequiredPieceFlag flag;
-        flag.card_name        = card;
-        flag.correlation      = kv.second;
-        flag.baseline_win_turn = baseline_avg;
-        flag.win_turn_required = avg2;
-        flag.improvement      = improve2;
-        flags.push_back(flag);
-        ++confirmed;
-    }
-
-    // ---- Phase 2b: color source requirements -----------------------------------
-    // Skipped under MTG_CARD_SCORES_ONLY (two RunForRecords batches per colour -- the largest slice
-    // of the post-grid cost). working_profile.min_color_sources stays empty -> default keep.
-    if (!CARD_SCORES_ONLY)
-    {
-        std::cerr << "  Analysing color source requirements...\n";
-        std::map<Color, int> max_pips = FindMaxPipsPerColor(deck);
-        for (const std::pair<const Color, int>& kv : max_pips)
-        {
-            if (kv.second == 0) { continue; }
-            int confirmed = ConfirmColorSourceMin(
-                deck, working_profile, kv.first, kv.second,
-                baseline_avg, confirm_seed, max_turns);
-            if (confirmed > 0)
-            {
-                working_profile.min_color_sources[kv.first] = confirmed;
-            }
-        }
-    }
-
-    // ---- Phase 3a: per-card scores (computed BEFORE the land grid) -------------
-    // Card scores and the hand-score threshold must exist before the land grid so the
-    // grid can evaluate land params WITH the score gate active (joint optimisation).
-    // Computing them earlier -- on working_profile rather than the final land config --
-    // also avoids coupling the scores to the very land params we are about to tune.
+    std::cerr << "Computing card scores...\n";
     constexpr uint64_t SCORING_OFFSET = 3'000'000ULL;
     const int          SCORING_GAMES  = Scaled(2000);
-    std::cerr << "  Computing card scores (" << SCORING_GAMES << " games, depth="
-              << ANALYSIS_DEPTH << ")...\n";
+    std::cerr << "  Card scores (" << SCORING_GAMES << " games, depth=" << ANALYSIS_DEPTH << ")...\n";
     std::vector<GameRecord> scoring_records = RunForRecords(
-        deck, working_profile, SCORING_GAMES, seed + SCORING_OFFSET, max_turns,
+        deck, profile, SCORING_GAMES, seed + SCORING_OFFSET, max_turns,
         ANALYSIS_DEPTH, ANALYSIS_BUDGET);
     double recommended_thr = 0.0, hs_mean = 0.0, hs_std = 0.0;
-    std::map<std::string, std::vector<double>> card_scores =
-        ComputeCardScores(scoring_records, max_turns, &recommended_thr, &hs_mean, &hs_std);
+    profile.card_scores          = ComputeCardScores(scoring_records, max_turns,
+                                                     &recommended_thr, &hs_mean, &hs_std);
+    profile.hand_score_threshold = NO_GATE;
 
-    // Candidate thresholds to grid jointly with land params. Always include a
-    // "no gate" option (-inf: every hand passes the score check) so the search can
-    // decline to gate at all -- the over-aggressive bolt-on gate was the regression.
-    // The others bracket the old mean-1.5*std recommendation.
-    // "No gate" is a large finite-negative sentinel rather than -inf: ComputeHandScore
-    // is always >= 0, so any hand clears it (gate never fires), and unlike -inf it
-    // serialises cleanly to JSON.
-    constexpr double NO_GATE = -1e18;
-    std::vector<double> thr_candidates;
-    if (!card_scores.empty())
-    {
-        thr_candidates.push_back(NO_GATE);
-        for (double k : {2.0, 1.5, 1.0}) { thr_candidates.push_back(hs_mean - k * hs_std); }
-        std::cerr << "  Hand-score gate candidates (mean=" << hs_mean << " std=" << hs_std
-                  << "): no-gate, " << (hs_mean - 2.0 * hs_std) << ", "
-                  << (hs_mean - 1.5 * hs_std) << ", " << (hs_mean - 1.0 * hs_std) << "\n";
-    }
+    std::cerr << "  Done. Card-scores-only profile: " << profile.card_scores.size()
+              << " cards, no hand-score gate, default land window (min_lands=" << profile.min_lands
+              << " max_lands=" << profile.max_lands << ").\n";
 
-    // ---- Phase 3b: JOINT land + threshold grid search --------------------------
-    MulliganProfile optimal;
-    if (SKIP_LAND_GRID || CARD_SCORES_ONLY)
-    {
-        // Card-scores-only stopgap: skip the expensive land x threshold grid (superseded by the
-        // exhaustive mulligan profile). Keep working_profile's default land params + the discovered
-        // required_pieces / min_color_sources, attach the cheap card_scores, and DECLINE to gate
-        // (NO_GATE): absent the joint grid we do NOT ship an unvalidated hand-score gate -- the
-        // bolt-on gate was the old over-mulligan regression, and the grid itself always included
-        // NO_GATE precisely as the "decline to gate" option. card_scores still drive the bottoming
-        // tiebreak (HeuristicBottomPick), which is threshold-independent.
-        optimal = working_profile;
-        optimal.card_scores          = card_scores;
-        optimal.hand_score_threshold = NO_GATE;
-        std::cerr << "  [" << (CARD_SCORES_ONLY ? "MTG_CARD_SCORES_ONLY" : "MTG_SKIP_GRID")
-                  << "] Land grid skipped; card-scores-only profile "
-                  << "(default land window min_lands=" << optimal.min_lands
-                  << " max_lands=" << optimal.max_lands << ", no hand-score gate).\n";
-    }
-    else
-    {
-        std::cerr << "  Grid-searching land parameters x hand-score gate (joint)...\n";
-        double best_win_turn = 0.0;
-        uint64_t grid_seed = seed + SCORING_OFFSET + SCORING_GAMES;
-        optimal = GridSearchLands(
-            deck, working_profile, GRID_GAMES, grid_seed, max_turns,
-            card_scores, thr_candidates, best_win_turn);
-    }
-
-    std::cerr << "  Done. Optimal profile: min_lands=" << optimal.min_lands
-              << " max_lands=" << optimal.max_lands
-              << " stop_at=" << optimal.stop_at
-              << " curve_check=" << CurveCheckToString(optimal.curve_check)
-              << " bottom_order=" << BottomOrderToString(optimal.bottom_order)
-              << " hand_score_threshold=" << optimal.hand_score_threshold << "\n";
-
-    return {optimal, flags};
+    return {profile, {}};
 }
 
 // ============================================================
