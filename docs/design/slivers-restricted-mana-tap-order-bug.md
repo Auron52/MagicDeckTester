@@ -142,3 +142,35 @@ from the working tree (unvalidated); reapply from here on Monday.
 Still open: the **secondary (flag-only) bug** — the affordability/source path at `SpellEffects.h:4198,
 4235,4249` keys on `creature_mana_only`/`colored_creature_only && !for_creature`; find the CALLER that
 passes `for_creature=false` while evaluating an all-creature line (gi277, seed 4281, is the repro).
+
+## Fix attempt #2 (2026-07-26) — CLAMP-59, A/B CLEAN WIN (recommend adopt)
+
+The blunt "exclude {C} from ncol" (attempt #1) helped d3/d5 but regressed greedy d0 (Sliver Hive
+50 gets spent where greedy wants it saved). A `{C}`-for-generic-pip tweak (`DripLandAnyPipColor`)
+was a **no-op**. The winning variant **keeps {C} in ncol but clamps a colour land out of the
+colourless-manland RESERVE tier** — one line after `int rank = ncol<=1?10:ncol*10;` in
+`ManaSourceRank` (`DecisionProviders.cpp`):
+
+```cpp
+if (rank >= 60) { rank = 59; }   // a colour land never enters the manland-reserve tier (60)
+```
+
+Sliver Hive 60→59 still sits *below* Mutavault's reserve (60), so the search spends it first and
+frees Mutavault to attack; but 59 is near-reserve so greedy still saves it. A/B (slivers, 6 seeds
+2002/3003 train + 4004-7007 held, 1000 games, avg9):
+
+| depth | attempt#1 (rank=50) held | **clamp-59 held** |
+|---|---|---|
+| d0 (greedy) | +0.0067 (worse) | **+0.0007 (neutral)** |
+| d3 (searched) | −0.0048 | **−0.0053** |
+| d5 (searched) | −0.0043 | **−0.0043** |
+| overall | +0.0002 | **−0.0023 (faster)** |
+
+Net faster on BOTH train (−0.0012) and held-out (−0.0029); d0 regression gone. Recovers target
+games gi80/278/314 → T4 (gi277 still T5 = the secondary bug). Blast radius: **dragonstorm d0
+byte-identical** (its Unclaimed/Cavern are also 6-mode but it has no Mutavault collision); d3/d5 not
+yet A/B'd (heavy — needs the suite).
+
+**Adoption checklist (not yet done):** full regression+overnight A/B incl dragonstorm d3/d5;
+rebaseline slivers (+ any dragonstorm) GT across smoke/regression/overnight; commit code + GT
+together. The clamp-59 patch is currently applied to the working tree but UNCOMMITTED.
