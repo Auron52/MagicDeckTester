@@ -82,6 +82,12 @@ flexibility. e.g. `ncol = count of non-Colorless colors in prod`. This restores 
 produces {C} alongside colors (check no other deck regresses), then rebaseline. Consider whether
 `colored_creature_only` lands specifically should rank by their *colored* count.
 
+## Secondary bug (the flag alone) — FIXED 2026-07-26 (`7b47650`)
+
+**Both bugs are now fixed and adopted** (primary clamp-59 `a8ea436`; secondary `7b47650`), GT
+rebaselined across smoke/regression/overnight — only slivers moves (faster/neutral), every other
+deck incl dragonstorm byte-identical. All four repro games gi80/277/278/314 → T4.
+
 ## Secondary bug (the flag alone) — LOCATED 2026-07-26
 
 **Root cause:** the multi-spell (combined) mana solver pays the whole turn's batch at once and calls
