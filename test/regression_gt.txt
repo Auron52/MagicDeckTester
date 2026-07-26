@@ -1,4 +1,4 @@
-# Regression ground truth -- commit d22d8d0  date 2026-07-26
+# Regression ground truth -- commit 7b47650  date 2026-07-26
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -64,18 +64,18 @@ dragonstorm_regression_d5_s2002=4.6080/e114a702f5d9c920
 dragonstorm_regression_d5_s3003=4.7040/17f8a70ce5a9aac1
 
 # --- overnight ---
-slivers_overnight_d0_s4004=4.6410/f9d4fc1661052c70
-slivers_overnight_d0_s5005=4.6330/690f041d0ab78e7a
-slivers_overnight_d0_s6006=4.6395/300259763e6c06aa
-slivers_overnight_d0_s7007=4.6320/4944433e8c02a889
-slivers_overnight_d3_s4004=4.2360/062a3367a24c133b
-slivers_overnight_d3_s5005=4.2110/f2180568fa401953
-slivers_overnight_d3_s6006=4.2440/a98a3e1a83c26331
-slivers_overnight_d3_s7007=4.2170/b57c2e77d5386ec3
-slivers_overnight_d5_s4004=4.2350/4fa7b1541573019c
-slivers_overnight_d5_s5005=4.2090/6600ab173713d266
-slivers_overnight_d5_s6006=4.2420/26725a07a571d683
-slivers_overnight_d5_s7007=4.2150/782547a0247c6b30
+slivers_overnight_d0_s4004=4.6420/3c364eea0dbc63eb
+slivers_overnight_d0_s5005=4.6325/09e836612ac2db65
+slivers_overnight_d0_s6006=4.6400/c5bcbd3821c8d471
+slivers_overnight_d0_s7007=4.6335/2774949bef52d899
+slivers_overnight_d3_s4004=4.2340/e45e6ad5eb34e638
+slivers_overnight_d3_s5005=4.2090/748cd005a832912c
+slivers_overnight_d3_s6006=4.2400/d68a9f70f2480691
+slivers_overnight_d3_s7007=4.2170/f3c92faab85139fc
+slivers_overnight_d5_s4004=4.2330/8249e6d13e88c152
+slivers_overnight_d5_s5005=4.2070/294a1d2bfa148699
+slivers_overnight_d5_s6006=4.2380/ea53c6be9593228f
+slivers_overnight_d5_s7007=4.2140/7a8d6e488db1b30d
 burn_overnight_d0_s4004=4.5740/bb4c95f8ea8b0c13
 burn_overnight_d0_s5005=4.5705/b5860e9d6ded69b7
 burn_overnight_d0_s6006=4.5880/f23966751e50e223
