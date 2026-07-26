@@ -82,7 +82,23 @@ flexibility. e.g. `ncol = count of non-Colorless colors in prod`. This restores 
 produces {C} alongside colors (check no other deck regresses), then rebaseline. Consider whether
 `colored_creature_only` lands specifically should rank by their *colored* count.
 
-## Secondary bug (the flag alone) — SCOPED, not yet located
+## Secondary bug (the flag alone) — LOCATED 2026-07-26
+
+**Root cause:** the multi-spell (combined) mana solver pays the whole turn's batch at once and calls
+`TapForCostBacktrack(state, combined, /*for_creature=*/false, ...)` with `for_creature` HARDCODED
+false (`src/ai/TurnSolver.cpp:3762` and `3779`). For a `colored_creature_only` land that strips its
+coloured mana, so an ALL-CREATURE batch needing a coloured pip off Sliver Hive / Secluded Courtyard
+reads as unaffordable -> planner declines the batch -> casts FEWER creatures (gi277: two 1-drops on
+T3 -> one -> T5 instead of T4). Confirmed: stripping the flag (keeping {C}) recovers gi277 to T4;
+clamp-59 does NOT (different path). Byte-identical for decks without these lands, which is why the
+hardcoded false was never revisited.
+
+**Fix:** `combined` is a mixed batch so one bool is wrong in general, but the failing case is an
+all-creature batch. Pass `for_creature = (every spell in the batch IsCreature())` instead of false.
+A general fix threads per-spell creature-awareness into the backtracker (only needed for MIXED
+batches on colored_creature_only lands). Needs the same adopt cycle (A/B + GT rebaseline).
+
+## Secondary bug (the flag alone) — earlier scoping notes
 
 `flag-only` (no {C}) also → T5, yet `ManaSourceRank` is byte-identical to pre-`e6c1f2c` there
 (`EffectiveProduces` is not stripped by the flag). Both payment paths that DO honor the flag —
