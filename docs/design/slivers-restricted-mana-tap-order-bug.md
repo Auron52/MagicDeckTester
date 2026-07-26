@@ -88,6 +88,20 @@ produces {C} alongside colors (check no other deck regresses), then rebaseline. 
 rebaselined across smoke/regression/overnight — only slivers moves (faster/neutral), every other
 deck incl dragonstorm byte-identical. All four repro games gi80/277/278/314 → T4.
 
+### Known limitation (mixed batches) — not a regression
+
+The secondary fix keys `for_creature` on `all_creatures`, so a MIXED batch (a noncreature present)
+stays conservative (`false`) — a `colored_creature_only` land contributes only `{C}` in the combined
+prepay there. This is BYTE-IDENTICAL to the pre-fix behaviour (it was hardcoded `false`), so it
+regresses nothing; it just means the batch-prepay anti-stranding optimization stays OFF for a mixed
+batch on these lands. Safe because: (a) the solver already declines on any ritual/rock producer, so
+Dragonstorm's ritual go-off turns never use it; (b) on decline it falls back to GREEDY per-cast
+solving where `for_creature = def->card.IsCreature()` is correct per spell (`TurnSolver.cpp:526`), so
+Unclaimed's colour IS usable for a dragon — never illegal, at worst slightly worse sequencing.
+Dragonstorm (2 Unclaimed Territory) is byte-identical across all modes. The GENERAL fix (thread
+per-spell creature-awareness into `TapForCostBacktrack` so a mixed batch pays each spell's pips with
+the right source) would close it; unmotivated until a deck measurably needs it.
+
 ## Secondary bug (the flag alone) — LOCATED 2026-07-26
 
 **Root cause:** the multi-spell (combined) mana solver pays the whole turn's batch at once and calls
