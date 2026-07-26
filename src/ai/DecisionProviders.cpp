@@ -372,6 +372,10 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
     if (amt > 1 && static_cast<int>(prod.size()) > 1) { return 10; }  // bounce/fixed-multi: no choice
     const int ncol = static_cast<int>(prod.size());
     int rank = ncol <= 1 ? 10 : ncol * 10;                            // mono=10 dual=20 tri=30 rainbow=50
+    // A COLOUR-producing land must not sit in the colourless-manland RESERVE tier (60): its {C} mode
+    // pushes ncol to 6 and collides with Mutavault's save-to-attack rank, stranding the manland's
+    // attack. Keep it just below (docs/design/slivers-restricted-mana-tap-order-bug.md).
+    if (rank >= 60) { rank = 59; }
     // Drip land (Grove of the Burnwillows, tap_opponent_lifegain > 0): its coloured tap gifts the
     // opponent 1 life, so among LANDS spend a painless source first and spare it (+1 -> one slot past its
     // own flexibility tier, i.e. last of a mono/dual land base). It stays AHEAD of the CREATURES (dorks,
