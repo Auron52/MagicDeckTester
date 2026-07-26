@@ -3685,6 +3685,12 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     const int active = state.active_player_index;
     ManaCost combined;
     int eligible = 0;
+    // Whether EVERY eligible cast is a creature. A colored_creature_only land (Sliver Hive / Secluded
+    // Courtyard) makes its coloured mana only for creature spells, so the combined solve may only treat
+    // it as coloured when the whole batch is creatures; a mixed batch stays conservative (false), where
+    // that land contributes {C} only. Fixes an all-creature batch reading as unaffordable off these
+    // lands -> casting fewer creatures. See docs/design/slivers-restricted-mana-tap-order-bug.md.
+    bool all_creatures = true;
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
@@ -3700,6 +3706,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
         combined.colorless += ec.colorless;
+        if (!d->card.IsCreature()) { all_creatures = false; }
         ++eligible;
     }
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
@@ -3759,7 +3766,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     bool ok = false;
     if (reserved)
     {
-        ok = TapForCostBacktrack(state, combined, /*for_creature=*/false, ManaPool{},
+        ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/reserved,
                                  /*out_full_pool=*/&produced)
@@ -3776,7 +3783,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     if (!ok)   // no depletion land to hold, or the held attempt failed: the original unrestricted solve
     {
-        ok = TapForCostBacktrack(state, combined, /*for_creature=*/false, ManaPool{},
+        ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/0,
                                  /*out_full_pool=*/&produced);
