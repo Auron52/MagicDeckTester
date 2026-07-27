@@ -1247,18 +1247,69 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // terminates when the library empties or the human passes. In the autonomous (search) AI
         // path ApplyPlan resolves draws inline and never shrinks the library across a no-draw
         // plan, so non-human external choosers still see exactly one decision per phase.
+        // #12 "Commit Line": the phase re-prompts not only after a DRAW (the classic breakpoint below)
+        // but also when the committed line's plays put a NEW permanent with a player-activated ability
+        // into play -- e.g. playing Horizon Canopy (a land) this turn enables its same-turn
+        // "{1},{T},Sacrifice: draw" dig, which the old draw-only breakpoint skipped (playing a land
+        // draws nothing), forcing the sac to the next turn. Human-play only (inside use_external) ->
+        // GT-neutral; the autonomous search never enters this branch. "Commit turn" naturally skips this
+        // breakpoint: its auto-pass (index.html advanceTo) fires on every same-turn main_phase decision.
+        // Two signals decide the #12 breakpoint precisely -- their INTERSECTION on a source that
+        // BECAME both this segment:
+        //   inplay_sac(state) -- sac-to-draw sources IN PLAY and UNTAPPED (Horizon Canopy, Fiery Islet).
+        //     A source appears here the segment you PLAY it untapped; a STANDING one is present at
+        //     phase start (so it never counts as "new"), which is what stops per-turn re-prompt spam.
+        //   offer_sac(plans)  -- sac-to-draw digs actually OFFERED among the enumerated plans
+        //     (AppendHumanPlayDigPlans additionally gates on the {1}-style sac cost being affordable
+        //     THIS phase). This is the affordability signal.
+        // Re-prompt iff a source is NEWLY in inplay_sac (just played untapped) AND currently in
+        // offer_sac (its sac is affordable). Requiring BOTH excludes: (a) a standing source whose sac
+        // merely became affordable when you played a second land -- spam, not "a just-played ability";
+        // and (b) a source you played untapped but cannot yet pay to sac -- a pointless re-prompt.
+        auto inplay_sac = [](const GameState& gs) -> std::set<std::string>
+        {
+            std::set<std::string> s;
+            for (const Permanent& perm : gs.battlefield)
+            {
+                if (perm.controller_index != gs.active_player_index || perm.tapped) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
+                if (d && d->params.sacrifice_draw_cost.has_value())
+                { s.insert(perm.card.m_name.str()); }
+            }
+            return s;
+        };
+        auto offer_sac = [](const std::vector<TurnSolver::Plan>& plans) -> std::set<std::string>
+        {
+            std::set<std::string> s;
+            for (const TurnSolver::Plan& p : plans)
+            { for (const Action& a : p.actions)
+              { if (a.kind == Action::Kind::DigDraw && a.dig_sacrifice)
+                { s.insert(a.card_name); } } }
+            return s;
+        };
+        std::set<std::string> prev_inplay;  // untapped in-play sac sources before the last applied plan
+        bool drew_last = false;             // did the last applied plan draw (library shrank)?
         for (int seg = 0; seg < 64; ++seg)
         {
             std::vector<TurnSolver::Plan> plans =
                 TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
             if (plans.empty()) { break; }
+            std::set<std::string> cur_inplay = inplay_sac(state);
+            std::set<std::string> cur_offer  = offer_sac(plans);
+            // Phase complete once a committed plan neither DREW (draw breakpoint) nor put a NEW,
+            // AFFORDABLE sac source into play (#12 breakpoint). seg==0 is the initial prompt, shown.
+            if (seg > 0 && !drew_last)
+            {
+                bool new_activation = false;
+                for (const std::string& name : cur_inplay)
+                { if (!prev_inplay.count(name) && cur_offer.count(name)) { new_activation = true; break; } }
+                if (!new_activation) { break; }
+            }
             // Post-combat (second) main: on the FIRST entry, only prompt when there is a real play
             // available (a Spectacle spell unlocked by combat, a castable spell, or a land drop) --
             // with nothing to do the second main is a no-op, so skip it silently rather than asking
-            // the human to "pass" every single turn. But on a re-prompt AFTER a draw/stage breakpoint
-            // (seg > 0, e.g. Light Up the Stage just exiled cards), ALWAYS re-prompt so the player can
-            // see and play the revealed cards -- matching the first main, which never suppresses. This
-            // fixes "no breakpoint after Light Up" when the dig leaves you tapped out for the moment.
+            // the human to "pass" every single turn. A seg>0 re-prompt (draw or #12 new-activation)
+            // is handled above and always shows -- matching the first main, which never suppresses.
             if (!is_pre_combat_main && seg == 0)
             {
                 bool any_play = false;
@@ -1270,8 +1321,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
             if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
             TurnSolver::ApplyPlan(state, plans[idx], is_pre_combat_main);
-            // No draw this segment -> phase complete; a draw -> loop and let the human re-decide.
-            if (state.ActivePlayer().library.size() >= lib_before) { break; }
+            drew_last = state.ActivePlayer().library.size() < lib_before;
+            prev_inplay = std::move(cur_inplay);
         }
 
         // Restore unplayed staged cards (mirror the normal end-of-TakeTurn restore):

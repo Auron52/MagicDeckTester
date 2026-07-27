@@ -884,7 +884,7 @@ function renderPlanbar() {
     : '';
   // Buttons FIRST (left edge, next to the hand) so Commit/Clear are within easy reach while
   // you build the line; the Turn-plan label + chips follow and the chips flex to fill the rest.
-  pb.innerHTML = `<button id="commit" class="primary" title="${empty?'Pass just THIS phase — you\'ll still get Main 2 to cast in (use Pass turn to skip the whole turn)':'Commit this line for this phase only'}">${empty?'Pass phase':'Commit phase'}</button>`+
+  pb.innerHTML = `<button id="commit" class="primary" title="${empty?'Pass just THIS phase — you\'ll still get Main 2 to cast in (use Pass turn to skip the whole turn)':'Commit this line; you stay in this phase to re-decide if it draws a card or opens an ability (e.g. a same-turn Horizon Canopy sac)'}">${empty?'Pass phase':'Commit Line'}</button>`+
     `<button id="committurn" class="primary" title="${empty?'Do nothing this turn and skip to the next turn':'Commit this line, then auto-pass the rest of this turn (skip Main 2 / any re-prompts)'}">${empty?'Pass turn':'Commit turn'}</button>`+
     (empty?'':`<button id="clearp" class="ghost">Clear</button>`)+
     `<span class="lbl">Turn plan</span>`+

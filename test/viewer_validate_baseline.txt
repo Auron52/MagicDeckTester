@@ -112,3 +112,5 @@ treasure_hunt/claude_s12_gi11.json | T5/pre_main | cast=Land's Edge
 treasure_hunt/claude_s1_gi0.json | T1/pre_main | land=Sandstone Needle
 treasure_hunt/claude_s1_gi0.json | T2/pre_main | land=Cascade Bluffs;cast=Land's Edge
 treasure_hunt/claude_s1_gi0.json | T3/pre_main | cast=Treasure Hunt
+treasure_hunt/claude_s4_gi3.json | T7/pre_main | land=Thundering Falls
+treasure_hunt/claude_s4_gi3.json | T8/pre_main | pass

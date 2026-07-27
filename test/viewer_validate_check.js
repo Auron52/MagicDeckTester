@@ -23,6 +23,16 @@
 // whose signature is NOT in the baseline -- a genuine CheckLine regression. Regenerate the baseline
 // with --update-baseline after an intended CheckLine change (inspect the diff first).
 //
+// CAVEAT (positional --choices replay): a FEW baseline entries are NOT CheckLine limitations but
+// CHOICE-STREAM SHIFTS from adding a human-play decision point. This check rebuilds each line by
+// replaying the recorded `chosen` indices positionally; if the CURRENT engine emits a human-play
+// breakpoint the recording predates (e.g. #12 Commit Line's same-turn sac re-prompt --
+// treasure_hunt/claude_s4_gi3 T7/T8), that inserted decision desyncs the recording's later choices,
+// so downstream lines validate against a shifted state. Verify such a fail is a stream-shift (not a
+// real CheckLine bug) by reverting the engine change and re-running: it should vanish. A robust fix
+// (drive the engine decision-by-decision and auto-pass extra breakpoints) is deferred; see
+// docs/design/viewer-fixes-2026-07-27.md (batch 4).
+//
 // Usage:  node test/viewer_validate_check.js [--update-baseline] [deckFilter ...]
 'use strict';
 const fs = require('fs');

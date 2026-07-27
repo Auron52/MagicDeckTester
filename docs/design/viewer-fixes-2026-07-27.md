@@ -60,7 +60,7 @@ Defect (1) errs toward **false-accept** (→ partial state); defect (2) errs tow
 | 4 | firebreathing mana invisible; no player control | `ApplyFirebreathing` greedy, reads pool untapped (`SpellEffects.h:1706-1786`) | new "how much" decision (4 sites); faithful display | TODO |
 | 6 | Dwarven Hold burst amount auto-decided | storage-land, same mechanic as Mercadian Bazaar | sibling amount decision to #4 | TODO |
 | 11 | unattached queued aura can't be dragged onto a creature | untargeted queued aura renders non-draggable `plannedThumb` (`index.html:600-609`) | make thumb draggable (reuse `retargetPlanAura`) | TODO |
-| 12 | can't activate abilities same-turn before combat (Horizon Canopy sac) | only 2 main breakpoints; combat auto-runs; freshly-played land still "in hand" at decision | engine re-prompts same phase when new activatable abilities appear; rename Commit phase→Commit Line; exempt Commit turn | TODO |
+| 12 | can't activate abilities same-turn before combat (Horizon Canopy sac) | only 2 main breakpoints; combat auto-runs; freshly-played land still "in hand" at decision | engine re-prompts same phase when new activatable abilities appear; rename Commit phase→Commit Line; exempt Commit turn | **DONE** |
 
 ## Server-truth resolution (the #2/#3 fix, chosen architecture)
 
@@ -163,6 +163,43 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     Anti-Lifegain's `Tainted Remedy + Skyshroud Cutter…` read `illegal: no black source` even though
     the fetched land makes black (`PerformFetch` default pick, `PlayLandByName` at 5832-5840). Same
     family as #9. Some `NO_VALIDATION_BLOCK` entries are the harness prefix landing on a sub-decision.
+
+- **2026-07-27 (batch 4 — #12 Commit Line, GT-neutral):**
+  - **#12 DONE.** The claude-play main-phase segment loop (`AIEngine.cpp` `use_external` branch, the
+    human-play chooser path — **GT-neutral by construction**, the autonomous search never enters it)
+    now re-prompts the SAME phase not only on a DRAW (the existing breakpoint) but also when a committed
+    line puts a NEW, AFFORDABLE sac-to-draw source into play — e.g. play Horizon Canopy this turn and
+    the engine offers its same-turn `{1},{T},Sacrifice: draw` (previously forced to the next turn since
+    playing a land draws nothing). Trigger is the INTERSECTION of two per-segment signals: `inplay_sac`
+    (untapped sac-to-draw permanents in play — a source appears here the segment you play it untapped; a
+    STANDING source is present at phase start so never counts as "new" → no per-turn spam) ∩ `offer_sac`
+    (the sac dig actually OFFERED among enumerated plans, which `AppendHumanPlayDigPlans` already gates on
+    the `{1}` cost being affordable this phase). Requiring BOTH excludes (a) a standing source whose sac
+    merely became affordable when you played a second land (spam, not a just-played ability) and (b) a
+    source you played untapped but can't yet pay to sac (pointless re-prompt). Using the ability drops it
+    from the signature (sac removes the source; a draw shrinks the library → the draw breakpoint takes
+    over) and a pass breaks, so it cannot spin. GUI: rename "Commit phase" → "Commit Line" (+ tooltip);
+    "Commit turn" needs NO change — its existing auto-pass (`index.html` advanceTo, fires on every
+    same-turn `main_phase` decision) already swallows the new breakpoint, so it stays exempt.
+  - **Verified:** build clean; `viewer_linebuild_check` 0 FAIL and `viewer_protocol_check` **0
+    play-drift** (autonomous byte-identical, confirming GT-neutrality); the mechanism fires (treasure_hunt
+    Fiery Islet — identical `sacrifice_draw_cost` code path to Horizon Canopy). Auras s12 correctly does
+    NOT trigger (its Horizon Canopy is a *standing* untapped source, and its affordability-flip is
+    excluded by the intersection — the earlier plan-based-only prototype wrongly fired there).
+  - **Validate baseline +2 (documented, NOT a CheckLine regression):** adding a human-play decision point
+    inherently SHIFTS the positional `--choices` stream for PRE-#12 recordings that trigger it. Exactly
+    one reference does — `treasure_hunt/claude_s4_gi3` plays Fiery Islet untapped+affordable, so the new
+    same-turn-sac breakpoint now inserts a decision at ~T4, desyncing its post-T4 replay; T7
+    (`land=Thundering Falls`) and T8 (`pass`) surface as validate fails (others post-T4 replay-shift but
+    happen to still validate). These are choice-stream shifts, VERIFIED non-CheckLine (stash-test: 0
+    regressions with #12 reverted), so they were added to `viewer_validate_baseline.txt` (now 116).
+    **This does NOT corrupt the reference:** saved games are VIEWED in `tools/replay/` from their stored
+    `decisions` (no engine re-drive), and new recordings are self-consistent (the breakpoint is recorded
+    as played); only a `--choices` RE-DRIVE of a pre-#12 recording (which only the validate test does)
+    shifts. **Deferred robustness:** make `viewer_validate_check.js` drive the engine decision-by-decision
+    and auto-pass any extra (breakpoint) decision the recording lacks — then no baseline entry is needed
+    and the check is robust to ANY future added human-play breakpoint. Left for later (the current cost is
+    2 trivial lines in 1 game).
 
 Reference reproductions to sanity-check specific items: Dragonstorm s21_gi20 (Lotus Bloom
 black, item 9 — see `logs/play/rejections/Dragonstorm_cod_s21_gi20_t7.json`), s9_gi8 (splice
