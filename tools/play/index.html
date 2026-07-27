@@ -150,6 +150,7 @@
   #planbar .chip.retrace { border-color:#7a5a2e; background:#332817; } #planbar .chip.retrace .nm { color:#e6a94c; }
   /* planned (this-turn) card: green ring + order badge + remove */
   .thumb.planned img { box-shadow:0 0 0 2px var(--good); }
+  .thumb.planned.aura-plan { cursor:grab; }   /* untargeted queued aura: drag onto a creature (issue #11) */
   .thumb.planned .ord { position:absolute; top:-7px; left:-7px; background:var(--good); color:#0c1116;
       border-radius:11px; width:20px; height:20px; font-size:12px; font-weight:700; z-index:3;
       display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px #0b0c0e; }
@@ -602,7 +603,16 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
             : entry.kind==='retrace' ? `<span class="srcbadge retrace" title="cast from graveyard via Retrace (discards a land)">↩</span>` : '';
   // data-num on a queued creature makes it a drop target for a same-turn Aura (drag Rancor onto it).
   const numAttr = (entry.num && !entry.target) ? ` data-num="${entry.num}"` : '';
-  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}" data-name="${esc(entry.name)}"${numAttr}>`+
+  // An UNTARGETED queued Aura is draggable straight onto a creature to set its enchant target --
+  // reuses retargetPlanAura via the #playfield drop funnel (no bounce to hand, no duplicate). Tagging
+  // it .aura-plan[data-pi] makes wireBoard's EXISTING dragstart wiring pick it up; the .aura-plan
+  // positioning CSS is .enchgroup-scoped, so this flat thumb keeps normal .planned styling (issue #11).
+  const isQueuedAura = entry.kind!=='land' && entry.kind!=='le' && entry.kind!=='vial'
+                    && entry.kind!=='retrace' && !entry.target
+                    && Object.keys(enchantTargetsFor(entry.name)).length>0;
+  const dragAttr = isQueuedAura
+    ? ` draggable="true" data-pi="${planIdx}" title="${esc(entry.name)} — queued; drag onto a creature to enchant it"` : '';
+  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}${isQueuedAura?' aura-plan':''}" data-name="${esc(entry.name)}"${numAttr}${dragAttr}>`+
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
     src+`<em>${esc(entry.name)}</em></span>`;

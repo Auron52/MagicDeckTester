@@ -10517,13 +10517,24 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             }
             addSub(p.land_to_play + " face " + faceName, p.land_to_play + " face", faceName, faceName, "face");
         }
-        // Sort the derived token strings so plans differing only in cast order share a signature.
-        // The label preserves the old " → "/" X="/" +N own"/" fetches " spacing (key already ends
-        // with the operator, choice follows a single space) so displayed labels are unchanged.
-        std::sort(toks.begin(), toks.end());
-        std::string sig, label;
-        for (size_t t = 0; t < toks.size(); ++t) { sig += "|" + toks[t]; label += (t?"; ":"") + toks[t]; }
-        if (label.empty()) { label = LineSummaryOfPlan(p); }
+        // SIGNATURE (dedup): sort the derived tokens so plans differing only in cast ORDER share a
+        // signature; a real sub-decision difference (target / X / splice / fetch) splits it. Kept
+        // byte-identical to before (a sorted copy -- `toks` itself stays in cast order for the label).
+        std::vector<std::string> sortedToks = toks;
+        std::sort(sortedToks.begin(), sortedToks.end());
+        std::string sig;
+        for (const std::string& t : sortedToks) { sig += "|" + t; }
+        // LABEL (displayed in the choose dialog): the FULL ordered line -- land + EVERY cast, including
+        // plain casts (Rite of Flame) that carry no sub-decision and so were previously DROPPED -- then
+        // the sub-decisions in CAST ORDER (unsorted `toks`), so two Desperate Rituals read
+        // "splice+0; splice+1" in the order cast, not alpha-scrambled (viewer issue #8). Empty subs ->
+        // just the line summary (unchanged from the old label.empty() fallback).
+        std::string label = LineSummaryOfPlan(p);
+        if (!toks.empty())
+        {
+            label += " \xE2\x80\x94 ";   // em dash separating the line from its sub-decisions
+            for (size_t t = 0; t < toks.size(); ++t) { label += (t ? "; " : "") + toks[t]; }
+        }
         cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs, planSacs });
     }
 
