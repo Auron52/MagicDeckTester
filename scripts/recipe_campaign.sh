@@ -98,10 +98,15 @@ print(f"  {label:38} avg={m:.5f}  delta={m-base:+.4f}t  (n={len(vals)} sd={sd:.4
 PY
   }
 
+  # full@Rk uses KEEP_ONLY: lower ONLY the keep table, sub-tables stay at pooled truth (full bottoming).
+  # Resampling the sub-tables to a lower R (plain SYNTH_R) would corrupt the bottoming argmin with the
+  # uniform-downsample winner's curse and over-penalize full bottoming -- making full@Rk look worse than
+  # adaptive@Rk (whose sub is refined-to-truth), i.e. the WRONG sign. KEEP_ONLY keeps both on a sub-truth
+  # basis, so full-vs-adaptive isolates the bottoming (floor-exclusion) fairly.
   run_recipe "adaptive@R40" "ab40" "$A_REALIZ" MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1
   for c in $CAPS; do
-    run_recipe "full@R$c" "full$c" "$S_REALIZ" MTG_KEEP_SYNTH_R=$c
-    run_recipe "adaptive@R$c" "ab$c" "$A_REALIZ" MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1
+    run_recipe "full@R$c" "full$c" "$S_REALIZ" MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_KEEP_ONLY=1
+    run_recipe "adaptive@R$c" "ab$c" "$A_REALIZ" MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_KEEP_ONLY=1 MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1
   done
   rm -f "$RAW"
 done

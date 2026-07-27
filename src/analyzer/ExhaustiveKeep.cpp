@@ -2922,6 +2922,11 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     // default (both unset) -> byte-identical to the plain merge.
     const int      synth_r        = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_R");        return (s&&*s)?std::atoi(s):0; }();
     const int      synth_bottom_r = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_BOTTOM_R"); return (s&&*s)?std::atoi(s):0; }();
+    // KEEP_ONLY: SYNTH_R lowers ONLY the size-7 keep table; the bottoming sub-tables stay at pooled truth
+    // (full R). This is the FAITHFUL "full bottoming at lower keep-R" -- resampling the sub-tables to a
+    // lower R (the default) corrupts the bottoming argmin with the uniform-downsample winner's curse, which
+    // over-penalizes full bottoming (see the SYNTH_BOTTOM_R note). Use with SYNTH_R for a full@Rk recipe.
+    const bool     synth_keep_only = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_KEEP_ONLY"); return s&&*s&&std::string(s)!="0"; }();
     const uint64_t synth_seed     = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_SEED");     return (s&&*s)?std::strtoull(s,nullptr,10):0x5eed1234ULL; }();
     const bool     synth_req = (synth_r > 0 || synth_bottom_r > 0);
     if (synth_req && !have_sumsq)
@@ -2949,9 +2954,11 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         auto pit = pooled.find(H);
         if (pit != pooled.end())
         {
-            // Target synth R for THIS table (0 => use the pooled mean as-is, no resample).
+            // Target synth R for THIS table (0 => use the pooled mean as-is, no resample). KEEP_ONLY holds
+            // the sub-tables at truth (kR=0) so only the keep table is lowered.
             const int kR = do_synth ? ((H == HAND) ? synth_r
-                                                   : (synth_bottom_r > 0 ? synth_bottom_r : synth_r)) : 0;
+                                                   : (synth_keep_only ? 0
+                                                      : (synth_bottom_r > 0 ? synth_bottom_r : synth_r))) : 0;
             std::array<double, 2>    vgH  = { 0.0, 0.0 }; std::array<long long, 2> ngH = { 0, 0 };
             std::array<double, 2>    vmin = { 1e30, 1e30 }, vmax = { -1e30, -1e30 };
             if (kR > 0)   // precompute shrink target + mean envelope for this size/pd
