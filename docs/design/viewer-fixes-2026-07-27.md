@@ -115,6 +115,20 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     Dragonstorm Apex turns. The proper fix needs an ACCURATE resolution oracle (did the committed
     plan fully resolve?) → folded into the server-truth workstream, which trial-applies with
     heuristic (autonomous) sub-decisions instead of nulled choosers.
+- **2026-07-27 (batch 2, GT-neutral):**
+  - **#8 DONE** — CheckLine variant label now bases on the ordered `LineSummaryOfPlan` (every cast,
+    in order) + sub-decisions in cast order; the dedup `sig` stays sorted/byte-identical. Fixes the
+    alpha-scrambled `splice+0; splice+1` and the dropped plain Rite of Flame. Viewer-only.
+  - **#11 DONE** — an untargeted queued aura now renders as a draggable `.aura-plan[data-pi]` thumb
+    (reuses `wireBoard` dragstart + `retargetPlanAura`; no bounce). Client-only.
+
+  **GT-BATCHING NOTE:** everything landed so far (#1b, #9, #8, #11) is viewer/CheckLine/client →
+  GT-neutral (no regression-suite rebaseline needed). The remaining **#5 (discard required_pieces),
+  #7 (splice default), #4/#6 (firebreathe/Dwarven amount)** change AUTONOMOUS play → they shift
+  ground truth and must be grouped into ONE regression rebaseline (`regression.sh` + `--accept`).
+  Do them together, not piecemeal. #10's viewer half and #12 and server-truth's CheckLine parts are
+  GT-neutral; only their autonomous-touching parts (if any) join the GT batch.
+
   - **Known CheckLine gaps the new check surfaced (pre-existing, for the mana-fidelity follow-up):**
     Stage-2 does not credit **fetchland-produced colors** (a fetched dual's colours), so lines like
     Anti-Lifegain's `Tainted Remedy + Skyshroud Cutter…` read `illegal: no black source` even though
