@@ -107,9 +107,30 @@ regret **+0.0058 ± 0.0001t** (draw +0.0058, play +0.0057) vs the measured **+0.
 monotonicity is physical (finer floor → more noise → more regret): slivers `FLOOR 1/2/4 → +0.009/+0.006/
 +0.003`. **Dragonstorm** (188 k size-7 hands, ~30 s/64-trials): `FLOOR 1/2/3/4 → +0.022/+0.014/+0.010/
 +0.008t`; at the standard floor=2, adaptive bottoming costs **+0.0138t** — small (≈ the keep-side R=40→30
-cost), but ~2.4× slivers. Use this per deck to decide adaptive vs full bottoming from ONE generation; a
-shipped profile still defaults to full bottoming (gated by the confounded A/B) — this quantifies what
-that default buys.
+cost), but ~2.4× slivers.
+
+**Lower the whole gen's R too (`MTG_KEEP_SIM_CAP=k`).** For a hard deck you cheapen *both* levers: a lower
+cap R *and* adaptive bottoming. `SIM_CAP=k` models the sub-tables (full baseline **and** adaptive refined
+cells, sharing draws so the cap-R noise cancels) reaching only R=k, so you read the adaptive-bottom regret
+**at** R=20/30. It *falls* as R drops — full bottoming's own argmin gets noisier at low R, shrinking the
+gap adaptive has to beat:
+
+| adaptive-bottom regret (blend) | R=40 | R=30 | R=20 |
+|---|---|---|---|
+| slivers | +0.0057 | +0.0037 | +0.0031 |
+| Dragonstorm | +0.0138 | +0.0090 | +0.0073 |
+
+(The keep-table R cost is *separate* and grows the other way — SYNTH_R sweep, Dragonstorm R30 ≈ +0.01t,
+R20 ≈ +0.03t. A full cheap-gen cost = keep-R cost + this bottoming regret.)
+
+**Performance impact.** The sim also prints the gen-rollout saving as a bracket — refined cells driven all
+the way to the cap (conservative, least saving) vs stopped at their modelled flip_eps-confident R
+(optimistic, most saving); reality lands mid-bracket (real slivers **~52 % of sub-table rollouts / ~33 %
+of total gen**, in-bracket). On **Dragonstorm** the sub-tables are **~81 % of the gen** (its keep table is
+already adaptive-cheap at mean R≈4.2), so adaptive bottoming saves **~27–49 % off the total gen** at R=40
+(a ~6–10 h cut on the 21 h run) for the +0.0138t cost. Use this per deck to decide adaptive vs full
+bottoming from ONE generation; a shipped profile still defaults to full bottoming (gated by the confounded
+A/B) — this quantifies what that default buys and what dropping it (plus lowering R) would cost.
 
 ## The compare step (in-game — the ground truth)
 
