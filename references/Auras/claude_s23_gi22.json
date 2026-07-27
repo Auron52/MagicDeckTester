@@ -1,0 +1,254 @@
+{
+  "seed": 23, "game_index": 22, "win_turn": 4, "won": true,
+  "mulligan": { "count": 3, "bottom": [7, 20, 25] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 42, "name": "Lion Umbra" }, { "num": 3, "name": "Ancestral Mask" }, { "num": 21, "name": "Ethereal Armor" }, { "num": 59, "name": "Spirit Link" }, { "num": 27, "name": "Gladecover Scout" }, { "num": 4, "name": "Ancestral Mask" }, { "num": 9, "name": "Branchloft Pathway" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 60, "name": "Spirit Mantle" }, { "num": 7, "name": "Armadillo Cloak" }, { "num": 28, "name": "Gladecover Scout" }, { "num": 53, "name": "Razorverge Thicket" }, { "num": 31, "name": "Horizon Canopy" }, { "num": 32, "name": "Horizon Canopy" }, { "num": 27, "name": "Gladecover Scout" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 15, "name": "Brushland" }, { "num": 20, "name": "Daybreak Coronet" }, { "num": 53, "name": "Razorverge Thicket" }, { "num": 6, "name": "Ancestral Mask" }, { "num": 31, "name": "Horizon Canopy" }, { "num": 42, "name": "Lion Umbra" }, { "num": 34, "name": "Horizon Canopy" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 3,
+  "on_the_play": false,
+  "to_bottom": 3,
+  "hand": [{ "num": 25, "name": "Forest" }, { "num": 52, "name": "Razorverge Thicket" }, { "num": 20, "name": "Daybreak Coronet" }, { "num": 7, "name": "Armadillo Cloak" }, { "num": 5, "name": "Ancestral Mask" }, { "num": 10, "name": "Branchloft Pathway" }, { "num": 36, "name": "Kor Spiritdancer" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 3 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 3,
+  "hand": [{ "num": 25, "name": "Forest", "win_optimal": true }, { "num": 52, "name": "Razorverge Thicket", "win_optimal": true }, { "num": 20, "name": "Daybreak Coronet", "win_optimal": true }, { "num": 7, "name": "Armadillo Cloak", "win_optimal": true }, { "num": 5, "name": "Ancestral Mask", "win_optimal": true }, { "num": 10, "name": "Branchloft Pathway", "win_optimal": true }, { "num": 36, "name": "Kor Spiritdancer", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 25, "name": "Forest" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 3)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 5,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 3,
+  "hand": [{ "num": 25, "name": "Forest", "win_optimal": true }, { "num": 52, "name": "Razorverge Thicket", "win_optimal": true }, { "num": 20, "name": "Daybreak Coronet", "win_optimal": true }, { "num": 5, "name": "Ancestral Mask", "win_optimal": true }, { "num": 10, "name": "Branchloft Pathway", "win_optimal": true }, { "num": 36, "name": "Kor Spiritdancer", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 25, "name": "Forest" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 2,
+  "bottom_total": 3,
+  "hand": [{ "num": 25, "name": "Forest", "win_optimal": true }, { "num": 52, "name": "Razorverge Thicket", "win_optimal": true }, { "num": 5, "name": "Ancestral Mask", "win_optimal": true }, { "num": 10, "name": "Branchloft Pathway", "win_optimal": true }, { "num": 36, "name": "Kor Spiritdancer", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 25, "name": "Forest" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 3 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Horizon Canopy" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 10, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Kor Spiritdancer", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Razorverge Thicket", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Razorverge Thicket; cast: (nothing)", "land": "Razorverge Thicket", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Hyena Umbra" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Razorverge Thicket", "idx": 2, "num": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 10, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Hyena Umbra", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 36, "name": "Kor Spiritdancer", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Horizon Canopy; cast: Kor Spiritdancer", "land": "Horizon Canopy", "casts": ["Kor Spiritdancer"], "actions": [{ "card": "Kor Spiritdancer" }] },
+    { "index": 2, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Branchloft Pathway; cast: Kor Spiritdancer", "land": "Branchloft Pathway", "casts": ["Kor Spiritdancer"], "actions": [{ "card": "Kor Spiritdancer" }] },
+    { "index": 4, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Branchloft Pathway; cast: Kor Spiritdancer", "land": "Branchloft Pathway", "casts": ["Kor Spiritdancer"], "actions": [{ "card": "Kor Spiritdancer" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Light-Paws, Emperor's Voice" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boulderloft Pathway", "idx": 5, "num": 0, "is_land": true }, { "name": "Kor Spiritdancer", "idx": 6, "num": 36, "is_land": false }, { "name": "Razorverge Thicket", "idx": 2, "num": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 33, "name": "Horizon Canopy", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Hyena Umbra", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 40, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Horizon Canopy; cast: Hyena Umbra → Kor Spiritdancer, Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Hyena Umbra", "Light-Paws, Emperor's Voice"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }, { "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 1, "summary": "land=Horizon Canopy; cast: Light-Paws, Emperor's Voice, Hyena Umbra → Kor Spiritdancer", "land": "Horizon Canopy", "casts": ["Light-Paws, Emperor's Voice", "Hyena Umbra"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }, { "card": "Hyena Umbra", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 2, "summary": "land=Horizon Canopy; cast: Light-Paws, Emperor's Voice, Hyena Umbra → Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Light-Paws, Emperor's Voice", "Hyena Umbra"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }, { "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 3, "summary": "land=Horizon Canopy; cast: Light-Paws, Emperor's Voice", "land": "Horizon Canopy", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 4, "summary": "land=none; cast: Light-Paws, Emperor's Voice", "land": null, "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 5, "summary": "land=Horizon Canopy; cast: Ancestral Mask → Kor Spiritdancer", "land": "Horizon Canopy", "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 6, "summary": "land=Horizon Canopy; cast: Hyena Umbra → Kor Spiritdancer", "land": "Horizon Canopy", "casts": ["Hyena Umbra"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 7, "summary": "land=none; cast: Hyena Umbra → Kor Spiritdancer", "land": null, "casts": ["Hyena Umbra"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 8, "summary": "land=Horizon Canopy; cast: (nothing)", "land": "Horizon Canopy", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 19, "battlefield": [{ "name": "Boulderloft Pathway", "idx": 5, "num": 0, "tapped": true, "is_land": true }, { "name": "Horizon Canopy", "idx": 9, "num": 0, "tapped": true, "is_land": true }, { "name": "Hyena Umbra", "idx": 11, "num": 35, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Kor Spiritdancer", "idx": 6, "num": 36, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 10, "num": 40, "is_land": false }, { "name": "Razorverge Thicket", "idx": 2, "num": 0, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 45, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "pool": [{ "index": 0, "legal": true, "name": "Ethereal Armor" }, { "index": 1, "legal": true, "name": "Rancor" }, { "index": 2, "legal": false, "name": "Daybreak Coronet" }, { "index": 3, "legal": true, "name": "Rancor" }, { "index": 4, "legal": false, "name": "Lion Umbra" }, { "index": 5, "legal": true, "name": "Rancor" }, { "index": 6, "legal": true, "name": "Ethereal Armor" }, { "index": 7, "legal": false, "name": "Alpha Authority" }, { "index": 8, "legal": false, "name": "All That Glitters" }, { "index": 9, "legal": true, "name": "Ethereal Armor" }, { "index": 10, "legal": true, "name": "Gryff's Boon" }, { "index": 11, "legal": false, "name": "Daybreak Coronet" }, { "index": 12, "legal": true, "name": "Spirit Link" }, { "index": 13, "legal": true, "name": "Ethereal Armor" }, { "index": 14, "legal": false, "name": "Spirit Mantle" }, { "index": 15, "legal": true, "name": "Audacity" }, { "index": 16, "legal": true, "name": "Rancor" }, { "index": 17, "legal": false, "name": "Ancestral Mask" }, { "index": 18, "legal": false, "name": "Ancestral Mask" }, { "index": 19, "legal": false, "name": "Ancestral Mask" }, { "index": 20, "legal": true, "name": "Spider Umbra" }, { "index": 21, "legal": false, "name": "Daybreak Coronet" }, { "index": 22, "legal": false, "name": "Armadillo Cloak" }, { "index": 23, "legal": false, "name": "Daybreak Coronet" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Plains" }, { "turn": 4, "card": "Lion Umbra" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Kor Spiritdancer (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 19, "battlefield": [{ "name": "Boulderloft Pathway", "idx": 5, "num": 0, "is_land": true }, { "name": "Ethereal Armor", "idx": 12, "num": 21, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Horizon Canopy", "idx": 9, "num": 0, "is_land": true }, { "name": "Hyena Umbra", "idx": 11, "num": 35, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Kor Spiritdancer", "idx": 6, "num": 36, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 10, "num": 40, "is_land": false }, { "name": "Razorverge Thicket", "idx": 2, "num": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Ancestral Mask", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 42, "name": "Lion Umbra", "cost": "{G}{G}", "mv": 2, "kind": "permanent" }, { "num": 45, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Ancestral Mask → Kor Spiritdancer", "land": "Plains", "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 1, "summary": "land=Plains; cast: Ancestral Mask → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 2, "summary": "land=Plains; cast: Lion Umbra → Kor Spiritdancer", "land": "Plains", "casts": ["Lion Umbra"], "actions": [{ "card": "Lion Umbra", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 3, "summary": "land=Plains; cast: Lion Umbra → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Lion Umbra"], "actions": [{ "card": "Lion Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 4, "summary": "land=none; cast: Ancestral Mask → Kor Spiritdancer", "land": null, "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 5, "summary": "land=none; cast: Ancestral Mask → Light-Paws, Emperor's Voice", "land": null, "casts": ["Ancestral Mask"], "actions": [{ "card": "Ancestral Mask", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 6, "summary": "land=none; cast: Lion Umbra → Kor Spiritdancer", "land": null, "casts": ["Lion Umbra"], "actions": [{ "card": "Lion Umbra", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 7, "summary": "land=none; cast: Lion Umbra → Light-Paws, Emperor's Voice", "land": null, "casts": ["Lion Umbra"], "actions": [{ "card": "Lion Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 8, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 10, "summary": "sacrifice Horizon Canopy to draw", "land": null, "casts": [], "actions": [{ "card": "Horizon Canopy", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 16, "decision": {
+  "decision_index": 12,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 19, "battlefield": [{ "name": "Ancestral Mask", "idx": 14, "num": 5, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 5, "num": 0, "tapped": true, "is_land": true }, { "name": "Ethereal Armor", "idx": 12, "num": 21, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Horizon Canopy", "idx": 9, "num": 0, "is_land": true }, { "name": "Hyena Umbra", "idx": 11, "num": 35, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Kor Spiritdancer", "idx": 6, "num": 36, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 10, "num": 40, "is_land": false }, { "name": "Plains", "idx": 13, "num": 0, "tapped": true, "is_land": true }, { "name": "Razorverge Thicket", "idx": 2, "num": 0, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 42, "name": "Lion Umbra", "cost": "{G}{G}", "mv": 2, "kind": "permanent" }, { "num": 49, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "heuristic_default": 16,
+  "pool": [{ "index": 0, "legal": true, "name": "Gryff's Boon" }, { "index": 1, "legal": true, "name": "Audacity" }, { "index": 2, "legal": true, "name": "Spirit Link" }, { "index": 3, "legal": true, "name": "Daybreak Coronet" }, { "index": 4, "legal": true, "name": "Armadillo Cloak" }, { "index": 5, "legal": true, "name": "Rancor" }, { "index": 6, "legal": true, "name": "Spider Umbra" }, { "index": 7, "legal": true, "name": "Daybreak Coronet" }, { "index": 8, "legal": false, "name": "Ancestral Mask" }, { "index": 9, "legal": true, "name": "Alpha Authority" }, { "index": 10, "legal": false, "name": "Ethereal Armor" }, { "index": 11, "legal": true, "name": "Daybreak Coronet" }, { "index": 12, "legal": true, "name": "Rancor" }, { "index": 13, "legal": true, "name": "Daybreak Coronet" }, { "index": 14, "legal": false, "name": "Ethereal Armor" }, { "index": 15, "legal": true, "name": "Spirit Mantle" }, { "index": 16, "legal": true, "name": "All That Glitters" }, { "index": 17, "legal": false, "name": "Ancestral Mask" }, { "index": 18, "legal": false, "name": "Ancestral Mask" }, { "index": 19, "legal": true, "name": "Rancor" }, { "index": 20, "legal": false, "name": "Ethereal Armor" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Rancor" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 19, "battlefield": [{ "name": "All That Glitters", "idx": 15, "num": 1, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Ancestral Mask", "idx": 14, "num": 5, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 5, "num": 0, "tapped": true, "is_land": true }, { "name": "Ethereal Armor", "idx": 12, "num": 21, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Horizon Canopy", "idx": 9, "num": 0, "is_land": true }, { "name": "Hyena Umbra", "idx": 11, "num": 35, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Kor Spiritdancer", "idx": 6, "num": 36, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 10, "num": 40, "is_land": false }, { "name": "Plains", "idx": 13, "num": 0, "tapped": true, "is_land": true }, { "name": "Razorverge Thicket", "idx": 2, "num": 0, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 42, "name": "Lion Umbra", "cost": "{G}{G}", "mv": 2, "kind": "permanent" }, { "num": 49, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 48 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Rancor → Kor Spiritdancer", "land": null, "casts": ["Rancor"], "actions": [{ "card": "Rancor", "enchant_target": 36, "enchant_target_name": "Kor Spiritdancer" }] },
+    { "index": 1, "summary": "land=none; cast: Rancor → Light-Paws, Emperor's Voice", "land": null, "casts": ["Rancor"], "actions": [{ "card": "Rancor", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 14,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "All That Glitters", "idx": 15, "num": 1, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Ancestral Mask", "idx": 14, "num": 5, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 5, "num": 0, "tapped": true, "is_land": true }, { "name": "Ethereal Armor", "idx": 12, "num": 21, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Horizon Canopy", "idx": 9, "num": 0, "tapped": true, "is_land": true }, { "name": "Hyena Umbra", "idx": 11, "num": 35, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Kor Spiritdancer", "idx": 6, "num": 36, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 10, "num": 40, "is_land": false }, { "name": "Plains", "idx": 13, "num": 0, "tapped": true, "is_land": true }, { "name": "Rancor", "idx": 16, "num": 49, "is_aura": true, "attached_to": 36, "is_land": false }, { "name": "Razorverge Thicket", "idx": 2, "num": 0, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Alpha Authority", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 42, "name": "Lion Umbra", "cost": "{G}{G}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 47 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "heuristic_default": 2,
+  "pool": [{ "index": 0, "legal": false, "name": "Daybreak Coronet" }, { "index": 1, "legal": false, "name": "Daybreak Coronet" }, { "index": 2, "legal": true, "name": "Audacity" }, { "index": 3, "legal": false, "name": "Ancestral Mask" }, { "index": 4, "legal": false, "name": "Ethereal Armor" }, { "index": 5, "legal": false, "name": "Rancor" }, { "index": 6, "legal": false, "name": "Ancestral Mask" }, { "index": 7, "legal": true, "name": "Spirit Link" }, { "index": 8, "legal": true, "name": "Gryff's Boon" }, { "index": 9, "legal": false, "name": "Armadillo Cloak" }, { "index": 10, "legal": false, "name": "Rancor" }, { "index": 11, "legal": false, "name": "Daybreak Coronet" }, { "index": 12, "legal": false, "name": "Ethereal Armor" }, { "index": 13, "legal": false, "name": "Ethereal Armor" }, { "index": 14, "legal": false, "name": "Ancestral Mask" }, { "index": 15, "legal": false, "name": "Spirit Mantle" }, { "index": 16, "legal": true, "name": "Spider Umbra" }, { "index": 17, "legal": false, "name": "Daybreak Coronet" }, { "index": 18, "legal": false, "name": "Rancor" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+}
+  ]
+}

@@ -1,0 +1,395 @@
+{
+  "seed": 13, "game_index": 12, "win_turn": 6, "won": true,
+  "mulligan": { "count": 2, "bottom": [32, 35] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 10, "name": "Dragonstorm" }, { "num": 1, "name": "Apex of Power" }, { "num": 57, "name": "Unclaimed Territory" }, { "num": 9, "name": "Dragonlord Kolaghan" }, { "num": 22, "name": "Mercadian Bazaar" }, { "num": 5, "name": "Desperate Ritual" }, { "num": 11, "name": "Dragonstorm" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 59, "name": "Utvara Hellkite" }, { "num": 47, "name": "Sandstone Needle" }, { "num": 9, "name": "Dragonlord Kolaghan" }, { "num": 46, "name": "Sandstone Needle" }, { "num": 36, "name": "Pyretic Ritual" }, { "num": 43, "name": "Ruby Medallion" }, { "num": 60, "name": "Utvara Hellkite" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 15, "name": "Irencrag Feat" }, { "num": 48, "name": "Sandstone Needle" }, { "num": 59, "name": "Utvara Hellkite" }, { "num": 35, "name": "Pyretic Ritual" }, { "num": 32, "name": "Mountain" }, { "num": 5, "name": "Desperate Ritual" }, { "num": 25, "name": "Mercadian Bazaar" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 15, "name": "Irencrag Feat", "win_optimal": true }, { "num": 48, "name": "Sandstone Needle", "win_optimal": true }, { "num": 59, "name": "Utvara Hellkite", "win_optimal": true }, { "num": 35, "name": "Pyretic Ritual", "win_optimal": true }, { "num": 32, "name": "Mountain", "win_optimal": true }, { "num": 5, "name": "Desperate Ritual", "win_optimal": true }, { "num": 25, "name": "Mercadian Bazaar", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 32, "name": "Mountain" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 15, "name": "Irencrag Feat", "win_optimal": true }, { "num": 48, "name": "Sandstone Needle", "win_optimal": true }, { "num": 59, "name": "Utvara Hellkite", "win_optimal": true }, { "num": 35, "name": "Pyretic Ritual", "win_optimal": true }, { "num": 5, "name": "Desperate Ritual", "win_optimal": true }, { "num": 25, "name": "Mercadian Bazaar", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 59, "name": "Utvara Hellkite" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Seething Song" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 15, "name": "Irencrag Feat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 25, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 59, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Mercadian Bazaar; cast: (nothing)", "land": "Mercadian Bazaar", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 30, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Pyretic Ritual" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 15, "name": "Irencrag Feat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 37, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 48, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 59, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sandstone Needle; cast: Pyretic Ritual, Seething Song, Desperate Ritual, Irencrag Feat", "land": "Sandstone Needle", "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 2, "summary": "land=Sandstone Needle; cast: Seething Song, Desperate Ritual, Irencrag Feat", "land": "Sandstone Needle", "casts": ["Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 3, "summary": "land=Sandstone Needle; cast: Pyretic Ritual, Desperate Ritual, Irencrag Feat", "land": "Sandstone Needle", "casts": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 4, "summary": "land=Sandstone Needle; cast: Pyretic Ritual, Seething Song, Irencrag Feat", "land": "Sandstone Needle", "casts": ["Pyretic Ritual", "Seething Song", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 5, "summary": "land=Sandstone Needle; cast: Pyretic Ritual, Seething Song, Desperate Ritual", "land": "Sandstone Needle", "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 6, "summary": "land=none; cast: Seething Song, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 7, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 8, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 9, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 10, "summary": "land=Sandstone Needle; cast: Desperate Ritual, Irencrag Feat", "land": "Sandstone Needle", "casts": ["Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 11, "summary": "land=Sandstone Needle; cast: Seething Song, Irencrag Feat", "land": "Sandstone Needle", "casts": ["Seething Song", "Irencrag Feat"], "actions": [{ "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 12, "summary": "land=Sandstone Needle; cast: Seething Song, Desperate Ritual", "land": "Sandstone Needle", "casts": ["Seething Song", "Desperate Ritual"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 13, "summary": "land=Sandstone Needle; cast: Pyretic Ritual, Irencrag Feat", "land": "Sandstone Needle", "casts": ["Pyretic Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 14, "summary": "land=Sandstone Needle; cast: Pyretic Ritual, Desperate Ritual", "land": "Sandstone Needle", "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 15, "summary": "land=Sandstone Needle; cast: Pyretic Ritual, Seething Song", "land": "Sandstone Needle", "casts": ["Pyretic Ritual", "Seething Song"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }] },
+    { "index": 16, "summary": "land=none; cast: Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 17, "summary": "land=none; cast: Seething Song, Irencrag Feat", "land": null, "casts": ["Seething Song", "Irencrag Feat"], "actions": [{ "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 18, "summary": "land=none; cast: Seething Song, Desperate Ritual", "land": null, "casts": ["Seething Song", "Desperate Ritual"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 19, "summary": "land=none; cast: Pyretic Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 20, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 21, "summary": "land=none; cast: Pyretic Ritual, Seething Song", "land": null, "casts": ["Pyretic Ritual", "Seething Song"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }] },
+    { "index": 22, "summary": "land=Sandstone Needle; cast: Irencrag Feat", "land": "Sandstone Needle", "casts": ["Irencrag Feat"], "actions": [{ "card": "Irencrag Feat" }] },
+    { "index": 23, "summary": "land=Sandstone Needle; cast: Desperate Ritual", "land": "Sandstone Needle", "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 24, "summary": "land=Sandstone Needle; cast: Seething Song", "land": "Sandstone Needle", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 25, "summary": "land=Sandstone Needle; cast: Pyretic Ritual", "land": "Sandstone Needle", "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 26, "summary": "land=none; cast: Irencrag Feat", "land": null, "casts": ["Irencrag Feat"], "actions": [{ "card": "Irencrag Feat" }] },
+    { "index": 27, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 28, "summary": "land=none; cast: Seething Song", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 29, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 30, "summary": "land=Sandstone Needle; cast: (nothing)", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 15, "name": "Irencrag Feat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 37, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 55, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 59, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 1, "summary": "land=none; cast: Seething Song, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 2, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 3, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 4, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 5, "summary": "land=none; cast: Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 6, "summary": "land=none; cast: Seething Song, Irencrag Feat", "land": null, "casts": ["Seething Song", "Irencrag Feat"], "actions": [{ "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 7, "summary": "land=none; cast: Seething Song, Desperate Ritual", "land": null, "casts": ["Seething Song", "Desperate Ritual"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 8, "summary": "land=none; cast: Pyretic Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 9, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 10, "summary": "land=none; cast: Pyretic Ritual, Seething Song", "land": null, "casts": ["Pyretic Ritual", "Seething Song"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }] },
+    { "index": 11, "summary": "land=none; cast: Irencrag Feat", "land": null, "casts": ["Irencrag Feat"], "actions": [{ "card": "Irencrag Feat" }] },
+    { "index": 12, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 13, "summary": "land=none; cast: Seething Song", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 14, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 15, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Pyretic Ritual" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true, "counters": [{ "kind": "storage", "label": "storage", "count": 1 }] }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 15, "name": "Irencrag Feat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 37, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 55, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 59, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Seething Song, Desperate Ritual, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Seething Song", "Desperate Ritual", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 1, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Desperate Ritual, Seething Song, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Desperate Ritual", "Seething Song", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Desperate Ritual" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 2, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Desperate Ritual, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 3, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Desperate Ritual, Seething Song, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Desperate Ritual", "Seething Song", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Desperate Ritual" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }] },
+    { "index": 4, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Desperate Ritual, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Desperate Ritual", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 5, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Desperate Ritual, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Desperate Ritual", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Desperate Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 6, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Seething Song, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Seething Song", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 7, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Seething Song, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Seething Song", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 8, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Seething Song, Desperate Ritual, Utvara Hellkite", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Seething Song", "Desperate Ritual", "Utvara Hellkite"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Utvara Hellkite" }] },
+    { "index": 9, "summary": "land=none; cast: Utvara Hellkite, Desperate Ritual, Seething Song, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Utvara Hellkite", "Desperate Ritual", "Seething Song", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Utvara Hellkite" }, { "card": "Desperate Ritual" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 10, "summary": "land=none; cast: Seething Song, Desperate Ritual, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Seething Song", "Desperate Ritual", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 11, "summary": "land=none; cast: Desperate Ritual, Seething Song, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Desperate Ritual", "Seething Song", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 12, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Desperate Ritual, Seething Song", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Desperate Ritual", "Seething Song"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Desperate Ritual" }, { "card": "Seething Song" }] },
+    { "index": 13, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 14, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Desperate Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Desperate Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Desperate Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 15, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 16, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Seething Song, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Seething Song", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }] },
+    { "index": 17, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 18, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 19, "summary": "land=none; cast: Seething Song, Irencrag Feat, Utvara Hellkite", "land": null, "casts": ["Seething Song", "Irencrag Feat", "Utvara Hellkite"], "actions": [{ "card": "Seething Song" }, { "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }] },
+    { "index": 20, "summary": "land=none; cast: Irencrag Feat, Utvara Hellkite, Seething Song", "land": null, "casts": ["Irencrag Feat", "Utvara Hellkite", "Seething Song"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Utvara Hellkite" }, { "card": "Seething Song" }] },
+    { "index": 21, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Seething Song, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 22, "summary": "land=none; cast: Irencrag Feat, Desperate Ritual, Seething Song, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Desperate Ritual", "Seething Song", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Desperate Ritual" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 23, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 24, "summary": "land=none; cast: Irencrag Feat, Desperate Ritual, Seething Song, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Desperate Ritual", "Seething Song", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Desperate Ritual" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }] },
+    { "index": 25, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 26, "summary": "land=none; cast: Irencrag Feat, Desperate Ritual, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Desperate Ritual", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Desperate Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 27, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Seething Song, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Seething Song", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 28, "summary": "land=none; cast: Irencrag Feat, Seething Song, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Seething Song", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 29, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Seething Song, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Seething Song", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 30, "summary": "land=none; cast: Seething Song, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Seething Song", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 31, "summary": "land=none; cast: Desperate Ritual, Seething Song, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Seething Song", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 32, "summary": "land=none; cast: Irencrag Feat, Desperate Ritual, Seething Song", "land": null, "casts": ["Irencrag Feat", "Desperate Ritual", "Seething Song"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Desperate Ritual" }, { "card": "Seething Song" }] },
+    { "index": 33, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 34, "summary": "land=none; cast: Irencrag Feat, Desperate Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Desperate Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Desperate Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 35, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 36, "summary": "land=none; cast: Irencrag Feat, Seething Song, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Seething Song", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Seething Song" }, { "card": "Pyretic Ritual" }] },
+    { "index": 37, "summary": "land=none; cast: Pyretic Ritual, Seething Song, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Seething Song", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 38, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 39, "summary": "land=none; cast: Irencrag Feat, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 40, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 41, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual, Seething Song", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual", "Seething Song"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }, { "card": "Seething Song" }] },
+    { "index": 42, "summary": "land=none; cast: Seething Song, Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Seething Song", "Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Seething Song" }, { "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 43, "summary": "land=none; cast: Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 44, "summary": "land=none; cast: Irencrag Feat, Desperate Ritual", "land": null, "casts": ["Irencrag Feat", "Desperate Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Desperate Ritual" }] },
+    { "index": 45, "summary": "land=none; cast: Seething Song, Irencrag Feat", "land": null, "casts": ["Seething Song", "Irencrag Feat"], "actions": [{ "card": "Seething Song" }, { "card": "Irencrag Feat" }] },
+    { "index": 46, "summary": "land=none; cast: Irencrag Feat, Seething Song", "land": null, "casts": ["Irencrag Feat", "Seething Song"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Seething Song" }] },
+    { "index": 47, "summary": "land=none; cast: Seething Song, Desperate Ritual", "land": null, "casts": ["Seething Song", "Desperate Ritual"], "actions": [{ "card": "Seething Song" }, { "card": "Desperate Ritual" }] },
+    { "index": 48, "summary": "land=none; cast: Desperate Ritual, Seething Song", "land": null, "casts": ["Desperate Ritual", "Seething Song"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Seething Song" }] },
+    { "index": 49, "summary": "land=none; cast: Pyretic Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 50, "summary": "land=none; cast: Irencrag Feat, Pyretic Ritual", "land": null, "casts": ["Irencrag Feat", "Pyretic Ritual"], "actions": [{ "card": "Irencrag Feat" }, { "card": "Pyretic Ritual" }] },
+    { "index": 51, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 52, "summary": "land=none; cast: Pyretic Ritual, Seething Song", "land": null, "casts": ["Pyretic Ritual", "Seething Song"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Seething Song" }] },
+    { "index": 53, "summary": "land=none; cast: Seething Song, Pyretic Ritual", "land": null, "casts": ["Seething Song", "Pyretic Ritual"], "actions": [{ "card": "Seething Song" }, { "card": "Pyretic Ritual" }] },
+    { "index": 54, "summary": "land=none; cast: Pyretic Ritual, Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual", "Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Pyretic Ritual" }] },
+    { "index": 55, "summary": "land=none; cast: Irencrag Feat", "land": null, "casts": ["Irencrag Feat"], "actions": [{ "card": "Irencrag Feat" }] },
+    { "index": 56, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 57, "summary": "land=none; cast: Seething Song", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 58, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 59, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true, "counters": [{ "kind": "storage", "label": "storage", "count": 1 }] }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Utvara Hellkite", "idx": 8, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Irencrag Feat", "Pyretic Ritual", "Seething Song"], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 2, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true, "counters": [{ "kind": "storage", "label": "storage", "count": 2 }] }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Utvara Hellkite", "idx": 8, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Irencrag Feat", "Pyretic Ritual", "Seething Song"], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Pyretic Ritual, Desperate Ritual", "land": "Mountain", "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Desperate Ritual", "land": "Mountain", "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Pyretic Ritual", "land": "Mountain", "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 4, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 5, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Utvara Hellkite (6) — 6 to opponent (20→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "6/6 Dragon Token", "idx": 10, "num": 0, "is_land": false }, { "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true, "counters": [{ "kind": "storage", "label": "storage", "count": 2 }] }, { "name": "Mountain", "idx": 9, "num": 0, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Utvara Hellkite", "idx": 8, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Irencrag Feat", "Pyretic Ritual", "Seething Song"], "library_size": 51 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 2, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Mercadian Bazaar" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "6/6 Dragon Token", "idx": 10, "num": 0, "is_land": false }, { "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true, "counters": [{ "kind": "storage", "label": "storage", "count": 3 }] }, { "name": "Mountain", "idx": 9, "num": 0, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Utvara Hellkite", "idx": 8, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 22, "name": "Mercadian Bazaar", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Irencrag Feat", "Pyretic Ritual", "Seething Song"], "library_size": 50 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual, Desperate Ritual", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 2, "summary": "land=Mercadian Bazaar; cast: Desperate Ritual", "land": "Mercadian Bazaar", "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 3, "summary": "land=Mercadian Bazaar; cast: Pyretic Ritual", "land": "Mercadian Bazaar", "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 4, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 5, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 6, "summary": "land=Mercadian Bazaar; cast: (nothing)", "land": "Mercadian Bazaar", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Utvara Hellkite (6), 6/6 Dragon Token (6) — 12 to opponent (14→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "6/6 Dragon Token", "idx": 10, "num": 0, "tapped": true, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 12, "num": 0, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 13, "num": 0, "is_land": false }, { "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true, "counters": [{ "kind": "storage", "label": "storage", "count": 3 }] }, { "name": "Mercadian Bazaar", "idx": 11, "num": 0, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 0, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Utvara Hellkite", "idx": 8, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 38, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Irencrag Feat", "Pyretic Ritual", "Seething Song"], "library_size": 50 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 1, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 2, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 6, "card": "Dragonstorm" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "6/6 Dragon Token", "idx": 10, "num": 0, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 12, "num": 0, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 13, "num": 0, "is_land": false }, { "name": "Mercadian Bazaar", "idx": 2, "num": 0, "is_land": true, "counters": [{ "kind": "storage", "label": "storage", "count": 4 }] }, { "name": "Mercadian Bazaar", "idx": 11, "num": 0, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 0, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Utvara Hellkite", "idx": 8, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 10, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 38, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Irencrag Feat", "Pyretic Ritual", "Seething Song"], "library_size": 49 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Dragonstorm", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Dragonstorm"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Dragonstorm" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 2, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 3, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": [1, 1, 0, 0, 0, 1, 0], "decision": {
+  "decision_index": 15,
+  "type": "dragon",
+  "source": "Dragonstorm",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "6/6 Dragon Token", "idx": 10, "num": 0, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 12, "num": 0, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 13, "num": 0, "is_land": false }, { "name": "Mercadian Bazaar", "idx": 2, "num": 0, "tapped": true, "is_land": true }, { "name": "Mercadian Bazaar", "idx": 11, "num": 0, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 0, "tapped": true, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 0, "tapped": true, "is_land": true }, { "name": "Utvara Hellkite", "idx": 8, "num": 59, "is_land": false }], "vial_counters": [], "hand": [], "graveyard": ["Desperate Ritual", "Irencrag Feat", "Pyretic Ritual", "Pyretic Ritual", "Seething Song"], "library_size": 49 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "max_puts": 3,
+  "ai_set": [0, 1, 5],
+  "candidates": [{ "index": 0, "def": true, "name": "Lathliss, Dragon Queen" }, { "index": 1, "def": true, "name": "Scourge of Valkas" }, { "index": 2, "def": false, "name": "Scourge of Valkas" }, { "index": 3, "def": false, "name": "Scourge of Valkas" }, { "index": 4, "def": false, "name": "Utvara Hellkite" }, { "index": 5, "def": true, "name": "Karrthus, Tyrant of Jund" }, { "index": 6, "def": false, "name": "Dragonlord Kolaghan" }],
+  "note": "reply one int per candidate (1 = put this Dragon), up to max_puts total. The engine keeps the rule's play order. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 22,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 6, "kind": "dragonstorm", "text": "🐉 Lathliss, Dragon Queen -- put onto the battlefield (Dragonstorm)" }, { "turn": 6, "kind": "dragonstorm", "text": "🐉 Scourge of Valkas -- put onto the battlefield (Dragonstorm)" }, { "turn": 6, "kind": "damage", "text": "🐉 Scourge of Valkas (7 Dragons): 7 to opponent (2→-5)" }, { "turn": 6, "kind": "damage", "text": "🐉 Scourge of Valkas (7 Dragons): 7 to opponent (-5→-12)" }, { "turn": 6, "kind": "dragonstorm", "text": "🐉 Karrthus, Tyrant of Jund -- put onto the battlefield (Dragonstorm)" }, { "turn": 6, "kind": "damage", "text": "🐉 Scourge of Valkas (9 Dragons): 9 to opponent (-12→-21)" }, { "turn": 6, "kind": "damage", "text": "🐉 Scourge of Valkas (9 Dragons): 9 to opponent (-21→-30)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "5/5 Dragon Token", "idx": 15, "num": 0, "is_land": false }, { "name": "5/5 Dragon Token", "idx": 17, "num": 0, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 9, "num": 0, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 11, "num": 0, "is_land": false }, { "name": "6/6 Dragon Token", "idx": 12, "num": 0, "is_land": false }, { "name": "Karrthus, Tyrant of Jund", "idx": 16, "num": 16, "is_land": false }, { "name": "Lathliss, Dragon Queen", "idx": 13, "num": 17, "is_land": false }, { "name": "Mercadian Bazaar", "idx": 2, "num": 0, "tapped": true, "is_land": true }, { "name": "Mercadian Bazaar", "idx": 10, "num": 0, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 0, "tapped": true, "is_land": true }, { "name": "Scourge of Valkas", "idx": 14, "num": 51, "is_land": false }, { "name": "Utvara Hellkite", "idx": 7, "num": 59, "is_land": false }], "vial_counters": [], "hand": [], "graveyard": ["Desperate Ritual", "Dragonstorm", "Irencrag Feat", "Pyretic Ritual", "Pyretic Ritual", "Sandstone Needle", "Seething Song"], "library_size": 46 },
+  "opponent": { "life": -30, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

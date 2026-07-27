@@ -59,6 +59,7 @@ robust to that change (which affects specific aura plays, not the aggregate dept
 committed model is the fresh-binary one. NB: on the fresh binary the value-rows dump exposed a
 **slow same-turn-aura search on some complex Auras boards** (one dump game's single decision ran
 K=8 `EnumerateEarliestWins` for >100s) — a perf item worth a look, unrelated to the value-leaf.
+See `docs/design/auras-same-turn-aura-enum-perf.md` for the standalone writeup.
 
 ## Caveats to revisit
 
