@@ -2304,7 +2304,12 @@ async function undo() {
 // entries removed) — then re-fetch that decision and tell the user why. Stateless replay makes the
 // rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
 async function rollbackLine(names) {
+  // A rolled-back line voids any pending "Commit turn" skip (mirror handleVerdict's reject branch):
+  // otherwise the post-rollback advanceTo re-fires the commit-turn auto-pass and BURNS the turn --
+  // the user reported "Commit turn played nothing and went to turn N+1" after a rejected line.
+  S.commitTurn = null; S.commitTurnPasses = 0;
   rollbackStep();
+  S.undoing = true;                // land ON the restored pre-commit decision, don't auto-advance it (mirror undo())
   renderHistory(); await step();   // re-fetch the pre-commit decision (board fully restored)
   notifyDropped(names);            // then surface why the line was rejected
 }

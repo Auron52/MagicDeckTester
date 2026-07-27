@@ -10580,6 +10580,15 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                          return a->sacs < b->sacs;           // then save one-shot sources when we can
                      });
 
+    // NOTE (viewer issue #1 payability accept-gate): a matched-but-UNPAYABLE plan being accepted lets
+    // ApplyPlanDirect resolve only its affordable subset (e.g. Reverent Silence's free alt-cost destroying
+    // the player's own enchantment) while dropping the rest -- the partial-state bug. The obvious gate --
+    // "drop candidates plan_pays reports unpayable" -- is UNSOUND here: plan_pays trial-applies under
+    // RevealLogPause (choosers NULLED), which cannot reproduce a chooser/order-dependent combo (Apex of
+    // Power's add-ten-mana + exile-and-cast, storm, dragon-put), so it false-NEGATIVES real combo lines
+    // and would reject payable Dragonstorm turns. plan_pays stays advisory (payable-first ORDERING only).
+    // The real fix needs an ACCURATE resolution oracle (does the committed plan fully resolve?) -- built
+    // in the server-truth resolution workstream; see docs/design/viewer-fixes-2026-07-27.md.
     std::vector<std::string> seenSig;
     for (const Cand* c : pool)
     {
@@ -10688,6 +10697,23 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         }
     }
 
+    // Credit in-play untapped SAC-FOR-MANA sources (Lotus Bloom: "{T}, Sacrifice: add three mana of
+    // ANY one color"). BuildPool / ComputeAvailableColors omit them -- they're modelled as a sac ACTION
+    // (ritual_float credited as wild), not a standing source -- so the affordability sim below would
+    // FALSE-REJECT a line they pay for: Dragonlord Kolaghan {4}{B}{R} off a Lotus Bloom's black + five
+    // Mountains was reported "illegal: no source of black" (Dragonstorm s21 viewer artifact, issue #9).
+    // Amount is credited as WILD (any single pip); the color gate credits all five (Lotus makes any one
+    // colour). Contention (one Lotus, two colours needed) is left to the real payment, matching the
+    // gate's maximally-conservative design -- and CheckLine only ever classifies here (Stage 1's
+    // payability gate is the real accept), so an over-lenient legal_not_enumerated label is harmless.
+    int sac_wild = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.tapped) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd && pd->params.sac_for_mana_amount > 0) { sac_wild += pd->params.sac_for_mana_amount; }
+    }
+
     // Restricted-color gate: reject a line that needs a colored pip NO untapped source can produce
     // (see LineColorGateEnabled). `s` already has this line's land played, so its color is credited;
     // a mana rock cast in this line also contributes its colors (the greedy below casts rocks first).
@@ -10697,6 +10723,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     {
         bool have[5];
         ComputeAvailableColors(s, have);
+        if (sac_wild > 0) { have[0] = have[1] = have[2] = have[3] = have[4] = true; }  // Lotus Bloom: any one colour
         for (const PendingCast& pc : pending)
         {
             if (!pc.rock || !pc.def) { continue; }
@@ -10737,6 +10764,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // line (the same-turn ramp the enumerator's BuildPool does not credit). Order-
     // independent, so it doesn't penalise the human's click order.
     ManaPool avail = BuildPool(s);
+    avail.wild += sac_wild;                                // Lotus Bloom & co. (see sac_wild above)
     bool spectacle_on = s.opponent_lost_life_this_turn;   // set as damage spells cast in this line
     // The mana cost to pay for pending[k] RIGHT NOW: free for an available alt cost; the spectacle
     // cost once a same-line burn has turned spectacle on; else the printed cost.
@@ -10778,6 +10806,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // viewer-only (sole caller --validate-line), so this is GT-neutral and only ever ACCEPTS more.
     {
         ManaPool p = BuildPool(s);
+        p.wild += sac_wild;                  // Lotus Bloom & co. (see sac_wild above)
         bool spec = s.opponent_lost_life_this_turn;
         std::vector<std::string> reducers;   // reduces_spell_color of Medallions cast so far in-line
         bool ok = true;
