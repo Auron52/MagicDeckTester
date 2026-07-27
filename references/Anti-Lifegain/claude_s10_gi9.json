@@ -1,0 +1,255 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [49] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 5, "name": "Birds of Paradise" }, { "num": 41, "name": "Skyshroud Cutter" }, { "num": 46, "name": "Swords to Plowshares" }, { "num": 16, "name": "Forest" }, { "num": 47, "name": "Swords to Plowshares" }, { "num": 10, "name": "Bloodstained Mire" }, { "num": 30, "name": "Marsh Flats" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 56, "name": "Windswept Heath" }, { "num": 49, "name": "Tainted Remedy" }, { "num": 58, "name": "Wooded Foothills" }, { "num": 18, "name": "Grove of the Burnwillows" }, { "num": 17, "name": "Godless Shrine" }, { "num": 23, "name": "Ignoble Hierarch" }, { "num": 51, "name": "Tainted Remedy" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 56, "name": "Windswept Heath", "win_optimal": true }, { "num": 49, "name": "Tainted Remedy", "win_optimal": true }, { "num": 58, "name": "Wooded Foothills", "win_optimal": true }, { "num": 18, "name": "Grove of the Burnwillows", "win_optimal": true }, { "num": 17, "name": "Godless Shrine", "win_optimal": true }, { "num": 23, "name": "Ignoble Hierarch", "win_optimal": true }, { "num": 51, "name": "Tainted Remedy", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 18, "name": "Grove of the Burnwillows" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Grove of the Burnwillows", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 56, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Windswept Heath; cast: Ignoble Hierarch", "land": "Windswept Heath", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=Windswept Heath; cast: Ignoble Hierarch", "land": "Windswept Heath", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 2, "summary": "land=Windswept Heath; cast: Ignoble Hierarch", "land": "Windswept Heath", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 3, "summary": "land=Windswept Heath; cast: Ignoble Hierarch", "land": "Windswept Heath", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 6, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: Ignoble Hierarch", "land": "Wooded Foothills", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 8, "summary": "land=Grove of the Burnwillows; cast: Ignoble Hierarch", "land": "Grove of the Burnwillows", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 9, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Grove of the Burnwillows; cast: (nothing)", "land": "Grove of the Burnwillows", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=Godless Shrine; cast: (nothing)", "land": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 11, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Skyshroud Cutter" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 2, "num": 23, "is_land": false }, { "name": "Temple Garden", "idx": 1, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Grove of the Burnwillows", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath"], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Skyshroud Cutter, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Skyshroud Cutter", "Tainted Remedy"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Tainted Remedy" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Tainted Remedy, Skyshroud Cutter", "land": "Wooded Foothills", "casts": ["Tainted Remedy", "Skyshroud Cutter"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 2, "summary": "land=Wooded Foothills; cast: Skyshroud Cutter, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Skyshroud Cutter", "Tainted Remedy"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Tainted Remedy" }] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: Tainted Remedy, Skyshroud Cutter", "land": "Wooded Foothills", "casts": ["Tainted Remedy", "Skyshroud Cutter"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: Skyshroud Cutter, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Skyshroud Cutter", "Tainted Remedy"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Tainted Remedy" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Tainted Remedy, Skyshroud Cutter", "land": "Wooded Foothills", "casts": ["Tainted Remedy", "Skyshroud Cutter"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 6, "summary": "land=Wooded Foothills; cast: Skyshroud Cutter, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Skyshroud Cutter", "Tainted Remedy"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Tainted Remedy" }] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: Tainted Remedy, Skyshroud Cutter", "land": "Wooded Foothills", "casts": ["Tainted Remedy", "Skyshroud Cutter"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 8, "summary": "land=Grove of the Burnwillows; cast: Skyshroud Cutter, Tainted Remedy", "land": "Grove of the Burnwillows", "casts": ["Skyshroud Cutter", "Tainted Remedy"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Tainted Remedy" }] },
+    { "index": 9, "summary": "land=Grove of the Burnwillows; cast: Tainted Remedy, Skyshroud Cutter", "land": "Grove of the Burnwillows", "casts": ["Tainted Remedy", "Skyshroud Cutter"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 10, "summary": "land=Godless Shrine; cast: Skyshroud Cutter, Tainted Remedy", "land": "Godless Shrine", "casts": ["Skyshroud Cutter", "Tainted Remedy"], "actions": [{ "card": "Skyshroud Cutter" }, { "card": "Tainted Remedy" }] },
+    { "index": 11, "summary": "land=Godless Shrine; cast: Tainted Remedy, Skyshroud Cutter", "land": "Godless Shrine", "casts": ["Tainted Remedy", "Skyshroud Cutter"], "actions": [{ "card": "Tainted Remedy" }, { "card": "Skyshroud Cutter" }] },
+    { "index": 12, "summary": "land=Wooded Foothills; cast: Skyshroud Cutter", "land": "Wooded Foothills", "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: Skyshroud Cutter", "land": "Wooded Foothills", "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 14, "summary": "land=Wooded Foothills; cast: Skyshroud Cutter", "land": "Wooded Foothills", "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 15, "summary": "land=Wooded Foothills; cast: Skyshroud Cutter", "land": "Wooded Foothills", "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 16, "summary": "land=Grove of the Burnwillows; cast: Skyshroud Cutter", "land": "Grove of the Burnwillows", "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 17, "summary": "land=Godless Shrine; cast: Skyshroud Cutter", "land": "Godless Shrine", "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 18, "summary": "land=none; cast: Skyshroud Cutter", "land": null, "casts": ["Skyshroud Cutter"], "actions": [{ "card": "Skyshroud Cutter" }] },
+    { "index": 19, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 20, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 21, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 22, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 23, "summary": "land=Grove of the Burnwillows; cast: Tainted Remedy", "land": "Grove of the Burnwillows", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 24, "summary": "land=Godless Shrine; cast: Tainted Remedy", "land": "Godless Shrine", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 25, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 26, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 27, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 28, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 29, "summary": "land=Grove of the Burnwillows; cast: (nothing)", "land": "Grove of the Burnwillows", "casts": [], "actions": [] },
+    { "index": 30, "summary": "land=Godless Shrine; cast: (nothing)", "land": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "type": "land_entry",
+  "source": "Godless Shrine",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 2, "num": 23, "is_land": false }, { "name": "Temple Garden", "idx": 1, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Godless Shrine", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Grove of the Burnwillows", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Skyshroud Cutter", "cost": "{3}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath"], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 10, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Tainted Remedy" }],
+  "events": [{ "turn": 2, "kind": "lifeloss", "text": "🩸 opponent −5 life (via Tainted Remedy)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Godless Shrine", "idx": 4, "num": 0, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 23, "is_land": false }, { "name": "Skyshroud Cutter", "idx": 6, "num": 41, "is_land": false }, { "name": "Tainted Remedy", "idx": 5, "num": 51, "is_land": false }, { "name": "Temple Garden", "idx": 1, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 18, "name": "Grove of the Burnwillows", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath"], "library_size": 51 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 2, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 4, "summary": "land=Grove of the Burnwillows; cast: Tainted Remedy", "land": "Grove of the Burnwillows", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 5, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 6, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Grove of the Burnwillows; cast: (nothing)", "land": "Grove of the Burnwillows", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "lifeloss", "text": "🩸 opponent −1 life (via Tainted Remedy)" }, { "turn": 3, "kind": "combat", "text": "⚔ attacked: Skyshroud Cutter (3) — 3 to opponent (14→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Godless Shrine", "idx": 4, "num": 0, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 8, "num": 0, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 23, "is_land": false }, { "name": "Skyshroud Cutter", "idx": 6, "num": 41, "tapped": true, "is_land": false }, { "name": "Tainted Remedy", "idx": 5, "num": 51, "is_land": false }, { "name": "Temple Garden", "idx": 1, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath"], "library_size": 51 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Invigorate" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Godless Shrine", "idx": 4, "num": 0, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 8, "num": 0, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 23, "is_land": false }, { "name": "Skyshroud Cutter", "idx": 6, "num": 41, "is_land": false }, { "name": "Tainted Remedy", "idx": 5, "num": 51, "is_land": false }, { "name": "Temple Garden", "idx": 1, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath"], "library_size": 50 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Invigorate, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Invigorate, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 2, "summary": "land=Wooded Foothills; cast: Invigorate, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: Invigorate, Tainted Remedy", "land": "Wooded Foothills", "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 4, "summary": "land=none; cast: Invigorate, Tainted Remedy", "land": null, "casts": ["Invigorate", "Tainted Remedy"], "actions": [{ "card": "Invigorate" }, { "card": "Tainted Remedy" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Invigorate", "land": "Wooded Foothills", "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 6, "summary": "land=Wooded Foothills; cast: Invigorate", "land": "Wooded Foothills", "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: Invigorate", "land": "Wooded Foothills", "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 8, "summary": "land=Wooded Foothills; cast: Invigorate", "land": "Wooded Foothills", "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 9, "summary": "land=none; cast: Invigorate", "land": null, "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 10, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 11, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 12, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: Tainted Remedy", "land": "Wooded Foothills", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 14, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 15, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Wooded Foothills; cast: (nothing)", "land": "Wooded Foothills", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "type": "target",
+  "source": "Invigorate",
+  "turn": 4,
+  "pump": "+4/+4",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 12, "battlefield": [{ "name": "Godless Shrine", "idx": 4, "num": 0, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 8, "num": 0, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 23, "is_land": false }, { "name": "Overgrown Tomb", "idx": 9, "num": 32, "is_land": true }, { "name": "Skyshroud Cutter", "idx": 6, "num": 41, "is_land": false }, { "name": "Tainted Remedy", "idx": 5, "num": 51, "is_land": false }, { "name": "Temple Garden", "idx": 1, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Windswept Heath", "Wooded Foothills"], "library_size": 49 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "legal_targets": [{ "kind": "permanent", "index": 2, "label": "Ignoble Hierarch (yours)" }, { "kind": "permanent", "index": 6, "label": "Skyshroud Cutter (yours)" }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 2 }] }, { "index": 1, "label": "Skyshroud Cutter (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }],
+  "note": "reply an option index. The chosen creature gets +4/+4. Default = the AI's pick (best attacker)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −3 life (via Tainted Remedy)" }, { "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −1 life (via Tainted Remedy)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 12, "battlefield": [{ "name": "Godless Shrine", "idx": 4, "num": 0, "is_land": true }, { "name": "Grove of the Burnwillows", "idx": 8, "num": 0, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 23, "is_land": false }, { "name": "Overgrown Tomb", "idx": 9, "num": 32, "is_land": true }, { "name": "Skyshroud Cutter", "idx": 6, "num": 41, "is_land": false }, { "name": "Tainted Remedy", "idx": 5, "num": 51, "is_land": false }, { "name": "Temple Garden", "idx": 1, "num": 53, "is_land": true }], "vial_counters": [], "hand": [{ "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Invigorate", "Windswept Heath", "Wooded Foothills"], "library_size": 49 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
