@@ -4135,6 +4135,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!TapForCostDirect(state, ec, is_creature))
             {
                 if (AffordAuditOn()) { g_afford_rollout_fails.fetch_add(1, std::memory_order_relaxed); }
+                // SERVER-TRUTH RESOLUTION: a declared cast that can't be paid is dropped (left in hand).
+                // Record its name so the play viewer learns AUTHORITATIVELY which casts failed, instead of
+                // inferring it from a board diff (the false-positiving detectDropped). Only top-level
+                // main-plan casts (sink_stack empty) -- nested breakpoint re-solve casts are engine-driven,
+                // not part of the user's committed line. Sink is nulled off real play so GT stays identical.
+                if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
                 return;
             }
         }

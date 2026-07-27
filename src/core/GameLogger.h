@@ -437,6 +437,16 @@ inline void EmitPlayEvent(int turn, const char* kind, std::string text)
     if (g_play_event_sink) { g_play_event_sink->push_back({ turn, kind, std::move(text) }); }
 }
 
+// Server-truth "dropped cast" sink for the play viewer (SERVER-TRUTH RESOLUTION). When a committed
+// main-phase plan is applied through TurnSolver::ApplyPlanDirect::apply_one and a declared hand cast
+// CANNOT be paid, that cast is silently left in hand; the apply site appends its name here. The next
+// emitted decision reports "dropped_casts" so the browser knows AUTHORITATIVELY which casts failed --
+// replacing the client-side detectDropped board-diff heuristic that false-positived on working lines
+// (e.g. a self-sacrificing/redrawn cast, or a mid-plan pause). Nulled by RevealLogPause during every
+// search/rollout/enumeration scope (incl. CheckLine's plan_pays trial-apply), so autonomous play is
+// byte-identical (appending to an external vector never touches GameState). Inert unless set.
+extern thread_local std::vector<std::string>* g_play_dropped_cast_sink;
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -453,6 +463,7 @@ struct RevealLogPause
     SoulfireTargetChooser* saved_sfchooser;
     std::vector<std::pair<int, std::string>>* saved_drawsink;
     std::vector<PlayEvent>* saved_evsink;
+    std::vector<std::string>* saved_dropsink;
     BounceChooser* saved_sacchooser;
     ReplicateChooser* saved_repchooser;
     LandEntryChooser* saved_lechooser;
@@ -463,13 +474,15 @@ struct RevealLogPause
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
                        saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
-                       saved_evsink(g_play_event_sink), saved_sacchooser(g_play_sacrifice_chooser),
+                       saved_evsink(g_play_event_sink), saved_dropsink(g_play_dropped_cast_sink),
+                       saved_sacchooser(g_play_sacrifice_chooser),
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
                        saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
-      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_sacrifice_chooser = nullptr;
+      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
+      g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
       g_play_lightpaws_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
@@ -477,7 +490,8 @@ struct RevealLogPause
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
-                        g_play_event_sink = saved_evsink; g_play_sacrifice_chooser = saved_sacchooser;
+                        g_play_event_sink = saved_evsink; g_play_dropped_cast_sink = saved_dropsink;
+                        g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
                         g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;

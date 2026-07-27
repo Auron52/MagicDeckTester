@@ -406,7 +406,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                               const std::vector<TurnSolver::Plan>& plans,
                               bool is_pre_combat, int decision_index, int reveal_count,
                               const std::vector<std::pair<int, std::string>>& drew = {},
-                              const std::vector<PlayEvent>& events = {})
+                              const std::vector<PlayEvent>& events = {},
+                              const std::vector<std::string>& dropped_casts = {})
 {
     const Player& me  = s.ActivePlayer();
     os << "{\n";
@@ -444,6 +445,20 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             os << ", \"text\": ";
             JsonStr(os, events[ei].text);
             os << " }";
+        }
+        os << "],\n";
+    }
+    // Server-truth resolution: the DECLARED casts of the just-committed plan the executor could not pay
+    // (dropped, left in hand). The viewer reads this to know AUTHORITATIVELY that a line partially
+    // failed -- and rolls it back -- instead of inferring it from a board diff (detectDropped, which
+    // false-positived on working lines). Empty (the common case) => the line fully resolved.
+    if (!dropped_casts.empty())
+    {
+        os << "  \"dropped_casts\": [";
+        for (size_t di = 0; di < dropped_casts.size(); ++di)
+        {
+            if (di) { os << ", "; }
+            JsonStr(os, dropped_casts[di]);
         }
         os << "],\n";
     }
@@ -1324,6 +1339,12 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // viewer history. Same lifecycle as draw_log: real sites append, cleared when a decision is consumed.
     std::vector<PlayEvent> event_log;
     g_play_event_sink = &event_log;
+    // Server-truth resolution: the DECLARED casts of the last-applied committed plan that the executor
+    // could not pay (dropped, left in hand). Same lifecycle as draw_log -- the apply site appends, and
+    // it is cleared when a decision is consumed, so the next emitted decision carries exactly the
+    // just-committed plan's dropped casts. The browser reads this instead of guessing via detectDropped.
+    std::vector<std::string> dropped_log;
+    g_play_dropped_cast_sink = &dropped_log;
     ai.SetExternalChooser(
         [&](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
         {
@@ -1338,7 +1359,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                     // Only the completing full-CSV run writes the trace file (below).
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log);
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
@@ -1347,6 +1368,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 // the draws that happen AFTER it (turn draw / cantrip draws of the next segment).
                 draw_log.clear();
                 event_log.clear();
+                dropped_log.clear();
                 return chosen;
             }
             // Human-play line reconciliation: if a --validate-line was supplied, this is the
@@ -1399,13 +1421,13 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 }
                 std::cout << "],\n";
                 std::cout << "  \"decision\": ";
-                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log);
+                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log);
                 std::cout << "}\n<<<END_VALIDATION>>>\n";
                 std::cout.flush();
                 std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log);
+            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);   // distinct code: "more input needed"
@@ -2110,6 +2132,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_lightpaws_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
+    g_play_dropped_cast_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Mulligan reproducibility: the actual (count, bottomed-card-numbers) this game used. Recorded
@@ -2167,6 +2190,19 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::cout << ", \"text\": ";
             JsonStr(std::cout, event_log[ei].text);
             std::cout << " }";
+        }
+        std::cout << "],\n";
+    }
+    // Server-truth: casts of the final committed line the executor couldn't pay (dropped). Carried on
+    // the result too so a line that drops a cast AS the game ends is still caught by the viewer (parity
+    // with the per-decision dropped_casts). Empty (the common case) => the final line fully resolved.
+    if (!dropped_log.empty())
+    {
+        std::cout << "  \"dropped_casts\": [";
+        for (size_t di = 0; di < dropped_log.size(); ++di)
+        {
+            if (di) { std::cout << ", "; }
+            JsonStr(std::cout, dropped_log[di]);
         }
         std::cout << "],\n";
     }

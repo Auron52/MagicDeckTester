@@ -1224,23 +1224,9 @@ function applyAccepted(planIndex, label) {
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
-  // Dropped-cast detection (issue 2): remember the non-land casts we INTENDED plus the pre-commit
-  // hand, graveyard AND battlefield counts, so after the line resolves we can tell if a queued cast
-  // never actually resolved (silently dropped for mana — e.g. an over-generated line the board can't
-  // pay). A cast is "dropped" only if it stayed in hand AND did not reach the graveyard AND did not
-  // reach the battlefield. The graveyard check avoids a false positive when the same-named card is
-  // cast (→ gy) but a fresh copy is re-staged into hand (Soulfire's dig), leaving the hand count
-  // unchanged; the BATTLEFIELD check avoids the same false positive for permanents — a creature/
-  // artifact resolves to the battlefield (never the gy), and with 4-of decks a redrawn copy restores
-  // the hand count, which otherwise looked like a drop. Compared in step() against the next state; a
-  // real drop rolls the whole line back (rollbackLine).
-  S._intendedCasts = (S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le'&&p.kind!=='retrace').map(p=>p.name);
-  S._preHandCounts = {};
-  (((S.decision||{}).me||{}).hand||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preHandCounts[nm]=(S._preHandCounts[nm]||0)+1; } });
-  S._preGyCounts = {};
-  (((S.decision||{}).me||{}).graveyard||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preGyCounts[nm]=(S._preGyCounts[nm]||0)+1; } });
-  S._preBfCounts = {};
-  (((S.decision||{}).me||{}).battlefield||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preBfCounts[nm]=(S._preBfCounts[nm]||0)+1; } });
+  // Dropped-cast detection is now SERVER-TRUTH (issue #3a): the engine reports decision.dropped_casts,
+  // so step() no longer needs pre-commit hand/gy/battlefield snapshots to infer a silent drop. (The old
+  // board-diff detectDropped false-positived on self-sacrificing/redrawn casts.)
   // Record a one-int step so undo can pop this main-phase decision. Without it S.steps desyncs from
   // S.choices and undo() (which bails when S.steps is empty) silently does nothing after any line.
   S.prev = S.decision; S.choices.push(planIndex); (S.steps=S.steps||[]).push(1);
@@ -2213,53 +2199,24 @@ async function step() {
   S.busy=false; $('undo').disabled = S.choices.length===0;
   if (res.kind==='decision') {
     advanceTo(res.decision);
-    // Defer the dropped-cast check while the committed plan is STILL APPLYING. A resolution-time
-    // sub-decision (Light-Paws / dig / scry / target / sacrifice / ...) is returned MID-plan, before the
-    // plan's later casts resolve. E.g. Ethereal Armor + Daybreak Coronet: Ethereal Armor resolves, triggers
-    // Light-Paws, and the engine PAUSES here with Daybreak Coronet still in hand -- judging droppedness now
-    // wrongly flags Coronet as unpayable and rolls the line back, pre-empting the very trigger the user
-    // never gets to see. _intendedCasts persists across the sub-decision reply (pushChoices does not clear
-    // it), so the check runs once the plan is fully resolved: the next non-sub decision, or a result. A
-    // genuinely dropped cast produces no trigger, so it never lands on a sub-decision -- it surfaces at the
-    // plan's end and is still caught there.
-    if (!SUBDECISIONS.includes((res.decision||{}).type)) {
-      const dropped=detectDropped((res.decision||{}).me);
-      if (dropped.length) return rollbackLine(dropped);
-    }
+    // SERVER-TRUTH RESOLUTION: the engine reports which committed casts it could not pay (dropped, left
+    // in hand) as decision.dropped_casts -- authoritative, replacing the old detectDropped board-diff
+    // heuristic that false-positived on working lines (a self-sacrificing/redrawn cast read as dropped;
+    // viewer issue #3a). It naturally DEFERS past mid-plan sub-decisions with no snapshot bookkeeping: a
+    // cast that drops never resolves, so it never triggers a sub-decision (Light-Paws / dig / target),
+    // and only a main-phase decision/result carries the field -- so a sub-decision reply never sees a
+    // premature drop. The stateless replay records the drop in the final segment after the last consumed
+    // choice, so it surfaces at the next main-phase decision.
+    const dropped=(res.decision||{}).dropped_casts||[];
+    if (dropped.length) return rollbackLine(dropped);
   } else if (res.kind==='result') {
-    const dropped=detectDropped((res.result||{}).me);
+    const dropped=(res.result||{}).dropped_casts||[];
     if (dropped.length) return rollbackLine(dropped);
     showResult(res.result);
   } else showError(res.error||'unknown error', res.raw);
 }
-// Dropped-cast detection (issue 2): return the intended non-land casts that never resolved. A cast
-// is "dropped" only if it stayed in hand (count did not fall below pre-commit) AND did not reach the
-// graveyard (an instant/sorcery that resolved always lands there) AND did not reach the battlefield
-// (a creature/artifact/permanent that resolved lands there). The gy check keeps a cast-then-re-staged
-// copy (Soulfire's dig re-adds a same-named card, so the hand count is unchanged) from being misread
-// as dropped; the BATTLEFIELD check does the same for permanents — a resolved permanent increments
-// its battlefield count, and battlefield counts are stable across the next draw step, so a redrawn
-// 4-of copy no longer looks like a drop. A discard (left hand → gy, never cast) is still caught.
-// A genuine over-generated/unpayable line reaches none of gy/battlefield, so step() rolls the whole
-// thing back (rollbackLine).
-function detectDropped(meAfter){
-  const intended=S._intendedCasts; S._intendedCasts=null;
-  const preH=S._preHandCounts||{}; S._preHandCounts=null;
-  const preG=S._preGyCounts||{};   S._preGyCounts=null;
-  const preB=S._preBfCounts||{};   S._preBfCounts=null;
-  if (!intended || !intended.length || !meAfter) return [];
-  const cn=c=>typeof c==='string'?c:(c&&c.name);
-  const afterH={}; (meAfter.hand||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterH[nm]=(afterH[nm]||0)+1; } });
-  const afterG={}; (meAfter.graveyard||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterG[nm]=(afterG[nm]||0)+1; } });
-  const afterB={}; (meAfter.battlefield||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterB[nm]=(afterB[nm]||0)+1; } });
-  const dropped=[]; const seen=new Set();
-  intended.forEach(nm=>{ if(seen.has(nm)) return; seen.add(nm);
-    const stillInHand=(afterH[nm]||0) >= (preH[nm]||0) && (preH[nm]||0) > 0;
-    const reachedGy  =(afterG[nm]||0) >  (preG[nm]||0);
-    const reachedBf  =(afterB[nm]||0) >  (preB[nm]||0);
-    if (stillInHand && !reachedGy && !reachedBf) dropped.push(nm); });
-  return dropped;
-}
+// (detectDropped removed: dropped-cast detection is now server-truth via decision.dropped_casts,
+// read directly in step(). The old board-diff inference false-positived on working lines — issue #3a.)
 function notifyDropped(names){
   const ve=$('verdict'); ve.className='unsupported';
   ve.innerHTML=`<span class="vtag">line rejected</span>`+
@@ -2299,9 +2256,6 @@ function rollbackStep() {
   (S.checkpoints||[]).length=S.steps.length;   // drop this + the returned decision's cp; advanceTo recreates it
   S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null; hideDecPanel();
-  // Clear the dropped-cast snapshot: since the drop-check is now deferred across mid-plan sub-decisions,
-  // it can outlive a single step -- an undo mid-plan must not leave a stale snapshot to mis-fire later.
-  S._intendedCasts=null; S._preHandCounts=null; S._preGyCounts=null; S._preBfCounts=null;
   return true;
 }
 async function undo() {
@@ -2309,10 +2263,10 @@ async function undo() {
   S.undoing = true;   // land INSIDE the replayed decision (suppress the dead-opponent/commit-turn auto-advance once)
   renderHistory(); await step();
 }
-// Auto-reject: the committed line dropped a cast it couldn't pay for (detectDropped). Roll the whole
-// line back to the previous phase — as if it was never committed (nothing cast/tapped/drawn, history
-// entries removed) — then re-fetch that decision and tell the user why. Stateless replay makes the
-// rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
+// Auto-reject: the committed line dropped a cast it couldn't pay for (engine decision.dropped_casts).
+// Roll the whole line back to the previous phase — as if it was never committed (nothing cast/tapped/
+// drawn, history entries removed) — then re-fetch that decision and tell the user why. Stateless replay
+// makes the rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
 async function rollbackLine(names) {
   // A rolled-back line voids any pending "Commit turn" skip (mirror handleVerdict's reject branch):
   // otherwise the post-rollback advanceTo re-fires the commit-turn auto-pass and BURNS the turn --

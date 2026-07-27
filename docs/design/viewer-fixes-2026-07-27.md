@@ -129,6 +129,35 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
   Do them together, not piecemeal. #10's viewer half and #12 and server-truth's CheckLine parts are
   GT-neutral; only their autonomous-touching parts (if any) join the GT batch.
 
+  **#5 concrete plan (prepped 2026-07-27):** `required_pieces` loads from the profile's JSON array
+  into `m_profile.required_pieces` (`src/ai/MulliganProfileIO.h:283`) and stamps `state.m_required_pieces`,
+  which `SelectCleanupDiscardIndex` protects from the highest-MV cleanup discard (both autonomous
+  rollout `AIEngine.cpp:3593` and interactive `main.cpp:1102`). Dragonstorm's profile currently has NO
+  `required_pieces` key (→ empty → Apex MV 10 always pitched). Quick fix = add
+  `"required_pieces": ["Apex of Power", "Dragonstorm"]` to `decks/Dragonstorm/Dragonstorm.profile.json`
+  (the two irreplaceable payoffs; Dragons are redundant, so pitching an excess one stays correct).
+  GT-affecting → part of the batch rebaseline. The searched-discard follow-up (`MTG_SEARCHED_DISCARD`
+  path, `AIEngine.cpp:3608`) is the general solution deferred per the user's "search later".
+
+- **2026-07-27 (batch 3, server-truth increment 1 — GT-neutral):**
+  - **#3a DONE + #1a resolved via server-truth.** The engine now emits `dropped_casts` — the declared
+    casts of the just-committed plan the executor could not pay (recorded at the `apply_one`
+    `!TapForCostDirect` drop site, `TurnSolver.cpp:4137`, top-level only via `sink_stack.empty()`).
+    Carried by a new `g_play_dropped_cast_sink` (`GameLogger.h`, nulled in `RevealLogPause` → autonomous
+    byte-identical, verified 0 play-drift), installed/cleared/read in `main.cpp` `RunClaudePlay` +
+    `WriteDecisionJson` + the result emitter. The browser reads `decision.dropped_casts` in `step()`
+    and retires the false-positiving `detectDropped` board-diff (removed, with its pre-commit snapshot
+    bookkeeping). Verified: `dropped_casts` fires exactly on the over-generated unpayable plans
+    (Rite of Flame / Apex of Power at s14_gi0 T5); working lines emit nothing → no false "not enough
+    mana" (#3a). The #1a partial-state (Reverent Silence resolving on a rolled-back line) is now handled
+    correctly by accept → authoritative drop report → reliable rollback (with #1b, no turn burn) — NOT
+    the unsound `plan_pays` gate.
+  - **STILL OPEN from the reject cluster:** **#2 undo history corruption** is a SEPARATE client
+    checkpoint↔step desync (auto-advanced dead-opp/commit-turn passes each push a checkpoint AND a
+    step), not fixed by server-truth; needs the bookkeeping reconcile. The FULLER server-truth vision
+    (render faithful per-action resolution — splice/firebreathe/discard/targets from an emitted action
+    log) is a later increment; increment 1 covers only the drop signal (the #3a/#1a fix).
+
   - **Known CheckLine gaps the new check surfaced (pre-existing, for the mana-fidelity follow-up):**
     Stage-2 does not credit **fetchland-produced colors** (a fetched dual's colours), so lines like
     Anti-Lifegain's `Tainted Remedy + Skyshroud Cutter…` read `illegal: no black source` even though
