@@ -56,7 +56,7 @@ Defect (1) errs toward **false-accept** (→ partial state); defect (2) errs tow
 | 10 | committed cast order ignored (re-sorted) | `CastRankOf` canonical re-sort unless `searched_order` (`TurnSolver.cpp:5102-5121`); CheckLine only honors enumerated perms (`10530-10536`) | build candidate from exact committed order, prefer it | TODO |
 | 8 | splice display out-of-order + drops Rite of Flame | variant labeler alpha-sorts sub-tokens + label from tokens only (`TurnSolver.cpp:10499,10523-10526`) | rewrite labeler to ordered cast list (or subsume in server-truth) | TODO |
 | 7 | no "just splice if affordable" default / no toggle | splice = search-chosen k, no chooser (`TurnSolver.cpp:1848-1892`) | greedy-splice default + off-by-default prompt | TODO |
-| 5 | discard pitches Apex of Power (only payoff) | `SelectCleanupDiscardIndex` = highest-MV non-required; `required_pieces:[]` (`SpellEffects.h:84-137`) | protect payoffs now; searched discard later | TODO |
+| 5 | discard pitches Apex of Power (only payoff) | `SelectCleanupDiscardIndex` = highest-MV non-required; `required_pieces:[]` (`SpellEffects.h:84-137`) | protect payoffs now; searched discard later | **DONE** (GT rebaselined) |
 | 4 | firebreathing mana invisible; no player control | `ApplyFirebreathing` greedy, reads pool untapped (`SpellEffects.h:1706-1786`) | new "how much" decision (4 sites); faithful display | TODO |
 | 6 | Dwarven Hold burst amount auto-decided | storage-land, same mechanic as Mercadian Bazaar | sibling amount decision to #4 | TODO |
 | 11 | unattached queued aura can't be dragged onto a creature | untargeted queued aura renders non-draggable `plannedThumb` (`index.html:600-609`) | make thumb draggable (reuse `retargetPlanAura`) | TODO |
@@ -200,6 +200,25 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     and auto-pass any extra (breakpoint) decision the recording lacks — then no baseline entry is needed
     and the check is robust to ANY future added human-play breakpoint. Left for later (the current cost is
     2 trivial lines in 1 game).
+
+- **2026-07-27 (batch 5 — #5 discard payoff protection, GT-affecting → rebaselined):**
+  - **#5 DONE.** Set `decks/Dragonstorm/Dragonstorm.profile.json` `mulligan.required_pieces` =
+    `["Apex of Power", "Dragonstorm"]` (was `[]`). `SelectCleanupDiscardIndex` (`SpellEffects.h:102-115`)
+    now skips these two irreplaceable payoffs when picking the highest-MV cleanup discard, in BOTH the
+    autonomous rollout (`AIEngine.cpp:3644`) and interactive play (`main.cpp:1117`) — the search rollout
+    reads the identical set via `GameState::m_required_pieces`. Dragons are redundant, so pitching an
+    excess Dragon stays correct; only Apex (MV 10, previously always pitched) and Dragonstorm are held.
+  - **GT rebaselined (smoke + regression, scoped `--deck=dragonstorm`, ACCEPTED).** Net loss-penalized
+    delta is strongly POSITIVE — every regression-mode case improved (d0/d3/d5 × s2002/s3003:
+    5.574→5.549, 4.463→4.437, 4.573→4.563, 4.452→4.420, 4.560→4.544) and smoke d0 (5.563→5.524); across
+    the 5 regression cases **7 losses recovered, 4 wins lost, 19 faster, 4 slower-still-win**. The deck
+    stops stranding its only wincon, so screwed-but-recoverable games now win. The few win→loss games
+    (gi190 etc.) are MANA-SCREWED (stuck on 2 lands) where protecting an uncastable payoff pitched a
+    needed land — the known blunt-heuristic tradeoff the user deferred to "searched discard later"
+    (`AIEngine.cpp` `MTG_SEARCHED_DISCARD`). smoke d3 dipped +0.013 (gi78/gi110, same screw class),
+    dwarfed by the regression gains → net positive, accepted. **OVERNIGHT GT (seeds 4004-7007) still
+    OLD** — Dragonstorm will show a diff on the next `--overnight` run; rebaseline it there (expected
+    same-direction improvement, NOT a regression).
 
 Reference reproductions to sanity-check specific items: Dragonstorm s21_gi20 (Lotus Bloom
 black, item 9 — see `logs/play/rejections/Dragonstorm_cod_s21_gi20_t7.json`), s9_gi8 (splice
