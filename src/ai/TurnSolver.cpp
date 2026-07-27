@@ -10619,6 +10619,53 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index]);
         return out;
     }
+    // #7 SPLICE default: the player does NOT get a splice-count picker -- the line just splices as many
+    // copies as the mana affords (greedy MAX-affordable) in the committed order. Only when MTG_SPLICE_
+    // PROMPT is set does splice stay a Choose so the human dials k. Applies ONLY to a PURE splice fan-out
+    // (variants differ SOLELY in the splice dimension); a line with a genuine OTHER sub-decision (tutor /
+    // fetch / X / enchant target) still prompts for all of them. Max-affordable = the highest TOTAL
+    // splice_count whose trial-apply pays (plan_pays); if NONE pays (a chooser/combo line the nulled-
+    // chooser sim under-reports -- see the plan_pays caveat above), fall back to the highest total and let
+    // the executor + server-truth dropped_casts surface any real shortfall. CheckLine is viewer-only -> GT-neutral.
+    static const bool s_splice_prompt = std::getenv("MTG_SPLICE_PROMPT") != nullptr;
+    if (out.variants.size() > 1 && !s_splice_prompt)
+    {
+        auto nonSpliceSig = [](const std::vector<SubChoice>& subs) -> std::string {
+            std::vector<std::string> ks;
+            for (const SubChoice& sc : subs) { if (sc.kind != "splice") { ks.push_back(sc.key + "\x1f" + sc.choice); } }
+            std::sort(ks.begin(), ks.end());
+            std::string r; for (const std::string& k : ks) { r += "\x1e" + k; } return r;
+        };
+        bool pure_splice = true, any_splice = false;
+        std::string base_ns;
+        for (size_t i = 0; i < out.variants.size(); ++i)
+        {
+            bool hs = false;
+            for (const SubChoice& sc : out.variants[i].subs) { if (sc.kind == "splice") { hs = true; break; } }
+            if (!hs) { pure_splice = false; break; }   // a variant without a splice sub -> not pure splice
+            any_splice = true;
+            std::string ns = nonSpliceSig(out.variants[i].subs);
+            if (i == 0) { base_ns = ns; } else if (ns != base_ns) { pure_splice = false; break; }
+        }
+        if (any_splice && pure_splice)
+        {
+            auto totalSplice = [&](int plan_idx) -> int {
+                int t = 0;
+                for (const Action& a : plans[plan_idx].actions)
+                { if (a.kind == Action::Kind::CastFromHand && a.splice_count > 0) { t += a.splice_count; } }
+                return t;
+            };
+            int pick = -1, pick_total = -1;
+            for (const LineVariant& v : out.variants)   // highest TOTAL splice among PAYABLE variants
+            { if (plan_pays(v.plan_index)) { int t = totalSplice(v.plan_index); if (t > pick_total) { pick_total = t; pick = v.plan_index; } } }
+            if (pick < 0)   // none reported payable (combo sim under-report) -> greedy max, trust the human
+            { for (const LineVariant& v : out.variants) { int t = totalSplice(v.plan_index); if (t > pick_total) { pick_total = t; pick = v.plan_index; } } }
+            out.variants.clear();
+            out.verdict = V::Accept; out.plan_index = pick;
+            out.matched_summary = LineSummaryOfPlan(plans[pick]);
+            return out;
+        }
+    }
     if (out.variants.size() > 1)
     {
         out.verdict = V::Choose;

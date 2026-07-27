@@ -55,7 +55,7 @@ Defect (1) errs toward **false-accept** (→ partial state); defect (2) errs tow
 | 2 | undo corrupts history (out-of-order/dup turns) | checkpoint↔step desync from auto-advanced decisions (`advanceTo` push `2144`, `rollbackStep` `2279`) | server-truth resolution + reconcile bookkeeping | TODO |
 | 10 | committed cast order ignored (re-sorted) | `CastRankOf` canonical re-sort unless `searched_order` (`TurnSolver.cpp:5102-5121`); CheckLine only honors enumerated perms (`10530-10536`) | build candidate from exact committed order, prefer it | TODO |
 | 8 | splice display out-of-order + drops Rite of Flame | variant labeler alpha-sorts sub-tokens + label from tokens only (`TurnSolver.cpp:10499,10523-10526`) | rewrite labeler to ordered cast list (or subsume in server-truth) | TODO |
-| 7 | no "just splice if affordable" default / no toggle | splice = search-chosen k, no chooser (`TurnSolver.cpp:1848-1892`) | greedy-splice default + off-by-default prompt | TODO |
+| 7 | no "just splice if affordable" default / no toggle | splice = search-chosen k, no chooser (`TurnSolver.cpp:1848-1892`) | greedy-splice default + off-by-default prompt | **DONE** |
 | 5 | discard pitches Apex of Power (only payoff) | `SelectCleanupDiscardIndex` = highest-MV non-required; `required_pieces:[]` (`SpellEffects.h:84-137`) | protect payoffs now; searched discard later | **DONE** (GT rebaselined) |
 | 4 | firebreathing mana invisible; no player control | `ApplyFirebreathing` greedy, reads pool untapped (`SpellEffects.h:1706-1786`) | new "how much" decision (4 sites); faithful display | TODO |
 | 6 | Dwarven Hold burst amount auto-decided | storage-land, same mechanic as Mercadian Bazaar | sibling amount decision to #4 | TODO |
@@ -219,6 +219,19 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     dwarfed by the regression gains → net positive, accepted. **OVERNIGHT GT (seeds 4004-7007) still
     OLD** — Dragonstorm will show a diff on the next `--overnight` run; rebaseline it there (expected
     same-direction improvement, NOT a regression).
+
+- **2026-07-27 (batch 6 — #7 splice default, GT-neutral):**
+  - **#7 DONE.** In `CheckLine`, a PURE splice fan-out (matched variants differing SOLELY in the splice
+    dimension) no longer returns `Choose`; by default it AUTO-ACCEPTS the greedy MAX-AFFORDABLE splice —
+    the variant with the highest TOTAL `splice_count` that `plan_pays` (falls back to the highest total if
+    none pays, e.g. an Apex-chooser combo the nulled-chooser sim under-reports, letting the executor +
+    server-truth `dropped_casts` surface any real shortfall). A line with a genuine OTHER sub-decision
+    (tutor / fetch / X / enchant) still prompts for all of them. `MTG_SPLICE_PROMPT=1` restores the
+    splice picker (the off-by-default "decision"). CheckLine viewer-only -> GT-neutral.
+  - **Verified:** default run moves 6 reference lines Choose→Accept (splice fan-outs auto-resolving);
+    `MTG_SPLICE_PROMPT=1` returns them to Choose (57). Both 0 REGRESSION; linebuild 0 FAIL, protocol 0
+    play-drift. Toggle is currently an env var (server-spawned binary); a viewer checkbox that passes it
+    through `/api/step` is a small follow-up.
 
 Reference reproductions to sanity-check specific items: Dragonstorm s21_gi20 (Lotus Bloom
 black, item 9 — see `logs/play/rejections/Dragonstorm_cod_s21_gi20_t7.json`), s9_gi8 (splice
