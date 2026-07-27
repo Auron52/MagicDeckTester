@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 5e646e7  date 2026-07-27
+# Regression ground truth -- commit f89b311  date 2026-07-27
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -136,15 +136,15 @@ hinata_overnight_d5_s4004=5.9333/fb510f791c90d89a
 hinata_overnight_d5_s5005=5.9367/4ec4f4c7655a50f4
 hinata_overnight_d5_s6006=5.9867/3c07dda41f283ca1
 hinata_overnight_d5_s7007=5.9567/29663c42159f1c1d
-dragonstorm_overnight_d0_s4004=6.1670/7fb8dcb1103e5224
-dragonstorm_overnight_d0_s5005=6.1770/c7d54e2f9801c8bd
-dragonstorm_overnight_d0_s6006=6.2290/4f4f8ecf313c0008
-dragonstorm_overnight_d0_s7007=6.2160/4274237963fb3390
-dragonstorm_overnight_d3_s4004=4.7500/3d511c35d46b0d8c
-dragonstorm_overnight_d3_s5005=4.6420/ada073ad41485254
-dragonstorm_overnight_d3_s6006=4.6600/9538aba6f493ab8a
-dragonstorm_overnight_d3_s7007=4.7140/d138595687827d38
-dragonstorm_overnight_d5_s4004=4.8567/c3e030ea3e1b03a7
-dragonstorm_overnight_d5_s5005=4.6333/f191be14d7f24746
-dragonstorm_overnight_d5_s6006=4.6333/be919fc9a0eb8ce1
-dragonstorm_overnight_d5_s7007=4.6433/453f5f06101ce947
+dragonstorm_overnight_d0_s4004=5.5245/2565e0456defba6a
+dragonstorm_overnight_d0_s5005=5.5730/f02080ec108e2325
+dragonstorm_overnight_d0_s6006=5.6605/668aac15867ae1d5
+dragonstorm_overnight_d0_s7007=5.5870/728300b84a76ae5f
+dragonstorm_overnight_d3_s4004=4.4720/d6fff697c1c2e674
+dragonstorm_overnight_d3_s5005=4.4100/32d65634f6d7a808
+dragonstorm_overnight_d3_s6006=4.4160/eeed9d69b9f70c3e
+dragonstorm_overnight_d3_s7007=4.5660/e06d8b0212a88d7a
+dragonstorm_overnight_d5_s4004=4.5000/633655612eb1dd1d
+dragonstorm_overnight_d5_s5005=4.4567/f6dc05145f3baf6a
+dragonstorm_overnight_d5_s6006=4.3300/42b149107c531c0c
+dragonstorm_overnight_d5_s7007=4.5433/65b769cabbc27fa4
