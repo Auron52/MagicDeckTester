@@ -2572,6 +2572,237 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     for (const Card& c : deck.mainboard)
     { auto it = bucket_of.find(c.m_name.str()); if (it != bucket_of.end()) { count[it->second]++; } }
 
+    // ==== OFFLINE ADAPTIVE-BOTTOM REGRET SIMULATOR (MTG_KEEP_SIM_ADAPTIVE_BOTTOM) =================
+    // Answers "what would adaptive bottoming have COST vs full bottoming?" from ONE full-bottom raw,
+    // with NO rollouts -- the cheap alternative to the expensive real adaptive_bottom generation.
+    //
+    // Why the uniform SYNTH_BOTTOM_R knob CANNOT answer this (measured, slivers): real adaptive
+    // bottoming REFINES the decision-relevant sub-cells (the per-hand bottoming argmin) toward the cap
+    // while leaving clear cells at the floor -- so a uniform downsample of every sub-cell to one R
+    // (which corrupts the true argmin with noise) massively over-states the cost (botR2 +0.236 vs the
+    // real +0.0057). This simulator instead REPLICATES the gen's variance-driven refinement: it floors
+    // the sub-tables, runs the SAME argmin-driven refine waves (with Gaussian draws from the stored
+    // mean+variance instead of real rollouts), excludes never-refined floor cells from the final
+    // bottoming argmin (the gen's bottom_floor filter), then SCORES the resulting policy against the
+    // TRUE full-R means. The regret is D(adaptive policy, scored on truth) - D(full policy) >= 0.
+    //
+    // The structural cost it captures: a genuinely-best sub-cell whose unlucky-HIGH floor draw keeps it
+    // from ever being the current argmin is never refined, so the bottom_floor filter excludes it and a
+    // slightly-worse refined cell is kept -- a winner's-curse-of-omission that only the floor-noise
+    // realization drives (hence the Monte-Carlo trials). Refined cells are credited their TRUE mean (the
+    // full raw's mean IS the best estimate of a refined cell's value), which isolates this structural
+    // regret from the second-order R-cap resampling noise the two independent gens would also differ by.
+    //
+    // Reproduces the in-game A/B delta cheaply. VALIDATION: slivers full-bottom raw -> +~0.006 (in-game
+    // was +0.0057). Knobs: MTG_KEEP_SIM_FLOOR (sub-table floor R, default 2 = the project's adaptive_
+    // bottom floor), MTG_KEEP_SIM_TRIALS (Monte-Carlo floor-noise realizations, default 128),
+    // MTG_KEEP_SIM_FLIP_EPS (refine stop gate, default 0.02 = cfg.flip_eps), MTG_KEEP_SIM_SEED. Reads the
+    // pooled true means+variances directly; writes nothing (a measurement) -> returns without a profile.
+    if (const char* sab = std::getenv("MTG_KEEP_SIM_ADAPTIVE_BOTTOM"); sab && *sab && std::string(sab) != "0")
+    {
+        if (!have_sumsq)
+        { os << "SIM-ADAPT-BOTTOM: pooled sidecars lack per-cell sumsq (need it to model floor-R noise) "
+                "-- regenerate/merge with sumsq. Nothing done.\n"; return; }
+        const long long floor_r = []{ const char* s = std::getenv("MTG_KEEP_SIM_FLOOR");
+            return (s && *s) ? std::max<long long>(1, std::atoll(s)) : 2LL; }();
+        const int trials = []{ const char* s = std::getenv("MTG_KEEP_SIM_TRIALS");
+            return (s && *s) ? std::max(1, std::atoi(s)) : 128; }();
+        const double flip_eps = []{ const char* s = std::getenv("MTG_KEEP_SIM_FLIP_EPS");
+            return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+        const uint64_t sim_seed = []{ const char* s = std::getenv("MTG_KEEP_SIM_SEED");
+            return (s && *s) ? std::strtoull(s, nullptr, 10) : 0xADA1B0770DULL; }();
+        const double se_prior = 8.0;                 // matches ExhaustiveKeepConfig::se_prior / the gate
+        const double SQRT2    = 1.4142135623730951;
+        const int    K        = static_cast<int>(count.size());
+        const int    M        = max_mull;
+        const int    minH     = std::max(1, HAND - M);
+        const int    NT       = M + 1;               // table index m in [0..M] holds hand size 7-m
+
+        // Deterministic standard-normal per (trial, table m, cell comp, pd) -- splitmix64 + Box-Muller.
+        auto sim_normal = [&](int trial, int m, const std::vector<int>& comp, int pd) -> double {
+            uint64_t x = sim_seed ^ (0x9E3779B97F4A7C15ULL
+                                     * static_cast<uint64_t>((trial * 64 + m) * 2 + pd + 1));
+            for (int v : comp) { x ^= static_cast<uint64_t>(v + 1) * 0xD1B54A32D192ED03ULL;
+                                 x = (x ^ (x >> 29)) * 0xBF58476D1CE4E5B9ULL; x ^= x >> 32; }
+            auto u01 = [&]() -> double { x += 0x9E3779B97F4A7C15ULL; uint64_t z = x;
+                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+                z ^= z >> 31; return static_cast<double>(z >> 11) * (1.0 / 9007199254740992.0); };
+            const double u1 = std::max(1e-12, u01()), u2 = u01();
+            return std::sqrt(-2.0 * std::log(u1)) * std::cos(6.283185307179586 * u2);
+        };
+
+        // ---- true per-size tables from the pooled sums (mu=mean, vc=per-rollout var, cnt) ----
+        std::vector<std::vector<std::vector<int>>>          comps(NT);
+        std::vector<std::map<std::vector<int>, int>>        cidx(NT);
+        std::vector<std::vector<std::array<double, 2>>>     MU(NT), VC(NT);
+        std::vector<std::vector<std::array<long long, 2>>>  CNT(NT);
+        std::vector<std::array<double, 2>>                  vg(NT, { 0.0, 0.0 });   // pooled per-table var
+        long long cap_r = 0;
+        bool tables_ok = true;
+        for (int H = HAND; H >= minH; --H)
+        {
+            const int m = HAND - H;                  // table m holds size H = 7-m
+            auto pit = pooled.find(H);
+            if (pit == pooled.end()) { os << "SIM-ADAPT-BOTTOM: missing pooled size " << H << "\n"; tables_ok = false; break; }
+            std::array<double, 2> vgacc = { 0.0, 0.0 }; std::array<long long, 2> vgn = { 0, 0 };
+            for (const auto& kv : pit->second)
+            {
+                const int i = static_cast<int>(comps[m].size());
+                comps[m].push_back(kv.first); cidx[m][kv.first] = i;
+                std::array<double, 2> mu = { 0.0, 0.0 }, vc = { 0.0, 0.0 };
+                std::array<long long, 2> cn = { kv.second.cnt[0], kv.second.cnt[1] };
+                for (int pd = 0; pd < 2; ++pd)
+                {
+                    const long long c = kv.second.cnt[pd];
+                    if (c > 0) { mu[pd] = kv.second.sum[pd] / c;
+                                 vc[pd] = std::max(0.0, kv.second.sumsq[pd] / c - mu[pd] * mu[pd]); }
+                    if (m > 0) { cap_r = std::max(cap_r, c); }        // sub-tables carry the full (cap) R
+                    if (c > 1) { vgacc[pd] += vc[pd]; ++vgn[pd]; }
+                }
+                MU[m].push_back(mu); VC[m].push_back(vc); CNT[m].push_back(cn);
+            }
+            for (int pd = 0; pd < 2; ++pd) { if (vgn[pd] > 0) { vg[m][pd] = vgacc[pd] / vgn[pd]; } }
+        }
+        if (!tables_ok) { return; }
+
+        // Hypergeometric size-7 hand weights.
+        const long long denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
+        std::vector<double> P(comps[0].size());
+        for (std::size_t i = 0; i < comps[0].size(); ++i)
+        { long long num = 1; for (int b = 0; b < K; ++b) { num *= Comb(count[b], comps[0][i][b]); }
+          P[i] = static_cast<double>(num) / static_cast<double>(denom); }
+
+        // Precompute, per size-7 hand i and mull m, the sub-cell indices of its (7-m)-subcompositions
+        // (pure combinatorics -- shared across trials/pd). m=0 -> the hand itself.
+        std::vector<std::vector<std::vector<int>>> subidx(NT, std::vector<std::vector<int>>(comps[0].size()));
+        for (std::size_t i = 0; i < comps[0].size(); ++i)
+            for (int m = 0; m <= M; ++m)
+            {
+                std::vector<std::vector<int>> subs; std::vector<int> cur(K, 0);
+                EnumComps(0, HAND - m, cur, comps[0][i], subs);
+                for (const std::vector<int>& s : subs)
+                { auto it = cidx[m].find(s); if (it != cidx[m].end()) { subidx[m][i].push_back(it->second); } }
+            }
+
+        // Floor-noise SD per sub-cell/pd: sd = sqrt(vs/floor_r), vs = the cell's per-rollout variance
+        // shrunk toward the table's pooled variance with se_prior (matches gate_se / the synth path).
+        std::vector<std::vector<std::array<double, 2>>> floorSD(NT);
+        for (int m = 1; m <= M; ++m)
+        {
+            floorSD[m].assign(comps[m].size(), { 0.0, 0.0 });
+            for (std::size_t c = 0; c < comps[m].size(); ++c)
+                for (int pd = 0; pd < 2; ++pd)
+                { const long long cn = CNT[m][c][pd];
+                  const double vs = (cn * VC[m][c][pd] + se_prior * vg[m][pd]) / (cn + se_prior);
+                  floorSD[m][c][pd] = std::sqrt(std::max(0.0, vs) / static_cast<double>(floor_r)); }
+        }
+
+        using Tab = std::vector<std::vector<std::array<double, 2>>>;
+        auto minsub = [&](const Tab& TV, int i, int m, int pd) -> double
+        { double best = 1e9; for (int c : subidx[m][i]) { best = std::min(best, TV[m][c][pd]); } return best; };
+        // argmin subcomp of hand i at mull m; refined_only excludes floor cells (the bottom_floor filter),
+        // falling back to the unfiltered argmin if none are refined (matches best_sub).
+        auto argsub = [&](const Tab& TV, int i, int m, int pd, bool refined_only,
+                          const std::vector<std::vector<char>>* refd) -> int
+        {
+            double best = 1e9, best_any = 1e9; int arg = -1, arg_any = -1;
+            for (int c : subidx[m][i])
+            { const double v = TV[m][c][pd];
+              if (v < best_any) { best_any = v; arg_any = c; }
+              if ((!refined_only || (*refd)[m][c]) && v < best) { best = v; arg = c; } }
+            return (arg >= 0) ? arg : arg_any;
+        };
+        auto compute_Dopt = [&](const Tab& TV, int pd) -> std::vector<double>
+        {
+            std::vector<double> D(M + 1, 0.0);
+            for (std::size_t i = 0; i < comps[0].size(); ++i) { D[M] += P[i] * minsub(TV, i, M, pd); }
+            for (int m = M - 1; m >= 0; --m)
+                for (std::size_t i = 0; i < comps[0].size(); ++i)
+                { D[m] += P[i] * std::min(minsub(TV, i, m, pd), D[m + 1]); }
+            return D;
+        };
+
+        // FULL-bottom truth: all sub-cells at their true mean (the adopted full profile's decisions).
+        Tab MUt = MU;
+        std::array<double, 2> Dfull = { compute_Dopt(MUt, 0)[0], compute_Dopt(MUt, 1)[0] };
+
+        // Monte-Carlo over floor-noise realizations.
+        std::array<double, 2> rsum = { 0.0, 0.0 }, rsq = { 0.0, 0.0 };
+        double bsum = 0.0, bsq = 0.0;
+        for (int t = 0; t < trials; ++t)
+        {
+            std::array<double, 2> regret = { 0.0, 0.0 };
+            for (int pd = 0; pd < 2; ++pd)
+            {
+                Tab EST = MU;                                        // size-7 (m=0) stays at truth
+                std::vector<std::vector<char>> refined(NT);
+                for (int m = 0; m <= M; ++m) { refined[m].assign(comps[m].size(), m == 0 ? 1 : 0); }
+                for (int m = 1; m <= M; ++m)                          // floor the sub-tables
+                    for (std::size_t c = 0; c < comps[m].size(); ++c)
+                        EST[m][c][pd] = MU[m][c][pd] + floorSD[m][c][pd] * sim_normal(t, m, comps[m][c], pd);
+                // Refine waves: mark each hand's current (unfiltered) argmin sub-cell and drive it to the
+                // cap (= its true mean), unless the hand is a confident mulligan at m -- exactly the gen's
+                // adaptive_bottom mark loop, with Gaussian draws standing in for rollouts.
+                for (;;)
+                {
+                    const std::vector<double> Dcur = compute_Dopt(EST, pd);
+                    std::set<std::pair<int, int>> mark;
+                    for (std::size_t i = 0; i < comps[0].size(); ++i)
+                        for (int m = 1; m <= M; ++m)
+                        {
+                            const int arg = argsub(EST, i, m, pd, false, nullptr);
+                            if (arg < 0 || refined[m][arg]) { continue; }     // absent, or already at cap
+                            if (m == M) { mark.insert({ m, arg }); continue; }
+                            const double kv = EST[m][arg][pd], thr = Dcur[m + 1], se = floorSD[m][arg][pd];
+                            const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
+                                                         : (kv == thr ? 0.5 : 0.0);
+                            const bool confident_mull = (kv - thr > 0.0) && (flip <= flip_eps);
+                            if (!confident_mull) { mark.insert({ m, arg }); }
+                        }
+                    if (mark.empty()) { break; }
+                    for (const auto& mk : mark)
+                    { refined[mk.first][mk.second] = 1; EST[mk.first][mk.second][pd] = MU[mk.first][mk.second][pd]; }
+                }
+                // Score the converged adaptive policy on the TRUE means: keep flag from the est keep_val vs
+                // the est Dopt (unfiltered, as the gen), bottom target from the refined-only argmin, value
+                // = true mean of the kept sub-cell.
+                const std::vector<double> Dest = compute_Dopt(EST, pd);
+                std::vector<double> Dsco(M + 1, 0.0);
+                for (std::size_t i = 0; i < comps[0].size(); ++i)
+                { const int tgt = argsub(EST, i, M, pd, true, &refined); Dsco[M] += P[i] * MU[M][tgt][pd]; }
+                for (int m = M - 1; m >= 0; --m)
+                    for (std::size_t i = 0; i < comps[0].size(); ++i)
+                    { const bool keep = (minsub(EST, i, m, pd) <= Dest[m + 1]);
+                      if (keep) { const int tgt = argsub(EST, i, m, pd, true, &refined);
+                                  Dsco[m] += P[i] * MU[m][tgt][pd]; }
+                      else      { Dsco[m] += P[i] * Dsco[m + 1]; } }
+                regret[pd] = Dsco[0] - Dfull[pd];
+            }
+            for (int pd = 0; pd < 2; ++pd) { rsum[pd] += regret[pd]; rsq[pd] += regret[pd] * regret[pd]; }
+            const double bl = 0.5 * (regret[0] + regret[1]);
+            bsum += bl; bsq += bl * bl;
+        }
+
+        auto se_of = [&](double sum, double sq) -> double
+        { const double mean = sum / trials; const double var = std::max(0.0, sq / trials - mean * mean);
+          return std::sqrt(var / trials); };
+        os << "\n=== ADAPTIVE-BOTTOM REGRET SIM (offline, from full-bottom raw; no rollouts) ===\n";
+        os << "floor R=" << floor_r << "  cap R~" << cap_r << "  trials=" << trials
+           << "  flip_eps=" << flip_eps << "  se_prior=" << se_prior
+           << "  size7 hands=" << comps[0].size() << "\n";
+        os << std::fixed << std::setprecision(4);
+        for (int pd = 0; pd < 2; ++pd)
+            os << (pd ? "  on-the-play " : "  on-the-draw ")
+               << "D_full=" << Dfull[pd] << "  regret=+" << (rsum[pd] / trials)
+               << " +/- " << se_of(rsum[pd], rsq[pd]) << "t\n";
+        os << "  BLEND (0.5 draw + 0.5 play; goldfish flips on_the_play ~50/50): +"
+           << (bsum / trials) << " +/- " << se_of(bsum, bsq) << "t\n";
+        os << "  (adaptive bottoming costs this many win-turns vs full bottoming; "
+              "negligible => adaptive is sufficient. slivers in-game reference = +0.0057)\n";
+        os.unsetf(std::ios::floatfield);
+        return;
+    }
+
     // ---- Synthetic-R reconstruction (MTG_KEEP_SYNTH_R / MTG_KEEP_SYNTH_BOTTOM_R) ----------------
     // Reconstruct the policy as if a table had been sampled to a LOWER R, from the stored per-cell
     // mean+variance -- so "how much R does this deck actually need?" and "adaptive vs full bottoming"

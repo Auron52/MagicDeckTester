@@ -141,14 +141,28 @@ variant, so never re-generate a subset. In the merge path (`MTG_KEEP_MERGE`):
 
 | env | effect |
 |---|---|
-| `MTG_KEEP_SYNTH_R=k`        | resample all tables to R=k → a lower-R profile |
-| `MTG_KEEP_SYNTH_BOTTOM_R=j` | resample only the bottoming sub-tables to R=j (j=floor → **emulates adaptive bottoming**) |
+| `MTG_KEEP_SYNTH_R=k`        | resample all tables to R=k → a lower-R profile (the **required-R / keep** question) |
 | `MTG_KEEP_SYNTH_SEED=…`     | deterministic RNG seed |
 
-Then A/B each reconstruction against the full profile **in game** with `test/keep_reconstruct_ab.sh`
-(attaches via `MTG_EXHAUSTIVE_PROFILE`, no `decks/`/GT churn) to find the required-R knee and the
-adaptive-vs-full bottoming call. **The reconstruction's reported `D_opt` is winner's-curse optimistic —
-do NOT rank variants by it; use the in-game delta.** Full recipe + rationale:
+Then A/B each `SYNTH_R` reconstruction against the full profile **in game** with
+`test/keep_reconstruct_ab.sh` (attaches via `MTG_EXHAUSTIVE_PROFILE`, no `decks/`/GT churn) to find the
+required-R knee. **The reconstruction's reported `D_opt` is winner's-curse optimistic — do NOT rank
+variants by it; use the in-game delta.**
+
+**Adaptive vs full BOTTOMING is a different question — do NOT use `SYNTH_BOTTOM_R` for it.** A uniform
+resample of every sub-cell to one R corrupts the bottoming `argmin` with noise and over-states the cost
+2.6×+ (slivers: real +0.0057 vs `SYNTH_BOTTOM_R=2` +0.236). Use the **offline regret simulator** instead
+— it replays the gen's variance-driven refinement (floor → refine argmin cells → refined-only argmin) and
+scores on the true means, reproducing the in-game A/B for ~free:
+
+```bash
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=<full-bottom.raw.json> \
+  MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 MTG_KEEP_SIM_FLOOR=2 MTG_KEEP_SIM_TRIALS=128 \
+  MTG_MERGE_OUT_PROFILE=/tmp/ig.json MTG_MERGE_OUT_RAW=/tmp/ig.raw.json \
+  ./build/Release/mtg-analyze <deck> --cards-json src/cards/data/cards.json   # prints regret=+Xt
+```
+
+Validated to ±0.0001t on slivers (+0.0058 sim vs +0.0057 in-game). Full recipe + rationale:
 [docs/design/mulligan-reconstruct-lower-r.md](../../docs/design/mulligan-reconstruct-lower-r.md).
 
 ## Multi-machine handoff (pooling with the secondary machine)
