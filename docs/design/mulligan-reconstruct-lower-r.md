@@ -52,6 +52,26 @@ e.g. on the Dragonstorm R≈2.3 perf raw: full 3.876 → SYNTH_R=5 3.601 → SYN
 argmin/threshold pick randomly-favorable cells, so the policy's self-reported EV is optimistic *precisely
 where it is least trustworthy*. **`D_opt` is not a cross-R quality metric.** Judge quality in play.
 
+## Limitation: this reconstructs KEEP, not BOTTOMING
+
+The synth resample is faithful for the **keep** decision (a single threshold comparison `V̂ < D_opt`,
+whose noise flips symmetrically) but **not** for **bottoming**, which is an `argmin` over the many
+sub-compositions of a hand. Minimizing over many `Normal(mean, var/k)` draws systematically selects the
+most-*underestimated* cell — a severe winner's curse that grows as k shrinks. Real low-R rollouts are
+*bounded* actual win-turns (a hand that "won on T3" genuinely can); a Gaussian tail can paint a true-T9
+hand as T3, and the argmin then picks it. Measured on Dragonstorm, `MTG_KEEP_SYNTH_BOTTOM_R=1` reported
+**+0.77t** — a model artifact (contrast slivers' real adaptive-bottom cost of +0.0045t). So:
+
+- **Use synth reconstruction for the required-R (keep) question only.** The R-sweep is trustworthy; the
+  Dragonstorm knee is **~R=30** (within ~0.01t of R=40), with R=20 a ~0.03t fallback for hard decks.
+- **Adaptive bottoming cannot be reconstructed from the full raw.** The full raw's sub-tables are at full
+  R (the *wrong*, too-high precision), and you can't exactly downsample them (only aggregates are
+  stored). A proper adaptive-bottom number needs **real floor-R rollouts on the bottoming sub-tables**:
+  either the full `MTG_KEEP_ADAPTIVE_BOTTOM=1` gen (re-does the expensive keep table too), or a
+  sub-tables-only floor-R gen grafted onto the existing full keep table (cheaper; needs a tooling add).
+  Since a shipped profile uses full bottoming (gated by the confounded A/B), this is a future gen-cost
+  question, not a correctness one — default to full bottoming for combo decks.
+
 ## The compare step (in-game — the ground truth)
 
 `test/keep_reconstruct_ab.sh` plays two exhaustive profiles identically and reports the per-depth

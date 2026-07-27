@@ -1,111 +1,93 @@
 #!/usr/bin/env bash
-# In-game A/B for the EXHAUSTIVE bucketed keep/bottom policy (see docs/design/exhaustive-keep-policy.md
-# and analyzer MTG_KEEP_EXHAUSTIVE). Two disjoint isolations, selected by KM_MODE:
+# In-game A/B for the EXHAUSTIVE bucketed keep/bottom policy (see docs/design/exhaustive-keep-policy.md).
+# Two disjoint isolations, selected by KM_MODE:
 #
 #   KM_MODE=keep    (default)  exhaustive KEEP profile  vs  static profile.
-#                              Bottoming held IDENTICAL (lookahead) on both sides -- MTG_EXHAUSTIVE_BOTTOM
-#                              is OFF everywhere -- so the only difference is the mulligan KEEP decision.
-#                              This is the definitive check of the R=20 analyzer gap (D_static-D_opt).
+#                              Bottoming held IDENTICAL (lookahead, MTG_EXHAUSTIVE_BOTTOM=0) on BOTH,
+#                              so the only difference is the mulligan KEEP decision.
+#   KM_MODE=bottom             exhaustive keep on BOTH; toggle bottoming: A=lookahead (=0), B=blind
+#                              exhaustive (=1). The only difference is the BOTTOMING policy.
+#                              Set MTG_CONFOUND_BOTTOM=1 in the environment for the confounded A/B
+#                              (reshuffle after the decision -> nullifies the lookahead peek).
 #
-#   KM_MODE=bottom             exhaustive profile with blind exhaustive BOTTOMING (MTG_EXHAUSTIVE_BOTTOM=1)
-#                              vs the SAME exhaustive profile with clairvoyant lookahead bottoming (flag
-#                              off). KEEP is exhaustive on both sides, so the only difference is the
-#                              BOTTOMING policy: blind-optimal vs clairvoyant-lookahead. Lower (earlier
-#                              win) is better; if blind is >= lookahead we may adopt it for realism.
+# Plays with the deck's REAL PLAY PROFILE: the manifest omits "depth" so the deck's enabled value_play
+# block owns the play depth (the shipping condition), with budget_ms as the CLI knob. Each arm runs as
+# ONE `mtg --batch` over all seeds -> a single pooled work queue (one load-imbalance tail per arm, not
+# one per seed -- the old per-seed sweep stranded 23 cores on each config's slow-storm tail). The
+# exhaustive keep/bottom policy is layered via MTG_EXHAUSTIVE_PROFILE on top of the base profile's
+# value_play; requires the exhaustive profile to already exist (generate via MTG_KEEP_EXHAUSTIVE).
 #
-# Mirrors keepmodel_ab_widseeds.sh's engine/flags/budget EXACTLY so numbers are comparable. Read-only
-# w.r.t. deck profiles; all output under logs/keepmodel_exh_<mode>_<stem>/. Requires the exhaustive
-# profile to already exist (generate via MTG_KEEP_EXHAUSTIVE); it is NOT regenerated here.
-#
-#   KM_DECK=decks/slivers_vial/slivers_vial.txt KM_MODE=keep bash test/keepmodel_exhaustive_ab.sh
-set -u
+#   KM_DECK=decks/<name>/<name>.txt KM_MODE=keep bash test/keepmodel_exhaustive_ab.sh
+set -uo pipefail
+cd "$(dirname "$0")/.."
 BIN=./build/Release/mtg
-DECK=${KM_DECK:?set KM_DECK=decks/<name>.txt}
+DECK=${KM_DECK:?set KM_DECK=decks/<name>/<name>.(txt|cod)}
 MODE=${KM_MODE:-keep}
-CARDS=${KM_CARDS:-src/cards/data/cards.json}
-STEM=$(basename "$DECK"); STEM=${STEM%.*}   # strip ANY extension (.txt or .cod) -> deck stem
-STATIC=${KM_STATIC:-decks/$STEM.profile.json}
+STEM=$(basename "$DECK"); STEM=${STEM%.*}
+# BASE = the deck's base .profile.json (carries the value_play PLAY profile). EXH = the exhaustive
+# keep/bottom sidecar (layered on top via env). Per-deck-folder decks need these passed explicitly.
+BASE=${KM_STATIC:-decks/$STEM.profile.json}
 EXH=${KM_EXH_PROFILE:-decks/$STEM.keepmodel.exhaustive.profile.json}
+[ -e "$EXH" ]  || { echo "missing exhaustive profile: $EXH (generate with MTG_KEEP_EXHAUSTIVE=1)"; exit 1; }
+[ -e "$BASE" ] || { echo "missing base/static profile: $BASE"; exit 1; }
 
-[ -f "$EXH" ]    || { echo "missing exhaustive profile: $EXH (generate with MTG_KEEP_EXHAUSTIVE=1)"; exit 1; }
-[ -f "$STATIC" ] || { echo "missing static profile: $STATIC"; exit 1; }
-
-# Same seed/depth/games grid as the wide-seed keep A/B for comparability.
 SEEDS=${KM_AB_SEEDS:-"4004 5005 6006 7007 8008 9009 10010 11011 12012 13013 14014 15015 16016 17017 18018 19019"}
-DEPTHS=${KM_AB_DEPTHS:-"0 3 5"}
 GAMES=${KM_AB_GAMES:-1000}
+BUDGET=${KM_AB_BUDGET:-20}
 
 OUT=logs/keepmodel_exh_${MODE}_$STEM; mkdir -p "$OUT"
 REPORT=$OUT/REPORT.txt
 stamp(){ date -u +%Y-%m-%dT%H:%M:%SZ; }
 log(){ echo "$*" | tee -a "$REPORT"; }
 : > "$REPORT"
-log "=== EXHAUSTIVE keep/bottom A/B ($(stamp)) deck=$STEM mode=$MODE ==="
-log "seeds[$SEEDS] depths[$DEPTHS] games=$GAMES budget-ms=20 max-turns=8"
+nseed=$(echo $SEEDS | wc -w)
+log "=== EXHAUSTIVE keep/bottom A/B ($(stamp)) deck=$STEM mode=$MODE  [batched, play-profile] ==="
+log "seeds=$nseed games=$GAMES budget-ms=$BUDGET (value_play owns depth)  confound=${MTG_CONFOUND_BOTTOM:-0}"
 log "exhaustive profile: $EXH"
 
-# ab <profile> <tag> <exhaustive_bottom 0|1>
-# MTG_EXHAUSTIVE_PROFILE=none suppresses presence-gated auto-attach so the STATIC arm is genuinely
-# static even when this deck has an adopted decks/<deck>.keepmodel.exhaustive sidecar. It's a no-op for
-# the exhaustive arms: those load the block directly via --profile, and AttachExhaustiveSidecar returns
-# early on an already-populated block before it ever consults the env. Replaces the old mv/scratch-path
-# workaround for A/B baseline contamination.
-ab(){ local prof="$1" tag="$2" exb="$3"
-  for d in $DEPTHS; do for s in $SEEDS; do
-    # --ignore-play-profile: take depth/budget from the CLI sweep even when the deck has an enabled
-    # value_play block (adopted value-leaf); without it the block forces its own depth and the engine
-    # rejects an explicit --depth. No-op for decks without value_play. The value leaf stays default-on,
-    # so both arms play shipped-equivalently and only the keep/bottom policy differs.
-    MTG_EXHAUSTIVE_PROFILE=none MTG_DUMP_WINS=1 MTG_EXHAUSTIVE_BOTTOM="$exb" "$BIN" "$DECK" --profile "$prof" --ignore-play-profile --seed "$s" \
-      --games "$GAMES" --depth "$d" --budget-ms 20 --max-turns 8 --lookahead-bottoming --threads 0 \
-      > "$OUT/wins_${tag}_d${d}_s${s}.wins" 2> "$OUT/err_${tag}_d${d}_s${s}.txt"
-  done; done; }
+# One manifest, seeds pooled, PLAY-PROFILE driven (no "depth" key -> value_play owns the depth).
+MF=$OUT/manifest.json
+{ echo '{ "jobs": ['; first=1
+  for s in $SEEDS; do [ $first -eq 1 ] && first=0 || printf ',\n'
+    printf '  { "name": "s%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "budget_ms": %s }' \
+      "$s" "$DECK" "$BASE" "$GAMES" "$s" "$BUDGET"
+  done; printf '\n] }\n'; } > "$MF"
+
+# run_arm <tag> <exhaustive-profile|none> <exhaustive_bottom 0|1> -- ONE pooled batch (inherits any
+# MTG_CONFOUND_BOTTOM from the caller's environment).
+run_arm(){ local tag="$1" prof="$2" exb="$3"
+  MTG_EXHAUSTIVE_PROFILE="$prof" MTG_EXHAUSTIVE_BOTTOM="$exb" \
+    "$BIN" --batch "$MF" --threads 0 --game-log-dir "$OUT/wins_$tag" \
+    > "$OUT/batch_$tag.log" 2>"$OUT/batch_$tag.err"; }
 
 if [ "$MODE" = keep ]; then
-  # KEEP isolation: exhaustive keep vs static; exhaustive bottoming OFF on BOTH (lookahead bottoming).
-  A_PROF=$STATIC; A_TAG=static; A_EXB=0
-  B_PROF=$EXH;    B_TAG=exh;    B_EXB=0
+  A_TAG=static;   A_PROF=none;  A_EXB=0     # static keep,      lookahead bottoming
+  B_TAG=exh;      B_PROF=$EXH;  B_EXB=0     # exhaustive keep,  lookahead bottoming
 else
-  # BOTTOM isolation: exhaustive keep on BOTH; toggle exhaustive bottoming. A=lookahead, B=blind.
-  A_PROF=$EXH; A_TAG=lookahead; A_EXB=0
-  B_PROF=$EXH; B_TAG=exhbottom; B_EXB=1
+  A_TAG=lookahead; A_PROF=$EXH; A_EXB=0     # exhaustive keep,  lookahead bottoming
+  B_TAG=exhbottom; B_PROF=$EXH; B_EXB=1     # exhaustive keep,  blind exhaustive bottoming
 fi
+log "--- arm A=$A_TAG ($(stamp)) ---"; run_arm "$A_TAG" "$A_PROF" "$A_EXB"
+log "--- arm B=$B_TAG ($(stamp)) ---"; run_arm "$B_TAG" "$B_PROF" "$B_EXB"
 
-log "--- A/B baseline=$A_TAG ($(stamp)) ---";   ab "$A_PROF" "$A_TAG" "$A_EXB"
-log "--- A/B candidate=$B_TAG ($(stamp)) ---";  ab "$B_PROF" "$B_TAG" "$B_EXB"
-
-python3 - "$OUT" "$A_TAG" "$B_TAG" "$DEPTHS" "$SEEDS" <<'PY' | tee -a "$REPORT"
-import sys,os
-OUT,base,cand=sys.argv[1],sys.argv[2],sys.argv[3]
-depths=[int(x) for x in sys.argv[4].split()]; seeds=[int(x) for x in sys.argv[5].split()]
-def wins(tag,d,s):
-    # MTG_DUMP_WINS emits "[win] gi=N wt=M" to STDERR (the err_ file); the .wins/stdout holds only the
-    # summary. Parse the err_ file.
-    fn=f"{OUT}/err_{tag}_d{d}_s{s}.txt"; w={}
-    if not os.path.exists(fn): return w
-    for ln in open(fn):
-        if ln.startswith("[win]"):
-            p=ln.split(); gi=int(p[1].split('=')[1]); wt=int(p[2].split('=')[1]); w[gi]=wt
-    return w
-def mean(xs): return sum(xs)/len(xs) if xs else 0.0
-print(f"\n=== EXHAUSTIVE A/B ({cand} vs {base}; negative delta = {cand} wins earlier) ===")
-print(f"{'depth':<6}{base:>10}{cand:>10}{'meanD':>10}{base[:3]+'->L':>8}{'L->'+cand[:3]:>8}{'seedsD<0':>10}")
-grand=[]
-for d in depths:
-    dd=[]; wl=0; lw=0; sdel=[]
-    for s in seeds:
-        wa=wins(base,d,s); wb=wins(cand,d,s)
-        av=[t for t in wa.values() if t>0]; bv=[t for t in wb.values() if t>0]
-        am=mean(av); bm=mean(bv); sdel.append(bm-am)
-        for gi in wa:
-            a=wa.get(gi,0); b=wb.get(gi,0); aw=a>0; bw=b>0
-            if aw and not bw: wl+=1
-            elif bw and not aw: lw+=1
-        dd.append((am,bm))
-    am=mean([x[0] for x in dd]); bm=mean([x[1] for x in dd]); delta=bm-am
-    nlt=sum(1 for x in sdel if x<0); grand.append(delta)
-    print(f"d{d:<5}{am:>10.3f}{bm:>10.3f}{delta:>+10.4f}{wl:>8}{lw:>8}{str(nlt)+'/'+str(len(seeds)):>10}")
-gm=mean(grand)
-print(f"\noverall meanD (avg over depths): {gm:>+.4f}  ({cand+' BEATS '+base if gm<0 else cand+' loses to '+base})")
+python3 - "$OUT" "$A_TAG" "$B_TAG" "$SEEDS" <<'PY' | tee -a "$REPORT"
+import sys, os, re
+OUT, A, B, seeds = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4].split()
+def avgs(tag):
+    d = {}; fn = f"{OUT}/batch_{tag}.log"
+    if os.path.exists(fn):
+        for ln in open(fn):
+            m = re.match(r"s(\d+): played=\d+ avg=([\d.]+)", ln)
+            if m: d[m.group(1)] = float(m.group(2))
+    return d
+def mean(x): return sum(x)/len(x) if x else 0.0
+a, b = avgs(A), avgs(B)
+per = [(s, a[s], b[s]) for s in seeds if s in a and s in b]
+mA, mB = mean([x[1] for x in per]), mean([x[2] for x in per])
+nlt = sum(1 for _, x, y in per if y - x < -1e-9)
+print(f"\n=== A/B ({B} vs {A}; negative delta = {B} wins earlier) — avg win turn (loss-penalized) ===")
+print(f"{A:>14}{B:>14}{'delta B-A':>14}{'seeds B<A':>14}")
+print(f"{mA:>14.4f}{mB:>14.4f}{mB-mA:>+14.4f}{str(nlt)+'/'+str(len(per)):>14}")
+print(f"\noverall delta {mB-mA:+.4f}t  ({B+' BEATS '+A if mB-mA < -1e-4 else (B+' loses to '+A if mB-mA > 1e-4 else 'tie (within noise)')})")
 PY
 log "=== EXHAUSTIVE A/B DONE ($(stamp)) ==="
