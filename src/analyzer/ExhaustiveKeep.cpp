@@ -2572,6 +2572,41 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     for (const Card& c : deck.mainboard)
     { auto it = bucket_of.find(c.m_name.str()); if (it != bucket_of.end()) { count[it->second]++; } }
 
+    // ---- Synthetic-R reconstruction (MTG_KEEP_SYNTH_R / MTG_KEEP_SYNTH_BOTTOM_R) ----------------
+    // Reconstruct the policy as if a table had been sampled to a LOWER R, from the stored per-cell
+    // mean+variance -- so "how much R does this deck actually need?" and "adaptive vs full bottoming"
+    // are both answerable from ONE full raw with NO re-rollout (the point of storing sumsq -- see the
+    // have_sumsq comment above). Each cell's V is redrawn V_hat ~ Normal(mean, vs/k): mean=sum/cnt,
+    // vs = the per-rollout variance (sumsq/cnt - mean^2) shrunk toward the size's pooled per-sample
+    // variance with se_prior (guards a low-count cell's fake-tight variance), k = the target R for the
+    // table, clamped to that size/pd's observed cell-mean envelope (a k-sample mean is bounded by it).
+    //   * MTG_KEEP_SYNTH_R=k       -> size-7 keep decision at R=k (and sub-tables too, unless overridden)
+    //   * MTG_KEEP_SYNTH_BOTTOM_R=j-> the bottoming SUB-tables (H<7) at R=j; j=floor with SYNTH_R unset
+    //                                 (or high) emulates ADAPTIVE bottoming (keep full, bottom coarse).
+    // This resamples ONLY the in-memory t.V used to BUILD the policy; the re-emitted raw below is written
+    // from `pooled` (untouched true sums), so a synth reconstruction can never corrupt a poolable sidecar.
+    // Deterministic (MTG_KEEP_SYNTH_SEED, hashed per comp/size/pd) -> the same profile every run. OFF by
+    // default (both unset) -> byte-identical to the plain merge.
+    const int      synth_r        = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_R");        return (s&&*s)?std::atoi(s):0; }();
+    const int      synth_bottom_r = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_BOTTOM_R"); return (s&&*s)?std::atoi(s):0; }();
+    const uint64_t synth_seed     = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_SEED");     return (s&&*s)?std::strtoull(s,nullptr,10):0x5eed1234ULL; }();
+    const bool     synth_req = (synth_r > 0 || synth_bottom_r > 0);
+    if (synth_req && !have_sumsq)
+    { os << "SYNTH-R: pooled sidecars lack per-cell sumsq (need it to model lower-R noise) -- IGNORING synth\n"; }
+    const bool     do_synth = synth_req && have_sumsq;
+    // Deterministic standard-normal draw seeded by (comp, size, pd) -- splitmix64 stream + Box-Muller.
+    auto synth_normal = [&](const std::vector<int>& comp, int H, int pd, double mean, double sd) -> double {
+        uint64_t x = synth_seed ^ (0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(H * 2 + pd + 1));
+        for (int v : comp) { x ^= static_cast<uint64_t>(v + 1) * 0xD1B54A32D192ED03ULL;
+                             x = (x ^ (x >> 29)) * 0xBF58476D1CE4E5B9ULL; x ^= x >> 32; }
+        auto u01 = [&]() -> double { x += 0x9E3779B97F4A7C15ULL; uint64_t z = x;
+            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+            z ^= z >> 31; return static_cast<double>(z >> 11) * (1.0 / 9007199254740992.0); };
+        const double u1 = std::max(1e-12, u01()), u2 = u01();
+        const double zscore = std::sqrt(-2.0 * std::log(u1)) * std::cos(6.283185307179586 * u2);
+        return mean + sd * zscore;
+    };
+
     const int min_size = std::max(1, HAND - max_mull);
     std::vector<SizeTable> tables(HAND - min_size + 1);
     int effective_R = 0;
@@ -2581,6 +2616,22 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         auto pit = pooled.find(H);
         if (pit != pooled.end())
         {
+            // Target synth R for THIS table (0 => use the pooled mean as-is, no resample).
+            const int kR = do_synth ? ((H == HAND) ? synth_r
+                                                   : (synth_bottom_r > 0 ? synth_bottom_r : synth_r)) : 0;
+            std::array<double, 2>    vgH  = { 0.0, 0.0 }; std::array<long long, 2> ngH = { 0, 0 };
+            std::array<double, 2>    vmin = { 1e30, 1e30 }, vmax = { -1e30, -1e30 };
+            if (kR > 0)   // precompute shrink target + mean envelope for this size/pd
+            {
+                for (const auto& kv : pit->second)
+                    for (int pd = 0; pd < 2; ++pd)
+                    { const long long c = kv.second.cnt[pd]; if (c < 1) { continue; }
+                      const double mn = kv.second.sum[pd] / c;
+                      vmin[pd] = std::min(vmin[pd], mn); vmax[pd] = std::max(vmax[pd], mn);
+                      if (c > 1) { vgH[pd] += std::max(0.0, kv.second.sumsq[pd] / c - mn * mn); ++ngH[pd]; } }
+                for (int pd = 0; pd < 2; ++pd) { if (ngH[pd] > 0) { vgH[pd] /= ngH[pd]; } }
+            }
+            const double se_prior = 8.0;   // matches ExhaustiveKeepConfig::se_prior / the PRUNE-EMIT gate
             for (const auto& kv : pit->second)
             {
                 const int i = static_cast<int>(t.comps.size());
@@ -2589,14 +2640,35 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                 std::array<double, 2> V = {
                     kv.second.cnt[0] ? kv.second.sum[0] / kv.second.cnt[0] : 0.0,
                     kv.second.cnt[1] ? kv.second.sum[1] / kv.second.cnt[1] : 0.0 };
+                if (kR > 0)
+                {
+                    for (int pd = 0; pd < 2; ++pd)
+                    {
+                        const long long c = kv.second.cnt[pd]; if (c < 1) { continue; }
+                        const double mean = kv.second.sum[pd] / c;
+                        const double vc   = std::max(0.0, kv.second.sumsq[pd] / c - mean * mean);
+                        const double vs   = (c * vc + se_prior * vgH[pd]) / (c + se_prior);
+                        const double sd   = std::sqrt(std::max(0.0, vs) / kR);
+                        double vhat = synth_normal(kv.first, H, pd, mean, sd);
+                        vhat = std::min(vmax[pd], std::max(vmin[pd], vhat));   // k-mean is bounded by the envelope
+                        V[pd] = vhat;
+                    }
+                }
                 t.V.push_back(V);
                 t.se.push_back({ 0.0, 0.0 });
-                if (H == HAND) { effective_R = std::max<long long>(effective_R, kv.second.cnt[1]); }
+                if (H == HAND)
+                { effective_R = kR > 0 ? std::max(effective_R, kR)
+                                       : std::max<long long>(effective_R, kv.second.cnt[1]); }
             }
         }
         else { os << "WARNING: pooled table missing size " << H << "\n"; }
         tables[HAND - H] = std::move(t);
     }
+    if (do_synth)
+    { os << "SYNTH-R: keep(size7) R=" << (synth_r > 0 ? synth_r : effective_R)
+         << "  bottom(sub) R=" << (synth_bottom_r > 0 ? synth_bottom_r : (synth_r > 0 ? synth_r : 0))
+         << " (0=full)  seed=" << synth_seed
+         << "  -- V RESAMPLED from stored mean+var, NOT re-rolled\n"; }
 
     os << "pooled " << files_ok << " file(s); " << seed_bases.size()
        << " distinct seed_base(s); effective R=" << effective_R << " per hand (per pd)\n";

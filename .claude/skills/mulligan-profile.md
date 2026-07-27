@@ -133,6 +133,24 @@ profile that ever *failed* the confounded A/B would be a signal to fix the botto
 bottoming shows a small win-turn *increase* on mulligan games — a deliberate, honest shift to accept via
 per-game audit, not a regression.
 
+## Post-hoc reconstruction: test lower R / adaptive bottoming without re-rollout
+
+Generate the full profile **once**, then reconstruct cheaper variants from its raw sidecar (which stores
+per-cell `mean+variance+count`) with **no rollouts** — the full run is a strict superset of every cheaper
+variant, so never re-generate a subset. In the merge path (`MTG_KEEP_MERGE`):
+
+| env | effect |
+|---|---|
+| `MTG_KEEP_SYNTH_R=k`        | resample all tables to R=k → a lower-R profile |
+| `MTG_KEEP_SYNTH_BOTTOM_R=j` | resample only the bottoming sub-tables to R=j (j=floor → **emulates adaptive bottoming**) |
+| `MTG_KEEP_SYNTH_SEED=…`     | deterministic RNG seed |
+
+Then A/B each reconstruction against the full profile **in game** with `test/keep_reconstruct_ab.sh`
+(attaches via `MTG_EXHAUSTIVE_PROFILE`, no `decks/`/GT churn) to find the required-R knee and the
+adaptive-vs-full bottoming call. **The reconstruction's reported `D_opt` is winner's-curse optimistic —
+do NOT rank variants by it; use the in-game delta.** Full recipe + rationale:
+[docs/design/mulligan-reconstruct-lower-r.md](../../docs/design/mulligan-reconstruct-lower-r.md).
+
 ## Multi-machine handoff (pooling with the secondary machine)
 
 Pooling sums raw sidecars element-wise. It is valid **only** when the runs agree on play-logic, buckets
