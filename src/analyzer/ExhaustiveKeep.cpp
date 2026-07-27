@@ -2812,6 +2812,12 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         // Two rollout brackets for the adaptive arm: CAP (every refined cell driven all the way to the cap
         // -- conservative, LEAST saving) and RSTOP (refined cells stop at the modelled flip_eps-confident R
         // -- optimistic, MOST saving). Reality lands between (real slivers 52% sits mid-bracket).
+        // NOTE: the full-bottom-at-cap absolute cost F(cap)-F(40) is deliberately NOT reported. Unlike the
+        // adaptive-vs-full REGRET (a difference in which the shared cap-R sampling noise cancels), F(cap)
+        // alone is an argmin over ALL sub-cells at a uniform lower R -- the same uniform-downsample argmin
+        // winner's curse that SYNTH_BOTTOM_R suffers, which overstates the cost 3-4x vs in game (offline
+        // F(30)-F(40) ~ +0.04t vs the in-game SYNTH_R marginal ~ +0.012t). Use the in-game SYNTH_R sweep for
+        // the lower-R (full bottoming) cost; use THIS sim only for the adaptive-vs-full increment.
         double bsum = 0.0, bsq = 0.0, adapt_cap_sum = 0.0, adapt_rstop_sum = 0.0;
         for (int t = 0; t < trials; ++t)
         {
