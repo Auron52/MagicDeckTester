@@ -123,7 +123,35 @@ gap adaptive has to beat:
 (The keep-table R cost is *separate* and grows the other way — SYNTH_R sweep, Dragonstorm R30 ≈ +0.01t,
 R20 ≈ +0.03t. A full cheap-gen cost = keep-R cost + this bottoming regret.)
 
-**Performance impact.** The sim also prints the gen-rollout saving as a bracket — refined cells driven all
+## Playable adaptive-bottom reconstruction (`MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM`) — for real game-testing
+
+The regret sim above returns a *number*. To **test recipes with real games** without a real `adaptive_bottom`
+gen, `MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1` in the merge path writes a **playable** adaptive-bottom profile: it
+floors the sub-tables, replays ONE realization of the gen's argmin-driven refinement (refined cells → their
+TRUE mean; unrefined stay at the noisy floor and are excluded from the bottoming argmin via `bottom_floor`),
+then serialises via the same `BuildPolicyFromTables` a real gen uses. The keep table is left at truth, or at
+a lower R if `MTG_KEEP_SYNTH_R=k` is also set — so a **fast recipe = low-R keep + adaptive bottoming**
+reconstructs in one pass. Knobs: `MTG_KEEP_SYNTH_ABOT_FLOOR` (default 2), `_FLIP_EPS` (0.02), `_SEED` (one
+realization), `_CAPNOISE` (default 0 = refine to exact truth; **1 is wrong** — it re-adds the argmin
+winner's curse, slivers +0.019t vs the real +0.0057).
+
+```bash
+# reconstruct a playable profile, then A/B it in game vs the full-bottom profile (both blind-bottoming):
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=<full.raw.json> MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1 \
+  MTG_MERGE_OUT_PROFILE=<deck>.reconadapt.profile.json MTG_MERGE_OUT_RAW=/tmp/ig.raw.json \
+  ./build/Release/mtg-analyze <deck> --cards-json src/cards/data/cards.json
+```
+
+**Validated in game (slivers, vs the REAL adaptive gen).** Structurally the reconstruction changes 17.0% of
+bottom targets vs full — the real gen changes 17.8% (nearly identical *amount*; different specific cells, as
+a different noise realization). In play, a **single** reconstruction is noisy (6 realizations spanned
++0.0035…+0.0122t, SD 0.0027 — one reconstruction ≈ one gen outcome), but the **6-realization mean +0.0069 ±
+0.0011t is statistically consistent with the real gen's +0.0057t** (~+0.001 residual, slightly pessimistic
+because truth-jump refines ~61% of cells vs the real ~65%). **So: average ~6–8 realizations (distinct
+`ABOT_SEED`) × seeds for a stable per-recipe quality number; the ~+0.002t pessimism is consistent across
+recipes and cancels in relative comparison.**
+
+**Performance impact.** The regret sim also prints the gen-rollout saving as a bracket — refined cells driven all
 the way to the cap (conservative, least saving) vs stopped at their modelled flip_eps-confident R
 (optimistic, most saving); reality lands mid-bracket (real slivers **~52 % of sub-table rollouts / ~33 %
 of total gen**, in-bracket). On **Dragonstorm** the sub-tables are **~81 % of the gen** (its keep table is

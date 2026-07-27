@@ -3012,10 +3012,148 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
            << " x" << count[b] << "\n";
     }
 
+    // ---- Playable ADAPTIVE-BOTTOM reconstruction (MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM) ----------------
+    // Produce a PLAYABLE adaptive-bottom profile from the full-bottom raw with NO real adaptive_bottom
+    // gen: floor the bottoming sub-tables and replay ONE realization of the gen's argmin-driven
+    // refinement -- refined cells resolve to their TRUE mean, unrefined cells stay at the noisy floor and
+    // are EXCLUDED from the bottoming argmin (the bottom_floor filter). The keep table (size-7) is left
+    // as-is: truth, or the SYNTH_R-resampled lower-R keep if MTG_KEEP_SYNTH_R is also set (so a FAST
+    // recipe = low-R keep + adaptive bottoming reconstructs in one pass). Unlike the uniform
+    // SYNTH_BOTTOM_R (which corrupts the argmin with noise and mis-plays), this reproduces the SELECTIVE
+    // refinement the real gen does -> validated to PLAY like a real adaptive gen (slivers in-game).
+    //   floor = MTG_KEEP_SYNTH_ABOT_FLOOR (default 2); cap for refined cells = SYNTH_R if set else raw R;
+    //   flip_eps = MTG_KEEP_SYNTH_ABOT_FLIP_EPS (default 0.02); one deterministic realization (ABOT_SEED).
+    long long recon_bottom_floor = -1;
+    if (const char* sab = std::getenv("MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM"); sab && *sab && std::string(sab) != "0")
+    {
+        if (!have_sumsq) { os << "SYNTH-ABOT: pooled sidecars lack per-cell sumsq -- IGNORING (no profile change)\n"; }
+        else
+        {
+            const long long ab_floor = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_FLOOR");
+                return (s && *s) ? std::max<long long>(1, std::atoll(s)) : 2LL; }();
+            const double ab_eps = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_FLIP_EPS");
+                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+            const uint64_t ab_seed = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_SEED");
+                return (s && *s) ? std::strtoull(s, nullptr, 10) : 0xABE770DDULL; }();
+            const long long ab_cap = (synth_r > 0) ? synth_r : std::max<long long>(1, effective_R);
+            const double se_prior = 8.0, SQRT2 = 1.4142135623730951;
+            const int K = static_cast<int>(count.size()), M = max_mull;
+            // A refined cell resolves to its TRUE mean (default). Adding the cap-R sampling noise a real
+            // gen leaves (MTG_KEEP_SYNTH_ABOT_CAPNOISE=1) re-introduces an argmin winner's curse over the
+            // refined cells that badly overstates the cost (slivers +0.019t vs the real +0.0057) -- the
+            // exact-truth refine is markedly closer, so it is the default.
+            const bool ab_capnoise = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_CAPNOISE");
+                return s && *s && std::string(s) != "0"; }();
+            auto mknorm = [&](uint64_t salt, const std::vector<int>& comp, int H, int pd) -> double {
+                uint64_t x = (ab_seed ^ salt) ^ (0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(H * 2 + pd + 1));
+                for (int v : comp) { x ^= static_cast<uint64_t>(v + 1) * 0xD1B54A32D192ED03ULL;
+                                     x = (x ^ (x >> 29)) * 0xBF58476D1CE4E5B9ULL; x ^= x >> 32; }
+                auto u01 = [&]() -> double { x += 0x9E3779B97F4A7C15ULL; uint64_t z = x;
+                    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+                    z ^= z >> 31; return static_cast<double>(z >> 11) * (1.0 / 9007199254740992.0); };
+                const double u1 = std::max(1e-12, u01()), u2 = u01();
+                return std::sqrt(-2.0 * std::log(u1)) * std::cos(6.283185307179586 * u2); };
+            auto abnorm     = [&](const std::vector<int>& c, int H, int pd){ return mknorm(0, c, H, pd); };
+            auto abnorm_cap = [&](const std::vector<int>& c, int H, int pd){ return mknorm(0xCA9ULL, c, H, pd); };
+
+            // Every cell gets a cnt: size-7 = cap (never a bottom target); sub-cells start at the floor.
+            for (auto& t : tables) { t.cnt.assign(t.comps.size(), { ab_cap, ab_cap }); }
+            std::vector<std::vector<std::array<double, 2>>> MU(tables.size());   // true means (refine target)
+            std::vector<std::vector<std::array<double, 2>>> CAPSD(tables.size()); // refined-cell R=cap SD
+            std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });  // shrink target per sub-table
+            for (int H = HAND - 1; H >= min_size; --H)
+            {
+                const int ti = HAND - H; SizeTable& t = tables[ti]; auto& pl = pooled[H];
+                MU[ti].assign(t.comps.size(), { 0.0, 0.0 });
+                CAPSD[ti].assign(t.comps.size(), { 0.0, 0.0 });
+                std::array<long long, 2> ng = { 0, 0 };
+                for (std::size_t c = 0; c < t.comps.size(); ++c)
+                { const Acc& a = pl[t.comps[c]];
+                  for (int pd = 0; pd < 2; ++pd) { const long long cc = a.cnt[pd];
+                    if (cc > 0) { const double mn = a.sum[pd] / cc; MU[ti][c][pd] = mn;
+                      if (cc > 1) { vg[ti][pd] += std::max(0.0, a.sumsq[pd] / cc - mn * mn); ++ng[pd]; } } } }
+                for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[ti][pd] /= ng[pd]; } }
+                for (std::size_t c = 0; c < t.comps.size(); ++c)   // floor draw off the TRUE mean
+                { const Acc& a = pl[t.comps[c]];
+                  for (int pd = 0; pd < 2; ++pd) { const long long cc = a.cnt[pd]; const double mu = MU[ti][c][pd];
+                    const double vc = cc > 1 ? std::max(0.0, a.sumsq[pd] / cc - mu * mu) : vg[ti][pd];
+                    const double vs = (cc * vc + se_prior * vg[ti][pd]) / (cc + se_prior);
+                    CAPSD[ti][c][pd] = ab_capnoise ? std::sqrt(std::max(0.0, vs) / static_cast<double>(ab_cap)) : 0.0;
+                    t.V[c][pd] = mu + std::sqrt(std::max(0.0, vs) / static_cast<double>(ab_floor))
+                                    * abnorm(t.comps[c], H, pd);
+                    t.cnt[c][pd] = ab_floor; } }
+            }
+
+            // keep_val / argmin / Dopt over the CURRENT tables (mirrors BuildPolicyFromTables' internals).
+            const long long denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
+            const SizeTable& H7 = tables[0];
+            std::vector<double> P(H7.comps.size());
+            for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            { long long num = 1; for (int b = 0; b < K; ++b) { num *= Comb(count[b], H7.comps[i][b]); }
+              P[i] = static_cast<double>(num) / static_cast<double>(denom); }
+            auto argmin_sub = [&](const std::vector<int>& h, int m, int pd) -> int {
+                std::vector<std::vector<int>> subs; std::vector<int> cur(K, 0);
+                EnumComps(0, HAND - m, cur, h, subs);
+                double best = 1e9; int arg = -1; const SizeTable& t = tables[m];
+                for (const std::vector<int>& s : subs) { auto it = t.index.find(s);
+                    if (it != t.index.end() && t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; } }
+                return arg; };
+            auto keep_val = [&](const std::vector<int>& h, int m, int pd) -> double {
+                const int a = argmin_sub(h, m, pd); return a < 0 ? 1e9 : tables[m].V[a][pd]; };
+            auto compute_Dopt = [&](int pd) -> std::vector<double> {
+                std::vector<double> D(M + 1, 0.0);
+                for (std::size_t i = 0; i < H7.comps.size(); ++i) { D[M] += P[i] * keep_val(H7.comps[i], M, pd); }
+                for (int m = M - 1; m >= 0; --m) for (std::size_t i = 0; i < H7.comps.size(); ++i)
+                    { D[m] += P[i] * std::min(keep_val(H7.comps[i], m, pd), D[m + 1]); }
+                return D; };
+            // Refine waves: drive each hand's current argmin sub-cell to its TRUE mean unless the hand is a
+            // confident mulligan at m -- exactly the gen's adaptive_bottom mark loop, one realization.
+            int waves = 0;
+            for (;;)
+            {
+                const std::array<std::vector<double>, 2> Dopt_c = { compute_Dopt(0), compute_Dopt(1) };
+                std::set<std::array<int, 3>> mark;   // (m, cellIdx, pd)
+                for (int pd = 0; pd < 2; ++pd)
+                    for (std::size_t i = 0; i < H7.comps.size(); ++i)
+                        for (int m = 1; m <= M; ++m)
+                        {
+                            const int arg = argmin_sub(H7.comps[i], m, pd);
+                            if (arg < 0 || tables[m].cnt[arg][pd] >= ab_cap) { continue; }   // absent / refined
+                            if (m == M) { mark.insert({ m, arg, pd }); continue; }
+                            const double kv = tables[m].V[arg][pd], thr = Dopt_c[pd][m + 1];
+                            const Acc& a = pooled[HAND - m][tables[m].comps[arg]];
+                            const double vc = a.cnt[pd] > 1
+                                ? std::max(0.0, a.sumsq[pd] / a.cnt[pd] - MU[m][arg][pd] * MU[m][arg][pd]) : vg[m][pd];
+                            const double vs = (ab_floor * vc + se_prior * vg[m][pd]) / (ab_floor + se_prior);
+                            const double se = std::sqrt(std::max(0.0, vs) / static_cast<double>(ab_floor));
+                            const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
+                                                         : (kv == thr ? 0.5 : 0.0);
+                            const bool confident_mull = (kv - thr > 0.0) && (flip <= ab_eps);
+                            if (!confident_mull) { mark.insert({ m, arg, pd }); }
+                        }
+                if (mark.empty()) { break; }
+                for (const std::array<int, 3>& mk : mark)   // refine -> true mean +/- cap-R sampling noise
+                { const int m = mk[0], c = mk[1], pd = mk[2];
+                  tables[m].V[c][pd] = MU[m][c][pd]
+                      + CAPSD[m][c][pd] * abnorm_cap(tables[m].comps[c], HAND - m, pd);
+                  tables[m].cnt[c][pd] = ab_cap; }
+                ++waves;
+            }
+            long long refined = 0, subtot = 0;
+            for (int m = 1; m <= M; ++m) for (std::size_t c = 0; c < tables[m].comps.size(); ++c)
+                for (int pd = 0; pd < 2; ++pd) { ++subtot; if (tables[m].cnt[c][pd] >= ab_cap) { ++refined; } }
+            recon_bottom_floor = ab_floor;
+            os << "SYNTH-ABOT: reconstructed PLAYABLE adaptive-bottom profile (floor=" << ab_floor
+               << " cap=" << ab_cap << " flip_eps=" << ab_eps << " seed=" << ab_seed << " waves=" << waves
+               << "); " << refined << "/" << subtot << " sub-cell sides refined ("
+               << (subtot ? 100 * refined / subtot : 0) << "%), rest floor-excluded from the bottoming argmin\n";
+        }
+    }
+
     std::array<std::vector<double>, 2> Dopt;
     ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
         tables, count, buckets, static_cast<int>(deck.mainboard.size()), max_mull, effective_R,
-        bottoming_enabled, -1, &Dopt);
+        bottoming_enabled, recon_bottom_floor, &Dopt);
     ek.commit = commit;
     os << "merged policy: D_opt(draw)=" << Dopt[0][0] << "  D_opt(play)=" << Dopt[1][0]
        << "  (expected win-turn, optimal keep)\n";
