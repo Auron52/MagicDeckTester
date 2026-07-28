@@ -111,6 +111,15 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
   // legitimate no-foresight ground-truth bound the AI should be able to match (see README).
   if (logDir) args.push('--log-dir', logDir);
   args.push('--choices', Array.isArray(p.choices) ? p.choices.join(',') : '');
+  // #4 firebreathe-amount side-channel: p.firebreathe is a { turn: count } map of the human's picks,
+  // passed as "turn:count,..." (turn-keyed, NEVER a --choices slot -> existing references unaffected).
+  // --firebreathe-prompt makes the engine emit a firebreathe decision (exit 70) for any combat turn not
+  // yet answered, so the viewer can surface the modal. A fully-answered map simply never prompts.
+  if (p.firebreathe && typeof p.firebreathe === 'object') {
+    const pairs = Object.keys(p.firebreathe).map(t => `${t}:${p.firebreathe[t]}`);
+    if (pairs.length) args.push('--firebreathe', pairs.join(','));
+  }
+  args.push('--firebreathe-prompt');
   if (validateLine != null) args.push('--validate-line', validateLine);
   return args;
 }

@@ -92,9 +92,37 @@ function buildDom() {
   // it (function declarations like newGame/commitTurn/undo already ARE window properties). This is the
   // only seam we need: the client's own bookkeeping state, read exactly as the code mutates it.
   const acc = win.document.createElement('script');
-  acc.textContent = 'window.__getS = function(){ return S; };';
+  acc.textContent = 'window.__getS = function(){ return S; };'
+    + 'window.__fb = { panel: firebreathePanelHtml, commit: commitFirebreathe, rollback: rollbackStep };';
   win.document.body.appendChild(acc);
   return win;
+}
+
+// #4 firebreathe GUI bookkeeping (isolated — a real firebreathing combat is hard to drive via the
+// line-building viewer). Verifies the modal renders and, crucially, that committing an amount rides the
+// TURN-keyed side-channel (S.firebreathe) WITHOUT consuming a --choices slot, and that undo drops it —
+// i.e. the new decision type does not perturb the positional stream (the whole point of #4's design).
+function testFirebreatheBookkeeping(win) {
+  const S = win.__getS(), fb = win.__fb, fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const d = { type: 'firebreathe', turn: 5, decision_index: 9, max_count: 5, heuristic_default: 5,
+              attackers: [{ name: 'Scourge of Valkas' }] };
+  const html = fb.panel(d);
+  chk((html.match(/data-opt="\d+"/g) || []).length === 6, 'panel renders max+1=6 amount buttons (0..5)');
+  // Seed a plausible mid-game state, then commit a held-back amount.
+  S.choices = [1, 0, 0]; S.steps = [{ n: 1 }, { n: 1 }, { n: 1 }];
+  S.checkpoints = [{ histLen: 0 }, { histLen: 0 }, { histLen: 0 }, { histLen: 0 }];
+  S.history = []; S.firebreathe = {}; S.decision = d; S.busy = false;
+  const choicesBefore = S.choices.length;
+  fb.commit(d, 2);
+  chk(S.firebreathe[5] === 2, 'commit records side-channel firebreathe[5]=2');
+  chk(S.choices.length === choicesBefore, 'commit consumes NO --choices slot');
+  const last = S.steps[S.steps.length - 1];
+  chk(last && last.n === 0 && last.fb === 5, 'commit pushes a zero-int step keyed by turn (fb=5)');
+  S.busy = false;
+  fb.rollback();
+  chk(!(5 in S.firebreathe), 'undo drops the side-channel entry');
+  return fails;
 }
 // The live client state. newGame() rebinds `let S` to a fresh object, so always re-read through the
 // captured accessor rather than caching a stale reference.
@@ -145,6 +173,7 @@ async function stepForward(win) {
   if (t === 'main_phase') { st.plan = []; win.commitTurn(); }
   else if (t === 'mulligan') { win.commitMulligan(d, 1); }        // keep
   else if (t === 'bottom') { win.followAiBottom(d); win.commitBottomBatch(d); }
+  else if (t === 'firebreathe') { win.commitFirebreathe(d, d.heuristic_default == null ? (d.max_count || 0) : d.heuristic_default); }
   else { const def = (d.heuristic_default == null ? 0 : d.heuristic_default); win.pushChoice(d, def, `${t}:auto`); }
   await settle(win);
   return true;
@@ -204,6 +233,13 @@ async function playScenario(sc) {
 
 (async () => {
   let anyFail = false;
+  // #4 firebreathe GUI bookkeeping (fast, DOM-only — no game needed).
+  {
+    const win = buildDom(); await settle(win);
+    const fbFails = testFirebreatheBookkeeping(win);
+    if (fbFails.length) { anyFail = true; console.log(`✗ firebreathe bookkeeping: ${fbFails.length} fail`); fbFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ firebreathe GUI bookkeeping (side-channel + zero-int step + undo)'); }
+  }
   for (const sc of SCENARIOS) {
     let res;
     try { res = await playScenario(sc); }

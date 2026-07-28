@@ -64,6 +64,22 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `dragon` | `g_play_dragon_chooser` (`DragonChooser`) | `PerformTutorToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteDragonDecisionJson` | `dragonPanelHtml` | modal |
 | `lightpaws` | `g_play_lightpaws_chooser` (`LightPawsChooser`) | `PerformLightPawsAttach` (SpellEffects.h, shared executor+rollout) | `WriteLightPawsDecisionJson` | `lightPawsPanelHtml` | modal |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
+| `firebreathe` | `g_play_firebreathe_chooser` (`FirebreatheChooser`) | `AIEngine::Firebreathe` (combat, `GameEngine.cpp:361`) | `WriteFirebreatheDecisionJson` | `firebreathePanelHtml` | modal |
+
+**Firebreathe amount (#4) — the first COMBAT-phase decision, and the first on a KEYED SIDE-CHANNEL.**
+At combat, leftover mana is spent greedily on attacker pumps (`ApplyFirebreathing`). The human instead
+picks how many pump ACTIVATIONS to buy (0..max, default = greedy max), so they can hold mana back.
+Because it fires at combat (attackers + leftover mana unknown at main-phase commit) it CANNOT ride the
+main-phase plan and must not shift the positional `--choices` stream, so it rides a **turn-keyed
+side-channel** `--firebreathe "turn:count,..."` (firebreathing fires once per combat = once per turn).
+`--firebreathe-prompt` makes the engine emit the decision (exit 70) for any unanswered combat turn; the
+viewer always passes it. **Existing references (no `--firebreathe`) replay byte-identically as greedy —
+the payoff of the decision-indexed side-channel design** (`docs/design/decision-indexed-choice-protocol.md`).
+The client records the amount in `S.firebreathe` (a `{turn: count}` map, sent in `cfg()`), NOT `S.choices`;
+`commitFirebreathe` pushes a ZERO-int `S.steps` entry carrying the turn key (`fb`) so undo (`rollbackStep`)
+pops it and drops the side-channel entry, keeping the #2 checkpoint/step bookkeeping 1:1. Chooser nulled
+in `RevealLogPause` (search/rollout greedy) and installed only when there's a recorded answer or live
+prompting → autonomous + reference-check runs are byte-identical.
 
 **Dragonstorm `dragon` put override:** the human picks WHICH library Dragons enter (Dragonstorm's
 tutor-to-battlefield), up to `max_puts` (the storm count); the engine keeps the rule's fixed play

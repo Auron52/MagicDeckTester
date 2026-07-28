@@ -435,12 +435,13 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
-          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null };
+          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{} };
 
 function cfg(extra) {
   return Object.assign({
     deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
+    firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
   }, extra || {});
 }
 async function post(path, body) {
@@ -659,7 +660,7 @@ function plannedEnchantGroup(entry, planIdx, ord, planned) {
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1412,7 +1413,7 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'
-                || dec==='lightpaws'; // centered card-image modals
+                || dec==='lightpaws' || dec==='firebreathe'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1426,6 +1427,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : dec==='dragon' ? dragonPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
+                  : dec==='firebreathe' ? firebreathePanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -1858,6 +1860,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitRetraceDiscard(d, +b.dataset.opt));
   else if (dec==='replicate')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitReplicate(d, +b.dataset.opt));
+  else if (dec==='firebreathe')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFirebreathe(d, +b.dataset.opt));
   else if (dec==='land_entry')
     panel.querySelectorAll('button[data-le]').forEach(b=>b.onclick=()=>commitLandEntry(d, +b.dataset.le));
   else if (dec==='mulligan')
@@ -1948,6 +1952,32 @@ function commitRetraceDiscard(d, oi){
 }
 function commitReplicate(d, n){
   pushChoice(d, n, `${d.source}: replicate ×${n}`);
+}
+// Firebreathe amount modal (#4): a combat-phase decision (the viewer's first NON-main-phase breakpoint
+// that isn't a spell sub-decision). Buttons 0..max, default = greedy max. The amount rides a TURN-keyed
+// side-channel (S.firebreathe), NOT the --choices stream, so it never shifts plan indices.
+function firebreathePanelHtml(d){
+  const max=d.max_count||0, def=(d.heuristic_default==null?max:d.heuristic_default);
+  const atk=(d.attackers||[]).map(a=>a.name);
+  let h=`<h3>Firebreathing — pump how much?</h3>`;
+  h+=`<div class="sub">Spend leftover combat mana on attacker pumps (each activation = +power, e.g. Scourge {R}:+1/+0). You can spend up to <b>${max}</b>; the AI spends the maximum. Hold back to keep mana for a trick.</div>`;
+  h+=`<div class="tutgrid">`+atk.map(n=>cardMini(n)).join('')+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+  for (let k=0;k<=max;k++)
+    h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
+  return h+`</div>`;
+}
+// Commit the firebreathe amount: record it in the turn-keyed side-channel and re-step. Unlike the
+// plan/sub-decision commits it appends NO --choices int; instead it pushes a ZERO-int step carrying the
+// turn key (fb) so undo (rollbackStep) can pop it and drop the side-channel entry, keeping the #2
+// checkpoint/step bookkeeping 1:1 (one shown decision -> one checkpoint -> one step).
+function commitFirebreathe(d, k){
+  const t=d.turn, max=d.max_count||0;
+  (S.firebreathe=S.firebreathe||{})[t]=k;
+  S.history.push({ turn:t, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
+  S.prev=S.decision;
+  (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), fb:t });   // consumes NO --choices slot
+  renderHistory(); hideDecPanel(); step();
 }
 function commitLandEntry(d, v){
   pushChoice(d, v, landEntryLabel(d, v));
@@ -2090,6 +2120,7 @@ const AUTO_RESOLVABLE = {
   replicate:       'Replicate — how many token copies to make',
   retrace_discard: 'Retrace — which land to discard',
   vial_charge:     'Aether Vial — add a counter',
+  firebreathe:     'Firebreathing — how much leftover mana to pump',
 };
 const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
@@ -2122,6 +2153,9 @@ function autoResolveDecision(dec){
   if (!dec || !(dec.type in AUTO_RESOLVABLE)) return false;
   if (surfaceEnabled(dec.type)) return false;
   const def = (dec.heuristic_default==null ? 0 : dec.heuristic_default);
+  // Firebreathe rides the turn-keyed side-channel, not --choices, so it auto-resolves via its own
+  // committer (a zero-int step) rather than pushChoice. "Let AI decide" => spend the greedy max.
+  if (dec.type==='firebreathe') { dec._autoStep = true; commitFirebreathe(dec, def); return true; }
   const lab = dec.type==='land_entry' ? landEntryLabel(dec, def)+' · auto'
             : dec.type==='replicate'  ? `${dec.source}: replicate ×${def} · auto`
             : dec.type==='retrace_discard' ? (()=>{ const c=(dec.options||[]).find(x=>x.index===def); return `${dec.source} (retrace): discard ${c?c.name:'land'} · auto`; })()
@@ -2235,7 +2269,7 @@ function notifyDropped(names){
   $('dropok').onclick=hideVerdict;
 }
 async function newGame() {
-  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
+  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{} };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed and start the next game — for playing several in a row. (Game index is always 0;
@@ -2257,7 +2291,12 @@ function rollbackStep() {
   // last one lands mid-auto-sequence and re-logs a phantom pass line (issue #2). So keep popping while
   // the step we just removed was auto-committed, stopping once we've removed the user step above it.
   let n=0, wasAuto;
-  do { const st=S.steps.pop(); n += (st&&st.n)||0; wasAuto = !!(st&&st.auto); } while (wasAuto && S.steps.length);
+  do {
+    const st=S.steps.pop(); n += (st&&st.n)||0; wasAuto = !!(st&&st.auto);
+    // A firebreathe step consumed no --choices int; it recorded a turn-keyed side-channel entry -> drop
+    // it so the re-step re-emits the firebreathe decision (rather than replaying the popped amount).
+    if (st && st.fb != null && S.firebreathe) { delete S.firebreathe[st.fb]; }
+  } while (wasAuto && S.steps.length);
   S.choices.length=Math.max(0,S.choices.length-n);
   S.history=S.history.filter(h=>!h.win);
   const cp=(S.checkpoints||[])[S.steps.length];
