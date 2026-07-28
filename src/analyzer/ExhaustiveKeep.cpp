@@ -807,19 +807,43 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // process_tasks call (cores full to the end) instead of 32 barriered groups. Held only for the cheap
     // 3-field commit (the multi-second rollout is outside it), so contention is negligible.
     std::mutex acc_mtx;
+
+    // Always-on rollout diagnostics: keep the N SLOWEST rollouts seen (a degenerate-cell detector -- e.g. a
+    // Lotus-Bloom + rituals enumeration blowup). Near-zero cost: capture_slow is now called for EVERY
+    // rollout, but a worker only builds the hand string / takes slow_mtx when its rollout beats the current
+    // N-th-slowest cutoff (slow_gate, an atomic read + compare) -- rare after warm-up -- so there is no
+    // per-rollout lock. MTG_KEEP_SLOW_MS additionally STREAMS any rollout over that threshold (unchanged).
+    struct SlowRec { double ms; int H; int pd; long long r; std::string hand; };
+    std::vector<SlowRec> slow_top;                    // the N slowest so far, guarded by slow_mtx
+    std::atomic<double>  slow_gate{0.0};              // = N-th-slowest ms once full; lock only if ms > this
+    const std::size_t    SLOW_N = 12;
     auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
     {
-        if (slow_ms <= 0 || ms < static_cast<double>(slow_ms)) { return; }
+        const bool topn_cand = ms > slow_gate.load(std::memory_order_relaxed);   // warm-up: gate 0 => all in
+        const bool stream    = slow_ms > 0 && ms >= static_cast<double>(slow_ms);
+        if (!topn_cand && !stream) { return; }        // fast path: the vast majority of rollouts
         std::string hand;
         for (int b = 0; b < K; ++b)
         { if (comp[b] > 0) { hand += label[b] + " x" + std::to_string(comp[b]) + "; "; } }
-        const std::string line = "[keepgen] SLOW-ROLLOUT " + std::to_string(static_cast<long long>(ms))
-            + "ms  size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
-            + " seed=" + std::to_string(rs) + "  hand: " + hand;
         std::lock_guard<std::mutex> lk(slow_mtx);
-        std::cerr << line << "\n" << std::flush;
-        if (const char* sl = std::getenv("MTG_KEEP_SLOW_LOG"); sl && *sl)
-        { std::ofstream f(sl, std::ios::app); f << line << "\n"; }
+        if (topn_cand)
+        {
+            slow_top.push_back({ms, H, pd, r, hand});
+            std::sort(slow_top.begin(), slow_top.end(),
+                      [](const SlowRec& a, const SlowRec& b) { return a.ms > b.ms; });
+            if (slow_top.size() > SLOW_N) { slow_top.resize(SLOW_N); }
+            slow_gate.store(slow_top.size() >= SLOW_N ? slow_top.back().ms : 0.0,
+                            std::memory_order_relaxed);
+        }
+        if (stream)
+        {
+            const std::string line = "[keepgen] SLOW-ROLLOUT " + std::to_string(static_cast<long long>(ms))
+                + "ms  size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
+                + " seed=" + std::to_string(rs) + "  hand: " + hand;
+            std::cerr << line << "\n" << std::flush;
+            if (const char* sl = std::getenv("MTG_KEEP_SLOW_LOG"); sl && *sl)
+            { std::ofstream f(sl, std::ios::app); f << line << "\n"; }
+        }
     };
 
     // ---- Per-cell JOURNAL (crash-recovery for the continuous pool) --------------------------------
@@ -916,8 +940,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } }
             }
             else { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
-            if (slow_ms > 0) { capture_slow(H, comp, pd, r, rs,
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count()); }
+            capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
             sum += wt; sumsq += wt * wt;
         }
         SizeTable& t = tables[HAND - H];
@@ -970,8 +994,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
         const auto t_roll = std::chrono::steady_clock::now();
         const double wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
-        if (slow_ms > 0) { capture_slow(H, comp, pd, r, rs,
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count()); }
+        capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
         return wt;
     };
 
@@ -2161,6 +2185,23 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                    << "x even for fast); use another machine or a weekend run.\n";
             os.unsetf(std::ios::floatfield);
             os << "=============================================\n" << std::flush;
+        }
+        // Always-on degenerate-cell diagnostic. After the floor pass this reflects at least one rollout of
+        // EVERY cell, so a pathological combo cell (a multi-second/minute rollout -- e.g. Lotus Bloom +
+        // rituals enumeration) surfaces HERE, before the long refine, so you can stop and optimize it
+        // instead of discovering it hours in. MTG_KEEP_REPLAY="<hand>" re-runs one such rollout in isolation.
+        {
+            std::lock_guard<std::mutex> lk(slow_mtx);
+            if (!slow_top.empty())
+            {
+                os << "  slowest rollouts so far (top " << slow_top.size() << "; watch for degenerate cells):\n";
+                os << std::fixed << std::setprecision(0);
+                for (const SlowRec& s : slow_top)
+                    os << "    " << s.ms << "ms  size" << s.H << " " << (s.pd ? "play" : "draw")
+                       << "  " << s.hand << "\n";
+                os.unsetf(std::ios::floatfield);
+                os << std::flush;
+            }
         }
         if (cfg.recommend_only)
         {
