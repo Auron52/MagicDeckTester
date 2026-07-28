@@ -121,6 +121,14 @@ it to pick the minimum viable R for the deck.
 - Keep is robust: **R=20 already captures ~94% of the keep gap** on Slivers (residual label-noise
   regret ~0.004t). R=100 is comfortably definitive.
 - Bottoming is **not** robust at low R (next section) — it needs the high-R run.
+- **Hard floor: R < 10 cannot produce a runtime profile.** A profile below R=10 is too noisy to be
+  usable, so it is *structurally* unshippable — a sub-10 single run (or a partial merge whose pooled
+  per-cell R < 10) writes **only a poolable raw chunk**, never a `.profile.json`, and says so loudly. To
+  get a profile from low-R rollouts you must **merge chunks up to R ≥ 10** (that is the only path). The
+  floor is a hard constant (not env-overridable — an override would just re-arm the footgun). It changes
+  no real recipe: `complete` (R40) and `fast` (R30) clear it by a wide margin. The one exemption is the
+  offline reconstruction probe (`MTG_KEEP_SYNTH_R`, next-but-one section), a deliberate in-game-A/B
+  experiment that is allowed to build a low-R profile.
 
 ## Bottoming: always ON (no generation off switch)
 

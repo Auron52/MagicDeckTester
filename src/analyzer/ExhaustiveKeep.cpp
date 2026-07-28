@@ -46,6 +46,16 @@ namespace
 {
 constexpr int HAND = 7;
 
+// Minimum per-cell rollout precision (R) a runtime keep profile may be built at. A profile below
+// this is too noisy to be usable, so it is STRUCTURALLY unshippable: a sub-R run (or a partial merge)
+// writes only a poolable raw CHUNK, never a runtime profile. To get a profile from low-R rollouts you
+// must merge chunks up to R >= this floor. This is a hard floor, deliberately NOT env-overridable --
+// an override would reintroduce the exact silent-low-R footgun it exists to prevent. It also makes an
+// accidental low-R gen (a stray MTG_KEEP_ROLLOUTS, a future auto-carry bug) unable to ship a bad
+// profile: the worst it can do is emit a chunk. Real recipes (fast R=30, complete R=40) clear it by a
+// wide margin, so this changes no happy path.
+constexpr int kMinProfileR = 10;
+
 // C(n,k) as an exact long long (n<=60, k<=7 here -> well within range).
 long long Comb(int n, int k)
 {
@@ -2423,7 +2433,23 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // ---- 6. Serialize the keep policy (bucket map + per-composition keep decisions) --------------
     // Built via the shared BuildPolicyFromTables so the in-run policy is byte-identical to what the
     // offline merge tool (RunKeepMerge) produces from the same pooled V's.
-    if (!cfg.out_profile.empty())
+    if (!cfg.out_profile.empty() && cfg.rollouts < kMinProfileR)
+    {
+        // Hard floor: a run whose cap R is below the minimum usable precision may NOT write a runtime
+        // profile -- only a poolable chunk. This makes a low-R profile structurally impossible (a stray
+        // low MTG_KEEP_ROLLOUTS can at worst emit a chunk, never ship a bad policy).
+        os << "\nREFUSING to write a runtime profile at R=" << cfg.rollouts
+           << " (< min usable R=" << kMinProfileR << ") -- too low-quality to ship.\n";
+        if (!cfg.out_raw.empty())
+        { os << "  A poolable raw chunk is written to " << cfg.out_raw
+             << " instead; merge chunks (MTG_KEEP_MERGE) up to R>=" << kMinProfileR
+             << " to build a profile.\n"; }
+        else
+        { os << "  ERROR: no out_raw chunk target set either -- nothing usable produced. Re-run with an\n"
+                "  out_raw target (so the rollouts become a poolable chunk) and merge, or raise R>="
+             << kMinProfileR << ".\n"; }
+    }
+    else if (!cfg.out_profile.empty())
     {
         std::vector<std::vector<std::string>> bmembers;
         for (int b = 0; b < K; ++b) { bmembers.push_back(eq.classes[b].members); }
@@ -3430,7 +3456,20 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         }
     }
 
-    if (!out_profile.empty())
+    if (!out_profile.empty() && !do_synth && effective_R < kMinProfileR)
+    {
+        // Same hard floor as the single-run path: a partial pool below the minimum usable R is only a
+        // CHAINABLE chunk, not a shippable profile. Keep merging chunks (the out_raw below re-emits the
+        // pooled table) until the pooled per-cell R crosses the floor, then the profile writes.
+        // EXEMPT do_synth (MTG_KEEP_SYNTH_R): that is the explicit, loudly-announced offline
+        // reconstruction A/B probe (test/keep_reconstruct_ab.sh) whose whole purpose is to build a
+        // deliberately lower-R profile to compare in-game -- experimental, never a silent ship.
+        os << "REFUSING to write merged profile at pooled effective R=" << effective_R
+           << " (< min usable R=" << kMinProfileR << ") -- pool more chunks";
+        if (!out_raw.empty()) { os << "; the pooled chunk -> " << out_raw << " chains for further merges"; }
+        os << ".\n";
+    }
+    else if (!out_profile.empty())
     {
         MulliganProfile out = profile;
         out.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(ek);
