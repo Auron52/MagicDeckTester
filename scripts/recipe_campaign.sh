@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
 # RECIPE CAMPAIGN: characterize mulligan-gen RECIPES by (in-game QUALITY, gen SPEED) from ONE full-bottom
 # raw per deck -- NO real adaptive_bottom gen. Adaptive bottoming is SIMULATED into a PLAYABLE profile
-# (MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM, validated to play like a real gen within realization noise); lower-R
-# full bottoming is SYNTH_R. Every recipe is then tested with REAL games (batched, blind bottoming, the
-# calib play setting: default depth + budget_ms=20 -- the footing the slivers +0.0057 was validated on).
+# (MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM, validated to play like a real gen within realization noise); lower keep-R
+# full bottoming is SYNTH_R+KEEP_ONLY (sub-tables held at truth -> no uniform-downsample argmin artifact).
+# Every recipe is tested with REAL games. Delta is vs full@native (the deck's complete gen = baseline).
 #
-# Recipes measured (delta vs full@R40 truth = the adopted-style baseline):
-#   full@R40 (baseline)  full@R30  full@R20      -- lower-R full bottoming (SYNTH_R), S realizations
-#   adaptive@R40  adaptive@R30  adaptive@R20     -- adaptive bottoming, A realizations (averaged)
-# A single adaptive reconstruction is one "gen outcome" (noisy); we average A distinct ABOT_SEED
-# realizations x seeds for a stable per-recipe number (the ~+0.002t reconstruction pessimism is consistent
-# across recipes -> cancels in the ranking).
+# EFFICIENCY (see CLAUDE.md "Long runs MUST batch"): per deck we (1) reconstruct EVERY recipe/realization
+# profile FIRST, in PARALLEL, then (2) run ONE pooled `mtg --batch` over all recipe x realization x seed
+# jobs -- one load-imbalance tail per deck instead of one per (recipe,realization). The reconstructed
+# profiles carry their exhaustive_keep, so each is named directly in the manifest (verified: identical play
+# to env-layering); MTG_EXHAUSTIVE_BOTTOM=1 forces blind bottoming for all jobs.
 #
 #   DECKS="slivers_vial burn Knights" bash scripts/recipe_campaign.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
-BINA=build/RelWithDebInfo/mtg-analyze     # has the reconstruction (merge path); optimized
-BIN=build/Release/mtg                     # goldfish batch (play binary, unchanged)
+BINA=build/RelWithDebInfo/mtg-analyze      # reconstruction (merge path)
+BIN=build/Release/mtg                      # goldfish batch
 CARDS=src/cards/data/cards.json
 
 declare -A DF=( [slivers_vial]=decks/slivers_vial/slivers_vial.txt [burn]=decks/burn/burn.txt \
@@ -25,90 +24,85 @@ declare -A DF=( [slivers_vial]=decks/slivers_vial/slivers_vial.txt [burn]=decks/
   [Dragonstorm]=decks/Dragonstorm/Dragonstorm.cod )
 
 DECKS=${DECKS:-"slivers_vial burn Knights"}
-A_REALIZ=${A_REALIZ:-4}                    # adaptive reconstruction realizations (distinct ABOT_SEED)
-S_REALIZ=${S_REALIZ:-2}                    # full-synth (SYNTH_R) realizations (distinct SYNTH_SEED)
-GAMES=${GAMES:-300}
+A_REALIZ=${A_REALIZ:-6}                     # adaptive reconstruction realizations (distinct ABOT_SEED)
+S_REALIZ=${S_REALIZ:-3}                     # full-synth (SYNTH_R keep-only) realizations
+GAMES=${GAMES:-400}
 SEEDS=${SEEDS:-"4004 5005 6006 7007 8008 9009 10010 11011"}
 BUDGET=${BUDGET:-20}
-CAPS=${CAPS:-"30 20"}                      # lower-R points to test (R40 = the raw's native cap = baseline)
+CAPS=${CAPS:-"30 20"}                       # lower keep-R points (native cap = full@native = baseline)
+RECON_JOBS=${RECON_JOBS:-$(nproc)}          # parallel reconstruction fan-out
 
 OUT=${OUT:-logs/recipe_campaign}; mkdir -p "$OUT"
 stamp(){ date -u +%H:%M:%SZ; }
 MASTER="$OUT/SUMMARY.txt"; : > "$MASTER"
 log(){ echo "$*" | tee -a "$MASTER"; }
-log "=== RECIPE CAMPAIGN ($(stamp))  A_realiz=$A_REALIZ S_realiz=$S_REALIZ games=$GAMES seeds=$(echo $SEEDS|wc -w) budget=$BUDGET ==="
+log "=== RECIPE CAMPAIGN ($(stamp)) A_realiz=$A_REALIZ S_realiz=$S_REALIZ games=$GAMES seeds=$(echo $SEEDS|wc -w) budget=$BUDGET recon_jobs=$RECON_JOBS ==="
 
-# one pooled batch over SEEDS for a given exhaustive profile -> mean loss-penalized avg turn
-play(){ local prof="$1" mf="$2" outlog="$3"
-  MTG_EXHAUSTIVE_PROFILE="$prof" MTG_EXHAUSTIVE_BOTTOM=1 "$BIN" --batch "$mf" --threads 0 \
-    > "$outlog" 2>/dev/null; }
-mean_of(){ python3 - "$1" "$SEEDS" <<'PY'
-import re,sys
-fn=sys.argv[1]; seeds=set(sys.argv[2].split()); d={}
-for ln in open(fn):
-    m=re.match(r"s(\d+): played=\d+ avg=([\d.]+)",ln)
-    if m and m.group(1) in seeds: d[m.group(1)]=float(m.group(2))
-print(f"{sum(d.values())/len(d):.5f}" if d else "nan")
-PY
-}
+# recipes as "label|tag|nreal|env..."; realization r appends distinct SYNTH/ABOT seeds.
+build_recipes(){ RECIPES=(); RECIPES+=("full@native|full_nat|1|"); RECIPES+=("adaptive@native|ab_nat|$A_REALIZ|MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1")
+  for c in $CAPS; do
+    RECIPES+=("full@R$c|full_$c|$S_REALIZ|MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_KEEP_ONLY=1")
+    RECIPES+=("adaptive@R$c|ab_$c|$A_REALIZ|MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_KEEP_ONLY=1 MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1")
+  done; }
 
 for deck in $DECKS; do
   DECKFILE=${DF[$deck]:-}
   RAWGZ=$(ls decks/$deck/*.keepmodel.exhaustive.raw.json.gz 2>/dev/null | head -1)
   [ -n "$DECKFILE" ] && [ -e "$RAWGZ" ] || { log "SKIP $deck (no deck/raw)"; continue; }
-  D="$OUT/$deck"; mkdir -p "$D"
-  RAW="$D/raw.json"; gunzip -c "$RAWGZ" > "$RAW"
+  D="$OUT/$deck"; mkdir -p "$D"; RAW="$D/raw.json"; gunzip -c "$RAWGZ" > "$RAW"
   BASEPROF="decks/$deck/$deck.profile.json"
   log ""; log "########## $deck ($(stamp)) ##########"
+  build_recipes
 
-  # manifest (seeds pooled, no depth -> calib play setting; base profile carries card_scores/mulligan)
+  # --- Phase 1: reconstruct EVERY (recipe,realization) profile, in parallel (bounded fan-out) ---
+  echo "  reconstructing profiles ($(stamp)) ..."
+  running=0
+  for spec in "${RECIPES[@]}"; do IFS='|' read -r label tag nreal env <<<"$spec"
+    for r in $(seq 1 "$nreal"); do
+      pf="$D/${tag}_r$r.profile.json"
+      ( env $env MTG_KEEP_SYNTH_SEED=$((1000+r)) MTG_KEEP_SYNTH_ABOT_SEED=$((7000+r)) \
+          MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="$RAW" MTG_MERGE_OUT_PROFILE="$pf" MTG_MERGE_OUT_RAW=/tmp/ig_${deck}_${tag}_$r.raw.json \
+          "$BINA" "$DECKFILE" --cards-json "$CARDS" >/dev/null 2>&1 ) &
+      running=$((running+1)); [ $((running % RECON_JOBS)) -eq 0 ] && wait
+    done
+  done
+  wait
+
+  # --- Phase 2: ONE pooled manifest over all (recipe,realization,seed); ONE batch -> one tail ---
   MF="$D/mf.json"
   { echo '{ "jobs": ['; first=1
-    for s in $SEEDS; do [ $first -eq 1 ] && first=0 || printf ',\n'
-      printf '  { "name": "s%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "budget_ms": %s }' \
-        "$s" "$DECKFILE" "$BASEPROF" "$GAMES" "$s" "$BUDGET"
+    for spec in "${RECIPES[@]}"; do IFS='|' read -r label tag nreal env <<<"$spec"
+      for r in $(seq 1 "$nreal"); do for s in $SEEDS; do
+        [ $first -eq 1 ] && first=0 || printf ',\n'
+        printf '  { "name": "%s|r%s|s%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "budget_ms": %s }' \
+          "$tag" "$r" "$s" "$DECKFILE" "$D/${tag}_r$r.profile.json" "$GAMES" "$s" "$BUDGET"
+      done; done
     done; printf '\n] }\n'; } > "$MF"
+  echo "  playing one pooled batch ($(stamp)) ..."
+  MTG_EXHAUSTIVE_BOTTOM=1 "$BIN" --batch "$MF" --threads 0 > "$D/batch.log" 2>"$D/batch.err"
 
-  # --- baseline: full@R40 (plain merge, truth) ---
-  play_prof(){ MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="$RAW" "$@" MTG_MERGE_OUT_PROFILE="$1x" MTG_MERGE_OUT_RAW=/tmp/ig.raw.json \
-    "$BINA" "$DECKFILE" --cards-json "$CARDS" >/dev/null 2>&1; }
-  MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="$RAW" MTG_MERGE_OUT_PROFILE="$D/full40.profile.json" MTG_MERGE_OUT_RAW=/tmp/ig.raw.json \
-    "$BINA" "$DECKFILE" --cards-json "$CARDS" >/dev/null 2>&1
-  play "$D/full40.profile.json" "$MF" "$D/play_full40.log"
-  BASE=$(mean_of "$D/play_full40.log")
-  log "  full@native (baseline; deck's native R) avg=$BASE"
-
-  # helper: reconstruct + play a set of realizations, print averaged delta vs BASE
-  run_recipe(){ local label="$1" tag="$2" nreal="$3"; shift 3   # rest = extra env for the merge
-    local sumv=0 n=0 vals=""
-    for r in $(seq 1 "$nreal"); do
-      local pf="$D/${tag}_r$r.profile.json" lg="$D/play_${tag}_r$r.log"
-      env "$@" MTG_KEEP_SYNTH_SEED=$((1000+r)) MTG_KEEP_SYNTH_ABOT_SEED=$((7000+r)) \
-        MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="$RAW" MTG_MERGE_OUT_PROFILE="$pf" MTG_MERGE_OUT_RAW=/tmp/ig.raw.json \
-        "$BINA" "$DECKFILE" --cards-json "$CARDS" >/dev/null 2>&1
-      play "$pf" "$MF" "$lg"
-      local v; v=$(mean_of "$lg"); vals="$vals $v"
-    done
-    python3 - "$label" "$BASE" "$vals" <<'PY' | tee -a "$MASTER"
-import sys
-label,base=sys.argv[1],float(sys.argv[2]); vals=[float(x) for x in sys.argv[3].split()]
-m=sum(vals)/len(vals); import statistics
-sd=statistics.pstdev(vals) if len(vals)>1 else 0.0
-print(f"  {label:38} avg={m:.5f}  delta={m-base:+.4f}t  (n={len(vals)} sd={sd:.4f} vals={' '.join(f'{v-base:+.4f}' for v in vals)})")
+  # --- Phase 3: aggregate per recipe (avg over realizations x seeds), delta vs full@native ---
+  python3 - "$D/batch.log" "$MASTER" <<PY | tee -a "$MASTER"
+import re,sys,statistics
+log=open(sys.argv[1]); rows={}
+for ln in log:
+    m=re.match(r"(\S+?)\|r(\d+)\|s(\d+): played=\d+ avg=([\d.]+)",ln)
+    if m: rows.setdefault(m.group(1),{}).setdefault(m.group(2),{})[m.group(3)]=float(m.group(4))
+# per (tag, realization) = mean over seeds; recipe value = mean over realizations
+recipes=[("full_nat","full@native (baseline)"),("ab_nat","adaptive@native (full keep)")]
+for c in "$CAPS".split(): recipes+=[("full_%s"%c,"full@R%s"%c),("ab_%s"%c,"adaptive@R%s"%c)]
+def recipe_mean(tag):
+    if tag not in rows: return None,[]
+    per=[sum(sv.values())/len(sv) for sv in rows[tag].values()]  # per-realization seed-mean
+    return sum(per)/len(per), per
+base,_=recipe_mean("full_nat")
+for tag,label in recipes:
+    m,per=recipe_mean(tag)
+    if m is None: continue
+    if tag=="full_nat": print(f"  {label:34} avg={m:.5f}"); continue
+    sd=statistics.pstdev(per) if len(per)>1 else 0.0
+    print(f"  {label:34} avg={m:.5f}  delta={m-base:+.4f}t  (n={len(per)} sd={sd:.4f})")
 PY
-  }
-
-  # full@Rk uses KEEP_ONLY: lower ONLY the keep table, sub-tables stay at pooled truth (full bottoming).
-  # Resampling the sub-tables to a lower R (plain SYNTH_R) would corrupt the bottoming argmin with the
-  # uniform-downsample winner's curse and over-penalize full bottoming -- making full@Rk look worse than
-  # adaptive@Rk (whose sub is refined-to-truth), i.e. the WRONG sign. KEEP_ONLY keeps both on a sub-truth
-  # basis, so full-vs-adaptive isolates the bottoming (floor-exclusion) fairly.
-  run_recipe "adaptive@native (full keep)" "ab40" "$A_REALIZ" MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1
-  for c in $CAPS; do
-    run_recipe "full@R$c" "full$c" "$S_REALIZ" MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_KEEP_ONLY=1
-    run_recipe "adaptive@R$c" "ab$c" "$A_REALIZ" MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_KEEP_ONLY=1 MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1
-  done
   rm -f "$RAW"
 done
-log ""; log "=== CAMPAIGN DONE ($(stamp)) -- delta = recipe - full@R40; +ve = slower/worse. Speed: see the"
-log "    regret sim's PERF line per (deck,cap). Fast recipe = cheapest recipe within your quality budget. ==="
+log ""; log "=== CAMPAIGN DONE ($(stamp)) -- delta = recipe - full@native; +ve = slower/worse. ==="

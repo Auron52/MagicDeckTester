@@ -36,6 +36,28 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   agent's). This applies to every tool call in this repo: analysis runs, the test
   harness, builds, and ad-hoc scripts.
 
+- **ONLY THE USER cancels a run longer than ~10 minutes — an agent NEVER does.**
+  Do not `TaskStop`, `kill`, `pkill`, Ctrl-C, or otherwise terminate any run that has
+  been going more than ~10 minutes, **even to "fix" or restart it, and especially not
+  when the user is merely asking a question about it.** A question about a run's
+  progress, CPU use, or correctness is NOT a request to cancel it — answer the question
+  and let the run continue. If you believe a long run is wrong or inefficient, *say so
+  and propose the fix for next time*; the decision to stop it is the user's alone. (This
+  rule exists because agents kill in-flight runs when the user is only inquiring —
+  destroying hours of work the user did not ask to discard.) Short (<10 min) throwaway
+  probes you started yourself may be stopped if clearly wrong.
+
+- **Long / multi-item runs MUST batch into ONE pooled work queue — never a loop of
+  many small invocations.** Launching a run as many separate per-item commands (e.g.
+  one `mtg` per seed, per profile, or per A/B arm) strands cores on *each* invocation's
+  load-imbalance tail, and any serial single-threaded step between them (a rebuild, a
+  profile reconstruction, a merge) idles the whole machine — cores sit ~half-used. Pool
+  ALL work (every game of every job) into ONE `mtg --batch <manifest>` so the runner
+  keeps cores saturated to a single tail. Do reconstruction/prep for every variant
+  first, then run one batch over all of them (bake per-variant profiles into the
+  manifest's `profile` field rather than re-launching per variant). This is the same
+  lesson as the regression harness's per-mode pooling — one tail, not one-per-item.
+
 - **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
   Any script or command that writes game logs, batch output, or A/B scratch must
   target a subdirectory of `logs/` (e.g. `logs/fd_quick`), not a root-level
