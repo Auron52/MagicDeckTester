@@ -1326,7 +1326,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& validate_line = "",
                          const std::string& force_mulligan = "",
                          const std::string& firebreathe_spec = "",
-                         bool firebreathe_prompt = false)
+                         bool firebreathe_prompt = false,
+                         const std::string& cast_order_spec = "")
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -2071,6 +2072,38 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     if (firebreathe_prompt || !firebreathe_by_turn.empty()) { g_play_firebreathe_chooser = &firebreathe_chooser; }
 
+    // #10 Cast-order: the human-pinned execution order of a committed main plan's non-sacrifice hand
+    // casts. Rides a MAIN-PHASE-ORDINAL-keyed side-channel (--cast-order "<ord>:A|B|C;<ord>:X|Y"),
+    // NOT the positional --choices cursor -- the ordinal is the Nth main-phase decision (0-based),
+    // names pipe-separated (pipe never appears in a card name, unlike ',' which some names carry).
+    // Absent => the map is empty => the chooser returns {} for every ordinal => canonical order =>
+    // existing references (no --cast-order) replay byte-identically. Installed only when non-empty.
+    std::map<int, std::vector<std::string>> cast_order_by_main;
+    {
+        std::stringstream cs(cast_order_spec);
+        std::string entry;
+        while (std::getline(cs, entry, ';'))
+        {
+            auto colon = entry.find(':');
+            if (colon == std::string::npos) { continue; }
+            int ord = 0;
+            try { ord = std::stoi(entry.substr(0, colon)); }
+            catch (...) { continue; }
+            std::vector<std::string> names;
+            std::stringstream ns(entry.substr(colon + 1));
+            std::string nm;
+            while (std::getline(ns, nm, '|')) { if (!nm.empty()) { names.push_back(nm); } }
+            if (!names.empty()) { cast_order_by_main[ord] = std::move(names); }
+        }
+    }
+    CastOrderChooser cast_order_chooser =
+        [&](int main_ordinal) -> std::vector<std::string>
+        {
+            auto it = cast_order_by_main.find(main_ordinal);
+            return it != cast_order_by_main.end() ? it->second : std::vector<std::string>{};
+        };
+    if (!cast_order_by_main.empty()) { g_play_cast_order_chooser = &cast_order_chooser; }
+
     // Land entry (shock lands / Frostboil Snarl): the player chooses whether the land enters untapped
     // (paying its life / revealing a matching land) or tapped. Shares the --choices stream; the reply
     // is 1 (untapped, pay) or 0 (tapped). Default (out-of-range or absent) = the engine's heuristic.
@@ -2207,6 +2240,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_dragon_chooser = nullptr;
     g_play_lightpaws_chooser = nullptr;
     g_play_firebreathe_chooser = nullptr;
+    g_play_cast_order_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
     g_play_dropped_cast_sink = nullptr;
@@ -2862,6 +2896,7 @@ int main(int argc, char* argv[])
     std::string choices_str;          // comma-separated plan indices for --claude-play
     std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
     bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
+    std::string cast_order_str;       // #10: "<ord>:A|B|C;..." cast-order side-channel (main-ordinal-keyed)
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
     std::string validate_line;        // --validate-line "<spec>": human-play line to reconcile
                                        // at the first un-chosen main phase (tools/play GUI)
@@ -2932,6 +2967,13 @@ int main(int argc, char* argv[])
                     // already answered in --firebreathe. Without this flag an unanswered turn falls back
                     // to the greedy default (reference replay / autonomous), so the checks never exit-70.
                     firebreathe_prompt = true;
+                }
+                else if (flag == "--cast-order")
+                {
+                    // #10 cast-order side-channel: "<ord>:A|B|C;<ord>:X|Y" (main-phase decision ordinal ->
+                    // pinned non-sac hand-cast order, pipe-separated names). Keyed by main-phase ordinal, so
+                    // it never touches the positional --choices stream -> existing references replay unchanged.
+                    cast_order_str = argv[++i];
                 }
                 else if (flag == "--reveal")
                 {
@@ -3107,7 +3149,8 @@ int main(int argc, char* argv[])
             }
             return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
-                                 validate_line, force_mulligan, firebreathe_str, firebreathe_prompt);
+                                 validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
+                                 cast_order_str);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

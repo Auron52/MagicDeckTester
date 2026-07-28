@@ -116,22 +116,38 @@ independently verifiable.
    LAST, reserved when unneeded", and charge is automatic (idle → +1). **That reasoning holds ONLY for the
    CLAIRVOYANT SEARCH** — its "reserve when unneeded / tap last" is a foresight-tuned heuristic, and the
    user confirms the clairvoyant/search side needs NO change. **But the HUMAN plays WITHOUT clairvoyance**,
-   so that heuristic is not the human's judgment: they must be able to explicitly choose charge-up (build
-   the battery for a future big burst) vs burst-now, and HOW MANY counters to burst, on their own read of
-   the game. So #6 DOES need a surfaced decision, wired like #4 via a keyed side-channel. The catch vs
-   firebreathe: firebreathe is a clean single combat point spending LEFTOVER mana, whereas the storage
-   burst is embedded in mana PAYMENT (`TapForCost`) and can fire mid-cast — so the injection needs a clean
-   per-turn (or per-permanent+turn) decision point (e.g. ask the burst budget once when a charged storage
-   land is first about to be tapped this turn; default = the current heuristic amount → byte-identical
-   when the human accepts the default). Find the cleanest hook during implementation.
-4. **#10 cast-order side-channel — GO (user-directed 2026-07-28), keeping references VALID.** Carry the
-   committed cast order through a keyed side-channel (`--cast-order "main#<ordinal>:A,B,C,…"`, keyed by
-   the main-phase decision ordinal); the executor reorders the accepted plan's non-sac casts to match.
-   No permutation enumeration, no `--choices` index churn → existing references (absent `--cast-order`)
-   replay byte-identically in canonical order. This is the option-(b) that succeeds where the reverted
-   post-sort append (stash `wip-10-postsort-append`) failed, and it fixes the 6-cast s24 go-off the cap
-   excluded. Update the reference checks to extract `--cast-order` from any future reordering reference
-   (no-op until one exists).
+   so that heuristic is not the human's judgment. **User-refined scope (2026-07-28): the decision is the
+   TAP-vs-CHARGE binary, NOT the burst count.** The user is "less worried about choosing the number of
+   counters to burst rather than 'is it untapped or tapped this turn'. That is an actively difficult decision
+   to make for the non-clairvoyant, since you don't know your full hand when you make it." A storage land
+   charges +1 automatically at the end of an *idle* turn; tapping it (for its {C} and/or to burst its counters)
+   forfeits that turn's charge. So the human decision is per-land-per-turn: **hold it untapped to charge the
+   battery, or tap/burst it now** — genuinely hard without clairvoyance because the payoff depends on a future
+   hand you can't see. Surface THAT binary, wired like #4 via a keyed side-channel keyed by (permanent#, turn)
+   or just turn if one storage land. Default = the current heuristic (tap/burst when the search would) →
+   byte-identical when the human accepts the default. This sidesteps the messy `TapForCost` mid-cast burst
+   count: we only gate whether the land is *available to tap at all this turn* (a clean pre-turn/per-land veto),
+   not the burst arithmetic. Find the cleanest "is this storage land tappable this turn?" hook during
+   implementation.
+4. **#10 cast-order side-channel — ENGINE/CLI/SERVER DONE (2026-07-28); GUI pending.** The committed cast
+   order rides a MAIN-PHASE-ORDINAL-keyed side-channel `--cast-order "<ord>:A|B|C;<ord>:X|Y"` (names
+   pipe-separated — MTG names carry ',' but never '|'; ordinal = the Nth main-phase decision, 0-based,
+   tracked by `AIEngine::m_ext_main_ordinal` incremented once per external-chooser call). `ReorderPlanCasts`
+   (AIEngine.cpp) reorders the chosen plan's non-sacrifice hand casts to the human's names (greedy match,
+   unnamed casts keep relative order) and sets `searched_order` so ApplyPlanDirect executes vector order.
+   `CastOrderChooser` hook (GameLogger.h, RevealLogPause-nulled) is consulted ONLY at the top-level
+   external-chooser site (never a rollout). No permutation enumeration, no `--choices` index churn →
+   existing references (absent `--cast-order`) replay byte-identically in canonical order. VERIFIED: smoke
+   21/21 byte-identical, 0 play-drift, 0 validate-regression; trace-confirmed the ordinal keying and exact
+   order honouring on Dragonstorm s24 (ord 2 → turn-2 [Rite of Flame, Pyretic Ritual] reversed to
+   [Pyretic Ritual, Rite of Flame]). This is the option-(b) that succeeds where the reverted post-sort
+   append (stash `wip-10-postsort-append`) failed. `server.js buildArgs` emits `--cast-order` from a
+   `p.castOrder` `{ mainOrdinal: [names] }` map (empty ⇒ omitted). **REMAINING:** the GUI (drag-reorder a
+   committed plan's casts → populate `S.castOrder`, key by client-side main-phase ordinal), the saved-
+   reference format (store the reorder so a re-played reference carries it), and the reference-check
+   extraction of `--cast-order` from such a reference (no-op until one is saved). The viewer must emit
+   `--cast-order` ONLY for decisions the human actually reordered — passing even the canonical order flips
+   on `searched_order`, which SKIPS the CastOrderRank sort / Spectacle-hoist path and could differ.
 
 ## Verification gates (every increment)
 

@@ -120,6 +120,16 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
     if (pairs.length) args.push('--firebreathe', pairs.join(','));
   }
   args.push('--firebreathe-prompt');
+  // #10 cast-order side-channel: p.castOrder is a { mainOrdinal: [name, ...] } map of the human's
+  // pinned non-sac hand-cast order for that main-phase decision. Passed as "<ord>:A|B|C;..." (pipe-
+  // separated names, since MTG names contain ',' but never '|'), keyed by main-phase ordinal — NEVER
+  // a --choices slot, so existing references (no --cast-order) replay in canonical order unchanged.
+  if (p.castOrder && typeof p.castOrder === 'object') {
+    const entries = Object.keys(p.castOrder)
+      .filter(k => Array.isArray(p.castOrder[k]) && p.castOrder[k].length)
+      .map(k => `${k}:${p.castOrder[k].join('|')}`);
+    if (entries.length) args.push('--cast-order', entries.join(';'));
+  }
   if (validateLine != null) args.push('--validate-line', validateLine);
   return args;
 }

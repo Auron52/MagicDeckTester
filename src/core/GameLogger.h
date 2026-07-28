@@ -362,6 +362,20 @@ using FirebreatheChooser = std::function<int(const GameState& state, int control
     const std::vector<int>& attacker_indices, int max_activations)>;
 extern thread_local FirebreatheChooser* g_play_firebreathe_chooser;
 
+// ---- Human-play cast-ORDER chooser (#10) -------------------------------------------------------
+// After the human commits a main-phase plan, they may pin the ORDER its non-sacrifice hand casts
+// resolve in (e.g. cast payoff before enabler, or a specific Dragonstorm go-off sequence the
+// canonical CastOrderRank batches wrong). Rather than enumerate permutations (O(k!), capped, and
+// index-churning the positional --choices stream), the committed order rides a MAIN-PHASE-ORDINAL-
+// keyed side-channel (--cast-order): given the ordinal of the just-chosen main-phase decision, the
+// chooser returns the human's card-name order (empty => keep canonical). The executor reorders the
+// chosen plan's non-sac casts to match and flags searched_order so ApplyPlanDirect honours vector
+// order. Absent --cast-order => empty => canonical => existing references replay byte-identically.
+// Consulted ONLY at the top-level external-chooser site (never in a rollout), so no RevealLogPause
+// gating is strictly required; nulled there anyway for consistency. Inert unless set.
+using CastOrderChooser = std::function<std::vector<std::string>(int main_ordinal)>;
+extern thread_local CastOrderChooser* g_play_cast_order_chooser;
+
 // ---- Human-play land-entry chooser (enter a "pay a cost, or the land enters tapped" land) ------
 // Two lands present this choice as they enter: a shock land (etb_pay_life_to_untap -> pay N life to
 // enter untapped) and a reveal land like Frostboil Snarl (etb_untap_reveal_subtypes -> reveal a
@@ -482,6 +496,7 @@ struct RevealLogPause
     DragonChooser* saved_dragchooser;
     LightPawsChooser* saved_lpchooser;
     FirebreatheChooser* saved_fbchooser;
+    CastOrderChooser* saved_cochooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
@@ -491,14 +506,16 @@ struct RevealLogPause
                        saved_sacchooser(g_play_sacrifice_chooser),
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
                        saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser),
-                       saved_fbchooser(g_play_firebreathe_chooser)
+                       saved_fbchooser(g_play_firebreathe_chooser),
+                       saved_cochooser(g_play_cast_order_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
       g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
       g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
-      g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr; }
+      g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
+      g_play_cast_order_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
@@ -508,7 +525,8 @@ struct RevealLogPause
                         g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
                         g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser;
-                        g_play_firebreathe_chooser = saved_fbchooser; }
+                        g_play_firebreathe_chooser = saved_fbchooser;
+                        g_play_cast_order_chooser = saved_cochooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

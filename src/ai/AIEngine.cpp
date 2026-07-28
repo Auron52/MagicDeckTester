@@ -25,6 +25,44 @@
 // record whenever a later turn's verified win turn exceeds one proved earlier.
 static const bool s_flag_nonconv = std::getenv("MTG_FLAG_NONCONV") != nullptr;
 
+// #10 cast-order side-channel: reorder a committed plan's non-sacrifice hand casts to the
+// human's pinned name order and flag searched_order so ApplyPlanDirect executes them in vector
+// order (no CastOrderRank re-sort). Only the non-sac CastFromHand actions move -- sac casts,
+// graveyard casts, vial activations and the land keep their positions (they run in separate
+// canonical loops regardless). Names in `order` are matched greedily (duplicate copies match in
+// listed order); any non-sac cast NOT named in `order` keeps its original relative position,
+// appended after the pinned ones. Empty `order` (the common / no-reorder case) is a no-op, so
+// existing references -- which pass no --cast-order -- stay byte-identical.
+static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::string>& order)
+{
+    if (order.empty()) { return; }
+    // Positions in plan.actions that hold a reorderable (non-sac hand) cast.
+    std::vector<size_t> slots;
+    for (size_t i = 0; i < plan.actions.size(); ++i)
+    {
+        const auto& a = plan.actions[i];
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+        { slots.push_back(i); }
+    }
+    if (slots.size() < 2) { plan.searched_order = true; return; }  // nothing to reorder, but honour order
+    // Greedily pick, for each name in `order`, the first not-yet-used slot whose card matches.
+    std::vector<size_t> remaining = slots;   // slot positions still to place
+    std::vector<Action> seq;                 // reordered actions
+    for (const std::string& name : order)
+    {
+        for (auto it = remaining.begin(); it != remaining.end(); ++it)
+        {
+            if (plan.actions[*it].card_name == name)
+            { seq.push_back(plan.actions[*it]); remaining.erase(it); break; }
+        }
+    }
+    // Any non-sac casts the human didn't name keep their original relative order, after the pinned ones.
+    for (size_t pos : remaining) { seq.push_back(plan.actions[pos]); }
+    // Write the reordered actions back into the same slot positions.
+    for (size_t k = 0; k < slots.size(); ++k) { plan.actions[slots[k]] = seq[k]; }
+    plan.searched_order = true;
+}
+
 // Route pre-combat (and second-main) decisions through the full-depth
 // commit-the-line search instead of SolveWithLookahead, so "depth N" means fully
 // searching N complete turns. This is now the DEFAULT engine (validated by the
@@ -1318,9 +1356,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (!any_play) { break; }
             }
             size_t lib_before = state.ActivePlayer().library.size();
+            const int this_main_ordinal = m_ext_main_ordinal++;   // #10 side-channel key
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
             if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
-            TurnSolver::ApplyPlan(state, plans[idx], is_pre_combat_main);
+            // #10: honour a human-pinned cast order for this main-phase decision (empty / unset =>
+            // no-op => canonical). Copy the chosen plan so the enumerated menu stays untouched.
+            TurnSolver::Plan chosen = plans[idx];
+            if (g_play_cast_order_chooser)
+            {
+                std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
+                ReorderPlanCasts(chosen, ord);
+            }
+            TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
             drew_last = state.ActivePlayer().library.size() < lib_before;
             prev_inplay = std::move(cur_inplay);
         }
