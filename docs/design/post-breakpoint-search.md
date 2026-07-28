@@ -425,3 +425,35 @@ MTG_BP_SITES=31 MTG_BP_SEARCH=16 build/Release/mtg <deck> --games 1 --seed <s> \
 removed Hook 23 (`PostDrawDropLandName`, a yield-ranked drop rule) — **rejected**: it bought the
 turn-4 line but lost games no budget could recover, because it made the static pick smarter instead
 of making the decision searched. `bp_choice` is the version that makes the decision searched.
+
+## Nested breakpoints: BUILT, MEASURED, NOT ADOPTED (2026-07-28)
+
+Only the FIRST breakpoint of an apply is searched; a second one in the same turn (a cantrip chain,
+an Apex cast off another Apex's exile, a second Treasure Hunt) still resolves greedily. That is real
+unsearched logic, and on Dragonstorm the nested ones **outnumber** the searched ones (183 vs 145 per
+40 games at d5 — `MTG_BP_PROBE` now reports `nested-unsearchable=`).
+
+It was implemented as a second AXIS -- `Plan::bp_at` (which breakpoint the choice applies to), so the
+emitted count is `depth*W`, not `W^depth`. Every individual breakpoint's continuation becomes
+reachable; a line needing two simultaneous non-greedy choices does not.
+
+**Result: adopted-looking on the TRAIN seeds, reversed on the HELD-OUT seeds.**
+
+| suite | seeds | outcome |
+|---|---|---|
+| smoke + regression | 1001 / 2002 / 3003 (train) | every changed case **better or equal**, and the regression suite got FASTER (58s -> 31s: most depth-2 variants dedup away, and earlier wins end rollouts sooner) |
+| overnight | 4004-7007 (held out) | **9 cases worse, 2 better**, net **+0.00035** avg; 14 slower games vs 4 faster |
+
+This is a textbook train/held-out split, and precisely what the suite's disjoint seeds exist to catch.
+Had it been judged on smoke+regression alone it would have been adopted. **Not adopted.**
+
+It also did NOT close `Dragonstorm/claude_s1_gi0` (still engine 5 vs human 4), so nesting is not that
+reference's blocker -- that hypothesis is refuted and the case needs its own investigation.
+
+The work is preserved in a git stash (`WIP nested breakpoint search (bp_at axis)`), NOT on a branch.
+Anyone resuming should know its default-off revert was **not yet byte-identical** when it was
+stashed: `bp_seen` must count only breakpoints of an ENABLED class (Hinata prunes the cantrip class,
+so its first enabled breakpoint is often not the apply's first), and the executor's own breakpoint
+counter must match that same rule -- it currently counts every breakpoint regardless of class.
+
+Worth retrying with a better formulation (the underlying gap is real), but not as-is.
