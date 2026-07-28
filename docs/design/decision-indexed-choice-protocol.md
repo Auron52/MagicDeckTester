@@ -110,22 +110,28 @@ independently verifiable.
 2. **#4 GUI modal.** A combat-phase surfacing in index.html (new context — the viewer auto-runs combat
    today): +/- amount modal defaulting to greedy max, `firebreathe` in `AUTO_RESOLVABLE`. jsdom
    `viewer_client_check` asserts the modal + the `--firebreathe` the viewer emits.
-3. **#6 Dwarven Hold — ANALYZED, NOT a clean amount decision (2026-07-28).** Despite the item-map
-   framing as a "sibling amount decision to #4", the storage-land mechanic has no meaningful independent
-   amount to surface. Per the authoritative card note (`cards.json`, Mercadian Bazaar / Dwarven Hold):
-   **charge is automatic** (an idle storage land gains +1 counter at end of turn — "weakly dominant, an
-   idle Mercadian never wants to sit un-charged"), and a **burst PARTIAL-bursts only the payment's
-   remaining shortfall** — `storage_burn = min(storage_counters, cost.ManaValue() − floating.Total())`
-   (`SpellEffects.h:4348`), "search-driven via plan choice, tapped LAST, reserved when unneeded". So the
-   burst amount is definitionally the shortfall (the ONLY sensible value — bursting fewer fails the cast,
-   more wastes counters), and the genuine strategic lever (charge-up vs burst-now) is ALREADY the human's:
-   they choose it by which PLAN they commit (a line that taps the storage land bursts it; a line that
-   doesn't leaves it idle to auto-charge). Firebreathe differs because it spends LEFTOVER mana — a free
-   "spend k of the surplus" choice with no cast depending on it. A finer #6 override ("pay this cast from
-   other sources, reserve the storage counters") would be a general mana-SOURCE-selection feature (deep,
-   touches `TapForCost` for every cast; the heuristic already taps storage last / reserves when unneeded),
-   NOT an amount modal — deferred as low-value. **#6 needs no new decision; closed with this finding.**
-4. **#10 cast-order side-channel** (optional follow-on).
+3. **#6 Dwarven Hold — REOPENED as a HUMAN decision (user-corrected 2026-07-28).** An earlier note here
+   argued #6 needs no decision because the burst is definitionally `storage_burn = min(storage_counters,
+   cost.ManaValue() − floating.Total())` (`SpellEffects.h:4348`), "search-driven via plan choice, tapped
+   LAST, reserved when unneeded", and charge is automatic (idle → +1). **That reasoning holds ONLY for the
+   CLAIRVOYANT SEARCH** — its "reserve when unneeded / tap last" is a foresight-tuned heuristic, and the
+   user confirms the clairvoyant/search side needs NO change. **But the HUMAN plays WITHOUT clairvoyance**,
+   so that heuristic is not the human's judgment: they must be able to explicitly choose charge-up (build
+   the battery for a future big burst) vs burst-now, and HOW MANY counters to burst, on their own read of
+   the game. So #6 DOES need a surfaced decision, wired like #4 via a keyed side-channel. The catch vs
+   firebreathe: firebreathe is a clean single combat point spending LEFTOVER mana, whereas the storage
+   burst is embedded in mana PAYMENT (`TapForCost`) and can fire mid-cast — so the injection needs a clean
+   per-turn (or per-permanent+turn) decision point (e.g. ask the burst budget once when a charged storage
+   land is first about to be tapped this turn; default = the current heuristic amount → byte-identical
+   when the human accepts the default). Find the cleanest hook during implementation.
+4. **#10 cast-order side-channel — GO (user-directed 2026-07-28), keeping references VALID.** Carry the
+   committed cast order through a keyed side-channel (`--cast-order "main#<ordinal>:A,B,C,…"`, keyed by
+   the main-phase decision ordinal); the executor reorders the accepted plan's non-sac casts to match.
+   No permutation enumeration, no `--choices` index churn → existing references (absent `--cast-order`)
+   replay byte-identically in canonical order. This is the option-(b) that succeeds where the reverted
+   post-sort append (stash `wip-10-postsort-append`) failed, and it fixes the 6-cast s24 go-off the cap
+   excluded. Update the reference checks to extract `--cast-order` from any future reordering reference
+   (no-op until one exists).
 
 ## Verification gates (every increment)
 
