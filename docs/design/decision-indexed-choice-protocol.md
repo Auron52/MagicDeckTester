@@ -182,15 +182,23 @@ independently verifiable.
    byte-identical, 0 play-drift, 0 validate-regression; integration emits `--cast-order 2:Pyretic Ritual|Rite
    of Flame` and the engine honours it.
 
-## REMAINING (both #6 and #10): reference ROUND-TRIP for saved reordered/held games
+## Reference ROUND-TRIP for saved reordered/held games — DONE (2026-07-28)
 
-Saving a reference (`/api/save-reference`) re-runs WITH the side-channels, so the saved TRACE reflects the
-reordered/held play — but the trace does not yet store the side-channel INPUTS, and the reference checks
-reconstruct only `--choices` from each decision's `chosen`. So a FUTURE reference that used `--cast-order` /
-`--storage-hold` would not replay those on the check path. This is a NO-OP today (no saved reference uses
-either feature — every existing ref is byte-identical, verified) but must be closed before such a reference is
-trusted: record the applied cast order on the main-phase trace entry + the storage-hold answers, and have
-`viewer_protocol_check` / `viewer_validate_check` extract and pass them.
+A saved reference that used `--cast-order` / `--storage-hold` now replays faithfully on the reference-check
+path. **Engine:** the applied cast order is recorded on the main-phase trace entry (`cast_order`), alongside
+the already-emitted `main_ordinal` + per-plan `cast_order_canonical`; the storage-hold answers are already
+trace entries. The #6 storage side-channel is keyed by the land's **battlefield index** (`land_idx`), not its
+card number — a played land's `m_number` is 0 (so two storage lands charged the same turn collided on the old
+key), and preserving `m_number` would perturb the autonomous behaviour digest (`LogPlayLand` folds `card_num`);
+the battlefield index is unique per permanent and deterministic across the stateless replay, with zero digest
+impact. **Checks** (`viewer_protocol_check.py`, `viewer_validate_check.js`): skip side-channel decision types
+(firebreathe, storage_hold) when rebuilding the positional `--choices` stream, and reconstruct + pass
+`--firebreathe "turn:count"` / `--storage-hold "turn:idx:val"` / `--cast-order "ord:A|B"` (keyed, so safe for
+every prefix). **Verified:** existing refs 0 play-drift / 0 validate-regression (identical — none use the
+side-channels); a saved game holding Dwarven Hold every turn reconstructs to the same outcome while omitting
+the side-channels diverges (two co-charged storage lands now key distinctly, `16:1` vs `16:5`); a saved reorder
+reconstructs `--cast-order "2:Pyretic Ritual|Rite of Flame"` and matches. The whole decision-indexed protocol
+plan (items 1–4 + round-trip) is now complete.
 
 ## Verification gates (every increment)
 
