@@ -20,6 +20,7 @@
 #include <fstream>
 #include <mutex>
 #include <cmath>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -1315,6 +1316,81 @@ static inline bool NonPrefixAccelViolated(const std::vector<int>& accel_order, c
 // declaration) so those callsites can omit out_breakpoint.
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr);
+
+// Forward decl: ApplyPlanDirect's SEARCHED breakpoint continuation (Plan::bp_choice) picks its
+// candidate from the same land-folded plan set the outer search ranks. Defined later.
+static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
+                                                            bool is_pre_combat);
+
+// ---- Searched mid-turn breakpoints (docs/design/post-breakpoint-search.md) -------------------
+// MTG_BP_SEARCH=<W> turns the post-breakpoint continuation into a real search node: the land
+// enumeration emits W extra Plan variants (bp_choice = 0..W-1) for every plan that opens a
+// breakpoint, and the OUTER rollout scores each one. ADOPTED default W=2 -- measured the knee of
+// the curve: it takes essentially all of the available quality (TH -0.05..-0.09 avg, Dragonstorm
+// -0.02..-0.044, burn -0.002, Hinata neutral-to-better) where W=4 adds only -0.002..-0.01 more for
+// +30-35% nodes. **MTG_BP_SEARCH=0 restores the old greedy engine byte-identically** and is the
+// A/B hatch. Read once so the hot paths pay one load.
+static int BpSearchWidth()
+{
+    static const int w = []() -> int
+    {
+        const char* v = std::getenv("MTG_BP_SEARCH");
+        if (v == nullptr || *v == '\0') { return 2; }
+        int n = std::atoi(v);
+        return n < 0 ? 0 : n;
+    }();
+    return w;
+}
+
+// Per-SITE enable mask (MTG_BP_SITES, default all five). Bit i == site i of kBpSiteName:
+//   0 stages/EI (Light Up the Stage, Expressive Iteration)   1 DrawUntilNonland (Treasure Hunt)
+//   2 impulse_exile (Apex of Power)                          3 plain cantrip (Ponder / Preordain)
+//   4 dig-through-lands (cycle / sacrifice)
+// Lets one breakpoint class be searched (and measured) at a time, and lets a class whose fan-out
+// costs more budget than it buys be pruned without giving up the others.
+static int BpSiteMask()
+{
+    static const int m = []() -> int
+    {
+        const char* v = std::getenv("MTG_BP_SITES");
+        // Default 0x17 = every class EXCEPT bit 3 (plain cantrip). That one is the single measured
+        // budget-dilution case: on Hinata it costs ~+26-31% nodes and flips sign between d3 and d5
+        // (i.e. buys noise). It is a PERFORMANCE prune only -- MTG_BP_SITES=31 gives the search
+        // free rein over it again, which is the benchmark that validates the prune.
+        if (v == nullptr || *v == '\0') { return 0x17; }
+        return std::atoi(v) & 0x1F;
+    }();
+    return m;
+}
+
+// Re-entrancy guard: the breakpoint's OWN enumeration must not emit further bp_choice variants.
+// Only the first breakpoint of an apply is searched (deeper ones stay greedy), so nested variants
+// would be pure duplicates burning nodes. Thread-local -- the search is single-threaded per game.
+static thread_local int g_bp_enum_depth = 0;
+
+// Fan out at EVERY ply, or only at the turn's COMMITTED decision? MEASURED: root-only is nearly
+// free but recovers NONE of the gain (TH stays 4.1333, Dragonstorm stays 4.6267). The greedy
+// continuation's real damage is to the LEAF EVALUATOR: it makes the rollouts mis-score lines, so
+// the root ranks its candidates on bad estimates. Fixing only the root therefore fixes nothing.
+// Every ply is the default; MTG_NO_BP_SEARCH_ROLLOUT restores root-only for the A/B (it is also
+// the cheap fallback if a future deck turns out to be budget-starved by the fan-out).
+// See docs/design/post-breakpoint-search.md.
+static thread_local bool g_bp_root_enum = false;
+static bool BpSearchInRollouts()
+{
+    static const bool on = std::getenv("MTG_NO_BP_SEARCH_ROLLOUT") == nullptr;
+    return on;
+}
+// Commit-the-line recursion depth. The committed decision is the OUTERMOST FSLineWin node of a
+// pass (its `state` is the real game state); everything below it is lookahead. Nesting is the
+// robust discriminator -- iterative deepening runs many passes, and each pass's root re-enters at
+// nest 0. Mirrors g_bp_root_enum for the SolveWithLookahead path (enforce_budget).
+static thread_local int g_fsline_nest = 0;
+struct FsLineNestGuard
+{
+    FsLineNestGuard()  { ++g_fsline_nest; }
+    ~FsLineNestGuard() { --g_fsline_nest; }
+};
 
 // MTG_NO_GOFF_SHORTCIRCUIT: isolation toggle for the Dragonstorm storm go-off short-circuit (below);
 // default on, disables ONLY that cut for a clean perf/GT A/B (the full search still finds the same win
@@ -3661,6 +3737,80 @@ static int CastRankOf(const GameState& state, const std::string& name)
 // can't capture it. The CastOrderRank reordering is therefore SKIPPED for any set that
 // contains such a card; that set keeps its canonical plan/breakpoint order (the search owns
 // the ambiguous ordering). Mirrored in AIEngine.
+// MTG_FORCE_LAND="<turn>:<land name>[,<turn>:<name>...]" (inert by default): the land to force as
+// that turn's drop. Diagnostic only -- there is otherwise no way to ask "what would the engine do
+// from THIS land drop?", which is needed whenever a reference's human line diverges at a land
+// choice (the goldfish runner has no land override; --force-mulligan only fixes the opening hand).
+// Returns "" when unset or when this turn is not listed.
+static std::string ForcedLandForTurn(int turn)
+{
+    static const std::string spec = []{ const char* e = std::getenv("MTG_FORCE_LAND");
+                                        return std::string(e ? e : ""); }();
+    if (spec.empty()) { return {}; }
+    std::stringstream ss(spec);
+    std::string tok;
+    while (std::getline(ss, tok, ','))
+    {
+        const size_t colon = tok.find(':');
+        if (colon == std::string::npos) { continue; }
+        if (std::atoi(tok.substr(0, colon).c_str()) == turn) { return tok.substr(colon + 1); }
+    }
+    return {};
+}
+
+// MTG_BP_PROBE=1 -- DIAGNOSTIC: count the post-breakpoint GREEDY re-solves (TurnSolver::Solve, the
+// "d0 decision + every rollout leaf" path) per call site. Every hit is a stretch of a turn decided
+// with NO search, inside an otherwise-searched game. Counts rollout and real execution alike (both
+// run ApplyPlanDirect), which is the point: it measures how much of the tree is greedy.
+// See docs/design/post-breakpoint-search.md.
+namespace
+{
+    const char* const kBpSiteName[5] = {
+        "stages_cards/EI  (Light Up the Stage, Expressive Iteration)",
+        "DrawUntilNonland (Treasure Hunt)",
+        "impulse_exile    (Apex of Power)",
+        "deferred_cantrip (Ponder / Preordain)",
+        "dig_through_lands(sac/cycle dig)",
+    };
+    struct BpProbe
+    {
+        std::atomic<uint64_t> hit[5]{};       // all invocations (incl. rollout evaluation)
+        std::atomic<uint64_t> committed[5]{}; // subset on a COMMITTED line -> a real game decision
+        std::atomic<uint64_t> searched[5]{};  // subset resolved by SEARCH (Plan::bp_choice)
+        ~BpProbe()
+        {
+            if (std::getenv("MTG_BP_PROBE") == nullptr) { return; }
+            for (int i = 0; i < 5; ++i)
+            {
+                const uint64_t n = hit[i].load(std::memory_order_relaxed);
+                const uint64_t c = committed[i].load(std::memory_order_relaxed);
+                const uint64_t q = searched[i].load(std::memory_order_relaxed);
+                if (n) { std::fprintf(stderr,
+                                      "[bp-probe] %-58s total=%-10llu greedy=%-10llu searched=%-10llu"
+                                      " (%.1f%% searched, committed-line: %llu)\n",
+                                      kBpSiteName[i], static_cast<unsigned long long>(n),
+                                      static_cast<unsigned long long>(n - q),
+                                      static_cast<unsigned long long>(q),
+                                      n ? (100.0 * static_cast<double>(q) / static_cast<double>(n)) : 0.0,
+                                      static_cast<unsigned long long>(c)); }
+            }
+        }
+    };
+    BpProbe g_bp_probe;
+    // `searched` distinguishes a breakpoint the search decided (Plan::bp_choice resolved it) from
+    // one that still fell through to greedy TurnSolver::Solve. The purge is complete for a site when
+    // greedy reaches 0 -- total alone cannot show that, and rises simply because more plans are
+    // applied. See docs/design/post-breakpoint-search.md.
+    inline void BpHit(int i, bool on_committed_line, bool resolved_by_search)
+    {
+        static const bool on = std::getenv("MTG_BP_PROBE") != nullptr;
+        if (!on) { return; }
+        g_bp_probe.hit[i].fetch_add(1, std::memory_order_relaxed);
+        if (on_committed_line)   { g_bp_probe.committed[i].fetch_add(1, std::memory_order_relaxed); }
+        if (resolved_by_search)  { g_bp_probe.searched[i].fetch_add(1, std::memory_order_relaxed); }
+    }
+}
+
 static bool OrderingOpaque(const std::string& name)
 {
     const CardDefinition* d = CardDatabase::Instance().Lookup(name);
@@ -3678,6 +3828,37 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 {
     static const bool s_enabled = std::getenv("MTG_NO_BATCH_PAY") == nullptr;
     if (!s_enabled) { return false; }
+    // DRAW-SAFE: decline the whole-turn prepay on a FLOOD-ENGINE turn. The prepay assumes `acts` IS
+    // the turn's cast set. That is FALSE after a dig: Treasure Hunt DRAWS the cards cast later the
+    // same turn at a post-draw breakpoint (recorded in Action::breakpoint_casts). Prepaying only the
+    // KNOWN casts lets the joint solve spend scarce COLOURED sources on generic pips the later cast
+    // needs, so the recorded breakpoint cast is declared and then unpayable -- the committed line's
+    // proven win is never realised. Repro (th_regression_d3_s3003 gi123): the search commits a T5
+    // line whose turn-5 breakpoint records Land's Edge; the prepay strands its {1}{R}{R} and the game
+    // is LOST outright -- "[fd-diverge] realized_win=9 predicted_win=5". MTG_NO_BATCH_PAY=1 also
+    // fixes it, confirming batch-pay as the cause. Adopted default ON alongside Hooks 22/23, which
+    // route MORE turns into this shape (double-dig turns); MTG_NO_BATCH_PAY_DRAWSAFE restores the
+    // unconditional prepay for A/Bs.
+    //
+    // SCOPED to the flood-engine class (DrawUntilNonland / DigDraw), NOT the whole OrderingOpaque
+    // predicate: that includes `draw > 0` and so caught plain cantrips, disabling batch-pay on most
+    // Hinata turns -- measured smoke +0.019/+0.013/+0.027 at d0/d3/d5, net worse and rejected. The
+    // stranding needs a cast that draws MANY cards and thereby introduces a NEW castable this turn.
+    //
+    // The SOURCE-level fix, if this is ever revisited: fold the recorded breakpoint_casts into the
+    // combined cost below, so the joint solve pays for them instead of declining the prepay.
+    static const bool s_drawsafe = std::getenv("MTG_NO_BATCH_PAY_DRAWSAFE") == nullptr;
+    if (s_drawsafe)
+    {
+        for (const Action& a : acts)
+        {
+            if (a.kind == Action::Kind::DigDraw) { return false; }
+            if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
+            { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d && d->tmpl == CardTemplate::DrawUntilNonland) { return false; }
+        }
+    }
     // A non-empty float (e.g. a ritual's output) would be clobbered by the pre-load; producer turns
     // are declined below regardless, but guard here too so the reserve stays byte-identical there.
     if (state.floating_mana.Total() != 0) { return false; }
@@ -3985,7 +4166,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
         if (!s_fd || !is_pre_combat) { return; }
         if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
-        std::string played = SimulateLandPlay(state);
+        // MTG_FORCE_LAND diagnostic (see EnumeratePlansWithLand): the POST-DRAW drop is picked by
+        // SimulateLandPlay, a static ranker the search never branches on -- so forcing it in the
+        // plan enumerator alone cannot reach this decision. Honour the override here too, else a
+        // deferred-drop turn silently ignores it.
+        std::string played;
+        const std::string forced = ForcedLandForTurn(state.turn_number);
+        if (!forced.empty() && PlayLandByName(state, forced, std::string{})) { played = forced; }
+        else { played = SimulateLandPlay(state); }
         if (!played.empty() && out_breakpoint != nullptr && sink != nullptr)
         {
             Action la;
@@ -4032,8 +4220,66 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             return;
         }
-        // No flood-keep land to play -> play the best normal land (the deferred drop), recorded.
-        play_breakpoint_land(sink);
+        // No flood-keep land YET, but another dig is affordable this turn -> HOLD the drop (Hook 22).
+        // Developing here spends the only way to play a Reliquary Tower one dig too early, so a Tower
+        // revealed by the NEXT dig is unplayable and the flood is discarded at cleanup (s2 gi1). This
+        // step runs again after that dig, so a whiff still develops -- just one dig later.
+        if (ResolveProvider(state).HoldDeferredDropForFurtherDig(state, state.active_player_index)) { return; }
+        // NO RULE FIRED -> the static ranker picks the drop (SimulateLandPlay: first multi-colour
+        // land in HAND ORDER, blind to yield). This is the SEARCH RESTRICTION documented in
+        // clairvoyant-reference-shortfalls.md A6: the post-dig continuation is resolved by the GREEDY
+        // TurnSolver::Solve below, which does not enumerate land variants, so no depth or budget can
+        // reach a different drop. MTG_BP_DROP_SEARCHED omits the static pick -- but until the
+        // breakpoint is a real search node that is strictly worse (no land is played at all), so it
+        // is opt-in for diagnosis only, NOT a fix.
+        static const bool s_searched = std::getenv("MTG_BP_DROP_SEARCHED") != nullptr;
+        if (!s_searched) { play_breakpoint_land(sink); }
+    };
+
+    // ---- Searched breakpoint continuation (Plan::bp_choice) ------------------------------------
+    // The FIRST breakpoint of this apply becomes a real search node when the plan carries a
+    // bp_choice: instead of the static land ranker + greedy Solve, the continuation is candidate k
+    // of the SAME land-folded plan set the outer search ranks. The rollout that produced this plan
+    // scored this exact k, so prediction and realisation stay in lockstep (no fd-diverge) and the
+    // decision is searched end to end. bp_choice < 0 (default) -> greedy, byte-identical.
+    // Deeper breakpoints in the same apply stay greedy: they are the leaf evaluator's own horizon.
+    int  bp_seen = 0;
+    auto bp_searched_plan = [&](int site, TurnSolver::Plan& out) -> bool
+    {
+        const bool eligible = plan.bp_choice >= 0
+                           && (BpSiteMask() & (1 << site)) != 0    // this class is pruned when clear
+                           && bp_seen++ == 0;
+        bool resolved = false;
+        if (eligible)
+        {
+            // Shared with the executor (AIEngine::resolve_draw_breakpoint): both index the SAME list.
+            std::vector<TurnSolver::Plan> cands =
+                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+            // Fewer continuations than variants -> fall back to greedy, making this variant a
+            // duplicate of its base plan (a wasted node, never a wrong answer).
+            if (plan.bp_choice < static_cast<int>(cands.size()))
+            {
+                out      = cands[plan.bp_choice];
+                resolved = true;
+            }
+        }
+        BpHit(site, out_breakpoint != nullptr, resolved);
+        return resolved;
+    };
+    // Play a continuation's SEARCHED land drop and record it for commit-the-line replay. Inert for
+    // a greedy continuation (Solve never sets land_decided), so the greedy path is unchanged.
+    auto bp_play_searched_land = [&](const TurnSolver::Plan& sp, std::vector<Action>* sink)
+    {
+        if (!sp.land_decided || sp.land_to_play.empty()) { return; }
+        if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
+        if (!PlayLandByName(state, sp.land_to_play, sp.fetch_target, true, sp.land_face)) { return; }
+        if (out_breakpoint != nullptr && sink != nullptr)
+        {
+            Action la;
+            la.kind      = Action::Kind::PlayLand;
+            la.card_name = sp.land_to_play;
+            sink->push_back(la);
+        }
     };
 
 
@@ -4667,9 +4913,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else
             {
                 if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
-                play_breakpoint_land(my_bp_sink);
-                TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-                apply_plan_actions(extra.actions, false);
+                TurnSolver::Plan extra;
+                if (!bp_searched_plan(0, extra))
+                {
+                    play_breakpoint_land(my_bp_sink);
+                    extra = TurnSolver::Solve(state, is_pre_combat);
+                }
+                bp_play_searched_land(extra, my_bp_sink);
+                apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
             }
         }
@@ -4694,9 +4945,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!s_human_play)
             {
                 if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
-                play_drawn_flood_keep_land(my_bp_sink);
-                TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-                apply_plan_actions(extra.actions, false);
+                // Searched continuation when the plan carries one (bp_choice), else the static
+                // flood-keep/ranker drop + greedy Solve. bp_play_searched_land then applies the
+                // continuation's SEARCHED land: EnumeratePlansWithLand plays each candidate land
+                // into a copy BEFORE enumerating casts, so `extra` was scored WITH it in play --
+                // applying only extra.actions would silently discard the search's land choice.
+                TurnSolver::Plan extra;
+                if (!bp_searched_plan(1, extra))
+                {
+                    play_drawn_flood_keep_land(my_bp_sink);
+                    extra = TurnSolver::Solve(state, is_pre_combat);
+                }
+                bp_play_searched_land(extra, my_bp_sink);
+                apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
             }
             // Human play: Treasure Hunt's reveal is now in hand; the chooser re-fires so the
@@ -4881,8 +5142,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!s_human_play)
             {
                 if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
-                play_breakpoint_land(my_bp_sink);
-                TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
+                TurnSolver::Plan extra;
+                if (!bp_searched_plan(2, extra))
+                {
+                    play_breakpoint_land(my_bp_sink);
+                    extra = TurnSolver::Solve(state, is_pre_combat);
+                }
+                bp_play_searched_land(extra, my_bp_sink);
                 // Lotus Bloom: apply (and RECORD) any SacForMana / Suspend the re-solve chose BEFORE the
                 // casts, exactly as the top-level ApplyPlanDirect / TakeTurn pre-pass does. apply_plan_actions
                 // handles only vial/hand/sac-land/graveyard casts, so a mid-turn Lotus sac would otherwise be
@@ -4903,7 +5169,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
                     }
                 }
-                apply_plan_actions(extra.actions, false);
+                apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
             }
         }
@@ -5315,9 +5581,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         deferred_cantrip_resolve = false;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
-        play_breakpoint_land(out_breakpoint);
-        TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-        apply_plan_actions(extra.actions, false);
+        TurnSolver::Plan extra;
+        if (!bp_searched_plan(3, extra))
+        {
+            play_breakpoint_land(out_breakpoint);
+            extra = TurnSolver::Solve(state, is_pre_combat);
+        }
+        bp_play_searched_land(extra, out_breakpoint);
+        apply_plan_actions(extra.actions, extra.searched_order);
         if (out_breakpoint) { sink_stack.pop_back(); }
     }
 
@@ -5401,8 +5672,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!drew_land)
             {
                 if (out_breakpoint) { sink_stack.push_back(my_bp_sink); }
-                TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat);
-                apply_plan_actions(extra.actions, false);
+                TurnSolver::Plan extra;
+                if (!bp_searched_plan(4, extra)) { extra = TurnSolver::Solve(state, is_pre_combat); }
+                bp_play_searched_land(extra, my_bp_sink);
+                apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint) { sink_stack.pop_back(); }
                 break;
             }
@@ -7366,6 +7639,81 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
     }
 }
 
+// Does this plan cast something that opens a mid-turn breakpoint (a spell whose resolution reveals
+// NEW castables, so ApplyPlanDirect re-decides the rest of the turn)? Mirrors the ApplyPlanDirect
+// branches that call TurnSolver::Solve: DrawUntilNonland (Treasure Hunt), staged exile / EI / plain
+// cantrip (DrawSpell), and impulse_exile (Apex of Power). Only those plans get bp_choice variants.
+static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
+{
+    int mask = 0;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
+        { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->tmpl == CardTemplate::DrawUntilNonland) { mask |= 1 << 1; }
+        else if (d->tmpl == CardTemplate::DrawSpell)
+        {
+            // Staging / EI re-solve inline (site 0); a plain cantrip defers to site 3.
+            mask |= (d->params.stages_cards || d->params.expressive_iteration) ? (1 << 0) : (1 << 3);
+        }
+        if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
+    }
+    return mask;
+}
+
+// Append the SEARCHED-BREAKPOINT variants (MTG_BP_SEARCH=W; see Plan::bp_choice). For every plan
+// that opens a breakpoint, add W copies tagged bp_choice = 0..W-1 so the outer rollout scores W
+// distinct post-breakpoint continuations (land drop AND casts) instead of trusting the greedy
+// re-solve. Appended AFTER the caller's sort so the existing candidate order -- and with it the
+// win-this-turn shortcut and every non-breakpoint decision -- is untouched; a variant can only win
+// on a strictly better rolled-out win turn, because the equal-turn tiebreak is `value`, which it
+// shares with its base plan. W=0 (default) or a nested breakpoint enumeration emits nothing, so
+// the whole mechanism is byte-identical off. See docs/design/post-breakpoint-search.md.
+static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSolver::Plan>& plans)
+{
+    const int w = BpSearchWidth();
+    if (w <= 0 || g_bp_enum_depth != 0 || plans.empty()) { return; }
+    if (!g_bp_root_enum && !BpSearchInRollouts()) { return; }   // committed decision only
+    // A cycle/sacrifice dig opens a breakpoint without any cast naming it (the dig loop runs off
+    // the board), so on a deck that is about to dig EVERY plan qualifies. Pre-checking
+    // ShouldConsiderDig (the same predicate the dig loop uses, here on the pre-apply state) keeps
+    // that fan-out off the turns that will not dig at all; a plan that only becomes dig-worthy
+    // after its own casts simply keeps the greedy dig continuation.
+    // PERFORMANCE PRUNE (cost only -- every base plan is still searched; this caps only the EXTRA
+    // continuations). On a very wide node the fan-out multiplies an already-huge candidate set:
+    // Dragonstorm at the overnight budget (its ritual/storm powersets) ran 5.3x slower for -0.033
+    // avg. `plans` is sorted best-first, so fanning out only the top N keeps the widening where the
+    // search actually is while bounding the blowup. MTG_BP_MAXBASE=0 lifts the cap (free rein).
+    static const int s_max_base = []() -> int
+    {
+        const char* v = std::getenv("MTG_BP_MAXBASE");
+        if (v == nullptr || *v == '\0') { return 16; }
+        const int n = std::atoi(v);
+        return n < 0 ? 0 : n;
+    }();
+    const int  sites  = BpSiteMask();
+    const DecisionProvider& prov = ResolveProvider(state);
+    const bool dig_bp = (sites & (1 << 4)) != 0
+                     && prov.HasAnyDigSource(state) && prov.ShouldConsiderDig(state);
+    std::vector<TurnSolver::Plan> variants;
+    int fanned = 0;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (!dig_bp && (PlanOpensBreakpoint(p) & sites) == 0) { continue; }
+        if (s_max_base > 0 && fanned++ >= s_max_base) { break; }
+        for (int k = 0; k < w; ++k)
+        {
+            TurnSolver::Plan v = p;
+            v.bp_choice = k;
+            variants.push_back(std::move(v));
+        }
+    }
+    plans.insert(plans.end(), std::make_move_iterator(variants.begin()),
+                              std::make_move_iterator(variants.end()));
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
 {
@@ -7388,6 +7736,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         AppendHumanPlayLandsEdgePlans(state, plans);
         AppendHumanPlayDigPlans(state, plans);
         for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
+        AppendBreakpointVariants(state, plans);
         return plans;
     }
 
@@ -7697,6 +8046,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             bool b_greedy = (b.land_to_play == greedy_land_name);
             return a_greedy > b_greedy;
         });
+
+    // DIAGNOSTIC (MTG_FORCE_LAND="<turn>:<land name>[,<turn>:<name>...]", inert by default):
+    // restrict this turn's plans to those playing the named land. There is otherwise no way to ask
+    // "what would the engine do from THIS land drop?" -- the goldfish runner has no land override and
+    // --force-mulligan only fixes the opening hand -- so a reference whose human line diverges at a
+    // land choice cannot be investigated past turn 1. Filter-only: it removes plans, never adds or
+    // reorders, and a turn with no matching plan is left untouched (so a turn where the land is not
+    // in hand degrades to normal behaviour rather than emptying the candidate set).
+    const std::string forced_land = ForcedLandForTurn(state.turn_number);
+    if (!forced_land.empty())
+    {
+        std::vector<TurnSolver::Plan> keep;
+        for (const TurnSolver::Plan& p : all)
+        {
+            if (p.land_to_play == forced_land) { keep.push_back(p); }
+        }
+        if (!keep.empty()) { all.swap(keep); }
+    }
+
+    AppendBreakpointVariants(state, all);
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
@@ -8343,7 +8712,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // No projected-`wins_this_turn` shortcut: lethality is decided by actually
     // simulating each plan below, so the committed line's win turn always matches
     // replaying it (the projection can over-count vs ApplyPlanDirect+SimulateCombat).
+    // Searched-breakpoint fan-out is emitted only at the COMMITTED node (nest 0) -- the play this
+    // turn actually makes. Deeper nodes are lookahead and keep the cheap greedy continuation; see
+    // g_bp_root_enum for why fanning out everywhere costs more budget than it buys.
+    const bool bp_root = (g_fsline_nest == 0);
+    FsLineNestGuard _fs_nest;
+    g_bp_root_enum = bp_root;
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
+    g_bp_root_enum = false;
     MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
 
     // VALUE-RANKED BEAM: reorder `pre` by the PROBE's recorded value-win-turns for this node, so the beam-cap
@@ -8378,6 +8754,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     std::vector<int> node_vals;
     if (rec_vals) { node_vals.reserve(pre.size()); }
 
+    // Searched-breakpoint variant DEDUP. A bp_choice variant is a duplicate whenever its
+    // continuation resolves to a state some earlier candidate already reached -- k past the end of
+    // the breakpoint's candidate list (it falls back to greedy == its own base plan), or two k's
+    // that pick the same continuation. Those cost a full rollout each and dilute a fixed node
+    // budget for nothing. Key every candidate's POST-APPLY state, but only ever SKIP a plan that
+    // carries a bp_choice: ordinary plans are never deduped, so a deck with no variants (and any
+    // run with MTG_BP_SEARCH=0) is byte-identical. Reuses the apply already done below.
+    bool bp_variants_here = false;
+    for (const TurnSolver::Plan& p : pre) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
+    std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
     int _beam_i = 0;
@@ -8396,6 +8783,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         GameState s = state;
         std::vector<Action> bp;
         ApplyPlanDirect(s, p, true, &bp);
+        // Breakpoint-variant dedup (see bp_seen_states): a variant whose continuation lands on an
+        // already-scored state is redundant -- skip its rollout. Ordinary plans only RECORD.
+        if (bp_variants_here)
+        {
+            const bool fresh = bp_seen_states.insert(BuildSimKey(s, 0, 0, false)).second;
+            if (!fresh && p.bp_choice >= 0)
+            { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
+        }
         // A plan that kills the active player via its own on-cast triggers (Eidolon of
         // the Great Revel) or self-damage cannot win: those triggers go on top of the
         // spell and resolve BEFORE it (CR 603.3), so we die to them before our spell or
@@ -10025,7 +10420,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // every (land choice x spell subset) plus a defer option, each plan tagged with
     // its land_to_play. The same fold runs in the rollout (SimulateToEndImpl calls
     // this per turn), so the land choice is searched consistently end to end.
+    // Searched-breakpoint fan-out is emitted only here, at the enforcing (committed) decision --
+    // see g_bp_root_enum. The rollouts below re-enter this function with the flag clear, so their
+    // leaf evaluation keeps the cheap greedy continuation.
+    g_bp_root_enum = enforce_budget;
     std::vector<Plan> candidates = EnumeratePlansWithLand(state, is_pre_combat);
+    g_bp_root_enum = false;
 
     // Candidates are sorted highest-value first, so the first winning plan
     // (if any) is also the highest-value winning plan.
@@ -10126,6 +10526,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // node budget. Reuses the apply already done below (no extra apply). Off (default) -> set never
         // consulted -> byte-identical. Per sub_depth pass. See docs/design/enumeration-feasibility-via-executor.md.
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> reframe_seen;
+        // Searched-breakpoint variant dedup -- see the identical guard in FSLineWin. Records every
+        // candidate's post-apply state but only SKIPS a bp_choice variant, so runs without variants
+        // (and MTG_BP_SEARCH=0) never enter it and stay byte-identical.
+        bool bp_variants_here = false;
+        for (const Plan& p : candidates) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
         for (const Plan& plan : candidates)
         {
             // --- Overrun guard: finish if almost done, else abort + roll back ---
@@ -10161,6 +10567,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // Count-bounder: skip this candidate's rollout if its post-apply state was already scored
                 // by an earlier candidate this pass (a dominated/strand-equivalent line). Reframe-only.
                 if (CostReframeEnabled() && !reframe_seen.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
+                if (bp_variants_here
+                    && !bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second
+                    && plan.bp_choice >= 0)
+                { ++candidates_done; continue; }
                 SimulateAnimateLands(copy);
                 SimulateTapTokens(copy);
 
@@ -10186,6 +10596,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // Count-bounder (post-combat main): dedup by post-apply state AFTER the win check so a
                 // unique winner is never skipped. Reframe-only. See the pre-combat branch above.
                 if (CostReframeEnabled() && !reframe_seen.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
+                if (bp_variants_here
+                    && !bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second
+                    && plan.bp_choice >= 0)
+                { ++candidates_done; continue; }
             }
 
             // End of this turn + start of next. The next turn's land drop is searched
@@ -10289,6 +10703,66 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                                                              bool is_pre_combat)
 {
     return EnumeratePlansWithLand(state, is_pre_combat);
+}
+
+// MID-TURN-exact state key for the breakpoint enumeration memo. BuildSimKey alone is NOT sufficient:
+// it is a TURN-BOUNDARY key, and GameState documents that floating_mana / spells_cast_this_turn are
+// deliberately never folded into it because they are 0 at every boundary. Mid-turn they are exactly
+// what distinguishes two breakpoint states -- floating mana decides what is affordable (Hinata's
+// Reality Spasm float) and spells_cast_this_turn decides Dragonstorm's storm count. Keying the memo
+// on BuildSimKey alone silently changed Hinata's play; folding these three makes it exact.
+static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat)
+{
+    TranspositionTable::Key k = BuildSimKey(state, 0, 0, is_pre_combat);
+    Fold(k, 0xB9E4);   // section tag: mid-turn scalars
+    const ManaPool& f = state.floating_mana;
+    Fold(k, static_cast<uint64_t>(f.white));
+    Fold(k, static_cast<uint64_t>(f.blue));
+    Fold(k, static_cast<uint64_t>(f.black));
+    Fold(k, static_cast<uint64_t>(f.red));
+    Fold(k, static_cast<uint64_t>(f.green));
+    Fold(k, static_cast<uint64_t>(f.colorless));
+    Fold(k, static_cast<uint64_t>(f.wild));
+    Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn));
+    Fold(k, static_cast<uint64_t>(state.casts_remaining_this_turn + 1));   // -1 == unset
+    return k;
+}
+
+std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameState& state,
+                                                                   bool is_pre_combat)
+{
+    // MEMO. The W variants of one base plan are emitted consecutively and every one reaches the SAME
+    // breakpoint state, so without a cache each pays a full EnumeratePlansWithLand -- and that
+    // enumeration is NOT a search node, so it never appears in interior_nodes (Dragonstorm at the
+    // overnight budget: +5% nodes but multiples of wall clock). Keyed on BuildBreakpointKey, which is
+    // mid-turn exact; the first attempt keyed on BuildSimKey alone silently changed Hinata's play.
+    // Capped so a long game cannot grow it without bound, and thread_local because the batch runner
+    // plays games concurrently. MTG_NO_BP_ENUM_CACHE disables it -- results must be identical either
+    // way, and the smoke digests are the check. See docs/design/post-breakpoint-search.md.
+    static const bool s_cache = std::getenv("MTG_NO_BP_ENUM_CACHE") == nullptr;
+    using BpEnumMap = std::unordered_map<TranspositionTable::Key, std::vector<Plan>,
+                                         TranspositionTable::KeyHash>;
+    static thread_local BpEnumMap cache;
+    constexpr std::size_t kBpEnumCacheCap = 8192;
+
+    TranspositionTable::Key key;
+    if (s_cache)
+    {
+        key = BuildBreakpointKey(state, is_pre_combat);
+        BpEnumMap::const_iterator it = cache.find(key);
+        if (it != cache.end()) { return it->second; }
+    }
+
+    ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
+    std::vector<Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    --g_bp_enum_depth;
+
+    if (s_cache)
+    {
+        if (cache.size() >= kBpEnumCacheCap) { cache.clear(); }
+        cache.emplace(key, plans);
+    }
+    return plans;
 }
 
 // One-line "land=...; cast: a, b" summary of a plan (for the human-play accept verdict).

@@ -248,6 +248,21 @@ public:
         // Action::breakpoint_casts and project-full-depth-search.
         std::vector<Action> breakpoint_actions;
 
+        // SEARCHED MID-TURN BREAKPOINT (see docs/design/post-breakpoint-search.md). When a spell
+        // that reveals NEW castables resolves mid-main (Treasure Hunt, Light Up the Stage /
+        // Expressive Iteration, Apex of Power, Ponder/Preordain, a cycle/sac dig), ApplyPlanDirect
+        // re-decides the rest of the turn. That continuation used to be picked GREEDILY
+        // (TurnSolver::Solve + a static land ranker) with no search node at all, so no depth and no
+        // budget could reach an alternative post-breakpoint line.
+        //
+        // -1 (default) == the greedy continuation, byte-identical to the old behaviour. k >= 0 ==
+        // "at the FIRST breakpoint of this apply, play candidate k of EnumeratePlansWithLand
+        // (land drop included) instead of the greedy pick". The land enumeration emits one Plan
+        // variant per k, so the OUTER rollout scores each continuation and the search -- not a
+        // heuristic -- decides. Parallels fetch_target / land_face: a plan-level sub-decision
+        // resolved at apply time, searched rather than narrowed.
+        int bp_choice = -1;
+
         bool empty() const { return actions.empty(); }
     };
 
@@ -268,6 +283,13 @@ public:
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
+
+    // The candidate list a SEARCHED breakpoint continuation indexes with Plan::bp_choice (see the
+    // field). Identical to EnumerateMainPlans except it suppresses the bp_choice fan-out, so the
+    // list ApplyPlanDirect scored and the list the executor replays are the same list -- the
+    // executor's fallback breakpoint re-solve (AIEngine::resolve_draw_breakpoint) MUST use this,
+    // never EnumerateMainPlans, or the realised play would drift from the searched one.
+    static std::vector<Plan> EnumerateBreakpointPlans(const GameState& state, bool is_pre_combat);
     // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the
     // viewer to diff the human's queued order against (equal => don't emit --cast-order).
     static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);

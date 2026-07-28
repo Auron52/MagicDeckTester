@@ -1205,6 +1205,52 @@ bool TreasureHuntProvider::HoldDeferredDropForLethal(const GameState& s, int con
     return lands_in_hand >= lethal_lands && (lands_in_hand - 1) < lethal_lands;
 }
 
+bool TreasureHuntProvider::HoldDeferredDropForFurtherDig(const GameState& s, int controller) const
+{
+    // HOLD the still-open deferred drop when the hand is flooding, nothing keeps it yet, and another
+    // Treasure Hunt is castable THIS TURN. Developing now (the generic fallback) spends the only way
+    // to play a Reliquary Tower one dig too early: dig 2 then reveals the Tower with no drop left and
+    // the flood is discarded at cleanup instead of becoming Land's Edge ammo (s2 gi1: engine T5, human
+    // T4 -- the human held the drop through BOTH digs and played the revealed Tower). ADOPTED default
+    // ON; MTG_NO_TH_HOLD_FOR_DIG restores eager-develop for A/Bs (presence-tested, so =0 also
+    // disables). Preconditions guaranteed by the caller: pre-combat, drop open, Hook 21 declined,
+    // Hook 13 found no keep land.
+    static const bool s_off = std::getenv("MTG_NO_TH_HOLD_FOR_DIG") != nullptr;
+    if (s_off) { return false; }
+
+    const Player& ap = s.players[controller];
+    if (static_cast<int>(ap.hand.size()) <= 7) { return false; }   // not flooding -> nothing to protect
+
+    for (const Permanent& p : s.battlefield)                    // already safe -> develop as usual
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.no_max_hand_size && d->card.IsLand()) { return false; }
+    }
+
+    // Another dig payable from mana available WITHOUT the held land (untapped sources + float, so
+    // holding can never starve the dig it is waiting for). Mirrors TurnSolver::BuildPool.
+    ManaPool pool;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        bool is_land = (d->tmpl == CardTemplate::BasicLand);
+        bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
+        if (!is_land && !is_dork) { continue; }
+        AddSourceToPool(pool, s, *d);
+    }
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(s.floating_mana); }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->tmpl != CardTemplate::DrawUntilNonland) { continue; }
+        if (pool.CanPay(d->card.m_mana_cost)) { return true; }
+    }
+    return false;
+}
+
 bool TreasureHuntProvider::HasExtraLethalModel() const
 {
     return true;   // the Land's Edge / Treasure Hunt lethal model below.

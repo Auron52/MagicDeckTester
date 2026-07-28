@@ -2123,6 +2123,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // (each real cast consumes its card), well under the budget, so the cap only stops the phantom spin.
     constexpr long kMaxDrawBreakpointCalls = 4096;
     long rdb_calls = 0;
+    // SEARCHED breakpoint continuation (TurnSolver::Plan::bp_choice): consumed by the FIRST
+    // breakpoint only, mirroring ApplyPlanDirect (deeper breakpoints keep the greedy re-solve).
+    bool bp_choice_used = false;
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
@@ -2136,7 +2139,30 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             sc.card.m_staged_expiry = sc.expiry_turn;
             rp.hand.push_back(sc.card);
         }
-        TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat_main);
+        // Honour the plan's SEARCHED breakpoint continuation. The search ranked this turn assuming
+        // candidate k of the breakpoint's own plan list, so the executor must play candidate k --
+        // re-solving greedily here would realise a turn the search never scored (a rollout/execution
+        // divergence, exactly the class of bug the Hook 21/22 mirrors below exist to prevent).
+        // EnumerateBreakpointPlans is the SHARED list (fan-out suppressed) ApplyPlanDirect indexed.
+        // Inert when bp_choice < 0, i.e. for every plan under MTG_BP_SEARCH=0.
+        TurnSolver::Plan extra;
+        bool bp_searched_here = false;
+        if (plan.bp_choice >= 0 && !bp_choice_used)
+        {
+            bp_choice_used = true;
+            const std::vector<TurnSolver::Plan> cands =
+                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+            if (plan.bp_choice < static_cast<int>(cands.size()))
+            {
+                extra            = cands[plan.bp_choice];
+                bp_searched_here = true;
+                // The continuation's land drop is part of the searched decision; play it first so
+                // its mana funds the casts (mirrors bp_play_searched_land in ApplyPlanDirect).
+                if (extra.land_decided && !extra.land_to_play.empty())
+                { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+            }
+        }
+        if (!bp_searched_here) { extra = TurnSolver::Solve(state, is_pre_combat_main); }
         // Lotus Bloom: apply any SacForMana (float the chosen colour) / Suspend this re-solve chose BEFORE
         // the casts, mirroring TakeTurn's top-of-turn pre-pass. Without this a mid-turn Lotus sac was
         // silently dropped in the fallback breakpoint re-solve, so the floated mana never materialised and
@@ -2175,10 +2201,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // non-flood draw turns keep their normal land timing. HOLD the drop when the hand is the
         // marginal Land's Edge ammo for a lethal this turn (Hook 21, mirrors the search's
         // play_drawn_flood_keep_land) so the deferred drop isn't spent out of the ammo pool.
-        if (is_pre_combat_main
+        // Hook 22 is mirrored here for the SAME reason as Hook 21: the rollout applies it in
+        // play_drawn_flood_keep_land, so an executor that developed the drop anyway would play a land
+        // the proved line does not -- a rollout/execution divergence, not a heuristic disagreement.
+        // The keep-land case (Hook 13) still goes through TryPlayLand's own Reliquary pre-pass.
+        // Skipped entirely when the continuation was SEARCHED: the drop is then part of the scored
+        // plan (played above, or deliberately deferred), and a static flood-keep play on top would
+        // be exactly the un-searched land choice this whole mechanism removes.
+        if (!bp_searched_here
+            && is_pre_combat_main
             && static_cast<int>(state.ActivePlayer().hand.size()) > 7
             && !ResolveProvider(state).HoldDeferredDropForLethal(state, state.active_player_index))
-        { TryPlayLand(state); }
+        {
+            const int          apx  = state.active_player_index;
+            const std::string  keep = ResolveProvider(state).PostDrawKeepLandName(state, apx);
+            if (!keep.empty() || !ResolveProvider(state).HoldDeferredDropForFurtherDig(state, apx))
+            { TryPlayLand(state); }
+        }
     };
 
     // Canonical execution order: Vial deployments first (lords live before spell casts),
