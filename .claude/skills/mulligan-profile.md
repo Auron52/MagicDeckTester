@@ -68,16 +68,46 @@ too large: lower R (keep tolerates it), or fall back to static/defaults for that
 
 ## Generating a profile
 
-**Pin every discovery parameter** — the buckets (and thus the poolable `bucket_fp`) depend on all of
-them, so they must match across any machines you intend to pool.
+### The normal path — one flag (`--gen-mulligan`)
+
+For almost every deck, don't hand-set the `MTG_KEEP_*`/`MTG_EQUIV_*` knobs — use the recipe flag. It
+takes **no parameters but the recipe**, pulls the rollout depth/budget from the deck's **play profile**
+(`value_play`), and prints its effective settings so a run is self-documenting.
+
+```bash
+# 1) SCOUT first (cheap, bounded): one rollout of every cell -> a wall-clock estimate + the slowest cells.
+./build/Release/mtg-analyze decks/<name>/<name>.cod --cards-json src/cards/data/cards.json \
+    --gen-mulligan recommend
+#    -> GEN-TIME PROJECTION: complete ~Xh / fast ~Yh vs the ~8h overnight window (MTG_KEEP_OVERNIGHT_H),
+#       and the top-12 slowest rollouts (watch for a degenerate combo cell BEFORE committing hours).
+
+# 2) Then generate with the recipe you chose from the estimate:
+./build/Release/mtg-analyze decks/<name>/<name>.cod --cards-json src/cards/data/cards.json \
+    --gen-mulligan complete      # full bottoming, R40 -- the definitive profile (default when it fits)
+#   --gen-mulligan fast          # adaptive bottoming, R30 -- ~a third off gen for slow/large-K decks
+```
+
+- **complete** = full bottoming + cap R40; **fast** = adaptive bottoming + cap R30; keep is always
+  adaptive (floor 2). See the recipe study (quality cost ≤ ~0.02t; fast saves ~22–38% of gen).
+- **Depth/budget** come from `value_play` (`target_depth`/`budget_ms`); set the optional
+  `value_play.mull_gen_depth` / `mull_gen_budget_ms` in `<deck>.value.json` when mulligan gen should run at
+  a **cheaper depth than shipped play** for cost (0/unset → inherit the play depth → built-in default).
+- **Every run reports its settings and its slowest cells** — always on, ~free (one clock read + an atomic
+  compare per rollout). `MTG_KEEP_SLOW_MS=<ms>` additionally *streams* live over-threshold rollouts.
+
+### Manual / advanced path (pin every param — for chunking & pooling)
+
+When you need the individual knobs — chunked / multi-machine runs, a specific R, a custom bucketing —
+drive the gen directly. **Pin every discovery parameter**: the buckets (and thus the poolable
+`bucket_fp`) depend on all of them, so they must match across any machines you intend to pool.
 
 ```bash
 HASH=$(git rev-parse --short HEAD)          # play-logic identity, stamped into the sidecar
 MTG_KEEP_EXHAUSTIVE=1 \
   MTG_EQUIV_PROBES=400 MTG_EQUIV_THRESHOLD=0.01 MTG_EQUIV_DEPTH=5 \  # bucketing (pinned)
   MTG_EQUIV_SEED=20260701 \                                          # FIXED bucket seed (all machines)
-  MTG_KEEP_ROLLOUTS=<R> MTG_KEEP_MAXMULL=3 \                         # R = label precision; depth of mull
-  MTG_COMMIT="$HASH" \                                               # (bottoming is always on -- no flag)
+  MTG_KEEP_ROLLOUTS=<R> \                                            # R = label precision (per-cell rollouts)
+  MTG_COMMIT="$HASH" \              # (bottoming always on; max_mull fixed at 6 = down to keep-1 -- no knob)
   ./build/Release/mtg-analyze decks/<name>/<name>.txt --cards-json src/cards/data/cards.json \
     --max-turns 8 --seed <SEED_BASE>                                 # SEED_BASE = the rollout run id
 ```
@@ -91,6 +121,14 @@ it to pick the minimum viable R for the deck.
 - Keep is robust: **R=20 already captures ~94% of the keep gap** on Slivers (residual label-noise
   regret ~0.004t). R=100 is comfortably definitive.
 - Bottoming is **not** robust at low R (next section) — it needs the high-R run.
+- **Hard floor: R < 10 cannot produce a runtime profile.** A profile below R=10 is too noisy to be
+  usable, so it is *structurally* unshippable — a sub-10 single run (or a partial merge whose pooled
+  per-cell R < 10) writes **only a poolable raw chunk**, never a `.profile.json`, and says so loudly. To
+  get a profile from low-R rollouts you must **merge chunks up to R ≥ 10** (that is the only path). The
+  floor is a hard constant (not env-overridable — an override would just re-arm the footgun). It changes
+  no real recipe: `complete` (R40) and `fast` (R30) clear it by a wide margin. The one exemption is the
+  offline reconstruction probe (`MTG_KEEP_SYNTH_R`, next-but-one section), a deliberate in-game-A/B
+  experiment that is allowed to build a low-R profile.
 
 ## Bottoming: always ON (no generation off switch)
 
@@ -141,15 +179,60 @@ variant, so never re-generate a subset. In the merge path (`MTG_KEEP_MERGE`):
 
 | env | effect |
 |---|---|
-| `MTG_KEEP_SYNTH_R=k`        | resample all tables to R=k → a lower-R profile |
-| `MTG_KEEP_SYNTH_BOTTOM_R=j` | resample only the bottoming sub-tables to R=j (j=floor → **emulates adaptive bottoming**) |
+| `MTG_KEEP_SYNTH_R=k`        | resample all tables to R=k → a lower-R profile (the **required-R / keep** question) |
 | `MTG_KEEP_SYNTH_SEED=…`     | deterministic RNG seed |
 
-Then A/B each reconstruction against the full profile **in game** with `test/keep_reconstruct_ab.sh`
-(attaches via `MTG_EXHAUSTIVE_PROFILE`, no `decks/`/GT churn) to find the required-R knee and the
-adaptive-vs-full bottoming call. **The reconstruction's reported `D_opt` is winner's-curse optimistic —
-do NOT rank variants by it; use the in-game delta.** Full recipe + rationale:
+Then A/B each `SYNTH_R` reconstruction against the full profile **in game** with
+`test/keep_reconstruct_ab.sh` (attaches via `MTG_EXHAUSTIVE_PROFILE`, no `decks/`/GT churn) to find the
+required-R knee. **The reconstruction's reported `D_opt` is winner's-curse optimistic — do NOT rank
+variants by it; use the in-game delta.**
+
+**Adaptive vs full BOTTOMING is a different question — do NOT use `SYNTH_BOTTOM_R` for it.** A uniform
+resample of every sub-cell to one R corrupts the bottoming `argmin` with noise and over-states the cost
+2.6×+ (slivers: real +0.0057 vs `SYNTH_BOTTOM_R=2` +0.236). Use the **offline regret simulator** instead
+— it replays the gen's variance-driven refinement (floor → refine argmin cells → refined-only argmin) and
+scores on the true means, reproducing the in-game A/B for ~free:
+
+```bash
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=<full-bottom.raw.json> \
+  MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 MTG_KEEP_SIM_FLOOR=2 MTG_KEEP_SIM_TRIALS=128 \
+  MTG_MERGE_OUT_PROFILE=/tmp/ig.json MTG_MERGE_OUT_RAW=/tmp/ig.raw.json \
+  ./build/Release/mtg-analyze <deck> --cards-json src/cards/data/cards.json   # prints regret=+Xt
+```
+
+Validated to ±0.0001t on slivers (+0.0058 sim vs +0.0057 in-game). Full recipe + rationale:
 [docs/design/mulligan-reconstruct-lower-r.md](../../docs/design/mulligan-reconstruct-lower-r.md).
+
+## Resuming an interrupted run & chunking (the "it didn't finish" path)
+
+The one-flag `--gen-mulligan` run is **single-shot** — great for the normal case, but it does not
+auto-resume. When a run is long enough that an interruption is likely (power failure, machine restart,
+manual shutdown) or must be **split across machines**, drive it through the resumable/poolable chunk
+driver instead. This is the separate path the simple flag deliberately leaves alone.
+
+**Resumable single-machine run (stop and restart at will).** `test/exhaustive_chunked_gen.sh` journals
+per-cell and continues from where it stopped — re-run the **identical** command to resume (it skips
+already-completed cells). Nothing is lost but the few in-flight cells.
+
+```bash
+# CONTINUOUS pool: one adaptive floor->cap queue; stop (Ctrl-C / power loss / reboot) and RE-RUN to resume.
+KM_CONTINUOUS=1 KM_DECK=decks/<name>/<name>.cod KM_TARGET_R=40 KM_FLOOR_R=2 \
+  bash test/exhaustive_chunked_gen.sh
+#   <-- interrupted? run the EXACT same line again; the <deck>.keepmodel.exhaustive.raw.json.journal
+#       carries the completed cells. Cores stay full to the last live cell (no per-chunk barrier).
+```
+
+Round mode (`KM_TARGET_R`/`KM_ROUND_R`, prune-set carry) is the alternative: each round adds `KM_ROUND_R`
+to the still-live frontier and freezes confident cells, so each round is cheaper and independently
+resumable/poolable. Use it when you want explicit stop points at intermediate R.
+
+**Manual carry (advanced).** A finished raw at a lower R (including a completed `--gen-mulligan recommend`
+R=1 probe) can seed a higher-R run via `MTG_KEEP_PRIOR_RAW=<that.raw.json>` on an **adaptive**
+(`0 < R_FLOOR < ROLLOUTS`) run — but it is **fingerprint-gated**: the carry is refused unless
+`bucket_fp`/`deck_fp`/`equiv_seed`/`K` match, and it re-rolls any cells a changed `play_digest` touched.
+That gate is the "don't assume it's safe" guard — a play-logic change since the prior invalidates it and
+the affected cells are recomputed. (Getting the seed/accumulate semantics right is exactly why chunk
+accumulation lives in the driver script, not the one-shot flag.)
 
 ## Multi-machine handoff (pooling with the secondary machine)
 
@@ -166,7 +249,7 @@ and deck, with **disjoint** rollout streams — the merge tool enforces this via
 4. **Distinct `--seed` (seed_base) per machine** → disjoint continuations. The merge rejects overlap.
 
 **Determinism handshake (do this ONCE before trusting a pool):** both machines run a tiny *identical*
-config (same `--seed`, e.g. `MTG_KEEP_ROLLOUTS=2 MTG_KEEP_MAXMULL=1`) and you confirm the raw sidecars
+config (same `--seed`, e.g. `MTG_KEEP_ROLLOUTS=2`) and you confirm the raw sidecars
 have **identical `bucket_fp` and `deck_fp`** and **byte-identical V** on that shared seed. Only if they
 match is cross-machine rollout determinism holding (the shuffle is portable across Linux/Windows, but
 verify per pair). Then discard those and run **distinct-seed** production runs.

@@ -26,7 +26,7 @@ LOG=$OUT/sweep.log
 exec > "$LOG" 2>&1
 stamp(){ date -u +%H:%M:%SZ; }
 nseed=$(echo $SEEDS | wc -w)
-echo "=== reconstruct sweep (BATCHED, play-profile) $(stamp): R{$RLEVELS}+adaptbottom vs full; ${GAMES}g x${nseed} seeds ==="
+echo "=== reconstruct sweep (BATCHED, play-profile) $(stamp): R{$RLEVELS} in-game vs full + adaptive-bottom offline-sim; ${GAMES}g x${nseed} seeds ==="
 [ -s "$RAW" ] || { echo "!! missing full raw $RAW"; exit 1; }
 
 # --- 1. reconstruct variants from the full raw (no rollouts, deterministic) ---
@@ -34,9 +34,18 @@ build_variant(){ local tag="$1"; shift
   env "$@" MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="$RAW" \
     MTG_MERGE_OUT_PROFILE="$OUT/$tag.profile.json" MTG_MERGE_OUT_RAW="$IGN" \
     "$BINA" "$DECK" --cards-json "$CARDS" 2>&1 | grep -E "SYNTH-R|merged policy" | sed "s/^/  [$tag] /"; }
-echo "--- reconstruct variants $(stamp) ---"
+echo "--- reconstruct R variants $(stamp) ---"
 for k in $RLEVELS; do build_variant "R$k" MTG_KEEP_SYNTH_R=$k; done
-build_variant "adaptbottom" MTG_KEEP_SYNTH_BOTTOM_R=1     # keep full, bottom sub-tables at floor R=1
+
+# Adaptive bottoming is NOT a uniform SYNTH_BOTTOM_R downsample (that corrupts the bottoming argmin with
+# noise and over-states the cost 2.6x+). Evaluate it with the OFFLINE REGRET SIMULATOR, which replays the
+# gen's variance-driven refinement and scores on the true means -- validated to reproduce the in-game A/B
+# (slivers +0.0058 sim vs +0.0057 in-game). It reports a number directly (no in-game play arm needed).
+echo "--- adaptive-bottom regret (offline sim; floor=2) $(stamp) ---"
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="$RAW" MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 \
+  MTG_KEEP_SIM_FLOOR="${SIM_FLOOR:-2}" MTG_KEEP_SIM_TRIALS="${SIM_TRIALS:-128}" \
+  MTG_MERGE_OUT_PROFILE="$IGN.p" MTG_MERGE_OUT_RAW="$IGN" \
+  "$BINA" "$DECK" --cards-json "$CARDS" 2>&1 | grep -E "on-the|BLEND|regret" | sed 's/^/  [adaptbottom-sim] /'
 
 # --- 2. ONE manifest, seeds pooled, PLAY-PROFILE driven (no "depth" key -> value_play owns depth) ---
 MF=$OUT/manifest.json
@@ -52,13 +61,13 @@ run_arm(){ local tag="$1" prof="$2"
     > "$OUT/batch_$tag.log" 2>"$OUT/batch_$tag.err"; }
 echo "--- play full baseline $(stamp) ---"; run_arm full "$FULL"
 for k in $RLEVELS; do echo "--- play R$k $(stamp) ---"; run_arm "R$k" "$OUT/R$k.profile.json"; done
-echo "--- play adaptbottom $(stamp) ---"; run_arm adaptbottom "$OUT/adaptbottom.profile.json"
+# (adaptive bottoming has no in-game play arm here -- the offline sim above IS its trustworthy number.)
 
 # --- 4. summary: per-seed loss-penalized avg (from batch stdout) -> delta vs full ---
 python3 - "$OUT" "$SEEDS" "$RLEVELS" <<'PY'
 import sys, os, re
 OUT, seeds = sys.argv[1], sys.argv[2].split()
-variants = [f"R{k}" for k in sys.argv[3].split()] + ["adaptbottom"]
+variants = [f"R{k}" for k in sys.argv[3].split()]   # adaptive bottoming reported by the offline sim above
 def avgs(tag):
     d = {}; fn = f"{OUT}/batch_{tag}.log"
     if os.path.exists(fn):
@@ -74,7 +83,8 @@ print(f"\n{'variant':<12}{'avg':>10}{'delta vs full':>16}")
 for v in variants:
     a = avgs(v); deltas = [a[s]-full[s] for s in seeds if s in a and s in full]
     print(f"{v:<12}{mean([a[s] for s in seeds if s in a]):>10.4f}{mean(deltas):>+16.4f}")
-print("\ndelta = variant - full(R=40); +ve = variant SLOWER/worse. ~0 within noise => that R (or adaptive"
-      " bottoming) is sufficient. Small deltas (<~0.02t) are at/below this grid's noise floor.")
+print("\ndelta = variant - full(R=40); +ve = variant SLOWER/worse. ~0 within noise => that R is"
+      " sufficient. Small deltas (<~0.02t) are at/below this grid's noise floor. (Adaptive-bottom cost is"
+      " the offline-sim 'regret=+Xt' line above -- not an in-game arm here.)")
 PY
 echo "=== sweep DONE $(stamp) ==="

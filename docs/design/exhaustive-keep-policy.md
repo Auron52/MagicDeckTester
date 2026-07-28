@@ -129,7 +129,7 @@ A feasibility pre-check mode (bucket → distinct-hand count + coverage curve, n
   {Cavern,Secluded,Unclaimed,Sliver Hive}, {Galerider,Plated,Striking}, {Crystalline,Hibernation}, +6
   singletons (Aether Vial, Ancient Ziggurat, Cloudshredder, Hatchery, Mutavault, Thrumming Hivepool).
 - **Evaluator:** `src/analyzer/ExhaustiveKeep.{h,cpp}` — `RunExhaustiveKeep()`. Mode `MTG_KEEP_EXHAUSTIVE=1`
-  (env: `MTG_KEEP_ROLLOUTS` R default 100, `MTG_KEEP_MAXMULL` default 3, `MTG_EQUIV_SEED` bucketing seed
+  (env: `MTG_KEEP_ROLLOUTS` R default 100; max_mull is FIXED at 6 = down to keep-1, no knob; `MTG_EQUIV_SEED` bucketing seed
   default 20260701 — FIXED across machines, `MTG_COMMIT` stamp). Realization-sampling: each rollout pulls
   the hand fresh from a freshly-shuffled library (samples WHICH bucket members fill slots ∝ deck counts
   AND the continuation) — removes representative bias, self-corrects near-equal merges. Reports: policy

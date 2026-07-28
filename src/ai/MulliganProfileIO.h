@@ -1052,6 +1052,9 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                 profile.value_play.escalation_cap = vp.value("escalation_cap", 0);
                 profile.value_play.escalation_r   = vp.value("escalation_r", 0.0);
                 profile.value_play.regime       = vp.value("regime", std::string(""));
+                // Optional mulligan-gen depth/budget override (0 => inherit the play depth/budget).
+                profile.value_play.mull_gen_depth     = vp.value("mull_gen_depth", 0);
+                profile.value_play.mull_gen_budget_ms = vp.value("mull_gen_budget_ms", 0);
                 auto parse_costs = [](const nlohmann::json& arr) {
                     std::vector<double> v;
                     if (arr.is_array()) { for (const auto& e : arr) { v.push_back(e.is_number() ? e.get<double>() : 0.0); } }

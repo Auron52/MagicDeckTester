@@ -19,7 +19,6 @@ CHUNK_R=${KM_CHUNK_R:-10}                 # uniform rollouts per chunk (floor=0 
 NUM_CHUNKS=${KM_NUM_CHUNKS:-6}
 SEED_BASE=${KM_SEED_BASE:-20260801}       # chunk i uses seed_base SEED_BASE+i (disjoint => poolable)
 TARGETS=${KM_TARGETS:-"3 4 5 6"}          # chunk-counts to pool -> R = k*CHUNK_R
-MAXMULL=${KM_MAXMULL:-3}
 # Generation rollout depth/budget = MTG_EQUIV_DEPTH/BUDGET (unified: bucketing + rollouts + play_digest).
 # d3/b10 is the combo-deck default (antilife: ~12x faster than d5 at GT-equal win-turn). MUST match across
 # machines you intend to pool (part of the bucket_fp / play_digest identity).
@@ -48,7 +47,7 @@ for i in $(seq 1 "$NUM_CHUNKS"); do
   s=$((SEED_BASE + i))
   log "chunk $i: generating uniform R=$CHUNK_R seed_base=$s $(stamp)"
   # Direct-write the chunk raw; skip the (unneeded) per-chunk profile via empty MTG_KEEP_OUT_PROFILE.
-  MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=$CHUNK_R MTG_KEEP_R_FLOOR=$CHUNK_FLOOR MTG_KEEP_MAXMULL=$MAXMULL \
+  MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=$CHUNK_R MTG_KEEP_R_FLOOR=$CHUNK_FLOOR \
     MTG_EQUIV_DEPTH=$GEN_DEPTH MTG_EQUIV_BUDGET=$GEN_BUDGET \
     MTG_KEEP_OUT_RAW="$craw" MTG_KEEP_OUT_PROFILE= \
     "$ANALYZE" "$DECK" --seed "$s" >"$OUT/gen_${i}.log" 2>&1

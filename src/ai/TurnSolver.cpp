@@ -674,20 +674,26 @@ static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state,
         return def.params.spectacle_cost.value();
     }
     ManaCost cost = def.card.m_mana_cost;
-    // Desperate Ritual SPLICE: casting ONE base while splicing k OTHER copies pays (k+1) times the
-    // printed cost. Scale the RAW cost by copies (=k+1) FIRST, so the Medallion/affinity/Hinata
-    // reductions below apply ONCE to the scaled total (a single floor at 0) -- NOT (k+1) separate
-    // floors (which would over-subtract the reduction). copies==1 (every non-spliced cast) is an
-    // identity multiply -> byte-identical for all other decks.
+    // Splice onto Arcane: casting ONE base while splicing k = copies-1 OTHER copies adds each spliced
+    // copy's SPLICE cost (params.splice_cost; unset -> the card's own printed cost) to the base's RAW
+    // cost FIRST, so the Medallion/affinity/Hinata reductions below apply ONCE to the combined total
+    // (a single floor at 0) -- NOT once per copy (which would over-subtract the reduction). With
+    // splice_cost defaulting to the printed cost this is an exact (k+1)x multiply (byte-identical for
+    // Desperate Ritual, splice {1}{R} == cast {1}{R}); a splice cost that differs is now priced right.
+    // copies==1 (every non-spliced cast) adds nothing -> byte-identical for all other decks.
     if (copies != 1)
     {
-        cost.generic   *= copies;
-        cost.white     *= copies;
-        cost.blue      *= copies;
-        cost.black     *= copies;
-        cost.red       *= copies;
-        cost.green     *= copies;
-        cost.colorless *= copies;
+        const ManaCost& sc = def.params.splice_cost.has_value()
+                           ? def.params.splice_cost.value()
+                           : def.card.m_mana_cost;
+        const int k = copies - 1;
+        cost.generic   += k * sc.generic;
+        cost.white     += k * sc.white;
+        cost.blue      += k * sc.blue;
+        cost.black     += k * sc.black;
+        cost.red       += k * sc.red;
+        cost.green     += k * sc.green;
+        cost.colorless += k * sc.colorless;
     }
     if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
     {

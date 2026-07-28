@@ -46,7 +46,6 @@ TARGET_R=${KM_TARGET_R:-40}      # target effective R on the live frontier
 # running more rounds (each banks + pools). Override KM_ROUND_R only with a reason.
 ROUND_R=${KM_ROUND_R:-1}         # R added to every non-frozen cell per round (size-1 chunks: see RULE above)
 CHUNK_R=${KM_CHUNK_R:-1}         # R of each pre-existing uniform base chunk (for BASE_R accounting)
-MAXMULL=${KM_MAXMULL:-6}         # "all the way" — mulligan to the floor (was 3; mm6 is now the standard)
 PRUNE_EPS=${KM_PRUNE_EPS:-0.005} # freeze gate: smaller = stricter (freeze fewer, safer)
 CKPT_SEC=${KM_CKPT_SEC:-1800}
 ROUND_SEED_BASE=${KM_ROUND_SEED_BASE:-30001000}   # distinct from the base chunks' seed space
@@ -117,10 +116,10 @@ if [ -n "${KM_CONTINUOUS:-}" ]; then
   raw=$OUT/continuous.raw.json
   prof=$OUT/continuous.profile.json
   [ -f "$raw" ] && log "continuous: resuming from existing $raw"
-  log "continuous: floor R=$FLOOR_R -> cap R=$TARGET_R, lookahead=$LOOKAHEAD, sweep=${SWEEP_SEC}s, maxmull=$MAXMULL, seed=$ROUND_SEED_BASE  START"
+  log "continuous: floor R=$FLOOR_R -> cap R=$TARGET_R, lookahead=$LOOKAHEAD, sweep=${SWEEP_SEC}s, seed=$ROUND_SEED_BASE  START"
   cstart=$(date +%s)
   if MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_CONTINUOUS=1 \
-       MTG_KEEP_ROLLOUTS=$TARGET_R MTG_KEEP_R_FLOOR=$FLOOR_R MTG_KEEP_MAXMULL=$MAXMULL \
+       MTG_KEEP_ROLLOUTS=$TARGET_R MTG_KEEP_R_FLOOR=$FLOOR_R \
        MTG_KEEP_CONTINUOUS_LOOKAHEAD=$LOOKAHEAD MTG_KEEP_SWEEP_SEC=$SWEEP_SEC \
        MTG_KEEP_CHECKPOINT_SEC=$CKPT_SEC MTG_COMMIT="$HEAD" MTG_EQUIV_CACHE="$OUT/equiv_cache.json" \
        MTG_KEEP_OUT_RAW="$raw" MTG_KEEP_OUT_PROFILE="$prof" \
@@ -151,7 +150,7 @@ while :; do
   log "round $((ROUNDS_DONE+1)) seed=$seed: live R ${LIVE_R}->${next_R} (skip-mode prune-set)  START"
   rstart=$(date +%s)
   if MTG_KEEP_EXHAUSTIVE=1 \
-       MTG_KEEP_ROLLOUTS=$ROUND_R MTG_KEEP_R_FLOOR=$ROUND_R MTG_KEEP_MAXMULL=$MAXMULL \
+       MTG_KEEP_ROLLOUTS=$ROUND_R MTG_KEEP_R_FLOOR=$ROUND_R \
        MTG_KEEP_PRUNE_SET="$OUT/prune.json" MTG_KEEP_CARRY_MODE=skip \
        MTG_KEEP_CHECKPOINT_SEC=$CKPT_SEC MTG_COMMIT="$HEAD" MTG_EQUIV_CACHE="$OUT/equiv_cache.json" \
        MTG_KEEP_OUT_RAW="$tmp" MTG_KEEP_OUT_PROFILE="$OUT/round_s${seed}.profile.json" \

@@ -46,6 +46,16 @@ namespace
 {
 constexpr int HAND = 7;
 
+// Minimum per-cell rollout precision (R) a runtime keep profile may be built at. A profile below
+// this is too noisy to be usable, so it is STRUCTURALLY unshippable: a sub-R run (or a partial merge)
+// writes only a poolable raw CHUNK, never a runtime profile. To get a profile from low-R rollouts you
+// must merge chunks up to R >= this floor. This is a hard floor, deliberately NOT env-overridable --
+// an override would reintroduce the exact silent-low-R footgun it exists to prevent. It also makes an
+// accidental low-R gen (a stray MTG_KEEP_ROLLOUTS, a future auto-carry bug) unable to ship a bad
+// profile: the worst it can do is emit a chunk. Real recipes (fast R=30, complete R=40) clear it by a
+// wide margin, so this changes no happy path.
+constexpr int kMinProfileR = 10;
+
 // C(n,k) as an exact long long (n<=60, k<=7 here -> well within range).
 long long Comb(int n, int k)
 {
@@ -233,6 +243,18 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                        const ExhaustiveKeepConfig& cfg)
 {
+    // Backstop: max_mull must be >= 1. The CLI now hard-codes it to 6 (there is no knob), so this can't be
+    // hit from a normal run -- it defends the library entry point against a future/direct caller passing a
+    // bad config. max_mull=0 leaves only size 7 with nothing to mulligan into and underflows the
+    // bottoming/Dopt sizing downstream (an opaque "vector > max_size" throw); fail loudly and early instead.
+    if (cfg.max_mull < 1)
+    {
+        os << "ERROR: max_mull=" << cfg.max_mull << " is invalid -- the exhaustive keep needs max_mull>=1 "
+              "(sizes 7..7-max_mull; a keep decision has nothing to mulligan into at 0). Aborting.\n" << std::flush;
+        std::cerr << "[keepgen] ERROR: max_mull=" << cfg.max_mull << " < 1 -- aborting (need >=1)\n" << std::flush;
+        return;
+    }
+
     // ---- 1. Buckets (objective-relative equivalence) --------------------------------------------
     // Bucketing uses the FIXED equiv_seed (not the rollout seed) so the clustering is byte-identical
     // across machines -- a precondition for pooling their raw tables.
@@ -807,19 +829,43 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // process_tasks call (cores full to the end) instead of 32 barriered groups. Held only for the cheap
     // 3-field commit (the multi-second rollout is outside it), so contention is negligible.
     std::mutex acc_mtx;
+
+    // Always-on rollout diagnostics: keep the N SLOWEST rollouts seen (a degenerate-cell detector -- e.g. a
+    // Lotus-Bloom + rituals enumeration blowup). Near-zero cost: capture_slow is now called for EVERY
+    // rollout, but a worker only builds the hand string / takes slow_mtx when its rollout beats the current
+    // N-th-slowest cutoff (slow_gate, an atomic read + compare) -- rare after warm-up -- so there is no
+    // per-rollout lock. MTG_KEEP_SLOW_MS additionally STREAMS any rollout over that threshold (unchanged).
+    struct SlowRec { double ms; int H; int pd; long long r; std::string hand; };
+    std::vector<SlowRec> slow_top;                    // the N slowest so far, guarded by slow_mtx
+    std::atomic<double>  slow_gate{0.0};              // = N-th-slowest ms once full; lock only if ms > this
+    const std::size_t    SLOW_N = 12;
     auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
     {
-        if (slow_ms <= 0 || ms < static_cast<double>(slow_ms)) { return; }
+        const bool topn_cand = ms > slow_gate.load(std::memory_order_relaxed);   // warm-up: gate 0 => all in
+        const bool stream    = slow_ms > 0 && ms >= static_cast<double>(slow_ms);
+        if (!topn_cand && !stream) { return; }        // fast path: the vast majority of rollouts
         std::string hand;
         for (int b = 0; b < K; ++b)
         { if (comp[b] > 0) { hand += label[b] + " x" + std::to_string(comp[b]) + "; "; } }
-        const std::string line = "[keepgen] SLOW-ROLLOUT " + std::to_string(static_cast<long long>(ms))
-            + "ms  size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
-            + " seed=" + std::to_string(rs) + "  hand: " + hand;
         std::lock_guard<std::mutex> lk(slow_mtx);
-        std::cerr << line << "\n" << std::flush;
-        if (const char* sl = std::getenv("MTG_KEEP_SLOW_LOG"); sl && *sl)
-        { std::ofstream f(sl, std::ios::app); f << line << "\n"; }
+        if (topn_cand)
+        {
+            slow_top.push_back({ms, H, pd, r, hand});
+            std::sort(slow_top.begin(), slow_top.end(),
+                      [](const SlowRec& a, const SlowRec& b) { return a.ms > b.ms; });
+            if (slow_top.size() > SLOW_N) { slow_top.resize(SLOW_N); }
+            slow_gate.store(slow_top.size() >= SLOW_N ? slow_top.back().ms : 0.0,
+                            std::memory_order_relaxed);
+        }
+        if (stream)
+        {
+            const std::string line = "[keepgen] SLOW-ROLLOUT " + std::to_string(static_cast<long long>(ms))
+                + "ms  size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
+                + " seed=" + std::to_string(rs) + "  hand: " + hand;
+            std::cerr << line << "\n" << std::flush;
+            if (const char* sl = std::getenv("MTG_KEEP_SLOW_LOG"); sl && *sl)
+            { std::ofstream f(sl, std::ios::app); f << line << "\n"; }
+        }
     };
 
     // ---- Per-cell JOURNAL (crash-recovery for the continuous pool) --------------------------------
@@ -916,8 +962,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 for (std::size_t k = 0; k < hit.size(); ++k) { if (hit[k]) { cell_touched.insert(static_cast<int>(k)); } }
             }
             else { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
-            if (slow_ms > 0) { capture_slow(H, comp, pd, r, rs,
-                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count()); }
+            capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
             sum += wt; sumsq += wt * wt;
         }
         SizeTable& t = tables[HAND - H];
@@ -970,8 +1016,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
         const auto t_roll = std::chrono::steady_clock::now();
         const double wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
-        if (slow_ms > 0) { capture_slow(H, comp, pd, r, rs,
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count()); }
+        capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
         return wt;
     };
 
@@ -1263,7 +1309,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     journal_on = continuous && !cfg.out_raw.empty()
               && !(std::getenv("MTG_KEEP_JOURNAL") && std::string(std::getenv("MTG_KEEP_JOURNAL")) == "0");
     if (journal_on) { journal_path = cfg.out_raw + ".journal"; }
-    auto write_raw_atomic = [&](const std::string& path) -> bool
+    auto write_raw_atomic = [&](const std::string& path, bool as_probe = false) -> bool
     {
         using json = nlohmann::json;
         uint64_t bucket_fp = 1469598103934665603ULL;
@@ -1275,12 +1321,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         uint64_t deck_fp = 1469598103934665603ULL;
         for (const std::string& n : deck_names) { deck_fp = Fnv(n + ",", deck_fp); }
         json root;
+        // A checkpoint stamps an empty play_digest (resume gates on the fingerprints, not the digest -- it is
+        // inherently the same commit). A PROBE chunk stamps the real play_digest + floor_complete markers so a
+        // later gen only reuses it when play is byte-identical (the byte-identical-r=0 precondition).
         root["meta"] = {
-            { "commit", cfg.commit }, { "play_digest", std::string() },
+            { "commit", cfg.commit }, { "play_digest", as_probe ? play_digest : std::string() },
             { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
             { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
+        if (as_probe) { root["meta"]["probe"] = true; root["meta"]["floor_complete"] = true; }
         json buckets = json::array();
         for (int b = 0; b < K; ++b) { buckets.push_back(eq.classes[b].members); }
         root["buckets"] = buckets;
@@ -1459,6 +1509,77 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     }
 
+    // ---- Probe carry: reuse a COMPLETE recommend-probe chunk (<out_raw>.probe) as this gen's r=0 slice ----
+    // --gen-mulligan recommend already sampled EVERY cell once (R=1) at the SAME seed/depth/budget/bucketing/
+    // commit, and the rollout seed is a pure fn of (seed_base,r,w,pd) -- so the probe's r=0 IS byte-identically
+    // this gen's r=0. Preload it and the Pass-A floor below rolls only r>=1 (honours the loaded count), saving
+    // one rollout/cell with ZERO change to output. Gated hard: probe/floor_complete markers + fingerprints +
+    // play_digest (reuse ONLY if play is unchanged -- the byte-identical precondition); any mismatch is
+    // silently ignored (fresh run). Skipped if a journal/out_raw resume already loaded state (same run
+    // continuing), and opt-out-able via MTG_KEEP_NO_PROBE_CARRY for an A/B.
+    if (cfg.use_probe_carry && !cfg.recommend_only && resume_loaded == 0 && !cfg.out_raw.empty()
+        && std::getenv("MTG_KEEP_NO_PROBE_CARRY") == nullptr)
+    {
+        const std::string probe_path = cfg.out_raw + ".probe";
+        std::ifstream pf(probe_path);
+        if (pf)
+        {
+            nlohmann::json pj; bool okp = true;
+            try { pf >> pj; } catch (...) { okp = false; }
+            if (okp && pj.contains("meta") && pj.contains("sizes"))
+            {
+                uint64_t pb, pdk; compute_fps(pb, pdk);
+                const auto& pm = pj["meta"];
+                const bool match = pm.value("probe", false) && pm.value("floor_complete", false)
+                                && pm.value("bucket_fp", 0ULL) == pb
+                                && pm.value("deck_fp", 0ULL) == pdk
+                                && pm.value("seed_base", ~0ULL) == cfg.seed
+                                && pm.value("K", -1) == K
+                                && pm.value("max_mull", -1) == cfg.max_mull
+                                && pm.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                                && pm.value("play_digest", std::string()) == play_digest;
+                if (match)
+                {
+                    long long carried = 0;
+                    for (const auto& sz : pj["sizes"])
+                    {
+                        const int H = sz.value("H", 0);
+                        if (H > HAND || H < min_size) { continue; }
+                        SizeTable& t = tables[HAND - H];
+                        for (const auto& e : sz["entries"])
+                        {
+                            auto it = t.index.find(e["comp"].get<std::vector<int>>());
+                            if (it == t.index.end()) { continue; }
+                            const int i = it->second;
+                            for (int pd = 0; pd < 2; ++pd)
+                            {
+                                const long long c = e["count"][pd].get<long long>();
+                                if (c <= 0) { continue; }
+                                t.sum[i][pd]   = e["sum"][pd].get<double>();
+                                t.sumsq[i][pd] = e["sumsq"][pd].get<double>();
+                                t.cnt[i][pd]   = c;
+                                ++carried;
+                            }
+                        }
+                    }
+                    if (carried > 0)
+                    {
+                        resume_loaded += carried;   // engages the Pass-A "start from loaded count" path below
+                        recompute();
+                        std::cerr << "[keepgen] PROBE-CARRY: reused " << carried << " cell-sides (r=0/cell) from "
+                                  << probe_path << " -> rolling only r>=1 (byte-identical; saves 1 rollout/cell)\n"
+                                  << std::flush;
+                    }
+                }
+                else
+                {
+                    std::cerr << "[keepgen] PROBE-CARRY: " << probe_path << " present but fingerprint/play_digest"
+                                 " MISMATCH -- ignoring (running fresh)\n" << std::flush;
+                }
+            }
+        }
+    }
+
     // Open the journal for the continuous run BEFORE Pass A (so sub-table completions are journaled as
     // they happen -> a crash mid-Pass-A loses only in-flight sub-cells). Append when we resumed one (keep
     // its prior records + header); otherwise truncate and write a fresh fingerprint header on line 1.
@@ -1531,11 +1652,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // on the new deck/commit. Adaptive only -- a uniform run has no refiner, so sample in full.
                 if (Hw == HAND && carry_lowfloor7[iw][pd] && adaptive)
                 { cell_init = std::min(cell_init, carry_floor); }
-                // RESUME: a cell already sampled to its floor in a reloaded checkpoint needs no re-run
-                // (its accumulators are already correct; += would double-count). Guarded on resume_loaded
-                // so a normal (non-resumed) run is byte-identical.
-                if (resume_loaded > 0 && tables[HAND - Hw].cnt[iw][pd] >= cell_init) { continue; }
-                tasks.push_back({ w, pd, 0, cell_init });
+                // RESUME / PROBE-CARRY: a cell may already carry rollouts from a reloaded checkpoint or probe
+                // chunk. If it is already at/above its floor, skip it (its accumulators are correct; += would
+                // double-count). Otherwise START at the loaded count so we roll only the DEFICIT r>=have --
+                // the seed is a pure fn of (seed_base,r,w,pd), so continuing the r-stream from `have` is
+                // byte-identical to a from-scratch [0,cell_init). Guarded on resume_loaded, and a same-R
+                // resume never has 0<have<cell_init (floor tasks commit atomically), so a normal/resumed run
+                // is byte-identical; only a probe carry (have=1<floor) actually takes the deficit branch.
+                const long long have = (resume_loaded > 0) ? tables[HAND - Hw].cnt[iw][pd] : 0;
+                if (resume_loaded > 0 && have >= cell_init) { continue; }
+                tasks.push_back({ w, pd, have, cell_init });
             }
         }
         // ONE barrier-free pass over the whole floor: workers stay saturated to the very end (cores idle
@@ -1553,8 +1679,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             // When journaling, Pass A's cells (sub-tables in the continuous path) are already persisted
             // per-commit via run_batch -> skip the full-raw mid-flight checkpoint AND the post-pass snapshot
-            // (both redundant, and the mid-flight one stalls the fold under acc_mtx).
-            if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0 && tasks.size() > 1)
+            // (both redundant, and the mid-flight one stalls the fold under acc_mtx). recommend_only also
+            // skips these writes: a scout must be NON-DESTRUCTIVE -- it writes ONLY its <out_raw>.probe
+            // sidecar and must never clobber a deck's real out_raw with a floor snapshot (re-scouting a deck
+            // that already has a gen'd raw would otherwise destroy it).
+            const bool ckpt_out_raw = !journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0
+                                   && !cfg.recommend_only;
+            if (ckpt_out_raw && tasks.size() > 1)
             {
                 process_tasks(tasks, lbl, checkpoint_sec,
                               [&]{ std::lock_guard<std::mutex> lk(acc_mtx); write_raw_atomic(cfg.out_raw); });
@@ -1563,7 +1694,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // Complete-floor final write: the mid-flight loop's last snapshot predates the final cells by up
             // to one interval, so write once more now (workers have joined -> quiescent, no lock needed). The
             // old grouped path likewise checkpointed after its last group.
-            if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0) { write_raw_atomic(cfg.out_raw); }
+            if (ckpt_out_raw) { write_raw_atomic(cfg.out_raw); }
             recompute();
         }
     }
@@ -2123,6 +2254,83 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     }
     // ================================================================================================
 
+    // Post-floor GEN-TIME PROJECTION: the floor pass just priced this deck's rollouts at the gen depth, so
+    // project the full gen's wall-clock and compare it to an overnight window -- letting the user decide
+    // fast vs complete vs another machine BEFORE paying for the (long) refine. Printed for every adaptive
+    // run; --gen-mulligan recommend STOPS here (no refine, no profile) so the projection is a cheap scout.
+    if (adaptive && !continuous)
+    {
+        const double floor_time = gen_elapsed();
+        const double rate = floor_time > 0.01 ? static_cast<double>(rollouts_done) / floor_time : 0.0;
+        long long total_cells = 0;
+        for (int H = HAND; H >= min_size; --H)
+            { total_cells += static_cast<long long>(tables[HAND - H].comps.size()) * 2; }
+        const double overnight_h = []{ const char* s = std::getenv("MTG_KEEP_OVERNIGHT_H");
+                                       return (s && *s) ? std::max(0.1, std::atof(s)) : 8.0; }();
+        if (rate > 0.0 && total_cells > 0)
+        {
+            // COMPLETE = full bottoming at R40 => ~uniform cap: total_cells x 40 rollouts (upper bound; the
+            // adaptive KEEP table trims it somewhat). FAST = adaptive bottoming at R30 ~= half of that
+            // (R30/R40 x ~0.65 bottoming saving, per the recipe calibration) -- a rough guide, not a promise.
+            const double complete_h = (static_cast<double>(total_cells) * 40.0 / rate) / 3600.0;
+            const double fast_h     = complete_h * 0.5;
+            os << "=== GEN-TIME PROJECTION (from floor pass) ===\n";
+            os << "  floor pass: " << static_cast<long long>(floor_time) << "s @ "
+               << static_cast<long long>(rate) << " rollouts/s;  " << total_cells << " cells (both pd)\n";
+            os << std::fixed << std::setprecision(1);
+            os << "  projected COMPLETE (full bottom, R40): ~" << complete_h
+               << " h   (upper bound; adaptive keep trims it)\n";
+            os << "  projected FAST     (adaptive,   R30): ~" << fast_h << " h   (rough guide)\n";
+            os << "  overnight target: ~" << overnight_h << " h  ->  ";
+            if (complete_h <= overnight_h)
+                os << "COMPLETE fits an overnight run.\n";
+            else if (fast_h <= overnight_h)
+                os << "complete is ~" << (complete_h / overnight_h) << "x over; FAST (~" << fast_h
+                   << "h) fits overnight -- or run complete on another machine / over a weekend.\n";
+            else
+                os << "BOTH exceed overnight (~" << (fast_h / overnight_h)
+                   << "x even for fast); use another machine or a weekend run.\n";
+            os.unsetf(std::ios::floatfield);
+            os << "=============================================\n" << std::flush;
+        }
+        // Always-on degenerate-cell diagnostic. After the floor pass this reflects at least one rollout of
+        // EVERY cell, so a pathological combo cell (a multi-second/minute rollout -- e.g. Lotus Bloom +
+        // rituals enumeration) surfaces HERE, before the long refine, so you can stop and optimize it
+        // instead of discovering it hours in. MTG_KEEP_REPLAY="<hand>" re-runs one such rollout in isolation.
+        {
+            std::lock_guard<std::mutex> lk(slow_mtx);
+            if (!slow_top.empty())
+            {
+                os << "  slowest rollouts so far (top " << slow_top.size() << "; watch for degenerate cells):\n";
+                os << std::fixed << std::setprecision(0);
+                for (const SlowRec& s : slow_top)
+                    os << "    " << s.ms << "ms  size" << s.H << " " << (s.pd ? "play" : "draw")
+                       << "  " << s.hand << "\n";
+                os.unsetf(std::ios::floatfield);
+                os << std::flush;
+            }
+        }
+        if (cfg.recommend_only)
+        {
+            // Persist the COMPLETE R=1 floor pass as a poolable "probe chunk" next to the eventual gen's
+            // out_raw, so a later --gen-mulligan complete/fast can reuse it as its r=0 slice (byte-identical;
+            // see use_probe_carry). We reach here only AFTER the whole floor pass, so every cell has its one
+            // rollout -> the chunk is floor-complete by construction.
+            if (!cfg.out_raw.empty())
+            {
+                const std::string probe_path = cfg.out_raw + ".probe";
+                if (write_raw_atomic(probe_path, /*as_probe=*/true))
+                { os << "probe chunk (R=1, every cell) written to " << probe_path
+                     << " -- a later 'complete'/'fast' gen will reuse it (skips r=0/cell).\n"; }
+                else
+                { os << "WARNING: failed to write probe chunk " << probe_path << "\n"; }
+            }
+            os << "recommend mode: stopping after the floor pass (no refine, no profile written).\n"
+               << std::flush;
+            return;
+        }
+    }
+
     // Save the (expensive) floor investment immediately -- refine waves can be long, so don't wait for
     // the first wave boundary. A complete-floor sidecar is already a valid (low-R) recoverable state.
     if (adaptive && !continuous) { maybe_checkpoint(); }
@@ -2335,7 +2543,23 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // ---- 6. Serialize the keep policy (bucket map + per-composition keep decisions) --------------
     // Built via the shared BuildPolicyFromTables so the in-run policy is byte-identical to what the
     // offline merge tool (RunKeepMerge) produces from the same pooled V's.
-    if (!cfg.out_profile.empty())
+    if (!cfg.out_profile.empty() && cfg.rollouts < kMinProfileR)
+    {
+        // Hard floor: a run whose cap R is below the minimum usable precision may NOT write a runtime
+        // profile -- only a poolable chunk. This makes a low-R profile structurally impossible (a stray
+        // low MTG_KEEP_ROLLOUTS can at worst emit a chunk, never ship a bad policy).
+        os << "\nREFUSING to write a runtime profile at R=" << cfg.rollouts
+           << " (< min usable R=" << kMinProfileR << ") -- too low-quality to ship.\n";
+        if (!cfg.out_raw.empty())
+        { os << "  A poolable raw chunk is written to " << cfg.out_raw
+             << " instead; merge chunks (MTG_KEEP_MERGE) up to R>=" << kMinProfileR
+             << " to build a profile.\n"; }
+        else
+        { os << "  ERROR: no out_raw chunk target set either -- nothing usable produced. Re-run with an\n"
+                "  out_raw target (so the rollouts become a poolable chunk) and merge, or raise R>="
+             << kMinProfileR << ".\n"; }
+    }
+    else if (!cfg.out_profile.empty())
     {
         std::vector<std::vector<std::string>> bmembers;
         for (int b = 0; b < K; ++b) { bmembers.push_back(eq.classes[b].members); }
@@ -2572,6 +2796,339 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     for (const Card& c : deck.mainboard)
     { auto it = bucket_of.find(c.m_name.str()); if (it != bucket_of.end()) { count[it->second]++; } }
 
+    // ==== OFFLINE ADAPTIVE-BOTTOM REGRET SIMULATOR (MTG_KEEP_SIM_ADAPTIVE_BOTTOM) =================
+    // Answers "what would adaptive bottoming have COST vs full bottoming?" from ONE full-bottom raw,
+    // with NO rollouts -- the cheap alternative to the expensive real adaptive_bottom generation.
+    //
+    // Why the uniform SYNTH_BOTTOM_R knob CANNOT answer this (measured, slivers): real adaptive
+    // bottoming REFINES the decision-relevant sub-cells (the per-hand bottoming argmin) toward the cap
+    // while leaving clear cells at the floor -- so a uniform downsample of every sub-cell to one R
+    // (which corrupts the true argmin with noise) massively over-states the cost (botR2 +0.236 vs the
+    // real +0.0057). This simulator instead REPLICATES the gen's variance-driven refinement: it floors
+    // the sub-tables, runs the SAME argmin-driven refine waves (with Gaussian draws from the stored
+    // mean+variance instead of real rollouts), excludes never-refined floor cells from the final
+    // bottoming argmin (the gen's bottom_floor filter), then SCORES the resulting policy against the
+    // TRUE full-R means. The regret is D(adaptive policy, scored on truth) - D(full policy) >= 0.
+    //
+    // The structural cost it captures: a genuinely-best sub-cell whose unlucky-HIGH floor draw keeps it
+    // from ever being the current argmin is never refined, so the bottom_floor filter excludes it and a
+    // slightly-worse refined cell is kept -- a winner's-curse-of-omission that only the floor-noise
+    // realization drives (hence the Monte-Carlo trials). Refined cells are credited their TRUE mean (the
+    // full raw's mean IS the best estimate of a refined cell's value), which isolates this structural
+    // regret from the second-order R-cap resampling noise the two independent gens would also differ by.
+    //
+    // Reproduces the in-game A/B delta cheaply. VALIDATION: slivers full-bottom raw -> +~0.006 (in-game
+    // was +0.0057). Knobs: MTG_KEEP_SIM_FLOOR (sub-table floor R, default 2 = the project's adaptive_
+    // bottom floor), MTG_KEEP_SIM_TRIALS (Monte-Carlo floor-noise realizations, default 128),
+    // MTG_KEEP_SIM_FLIP_EPS (refine stop gate, default 0.02 = cfg.flip_eps), MTG_KEEP_SIM_SEED. Reads the
+    // pooled true means+variances directly; writes nothing (a measurement) -> returns without a profile.
+    if (const char* sab = std::getenv("MTG_KEEP_SIM_ADAPTIVE_BOTTOM"); sab && *sab && std::string(sab) != "0")
+    {
+        if (!have_sumsq)
+        { os << "SIM-ADAPT-BOTTOM: pooled sidecars lack per-cell sumsq (need it to model floor-R noise) "
+                "-- regenerate/merge with sumsq. Nothing done.\n"; return; }
+        const long long floor_r = []{ const char* s = std::getenv("MTG_KEEP_SIM_FLOOR");
+            return (s && *s) ? std::max<long long>(1, std::atoll(s)) : 2LL; }();
+        const int trials = []{ const char* s = std::getenv("MTG_KEEP_SIM_TRIALS");
+            return (s && *s) ? std::max(1, std::atoi(s)) : 128; }();
+        const double flip_eps = []{ const char* s = std::getenv("MTG_KEEP_SIM_FLIP_EPS");
+            return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+        const uint64_t sim_seed = []{ const char* s = std::getenv("MTG_KEEP_SIM_SEED");
+            return (s && *s) ? std::strtoull(s, nullptr, 10) : 0xADA1B0770DULL; }();
+        // MTG_KEEP_SIM_CAP=k: model a cheaper gen whose sub-tables (both the full baseline AND the
+        // adaptive refined cells) only reach R=k instead of the raw's full R -- so "what would the
+        // adaptive-bottom regret be at R=20/R=30?". 0 (default) => refined cells sit at the true mean
+        // (the R=cap_r validated model). Both arms share the SAME cap draws, so the cap-R sampling noise
+        // cancels and the regret still isolates the floor-exclusion cost -- now judged against cap-R-noisy
+        // alternatives. The keep table (size-7) is held at truth in both arms (it cancels); its own R cost
+        // is the SEPARATE SYNTH_R sweep, not this.
+        const long long sim_cap = []{ const char* s = std::getenv("MTG_KEEP_SIM_CAP");
+            return (s && *s) ? std::max<long long>(0, std::atoll(s)) : 0LL; }();   // <=0 => truth (raw R)
+        const double se_prior = 8.0;                 // matches ExhaustiveKeepConfig::se_prior / the gate
+        const double SQRT2    = 1.4142135623730951;
+        const int    K        = static_cast<int>(count.size());
+        const int    M        = max_mull;
+        const int    minH     = std::max(1, HAND - M);
+        const int    NT       = M + 1;               // table index m in [0..M] holds hand size 7-m
+
+        // Deterministic standard-normal per (trial, table m, cell comp, pd) -- splitmix64 + Box-Muller.
+        auto sim_normal = [&](int trial, int m, const std::vector<int>& comp, int pd) -> double {
+            uint64_t x = sim_seed ^ (0x9E3779B97F4A7C15ULL
+                                     * static_cast<uint64_t>((trial * 64 + m) * 2 + pd + 1));
+            for (int v : comp) { x ^= static_cast<uint64_t>(v + 1) * 0xD1B54A32D192ED03ULL;
+                                 x = (x ^ (x >> 29)) * 0xBF58476D1CE4E5B9ULL; x ^= x >> 32; }
+            auto u01 = [&]() -> double { x += 0x9E3779B97F4A7C15ULL; uint64_t z = x;
+                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+                z ^= z >> 31; return static_cast<double>(z >> 11) * (1.0 / 9007199254740992.0); };
+            const double u1 = std::max(1e-12, u01()), u2 = u01();
+            return std::sqrt(-2.0 * std::log(u1)) * std::cos(6.283185307179586 * u2);
+        };
+        // Independent stream for the cap-R draw (a refined cell / the full baseline at R=cap), so it does
+        // not correlate with the floor draw of the same cell. Distinct seed salt.
+        auto sim_normal_cap = [&](int trial, int m, const std::vector<int>& comp, int pd) -> double {
+            uint64_t x = (sim_seed ^ 0xC0FFEE1234567890ULL)
+                       ^ (0x9E3779B97F4A7C15ULL * static_cast<uint64_t>((trial * 64 + m) * 2 + pd + 1));
+            for (int v : comp) { x ^= static_cast<uint64_t>(v + 1) * 0x2545F4914F6CDD1DULL;
+                                 x = (x ^ (x >> 29)) * 0xBF58476D1CE4E5B9ULL; x ^= x >> 32; }
+            auto u01 = [&]() -> double { x += 0x9E3779B97F4A7C15ULL; uint64_t z = x;
+                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+                z ^= z >> 31; return static_cast<double>(z >> 11) * (1.0 / 9007199254740992.0); };
+            const double u1 = std::max(1e-12, u01()), u2 = u01();
+            return std::sqrt(-2.0 * std::log(u1)) * std::cos(6.283185307179586 * u2);
+        };
+
+        // ---- true per-size tables from the pooled sums (mu=mean, vc=per-rollout var, cnt) ----
+        std::vector<std::vector<std::vector<int>>>          comps(NT);
+        std::vector<std::map<std::vector<int>, int>>        cidx(NT);
+        std::vector<std::vector<std::array<double, 2>>>     MU(NT), VC(NT);
+        std::vector<std::vector<std::array<long long, 2>>>  CNT(NT);
+        std::vector<std::array<double, 2>>                  vg(NT, { 0.0, 0.0 });   // pooled per-table var
+        long long cap_r = 0;
+        bool tables_ok = true;
+        for (int H = HAND; H >= minH; --H)
+        {
+            const int m = HAND - H;                  // table m holds size H = 7-m
+            auto pit = pooled.find(H);
+            if (pit == pooled.end()) { os << "SIM-ADAPT-BOTTOM: missing pooled size " << H << "\n"; tables_ok = false; break; }
+            std::array<double, 2> vgacc = { 0.0, 0.0 }; std::array<long long, 2> vgn = { 0, 0 };
+            for (const auto& kv : pit->second)
+            {
+                const int i = static_cast<int>(comps[m].size());
+                comps[m].push_back(kv.first); cidx[m][kv.first] = i;
+                std::array<double, 2> mu = { 0.0, 0.0 }, vc = { 0.0, 0.0 };
+                std::array<long long, 2> cn = { kv.second.cnt[0], kv.second.cnt[1] };
+                for (int pd = 0; pd < 2; ++pd)
+                {
+                    const long long c = kv.second.cnt[pd];
+                    if (c > 0) { mu[pd] = kv.second.sum[pd] / c;
+                                 vc[pd] = std::max(0.0, kv.second.sumsq[pd] / c - mu[pd] * mu[pd]); }
+                    if (m > 0) { cap_r = std::max(cap_r, c); }        // sub-tables carry the full (cap) R
+                    if (c > 1) { vgacc[pd] += vc[pd]; ++vgn[pd]; }
+                }
+                MU[m].push_back(mu); VC[m].push_back(vc); CNT[m].push_back(cn);
+            }
+            for (int pd = 0; pd < 2; ++pd) { if (vgn[pd] > 0) { vg[m][pd] = vgacc[pd] / vgn[pd]; } }
+        }
+        if (!tables_ok) { return; }
+
+        // Hypergeometric size-7 hand weights.
+        const long long denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
+        std::vector<double> P(comps[0].size());
+        for (std::size_t i = 0; i < comps[0].size(); ++i)
+        { long long num = 1; for (int b = 0; b < K; ++b) { num *= Comb(count[b], comps[0][i][b]); }
+          P[i] = static_cast<double>(num) / static_cast<double>(denom); }
+
+        // Precompute, per size-7 hand i and mull m, the sub-cell indices of its (7-m)-subcompositions
+        // (pure combinatorics -- shared across trials/pd). m=0 -> the hand itself.
+        std::vector<std::vector<std::vector<int>>> subidx(NT, std::vector<std::vector<int>>(comps[0].size()));
+        for (std::size_t i = 0; i < comps[0].size(); ++i)
+            for (int m = 0; m <= M; ++m)
+            {
+                std::vector<std::vector<int>> subs; std::vector<int> cur(K, 0);
+                EnumComps(0, HAND - m, cur, comps[0][i], subs);
+                for (const std::vector<int>& s : subs)
+                { auto it = cidx[m].find(s); if (it != cidx[m].end()) { subidx[m][i].push_back(it->second); } }
+            }
+
+        // Floor-noise SD per sub-cell/pd: sd = sqrt(vs/floor_r), vs = the cell's per-rollout variance
+        // shrunk toward the table's pooled variance with se_prior (matches gate_se / the synth path).
+        // capSD = the sub-cell SD at R=sim_cap (for the cheaper-gen refined precision); 0 => refined cells
+        // sit at truth (the validated R=cap_r model). Same shrunk variance vs the floor uses.
+        std::vector<std::vector<std::array<double, 2>>> floorSD(NT), capSD(NT);
+        for (int m = 1; m <= M; ++m)
+        {
+            floorSD[m].assign(comps[m].size(), { 0.0, 0.0 });
+            capSD[m].assign(comps[m].size(), { 0.0, 0.0 });
+            for (std::size_t c = 0; c < comps[m].size(); ++c)
+                for (int pd = 0; pd < 2; ++pd)
+                { const long long cn = CNT[m][c][pd];
+                  const double vs = (cn * VC[m][c][pd] + se_prior * vg[m][pd]) / (cn + se_prior);
+                  floorSD[m][c][pd] = std::sqrt(std::max(0.0, vs) / static_cast<double>(floor_r));
+                  capSD[m][c][pd]   = (sim_cap > 0)
+                      ? std::sqrt(std::max(0.0, vs) / static_cast<double>(sim_cap)) : 0.0; }
+        }
+
+        using Tab = std::vector<std::vector<std::array<double, 2>>>;
+        auto minsub = [&](const Tab& TV, int i, int m, int pd) -> double
+        { double best = 1e9; for (int c : subidx[m][i]) { best = std::min(best, TV[m][c][pd]); } return best; };
+        // argmin subcomp of hand i at mull m; refined_only excludes floor cells (the bottom_floor filter),
+        // falling back to the unfiltered argmin if none are refined (matches best_sub).
+        auto argsub = [&](const Tab& TV, int i, int m, int pd, bool refined_only,
+                          const std::vector<std::vector<char>>* refd) -> int
+        {
+            double best = 1e9, best_any = 1e9; int arg = -1, arg_any = -1;
+            for (int c : subidx[m][i])
+            { const double v = TV[m][c][pd];
+              if (v < best_any) { best_any = v; arg_any = c; }
+              if ((!refined_only || (*refd)[m][c]) && v < best) { best = v; arg = c; } }
+            return (arg >= 0) ? arg : arg_any;
+        };
+        auto compute_Dopt = [&](const Tab& TV, int pd) -> std::vector<double>
+        {
+            std::vector<double> D(M + 1, 0.0);
+            for (std::size_t i = 0; i < comps[0].size(); ++i) { D[M] += P[i] * minsub(TV, i, M, pd); }
+            for (int m = M - 1; m >= 0; --m)
+                for (std::size_t i = 0; i < comps[0].size(); ++i)
+                { D[m] += P[i] * std::min(minsub(TV, i, m, pd), D[m + 1]); }
+            return D;
+        };
+        // Expected TRUE win-turn of a bottoming policy whose DECISIONS use table DV: keep flag from the DV
+        // keep_val vs the DV Dopt (unfiltered, as the gen), bottom target from the argmin over DV
+        // (refined-only when a mask is given -- the bottom_floor filter), VALUE credited = the true mean of
+        // the kept sub-cell. refd=nullptr => full bottoming (every cell eligible).
+        auto score = [&](const Tab& DV, const std::vector<std::vector<char>>* refd, int pd) -> double
+        {
+            const bool ro = (refd != nullptr);
+            const std::vector<double> D = compute_Dopt(DV, pd);
+            std::vector<double> Dsco(M + 1, 0.0);
+            for (std::size_t i = 0; i < comps[0].size(); ++i)
+            { const int tgt = argsub(DV, i, M, pd, ro, refd); Dsco[M] += P[i] * MU[M][tgt][pd]; }
+            for (int m = M - 1; m >= 0; --m)
+                for (std::size_t i = 0; i < comps[0].size(); ++i)
+                { const bool keep = (minsub(DV, i, m, pd) <= D[m + 1]);
+                  if (keep) { const int tgt = argsub(DV, i, m, pd, ro, refd); Dsco[m] += P[i] * MU[m][tgt][pd]; }
+                  else      { Dsco[m] += P[i] * Dsco[m + 1]; } }
+            return Dsco[0];
+        };
+
+        // Full-bottom baseline at truth (sim_cap==0): the adopted full profile's decisions, trial-invariant.
+        std::array<double, 2> Dfull_truth = { score(MU, nullptr, 0), score(MU, nullptr, 1) };
+
+        // Rollout-accounting (performance impact): full bottoming samples every sub-cell side to the cap;
+        // adaptive floors the rest and refines each marked cell only until its decision is flip_eps-
+        // confident (NOT to the cap -- that is the ~half of the saving the binary model misses). Per refined
+        // sub-cell we model that stopping R: a genuine keeper (mean < the mull threshold Dopt[m+1]) or a
+        // terminal (m=max_mull) cell drives to the cap; a marginal cell (mean > threshold) stops at the R
+        // where 0.5*erfc(d/(se(R)*sqrt2)) <= flip_eps, i.e. R = 2*q^2*vs/d^2 (q=erfcinv(2*flip_eps)),
+        // clamped to [floor, cap]. Calibrated: reproduces the real slivers ~52% sub-table saving. (Size-7
+        // keep rollouts are identical in both arms -> a fixed denominator term.)
+        const std::array<std::vector<double>, 2> Dopt_truth = { compute_Dopt(MU, 0), compute_Dopt(MU, 1) };
+        const double q_eps = [&]{ double lo = 0.0, hi = 10.0;      // erfcinv(2*flip_eps) via bisection
+            for (int it = 0; it < 80; ++it) { const double mid = 0.5 * (lo + hi);
+                if (std::erfc(mid) > 2.0 * flip_eps) { lo = mid; } else { hi = mid; } }
+            return 0.5 * (lo + hi); }();
+        long long full_sub_rolls = 0, keep7_rolls = 0;
+        const long long acct_cap = (sim_cap > 0) ? sim_cap : cap_r;
+        for (int m = 1; m <= M; ++m) { full_sub_rolls += 2LL * static_cast<long long>(comps[m].size()) * acct_cap; }
+        for (std::size_t i = 0; i < comps[0].size(); ++i) { keep7_rolls += CNT[0][i][0] + CNT[0][i][1]; }
+        std::vector<std::vector<std::array<double, 2>>> Rstop(NT);   // modelled stopping R per refined cell
+        for (int m = 1; m <= M; ++m)
+        {
+            Rstop[m].assign(comps[m].size(), { 0.0, 0.0 });
+            for (std::size_t c = 0; c < comps[m].size(); ++c)
+                for (int pd = 0; pd < 2; ++pd)
+                {
+                    double r = static_cast<double>(acct_cap);
+                    if (m < M)
+                    {
+                        const double d = MU[m][c][pd] - Dopt_truth[pd][m + 1];   // margin vs the mull threshold
+                        if (d > 0.0)                                             // marginal -> stops early
+                        { const long long cn = CNT[m][c][pd];
+                          const double vs = (cn * VC[m][c][pd] + se_prior * vg[m][pd]) / (cn + se_prior);
+                          r = std::min<double>(acct_cap, std::max<double>(floor_r, 2.0 * q_eps * q_eps * vs / (d * d))); }
+                    }
+                    Rstop[m][c][pd] = r;
+                }
+        }
+
+        // Monte-Carlo over floor-noise realizations.
+        std::array<double, 2> rsum = { 0.0, 0.0 }, rsq = { 0.0, 0.0 };
+        // Two rollout brackets for the adaptive arm: CAP (every refined cell driven all the way to the cap
+        // -- conservative, LEAST saving) and RSTOP (refined cells stop at the modelled flip_eps-confident R
+        // -- optimistic, MOST saving). Reality lands between (real slivers 52% sits mid-bracket).
+        // NOTE: the full-bottom-at-cap absolute cost F(cap)-F(40) is deliberately NOT reported. Unlike the
+        // adaptive-vs-full REGRET (a difference in which the shared cap-R sampling noise cancels), F(cap)
+        // alone is an argmin over ALL sub-cells at a uniform lower R -- the same uniform-downsample argmin
+        // winner's curse that SYNTH_BOTTOM_R suffers, which overstates the cost 3-4x vs in game (offline
+        // F(30)-F(40) ~ +0.04t vs the in-game SYNTH_R marginal ~ +0.012t). Use the in-game SYNTH_R sweep for
+        // the lower-R (full bottoming) cost; use THIS sim only for the adaptive-vs-full increment.
+        double bsum = 0.0, bsq = 0.0, adapt_cap_sum = 0.0, adapt_rstop_sum = 0.0;
+        for (int t = 0; t < trials; ++t)
+        {
+            std::array<double, 2> regret = { 0.0, 0.0 };
+            for (int pd = 0; pd < 2; ++pd)
+            {
+                // Cap-precision estimate for every sub-cell (SHARED by the full baseline and adaptive's
+                // refined cells so the cap-R sampling noise cancels in the regret). sim_cap==0 => truth.
+                Tab CAPN = MU;
+                for (int m = 1; m <= M; ++m)
+                    for (std::size_t c = 0; c < comps[m].size(); ++c)
+                        CAPN[m][c][pd] = MU[m][c][pd]
+                            + capSD[m][c][pd] * (sim_cap > 0 ? sim_normal_cap(t, m, comps[m][c], pd) : 0.0);
+                const double Dfull_pd = (sim_cap > 0) ? score(CAPN, nullptr, pd) : Dfull_truth[pd];
+
+                Tab EST = MU;                                        // size-7 (m=0) stays at truth
+                std::vector<std::vector<char>> refined(NT);
+                for (int m = 0; m <= M; ++m) { refined[m].assign(comps[m].size(), m == 0 ? 1 : 0); }
+                for (int m = 1; m <= M; ++m)                          // floor the sub-tables
+                    for (std::size_t c = 0; c < comps[m].size(); ++c)
+                        EST[m][c][pd] = MU[m][c][pd] + floorSD[m][c][pd] * sim_normal(t, m, comps[m][c], pd);
+                // Refine waves: mark each hand's current (unfiltered) argmin sub-cell and drive it to the
+                // cap, unless the hand is a confident mulligan at m -- exactly the gen's adaptive_bottom
+                // mark loop, with Gaussian draws standing in for rollouts. A refined cell takes its
+                // cap-precision estimate CAPN (= truth when sim_cap==0).
+                for (;;)
+                {
+                    const std::vector<double> Dcur = compute_Dopt(EST, pd);
+                    std::set<std::pair<int, int>> mark;
+                    for (std::size_t i = 0; i < comps[0].size(); ++i)
+                        for (int m = 1; m <= M; ++m)
+                        {
+                            const int arg = argsub(EST, i, m, pd, false, nullptr);
+                            if (arg < 0 || refined[m][arg]) { continue; }     // absent, or already at cap
+                            if (m == M) { mark.insert({ m, arg }); continue; }
+                            const double kv = EST[m][arg][pd], thr = Dcur[m + 1], se = floorSD[m][arg][pd];
+                            const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
+                                                         : (kv == thr ? 0.5 : 0.0);
+                            const bool confident_mull = (kv - thr > 0.0) && (flip <= flip_eps);
+                            if (!confident_mull) { mark.insert({ m, arg }); }
+                        }
+                    if (mark.empty()) { break; }
+                    for (const auto& mk : mark)
+                    { refined[mk.first][mk.second] = 1; EST[mk.first][mk.second][pd] = CAPN[mk.first][mk.second][pd]; }
+                }
+                regret[pd] = score(EST, &refined, pd) - Dfull_pd;
+                for (int m = 1; m <= M; ++m)                          // rollout accounting (both brackets)
+                    for (std::size_t c = 0; c < comps[m].size(); ++c)
+                    { if (refined[m][c]) { adapt_cap_sum += acct_cap; adapt_rstop_sum += Rstop[m][c][pd]; }
+                      else               { adapt_cap_sum += floor_r;  adapt_rstop_sum += floor_r; } }
+            }
+            for (int pd = 0; pd < 2; ++pd) { rsum[pd] += regret[pd]; rsq[pd] += regret[pd] * regret[pd]; }
+            const double bl = 0.5 * (regret[0] + regret[1]);
+            bsum += bl; bsq += bl * bl;
+        }
+
+        auto se_of = [&](double sum, double sq) -> double
+        { const double mean = sum / trials; const double var = std::max(0.0, sq / trials - mean * mean);
+          return std::sqrt(var / trials); };
+        const double adapt_cap   = adapt_cap_sum   / trials;   // avg over trials, both pd summed
+        const double adapt_rstop = adapt_rstop_sum / trials;
+        const double total_full  = static_cast<double>(full_sub_rolls + keep7_rolls);
+        auto save_sub   = [&](double a){ return full_sub_rolls > 0 ? 100.0 * (1.0 - a / full_sub_rolls) : 0.0; };
+        auto save_total = [&](double a){ return total_full > 0 ? 100.0 * (1.0 - (a + keep7_rolls) / total_full) : 0.0; };
+        os << "\n=== ADAPTIVE-BOTTOM REGRET SIM (offline, from full-bottom raw; no rollouts) ===\n";
+        os << "floor R=" << floor_r << "  cap R=" << acct_cap << (sim_cap > 0 ? " (SIM_CAP)" : " (raw)")
+           << "  trials=" << trials << "  flip_eps=" << flip_eps << "  se_prior=" << se_prior
+           << "  size7 hands=" << comps[0].size() << "\n";
+        os << std::fixed << std::setprecision(4);
+        for (int pd = 0; pd < 2; ++pd)
+            os << (pd ? "  on-the-play " : "  on-the-draw ")
+               << "regret=+" << (rsum[pd] / trials) << " +/- " << se_of(rsum[pd], rsq[pd]) << "t\n";
+        os << "  BLEND (0.5 draw + 0.5 play; goldfish flips on_the_play ~50/50): +"
+           << (bsum / trials) << " +/- " << se_of(bsum, bsq) << "t"
+           << "   [cost of adaptive vs full bottoming at R=" << acct_cap << "]\n";
+        os << std::setprecision(1);
+        os << "  PERF: adaptive bottoming saves " << save_sub(adapt_rstop) << "-" << save_sub(adapt_cap)
+           << "% of the full-bottom SUB-TABLE rollouts (=> " << save_total(adapt_rstop) << "-"
+           << save_total(adapt_cap) << "% off TOTAL gen; sub-tables are "
+           << (100.0 * full_sub_rolls / total_full) << "% of it). Real slivers landed at ~52% sub / ~33% "
+              "total -- mid-bracket.\n";
+        os << std::setprecision(4);
+        os << "  (slivers in-game reference at R=40: +0.0057. Keep-table R cost is separate -- SYNTH_R.)\n";
+        os.unsetf(std::ios::floatfield);
+        return;
+    }
+
     // ---- Synthetic-R reconstruction (MTG_KEEP_SYNTH_R / MTG_KEEP_SYNTH_BOTTOM_R) ----------------
     // Reconstruct the policy as if a table had been sampled to a LOWER R, from the stored per-cell
     // mean+variance -- so "how much R does this deck actually need?" and "adaptive vs full bottoming"
@@ -2589,6 +3146,11 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     // default (both unset) -> byte-identical to the plain merge.
     const int      synth_r        = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_R");        return (s&&*s)?std::atoi(s):0; }();
     const int      synth_bottom_r = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_BOTTOM_R"); return (s&&*s)?std::atoi(s):0; }();
+    // KEEP_ONLY: SYNTH_R lowers ONLY the size-7 keep table; the bottoming sub-tables stay at pooled truth
+    // (full R). This is the FAITHFUL "full bottoming at lower keep-R" -- resampling the sub-tables to a
+    // lower R (the default) corrupts the bottoming argmin with the uniform-downsample winner's curse, which
+    // over-penalizes full bottoming (see the SYNTH_BOTTOM_R note). Use with SYNTH_R for a full@Rk recipe.
+    const bool     synth_keep_only = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_KEEP_ONLY"); return s&&*s&&std::string(s)!="0"; }();
     const uint64_t synth_seed     = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_SEED");     return (s&&*s)?std::strtoull(s,nullptr,10):0x5eed1234ULL; }();
     const bool     synth_req = (synth_r > 0 || synth_bottom_r > 0);
     if (synth_req && !have_sumsq)
@@ -2616,9 +3178,11 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         auto pit = pooled.find(H);
         if (pit != pooled.end())
         {
-            // Target synth R for THIS table (0 => use the pooled mean as-is, no resample).
+            // Target synth R for THIS table (0 => use the pooled mean as-is, no resample). KEEP_ONLY holds
+            // the sub-tables at truth (kR=0) so only the keep table is lowered.
             const int kR = do_synth ? ((H == HAND) ? synth_r
-                                                   : (synth_bottom_r > 0 ? synth_bottom_r : synth_r)) : 0;
+                                                   : (synth_keep_only ? 0
+                                                      : (synth_bottom_r > 0 ? synth_bottom_r : synth_r))) : 0;
             std::array<double, 2>    vgH  = { 0.0, 0.0 }; std::array<long long, 2> ngH = { 0, 0 };
             std::array<double, 2>    vmin = { 1e30, 1e30 }, vmax = { -1e30, -1e30 };
             if (kR > 0)   // precompute shrink target + mean envelope for this size/pd
@@ -2679,10 +3243,148 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
            << " x" << count[b] << "\n";
     }
 
+    // ---- Playable ADAPTIVE-BOTTOM reconstruction (MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM) ----------------
+    // Produce a PLAYABLE adaptive-bottom profile from the full-bottom raw with NO real adaptive_bottom
+    // gen: floor the bottoming sub-tables and replay ONE realization of the gen's argmin-driven
+    // refinement -- refined cells resolve to their TRUE mean, unrefined cells stay at the noisy floor and
+    // are EXCLUDED from the bottoming argmin (the bottom_floor filter). The keep table (size-7) is left
+    // as-is: truth, or the SYNTH_R-resampled lower-R keep if MTG_KEEP_SYNTH_R is also set (so a FAST
+    // recipe = low-R keep + adaptive bottoming reconstructs in one pass). Unlike the uniform
+    // SYNTH_BOTTOM_R (which corrupts the argmin with noise and mis-plays), this reproduces the SELECTIVE
+    // refinement the real gen does -> validated to PLAY like a real adaptive gen (slivers in-game).
+    //   floor = MTG_KEEP_SYNTH_ABOT_FLOOR (default 2); cap for refined cells = SYNTH_R if set else raw R;
+    //   flip_eps = MTG_KEEP_SYNTH_ABOT_FLIP_EPS (default 0.02); one deterministic realization (ABOT_SEED).
+    long long recon_bottom_floor = -1;
+    if (const char* sab = std::getenv("MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM"); sab && *sab && std::string(sab) != "0")
+    {
+        if (!have_sumsq) { os << "SYNTH-ABOT: pooled sidecars lack per-cell sumsq -- IGNORING (no profile change)\n"; }
+        else
+        {
+            const long long ab_floor = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_FLOOR");
+                return (s && *s) ? std::max<long long>(1, std::atoll(s)) : 2LL; }();
+            const double ab_eps = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_FLIP_EPS");
+                return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
+            const uint64_t ab_seed = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_SEED");
+                return (s && *s) ? std::strtoull(s, nullptr, 10) : 0xABE770DDULL; }();
+            const long long ab_cap = (synth_r > 0) ? synth_r : std::max<long long>(1, effective_R);
+            const double se_prior = 8.0, SQRT2 = 1.4142135623730951;
+            const int K = static_cast<int>(count.size()), M = max_mull;
+            // A refined cell resolves to its TRUE mean (default). Adding the cap-R sampling noise a real
+            // gen leaves (MTG_KEEP_SYNTH_ABOT_CAPNOISE=1) re-introduces an argmin winner's curse over the
+            // refined cells that badly overstates the cost (slivers +0.019t vs the real +0.0057) -- the
+            // exact-truth refine is markedly closer, so it is the default.
+            const bool ab_capnoise = []{ const char* s = std::getenv("MTG_KEEP_SYNTH_ABOT_CAPNOISE");
+                return s && *s && std::string(s) != "0"; }();
+            auto mknorm = [&](uint64_t salt, const std::vector<int>& comp, int H, int pd) -> double {
+                uint64_t x = (ab_seed ^ salt) ^ (0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(H * 2 + pd + 1));
+                for (int v : comp) { x ^= static_cast<uint64_t>(v + 1) * 0xD1B54A32D192ED03ULL;
+                                     x = (x ^ (x >> 29)) * 0xBF58476D1CE4E5B9ULL; x ^= x >> 32; }
+                auto u01 = [&]() -> double { x += 0x9E3779B97F4A7C15ULL; uint64_t z = x;
+                    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+                    z ^= z >> 31; return static_cast<double>(z >> 11) * (1.0 / 9007199254740992.0); };
+                const double u1 = std::max(1e-12, u01()), u2 = u01();
+                return std::sqrt(-2.0 * std::log(u1)) * std::cos(6.283185307179586 * u2); };
+            auto abnorm     = [&](const std::vector<int>& c, int H, int pd){ return mknorm(0, c, H, pd); };
+            auto abnorm_cap = [&](const std::vector<int>& c, int H, int pd){ return mknorm(0xCA9ULL, c, H, pd); };
+
+            // Every cell gets a cnt: size-7 = cap (never a bottom target); sub-cells start at the floor.
+            for (auto& t : tables) { t.cnt.assign(t.comps.size(), { ab_cap, ab_cap }); }
+            std::vector<std::vector<std::array<double, 2>>> MU(tables.size());   // true means (refine target)
+            std::vector<std::vector<std::array<double, 2>>> CAPSD(tables.size()); // refined-cell R=cap SD
+            std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });  // shrink target per sub-table
+            for (int H = HAND - 1; H >= min_size; --H)
+            {
+                const int ti = HAND - H; SizeTable& t = tables[ti]; auto& pl = pooled[H];
+                MU[ti].assign(t.comps.size(), { 0.0, 0.0 });
+                CAPSD[ti].assign(t.comps.size(), { 0.0, 0.0 });
+                std::array<long long, 2> ng = { 0, 0 };
+                for (std::size_t c = 0; c < t.comps.size(); ++c)
+                { const Acc& a = pl[t.comps[c]];
+                  for (int pd = 0; pd < 2; ++pd) { const long long cc = a.cnt[pd];
+                    if (cc > 0) { const double mn = a.sum[pd] / cc; MU[ti][c][pd] = mn;
+                      if (cc > 1) { vg[ti][pd] += std::max(0.0, a.sumsq[pd] / cc - mn * mn); ++ng[pd]; } } } }
+                for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[ti][pd] /= ng[pd]; } }
+                for (std::size_t c = 0; c < t.comps.size(); ++c)   // floor draw off the TRUE mean
+                { const Acc& a = pl[t.comps[c]];
+                  for (int pd = 0; pd < 2; ++pd) { const long long cc = a.cnt[pd]; const double mu = MU[ti][c][pd];
+                    const double vc = cc > 1 ? std::max(0.0, a.sumsq[pd] / cc - mu * mu) : vg[ti][pd];
+                    const double vs = (cc * vc + se_prior * vg[ti][pd]) / (cc + se_prior);
+                    CAPSD[ti][c][pd] = ab_capnoise ? std::sqrt(std::max(0.0, vs) / static_cast<double>(ab_cap)) : 0.0;
+                    t.V[c][pd] = mu + std::sqrt(std::max(0.0, vs) / static_cast<double>(ab_floor))
+                                    * abnorm(t.comps[c], H, pd);
+                    t.cnt[c][pd] = ab_floor; } }
+            }
+
+            // keep_val / argmin / Dopt over the CURRENT tables (mirrors BuildPolicyFromTables' internals).
+            const long long denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
+            const SizeTable& H7 = tables[0];
+            std::vector<double> P(H7.comps.size());
+            for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            { long long num = 1; for (int b = 0; b < K; ++b) { num *= Comb(count[b], H7.comps[i][b]); }
+              P[i] = static_cast<double>(num) / static_cast<double>(denom); }
+            auto argmin_sub = [&](const std::vector<int>& h, int m, int pd) -> int {
+                std::vector<std::vector<int>> subs; std::vector<int> cur(K, 0);
+                EnumComps(0, HAND - m, cur, h, subs);
+                double best = 1e9; int arg = -1; const SizeTable& t = tables[m];
+                for (const std::vector<int>& s : subs) { auto it = t.index.find(s);
+                    if (it != t.index.end() && t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; } }
+                return arg; };
+            auto keep_val = [&](const std::vector<int>& h, int m, int pd) -> double {
+                const int a = argmin_sub(h, m, pd); return a < 0 ? 1e9 : tables[m].V[a][pd]; };
+            auto compute_Dopt = [&](int pd) -> std::vector<double> {
+                std::vector<double> D(M + 1, 0.0);
+                for (std::size_t i = 0; i < H7.comps.size(); ++i) { D[M] += P[i] * keep_val(H7.comps[i], M, pd); }
+                for (int m = M - 1; m >= 0; --m) for (std::size_t i = 0; i < H7.comps.size(); ++i)
+                    { D[m] += P[i] * std::min(keep_val(H7.comps[i], m, pd), D[m + 1]); }
+                return D; };
+            // Refine waves: drive each hand's current argmin sub-cell to its TRUE mean unless the hand is a
+            // confident mulligan at m -- exactly the gen's adaptive_bottom mark loop, one realization.
+            int waves = 0;
+            for (;;)
+            {
+                const std::array<std::vector<double>, 2> Dopt_c = { compute_Dopt(0), compute_Dopt(1) };
+                std::set<std::array<int, 3>> mark;   // (m, cellIdx, pd)
+                for (int pd = 0; pd < 2; ++pd)
+                    for (std::size_t i = 0; i < H7.comps.size(); ++i)
+                        for (int m = 1; m <= M; ++m)
+                        {
+                            const int arg = argmin_sub(H7.comps[i], m, pd);
+                            if (arg < 0 || tables[m].cnt[arg][pd] >= ab_cap) { continue; }   // absent / refined
+                            if (m == M) { mark.insert({ m, arg, pd }); continue; }
+                            const double kv = tables[m].V[arg][pd], thr = Dopt_c[pd][m + 1];
+                            const Acc& a = pooled[HAND - m][tables[m].comps[arg]];
+                            const double vc = a.cnt[pd] > 1
+                                ? std::max(0.0, a.sumsq[pd] / a.cnt[pd] - MU[m][arg][pd] * MU[m][arg][pd]) : vg[m][pd];
+                            const double vs = (ab_floor * vc + se_prior * vg[m][pd]) / (ab_floor + se_prior);
+                            const double se = std::sqrt(std::max(0.0, vs) / static_cast<double>(ab_floor));
+                            const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
+                                                         : (kv == thr ? 0.5 : 0.0);
+                            const bool confident_mull = (kv - thr > 0.0) && (flip <= ab_eps);
+                            if (!confident_mull) { mark.insert({ m, arg, pd }); }
+                        }
+                if (mark.empty()) { break; }
+                for (const std::array<int, 3>& mk : mark)   // refine -> true mean +/- cap-R sampling noise
+                { const int m = mk[0], c = mk[1], pd = mk[2];
+                  tables[m].V[c][pd] = MU[m][c][pd]
+                      + CAPSD[m][c][pd] * abnorm_cap(tables[m].comps[c], HAND - m, pd);
+                  tables[m].cnt[c][pd] = ab_cap; }
+                ++waves;
+            }
+            long long refined = 0, subtot = 0;
+            for (int m = 1; m <= M; ++m) for (std::size_t c = 0; c < tables[m].comps.size(); ++c)
+                for (int pd = 0; pd < 2; ++pd) { ++subtot; if (tables[m].cnt[c][pd] >= ab_cap) { ++refined; } }
+            recon_bottom_floor = ab_floor;
+            os << "SYNTH-ABOT: reconstructed PLAYABLE adaptive-bottom profile (floor=" << ab_floor
+               << " cap=" << ab_cap << " flip_eps=" << ab_eps << " seed=" << ab_seed << " waves=" << waves
+               << "); " << refined << "/" << subtot << " sub-cell sides refined ("
+               << (subtot ? 100 * refined / subtot : 0) << "%), rest floor-excluded from the bottoming argmin\n";
+        }
+    }
+
     std::array<std::vector<double>, 2> Dopt;
     ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
         tables, count, buckets, static_cast<int>(deck.mainboard.size()), max_mull, effective_R,
-        bottoming_enabled, -1, &Dopt);
+        bottoming_enabled, recon_bottom_floor, &Dopt);
     ek.commit = commit;
     os << "merged policy: D_opt(draw)=" << Dopt[0][0] << "  D_opt(play)=" << Dopt[1][0]
        << "  (expected win-turn, optimal keep)\n";
@@ -2864,7 +3566,20 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         }
     }
 
-    if (!out_profile.empty())
+    if (!out_profile.empty() && !do_synth && effective_R < kMinProfileR)
+    {
+        // Same hard floor as the single-run path: a partial pool below the minimum usable R is only a
+        // CHAINABLE chunk, not a shippable profile. Keep merging chunks (the out_raw below re-emits the
+        // pooled table) until the pooled per-cell R crosses the floor, then the profile writes.
+        // EXEMPT do_synth (MTG_KEEP_SYNTH_R): that is the explicit, loudly-announced offline
+        // reconstruction A/B probe (test/keep_reconstruct_ab.sh) whose whole purpose is to build a
+        // deliberately lower-R profile to compare in-game -- experimental, never a silent ship.
+        os << "REFUSING to write merged profile at pooled effective R=" << effective_R
+           << " (< min usable R=" << kMinProfileR << ") -- pool more chunks";
+        if (!out_raw.empty()) { os << "; the pooled chunk -> " << out_raw << " chains for further merges"; }
+        os << ".\n";
+    }
+    else if (!out_profile.empty())
     {
         MulliganProfile out = profile;
         out.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(ek);

@@ -3340,18 +3340,24 @@ ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& sta
         return def.params.spectacle_cost.value();
     }
     ManaCost cost = def.card.m_mana_cost;
-    // Desperate Ritual SPLICE (splice_count+1 copies): scale the RAW cost FIRST, so the reductions
-    // below floor ONCE on the scaled total (lockstep with TurnSolver::EffectiveCost). copies==1 =
-    // identity -> byte-identical for every non-spliced cast.
+    // Splice onto Arcane (splice_count+1 copies): add each spliced copy's SPLICE cost (params.splice_cost;
+    // unset -> the card's own printed cost) to the base's RAW cost FIRST, so the reductions below floor
+    // ONCE on the combined total (lockstep with TurnSolver::EffectiveCost). splice_cost defaulting to the
+    // printed cost makes this an exact (k+1)x multiply -> byte-identical for Desperate Ritual; a differing
+    // splice cost is now priced right. copies==1 = adds nothing -> byte-identical for every non-spliced cast.
     if (copies != 1)
     {
-        cost.generic   *= copies;
-        cost.white     *= copies;
-        cost.blue      *= copies;
-        cost.black     *= copies;
-        cost.red       *= copies;
-        cost.green     *= copies;
-        cost.colorless *= copies;
+        const ManaCost& sc = def.params.splice_cost.has_value()
+                           ? def.params.splice_cost.value()
+                           : def.card.m_mana_cost;
+        const int k = copies - 1;
+        cost.generic   += k * sc.generic;
+        cost.white     += k * sc.white;
+        cost.blue      += k * sc.blue;
+        cost.black     += k * sc.black;
+        cost.red       += k * sc.red;
+        cost.green     += k * sc.green;
+        cost.colorless += k * sc.colorless;
     }
     if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
     {

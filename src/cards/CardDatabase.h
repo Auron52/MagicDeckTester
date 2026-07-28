@@ -551,11 +551,17 @@ struct CardParams
     // per spliced copy and adding their ritual float too -- the spliced copies STAY IN HAND (not cast,
     // not exiled), so they can be spliced again onto another base or hard-cast later the same/a future
     // turn. A search-chosen splice_count k (0..#other splice copies in hand) rides on the Action /
-    // StackEntry; every cast path scales cost AND float by (k+1) in lockstep (see SpliceCopies /
-    // AddSpliceExtraCost / ApplyRitualFloat's splice_mult in SpellEffects.h). Cost/float derive from
-    // the card's own {1}{R} + ritual_floating_mana:3 (+ ritual_float_color) -- no extra cost/float
-    // params. False = not a splice card -> every non-splice deck is byte-identical.
+    // StackEntry; every cast path prices the COST as base + k*splice_cost and the FLOAT as (k+1) times
+    // the per-copy effect, in lockstep (EffectiveCost / RitualFloatAmount). False = not a splice card
+    // -> every non-splice deck is byte-identical.
     bool splice_onto_arcane = false;
+    // Splice cost paid PER spliced copy (CR 702.47: an additional cost added to the base spell as it is
+    // cast). UNSET defaults to the card's own printed mana cost -- exact for Desperate Ritual, whose
+    // splice cost {1}{R} equals its {1}{R} mana cost, so EffectiveCost stays byte-identical. Set this
+    // explicitly for any future splice card whose splice cost DIFFERS from its mana cost (the general
+    // case, e.g. Glacial Ray, Kodama's Reach) so the (k+1)-copy price is correct rather than assuming
+    // splice cost == cast cost.
+    std::optional<ManaCost> splice_cost;
 
     // --- Lotus Bloom (Suspend 3-{0}; {T},Sacrifice: add 3 mana of ONE chosen color) ---
     // Suspend: the number of time counters the card is exiled with by the {0} suspend action (3 for

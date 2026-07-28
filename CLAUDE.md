@@ -36,6 +36,30 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   agent's). This applies to every tool call in this repo: analysis runs, the test
   harness, builds, and ad-hoc scripts.
 
+- **ONLY THE USER cancels a run past ~10 minutes — an agent NEVER does; a question is not a cancel.**
+  The ~10-minute mark is a **detection deadline**. If you spot a *clear* defect in a run
+  within its first ~10 minutes (wrong flags, a methodology bug, obviously-corrupt output),
+  you MAY stop it, fix the cause, and restart right away — little is lost, and that is the
+  right move. **Once a run has been going past ~10 minutes, do NOT `TaskStop`/`kill`/`pkill`/
+  Ctrl-C it for ANY reason** — not to "fix" it, not to restart it more efficiently, and above
+  all not because the user asked a question about it. A question about a run's progress, CPU
+  use, or correctness is NOT a request to cancel it. If you believe a past-10-min run is wrong
+  or inefficient, **let it keep running and surface a question to the user** (flag the problem,
+  propose the fix, note that re-running is their call); the decision to stop it is theirs
+  alone. (This rule exists because agents kill in-flight runs when the user is only inquiring —
+  destroying work the user did not ask to discard.)
+
+- **Long / multi-item runs MUST batch into ONE pooled work queue — never a loop of
+  many small invocations.** Launching a run as many separate per-item commands (e.g.
+  one `mtg` per seed, per profile, or per A/B arm) strands cores on *each* invocation's
+  load-imbalance tail, and any serial single-threaded step between them (a rebuild, a
+  profile reconstruction, a merge) idles the whole machine — cores sit ~half-used. Pool
+  ALL work (every game of every job) into ONE `mtg --batch <manifest>` so the runner
+  keeps cores saturated to a single tail. Do reconstruction/prep for every variant
+  first, then run one batch over all of them (bake per-variant profiles into the
+  manifest's `profile` field rather than re-launching per variant). This is the same
+  lesson as the regression harness's per-mode pooling — one tail, not one-per-item.
+
 - **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
   Any script or command that writes game logs, batch output, or A/B scratch must
   target a subdirectory of `logs/` (e.g. `logs/fd_quick`), not a root-level

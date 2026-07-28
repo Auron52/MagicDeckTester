@@ -3,6 +3,13 @@
 **Status:** confirmed by code inspection, deferred (fix touches core play logic + GT; do NOT change while a
 profile regen is in flight). Found 2026-07-12 while adding the claude-play joint `ai_set`.
 
+**Largely mooted 2026-07-28:** `max_mull` is now FIXED at 6 for every gen (the `MTG_KEEP_MAXMULL` knob was
+removed; gens used to run at 3). The bug's precondition is `mulligan_count > max_mull`, which at max_mull=6
+requires mulliganing to keep-0 (7 mulligans) -- effectively a non-event. So a shipped profile now covers
+keep-7..keep-1 exactly and the under-bottoming can only bite at the degenerate keep-0, which never arises.
+The `DecideBottom`/`BottomCards` `std::min(count, max_mull)` cap is still worth hardening for robustness, but
+the practical exposure is gone. (The rest of this doc is the original analysis, written when tables were mm3.)
+
 ## The bug
 
 `ExhaustiveKeepPolicy::DecideBottom` indexes its table with `std::min(count, max_mull)`

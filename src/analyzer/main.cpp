@@ -55,6 +55,7 @@ int main(int argc, char* argv[])
                                   // with --max-turns for a genuinely slow deck.
     uint64_t seed          = 0;
     bool     seed_provided = false;
+    std::string gen_recipe;   // --gen-mulligan <fast|complete|recommend>: one-flag mulligan-profile gen
 
     for (int i = 2; i < argc - 1; ++i)
     {
@@ -73,6 +74,10 @@ int main(int argc, char* argv[])
             else if (flag == "--cards-json")
             {
                 cards_json = argv[i + 1];
+            }
+            else if (flag == "--gen-mulligan")
+            {
+                gen_recipe = argv[i + 1];
             }
         }
         catch (...)
@@ -516,11 +521,13 @@ int main(int argc, char* argv[])
         // Exhaustive keep/bottom policy (MTG_KEEP_EXHAUSTIVE): bucket the deck, enumerate every
         // distinct bucket-hand for sizes 7..7-max_mull, evaluate each with R reshuffled rollouts,
         // and print the exact optimal keep+bottom policy value vs the static keep rule. Read-only.
-        //   MTG_EQUIV_PROBES/_THRESHOLD/_DEPTH (bucketing), MTG_KEEP_ROLLOUTS (R, default 100),
-        //   MTG_KEEP_MAXMULL (deepest mulligan, default 6 = down to keep-1; the terminal keep-1 anchor is
-        //   the only correct forced-keep, so 6 is the uniquely-correct depth. Shallower forced-keeps a hand
-        //   it should ship -- see docs/design/bottomcards-undercount-beyond-maxmull.md).
-        if (const char* e = std::getenv("MTG_KEEP_EXHAUSTIVE"); e && *e && std::string(e) != "0")
+        //   MTG_EQUIV_PROBES/_THRESHOLD/_DEPTH (bucketing), MTG_KEEP_ROLLOUTS (R, default 100).
+        //   max_mull is FIXED at 6 (deepest mulligan = down to keep-1): the terminal keep-1 anchor is the only
+        //   correct forced-keep, so 6 is the uniquely-correct depth and there is no knob (a shallower table
+        //   forced-keeps a hand it should ship -- see docs/design/bottomcards-undercount-beyond-maxmull.md).
+        const bool env_exhaustive = []{ const char* e = std::getenv("MTG_KEEP_EXHAUSTIVE");
+                                        return e && *e && std::string(e) != "0"; }();
+        if (env_exhaustive || !gen_recipe.empty())
         {
             auto env_int = [](const char* k, int dflt, int lo)
             { const char* s = std::getenv(k); return (s && *s) ? std::max(lo, std::atoi(s)) : dflt; };
@@ -553,7 +560,13 @@ int main(int argc, char* argv[])
                                 return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
             cfg.se_prior  = []{ const char* s = std::getenv("MTG_KEEP_SE_PRIOR");
                                 return (s && *s) ? std::max(0.0, std::atof(s)) : 8.0; }();
-            cfg.max_mull  = env_int("MTG_KEEP_MAXMULL", 6, 0);
+            // max_mull is FIXED at 6 (a 7-card hand down to keep-1) -- there is no knob. A shipped profile
+            // must model mulligans all the way to 1 card; a shallower table leaves deep mulligans unmodelled
+            // and under-bottoms (docs/design/bottomcards-undercount-beyond-maxmull.md). The deep levels are
+            // cheap (small hands have very few compositions) and there is no reliable a-priori "always-keep"
+            // cutoff without running them, so there is no reason to ever shorten it -- the old MTG_KEEP_MAXMULL
+            // knob was pure misconfiguration risk and is gone (setting it now has no effect).
+            cfg.max_mull  = 6;
             cfg.seed      = seed;   // rollout seed base (the run id / seed_base)
             cfg.equiv_seed = []{ const char* s = std::getenv("MTG_EQUIV_SEED");
                                  return (s && *s) ? std::strtoull(s, nullptr, 10) : 20260701ULL; }();
@@ -567,6 +580,11 @@ int main(int argc, char* argv[])
             // EXPERIMENT: adaptively sample sub-tables even with bottoming on + curse-filter the bottom
             // argmin to refined cells (recovers keep-only savings for bottoming-on). Off => full-R sub-tables.
             cfg.adaptive_bottom = []{ const char* s = std::getenv("MTG_KEEP_ADAPTIVE_BOTTOM");
+                                      return s && *s && std::string(s) != "0"; }();
+            // Reuse a prior recommend-probe chunk (<out_raw>.probe) as this gen's r=0 slice. Auto-on for the
+            // --gen-mulligan complete/fast recipes (set below); MTG_KEEP_PROBE_CARRY=1 also enables it on this
+            // advanced env path.
+            cfg.use_probe_carry = []{ const char* s = std::getenv("MTG_KEEP_PROBE_CARRY");
                                       return s && *s && std::string(s) != "0"; }();
             if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
             if (const char* fm = std::getenv("MTG_EQUIV_FORCE_MERGE")) { cfg.force_merge = fm; }
@@ -582,6 +600,96 @@ int main(int argc, char* argv[])
                 if (const char* p = std::getenv("MTG_KEEP_OUT_PROFILE")) { cfg.out_profile = p; }
                 if (const char* r = std::getenv("MTG_KEEP_OUT_RAW"))     { cfg.out_raw     = r; }
             }
+
+            // --gen-mulligan <recipe>: one-flag mulligan-profile generation. A recipe is a fixed preset over
+            // the two cost levers -- bottoming mode (full vs adaptive) and cap R -- so the whole gen needs no
+            // parameters but the flag. depth/budget come from the play profile's value_play (its mulligan-gen
+            // override if set, else the play depth), NOT from the MTG_EQUIV_* env (which stay as advanced
+            // overrides for the raw MTG_KEEP_EXHAUSTIVE path). Keep is always adaptive (floor 2); the recipes
+            // differ in whether BOTTOMING is adaptive and in the cap R. See the recipe study in memory/docs.
+            std::string depth_src = "gen-default", budget_src = "gen-default";
+            if (!gen_recipe.empty())
+            {
+                // Deterministic seed by DEFAULT for the recipe path. The global default randomizes the seed
+                // per invocation (fine for one-off play analysis), but that would defeat everything the recipe
+                // flow wants to "just work": recommend's probe chunk and the real gen must share a seed for the
+                // byte-identical probe reuse, and re-running an interrupted recipe must resume its own out_raw
+                // (also seed-gated). A fixed seed makes recipe gens reproducible too. Explicit --seed still
+                // overrides -- multi-machine pools pass their own disjoint seeds on the advanced env path.
+                //
+                // 1000000 is a deliberate sentinel clear of every seed range the repo uses: reference games
+                // (s1..~s30), regression/smoke/overnight (s1001..~s8100), and the explicit mulligan-gen seeds
+                // (12345, 700001, 900001, 10000001, 20000001, date-like 2026xxxx). It reads as "the recipe
+                // default" and won't be mistaken for a hand-played or test seed.
+                if (!seed_provided) { cfg.seed = 1000000; }
+                // (max_mull is fixed at 6 for every path -- see the cfg.max_mull note above; not a recipe knob.)
+                // Resolve rollout depth/budget from value_play (mull_gen_* override -> play -> built-in default).
+                const auto& vp = profile.value_play;
+                cfg.depth     = vp.MullGenDepth(5);
+                cfg.budget_ms = vp.MullGenBudgetMs(20);
+                depth_src  = vp.mull_gen_depth > 0 ? "value_play.mull_gen_depth"
+                           : vp.target_depth   > 0 ? "value_play.target_depth" : "gen-default";
+                budget_src = vp.mull_gen_budget_ms > 0 ? "value_play.mull_gen_budget_ms"
+                           : vp.budget_ms          > 0 ? "value_play.budget_ms" : "gen-default";
+
+                if (gen_recipe == "complete")
+                {
+                    cfg.rollouts = 40; cfg.r_floor = 2; cfg.adaptive_bottom = false;  // full bottoming, native-R
+                    cfg.use_probe_carry = true;   // reuse a prior 'recommend' probe chunk if one matches
+                }
+                else if (gen_recipe == "fast")
+                {
+                    cfg.rollouts = 30; cfg.r_floor = 2; cfg.adaptive_bottom = true;   // adaptive bottoming, R30
+                    cfg.use_probe_carry = true;   // reuse a prior 'recommend' probe chunk if one matches
+                }
+                else if (gen_recipe == "recommend")
+                {
+                    // Bounded scout: discovery + ONE rollout of every cell (r_floor=1), then project the
+                    // full-gen wall-clock vs an overnight window AND report the slowest cells, then STOP (no
+                    // refine, no profile). The point (per the workflow) is to catch degenerate performance up
+                    // front -- rather than kick off the full run and discover hours in that it is crippled by
+                    // a pathological cell. MUST use adaptive bottoming so the probe stays one rollout/cell;
+                    // full bottoming would drive the sub-tables to the cap = as expensive as a real gen.
+                    cfg.rollouts = 40; cfg.r_floor = 1; cfg.adaptive_bottom = true; cfg.recommend_only = true;
+                }
+                else
+                {
+                    std::cerr << "Unknown --gen-mulligan recipe '" << gen_recipe
+                              << "'. Use: complete | fast | recommend\n";
+                    return 1;
+                }
+            }
+
+            // Always report the effective gen settings (even when they are just defaults) so a run is
+            // self-documenting -- what recipe, depth, R, and bottoming mode actually produced this profile.
+            {
+                const char* trigger = !gen_recipe.empty() ? gen_recipe.c_str() : "env (MTG_KEEP_EXHAUSTIVE)";
+                std::cout << "=== MULLIGAN PROFILE GEN SETTINGS ===\n";
+                std::cout << "  recipe          : " << trigger << "\n";
+                std::cout << "  bottoming       : " << (cfg.adaptive_bottom ? "ADAPTIVE" : "FULL")
+                          << "  (baked ON at runtime)\n";
+                std::cout << "  cap R (rollouts): " << cfg.rollouts << "\n";
+                std::cout << "  floor R         : " << cfg.r_floor
+                          << (cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts ? "  (adaptive keep)" : "  (uniform)")
+                          << "\n";
+                std::cout << "  rollout depth   : " << cfg.depth     << "  (source: " << depth_src  << ")\n";
+                std::cout << "  rollout budget  : " << cfg.budget_ms << " ms  (source: " << budget_src << ")\n";
+                std::cout << "  flip_eps        : " << cfg.flip_eps << "   se_prior: " << cfg.se_prior
+                          << "   r_batch: " << cfg.r_batch << "\n";
+                std::cout << "  max_mull        : " << cfg.max_mull << "   max_turns: " << cfg.max_turns << "\n";
+                std::cout << "  bucket probes   : " << cfg.probes << "   threshold: " << cfg.threshold << "\n";
+                std::cout << "  seed            : " << cfg.seed << "\n";
+                std::cout << "  out profile     : " << (cfg.out_profile.empty() ? "(none)" : cfg.out_profile) << "\n";
+                std::cout << "  out raw         : " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw) << "\n";
+                if (cfg.recommend_only)
+                { std::cout << "  probe chunk out : " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw + ".probe")
+                            << "\n"; }
+                else if (cfg.use_probe_carry)
+                { std::cout << "  probe carry     : ON (reuse " << (cfg.out_raw.empty() ? "<out_raw>" : cfg.out_raw)
+                            << ".probe if it matches)\n"; }
+                std::cout << "=====================================\n" << std::flush;
+            }
+
             RunExhaustiveKeep(std::cout, deck, profile, cfg);
             return 0;
         }

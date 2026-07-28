@@ -52,25 +52,113 @@ e.g. on the Dragonstorm R≈2.3 perf raw: full 3.876 → SYNTH_R=5 3.601 → SYN
 argmin/threshold pick randomly-favorable cells, so the policy's self-reported EV is optimistic *precisely
 where it is least trustworthy*. **`D_opt` is not a cross-R quality metric.** Judge quality in play.
 
-## Limitation: this reconstructs KEEP, not BOTTOMING
+## The uniform SYNTH_BOTTOM_R knob does NOT model adaptive bottoming
 
-The synth resample is faithful for the **keep** decision (a single threshold comparison `V̂ < D_opt`,
-whose noise flips symmetrically) but **not** for **bottoming**, which is an `argmin` over the many
-sub-compositions of a hand. Minimizing over many `Normal(mean, var/k)` draws systematically selects the
-most-*underestimated* cell — a severe winner's curse that grows as k shrinks. Real low-R rollouts are
-*bounded* actual win-turns (a hand that "won on T3" genuinely can); a Gaussian tail can paint a true-T9
-hand as T3, and the argmin then picks it. Measured on Dragonstorm, `MTG_KEEP_SYNTH_BOTTOM_R=1` reported
-**+0.77t** — a model artifact (contrast slivers' real adaptive-bottom cost of +0.0045t). So:
+`MTG_KEEP_SYNTH_BOTTOM_R=j` resamples **every** bottoming sub-cell to the same R=j. That is NOT what
+adaptive bottoming does, and it badly over-states the cost. Bottoming is an `argmin` over a hand's many
+sub-compositions; downsampling *every* cell to one R corrupts the true-argmin cell with noise, and the
+argmin then systematically selects the most-*underestimated* cell — a severe winner's curse that grows
+as j shrinks. Measured on slivers (real adaptive cost **+0.0057t** in game): `SYNTH_BOTTOM_R` at
+`j=2 → +0.236`, `8 → +0.055`, `16 → +0.032`, `40 → +0.015` — none match, all 2.6×+ too high, because a
+uniform level cannot reproduce what adaptive bottoming actually does: **REFINE the decision-relevant
+argmin sub-cells toward the cap** (measured mean R 16–28, 60–75 % of cells above the floor) while leaving
+clearly-worse cells at the floor. So do **not** use `SYNTH_BOTTOM_R` to estimate adaptive bottoming.
+(The `SYNTH_R` keep-only R-sweep above IS trustworthy — a keep decision is one symmetric threshold flip,
+no argmin — Dragonstorm knee **~R=30**, R=20 fallback for hard decks.)
 
-- **Use synth reconstruction for the required-R (keep) question only.** The R-sweep is trustworthy; the
-  Dragonstorm knee is **~R=30** (within ~0.01t of R=40), with R=20 a ~0.03t fallback for hard decks.
-- **Adaptive bottoming cannot be reconstructed from the full raw.** The full raw's sub-tables are at full
-  R (the *wrong*, too-high precision), and you can't exactly downsample them (only aggregates are
-  stored). A proper adaptive-bottom number needs **real floor-R rollouts on the bottoming sub-tables**:
-  either the full `MTG_KEEP_ADAPTIVE_BOTTOM=1` gen (re-does the expensive keep table too), or a
-  sub-tables-only floor-R gen grafted onto the existing full keep table (cheaper; needs a tooling add).
-  Since a shipped profile uses full bottoming (gated by the confounded A/B), this is a future gen-cost
-  question, not a correctness one — default to full bottoming for combo decks.
+## Adaptive bottoming: the offline REGRET SIMULATOR (`MTG_KEEP_SIM_ADAPTIVE_BOTTOM`)
+
+Adaptive bottoming *can* be evaluated from ONE full-bottom raw — not by downsampling, but by **replaying
+the gen's variance-driven refinement offline** and scoring the result on the true means. This is the
+cheap, trustworthy answer:
+
+```bash
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=<full-bottom.raw.json> \
+  MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 MTG_KEEP_SIM_FLOOR=2 MTG_KEEP_SIM_TRIALS=128 \
+  MTG_MERGE_OUT_PROFILE=/tmp/ignore.json MTG_MERGE_OUT_RAW=/tmp/ignore.raw.json \
+  ./build/Release/mtg-analyze <deck> --cards-json src/cards/data/cards.json
+# prints:  regret = +Xt  (win-turns adaptive bottoming costs vs full bottoming, per pd + a 50/50 blend)
+```
+
+What it does, per Monte-Carlo floor-noise realization (default 128, `MTG_KEEP_SIM_TRIALS`):
+
+1. **Floor the sub-tables** to R=`MTG_KEEP_SIM_FLOOR` (default 2 = the project's adaptive_bottom floor):
+   each sub-cell's estimate becomes `μ + Normal(0, vs/floor)` (`vs` = the stored per-rollout variance,
+   shrunk toward the table's pooled variance with `se_prior=8` — the same shrink the gen's stop gate
+   uses). Size-7 (the keep table) stays at its true mean — both adaptive and full bottoming share it, so
+   it cancels.
+2. **Run the gen's exact refine waves** (`MTG_KEEP_SIM_FLIP_EPS`, default 0.02): mark each hand's current
+   `argmin` sub-cell and drive it to the cap (its true mean) unless the hand is a confident mulligan —
+   with Gaussian draws standing in for rollouts. Cells that are never any hand's argmin stay at the floor.
+3. **Build the converged policy** exactly as the gen does — keep flag from the est `keep_val` vs the est
+   `D_opt`, bottom target from the **refined-only** `argmin` (the `bottom_floor` filter that excludes
+   never-refined floor cells).
+4. **Score it on the TRUE means**: `regret = D(adaptive policy) − D(full policy) ≥ 0`.
+
+The structural cost this captures: a genuinely-best sub-cell whose *unlucky-high* floor draw keeps it
+from ever being the current argmin is never refined, so the `bottom_floor` filter excludes it and a
+slightly-worse refined cell is kept — a winner's-curse-of-*omission* that only the floor-noise
+realization drives (hence the trials). Refined cells are credited their true mean (the full raw's mean IS
+the best estimate of a refined cell's value), which isolates this structural regret from the second-order
+R-cap resampling noise the two independent gens would also differ by.
+
+**Validation.** On the slivers full-bottom raw, `FLOOR=2` reproduces the in-game A/B almost exactly:
+regret **+0.0058 ± 0.0001t** (draw +0.0058, play +0.0057) vs the measured **+0.0057t**. Floor
+monotonicity is physical (finer floor → more noise → more regret): slivers `FLOOR 1/2/4 → +0.009/+0.006/
++0.003`. **Dragonstorm** (188 k size-7 hands, ~30 s/64-trials): `FLOOR 1/2/3/4 → +0.022/+0.014/+0.010/
++0.008t`; at the standard floor=2, adaptive bottoming costs **+0.0138t** — small (≈ the keep-side R=40→30
+cost), but ~2.4× slivers.
+
+**Lower the whole gen's R too (`MTG_KEEP_SIM_CAP=k`).** For a hard deck you cheapen *both* levers: a lower
+cap R *and* adaptive bottoming. `SIM_CAP=k` models the sub-tables (full baseline **and** adaptive refined
+cells, sharing draws so the cap-R noise cancels) reaching only R=k, so you read the adaptive-bottom regret
+**at** R=20/30. It *falls* as R drops — full bottoming's own argmin gets noisier at low R, shrinking the
+gap adaptive has to beat:
+
+| adaptive-bottom regret (blend) | R=40 | R=30 | R=20 |
+|---|---|---|---|
+| slivers | +0.0057 | +0.0037 | +0.0031 |
+| Dragonstorm | +0.0138 | +0.0090 | +0.0073 |
+
+(The keep-table R cost is *separate* and grows the other way — SYNTH_R sweep, Dragonstorm R30 ≈ +0.01t,
+R20 ≈ +0.03t. A full cheap-gen cost = keep-R cost + this bottoming regret.)
+
+## Playable adaptive-bottom reconstruction (`MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM`) — for real game-testing
+
+The regret sim above returns a *number*. To **test recipes with real games** without a real `adaptive_bottom`
+gen, `MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1` in the merge path writes a **playable** adaptive-bottom profile: it
+floors the sub-tables, replays ONE realization of the gen's argmin-driven refinement (refined cells → their
+TRUE mean; unrefined stay at the noisy floor and are excluded from the bottoming argmin via `bottom_floor`),
+then serialises via the same `BuildPolicyFromTables` a real gen uses. The keep table is left at truth, or at
+a lower R if `MTG_KEEP_SYNTH_R=k` is also set — so a **fast recipe = low-R keep + adaptive bottoming**
+reconstructs in one pass. Knobs: `MTG_KEEP_SYNTH_ABOT_FLOOR` (default 2), `_FLIP_EPS` (0.02), `_SEED` (one
+realization), `_CAPNOISE` (default 0 = refine to exact truth; **1 is wrong** — it re-adds the argmin
+winner's curse, slivers +0.019t vs the real +0.0057).
+
+```bash
+# reconstruct a playable profile, then A/B it in game vs the full-bottom profile (both blind-bottoming):
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=<full.raw.json> MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1 \
+  MTG_MERGE_OUT_PROFILE=<deck>.reconadapt.profile.json MTG_MERGE_OUT_RAW=/tmp/ig.raw.json \
+  ./build/Release/mtg-analyze <deck> --cards-json src/cards/data/cards.json
+```
+
+**Validated in game (slivers, vs the REAL adaptive gen).** Structurally the reconstruction changes 17.0% of
+bottom targets vs full — the real gen changes 17.8% (nearly identical *amount*; different specific cells, as
+a different noise realization). In play, a **single** reconstruction is noisy (6 realizations spanned
++0.0035…+0.0122t, SD 0.0027 — one reconstruction ≈ one gen outcome), but the **6-realization mean +0.0069 ±
+0.0011t is statistically consistent with the real gen's +0.0057t** (~+0.001 residual, slightly pessimistic
+because truth-jump refines ~61% of cells vs the real ~65%). **So: average ~6–8 realizations (distinct
+`ABOT_SEED`) × seeds for a stable per-recipe quality number; the ~+0.002t pessimism is consistent across
+recipes and cancels in relative comparison.**
+
+**Performance impact.** The regret sim also prints the gen-rollout saving as a bracket — refined cells driven all
+the way to the cap (conservative, least saving) vs stopped at their modelled flip_eps-confident R
+(optimistic, most saving); reality lands mid-bracket (real slivers **~52 % of sub-table rollouts / ~33 %
+of total gen**, in-bracket). On **Dragonstorm** the sub-tables are **~81 % of the gen** (its keep table is
+already adaptive-cheap at mean R≈4.2), so adaptive bottoming saves **~27–49 % off the total gen** at R=40
+(a ~6–10 h cut on the 21 h run) for the +0.0138t cost. Use this per deck to decide adaptive vs full
+bottoming from ONE generation; a shipped profile still defaults to full bottoming (gated by the confounded
+A/B) — this quantifies what that default buys and what dropping it (plus lowering R) would cost.
 
 ## The compare step (in-game — the ground truth)
 
