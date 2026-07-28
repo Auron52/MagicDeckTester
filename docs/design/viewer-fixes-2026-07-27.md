@@ -251,14 +251,37 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     is impossible from inside the pre-sort ordering-search function. The WIP is stashed
     (`git stash` "wip-10-append-cast-order").
   - **Correct fix (deferred, two clean options).** (a) **Post-sort append:** compute the human's extra
-    committed-order permutations and append them to `all` AFTER the `7755` stable_sort (highest indices),
-    so the sorted base order — and thus every existing recorded index — is untouched; the extras are only
-    ever reachable by a NEW commit that matches one exactly. (b) **Order channel:** stop relying on the
+    committed-order permutations and append them to `all` AFTER the stable_sort (highest indices), so the
+    sorted base order — and thus every existing recorded index — is untouched; the extras are only ever
+    reachable by a NEW commit that matches one exactly. (b) **Order channel:** stop relying on the
     `plan_index` to carry order — have the human-play apply path reorder the accepted plan's non-sac casts
     to the recorded `spec.casts` order (pass the committed order through the choice protocol, not just an
-    int). (a) is smaller and index-preserving; do it next. Both are GT-neutral (human-play only). NOTE the
-    downstream sort is the crux for ANY "add human-play plans" change (same lesson as #12's decision-point
-    insertion): adding plans reshuffles indices unless appended post-sort.
+    int). NOTE the downstream sort is the crux for ANY "add human-play plans" change (same lesson as #12's
+    decision-point insertion): adding plans reshuffles indices unless appended post-sort.
+  - **2026-07-28 (batch 9 — option (a) IMPLEMENTED, verified safe, then REVERTED as architecturally wrong).**
+    Built `AppendHumanPlayCastOrderPlans` (HumanPlayActive-gated): for each plan in `all`, permute the
+    reorderable hand casts (fixed actions kept in place), apply each on a copy, append those reaching a
+    DISTINCT end-of-phase state (same end-state dedup the autonomous ordering search uses), all AFTER the
+    stable_sort. Called on both `EnumeratePlansWithLand` return paths. **Verified: 0 validate REGRESSIONS
+    (vs the pre-sort attempt's 68) and 0 protocol play-drift — so post-sort append IS index-safe and
+    GT-neutral, exactly as predicted.** BUT it does NOT fix the motivating case and is O(base_plans × k!):
+    (1) **cap < target.** s24's go-off (`references/Dragonstorm/claude_s24_gi23.json`, dec 10/11, turn 5)
+    is a **6-cast** line (`Ruby Medallion, Pyretic ×2, Seething, Desperate, Apex`); 6! = 720 exceeds any
+    sane k! cap (120), so the append skips it → CheckLine falls back to canonical order → s24 still not
+    honoured. (2) **explosive on the decks that matter.** dec 11 has **164 base plans**; the append permutes
+    each multi-cast one → O(base_plans × k!) work per enumeration, ×3 per commit (step JSON / CheckLine /
+    executor replay). The honouring lands on ≤5-cast lines on SIMPLE decks (where order rarely matters); the
+    cost lands on COMBO go-offs (where it matters but isn't fixed) — backwards. Shipping that partial isn't
+    worth the combo-turn hot-path cost, so reverted (stash `wip-10-postsort-append`, recoverable).
+  - **Verdict: option (b) order-channel is the ONLY viable fix.** Generic enumeration cannot know the
+    human's specific order, so option (a) must enumerate ALL orders (explodes on combo decks — the exact
+    case #10 is about) and any k! cap excludes the big go-offs that motivate it. Option (b) carries the
+    committed order through the choice protocol so the executor reorders the accepted plan's casts to
+    `spec.casts` WITHOUT enumerating permutations — O(1), no index churn, fixes 6+-cast go-offs. It requires
+    a protocol extension (a per-decision order alongside the `--choices` int, + reference-format storage +
+    replay support) — a deliberate design change, NOT a cosmetic-item drive-by. **#10 stays deferred pending
+    a decision to extend the protocol** (it is the lowest-value item: cosmetic cast-order display, and when
+    order matters for PAYMENT the distinct-state line is already enumerated by the autonomous search).
 
 - **2026-07-28 (batch 8 — remaining items: analysis + deferral):**
   - **#4/#6 firebreathe / Dwarven Hold burst amount — DEFERRED (largest; new COMBAT decision point).**
