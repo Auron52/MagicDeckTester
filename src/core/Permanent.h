@@ -40,6 +40,13 @@ struct Permanent
                                            // Bazaar): accumulated over idle turns; an untapped charged
                                            // storage land taps to burst {R} x storage_counters (zeroing
                                            // them), NOT sacrificed. See CardParams::storage_land.
+    bool      storage_hold_this_turn = false; // #6 human-play tap-vs-charge: when the non-clairvoyant
+                                           // human elects to HOLD a charged storage land this turn (build
+                                           // the battery rather than burst now), this flags it not-live
+                                           // (StorageSourceLive returns false) so it is never tapped for
+                                           // mana -> stays untapped -> charges +1 at end of turn. Set only
+                                           // via the human StorageHoldChooser; reset each UntapStep. Never
+                                           // set autonomously -> byte-identical for the search/rollout.
     bool      is_animated          = false; // land animated as a creature (e.g. Mutavault); reset each cleanup
     bool      is_token             = false; // created by a token-making effect (CreateToken). Lathliss's
                                             // "nontoken Dragon" gate reads this so a created 5/5 Dragon

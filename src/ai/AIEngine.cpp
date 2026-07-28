@@ -1329,6 +1329,27 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         bool drew_last = false;             // did the last applied plan draw (library shrank)?
         for (int seg = 0; seg < 64; ++seg)
         {
+            // #6 storage-land TAP-vs-CHARGE, POST-DRAW variant (Mercadian Bazaar, storage_charge_mode
+            // "tap"): its "{T}: put a counter" is an active MAIN-PHASE tap, so the human decides hold-vs-
+            // burst AFTER the draw, with full information. Consulted once per turn at the START of the pre-
+            // combat main and BEFORE plan enumeration (so the offered plans respect the hold). Dwarven Hold
+            // ("upkeep_if_tapped") is EXCLUDED here -- its commitment is pre-draw, surfaced in
+            // GameEngine::UpkeepStep. A hold flags the land not-live for the turn -> never tapped for mana ->
+            // stays untapped -> charges. Human-play only (chooser null autonomously / in rollout) ->
+            // byte-identical for the search and every non-storage deck.
+            if (seg == 0 && is_pre_combat_main && g_play_storage_hold_chooser)
+            {
+                for (Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    if (p.tapped || p.storage_counters <= 0) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (!d || !d->params.storage_land
+                        || d->params.storage_charge_mode == "upkeep_if_tapped") { continue; }
+                    if ((*g_play_storage_hold_chooser)(state, p, p.storage_counters))
+                    { p.storage_hold_this_turn = true; }
+                }
+            }
             std::vector<TurnSolver::Plan> plans =
                 TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
             if (plans.empty()) { break; }

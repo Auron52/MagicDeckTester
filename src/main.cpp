@@ -1262,6 +1262,40 @@ static void WriteFirebreatheDecisionJson(std::ostream& os, const GameState& s,
     os << "}\n";
 }
 
+// Storage-land tap-vs-charge decision (#6, Dwarven Hold / Mercadian Bazaar): a charged storage land can
+// either BURST this turn (tap, spend counters as {R}) or CHARGE (stay untapped -> +1 counter at end of
+// turn). Reply = 1 to HOLD (charge / build the battery), 0 to allow the normal tap/burst. Default = 0
+// (the current heuristic: burst when a committed line needs it, reserve otherwise). Rides the
+// (turn, land number)-keyed --storage-hold side-channel, NOT --choices.
+static void WriteStorageHoldDecisionJson(std::ostream& os, const GameState& s,
+                                         const Permanent& land, int counters, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"storage_hold\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"land\": "; JsonStr(os, land.card.m_name.str()); os << ",\n";
+    os << "  \"land_num\": " << land.card.m_number << ",\n";
+    os << "  \"counters\": " << counters << ",\n";
+    os << "  \"heuristic_default\": 0,\n";
+    // Charge-mode drives the decision TIMING: "upkeep_if_tapped" (Dwarven Hold) is decided PRE-DRAW
+    // (at upkeep -- the human commits without seeing this turn's draw); "tap" (Mercadian Bazaar) is a
+    // post-draw main-phase tap. The viewer uses pre_draw to label the harder blind commitment.
+    const CardDefinition* ld = CardDatabase::Instance().LookupCached(land.card);
+    const bool pre_draw = ld && ld->params.storage_charge_mode == "upkeep_if_tapped";
+    os << "  \"charge_mode\": "; JsonStr(os, ld ? ld->params.storage_charge_mode : std::string()); os << ",\n";
+    os << "  \"pre_draw\": " << (pre_draw ? "true" : "false") << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"note\": ";
+    JsonStr(os, std::string("reply 1 to HOLD this storage land untapped this turn (charge it: +1 counter at"
+              " end of turn), or 0 to let it tap/burst as needed. ")
+              + (pre_draw
+                 ? "NOTE: decided at UPKEEP, BEFORE your draw -- you commit without seeing this turn's card."
+                 : "Holding forgoes bursting now to build toward a bigger future burst."));
+    os << "\n";
+    os << "}\n";
+}
+
 // Land-entry decision (shock lands, and reveal lands like Frostboil Snarl): as the land enters you may
 // pay a cost to have it enter UNTAPPED, or let it enter tapped. Shock lands pay `pay_life` life; reveal
 // lands reveal a matching land (`reveal_types`) already in hand -- free, but shown as a choice. The AI
@@ -1327,7 +1361,9 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& force_mulligan = "",
                          const std::string& firebreathe_spec = "",
                          bool firebreathe_prompt = false,
-                         const std::string& cast_order_spec = "")
+                         const std::string& cast_order_spec = "",
+                         const std::string& storage_hold_spec = "",
+                         bool storage_hold_prompt = false)
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -2104,6 +2140,58 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     if (!cast_order_by_main.empty()) { g_play_cast_order_chooser = &cast_order_chooser; }
 
+    // #6 Storage-land tap-vs-charge: the human's per-(turn, land) tap-vs-charge answers. Keyed by
+    // (turn, land number) on a side-channel (--storage-hold "turn:num:val,...", val 1=HOLD/charge,
+    // 0=allow tap), NOT the positional --choices cursor -> existing references (no --storage-hold) replay
+    // byte-identically as the burst heuristic. BOTH answers are recorded (a 0 = an explicit "no hold")
+    // so live prompting never re-asks an answered land. Installed only when there is a recorded answer or
+    // live prompting (--storage-hold-prompt); otherwise null -> the engine never consults it (no hold).
+    std::map<std::pair<int, int>, bool> storage_hold_by_land;   // (turn, land_num) -> hold?
+    {
+        std::stringstream ss(storage_hold_spec);
+        std::string tok;
+        while (std::getline(ss, tok, ','))
+        {
+            auto c1 = tok.find(':');
+            if (c1 == std::string::npos) { continue; }
+            auto c2 = tok.find(':', c1 + 1);
+            if (c2 == std::string::npos) { continue; }
+            try
+            {
+                int t = std::stoi(tok.substr(0, c1));
+                int n = std::stoi(tok.substr(c1 + 1, c2 - c1 - 1));
+                int v = std::stoi(tok.substr(c2 + 1));
+                storage_hold_by_land[{ t, n }] = (v != 0);
+            }
+            catch (...) { /* skip malformed token */ }
+        }
+    }
+    StorageHoldChooser storage_hold_chooser =
+        [&](const GameState& s, const Permanent& land, int counters) -> bool
+        {
+            int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
+            auto it = storage_hold_by_land.find({ s.turn_number, land.card.m_number });
+            if (it != storage_hold_by_land.end())
+            {
+                if (!log_dir.empty())
+                {
+                    std::ostringstream tss;
+                    tss << "{ \"chosen\": " << (it->second ? 1 : 0) << ", \"decision\": ";
+                    WriteStorageHoldDecisionJson(tss, s, land, counters, di);
+                    tss << "}";
+                    trace.push_back(tss.str());
+                }
+                return it->second;   // recorded answer (hold / allow)
+            }
+            if (!storage_hold_prompt) { return false; }   // reference replay / not-yet-live -> heuristic (no hold)
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteStorageHoldDecisionJson(std::cout, s, land, counters, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    if (storage_hold_prompt || !storage_hold_by_land.empty()) { g_play_storage_hold_chooser = &storage_hold_chooser; }
+
     // Land entry (shock lands / Frostboil Snarl): the player chooses whether the land enters untapped
     // (paying its life / revealing a matching land) or tapped. Shares the --choices stream; the reply
     // is 1 (untapped, pay) or 0 (tapped). Default (out-of-range or absent) = the engine's heuristic.
@@ -2241,6 +2329,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_lightpaws_chooser = nullptr;
     g_play_firebreathe_chooser = nullptr;
     g_play_cast_order_chooser = nullptr;
+    g_play_storage_hold_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
     g_play_dropped_cast_sink = nullptr;
@@ -2897,6 +2986,8 @@ int main(int argc, char* argv[])
     std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
     bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
     std::string cast_order_str;       // #10: "<ord>:A|B|C;..." cast-order side-channel (main-ordinal-keyed)
+    std::string storage_hold_str;     // #6: "turn:num:val,..." storage tap-vs-charge side-channel
+    bool storage_hold_prompt = false; // #6: --storage-hold-prompt -> exit-70 to ask per charged storage land
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
     std::string validate_line;        // --validate-line "<spec>": human-play line to reconcile
                                        // at the first un-chosen main phase (tools/play GUI)
@@ -2921,6 +3012,7 @@ int main(int argc, char* argv[])
         if (flag == "--exhaustive-keep")     { force_exhaustive_keep = true; continue; }
         if (flag == "--ignore-play-profile") { ignore_play_profile = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
+        if (flag == "--storage-hold-prompt") { storage_hold_prompt = true; continue; }   // #6: value-less; parse regardless of position (the else-if chain below is gated on i+1<argc, so a trailing value-less flag would be dropped)
         try
         {
             if (i + 1 < argc)
@@ -2974,6 +3066,13 @@ int main(int argc, char* argv[])
                     // pinned non-sac hand-cast order, pipe-separated names). Keyed by main-phase ordinal, so
                     // it never touches the positional --choices stream -> existing references replay unchanged.
                     cast_order_str = argv[++i];
+                }
+                else if (flag == "--storage-hold")
+                {
+                    // #6 storage tap-vs-charge side-channel: "turn:num:val,..." (val 1=hold/charge, 0=allow
+                    // tap). Keyed by (turn, land number), so it never touches the positional --choices
+                    // stream -> existing references replay unchanged (no --storage-hold = the burst heuristic).
+                    storage_hold_str = argv[++i];
                 }
                 else if (flag == "--reveal")
                 {
@@ -3150,7 +3249,7 @@ int main(int argc, char* argv[])
             return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
                                  validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
-                                 cast_order_str);
+                                 cast_order_str, storage_hold_str, storage_hold_prompt);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

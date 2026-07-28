@@ -130,6 +130,16 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
       .map(k => `${k}:${p.castOrder[k].join('|')}`);
     if (entries.length) args.push('--cast-order', entries.join(';'));
   }
+  // #6 storage tap-vs-charge side-channel: p.storageHold is a { "turn:num": 0|1 } map of the human's
+  // per-(turn, land) hold answers (1 = hold/charge, 0 = allow tap). Passed as "turn:num:val,..." keyed by
+  // (turn, land number) — NEVER a --choices slot, so existing references (no --storage-hold) replay as the
+  // burst heuristic. NOTE: --storage-hold-prompt (which makes the engine exit-70 to ask per charged
+  // storage land) is deliberately NOT pushed yet — it ships with the GUI modal that handles the
+  // storage_hold decision (otherwise the live viewer would strand on an unhandled decision type).
+  if (p.storageHold && typeof p.storageHold === 'object') {
+    const trips = Object.keys(p.storageHold).map(k => `${k}:${p.storageHold[k] ? 1 : 0}`);
+    if (trips.length) args.push('--storage-hold', trips.join(','));
+  }
   if (validateLine != null) args.push('--validate-line', validateLine);
   return args;
 }

@@ -218,6 +218,7 @@ extern thread_local GameLogger* g_reveal_logger;
 // for the duration of every search/rollout "thinking" scope, so it fires ONLY during REAL
 // resolution (which is never paused) -- making the search byte-identical by construction.
 struct GameState;
+struct Permanent;
 struct Card;
 enum class LookKind { Scry, Reorder, Surveil };
 
@@ -376,6 +377,19 @@ extern thread_local FirebreatheChooser* g_play_firebreathe_chooser;
 using CastOrderChooser = std::function<std::vector<std::string>(int main_ordinal)>;
 extern thread_local CastOrderChooser* g_play_cast_order_chooser;
 
+// ---- Human-play storage-land TAP-vs-CHARGE chooser (#6, Dwarven Hold / Mercadian Bazaar) -------
+// A charged storage land either BURSTS this turn (tap it, spend counters as {R}) or CHARGES (leave it
+// untapped -> +1 counter at end of turn). The clairvoyant search decides this from foresight (burst =
+// payment shortfall, reserve when unneeded), but the NON-clairvoyant human -- who can't see their next
+// draws -- must be able to explicitly HOLD the battery to build toward a future big burst. Fires once
+// per (turn, charged storage land) at the START of the pre-combat main, BEFORE plan enumeration, so the
+// offered plans reflect the hold. Returns true => hold (reserve untapped this turn); false => allow the
+// normal tap/burst (the current heuristic). Keyed by (turn, land number) on a side-channel
+// (--storage-hold), NOT the positional --choices stream -> existing references (no --storage-hold)
+// replay byte-identically as the heuristic. Nulled by RevealLogPause; inert unless set.
+using StorageHoldChooser = std::function<bool(const GameState& state, const Permanent& land, int counters)>;
+extern thread_local StorageHoldChooser* g_play_storage_hold_chooser;
+
 // ---- Human-play land-entry chooser (enter a "pay a cost, or the land enters tapped" land) ------
 // Two lands present this choice as they enter: a shock land (etb_pay_life_to_untap -> pay N life to
 // enter untapped) and a reveal land like Frostboil Snarl (etb_untap_reveal_subtypes -> reveal a
@@ -497,6 +511,7 @@ struct RevealLogPause
     LightPawsChooser* saved_lpchooser;
     FirebreatheChooser* saved_fbchooser;
     CastOrderChooser* saved_cochooser;
+    StorageHoldChooser* saved_shchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
@@ -507,7 +522,8 @@ struct RevealLogPause
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
                        saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser),
                        saved_fbchooser(g_play_firebreathe_chooser),
-                       saved_cochooser(g_play_cast_order_chooser)
+                       saved_cochooser(g_play_cast_order_chooser),
+                       saved_shchooser(g_play_storage_hold_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
@@ -515,7 +531,7 @@ struct RevealLogPause
       g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
       g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
-      g_play_cast_order_chooser = nullptr; }
+      g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
@@ -526,7 +542,8 @@ struct RevealLogPause
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
                         g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser;
                         g_play_firebreathe_chooser = saved_fbchooser;
-                        g_play_cast_order_chooser = saved_cochooser; }
+                        g_play_cast_order_chooser = saved_cochooser;
+                        g_play_storage_hold_chooser = saved_shchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

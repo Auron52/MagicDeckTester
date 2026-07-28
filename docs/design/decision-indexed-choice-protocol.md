@@ -123,12 +123,36 @@ independently verifiable.
    charges +1 automatically at the end of an *idle* turn; tapping it (for its {C} and/or to burst its counters)
    forfeits that turn's charge. So the human decision is per-land-per-turn: **hold it untapped to charge the
    battery, or tap/burst it now** — genuinely hard without clairvoyance because the payoff depends on a future
-   hand you can't see. Surface THAT binary, wired like #4 via a keyed side-channel keyed by (permanent#, turn)
-   or just turn if one storage land. Default = the current heuristic (tap/burst when the search would) →
-   byte-identical when the human accepts the default. This sidesteps the messy `TapForCost` mid-cast burst
-   count: we only gate whether the land is *available to tap at all this turn* (a clean pre-turn/per-land veto),
-   not the burst arithmetic. Find the cleanest "is this storage land tappable this turn?" hook during
-   implementation.
+   hand you can't see.
+
+   **DONE (engine/CLI/server, 2026-07-28).** Realized as a `storage_hold` decision on a (turn, land-number)-
+   keyed side-channel `--storage-hold "turn:num:val,..."` (val 1=hold/charge, 0=allow tap; BOTH recorded so
+   live prompting never re-asks) + `--storage-hold-prompt`. Mechanism: a per-turn `Permanent.storage_hold_this_turn`
+   flag (reset each UntapStep) that makes `StorageSourceLive` return false → the land is never tapped for mana →
+   stays untapped → charges. `StorageHoldChooser` hook (GameLogger.h, RevealLogPause-nulled); default (no answer /
+   autonomous) = flag false = the current burst heuristic → byte-identical (smoke 21/21, 0 play-drift, 0
+   validate-regression).
+
+   **TIMING split (user correction, 2026-07-28): the two storage lands decide at DIFFERENT times, because
+   Mercadian Bazaar "does not have to make the same decision before the draw phase — Dwarven Hold is a bit
+   worse as a result."**
+   - **Dwarven Hold** (`storage_charge_mode = upkeep_if_tapped`): the literal card charges by being held TAPPED
+     through the untap step ("if tapped at upkeep, +1"), so the commitment is **pre-draw**. Surfaced in
+     `GameEngine::UpkeepStep` (before `DrawStep`) — the human commits to charging without seeing this turn's
+     draw. `pre_draw:true` in the decision JSON — the harder, strictly-less-information blind commitment.
+   - **Mercadian Bazaar** (`storage_charge_mode = tap`): "{T}: put a counter" is an active **post-draw**
+     main-phase tap, so it is surfaced in AIEngine's pre-combat-main consult (seg 0, before plan enumeration,
+     with the draw known). `pre_draw:false`. Dwarven Hold is EXCLUDED from the main consult (mode check) so
+     each land is asked exactly once, at its correct time.
+   The shared idle-charge MODEL (end-of-turn +1 for any untapped storage land) is UNCHANGED — the user
+   confirmed the clairvoyant/search side needs no change; only the human decision timing/information differs.
+   Verified: Dwarven Hold surfaces at upkeep (pre_draw:true), Mercadian at main (pre_draw:false); HOLD keeps
+   the battery climbing monotonically, ALLOW lets it burst and reset.
+
+   **REMAINING:** the GUI (a modal on the `storage_hold` decision → populate `S.storageHold`, and push
+   `--storage-hold-prompt` in server.js buildArgs alongside it) + jsdom coverage. Until then server.js passes a
+   recorded `--storage-hold` but deliberately does NOT push `--storage-hold-prompt` (an unhandled exit-70 would
+   strand the live viewer).
 4. **#10 cast-order side-channel — ENGINE/CLI/SERVER DONE (2026-07-28); GUI pending.** The committed cast
    order rides a MAIN-PHASE-ORDINAL-keyed side-channel `--cast-order "<ord>:A|B|C;<ord>:X|Y"` (names
    pipe-separated — MTG names carry ',' but never '|'; ordinal = the Nth main-phase decision, 0-based,

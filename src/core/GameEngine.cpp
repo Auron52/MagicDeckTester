@@ -155,6 +155,7 @@ void GameEngine::UntapStep(GameState& state)
         {
             p.tapped            = false;
             p.entered_this_turn = false;
+            p.storage_hold_this_turn = false;   // #6: the tap-vs-charge hold is a per-turn human choice
         }
     }
 
@@ -211,6 +212,28 @@ void GameEngine::UpkeepStep(GameState& state)
         // same heuristic as before (charge up to the deck's dominant creature MV), so the
         // normal AI is byte-identical; an external controller (claude-play) can override.
         if (m_ai.DecideVialCharge(state, p)) { ++p.charge_counters; }
+    }
+
+    // #6 Dwarven Hold (storage_charge_mode "upkeep_if_tapped"): its tap-vs-charge commitment is made at
+    // the UNTAP/UPKEEP step -- BEFORE the draw -- because the literal card charges by being HELD TAPPED
+    // through untap ("if tapped at upkeep, +1"). So the non-clairvoyant human must decide to hold (charge)
+    // without seeing this turn's draw -- strictly less information than Mercadian Bazaar, whose "{T}: put a
+    // counter" is an active post-draw main-phase tap (surfaced later, in AIEngine's pre-main consult).
+    // A "hold" flags the land not-live for the turn (StorageSourceLive) so it is never tapped for mana ->
+    // stays untapped -> banks its counter at end of turn. Human-play only (chooser null autonomously / in
+    // rollout) -> byte-identical for the search and every non-storage deck.
+    if (g_play_storage_hold_chooser)
+    {
+        for (Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            if (p.tapped || p.storage_counters <= 0) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || !d->params.storage_land || d->params.storage_charge_mode != "upkeep_if_tapped")
+            { continue; }
+            if ((*g_play_storage_hold_chooser)(state, p, p.storage_counters))
+            { p.storage_hold_this_turn = true; }
+        }
     }
 
     // Upkeep token creation (e.g. Thrumming Hivepool: create two 1/1 Sliver tokens).

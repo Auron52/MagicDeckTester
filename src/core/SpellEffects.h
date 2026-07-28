@@ -2228,7 +2228,10 @@ inline int PermanentManaYield(const Permanent& perm, const CardDefinition& def)
 // always "live" here (their usability is decided by the usual template/tap checks).
 inline bool StorageSourceLive(const Permanent& perm, const CardDefinition& def)
 {
-    return def.params.storage_land ? (perm.storage_counters > 0) : true;
+    // #6: a human "hold this turn" (tap-vs-charge) makes a charged storage land not-live -> never tapped
+    // for mana this turn -> stays untapped -> charges. Flag is human-play only (default false) so the
+    // search/rollout and every non-storage deck are byte-identical.
+    return def.params.storage_land ? (perm.storage_counters > 0 && !perm.storage_hold_this_turn) : true;
 }
 
 // Mana value of the top card of the active player's library (0 if empty). Soulfire Eruption's
