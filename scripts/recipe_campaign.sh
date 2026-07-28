@@ -76,7 +76,7 @@ for deck in $DECKS; do
     "$BINA" "$DECKFILE" --cards-json "$CARDS" >/dev/null 2>&1
   play "$D/full40.profile.json" "$MF" "$D/play_full40.log"
   BASE=$(mean_of "$D/play_full40.log")
-  log "  full@R40 (baseline)                    avg=$BASE"
+  log "  full@native (baseline; deck's native R) avg=$BASE"
 
   # helper: reconstruct + play a set of realizations, print averaged delta vs BASE
   run_recipe(){ local label="$1" tag="$2" nreal="$3"; shift 3   # rest = extra env for the merge
@@ -103,7 +103,7 @@ PY
   # uniform-downsample winner's curse and over-penalize full bottoming -- making full@Rk look worse than
   # adaptive@Rk (whose sub is refined-to-truth), i.e. the WRONG sign. KEEP_ONLY keeps both on a sub-truth
   # basis, so full-vs-adaptive isolates the bottoming (floor-exclusion) fairly.
-  run_recipe "adaptive@R40" "ab40" "$A_REALIZ" MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1
+  run_recipe "adaptive@native (full keep)" "ab40" "$A_REALIZ" MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1
   for c in $CAPS; do
     run_recipe "full@R$c" "full$c" "$S_REALIZ" MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_KEEP_ONLY=1
     run_recipe "adaptive@R$c" "ab$c" "$A_REALIZ" MTG_KEEP_SYNTH_R=$c MTG_KEEP_SYNTH_KEEP_ONLY=1 MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM=1
