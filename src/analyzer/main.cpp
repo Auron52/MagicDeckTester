@@ -616,6 +616,12 @@ int main(int argc, char* argv[])
                 // (12345, 700001, 900001, 10000001, 20000001, date-like 2026xxxx). It reads as "the recipe
                 // default" and won't be mistaken for a hand-played or test seed.
                 if (!seed_provided) { cfg.seed = 1000000; }
+                // max_mull is NOT a recipe knob: a shipped profile must always be able to mulligan all the way
+                // down to 1 card, so the recipe path forces the full depth (sizes 7..1) and ignores
+                // MTG_KEEP_MAXMULL. A shallower table would leave deep mulligans unmodelled (and under-bottom --
+                // see docs/design/bottomcards-undercount-beyond-maxmull.md). Cost-limited shallow gens remain
+                // available only on the advanced MTG_KEEP_EXHAUSTIVE path (for experiments/chunking, not shipping).
+                cfg.max_mull = 6;   // 7-card hand down to keep-1 (sizes 7..1)
                 // Resolve rollout depth/budget from value_play (mull_gen_* override -> play -> built-in default).
                 const auto& vp = profile.value_play;
                 cfg.depth     = vp.MullGenDepth(5);
@@ -683,6 +689,12 @@ int main(int argc, char* argv[])
                 std::cout << "=====================================\n" << std::flush;
             }
 
+            if (cfg.max_mull < 1)
+            {
+                std::cerr << "ERROR: MTG_KEEP_MAXMULL=" << cfg.max_mull << " is invalid -- the exhaustive keep "
+                             "needs max_mull>=1 (a keep decision has nothing to mulligan into at 0).\n";
+                return 1;
+            }
             RunExhaustiveKeep(std::cout, deck, profile, cfg);
             return 0;
         }

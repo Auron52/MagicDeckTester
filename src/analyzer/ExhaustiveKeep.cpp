@@ -243,6 +243,18 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                        const ExhaustiveKeepConfig& cfg)
 {
+    // Guard: max_mull must be >= 1. The exhaustive keep evaluates the keep-vs-mulligan decision, which needs
+    // at least the size-6 sub-table to compare a kept 7 against; max_mull=0 leaves only size 7 with nothing to
+    // mulligan into and underflows the bottoming/Dopt sizing downstream (an opaque "vector > max_size" throw).
+    // Fail loudly and early instead. (main.cpp also rejects it with a nonzero exit; this backstops any caller.)
+    if (cfg.max_mull < 1)
+    {
+        os << "ERROR: max_mull=" << cfg.max_mull << " is invalid -- the exhaustive keep needs max_mull>=1 "
+              "(sizes 7..7-max_mull; a keep decision has nothing to mulligan into at 0). Aborting.\n" << std::flush;
+        std::cerr << "[keepgen] ERROR: max_mull=" << cfg.max_mull << " < 1 -- aborting (need >=1)\n" << std::flush;
+        return;
+    }
+
     // ---- 1. Buckets (objective-relative equivalence) --------------------------------------------
     // Bucketing uses the FIXED equiv_seed (not the rollout seed) so the clustering is byte-identical
     // across machines -- a precondition for pooling their raw tables.
