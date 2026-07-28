@@ -243,10 +243,10 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                        const ExhaustiveKeepConfig& cfg)
 {
-    // Guard: max_mull must be >= 1. The exhaustive keep evaluates the keep-vs-mulligan decision, which needs
-    // at least the size-6 sub-table to compare a kept 7 against; max_mull=0 leaves only size 7 with nothing to
-    // mulligan into and underflows the bottoming/Dopt sizing downstream (an opaque "vector > max_size" throw).
-    // Fail loudly and early instead. (main.cpp also rejects it with a nonzero exit; this backstops any caller.)
+    // Backstop: max_mull must be >= 1. The CLI now hard-codes it to 6 (there is no knob), so this can't be
+    // hit from a normal run -- it defends the library entry point against a future/direct caller passing a
+    // bad config. max_mull=0 leaves only size 7 with nothing to mulligan into and underflows the
+    // bottoming/Dopt sizing downstream (an opaque "vector > max_size" throw); fail loudly and early instead.
     if (cfg.max_mull < 1)
     {
         os << "ERROR: max_mull=" << cfg.max_mull << " is invalid -- the exhaustive keep needs max_mull>=1 "

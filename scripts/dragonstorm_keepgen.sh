@@ -8,7 +8,7 @@
 #     mulligan-gen settings are deliberately cheaper -- to be encoded in the play profile later.)
 #   * FORCE_MERGE Karrthus+Kolaghan -> K=17 (C(23,7)=245,157 cells, ~29% fewer than natural K=18). Both
 #     are hard-to-cast off-red haste-dragon payoffs; merging them is the established Dragonstorm config.
-#   * R=40 cap, r0=2 floor, MAXMULL=3, bottoming always on.
+#   * R=40 cap, r0=2 floor, max_mull fixed at 6 (no knob), bottoming always on.
 #   * Frozen commit baa53d4 (adds the storm go-off short-circuit 324896d + Lotus accel-prefix collapse).
 #     Fresh discovery cache on this commit (the tractability cuts change play, so old caches are stale).
 #   * TRACTABILITY CUTS: the go-off short-circuit ships default-on; the Desperate Ritual splice collapse
@@ -42,7 +42,7 @@ exec env \
   MTG_EQUIV_SEED=20260701 \
   MTG_EQUIV_FORCE_MERGE="Karrthus,Dragonlord Kolaghan" \
   MTG_EQUIV_CACHE="$CACHE" \
-  MTG_KEEP_ROLLOUTS=40 MTG_KEEP_R_FLOOR=2 MTG_KEEP_MAXMULL=3 \
+  MTG_KEEP_ROLLOUTS=40 MTG_KEEP_R_FLOOR=2 \
   MTG_COMMIT="${HASH}+lotusprefix" \
   MTG_KEEP_OUT_RAW="$RAW" MTG_KEEP_OUT_PROFILE="$PROF" \
   MTG_KEEP_SLOW_MS=30000 MTG_KEEP_SLOW_LOG="$GENDIR/slow_captures_${HASH}.txt" \

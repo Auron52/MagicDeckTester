@@ -106,8 +106,8 @@ HASH=$(git rev-parse --short HEAD)          # play-logic identity, stamped into 
 MTG_KEEP_EXHAUSTIVE=1 \
   MTG_EQUIV_PROBES=400 MTG_EQUIV_THRESHOLD=0.01 MTG_EQUIV_DEPTH=5 \  # bucketing (pinned)
   MTG_EQUIV_SEED=20260701 \                                          # FIXED bucket seed (all machines)
-  MTG_KEEP_ROLLOUTS=<R> MTG_KEEP_MAXMULL=3 \                         # R = label precision; depth of mull
-  MTG_COMMIT="$HASH" \                                               # (bottoming is always on -- no flag)
+  MTG_KEEP_ROLLOUTS=<R> \                                            # R = label precision (per-cell rollouts)
+  MTG_COMMIT="$HASH" \              # (bottoming always on; max_mull fixed at 6 = down to keep-1 -- no knob)
   ./build/Release/mtg-analyze decks/<name>/<name>.txt --cards-json src/cards/data/cards.json \
     --max-turns 8 --seed <SEED_BASE>                                 # SEED_BASE = the rollout run id
 ```
@@ -249,7 +249,7 @@ and deck, with **disjoint** rollout streams — the merge tool enforces this via
 4. **Distinct `--seed` (seed_base) per machine** → disjoint continuations. The merge rejects overlap.
 
 **Determinism handshake (do this ONCE before trusting a pool):** both machines run a tiny *identical*
-config (same `--seed`, e.g. `MTG_KEEP_ROLLOUTS=2 MTG_KEEP_MAXMULL=1`) and you confirm the raw sidecars
+config (same `--seed`, e.g. `MTG_KEEP_ROLLOUTS=2`) and you confirm the raw sidecars
 have **identical `bucket_fp` and `deck_fp`** and **byte-identical V** on that shared seed. Only if they
 match is cross-machine rollout determinism holding (the shuffle is portable across Linux/Windows, but
 verify per pair). Then discard those and run **distinct-seed** production runs.
