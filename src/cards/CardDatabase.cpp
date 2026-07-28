@@ -351,6 +351,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     {
         p.spectacle_cost = ManaCostFromString(params["spectacle_cost"].get<std::string>());
     }
+    // Splice-onto-Arcane per-copy cost. Unset -> EffectiveCost falls back to the card's own printed
+    // mana cost (byte-identical for Desperate Ritual, whose splice cost equals its cast cost).
+    if (params.contains("splice_cost"))
+    {
+        p.splice_cost = ManaCostFromString(params["splice_cost"].get<std::string>());
+    }
 
     for (const std::string& c : params.value("produces", json::array()))
     {
