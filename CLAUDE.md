@@ -36,16 +36,18 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   agent's). This applies to every tool call in this repo: analysis runs, the test
   harness, builds, and ad-hoc scripts.
 
-- **ONLY THE USER cancels a run longer than ~10 minutes — an agent NEVER does.**
-  Do not `TaskStop`, `kill`, `pkill`, Ctrl-C, or otherwise terminate any run that has
-  been going more than ~10 minutes, **even to "fix" or restart it, and especially not
-  when the user is merely asking a question about it.** A question about a run's
-  progress, CPU use, or correctness is NOT a request to cancel it — answer the question
-  and let the run continue. If you believe a long run is wrong or inefficient, *say so
-  and propose the fix for next time*; the decision to stop it is the user's alone. (This
-  rule exists because agents kill in-flight runs when the user is only inquiring —
-  destroying hours of work the user did not ask to discard.) Short (<10 min) throwaway
-  probes you started yourself may be stopped if clearly wrong.
+- **ONLY THE USER cancels a run past ~10 minutes — an agent NEVER does; a question is not a cancel.**
+  The ~10-minute mark is a **detection deadline**. If you spot a *clear* defect in a run
+  within its first ~10 minutes (wrong flags, a methodology bug, obviously-corrupt output),
+  you MAY stop it, fix the cause, and restart right away — little is lost, and that is the
+  right move. **Once a run has been going past ~10 minutes, do NOT `TaskStop`/`kill`/`pkill`/
+  Ctrl-C it for ANY reason** — not to "fix" it, not to restart it more efficiently, and above
+  all not because the user asked a question about it. A question about a run's progress, CPU
+  use, or correctness is NOT a request to cancel it. If you believe a past-10-min run is wrong
+  or inefficient, **let it keep running and surface a question to the user** (flag the problem,
+  propose the fix, note that re-running is their call); the decision to stop it is theirs
+  alone. (This rule exists because agents kill in-flight runs when the user is only inquiring —
+  destroying work the user did not ask to discard.)
 
 - **Long / multi-item runs MUST batch into ONE pooled work queue — never a loop of
   many small invocations.** Launching a run as many separate per-item commands (e.g.
