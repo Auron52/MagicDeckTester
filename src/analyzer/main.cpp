@@ -55,6 +55,7 @@ int main(int argc, char* argv[])
                                   // with --max-turns for a genuinely slow deck.
     uint64_t seed          = 0;
     bool     seed_provided = false;
+    std::string gen_recipe;   // --gen-mulligan <fast|complete|recommend>: one-flag mulligan-profile gen
 
     for (int i = 2; i < argc - 1; ++i)
     {
@@ -73,6 +74,10 @@ int main(int argc, char* argv[])
             else if (flag == "--cards-json")
             {
                 cards_json = argv[i + 1];
+            }
+            else if (flag == "--gen-mulligan")
+            {
+                gen_recipe = argv[i + 1];
             }
         }
         catch (...)
@@ -520,7 +525,9 @@ int main(int argc, char* argv[])
         //   MTG_KEEP_MAXMULL (deepest mulligan, default 6 = down to keep-1; the terminal keep-1 anchor is
         //   the only correct forced-keep, so 6 is the uniquely-correct depth. Shallower forced-keeps a hand
         //   it should ship -- see docs/design/bottomcards-undercount-beyond-maxmull.md).
-        if (const char* e = std::getenv("MTG_KEEP_EXHAUSTIVE"); e && *e && std::string(e) != "0")
+        const bool env_exhaustive = []{ const char* e = std::getenv("MTG_KEEP_EXHAUSTIVE");
+                                        return e && *e && std::string(e) != "0"; }();
+        if (env_exhaustive || !gen_recipe.empty())
         {
             auto env_int = [](const char* k, int dflt, int lo)
             { const char* s = std::getenv(k); return (s && *s) ? std::max(lo, std::atoi(s)) : dflt; };
@@ -582,6 +589,65 @@ int main(int argc, char* argv[])
                 if (const char* p = std::getenv("MTG_KEEP_OUT_PROFILE")) { cfg.out_profile = p; }
                 if (const char* r = std::getenv("MTG_KEEP_OUT_RAW"))     { cfg.out_raw     = r; }
             }
+
+            // --gen-mulligan <recipe>: one-flag mulligan-profile generation. A recipe is a fixed preset over
+            // the two cost levers -- bottoming mode (full vs adaptive) and cap R -- so the whole gen needs no
+            // parameters but the flag. depth/budget come from the play profile's value_play (its mulligan-gen
+            // override if set, else the play depth), NOT from the MTG_EQUIV_* env (which stay as advanced
+            // overrides for the raw MTG_KEEP_EXHAUSTIVE path). Keep is always adaptive (floor 2); the recipes
+            // differ in whether BOTTOMING is adaptive and in the cap R. See the recipe study in memory/docs.
+            std::string depth_src = "gen-default", budget_src = "gen-default";
+            if (!gen_recipe.empty())
+            {
+                // Resolve rollout depth/budget from value_play (mull_gen_* override -> play -> built-in default).
+                const auto& vp = profile.value_play;
+                cfg.depth     = vp.MullGenDepth(5);
+                cfg.budget_ms = vp.MullGenBudgetMs(20);
+                depth_src  = vp.mull_gen_depth > 0 ? "value_play.mull_gen_depth"
+                           : vp.target_depth   > 0 ? "value_play.target_depth" : "gen-default";
+                budget_src = vp.mull_gen_budget_ms > 0 ? "value_play.mull_gen_budget_ms"
+                           : vp.budget_ms          > 0 ? "value_play.budget_ms" : "gen-default";
+
+                if (gen_recipe == "complete")
+                {
+                    cfg.rollouts = 40; cfg.r_floor = 2; cfg.adaptive_bottom = false;  // full bottoming, native-R
+                }
+                else if (gen_recipe == "fast")
+                {
+                    cfg.rollouts = 30; cfg.r_floor = 2; cfg.adaptive_bottom = true;   // adaptive bottoming, R30
+                }
+                else
+                {
+                    std::cerr << "Unknown --gen-mulligan recipe '" << gen_recipe
+                              << "'. Use: complete | fast\n";
+                    return 1;
+                }
+            }
+
+            // Always report the effective gen settings (even when they are just defaults) so a run is
+            // self-documenting -- what recipe, depth, R, and bottoming mode actually produced this profile.
+            {
+                const char* trigger = !gen_recipe.empty() ? gen_recipe.c_str() : "env (MTG_KEEP_EXHAUSTIVE)";
+                std::cout << "=== MULLIGAN PROFILE GEN SETTINGS ===\n";
+                std::cout << "  recipe          : " << trigger << "\n";
+                std::cout << "  bottoming       : " << (cfg.adaptive_bottom ? "ADAPTIVE" : "FULL")
+                          << "  (baked ON at runtime)\n";
+                std::cout << "  cap R (rollouts): " << cfg.rollouts << "\n";
+                std::cout << "  floor R         : " << cfg.r_floor
+                          << (cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts ? "  (adaptive keep)" : "  (uniform)")
+                          << "\n";
+                std::cout << "  rollout depth   : " << cfg.depth     << "  (source: " << depth_src  << ")\n";
+                std::cout << "  rollout budget  : " << cfg.budget_ms << " ms  (source: " << budget_src << ")\n";
+                std::cout << "  flip_eps        : " << cfg.flip_eps << "   se_prior: " << cfg.se_prior
+                          << "   r_batch: " << cfg.r_batch << "\n";
+                std::cout << "  max_mull        : " << cfg.max_mull << "   max_turns: " << cfg.max_turns << "\n";
+                std::cout << "  bucket probes   : " << cfg.probes << "   threshold: " << cfg.threshold << "\n";
+                std::cout << "  seed            : " << cfg.seed << "\n";
+                std::cout << "  out profile     : " << (cfg.out_profile.empty() ? "(none)" : cfg.out_profile) << "\n";
+                std::cout << "  out raw         : " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw) << "\n";
+                std::cout << "=====================================\n" << std::flush;
+            }
+
             RunExhaustiveKeep(std::cout, deck, profile, cfg);
             return 0;
         }

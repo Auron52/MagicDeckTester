@@ -65,8 +65,21 @@ struct ValuePlay
     std::string         regime;           // "light" | "heavy"
     std::vector<double> leaf_cost_ms;     // indexed by depth (index 0 unused)
     std::vector<double> heur_cost_ms;
+    // Mulligan-GENERATION rollout settings (distinct from the PLAY settings above). Mulligan gen labels each
+    // bucket-hand with R reshuffled rollouts, and a slow/large-K deck may want those rollouts run at a CHEAPER
+    // depth than the shipped play depth purely for gen cost -- so the --gen-mulligan recipe reads depth/budget
+    // from here. 0 => unset => fall back to the play target_depth/budget_ms (see MullGenDepth/MullGenBudgetMs).
+    // Set when the play profile is created (or left 0 to inherit play).
+    int    mull_gen_depth     = 0;
+    int    mull_gen_budget_ms = 0;
     bool present() const { return target_depth > 0; }
     bool drives()  const { return target_depth > 0 && enabled; }   // actually steers play (adopted)
+    // Effective mulligan-gen depth/budget: explicit mull_gen_* if set, else the play depth/budget, else the
+    // caller's built-in default (passed in so this header needs no dependency on the gen defaults).
+    int MullGenDepth(int dflt) const
+    { return mull_gen_depth > 0 ? mull_gen_depth : (target_depth > 0 ? target_depth : dflt); }
+    int MullGenBudgetMs(int dflt) const
+    { return mull_gen_budget_ms > 0 ? mull_gen_budget_ms : (budget_ms > 0 ? budget_ms : dflt); }
 };
 
 struct MulliganProfile
