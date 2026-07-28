@@ -575,6 +575,11 @@ int main(int argc, char* argv[])
             // argmin to refined cells (recovers keep-only savings for bottoming-on). Off => full-R sub-tables.
             cfg.adaptive_bottom = []{ const char* s = std::getenv("MTG_KEEP_ADAPTIVE_BOTTOM");
                                       return s && *s && std::string(s) != "0"; }();
+            // Reuse a prior recommend-probe chunk (<out_raw>.probe) as this gen's r=0 slice. Auto-on for the
+            // --gen-mulligan complete/fast recipes (set below); MTG_KEEP_PROBE_CARRY=1 also enables it on this
+            // advanced env path.
+            cfg.use_probe_carry = []{ const char* s = std::getenv("MTG_KEEP_PROBE_CARRY");
+                                      return s && *s && std::string(s) != "0"; }();
             if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
             if (const char* fm = std::getenv("MTG_EQUIV_FORCE_MERGE")) { cfg.force_merge = fm; }
             // Write the serialized keep policy + poolable raw sidecar next to the deck unless suppressed.
@@ -599,6 +604,18 @@ int main(int argc, char* argv[])
             std::string depth_src = "gen-default", budget_src = "gen-default";
             if (!gen_recipe.empty())
             {
+                // Deterministic seed by DEFAULT for the recipe path. The global default randomizes the seed
+                // per invocation (fine for one-off play analysis), but that would defeat everything the recipe
+                // flow wants to "just work": recommend's probe chunk and the real gen must share a seed for the
+                // byte-identical probe reuse, and re-running an interrupted recipe must resume its own out_raw
+                // (also seed-gated). A fixed seed makes recipe gens reproducible too. Explicit --seed still
+                // overrides -- multi-machine pools pass their own disjoint seeds on the advanced env path.
+                //
+                // 1000000 is a deliberate sentinel clear of every seed range the repo uses: reference games
+                // (s1..~s30), regression/smoke/overnight (s1001..~s8100), and the explicit mulligan-gen seeds
+                // (12345, 700001, 900001, 10000001, 20000001, date-like 2026xxxx). It reads as "the recipe
+                // default" and won't be mistaken for a hand-played or test seed.
+                if (!seed_provided) { cfg.seed = 1000000; }
                 // Resolve rollout depth/budget from value_play (mull_gen_* override -> play -> built-in default).
                 const auto& vp = profile.value_play;
                 cfg.depth     = vp.MullGenDepth(5);
@@ -611,10 +628,12 @@ int main(int argc, char* argv[])
                 if (gen_recipe == "complete")
                 {
                     cfg.rollouts = 40; cfg.r_floor = 2; cfg.adaptive_bottom = false;  // full bottoming, native-R
+                    cfg.use_probe_carry = true;   // reuse a prior 'recommend' probe chunk if one matches
                 }
                 else if (gen_recipe == "fast")
                 {
                     cfg.rollouts = 30; cfg.r_floor = 2; cfg.adaptive_bottom = true;   // adaptive bottoming, R30
+                    cfg.use_probe_carry = true;   // reuse a prior 'recommend' probe chunk if one matches
                 }
                 else if (gen_recipe == "recommend")
                 {
@@ -655,6 +674,12 @@ int main(int argc, char* argv[])
                 std::cout << "  seed            : " << cfg.seed << "\n";
                 std::cout << "  out profile     : " << (cfg.out_profile.empty() ? "(none)" : cfg.out_profile) << "\n";
                 std::cout << "  out raw         : " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw) << "\n";
+                if (cfg.recommend_only)
+                { std::cout << "  probe chunk out : " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw + ".probe")
+                            << "\n"; }
+                else if (cfg.use_probe_carry)
+                { std::cout << "  probe carry     : ON (reuse " << (cfg.out_raw.empty() ? "<out_raw>" : cfg.out_raw)
+                            << ".probe if it matches)\n"; }
                 std::cout << "=====================================\n" << std::flush;
             }
 

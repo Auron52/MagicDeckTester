@@ -65,6 +65,17 @@ struct ExhaustiveKeepConfig
                                      // full-gen wall-clock (vs an overnight window) and STOP -- no refine
                                      // waves, no profile written. A cost-scouting probe, ~1/(cap/floor) the
                                      // price of a full gen, so the user can pick fast/complete/another machine.
+                                     // ALSO writes its R=1 floor pass to <out_raw>.probe (a poolable "probe
+                                     // chunk") so a later real gen can reuse it (see use_probe_carry).
+    bool     use_probe_carry = false; // reuse a COMPLETE recommend-probe chunk (<out_raw>.probe) as the r=0
+                                     // slice of THIS gen. The probe sampled every cell once at the SAME
+                                     // seed/depth/budget/bucketing, so (rollout seed is a pure fn of
+                                     // (seed_base,r,w,pd)) its r=0 IS byte-identically this gen's r=0 -> load
+                                     // it and roll only r>=1, skipping one rollout/cell. BYTE-IDENTICAL to a
+                                     // from-scratch run (not a lossy pool). Gated on matching play_digest
+                                     // (only reuse if play is unchanged) + fingerprints + floor_complete; a
+                                     // mismatch is silently ignored (fresh run). main.cpp sets this for the
+                                     // --gen-mulligan complete/fast recipes; MTG_KEEP_NO_PROBE_CARRY opts out.
     std::string out_profile;    // if set, write the serialized keep policy (base profile + table) here
     std::string out_raw;        // if set, write the poolable raw sum+count sidecar (for cross-machine merge)
     std::string commit;         // play-logic identity stamped into the raw sidecar (from MTG_COMMIT)

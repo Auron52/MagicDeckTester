@@ -1297,7 +1297,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     journal_on = continuous && !cfg.out_raw.empty()
               && !(std::getenv("MTG_KEEP_JOURNAL") && std::string(std::getenv("MTG_KEEP_JOURNAL")) == "0");
     if (journal_on) { journal_path = cfg.out_raw + ".journal"; }
-    auto write_raw_atomic = [&](const std::string& path) -> bool
+    auto write_raw_atomic = [&](const std::string& path, bool as_probe = false) -> bool
     {
         using json = nlohmann::json;
         uint64_t bucket_fp = 1469598103934665603ULL;
@@ -1309,12 +1309,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         uint64_t deck_fp = 1469598103934665603ULL;
         for (const std::string& n : deck_names) { deck_fp = Fnv(n + ",", deck_fp); }
         json root;
+        // A checkpoint stamps an empty play_digest (resume gates on the fingerprints, not the digest -- it is
+        // inherently the same commit). A PROBE chunk stamps the real play_digest + floor_complete markers so a
+        // later gen only reuses it when play is byte-identical (the byte-identical-r=0 precondition).
         root["meta"] = {
-            { "commit", cfg.commit }, { "play_digest", std::string() },
+            { "commit", cfg.commit }, { "play_digest", as_probe ? play_digest : std::string() },
             { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
             { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
+        if (as_probe) { root["meta"]["probe"] = true; root["meta"]["floor_complete"] = true; }
         json buckets = json::array();
         for (int b = 0; b < K; ++b) { buckets.push_back(eq.classes[b].members); }
         root["buckets"] = buckets;
@@ -1493,6 +1497,77 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     }
 
+    // ---- Probe carry: reuse a COMPLETE recommend-probe chunk (<out_raw>.probe) as this gen's r=0 slice ----
+    // --gen-mulligan recommend already sampled EVERY cell once (R=1) at the SAME seed/depth/budget/bucketing/
+    // commit, and the rollout seed is a pure fn of (seed_base,r,w,pd) -- so the probe's r=0 IS byte-identically
+    // this gen's r=0. Preload it and the Pass-A floor below rolls only r>=1 (honours the loaded count), saving
+    // one rollout/cell with ZERO change to output. Gated hard: probe/floor_complete markers + fingerprints +
+    // play_digest (reuse ONLY if play is unchanged -- the byte-identical precondition); any mismatch is
+    // silently ignored (fresh run). Skipped if a journal/out_raw resume already loaded state (same run
+    // continuing), and opt-out-able via MTG_KEEP_NO_PROBE_CARRY for an A/B.
+    if (cfg.use_probe_carry && !cfg.recommend_only && resume_loaded == 0 && !cfg.out_raw.empty()
+        && std::getenv("MTG_KEEP_NO_PROBE_CARRY") == nullptr)
+    {
+        const std::string probe_path = cfg.out_raw + ".probe";
+        std::ifstream pf(probe_path);
+        if (pf)
+        {
+            nlohmann::json pj; bool okp = true;
+            try { pf >> pj; } catch (...) { okp = false; }
+            if (okp && pj.contains("meta") && pj.contains("sizes"))
+            {
+                uint64_t pb, pdk; compute_fps(pb, pdk);
+                const auto& pm = pj["meta"];
+                const bool match = pm.value("probe", false) && pm.value("floor_complete", false)
+                                && pm.value("bucket_fp", 0ULL) == pb
+                                && pm.value("deck_fp", 0ULL) == pdk
+                                && pm.value("seed_base", ~0ULL) == cfg.seed
+                                && pm.value("K", -1) == K
+                                && pm.value("max_mull", -1) == cfg.max_mull
+                                && pm.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                                && pm.value("play_digest", std::string()) == play_digest;
+                if (match)
+                {
+                    long long carried = 0;
+                    for (const auto& sz : pj["sizes"])
+                    {
+                        const int H = sz.value("H", 0);
+                        if (H > HAND || H < min_size) { continue; }
+                        SizeTable& t = tables[HAND - H];
+                        for (const auto& e : sz["entries"])
+                        {
+                            auto it = t.index.find(e["comp"].get<std::vector<int>>());
+                            if (it == t.index.end()) { continue; }
+                            const int i = it->second;
+                            for (int pd = 0; pd < 2; ++pd)
+                            {
+                                const long long c = e["count"][pd].get<long long>();
+                                if (c <= 0) { continue; }
+                                t.sum[i][pd]   = e["sum"][pd].get<double>();
+                                t.sumsq[i][pd] = e["sumsq"][pd].get<double>();
+                                t.cnt[i][pd]   = c;
+                                ++carried;
+                            }
+                        }
+                    }
+                    if (carried > 0)
+                    {
+                        resume_loaded += carried;   // engages the Pass-A "start from loaded count" path below
+                        recompute();
+                        std::cerr << "[keepgen] PROBE-CARRY: reused " << carried << " cell-sides (r=0/cell) from "
+                                  << probe_path << " -> rolling only r>=1 (byte-identical; saves 1 rollout/cell)\n"
+                                  << std::flush;
+                    }
+                }
+                else
+                {
+                    std::cerr << "[keepgen] PROBE-CARRY: " << probe_path << " present but fingerprint/play_digest"
+                                 " MISMATCH -- ignoring (running fresh)\n" << std::flush;
+                }
+            }
+        }
+    }
+
     // Open the journal for the continuous run BEFORE Pass A (so sub-table completions are journaled as
     // they happen -> a crash mid-Pass-A loses only in-flight sub-cells). Append when we resumed one (keep
     // its prior records + header); otherwise truncate and write a fresh fingerprint header on line 1.
@@ -1565,11 +1640,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // on the new deck/commit. Adaptive only -- a uniform run has no refiner, so sample in full.
                 if (Hw == HAND && carry_lowfloor7[iw][pd] && adaptive)
                 { cell_init = std::min(cell_init, carry_floor); }
-                // RESUME: a cell already sampled to its floor in a reloaded checkpoint needs no re-run
-                // (its accumulators are already correct; += would double-count). Guarded on resume_loaded
-                // so a normal (non-resumed) run is byte-identical.
-                if (resume_loaded > 0 && tables[HAND - Hw].cnt[iw][pd] >= cell_init) { continue; }
-                tasks.push_back({ w, pd, 0, cell_init });
+                // RESUME / PROBE-CARRY: a cell may already carry rollouts from a reloaded checkpoint or probe
+                // chunk. If it is already at/above its floor, skip it (its accumulators are correct; += would
+                // double-count). Otherwise START at the loaded count so we roll only the DEFICIT r>=have --
+                // the seed is a pure fn of (seed_base,r,w,pd), so continuing the r-stream from `have` is
+                // byte-identical to a from-scratch [0,cell_init). Guarded on resume_loaded, and a same-R
+                // resume never has 0<have<cell_init (floor tasks commit atomically), so a normal/resumed run
+                // is byte-identical; only a probe carry (have=1<floor) actually takes the deficit branch.
+                const long long have = (resume_loaded > 0) ? tables[HAND - Hw].cnt[iw][pd] : 0;
+                if (resume_loaded > 0 && have >= cell_init) { continue; }
+                tasks.push_back({ w, pd, have, cell_init });
             }
         }
         // ONE barrier-free pass over the whole floor: workers stay saturated to the very end (cores idle
@@ -1587,8 +1667,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             // When journaling, Pass A's cells (sub-tables in the continuous path) are already persisted
             // per-commit via run_batch -> skip the full-raw mid-flight checkpoint AND the post-pass snapshot
-            // (both redundant, and the mid-flight one stalls the fold under acc_mtx).
-            if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0 && tasks.size() > 1)
+            // (both redundant, and the mid-flight one stalls the fold under acc_mtx). recommend_only also
+            // skips these writes: a scout must be NON-DESTRUCTIVE -- it writes ONLY its <out_raw>.probe
+            // sidecar and must never clobber a deck's real out_raw with a floor snapshot (re-scouting a deck
+            // that already has a gen'd raw would otherwise destroy it).
+            const bool ckpt_out_raw = !journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0
+                                   && !cfg.recommend_only;
+            if (ckpt_out_raw && tasks.size() > 1)
             {
                 process_tasks(tasks, lbl, checkpoint_sec,
                               [&]{ std::lock_guard<std::mutex> lk(acc_mtx); write_raw_atomic(cfg.out_raw); });
@@ -1597,7 +1682,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // Complete-floor final write: the mid-flight loop's last snapshot predates the final cells by up
             // to one interval, so write once more now (workers have joined -> quiescent, no lock needed). The
             // old grouped path likewise checkpointed after its last group.
-            if (!journal_on && !cfg.out_raw.empty() && checkpoint_sec > 0) { write_raw_atomic(cfg.out_raw); }
+            if (ckpt_out_raw) { write_raw_atomic(cfg.out_raw); }
             recompute();
         }
     }
@@ -2215,6 +2300,19 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         if (cfg.recommend_only)
         {
+            // Persist the COMPLETE R=1 floor pass as a poolable "probe chunk" next to the eventual gen's
+            // out_raw, so a later --gen-mulligan complete/fast can reuse it as its r=0 slice (byte-identical;
+            // see use_probe_carry). We reach here only AFTER the whole floor pass, so every cell has its one
+            // rollout -> the chunk is floor-complete by construction.
+            if (!cfg.out_raw.empty())
+            {
+                const std::string probe_path = cfg.out_raw + ".probe";
+                if (write_raw_atomic(probe_path, /*as_probe=*/true))
+                { os << "probe chunk (R=1, every cell) written to " << probe_path
+                     << " -- a later 'complete'/'fast' gen will reuse it (skips r=0/cell).\n"; }
+                else
+                { os << "WARNING: failed to write probe chunk " << probe_path << "\n"; }
+            }
             os << "recommend mode: stopping after the floor pass (no refine, no profile written).\n"
                << std::flush;
             return;
