@@ -273,23 +273,35 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     Keep it GT-neutral by gating on `HumanPlayActive()` (autonomous keeps the greedy `ApplyFirebreathing`).
     The "invisible mana accounting" half is the server-truth increment-2 (faithful per-action resolution
     log). Needs a focused, browser-verified session — do NOT ship blind.
-  - **#2 undo history corruption — DEFERRED (cosmetic; unverifiable without a browser).** The game STATE
-    is always correct (stateless `--choices` replay); only the client history PANEL misrenders after undo
-    around auto-advanced passes. The checkpoint↔step invariant (`checkpoints.length == steps.length+1`)
-    actually HOLDS through an auto-advance chain (each auto-pass pushes both a checkpoint in `advanceTo`
-    2140 and a step in `commitLine`/`pushChoices`), so the corruption is subtler than a raw count desync —
-    likely `rollbackStep` popping only ONE step lands undo on an auto-advanced decision whose `S.undoing`
-    suppression + re-logged draws (`advanceTo` 2142) interact to duplicate/reorder history lines. Fixing
-    it means reasoning about the auto-advance chain in `rollbackStep`/`advanceTo` and VISUALLY confirming
-    the history panel — untestable from the CLI, so deferred to a browser session rather than shipping an
-    unverifiable client change that could corrupt the panel further.
+  - **#2 undo history corruption — FIXED + browser-verified (jsdom), commit `22f1711`.** Root cause was
+    NOT a count desync (the checkpoint↔step invariant does hold): a single USER action can commit SEVERAL
+    engine decisions with no user rest between them — "Commit turn" auto-passes the pre-main (user) AND the
+    post-main (auto) before landing on the next real decision; a lethal line leaves the dead opponent still
+    prompted; an auto-resolved land-entry follows a cast. `rollbackStep` popped only the LAST step, so undo
+    landed mid-auto-sequence on the auto-advanced post-main decision, leaving a phantom "pass / cast nothing"
+    line (reproduced as a `+1` extra history entry at EVERY main-phase rest). Fix: tag each step `{n, auto}`
+    (auto set at the three auto-advance sites in `advanceTo` + `autoResolveDecision` via `dec._autoStep`);
+    `rollbackStep` keeps popping while the removed step was auto, stopping once it removes the user step above
+    it — so undo returns to the decision the user actually stopped at. Verified by the NEW headless jsdom
+    client check (below): reproduced the corruption pre-fix on every main rest, green post-fix on
+    treasure_hunt/Dragonstorm/burn.
+  - **AGENT-TESTABILITY: `test/viewer_client_check.js` (jsdom).** Loads index.html's REAL `<script>` in a
+    jsdom DOM (linebuild.js inlined; `let S` captured via an injected accessor since it's a lexical binding,
+    not a window prop) and drives it like a browser, with `window.fetch` pointed at server.js's
+    `runStep`/`runValidate` (real engine, in-process transport — server.js now guards `listen` with
+    `require.main` and exports its routes). Deck-agnostic PROPERTY test: because the protocol is a stateless
+    `--choices` replay, undo-then-nothing MUST reproduce the prior history EXACTLY; any `#hist` divergence is
+    client-bookkeeping corruption. This is the fourth viewer check (alongside protocol/linebuild/validate)
+    and the ONLY one that exercises index.html's own client state machine (S.history/steps/checkpoints).
+    Reusable for #4/#6's amount modal (assert modal DOM + choice-stream).
   - **Overnight GT (#5) still PENDING** — rebaseline Dragonstorm on the next `--overnight` (8 h, not
     inline); expected same-direction improvement, NOT a regression.
 
   **SESSION SUMMARY (2026-07-27/28).** Landed + committed: #12 (b608733), #5 (a12b753, GT rebaselined
-  smoke+regression), #7 (7623afe), #10 root-cause doc (b68024d) — on top of the earlier #1b/#3b/#9/#8/#11/
-  #3a/#1a. All GT-neutral except #5 (net-positive, accepted). Remaining: #10 (clear post-sort-append
-  next step), #4/#6 (new combat decision — focused session), #2 (browser-verified session), overnight GT.
+  smoke+regression), #7 (7623afe), #10 root-cause doc (b68024d), **#2 FIXED + jsdom harness (22f1711)** —
+  on top of the earlier #1b/#3b/#9/#8/#11/#3a/#1a. All GT-neutral except #5 (net-positive, accepted).
+  Remaining: #10 (clear post-sort-append next step, CLI-verifiable), #4/#6 (new combat decision — now
+  jsdom-testable for the modal half), overnight GT (#5).
 
 Reference reproductions to sanity-check specific items: Dragonstorm s21_gi20 (Lotus Bloom
 black, item 9 — see `logs/play/rejections/Dragonstorm_cod_s21_gi20_t7.json`), s9_gi8 (splice
