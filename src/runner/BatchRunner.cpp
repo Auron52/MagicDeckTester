@@ -9,24 +9,34 @@
 #include "../deck/DeckLoader.h"
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <list>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <thread>
+#include <unordered_map>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
 namespace
 {
-// One fully-resolved job: deck + profile loaded, all run parameters by value.
+// One fully-resolved job: deck loaded + run parameters resolved. The (potentially huge -- ~167 MB for a
+// big deck's exhaustive keep/bottom sidecar) MulliganProfile is NOT stored here: a manifest can list
+// hundreds of jobs, and holding every job's profile by value OOMs. Instead the job keeps the profile's
+// PATH and the two scalars the play loop needs off the profile directly (vial_target_mv); the profile
+// itself is loaded on demand through a small LRU ProfileCache (see below) and copied into each worker's
+// AIEngine. Play settings are resolved once at parse (needs the profile transiently) and stored by value.
 struct Job
 {
     std::string     name;
     Decklist        deck;
-    MulliganProfile profile;
+    std::string     profile_path;               // key into ProfileCache; loaded lazily by the worker
+    int             vial_target_mv      = 0;     // pulled off the profile at parse (cheap scalar)
     int             games               = 0;
     uint64_t        seed                = 0;
     int             depth               = 0;
@@ -38,6 +48,86 @@ struct Job
                                                // jobs (e.g. Hinata's combo search). 0 => use the proxy.
 };
 
+// Bounded LRU cache of loaded (+sidecar-attached) mulligan profiles, keyed by profile path.
+//
+// A big deck's exhaustive keep/bottom profile is ~167 MB; a recipe/A-B manifest can reference dozens of
+// distinct profiles. Loading them all up front (the old Job-holds-profile design) OOMs. This cache loads
+// each profile at most once while it stays resident and evicts the least-recently-used beyond a small cap
+// (MTG_BATCH_PROFILE_CACHE, default 3). Because the work list is sorted so a profile's games are
+// contiguous (see the stable_sort below), the resident set at any instant is ~1 profile (2 briefly at a
+// boundary), so a cap of 3 yields essentially one load per distinct profile with no reload thrash.
+//
+// get() returns a shared_ptr so a worker that grabbed a handle keeps its profile alive even if the cache
+// evicts it meanwhile; the expensive load happens OUTSIDE the lock, so concurrent loads of DIFFERENT
+// profiles proceed in parallel and the lock is held only for the O(1) map/list bookkeeping.
+class ProfileCache
+{
+public:
+    explicit ProfileCache(std::size_t cap) : cap_(std::max<std::size_t>(1, cap)) {}
+
+    std::shared_ptr<const MulliganProfile> get(const std::string& path)
+    {
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            auto it = map_.find(path);
+            if (it != map_.end())
+            {
+                lru_.splice(lru_.begin(), lru_, it->second.pos);   // mark most-recently-used
+                return it->second.ptr;
+            }
+        }
+        // Miss: load outside the lock (a profile load is heavy; don't serialise all workers on it).
+        std::shared_ptr<const MulliganProfile> loaded = load(path);
+        std::lock_guard<std::mutex> lk(mtx_);
+        auto it = map_.find(path);
+        if (it != map_.end())
+        {
+            // Another worker loaded the same profile while we were loading; keep theirs, drop ours.
+            lru_.splice(lru_.begin(), lru_, it->second.pos);
+            return it->second.ptr;
+        }
+        lru_.push_front(path);
+        map_[path] = Entry{loaded, lru_.begin()};
+        while (map_.size() > cap_)
+        {
+            map_.erase(lru_.back());   // evict LRU (its profile survives while any worker holds a handle)
+            lru_.pop_back();
+        }
+        return loaded;
+    }
+
+private:
+    static std::shared_ptr<const MulliganProfile> load(const std::string& path)
+    {
+        // Mirror ParseJob's original load exactly: base profile (or the built-in default when the file is
+        // absent -- the auto-detect case), then attach the exhaustive keep/bottom, eval, and value sidecars
+        // (each a no-op when its sidecar file is missing).
+        auto prof = std::filesystem::exists(path)
+                        ? std::make_shared<MulliganProfile>(LoadDeckProfile(path))
+                        : std::make_shared<MulliganProfile>(MulliganProfile::DefaultProfile());
+        AttachExhaustiveSidecar(*prof, path);
+        AttachEvalSidecar(*prof, path);
+        AttachValueSidecar(*prof, path);
+        return prof;
+    }
+
+    struct Entry { std::shared_ptr<const MulliganProfile> ptr; std::list<std::string>::iterator pos; };
+    std::size_t                              cap_;
+    std::mutex                               mtx_;
+    std::list<std::string>                   lru_;   // front = MRU, back = LRU
+    std::unordered_map<std::string, Entry>   map_;
+};
+
+std::size_t ProfileCacheCap()
+{
+    if (const char* e = std::getenv("MTG_BATCH_PROFILE_CACHE"))
+    {
+        long v = std::atol(e);
+        if (v > 0) { return static_cast<std::size_t>(v); }
+    }
+    return 3;   // small: a big profile is ~167 MB, and the sort keeps the resident set ~1-2 anyway
+}
+
 // A single unit of pooled work: game `game` of job `job`.
 struct WorkItem
 {
@@ -45,7 +135,7 @@ struct WorkItem
     int game;
 };
 
-Job ParseJob(const json& jspec)
+Job ParseJob(const json& jspec, ProfileCache& cache)
 {
     Job j;
     j.name = jspec.value("name", std::string("<unnamed>"));
@@ -67,7 +157,10 @@ Job ParseJob(const json& jspec)
     // from depth (on iff depth>0). A stale "lookahead_bottoming" key is simply ignored.
 
     // Profile: explicit "profile" path, else auto-detect deckname.profile.json
-    // (mirrors the single-run mtg.exe behaviour exactly).
+    // (mirrors the single-run mtg.exe behaviour exactly). The full profile is NOT stored on the job --
+    // only its path (the worker loads it lazily via the shared LRU cache). We load it once here, through
+    // the same cache, to resolve play settings and pull the vial_target_mv scalar; that resident copy is
+    // released at the end of this function (or evicted later) rather than retained per job.
     std::filesystem::path profile_path;
     if (jspec.contains("profile"))
     {
@@ -78,15 +171,9 @@ Job ParseJob(const json& jspec)
         profile_path = deck_path.parent_path()
                      / (deck_path.stem().string() + ".profile.json");
     }
-    if (std::filesystem::exists(profile_path))
-    {
-        j.profile = LoadDeckProfile(profile_path);
-    }
-    // Play always uses a deck's exhaustive keep/bottom sidecar when it ships alongside the base
-    // profile (keep on presence; bottoming per the sidecar's bottoming_enabled).
-    AttachExhaustiveSidecar(j.profile, profile_path);
-    AttachEvalSidecar(j.profile, profile_path);   // ... and its learned mid-game eval sidecar if present
-    AttachValueSidecar(j.profile, profile_path);  // ... and its learned leaf value sidecar if present
+    j.profile_path = profile_path.string();
+    std::shared_ptr<const MulliganProfile> prof = cache.get(j.profile_path);
+    j.vial_target_mv = prof->vial_target_mv;
 
     // Resolve the effective play settings from the manifest's explicit depth/budget + the deck's value_play.
     // A case that OMITS depth falls to value_play, or -- with no enabled model -- the built-in default depth
@@ -96,7 +183,7 @@ Job ParseJob(const json& jspec)
         const bool depth_given  = jspec.contains("depth");
         const bool budget_given = jspec.contains("budget_ms");
         const bool ignore_play  = jspec.value("ignore_play_profile", false);
-        PlaySettings ps = ResolvePlaySettings(j.profile,
+        PlaySettings ps = ResolvePlaySettings(*prof,
                                               depth_given  ? j.depth     : -1,
                                               budget_given ? j.budget_ms : -1,
                                               ignore_play);
@@ -124,9 +211,13 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         throw std::runtime_error("manifest must contain a \"jobs\" array");
     }
 
+    // Shared LRU cache of loaded profiles (see ProfileCache). Used both here at parse (to resolve each
+    // job's settings/vial without retaining the profile) and by the workers below (to build each AIEngine).
+    ProfileCache profile_cache(ProfileCacheCap());
+
     std::vector<Job> jobs;
     jobs.reserve(manifest["jobs"].size());
-    for (const json& jspec : manifest["jobs"]) { jobs.push_back(ParseJob(jspec)); }
+    for (const json& jspec : manifest["jobs"]) { jobs.push_back(ParseJob(jspec, profile_cache)); }
 
     // Per-job, per-game results. Pre-sized so workers write to disjoint slots with
     // no synchronisation. games[j][gi] = win turn (<=0 means no win).
@@ -155,7 +246,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // depth/budget proxy misjudges -- e.g. Hinata's combo search measured ~40x the other
     // decks at the SAME depth, with a heavy multi-minute tail, so without a weight its d3
     // games sort behind every deck's d5 and become the long tail); then depth, then budget
-    // as the proxy. Reordering is
+    // as the proxy. Then, within a cost tier, group by profile PATH so all games sharing a profile run
+    // consecutively -- this keeps the ProfileCache's resident set to ~1 profile at a time (a big profile is
+    // ~167 MB) so the small cap loads each distinct profile essentially once with no reload thrash. Job
+    // index is the final tiebreak (keeps a single job's games contiguous). Reordering is
     // lossless -- each game is seeded by its job's seed + game index, so order cannot
     // change any result -- and a stable sort keeps a job's games contiguous, which
     // maximises the worker's per-job engine reuse below.
@@ -167,6 +261,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             if (ja.sched_weight != jb.sched_weight) { return ja.sched_weight > jb.sched_weight; }
             if (ja.depth     != jb.depth)     { return ja.depth     > jb.depth; }
             if (ja.budget_ms != jb.budget_ms) { return ja.budget_ms > jb.budget_ms; }
+            if (ja.profile_path != jb.profile_path) { return ja.profile_path < jb.profile_path; }
             return a.job < b.job;
         });
 
@@ -239,7 +334,11 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
 
                 if (wi.job != cached_job)
                 {
-                    ai.emplace(job.profile, job.depth, job.budget_ms);
+                    // Load (or hit) the job's profile through the shared cache and hand a copy to the
+                    // AIEngine (which owns its own copy). The shared handle is released at the end of this
+                    // block; only the AIEngine's copy persists across the job's games.
+                    std::shared_ptr<const MulliganProfile> prof = profile_cache.get(job.profile_path);
+                    ai.emplace(*prof, job.depth, job.budget_ms);
                     ai->SetSearchPostCombat(job.second_main);
                     engine.emplace(*ai);
                     cached_job = wi.job;
@@ -247,7 +346,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
 
                 GameState state = GoldFishRunner::SetupGame(
                     job.deck, job.seed + static_cast<uint64_t>(wi.game));
-                state.vial_target_mv = job.profile.vial_target_mv;
+                state.vial_target_mv = job.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(state, wi.game);
 
                 // Attach a logger for the play fingerprint. Default: DIGEST-ONLY (no structure
