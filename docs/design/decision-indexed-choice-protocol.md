@@ -110,7 +110,21 @@ independently verifiable.
 2. **#4 GUI modal.** A combat-phase surfacing in index.html (new context — the viewer auto-runs combat
    today): +/- amount modal defaulting to greedy max, `firebreathe` in `AUTO_RESOLVABLE`. jsdom
    `viewer_client_check` asserts the modal + the `--firebreathe` the viewer emits.
-3. **#6 Dwarven Hold** storage-burst amount via the same pattern.
+3. **#6 Dwarven Hold — ANALYZED, NOT a clean amount decision (2026-07-28).** Despite the item-map
+   framing as a "sibling amount decision to #4", the storage-land mechanic has no meaningful independent
+   amount to surface. Per the authoritative card note (`cards.json`, Mercadian Bazaar / Dwarven Hold):
+   **charge is automatic** (an idle storage land gains +1 counter at end of turn — "weakly dominant, an
+   idle Mercadian never wants to sit un-charged"), and a **burst PARTIAL-bursts only the payment's
+   remaining shortfall** — `storage_burn = min(storage_counters, cost.ManaValue() − floating.Total())`
+   (`SpellEffects.h:4348`), "search-driven via plan choice, tapped LAST, reserved when unneeded". So the
+   burst amount is definitionally the shortfall (the ONLY sensible value — bursting fewer fails the cast,
+   more wastes counters), and the genuine strategic lever (charge-up vs burst-now) is ALREADY the human's:
+   they choose it by which PLAN they commit (a line that taps the storage land bursts it; a line that
+   doesn't leaves it idle to auto-charge). Firebreathe differs because it spends LEFTOVER mana — a free
+   "spend k of the surplus" choice with no cast depending on it. A finer #6 override ("pay this cast from
+   other sources, reserve the storage counters") would be a general mana-SOURCE-selection feature (deep,
+   touches `TapForCost` for every cast; the heuristic already taps storage last / reserves when unneeded),
+   NOT an amount modal — deferred as low-value. **#6 needs no new decision; closed with this finding.**
 4. **#10 cast-order side-channel** (optional follow-on).
 
 ## Verification gates (every increment)
