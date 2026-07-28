@@ -134,7 +134,7 @@ function testFirebreatheBookkeeping(win) {
 function testStorageHoldBookkeeping(win) {
   const S = win.__getS(), sh = win.__sh, fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
-  const d = { type: 'storage_hold', turn: 6, land: 'Dwarven Hold', land_num: 42, counters: 3,
+  const d = { type: 'storage_hold', turn: 6, land: 'Dwarven Hold', land_idx: 5, counters: 3,
               heuristic_default: 0, pre_draw: true };
   const html = sh.panel(d);
   chk((html.match(/data-opt="[01]"/g) || []).length === 2, 'panel renders the two hold/allow buttons');
@@ -144,13 +144,13 @@ function testStorageHoldBookkeeping(win) {
   S.history = []; S.storageHold = {}; S.decision = d; S.busy = false;
   const choicesBefore = S.choices.length;
   sh.commit(d, 1);
-  chk(S.storageHold['6:42'] === 1, "commit records side-channel storageHold['6:42']=1");
+  chk(S.storageHold['6:5'] === 1, "commit records side-channel storageHold['6:5'] (turn:land_idx)=1");
   chk(S.choices.length === choicesBefore, 'commit consumes NO --choices slot');
   const last = S.steps[S.steps.length - 1];
-  chk(last && last.n === 0 && last.sh === '6:42', 'commit pushes a zero-int step keyed by (turn,land#) (sh=6:42)');
+  chk(last && last.n === 0 && last.sh === '6:5', 'commit pushes a zero-int step keyed by (turn,land_idx) (sh=6:5)');
   S.busy = false;
   sh.rollback();
-  chk(!('6:42' in S.storageHold), 'undo drops the side-channel entry');
+  chk(!('6:5' in S.storageHold), 'undo drops the side-channel entry');
   return fails;
 }
 

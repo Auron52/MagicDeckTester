@@ -384,7 +384,7 @@ extern thread_local CastOrderChooser* g_play_cast_order_chooser;
 // draws -- must be able to explicitly HOLD the battery to build toward a future big burst. Fires once
 // per (turn, charged storage land) at the START of the pre-combat main, BEFORE plan enumeration, so the
 // offered plans reflect the hold. Returns true => hold (reserve untapped this turn); false => allow the
-// normal tap/burst (the current heuristic). Keyed by (turn, land number) on a side-channel
+// normal tap/burst (the current heuristic). Keyed by (turn, land BATTLEFIELD INDEX) on a side-channel
 // (--storage-hold), NOT the positional --choices stream -> existing references (no --storage-hold)
 // replay byte-identically as the heuristic. Nulled by RevealLogPause; inert unless set.
 using StorageHoldChooser = std::function<bool(const GameState& state, const Permanent& land, int counters)>;

@@ -442,7 +442,7 @@ function cfg(extra) {
     deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
     firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
-    storageHold:S.storageHold||{},   // #6 (turn,land#)-keyed tap-vs-charge side-channel
+    storageHold:S.storageHold||{},   // #6 (turn,land_idx)-keyed tap-vs-charge side-channel
     castOrder:S.castOrder||{},       // #10 main-ordinal-keyed cast-order side-channel
   }, extra || {});
 }
@@ -2018,7 +2018,7 @@ function storageHoldPanelHtml(d){
 // Record the hold answer in the (turn, land-number)-keyed side-channel and re-step. Like commitFirebreathe
 // it appends NO --choices int; it pushes a ZERO-int step carrying the side-channel key (sh) so undo drops it.
 function commitStorageHold(d, k){
-  const key=`${d.turn}:${d.land_num}`;
+  const key=`${d.turn}:${d.land_idx}`;
   (S.storageHold=S.storageHold||{})[key]=k;
   S.history.push({ turn:d.turn, label:`${d.land||'storage'} ${k?'hold (charge)':'allow tap'}` });
   S.prev=S.decision;
@@ -2203,7 +2203,7 @@ function autoResolveDecision(dec){
   // Firebreathe rides the turn-keyed side-channel, not --choices, so it auto-resolves via its own
   // committer (a zero-int step) rather than pushChoice. "Let AI decide" => spend the greedy max.
   if (dec.type==='firebreathe') { dec._autoStep = true; commitFirebreathe(dec, def); return true; }
-  // Storage tap-vs-charge rides the (turn,land#) side-channel too. "Let AI decide" => the heuristic
+  // Storage tap-vs-charge rides the (turn,land_idx) side-channel too. "Let AI decide" => the heuristic
   // default (0 = allow the normal tap/burst), committed via its zero-int step.
   if (dec.type==='storage_hold') { dec._autoStep = true; commitStorageHold(dec, def); return true; }
   const lab = dec.type==='land_entry' ? landEntryLabel(dec, def)+' · auto'
@@ -2346,7 +2346,7 @@ function rollbackStep() {
     // A firebreathe step consumed no --choices int; it recorded a turn-keyed side-channel entry -> drop
     // it so the re-step re-emits the firebreathe decision (rather than replaying the popped amount).
     if (st && st.fb != null && S.firebreathe) { delete S.firebreathe[st.fb]; }
-    // #6: a storage_hold step likewise consumed no --choices int -> drop its (turn,land#) side-channel entry.
+    // #6: a storage_hold step likewise consumed no --choices int -> drop its (turn,land_idx) side-channel entry.
     if (st && st.sh != null && S.storageHold) { delete S.storageHold[st.sh]; }
     // #10: a main-phase step that PINNED a cast order -> drop its main-ordinal cast-order side-channel entry
     // (the --choices plan int itself is dropped via `n` above).

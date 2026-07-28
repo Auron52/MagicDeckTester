@@ -64,12 +64,32 @@ function resolveDeck(deck) {
 
 function flatten(chosen) { return Array.isArray(chosen) ? chosen.slice() : [chosen]; }
 
-function runValidate(dk, seed, gi, maxTurns, choices, line) {
+// Decision types on a keyed SIDE-CHANNEL (not the positional --choices stream): skipped from --choices,
+// reconstructed as --firebreathe / --storage-hold / --cast-order (keyed by turn / land# / main-ordinal).
+const SIDE_CHANNEL = new Set(['firebreathe', 'storage_hold']);
+
+function sideChannelArgs(decisions) {
+  const fb = [], sh = [], co = [];
+  for (const de of decisions) {
+    const d = de.decision || {}, t = d.type;
+    if (t === 'firebreathe') fb.push(`${d.turn}:${de.chosen}`);
+    else if (t === 'storage_hold') sh.push(`${d.turn}:${d.land_idx}:${de.chosen}`);
+    else if (t === 'main_phase' && Array.isArray(de.cast_order) && de.cast_order.length) co.push(`${d.main_ordinal}:${de.cast_order.join('|')}`);
+  }
+  const extra = [];
+  if (fb.length) extra.push('--firebreathe', fb.join(','));
+  if (sh.length) extra.push('--storage-hold', sh.join(','));
+  if (co.length) extra.push('--cast-order', co.join(';'));
+  return extra;
+}
+
+function runValidate(dk, seed, gi, maxTurns, choices, line, extra) {
   const args = [dk.deckPath];
   if (dk.profilePath) args.push('--profile', dk.profilePath);
   args.push('--cards-json', CARDS, '--claude-play', '--seed', String(seed),
             '--game-index', String(gi), '--max-turns', String(maxTurns), '--depth', '0',
             '--choices', choices.join(','), '--validate-line', line);
+  if (extra && extra.length) args.push(...extra);
   let out;
   try { out = execFileSync(BIN, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
   catch (e) { out = (e.stdout || '') + (e.stderr || ''); }   // exit 71 is expected (validation)
@@ -103,10 +123,12 @@ function main() {
     const ref = JSON.parse(fs.readFileSync(file, 'utf8'));
     const maxTurns = Math.max(8, (ref.win_turn || 8) + 1);
     const rel = path.relative(REFROOT, file);
+    const extra = sideChannelArgs(ref.decisions || []);   // --firebreathe / --storage-hold / --cast-order the ref used
     const choices = [];
     for (const de of ref.decisions || []) {
       const d = de.decision || {};
       const ch = de.chosen;
+      if (SIDE_CHANNEL.has(d.type)) { continue; }   // side-channel: no --choices slot, no line to validate
       if (d.type === 'main_phase' && typeof ch === 'number' && ch >= 0 && ch < (d.plans || []).length) {
         const plan = d.plans[ch];
         const casts = plan.casts || [];
@@ -119,7 +141,7 @@ function main() {
           if (plan.land) built = LB.queueCard(d, built, plan.land, 'land');
           for (const nm of casts) { const hc = hand.find(c => c.name === nm); built = LB.queueCard(d, built, nm, hc.kind); }
           const line = LB.encodeLine(built);
-          const v = runValidate(dk, ref.seed, ref.game_index, maxTurns, choices, line);
+          const v = runValidate(dk, ref.seed, ref.game_index, maxTurns, choices, line, extra);
           const verdict = v.verdict;
           if (verdict === 'accept' || verdict === 'choose' || verdict === 'unsupported') { tally[verdict]++; }
           else {

@@ -1292,7 +1292,12 @@ static void WriteStorageHoldDecisionJson(std::ostream& os, const GameState& s,
     os << "  \"type\": \"storage_hold\",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"land\": "; JsonStr(os, land.card.m_name.str()); os << ",\n";
-    os << "  \"land_num\": " << land.card.m_number << ",\n";
+    // Side-channel key: the land's BATTLEFIELD INDEX (its position in state.battlefield). Unique per
+    // permanent and deterministic across the stateless replay (same seed/choices/holds => same board =>
+    // same index at this consult), so it distinguishes two storage lands charged the same turn -- unlike
+    // the card m_number, which is 0 for a played land and whose preservation would perturb the autonomous
+    // behaviour digest. Computed from the reference's position (land is always an element of s.battlefield).
+    os << "  \"land_idx\": " << static_cast<int>(&land - s.battlefield.data()) << ",\n";
     os << "  \"counters\": " << counters << ",\n";
     os << "  \"heuristic_default\": 0,\n";
     // Charge-mode drives the decision TIMING: "upkeep_if_tapped" (Dwarven Hold) is decided PRE-DRAW
@@ -1446,7 +1451,22 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                     // Record this resolved decision (state + plans + the chosen index).
                     // Only the completing full-CSV run writes the trace file (below).
                     std::ostringstream ss;
-                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    ss << "{ \"chosen\": " << chosen;
+                    // #10 reference round-trip: record the APPLIED cast order (the human's pin) on the
+                    // main-phase trace entry, so a saved reference that reordered can be replayed by the
+                    // reference checks (which reconstruct --cast-order "<main_ordinal>:names" from this).
+                    // Absent (no reorder) => omitted => the reference replays in canonical order unchanged.
+                    if (g_play_cast_order_chooser)
+                    {
+                        std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
+                        if (!ord.empty())
+                        {
+                            ss << ", \"cast_order\": [";
+                            for (size_t j = 0; j < ord.size(); ++j) { if (j) ss << ", "; JsonStr(ss, ord[j]); }
+                            ss << "]";
+                        }
+                    }
+                    ss << ", \"decision\": ";
                     WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
                     ss << "}";
                     trace.push_back(ss.str());
@@ -2163,12 +2183,12 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     if (!cast_order_by_main.empty()) { g_play_cast_order_chooser = &cast_order_chooser; }
 
     // #6 Storage-land tap-vs-charge: the human's per-(turn, land) tap-vs-charge answers. Keyed by
-    // (turn, land number) on a side-channel (--storage-hold "turn:num:val,...", val 1=HOLD/charge,
+    // (turn, land BATTLEFIELD INDEX) on a side-channel (--storage-hold "turn:idx:val,...", val 1=HOLD/charge,
     // 0=allow tap), NOT the positional --choices cursor -> existing references (no --storage-hold) replay
     // byte-identically as the burst heuristic. BOTH answers are recorded (a 0 = an explicit "no hold")
     // so live prompting never re-asks an answered land. Installed only when there is a recorded answer or
     // live prompting (--storage-hold-prompt); otherwise null -> the engine never consults it (no hold).
-    std::map<std::pair<int, int>, bool> storage_hold_by_land;   // (turn, land_num) -> hold?
+    std::map<std::pair<int, int>, bool> storage_hold_by_land;   // (turn, land battlefield index) -> hold?
     {
         std::stringstream ss(storage_hold_spec);
         std::string tok;
@@ -2192,7 +2212,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         [&](const GameState& s, const Permanent& land, int counters) -> bool
         {
             int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
-            auto it = storage_hold_by_land.find({ s.turn_number, land.card.m_number });
+            const int land_idx = static_cast<int>(&land - s.battlefield.data());   // #6 side-channel key
+            auto it = storage_hold_by_land.find({ s.turn_number, land_idx });
             if (it != storage_hold_by_land.end())
             {
                 if (!log_dir.empty())
@@ -3091,9 +3112,9 @@ int main(int argc, char* argv[])
                 }
                 else if (flag == "--storage-hold")
                 {
-                    // #6 storage tap-vs-charge side-channel: "turn:num:val,..." (val 1=hold/charge, 0=allow
-                    // tap). Keyed by (turn, land number), so it never touches the positional --choices
-                    // stream -> existing references replay unchanged (no --storage-hold = the burst heuristic).
+                    // #6 storage tap-vs-charge side-channel: "turn:idx:val,..." (val 1=hold/charge, 0=allow
+                    // tap; idx = land battlefield index). Keyed by (turn, index), so it never touches the
+                    // positional --choices stream -> existing references replay unchanged (burst heuristic).
                     storage_hold_str = argv[++i];
                 }
                 else if (flag == "--reveal")

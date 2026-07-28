@@ -45,14 +45,49 @@ DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", r
 RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>\s*(\{.*?\})\s*<<<END_RESULT>>>", re.S)
 
 
+# Decision types that ride a KEYED SIDE-CHANNEL, not the positional --choices stream: their recorded
+# `chosen` must NOT be folded into --choices (that would desync the positional replay). They are
+# reconstructed separately in side_channel_args() and passed as --firebreathe / --storage-hold.
+SIDE_CHANNEL_TYPES = {"firebreathe", "storage_hold"}
+
+
 def flatten_choices(decisions):
     """The GUI encodes a multi-pick decision as a list `chosen`; the --choices
-    CSV is a flat pick stream, so a list contributes its picks in order."""
+    CSV is a flat pick stream, so a list contributes its picks in order. Side-channel
+    decisions (firebreathe / storage_hold) consume NO --choices slot and are skipped here."""
     out = []
     for d in decisions:
+        if d.get("decision", {}).get("type") in SIDE_CHANNEL_TYPES:
+            continue
         c = d["chosen"]
         out += [int(x) for x in c] if isinstance(c, list) else [int(c)]
     return out
+
+
+def side_channel_args(decisions):
+    """Reconstruct the keyed side-channel args a reference used, so a saved reordered/held game replays
+    faithfully: --firebreathe "turn:count", --storage-hold "turn:num:val", --cast-order "ord:A|B" (the
+    applied cast order recorded on the main-phase entry). All keyed (turn / land# / main-ordinal), so
+    passing the full set for every prefix is safe -- the engine applies each only when it reaches that
+    turn/ordinal. Empty (existing references use none) => no extra args => identical to before."""
+    fb, sh, co = [], [], []
+    for d in decisions:
+        dec = d.get("decision", {})
+        t = dec.get("type")
+        if t == "firebreathe":
+            fb.append(f'{dec.get("turn")}:{int(d["chosen"])}')
+        elif t == "storage_hold":
+            sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
+        elif t == "main_phase" and d.get("cast_order"):
+            co.append(f'{dec.get("main_ordinal")}:' + "|".join(d["cast_order"]))
+    extra = []
+    if fb:
+        extra += ["--firebreathe", ",".join(fb)]
+    if sh:
+        extra += ["--storage-hold", ",".join(sh)]
+    if co:
+        extra += ["--cast-order", ";".join(co)]
+    return extra
 
 
 def force_arg(ref):
@@ -65,14 +100,18 @@ def force_arg(ref):
     return f'{m.get("count", 0)}:' + ",".join(str(n) for n in m.get("bottom", []))
 
 
-def replay(deck, prof, seed, gi, choices, force=None):
+def replay(deck, prof, seed, gi, choices, force=None, extra=None):
     """One stateless --claude-play invocation with the GUI's params (depth 0,
-    no --reveal). Returns (exit_code, stdout)."""
+    no --reveal). `extra` carries reconstructed keyed side-channel args (--firebreathe /
+    --storage-hold / --cast-order); safe for every prefix (keyed, applied only when reached).
+    Returns (exit_code, stdout)."""
     args = [MTG, deck, "--claude-play", "--seed", str(seed), "--game-index", str(gi),
             "--max-turns", "8", "--depth", "0", "--profile", prof,
             "--choices", ",".join(str(c) for c in choices)]
     if force is not None:
         args += ["--force-mulligan", force]
+    if extra:
+        args += extra
     p = subprocess.run(args, capture_output=True, text=True)
     return p.returncode, p.stdout + p.stderr
 
@@ -102,6 +141,7 @@ def check_reference(path):
     deck, prof = DECKS[deck_dir]
     seed, gi = ref["seed"], ref["game_index"]
     choices = flatten_choices(ref["decisions"])
+    extra = side_channel_args(ref["decisions"])   # --firebreathe / --storage-hold / --cast-order the ref used
     force = force_arg(ref)   # reconstruct the recorded opening hand when the reference carries it
 
     # Root cause first: does the engine still open the SAME hand? With a recorded mulligan we FORCE
@@ -109,7 +149,7 @@ def check_reference(path):
     # hand means the mulligan heuristic diverged -> classify as mulligan-drift, not play-drift.
     ref_decs = ref.get("decisions", [])
     if ref_decs:
-        rc0, out0 = replay(deck, prof, seed, gi, [], force)
+        rc0, out0 = replay(deck, prof, seed, gi, [], force, extra)
         if "Error:" in out0 or rc0 not in (0, 70):
             return False, "play", f"engine error at step 0 (rc={rc0}): {out0.strip()[-160:]}"
         m0 = DEC_RE.search(out0)
@@ -124,7 +164,7 @@ def check_reference(path):
     # (exit 70) or the terminal result (exit 0), and the next recorded pick must
     # be a valid index into the plans just offered.
     for k in range(len(choices) + 1):
-        rc, out = replay(deck, prof, seed, gi, choices[:k], force)
+        rc, out = replay(deck, prof, seed, gi, choices[:k], force, extra)
         if "Error:" in out or rc not in (0, 70):
             return False, "play", f"engine error at step {k} (rc={rc}): {out.strip()[-160:]}"
         if rc == 0:  # terminal reached before consuming all recorded picks
