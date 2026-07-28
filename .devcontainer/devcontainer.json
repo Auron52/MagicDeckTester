@@ -107,7 +107,13 @@
   // traffic (telemetry, error reporting, and the auto-updater) -- those would
   // otherwise repeatedly hit hosts that are not on the allowlist.
   "remoteEnv": {
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    // jsdom (installed at create time in postCreateCommand below, before the
+    // firewall) lives outside the workspace at /home/vscode/.mdt-tools/node_modules
+    // -- kept off the Windows bind-mount so it needs no package.json/.gitignore in
+    // the repo. NODE_PATH puts that dir on Node's module resolution path so
+    // `require('jsdom')` works from any script in the repo without a local install.
+    "NODE_PATH": "/home/vscode/.mdt-tools/node_modules"
   },
 
   // Install the Claude Code CLI, hand the root-owned volumes (build/, ~/.claude,
@@ -115,9 +121,14 @@
   // reused; the parent ~/.vscode-server is already vscode-owned from the image) to
   // the non-root user, then configure CMake once (this triggers the FetchContent
   // download of pugixml + json, so it needs network on first run). All run at
-  // create time with full network, before the firewall is applied.
+  // create time with full network, before the firewall is applied. The jsdom
+  // install rides this same create-time window for the same reason: the egress
+  // firewall blocks the npm registry during the interactive session, so it can't
+  // be `npm install`ed later. It goes into an out-of-workspace prefix
+  // (/home/vscode/.mdt-tools), made require-able via NODE_PATH (remoteEnv above);
+  // jsdom is pure-JS (no native build), so no compiler/node-gyp step is needed.
   // Build with:  cmake --build build --config Release
-  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && sudo chown -R vscode:vscode build /home/vscode/.claude /home/vscode/.vscode-server/extensions /home/vscode/.config/gh && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && npm install --prefix /home/vscode/.mdt-tools jsdom && sudo chown -R vscode:vscode build /home/vscode/.claude /home/vscode/.vscode-server/extensions /home/vscode/.config/gh && cmake -G 'Ninja Multi-Config' -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
 
   // Apply the egress firewall on every start (a restart clears the container's
   // iptables rules). It runs AFTER postCreate, so the first dependency fetch is
