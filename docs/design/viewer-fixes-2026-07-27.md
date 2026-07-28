@@ -296,6 +296,33 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     Keep it GT-neutral by gating on `HumanPlayActive()` (autonomous keeps the greedy `ApplyFirebreathing`).
     The "invisible mana accounting" half is the server-truth increment-2 (faithful per-action resolution
     log). Needs a focused, browser-verified session — do NOT ship blind.
+  - **2026-07-28 (batch 10 — #4/#6 fully traced: mechanics clear, but a REFERENCE-COMPATIBILITY BLOCKER
+    needs a user decision before wiring).** The engine mechanism is well-understood and templated:
+    injection point is `GameEngine::CombatDamageStep` (`GameEngine.cpp:361`, `m_ai.Firebreathe` → the shared
+    `ApplyFirebreathing`); the `replicate` decision is an exact 4-site template (chooser lambda
+    `main.cpp:1970` walks the `--choices` cursor / exit-70; `ReplicateChooser` hook + `RevealLogPause` null
+    in `GameLogger.h`; `WriteReplicateDecisionJson`; `replicatePanelHtml`). Design: refactor
+    `ApplyFirebreathing` to `int ApplyFirebreathing(..., int max_activations = INT_MAX)` (returns activations
+    done; default INT_MAX ⇒ autonomous byte-identical), probe greedy-max on a state copy, ask the human for
+    k∈[0,max] (default max = current greedy), apply k. Sensible-default+toggle, HumanPlayActive-gated.
+    **THE BLOCKER: it is a new STREAM-CONSUMING decision.** Firebreathing fires at COMBAT, whose attackers +
+    leftover mana are unknown at main-phase commit, so the amount CANNOT ride the main-phase plan (unlike
+    `chosen_x`/`enchant_target`, which are known at cast time). It must consume its own `--choices` slot. Any
+    new stream slot DESYNCS the replay of every existing reference that reaches it: an old (pre-#4) recording
+    has no firebreathe choice, so the chooser eats the NEXT decision's int and the whole stream shifts by one
+    → `viewer_protocol_check` play-drift / `viewer_validate_check` illegal for the affected games. This hits
+    the **Dragonstorm** go-off references (Lathliss/Scourge fire firebreathing); those are **user-owned
+    (`references/`, commit-only — an agent must NEVER re-record them)**, so the ONLY fix for the desync is the
+    USER re-playing + re-saving them via the viewer. Off-by-default flag does NOT dodge it: the viewer must
+    enable the decision to record the choice, and then the check must enable it to replay — which re-desyncs
+    the OLD references either way. A stream-consuming decision fundamentally partitions references into
+    with/without, and one binary config can't replay both.
+    **Resolutions (user's call — changes HOW to build):** (A) ship ON, accept the re-baseline — user re-saves
+    the handful of firebreathing Dragonstorm references via the viewer; small, one-time. (B) redesign the
+    reference/replay protocol to tolerate optional decisions (e.g. tag each choice with its decision-index so
+    replay realigns instead of consuming positionally) — bigger, but unblocks ALL future combat/optional
+    decisions (and would retroactively make #10's order-channel cheap). (C) keep deferred. The engine work is
+    ready to write the moment the approach is chosen; only the reference-compat tradeoff needs the decision.
   - **#2 undo history corruption — FIXED + browser-verified (jsdom), commit `22f1711`.** Root cause was
     NOT a count desync (the checkpoint↔step invariant does hold): a single USER action can commit SEVERAL
     engine decisions with no user rest between them — "Commit turn" auto-passes the pre-main (user) AND the
