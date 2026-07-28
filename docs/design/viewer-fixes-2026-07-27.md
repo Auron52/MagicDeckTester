@@ -260,6 +260,37 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     downstream sort is the crux for ANY "add human-play plans" change (same lesson as #12's decision-point
     insertion): adding plans reshuffles indices unless appended post-sort.
 
+- **2026-07-28 (batch 8 — remaining items: analysis + deferral):**
+  - **#4/#6 firebreathe / Dwarven Hold burst amount — DEFERRED (largest; new COMBAT decision point).**
+    `ApplyFirebreathing` (`SpellEffects.h:1706`) greedily spends the combat pool on the best damage/mana
+    ratio (self `firebreathing_cost` / team `team_pump_cost`). Making the amount player-controllable is
+    NOT a CheckLine tweak like #7 — it needs a new **combat-phase** decision, and the viewer currently
+    AUTO-RUNS combat (only main phases prompt), so this adds a whole new breakpoint class plus the 4
+    decision-wiring sites (`tools/play/DECISIONS.md`: chooser hook in GameLogger.h → shared call site →
+    `Write*DecisionJson` emitter in main.cpp → GUI branch in index.html), a `firebreathe_amount` decision
+    payload, and a +/- amount modal defaulting to the current greedy max. #6 (Dwarven Hold, a storage land
+    like Mercadian Bazaar) is the sibling burst-amount decision — same new decision type, different source.
+    Keep it GT-neutral by gating on `HumanPlayActive()` (autonomous keeps the greedy `ApplyFirebreathing`).
+    The "invisible mana accounting" half is the server-truth increment-2 (faithful per-action resolution
+    log). Needs a focused, browser-verified session — do NOT ship blind.
+  - **#2 undo history corruption — DEFERRED (cosmetic; unverifiable without a browser).** The game STATE
+    is always correct (stateless `--choices` replay); only the client history PANEL misrenders after undo
+    around auto-advanced passes. The checkpoint↔step invariant (`checkpoints.length == steps.length+1`)
+    actually HOLDS through an auto-advance chain (each auto-pass pushes both a checkpoint in `advanceTo`
+    2140 and a step in `commitLine`/`pushChoices`), so the corruption is subtler than a raw count desync —
+    likely `rollbackStep` popping only ONE step lands undo on an auto-advanced decision whose `S.undoing`
+    suppression + re-logged draws (`advanceTo` 2142) interact to duplicate/reorder history lines. Fixing
+    it means reasoning about the auto-advance chain in `rollbackStep`/`advanceTo` and VISUALLY confirming
+    the history panel — untestable from the CLI, so deferred to a browser session rather than shipping an
+    unverifiable client change that could corrupt the panel further.
+  - **Overnight GT (#5) still PENDING** — rebaseline Dragonstorm on the next `--overnight` (8 h, not
+    inline); expected same-direction improvement, NOT a regression.
+
+  **SESSION SUMMARY (2026-07-27/28).** Landed + committed: #12 (b608733), #5 (a12b753, GT rebaselined
+  smoke+regression), #7 (7623afe), #10 root-cause doc (b68024d) — on top of the earlier #1b/#3b/#9/#8/#11/
+  #3a/#1a. All GT-neutral except #5 (net-positive, accepted). Remaining: #10 (clear post-sort-append
+  next step), #4/#6 (new combat decision — focused session), #2 (browser-verified session), overnight GT.
+
 Reference reproductions to sanity-check specific items: Dragonstorm s21_gi20 (Lotus Bloom
 black, item 9 — see `logs/play/rejections/Dragonstorm_cod_s21_gi20_t7.json`), s9_gi8 (splice
 display #8), s24_gi23 (cast order #10), s3_gi2 (discard #5); Auras s21_gi20 suboptimal
