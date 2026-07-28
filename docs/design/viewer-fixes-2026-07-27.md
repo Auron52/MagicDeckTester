@@ -53,7 +53,7 @@ Defect (1) errs toward **false-accept** (→ partial state); defect (2) errs tow
 | 9 | Lotus Bloom line rejected "no black source" | Stage-2 color model credits only rocks `TurnSolver.cpp:10702` | credit flexible/any-color sources in `ComputeAvailableColors` | TODO |
 | 3a | working line still shows "not enough mana" | client `detectDropped` heuristic false-positive (`index.html:2235-2252`) | server-truth resolution (below) | TODO |
 | 2 | undo corrupts history (out-of-order/dup turns) | checkpoint↔step desync from auto-advanced decisions (`advanceTo` push `2144`, `rollbackStep` `2279`) | server-truth resolution + reconcile bookkeeping | TODO |
-| 10 | committed cast order ignored (re-sorted) | `CastRankOf` canonical re-sort unless `searched_order` (`TurnSolver.cpp:5102-5121`); CheckLine only honors enumerated perms (`10530-10536`) | build candidate from exact committed order, prefer it | TODO |
+| 10 | committed cast order ignored (re-sorted) | `CastRankOf` canonical re-sort unless `searched_order` (`TurnSolver.cpp:5102-5121`); CheckLine only honors enumerated perms (`10530-10536`) | build candidate from exact committed order, prefer it | **ATTEMPTED → DEFERRED** (see batch 7) |
 | 8 | splice display out-of-order + drops Rite of Flame | variant labeler alpha-sorts sub-tokens + label from tokens only (`TurnSolver.cpp:10499,10523-10526`) | rewrite labeler to ordered cast list (or subsume in server-truth) | TODO |
 | 7 | no "just splice if affordable" default / no toggle | splice = search-chosen k, no chooser (`TurnSolver.cpp:1848-1892`) | greedy-splice default + off-by-default prompt | **DONE** |
 | 5 | discard pitches Apex of Power (only payoff) | `SelectCleanupDiscardIndex` = highest-MV non-required; `required_pieces:[]` (`SpellEffects.h:84-137`) | protect payoffs now; searched discard later | **DONE** (GT rebaselined) |
@@ -232,6 +232,33 @@ few harness prefixes that land on a sub-decision). This check CAUGHT the #1a reg
     `MTG_SPLICE_PROMPT=1` returns them to Choose (57). Both 0 REGRESSION; linebuild 0 FAIL, protocol 0
     play-drift. Toggle is currently an env var (server-spawned binary); a viewer checkbox that passes it
     through `/api/step` is a small follow-up.
+
+- **2026-07-28 (batch 7 — #10 cast-order-is-law: ATTEMPTED, root-caused, DEFERRED):**
+  - **Goal.** The human's committed cast order must be honoured verbatim (Dragonstorm s24: "tried
+    Lathliss first" ignored). CheckLine already PREFERS a candidate whose `c.order == spec.casts`
+    (`TurnSolver.cpp:10552`) and the executor replays a `searched_order` plan in `plan.actions` order
+    (`AIEngine.cpp:2191`), so an order IS honoured **when it is enumerated**. The gap: the human's exact
+    permutation is often NOT enumerated — Dragonstorm uses the TARGETED `DragonstormCastOrderings`
+    (O(k) principled orderings), not all k! perms; other decks enumerate a single canonical order.
+  - **Attempt (reverted).** For human play only (`HumanPlayActive()`-gated → autonomous byte-identical,
+    verified 0 play-drift), APPEND every distinct-order permutation not already enumerated, intending to
+    preserve existing plan indices (append at the end) so old recordings' `--choices` replay stays valid.
+  - **Why it failed (68 validate REGRESSIONS).** `EnumeratePlansWithLand` **STABLE-SORTS the whole plan
+    list at `TurnSolver.cpp:7755`** (by win-turn/value/lethal) AFTER the ordering-search sub-function
+    returns. Appending permutation plans *before* that sort means they get interleaved by the sort, which
+    RESHUFFLES the base plans' indices → every recorded choice index now maps to a different plan → the
+    `--choices` replay desyncs → most Dragonstorm reference lines validate `illegal`. Index preservation
+    is impossible from inside the pre-sort ordering-search function. The WIP is stashed
+    (`git stash` "wip-10-append-cast-order").
+  - **Correct fix (deferred, two clean options).** (a) **Post-sort append:** compute the human's extra
+    committed-order permutations and append them to `all` AFTER the `7755` stable_sort (highest indices),
+    so the sorted base order — and thus every existing recorded index — is untouched; the extras are only
+    ever reachable by a NEW commit that matches one exactly. (b) **Order channel:** stop relying on the
+    `plan_index` to carry order — have the human-play apply path reorder the accepted plan's non-sac casts
+    to the recorded `spec.casts` order (pass the committed order through the choice protocol, not just an
+    int). (a) is smaller and index-preserving; do it next. Both are GT-neutral (human-play only). NOTE the
+    downstream sort is the crux for ANY "add human-play plans" change (same lesson as #12's decision-point
+    insertion): adding plans reshuffles indices unless appended post-sort.
 
 Reference reproductions to sanity-check specific items: Dragonstorm s21_gi20 (Lotus Bloom
 black, item 9 — see `logs/play/rejections/Dragonstorm_cod_s21_gi20_t7.json`), s9_gi8 (splice
