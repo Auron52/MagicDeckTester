@@ -93,7 +93,8 @@ function buildDom() {
   // only seam we need: the client's own bookkeeping state, read exactly as the code mutates it.
   const acc = win.document.createElement('script');
   acc.textContent = 'window.__getS = function(){ return S; };'
-    + 'window.__fb = { panel: firebreathePanelHtml, commit: commitFirebreathe, rollback: rollbackStep };';
+    + 'window.__fb = { panel: firebreathePanelHtml, commit: commitFirebreathe, rollback: rollbackStep };'
+    + 'window.__sh = { panel: storageHoldPanelHtml, commit: commitStorageHold, rollback: rollbackStep };';
   win.document.body.appendChild(acc);
   return win;
 }
@@ -122,6 +123,33 @@ function testFirebreatheBookkeeping(win) {
   S.busy = false;
   fb.rollback();
   chk(!(5 in S.firebreathe), 'undo drops the side-channel entry');
+  return fails;
+}
+
+// #6 storage tap-vs-charge GUI bookkeeping (isolated — reaching a charged storage land at a live decision
+// is hard to drive here). Mirrors the firebreathe test: the answer rides the (turn,land#)-keyed side-channel
+// (S.storageHold) WITHOUT consuming a --choices slot, and undo drops it, so the new decision type never
+// perturbs the positional stream.
+function testStorageHoldBookkeeping(win) {
+  const S = win.__getS(), sh = win.__sh, fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const d = { type: 'storage_hold', turn: 6, land: 'Dwarven Hold', land_num: 42, counters: 3,
+              heuristic_default: 0, pre_draw: true };
+  const html = sh.panel(d);
+  chk((html.match(/data-opt="[01]"/g) || []).length === 2, 'panel renders the two hold/allow buttons');
+  chk(/UPKEEP/.test(html), 'pre_draw panel notes the pre-draw (UPKEEP) commitment');
+  S.choices = [1, 0, 0]; S.steps = [{ n: 1 }, { n: 1 }, { n: 1 }];
+  S.checkpoints = [{ histLen: 0 }, { histLen: 0 }, { histLen: 0 }, { histLen: 0 }];
+  S.history = []; S.storageHold = {}; S.decision = d; S.busy = false;
+  const choicesBefore = S.choices.length;
+  sh.commit(d, 1);
+  chk(S.storageHold['6:42'] === 1, "commit records side-channel storageHold['6:42']=1");
+  chk(S.choices.length === choicesBefore, 'commit consumes NO --choices slot');
+  const last = S.steps[S.steps.length - 1];
+  chk(last && last.n === 0 && last.sh === '6:42', 'commit pushes a zero-int step keyed by (turn,land#) (sh=6:42)');
+  S.busy = false;
+  sh.rollback();
+  chk(!('6:42' in S.storageHold), 'undo drops the side-channel entry');
   return fails;
 }
 // The live client state. newGame() rebinds `let S` to a fresh object, so always re-read through the
@@ -174,6 +202,7 @@ async function stepForward(win) {
   else if (t === 'mulligan') { win.commitMulligan(d, 1); }        // keep
   else if (t === 'bottom') { win.followAiBottom(d); win.commitBottomBatch(d); }
   else if (t === 'firebreathe') { win.commitFirebreathe(d, d.heuristic_default == null ? (d.max_count || 0) : d.heuristic_default); }
+  else if (t === 'storage_hold') { win.commitStorageHold(d, d.heuristic_default == null ? 0 : d.heuristic_default); }
   else { const def = (d.heuristic_default == null ? 0 : d.heuristic_default); win.pushChoice(d, def, `${t}:auto`); }
   await settle(win);
   return true;
@@ -239,6 +268,10 @@ async function playScenario(sc) {
     const fbFails = testFirebreatheBookkeeping(win);
     if (fbFails.length) { anyFail = true; console.log(`✗ firebreathe bookkeeping: ${fbFails.length} fail`); fbFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ firebreathe GUI bookkeeping (side-channel + zero-int step + undo)'); }
+    // #6 storage tap-vs-charge GUI bookkeeping (fast, DOM-only).
+    const shFails = testStorageHoldBookkeeping(win);
+    if (shFails.length) { anyFail = true; console.log(`✗ storage_hold bookkeeping: ${shFails.length} fail`); shFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ storage_hold GUI bookkeeping (side-channel + zero-int step + undo)'); }
   }
   for (const sc of SCENARIOS) {
     let res;

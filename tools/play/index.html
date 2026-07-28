@@ -435,13 +435,14 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
-          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{} };
+          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{} };
 
 function cfg(extra) {
   return Object.assign({
     deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
     firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
+    storageHold:S.storageHold||{},   // #6 (turn,land#)-keyed tap-vs-charge side-channel
   }, extra || {});
 }
 async function post(path, body) {
@@ -660,7 +661,7 @@ function plannedEnchantGroup(entry, planIdx, ord, planned) {
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1413,7 +1414,7 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'
-                || dec==='lightpaws' || dec==='firebreathe'; // centered card-image modals
+                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1428,6 +1429,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='dragon' ? dragonPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
                   : dec==='firebreathe' ? firebreathePanelHtml(d)
+                  : dec==='storage_hold' ? storageHoldPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -1862,6 +1864,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitReplicate(d, +b.dataset.opt));
   else if (dec==='firebreathe')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFirebreathe(d, +b.dataset.opt));
+  else if (dec==='storage_hold')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitStorageHold(d, +b.dataset.opt));
   else if (dec==='land_entry')
     panel.querySelectorAll('button[data-le]').forEach(b=>b.onclick=()=>commitLandEntry(d, +b.dataset.le));
   else if (dec==='mulligan')
@@ -1977,6 +1981,31 @@ function commitFirebreathe(d, k){
   S.history.push({ turn:t, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
   S.prev=S.decision;
   (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), fb:t });   // consumes NO --choices slot
+  renderHistory(); hideDecPanel(); step();
+}
+// #6 storage tap-vs-charge (Dwarven Hold / Mercadian Bazaar): HOLD the land untapped this turn (charge it)
+// or ALLOW the normal tap/burst. Rides the (turn, land-number)-keyed side-channel (S.storageHold), NOT the
+// --choices stream. pre_draw=true (Dwarven Hold) surfaces at UPKEEP -- the blind, pre-draw commitment.
+function storageHoldPanelHtml(d){
+  const land=d.land||'this storage land', c=d.counters||0, pre=!!d.pre_draw;
+  let h=`<h3>${esc(land)} — charge or burst?</h3>`;
+  h+=`<div class="sub">It holds <b>${c}</b> storage counter${c===1?'':'s'} ({R} each on burst). <b>Hold</b> it untapped this turn to bank <b>+1</b> more at end of turn; <b>Allow</b> lets it tap/burst as your plays need. `
+    + (pre ? `<b>Decided now, at UPKEEP — before your draw:</b> you commit without seeing this turn's card.`
+           : `Decided in your main phase, after the draw.`) + `</div>`;
+  h+=`<div class="tutgrid">`+cardMini(land)+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  h+=`<button class="ghost" data-opt="1">Hold (charge)</button>`;
+  h+=`<button class="primary" data-opt="0">Allow tap  ·  AI</button>`;
+  return h+`</div>`;
+}
+// Record the hold answer in the (turn, land-number)-keyed side-channel and re-step. Like commitFirebreathe
+// it appends NO --choices int; it pushes a ZERO-int step carrying the side-channel key (sh) so undo drops it.
+function commitStorageHold(d, k){
+  const key=`${d.turn}:${d.land_num}`;
+  (S.storageHold=S.storageHold||{})[key]=k;
+  S.history.push({ turn:d.turn, label:`${d.land||'storage'} ${k?'hold (charge)':'allow tap'}` });
+  S.prev=S.decision;
+  (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), sh:key });   // consumes NO --choices slot
   renderHistory(); hideDecPanel(); step();
 }
 function commitLandEntry(d, v){
@@ -2121,6 +2150,7 @@ const AUTO_RESOLVABLE = {
   retrace_discard: 'Retrace — which land to discard',
   vial_charge:     'Aether Vial — add a counter',
   firebreathe:     'Firebreathing — how much leftover mana to pump',
+  storage_hold:    'Storage lands — hold to charge vs. tap/burst',
 };
 const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
@@ -2156,6 +2186,9 @@ function autoResolveDecision(dec){
   // Firebreathe rides the turn-keyed side-channel, not --choices, so it auto-resolves via its own
   // committer (a zero-int step) rather than pushChoice. "Let AI decide" => spend the greedy max.
   if (dec.type==='firebreathe') { dec._autoStep = true; commitFirebreathe(dec, def); return true; }
+  // Storage tap-vs-charge rides the (turn,land#) side-channel too. "Let AI decide" => the heuristic
+  // default (0 = allow the normal tap/burst), committed via its zero-int step.
+  if (dec.type==='storage_hold') { dec._autoStep = true; commitStorageHold(dec, def); return true; }
   const lab = dec.type==='land_entry' ? landEntryLabel(dec, def)+' · auto'
             : dec.type==='replicate'  ? `${dec.source}: replicate ×${def} · auto`
             : dec.type==='retrace_discard' ? (()=>{ const c=(dec.options||[]).find(x=>x.index===def); return `${dec.source} (retrace): discard ${c?c.name:'land'} · auto`; })()
@@ -2269,7 +2302,7 @@ function notifyDropped(names){
   $('dropok').onclick=hideVerdict;
 }
 async function newGame() {
-  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{} };
+  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{}, storageHold:{} };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed and start the next game — for playing several in a row. (Game index is always 0;
@@ -2296,6 +2329,8 @@ function rollbackStep() {
     // A firebreathe step consumed no --choices int; it recorded a turn-keyed side-channel entry -> drop
     // it so the re-step re-emits the firebreathe decision (rather than replaying the popped amount).
     if (st && st.fb != null && S.firebreathe) { delete S.firebreathe[st.fb]; }
+    // #6: a storage_hold step likewise consumed no --choices int -> drop its (turn,land#) side-channel entry.
+    if (st && st.sh != null && S.storageHold) { delete S.storageHold[st.sh]; }
   } while (wasAuto && S.steps.length);
   S.choices.length=Math.max(0,S.choices.length-n);
   S.history=S.history.filter(h=>!h.win);
