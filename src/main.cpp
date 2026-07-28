@@ -408,11 +408,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                               bool is_pre_combat, int decision_index, int reveal_count,
                               const std::vector<std::pair<int, std::string>>& drew = {},
                               const std::vector<PlayEvent>& events = {},
-                              const std::vector<std::string>& dropped_casts = {})
+                              const std::vector<std::string>& dropped_casts = {},
+                              int main_ordinal = -1)
 {
     const Player& me  = s.ActivePlayer();
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
+    // #10 cast-order key: the ordinal of THIS main-phase decision among all main-phase decisions (0-based),
+    // matching AIEngine::m_ext_main_ordinal at reorder time. The viewer keys S.castOrder by it directly
+    // (no fragile client-side counting). -1 => not supplied (validation/replay contexts that don't reorder).
+    if (main_ordinal >= 0) { os << "  \"main_ordinal\": " << main_ordinal << ",\n"; }
     os << "  \"type\": \"main_phase\",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"phase\": \"" << (is_pre_combat ? "pre_main" : "post_main") << "\",\n";
@@ -516,6 +521,18 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
         }
         os << "]";
+        // #10 cast-order: the CANONICAL execution order of this plan's non-sac hand casts, so the viewer
+        // can tell whether the human's queued order is a REORDER (=> emit --cast-order) or already
+        // canonical (=> omit, keeping references byte-identical). Emitted only when >=2 non-sac casts.
+        {
+            std::vector<std::string> canon = TurnSolver::CanonicalNonSacCastOrder(s, p);
+            if (canon.size() >= 2)
+            {
+                os << ", \"cast_order_canonical\": [";
+                for (size_t ci = 0; ci < canon.size(); ++ci) { if (ci) os << ", "; JsonStr(os, canon[ci]); }
+                os << "]";
+            }
+        }
         // ... plus the per-action variant params (tutor target / X / Ponder keep / Soulfire
         // own-targets) so the GUI can show WHICH variant when several plans share the same casts.
         os << ", \"actions\": [";
@@ -1394,6 +1411,10 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     }
     size_t cursor = 0;
     int decisions_made = 0;
+    // #10: ordinal of the current main-phase decision among all main-phase decisions (the external chooser
+    // is called once per main-phase decision, exactly mirroring AIEngine::m_ext_main_ordinal). Emitted in
+    // the decision JSON so the viewer keys --cast-order by it. Post-incremented at each external-chooser call.
+    int main_ordinal = 0;
     std::vector<std::string> trace;   // one entry per RESOLVED decision (for --log-dir)
     // Accurate per-draw reporting: the real draw sites append (turn, card_name) here as cards are
     // drawn (see g_play_draw_sink). It accumulates the draws since the last RESOLVED main-phase
@@ -1415,6 +1436,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         [&](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
         {
             int di = static_cast<int>(cursor);
+            const int this_main_ordinal = main_ordinal++;   // #10: this decision's main-phase ordinal
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -1425,7 +1447,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                     // Only the completing full-CSV run writes the trace file (below).
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log);
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
@@ -1487,13 +1509,13 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 }
                 std::cout << "],\n";
                 std::cout << "  \"decision\": ";
-                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log);
+                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
                 std::cout << "}\n<<<END_VALIDATION>>>\n";
                 std::cout.flush();
                 std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log);
+            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);   // distinct code: "more input needed"

@@ -435,7 +435,7 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
-          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{} };
+          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{} };
 
 function cfg(extra) {
   return Object.assign({
@@ -443,6 +443,7 @@ function cfg(extra) {
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
     firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
     storageHold:S.storageHold||{},   // #6 (turn,land#)-keyed tap-vs-charge side-channel
+    castOrder:S.castOrder||{},       // #10 main-ordinal-keyed cast-order side-channel
   }, extra || {});
 }
 async function post(path, body) {
@@ -1234,8 +1235,24 @@ function applyAccepted(planIndex, label) {
   // {n, auto}: n = ints this decision contributed; auto = it was committed WITHOUT a user rest
   // (dead-opponent / commit-turn auto-pass / auto-resolve), so undo rolls it back together with the
   // preceding user step rather than landing mid-auto-sequence (issue #2).
+  // #10 cast-order: if the human queued the accepted plan's non-sac casts in a NON-canonical order, pin
+  // that order via the main-ordinal-keyed side-channel (S.castOrder). The engine emits each plan's
+  // cast_order_canonical (>=2 casts) + the decision's main_ordinal; we send --cast-order ONLY when the
+  // human's queued sequence differs from canonical (same multiset, different order) -> references that
+  // aren't reordered stay byte-identical. Keyed step marker `co` so undo drops the side-channel entry.
+  let coKey = null;
+  const dec0 = S.decision, plan0 = dec0 && dec0.plans && dec0.plans[planIndex];
+  const canon = plan0 && plan0.cast_order_canonical;
+  if (canon && canon.length >= 2 && dec0.main_ordinal != null) {
+    const human = (S.plan||[]).map(p=>p.name).filter(n => canon.includes(n));
+    const ms = a => a.slice().sort().join('');
+    if (ms(human) === ms(canon) && human.some((n,i)=>n!==canon[i])) {   // same casts, different order
+      coKey = String(dec0.main_ordinal);
+      (S.castOrder=S.castOrder||{})[coKey] = human;
+    }
+  }
   S.prev = S.decision; S.choices.push(planIndex);
-  (S.steps=S.steps||[]).push({ n:1, auto:!!(S.decision && S.decision._autoStep) });
+  (S.steps=S.steps||[]).push({ n:1, auto:!!(S.decision && S.decision._autoStep), co:coKey });
   S.plan=[]; S.leMode=false; S.vialMode=null;
   renderHistory(); hideVerdict(); step();
 }
@@ -2302,7 +2319,7 @@ function notifyDropped(names){
   $('dropok').onclick=hideVerdict;
 }
 async function newGame() {
-  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{}, storageHold:{} };
+  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{}, storageHold:{}, castOrder:{} };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed and start the next game — for playing several in a row. (Game index is always 0;
@@ -2331,6 +2348,9 @@ function rollbackStep() {
     if (st && st.fb != null && S.firebreathe) { delete S.firebreathe[st.fb]; }
     // #6: a storage_hold step likewise consumed no --choices int -> drop its (turn,land#) side-channel entry.
     if (st && st.sh != null && S.storageHold) { delete S.storageHold[st.sh]; }
+    // #10: a main-phase step that PINNED a cast order -> drop its main-ordinal cast-order side-channel entry
+    // (the --choices plan int itself is dropped via `n` above).
+    if (st && st.co != null && S.castOrder) { delete S.castOrder[st.co]; }
   } while (wasAuto && S.steps.length);
   S.choices.length=Math.max(0,S.choices.length-n);
   S.history=S.history.filter(h=>!h.win);

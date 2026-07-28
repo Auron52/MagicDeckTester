@@ -166,12 +166,31 @@ independently verifiable.
    order honouring on Dragonstorm s24 (ord 2 → turn-2 [Rite of Flame, Pyretic Ritual] reversed to
    [Pyretic Ritual, Rite of Flame]). This is the option-(b) that succeeds where the reverted post-sort
    append (stash `wip-10-postsort-append`) failed. `server.js buildArgs` emits `--cast-order` from a
-   `p.castOrder` `{ mainOrdinal: [names] }` map (empty ⇒ omitted). **REMAINING:** the GUI (drag-reorder a
-   committed plan's casts → populate `S.castOrder`, key by client-side main-phase ordinal), the saved-
-   reference format (store the reorder so a re-played reference carries it), and the reference-check
-   extraction of `--cast-order` from such a reference (no-op until one is saved). The viewer must emit
-   `--cast-order` ONLY for decisions the human actually reordered — passing even the canonical order flips
-   on `searched_order`, which SKIPS the CastOrderRank sort / Spectacle-hoist path and could differ.
+   `p.castOrder` `{ mainOrdinal: [names] }` map (empty ⇒ omitted). The viewer must emit `--cast-order` ONLY
+   for decisions the human actually reordered — passing even the canonical order flips on `searched_order`,
+   which SKIPS the CastOrderRank sort / Spectacle-hoist path and could differ.
+
+   **GUI DONE (2026-07-28).** The engine now emits, per main-phase decision, `main_ordinal` (the cast-order
+   key, mirroring `AIEngine::m_ext_main_ordinal`) and, per plan, `cast_order_canonical` (the executor's
+   clean-set order, via `TurnSolver::CanonicalNonSacCastOrder`). At `applyAccepted` the viewer intersects the
+   human's queued S.plan names with the accepted plan's `cast_order_canonical`; if the multiset matches but the
+   SEQUENCE differs it pins the human's order in `S.castOrder[main_ordinal]` and marks the step `co:<key>` so
+   undo drops it. A canonical (or single-cast) queue pins NOTHING → `--cast-order` omitted → byte-identical.
+   The human sets the order simply by QUEUING casts in the desired sequence in the line builder (the queue
+   order IS the intent — no separate drag-reorder widget). jsdom `testCastOrderBookkeeping` asserts the
+   canonical-diff, the single plan-int (no extra --choices slot), and undo-drop. Verified: smoke 21/21
+   byte-identical, 0 play-drift, 0 validate-regression; integration emits `--cast-order 2:Pyretic Ritual|Rite
+   of Flame` and the engine honours it.
+
+## REMAINING (both #6 and #10): reference ROUND-TRIP for saved reordered/held games
+
+Saving a reference (`/api/save-reference`) re-runs WITH the side-channels, so the saved TRACE reflects the
+reordered/held play — but the trace does not yet store the side-channel INPUTS, and the reference checks
+reconstruct only `--choices` from each decision's `chosen`. So a FUTURE reference that used `--cast-order` /
+`--storage-hold` would not replay those on the check path. This is a NO-OP today (no saved reference uses
+either feature — every existing ref is byte-identical, verified) but must be closed before such a reference is
+trusted: record the applied cast order on the main-phase trace entry + the storage-hold answers, and have
+`viewer_protocol_check` / `viewer_validate_check` extract and pass them.
 
 ## Verification gates (every increment)
 

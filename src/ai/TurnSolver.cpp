@@ -11016,3 +11016,25 @@ void TurnSolver::ApplyPlan(GameState& state, const Plan& plan, bool is_pre_comba
 {
     ApplyPlanDirect(state, plan, is_pre_combat);
 }
+
+// #10 cast-order: the CANONICAL execution order of a plan's non-sacrifice hand casts -- what the
+// executor's clean-set branch casts (stable-sort by CastOrderRank; plan order breaks ties). The viewer
+// diffs the human's queued order against this to decide whether to emit --cast-order at all (equal =>
+// omit => byte-identical / references stay clean). Opaque sets (draw/stage/cascade breakpoint cards)
+// keep their plan/breakpoint order in the executor, not this sort; there the diff may over-report a
+// reorder, which is benign -- the engine then honours the human's exact queued order via searched_order.
+std::vector<std::string> TurnSolver::CanonicalNonSacCastOrder(const GameState& state, const Plan& plan)
+{
+    std::vector<int> order;
+    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+    {
+        const Action& a = plan.actions[i];
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { order.push_back(i); }
+    }
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    { return CastRankOf(state, plan.actions[x].card_name) < CastRankOf(state, plan.actions[y].card_name); });
+    std::vector<std::string> names;
+    names.reserve(order.size());
+    for (int i : order) { names.push_back(plan.actions[i].card_name); }
+    return names;
+}

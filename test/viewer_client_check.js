@@ -94,7 +94,8 @@ function buildDom() {
   const acc = win.document.createElement('script');
   acc.textContent = 'window.__getS = function(){ return S; };'
     + 'window.__fb = { panel: firebreathePanelHtml, commit: commitFirebreathe, rollback: rollbackStep };'
-    + 'window.__sh = { panel: storageHoldPanelHtml, commit: commitStorageHold, rollback: rollbackStep };';
+    + 'window.__sh = { panel: storageHoldPanelHtml, commit: commitStorageHold, rollback: rollbackStep };'
+    + 'window.__co = { apply: applyAccepted, rollback: rollbackStep };';
   win.document.body.appendChild(acc);
   return win;
 }
@@ -150,6 +151,41 @@ function testStorageHoldBookkeeping(win) {
   S.busy = false;
   sh.rollback();
   chk(!('6:42' in S.storageHold), 'undo drops the side-channel entry');
+  return fails;
+}
+
+// #10 cast-order GUI bookkeeping: committing a main plan whose non-sac casts were QUEUED in a non-canonical
+// order pins that order in the main-ordinal-keyed side-channel (S.castOrder) WITHOUT an extra --choices slot
+// (the plan int is the only positional entry), and undo drops it. A canonical (or single-cast) order pins
+// NOTHING -> references stay byte-identical. Mirrors the engine's cast_order_canonical + main_ordinal diff.
+function testCastOrderBookkeeping(win) {
+  const S = win.__getS(), co = win.__co, fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  // A main_phase decision whose accepted plan (index 0) canonically casts [A, B]; the human queued [B, A].
+  // Carries empty board context so the async render (computeDiff over S.prev after applyAccepted's step())
+  // can't throw on the seeded state — we assert the synchronous bookkeeping, not the round-trip.
+  const dec = { type: 'main_phase', turn: 4, main_ordinal: 3,
+                me: { life: 20, battlefield: [] }, opponent: { life: 20, battlefield: [] },
+                plans: [{ index: 0, casts: ['Spell A', 'Spell B'], cast_order_canonical: ['Spell A', 'Spell B'] }] };
+  function seed(planOrder) {
+    S.choices = [1, 1]; S.steps = [{ n: 1 }, { n: 1 }];
+    S.checkpoints = [{ histLen: 0 }, { histLen: 0 }, { histLen: 0 }];
+    S.history = []; S.castOrder = {}; S.decision = dec; S.prev = null; S.busy = false;
+    S.plan = planOrder.map(n => ({ name: n, kind: 'spell' }));
+  }
+  // Reordered queue [B, A] vs canonical [A, B] -> pins main_ordinal 3.
+  seed(['Spell B', 'Spell A']);
+  co.apply(0, 'reordered');
+  chk(JSON.stringify(S.castOrder['3']) === JSON.stringify(['Spell B', 'Spell A']), 'reordered queue pins castOrder[3]=[B,A]');
+  chk(S.choices[S.choices.length - 1] === 0, 'commit pushes exactly the plan int (0) to --choices');
+  const last = S.steps[S.steps.length - 1];
+  chk(last && last.n === 1 && last.co === '3', 'step marks n=1 + co=3 (cast-order key)');
+  S.busy = false; co.rollback();
+  chk(!('3' in S.castOrder), 'undo drops the cast-order side-channel entry');
+  // Canonical queue [A, B] -> pins NOTHING (byte-identical / reference-clean).
+  seed(['Spell A', 'Spell B']);
+  co.apply(0, 'canonical');
+  chk(Object.keys(S.castOrder).length === 0, 'canonical queue pins no castOrder (references stay byte-identical)');
   return fails;
 }
 // The live client state. newGame() rebinds `let S` to a fresh object, so always re-read through the
@@ -272,6 +308,10 @@ async function playScenario(sc) {
     const shFails = testStorageHoldBookkeeping(win);
     if (shFails.length) { anyFail = true; console.log(`✗ storage_hold bookkeeping: ${shFails.length} fail`); shFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ storage_hold GUI bookkeeping (side-channel + zero-int step + undo)'); }
+    // #10 cast-order GUI bookkeeping (fast, DOM-only).
+    const coFails = testCastOrderBookkeeping(win);
+    if (coFails.length) { anyFail = true; console.log(`✗ cast_order bookkeeping: ${coFails.length} fail`); coFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ cast_order GUI bookkeeping (canonical diff + side-channel + undo)'); }
   }
   for (const sc of SCENARIOS) {
     let res;
