@@ -350,6 +350,18 @@ using ReplicateChooser = std::function<int(const GameState& state, int controlle
                                            const std::string& source, int max_count)>;
 extern thread_local ReplicateChooser* g_play_replicate_chooser;
 
+// ---- Human-play firebreathing-amount chooser (#4) ----------------------------------------------
+// At combat, LEFTOVER mana is spent greedily on attacker pumps (Scourge {R}:+1/+0, Lathliss {1}{R}:
+// team +1/+0) by ApplyFirebreathing. Under --claude-play the human instead chooses how many pump
+// ACTIVATIONS to make (0..max, default = the greedy max), so they can hold mana back. Fires at most
+// once per combat (once per turn), so it rides a TURN-keyed side-channel (--firebreathe), NOT the
+// positional --choices stream -> existing references (no --firebreathe) replay byte-identically as
+// greedy. Returns the chosen count, or -1 for the greedy default. Nulled by RevealLogPause so every
+// search/rollout pumps greedily -> autonomous byte-identical. Inert (greedy) unless set.
+using FirebreatheChooser = std::function<int(const GameState& state, int controller,
+    const std::vector<int>& attacker_indices, int max_activations)>;
+extern thread_local FirebreatheChooser* g_play_firebreathe_chooser;
+
 // ---- Human-play land-entry chooser (enter a "pay a cost, or the land enters tapped" land) ------
 // Two lands present this choice as they enter: a shock land (etb_pay_life_to_untap -> pay N life to
 // enter untapped) and a reveal land like Frostboil Snarl (etb_untap_reveal_subtypes -> reveal a
@@ -469,6 +481,7 @@ struct RevealLogPause
     LandEntryChooser* saved_lechooser;
     DragonChooser* saved_dragchooser;
     LightPawsChooser* saved_lpchooser;
+    FirebreatheChooser* saved_fbchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
@@ -477,14 +490,15 @@ struct RevealLogPause
                        saved_evsink(g_play_event_sink), saved_dropsink(g_play_dropped_cast_sink),
                        saved_sacchooser(g_play_sacrifice_chooser),
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
-                       saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser)
+                       saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser),
+                       saved_fbchooser(g_play_firebreathe_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
       g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
       g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
-      g_play_lightpaws_chooser = nullptr; }
+      g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
@@ -493,7 +507,8 @@ struct RevealLogPause
                         g_play_event_sink = saved_evsink; g_play_dropped_cast_sink = saved_dropsink;
                         g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
-                        g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser; }
+                        g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser;
+                        g_play_firebreathe_chooser = saved_fbchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

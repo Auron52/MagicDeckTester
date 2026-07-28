@@ -9,6 +9,7 @@
 #include <thread>
 #include <sstream>
 #include <cstdlib>
+#include <map>
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
 #include "core/HeuristicDefaults.h"
@@ -1235,6 +1236,32 @@ static void WriteReplicateDecisionJson(std::ostream& os, const GameState& s, con
     os << "}\n";
 }
 
+// Firebreathe-amount decision (#4): at combat, how many pump ACTIVATIONS to buy with leftover mana
+// (Scourge {R}:+1/+0 self, Lathliss {1}{R}: team +1/+0). Reply = count in [0, max_count]; default =
+// max (the current greedy spend). Rides the turn-keyed --firebreathe side-channel, NOT --choices.
+static void WriteFirebreatheDecisionJson(std::ostream& os, const GameState& s,
+                                         const std::vector<int>& attacker_indices,
+                                         int max_count, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"firebreathe\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"max_count\": " << max_count << ",\n";
+    os << "  \"heuristic_default\": " << max_count << ",\n";
+    os << "  \"attackers\": [";
+    for (size_t j = 0; j < attacker_indices.size(); ++j)
+    {
+        const Permanent& p = s.battlefield[attacker_indices[j]];
+        os << (j ? ", " : "") << "{ \"name\": "; JsonStr(os, p.card.m_name.str()); os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply how many firebreathing activations to spend leftover combat mana on (0.."
+       << max_count << "); each pumps an attacker. Default = spend the maximum.\"\n";
+    os << "}\n";
+}
+
 // Land-entry decision (shock lands, and reveal lands like Frostboil Snarl): as the land enters you may
 // pay a cost to have it enter UNTAPPED, or let it enter tapped. Shock lands pay `pay_life` life; reveal
 // lands reveal a matching land (`reveal_types`) already in hand -- free, but shown as a choice. The AI
@@ -1297,7 +1324,9 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          int lookahead_depth, int timeout_ms, std::vector<int> choices,
                          int reveal_count, const std::filesystem::path& log_dir,
                          const std::string& validate_line = "",
-                         const std::string& force_mulligan = "")
+                         const std::string& force_mulligan = "",
+                         const std::string& firebreathe_spec = "",
+                         bool firebreathe_prompt = false)
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -1995,6 +2024,53 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_replicate_chooser = &replicate_chooser;
 
+    // #4 Firebreathe-amount: at combat, how many pump activations to buy with leftover mana. Rides a
+    // TURN-keyed side-channel (--firebreathe "turn:count,..."), NOT the positional --choices cursor, so
+    // it never shifts the stream and existing references (no --firebreathe) replay byte-identically as
+    // greedy. Installed ONLY when there is something to do -- a recorded answer to apply (non-empty map)
+    // or live prompting (--firebreathe-prompt). Otherwise left null -> AIEngine::Firebreathe stays greedy
+    // (no probe, byte-identical) -- which is exactly the reference-check / autonomous case.
+    std::map<int, int> firebreathe_by_turn;
+    {
+        std::stringstream fs(firebreathe_spec);
+        std::string ftok;
+        while (std::getline(fs, ftok, ','))
+        {
+            auto fc = ftok.find(':');
+            if (fc == std::string::npos) { continue; }
+            try { firebreathe_by_turn[std::stoi(ftok.substr(0, fc))] = std::stoi(ftok.substr(fc + 1)); }
+            catch (...) { /* skip malformed token */ }
+        }
+    }
+    FirebreatheChooser firebreathe_chooser =
+        [&](const GameState& s, int controller, const std::vector<int>& attackers, int max_count) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
+            auto it = firebreathe_by_turn.find(s.turn_number);
+            if (it != firebreathe_by_turn.end())
+            {
+                int chosen = it->second;
+                if (chosen < 0 || chosen > max_count) { chosen = max_count; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteFirebreatheDecisionJson(ss, s, attackers, max_count, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            if (!firebreathe_prompt) { return -1; }   // reference replay / not-yet-live -> greedy default
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteFirebreatheDecisionJson(std::cout, s, attackers, max_count, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    if (firebreathe_prompt || !firebreathe_by_turn.empty()) { g_play_firebreathe_chooser = &firebreathe_chooser; }
+
     // Land entry (shock lands / Frostboil Snarl): the player chooses whether the land enters untapped
     // (paying its life / revealing a matching land) or tapped. Shares the --choices stream; the reply
     // is 1 (untapped, pay) or 0 (tapped). Default (out-of-range or absent) = the engine's heuristic.
@@ -2130,6 +2206,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_land_entry_chooser = nullptr;
     g_play_dragon_chooser = nullptr;
     g_play_lightpaws_chooser = nullptr;
+    g_play_firebreathe_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
     g_play_dropped_cast_sink = nullptr;
@@ -2783,6 +2860,8 @@ int main(int argc, char* argv[])
     bool        force_exhaustive_keep = false;  // --exhaustive-keep: load the exhaustive keep sidecar
                                                 // even under claude-play (which skips it by default)
     std::string choices_str;          // comma-separated plan indices for --claude-play
+    std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
+    bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
     std::string validate_line;        // --validate-line "<spec>": human-play line to reconcile
                                        // at the first un-chosen main phase (tools/play GUI)
@@ -2839,6 +2918,20 @@ int main(int argc, char* argv[])
                 else if (flag == "--choices")
                 {
                     choices_str = argv[++i];
+                }
+                else if (flag == "--firebreathe")
+                {
+                    // #4 firebreathe-amount side-channel: "turn:count,turn:count" (turn -> pump
+                    // activations). Keyed by turn (firebreathing fires once per combat), so it never
+                    // touches the positional --choices stream -> existing references replay unchanged.
+                    firebreathe_str = argv[++i];
+                }
+                else if (flag == "--firebreathe-prompt")
+                {
+                    // Live viewer mode: emit the firebreathe decision (exit 70) for any combat turn not
+                    // already answered in --firebreathe. Without this flag an unanswered turn falls back
+                    // to the greedy default (reference replay / autonomous), so the checks never exit-70.
+                    firebreathe_prompt = true;
                 }
                 else if (flag == "--reveal")
                 {
@@ -3014,7 +3107,7 @@ int main(int argc, char* argv[])
             }
             return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
-                                 validate_line, force_mulligan);
+                                 validate_line, force_mulligan, firebreathe_str, firebreathe_prompt);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

@@ -2720,8 +2720,24 @@ void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_in
 {
     if (attacker_indices.empty()) { return; }
     if (!ControlsFirebreathingSource(state, state.active_player_index)) { return; }
-    ApplyFirebreathing(state, state.active_player_index, attacker_indices,
-                       BuildAvailableMana(state));
+    ManaPool pool = BuildAvailableMana(state);
+    // Human play (#4): let the player cap the pump. Probe the greedy-max activation count on a COPY
+    // (ApplyFirebreathing takes the pool by value, so the probe does not consume it), ask the chooser
+    // for k in [0, max], then apply exactly k. The chooser is nulled in every search/rollout
+    // (RevealLogPause) and installed only under --claude-play, so autonomous stays greedy = byte-identical.
+    if (g_play_firebreathe_chooser)
+    {
+        GameState probe = state;
+        int max_k = ApplyFirebreathing(probe, state.active_player_index, attacker_indices, pool);
+        if (max_k > 0)
+        {
+            int k = (*g_play_firebreathe_chooser)(state, state.active_player_index, attacker_indices, max_k);
+            if (k < 0 || k > max_k) { k = max_k; }   // -1 / out-of-range -> greedy default (current behaviour)
+            ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, k);
+            return;
+        }
+    }
+    ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool);
 }
 
 // ---- Tap-and-pay token abilities (e.g. Sliver Hive) ----

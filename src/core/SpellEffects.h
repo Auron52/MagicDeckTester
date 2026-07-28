@@ -1703,12 +1703,19 @@ inline bool ControlsFirebreathingSource(const GameState& state, int controller)
     return false;
 }
 
-inline void ApplyFirebreathing(GameState& state, int controller,
-                               const std::vector<int>& attacker_indices, ManaPool pool)
+// Spend LEFTOVER combat mana greedily (best damage/mana ratio) on attacker pumps. Returns the number
+// of pump ACTIVATIONS performed. `max_activations` caps how many (default INT_MAX = the greedy full
+// spend, byte-identical to before). Human play passes a smaller k so the player can hold mana back
+// (viewer #4, via the turn-keyed --firebreathe side-channel); autonomous always uses the default.
+inline int ApplyFirebreathing(GameState& state, int controller,
+                              const std::vector<int>& attacker_indices, ManaPool pool,
+                              int max_activations = std::numeric_limits<int>::max())
 {
-    if (attacker_indices.empty()) { return; }
+    if (attacker_indices.empty()) { return 0; }
+    int activations = 0;
     for (;;)
     {
+        if (activations >= max_activations) { break; }   // human-chosen budget reached (#4)
         int    best_kind = 0;      // 1 = self (pump one attacker), 2 = team (pump matching attackers)
         int    best_self_idx = -1;
         int    best_src_idx  = -1;
@@ -1782,7 +1789,9 @@ inline void ApplyFirebreathing(GameState& state, int controller,
                 if (m) { a.temp_power_bonus += d->params.team_pump_power; }
             }
         }
+        ++activations;
     }
+    return activations;
 }
 
 // ---- Suspend: cast off suspend (the SHARED free-cast site) ----------------------------------
