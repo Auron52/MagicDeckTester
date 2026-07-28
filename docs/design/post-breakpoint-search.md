@@ -456,4 +456,32 @@ stashed: `bp_seen` must count only breakpoints of an ENABLED class (Hinata prune
 so its first enabled breakpoint is often not the apply's first), and the executor's own breakpoint
 counter must match that same rule -- it currently counts every breakpoint regardless of class.
 
+### CORRECTION: the held-out result was measured on a BROKEN implementation
+
+The 14 slower games were then re-run at **depth 9 with unbounded budget** (the bar: no regression may
+survive full search). **12 of 14 recover exactly. TWO SURVIVE**, both Dragonstorm, both 2 turns worse:
+
+| game | at gate budget | depth 9 / unbounded |
+|---|---|---|
+| `dragonstorm_overnight_d3_s4004` gi372 | 7->8 | depth1 = **7** -> depth2 = **LOSS** |
+| `dragonstorm_overnight_d5_s5005` gi4 | 5->7 | depth1 = **5** -> depth2 = **7** |
+
+A regression that survives unlimited budget and max depth is a DEFECT, not budget dilution. So the
+"nested search is net negative on held-out seeds" conclusion above is **confounded** -- it measured a
+buggy implementation, and the held-out negative may be the bug rather than the idea.
+
+Prime suspect, already flagged when this was stashed: **ApplyPlanDirect and the executor count
+breakpoints differently.** ApplyPlanDirect's `bp_seen` counts only ENABLED-class breakpoints;
+AIEngine::resolve_draw_breakpoint's counter counts every breakpoint regardless of class. When those
+disagree the executor applies the searched continuation at the WRONG breakpoint, so the realised game
+is not the line the rollout scored -- which produces exactly this signature: outcomes arbitrarily
+worse than the scored line, that no amount of budget can fix. Dragonstorm is where nesting is most
+common (183 nested vs 145 searched per 40 games), i.e. exactly where such a bug bites hardest, and
+both survivors are Dragonstorm.
+
+**Next step is therefore to FIX the lockstep, not to abandon the idea:** make both counters use the
+identical rule (enabled-class only), confirm `MTG_BP_DEPTH=1` is byte-identical to the shipped
+engine, verify these two games no longer survive unbounded budget, and only THEN re-run the held-out
+overnight A/B. The earlier train/held-out table should be treated as void until that is done.
+
 Worth retrying with a better formulation (the underlying gap is real), but not as-is.
