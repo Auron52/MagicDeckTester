@@ -58,8 +58,10 @@ struct Job
 // boundary), so a cap of 3 yields essentially one load per distinct profile with no reload thrash.
 //
 // get() returns a shared_ptr so a worker that grabbed a handle keeps its profile alive even if the cache
-// evicts it meanwhile; the expensive load happens OUTSIDE the lock, so concurrent loads of DIFFERENT
-// profiles proceed in parallel and the lock is held only for the O(1) map/list bookkeeping.
+// evicts it meanwhile. Loads are serialised under the cache mutex (see get()): the profile's own big
+// exhaustive table is a shared_ptr<const>, so the many AIEngine copies already SHARE it (per-worker copies
+// cost ~nothing) -- the only real memory pressure is redundant CONCURRENT loads at a profile boundary, which
+// serialising eliminates while keeping steady-state play lock-free (it never loads once a profile is warm).
 class ProfileCache
 {
 public:
@@ -67,25 +69,21 @@ public:
 
     std::shared_ptr<const MulliganProfile> get(const std::string& path)
     {
-        {
-            std::lock_guard<std::mutex> lk(mtx_);
-            auto it = map_.find(path);
-            if (it != map_.end())
-            {
-                lru_.splice(lru_.begin(), lru_, it->second.pos);   // mark most-recently-used
-                return it->second.ptr;
-            }
-        }
-        // Miss: load outside the lock (a profile load is heavy; don't serialise all workers on it).
-        std::shared_ptr<const MulliganProfile> loaded = load(path);
         std::lock_guard<std::mutex> lk(mtx_);
         auto it = map_.find(path);
         if (it != map_.end())
         {
-            // Another worker loaded the same profile while we were loading; keep theirs, drop ours.
-            lru_.splice(lru_.begin(), lru_, it->second.pos);
+            lru_.splice(lru_.begin(), lru_, it->second.pos);   // mark most-recently-used
             return it->second.ptr;
         }
+        // Miss: load UNDER the lock so at most one profile parses at a time. Loading outside the lock is a
+        // thundering-herd trap: work is grouped by profile, so a profile boundary makes ~all workers miss on
+        // the SAME next profile at once, each redundantly parsing the same 150 MB JSON (~0.6 GB transient
+        // apiece) before one wins the insert -- that spiked RSS to 14 GB+. Serialising loads costs only a
+        // brief stall per boundary (a load is ~1 s; steady-state play does no loads at all, and the second
+        // worker to want a profile now gets the cache hit instead of re-parsing) and bounds resident memory
+        // to ~cap profiles + the one in-flight load.
+        std::shared_ptr<const MulliganProfile> loaded = load(path);
         lru_.push_front(path);
         map_[path] = Entry{loaded, lru_.begin()};
         while (map_.size() > cap_)
