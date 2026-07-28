@@ -408,8 +408,16 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`MagicDeckTester play GUI: http://localhost:${PORT}  (bound ${HOST}:${PORT})`);
-  console.log(`  binary: ${BIN} ${fs.existsSync(BIN) ? '(found)' : '(MISSING — build Release first)'}`);
-  console.log(`  decks:  ${DECKS_DIR}`);
-});
+// Only bind the port when run as a script (node tools/play/server.js). When require()d — by the
+// jsdom client check (test/viewer_client_check.js), which reuses runStep/runValidate/listDecks to
+// serve the exact same protocol the browser talks — do NOT listen (no port bind, no console spam).
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`MagicDeckTester play GUI: http://localhost:${PORT}  (bound ${HOST}:${PORT})`);
+    console.log(`  binary: ${BIN} ${fs.existsSync(BIN) ? '(found)' : '(MISSING — build Release first)'}`);
+    console.log(`  decks:  ${DECKS_DIR}`);
+  });
+}
+
+// Exported for the headless jsdom client check so it drives the REAL protocol (not a reimplementation).
+module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN };

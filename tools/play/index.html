@@ -1227,9 +1227,13 @@ function applyAccepted(planIndex, label) {
   // Dropped-cast detection is now SERVER-TRUTH (issue #3a): the engine reports decision.dropped_casts,
   // so step() no longer needs pre-commit hand/gy/battlefield snapshots to infer a silent drop. (The old
   // board-diff detectDropped false-positived on self-sacrificing/redrawn casts.)
-  // Record a one-int step so undo can pop this main-phase decision. Without it S.steps desyncs from
+  // Record a step so undo can pop this main-phase decision. Without it S.steps desyncs from
   // S.choices and undo() (which bails when S.steps is empty) silently does nothing after any line.
-  S.prev = S.decision; S.choices.push(planIndex); (S.steps=S.steps||[]).push(1);
+  // {n, auto}: n = ints this decision contributed; auto = it was committed WITHOUT a user rest
+  // (dead-opponent / commit-turn auto-pass / auto-resolve), so undo rolls it back together with the
+  // preceding user step rather than landing mid-auto-sequence (issue #2).
+  S.prev = S.decision; S.choices.push(planIndex);
+  (S.steps=S.steps||[]).push({ n:1, auto:!!(S.decision && S.decision._autoStep) });
   S.plan=[]; S.leMode=false; S.vialMode=null;
   renderHistory(); hideVerdict(); step();
 }
@@ -1871,7 +1875,8 @@ function pushChoice(d, oi, lab){ pushChoices(d, [oi], lab); }
 // target). Existing single-int decisions record a step of 1 -> behaviour unchanged.
 function pushChoices(d, arr, lab){
   S.history.push({ turn:d.turn, label:lab });
-  S.prev=S.decision; arr.forEach(x=>S.choices.push(x)); (S.steps=S.steps||[]).push(arr.length);
+  S.prev=S.decision; arr.forEach(x=>S.choices.push(x));
+  (S.steps=S.steps||[]).push({ n:arr.length, auto:!!(d && d._autoStep) });   // auto -> undo pops with prior user step (#2)
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null;
   renderHistory(); hideDecPanel(); step();
 }
@@ -2122,6 +2127,7 @@ function autoResolveDecision(dec){
             : dec.type==='retrace_discard' ? (()=>{ const c=(dec.options||[]).find(x=>x.index===def); return `${dec.source} (retrace): discard ${c?c.name:'land'} · auto`; })()
             : dec.type==='vial_charge' ? `Vial: ${def?'+counter':'hold'} · auto`
             : `${dec.source||dec.type}: auto`;
+  dec._autoStep = true;        // committed WITHOUT a user rest -> undo rolls it back with the prior user step (#2)
   pushChoice(dec, def, lab);   // appends the choice, records history, hides the panel, re-steps
   return true;
 }
@@ -2149,14 +2155,14 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // re-prompt in the SAME main -- e.g. Anti-Lifegain seed 1 game 0, which re-prompts a pre_main at
   // turn 4 with the opponent at -1). Don't make the user click through a decided game -- auto-pass an
   // empty line to fetch the result. Fires on ANY main decision with a dead opponent (both phases).
-  if (!undoing && isDeadOpponentMain(dec)) { S.plan=[]; commitLine(); return; }
+  if (!undoing && isDeadOpponentMain(dec)) { dec._autoStep=true; S.plan=[]; commitLine(); return; }
   // "Commit turn": auto-pass every remaining MAIN-phase decision of the same turn (a post-combat
   // Main 2, or a draw-breakpoint re-prompt) so the user jumps to the next turn without clicking
   // through the rest of this one. Stops as soon as the turn advances, a non-main decision appears
   // (needs a real choice), or the game ends (result -> showResult clears the flag). Capped defensively.
   if (!undoing && S.commitTurn != null) {
     if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
-      S.commitTurnPasses = (S.commitTurnPasses||0) + 1; S.plan=[]; commitLine(); return;
+      S.commitTurnPasses = (S.commitTurnPasses||0) + 1; dec._autoStep=true; S.plan=[]; commitLine(); return;
     }
     S.commitTurn = null;   // turn advanced / non-main / cap hit -> resume normal interaction
   }
@@ -2245,7 +2251,13 @@ async function nextGame() {
 // there was nothing to pop. Callers then step() to replay + re-log the returned decision exactly.
 function rollbackStep() {
   if (!(S.steps&&S.steps.length)) return false;
-  const n=S.steps.pop();                       // ints the last-committed decision contributed (>=1)
+  // Pop the last USER action AND any auto-advanced steps that trailed it. A single user click ("Commit
+  // turn", or a lethal line that leaves the dead opponent still being prompted, or an auto-resolved
+  // land-entry) can commit SEVERAL engine decisions with no user rest between them; popping only the
+  // last one lands mid-auto-sequence and re-logs a phantom pass line (issue #2). So keep popping while
+  // the step we just removed was auto-committed, stopping once we've removed the user step above it.
+  let n=0, wasAuto;
+  do { const st=S.steps.pop(); n += (st&&st.n)||0; wasAuto = !!(st&&st.auto); } while (wasAuto && S.steps.length);
   S.choices.length=Math.max(0,S.choices.length-n);
   S.history=S.history.filter(h=>!h.win);
   const cp=(S.checkpoints||[])[S.steps.length];
