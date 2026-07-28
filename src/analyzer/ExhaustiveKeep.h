@@ -61,6 +61,10 @@ struct ExhaustiveKeepConfig
                                          // agent should reach; the confounded A/B has consistently shown
                                          // blind >= clairvoyant lookahead). The struct default stays false
                                          // only so an unset/legacy config is inert. Keep is always on too.
+    bool     recommend_only = false;  // --gen-mulligan recommend: after the cheap floor pass, project the
+                                     // full-gen wall-clock (vs an overnight window) and STOP -- no refine
+                                     // waves, no profile written. A cost-scouting probe, ~1/(cap/floor) the
+                                     // price of a full gen, so the user can pick fast/complete/another machine.
     std::string out_profile;    // if set, write the serialized keep policy (base profile + table) here
     std::string out_raw;        // if set, write the poolable raw sum+count sidecar (for cross-machine merge)
     std::string commit;         // play-logic identity stamped into the raw sidecar (from MTG_COMMIT)

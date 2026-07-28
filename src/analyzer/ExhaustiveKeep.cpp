@@ -2123,6 +2123,53 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     }
     // ================================================================================================
 
+    // Post-floor GEN-TIME PROJECTION: the floor pass just priced this deck's rollouts at the gen depth, so
+    // project the full gen's wall-clock and compare it to an overnight window -- letting the user decide
+    // fast vs complete vs another machine BEFORE paying for the (long) refine. Printed for every adaptive
+    // run; --gen-mulligan recommend STOPS here (no refine, no profile) so the projection is a cheap scout.
+    if (adaptive && !continuous)
+    {
+        const double floor_time = gen_elapsed();
+        const double rate = floor_time > 0.01 ? static_cast<double>(rollouts_done) / floor_time : 0.0;
+        long long total_cells = 0;
+        for (int H = HAND; H >= min_size; --H)
+            { total_cells += static_cast<long long>(tables[HAND - H].comps.size()) * 2; }
+        const double overnight_h = []{ const char* s = std::getenv("MTG_KEEP_OVERNIGHT_H");
+                                       return (s && *s) ? std::max(0.1, std::atof(s)) : 8.0; }();
+        if (rate > 0.0 && total_cells > 0)
+        {
+            // COMPLETE = full bottoming at R40 => ~uniform cap: total_cells x 40 rollouts (upper bound; the
+            // adaptive KEEP table trims it somewhat). FAST = adaptive bottoming at R30 ~= half of that
+            // (R30/R40 x ~0.65 bottoming saving, per the recipe calibration) -- a rough guide, not a promise.
+            const double complete_h = (static_cast<double>(total_cells) * 40.0 / rate) / 3600.0;
+            const double fast_h     = complete_h * 0.5;
+            os << "=== GEN-TIME PROJECTION (from floor pass) ===\n";
+            os << "  floor pass: " << static_cast<long long>(floor_time) << "s @ "
+               << static_cast<long long>(rate) << " rollouts/s;  " << total_cells << " cells (both pd)\n";
+            os << std::fixed << std::setprecision(1);
+            os << "  projected COMPLETE (full bottom, R40): ~" << complete_h
+               << " h   (upper bound; adaptive keep trims it)\n";
+            os << "  projected FAST     (adaptive,   R30): ~" << fast_h << " h   (rough guide)\n";
+            os << "  overnight target: ~" << overnight_h << " h  ->  ";
+            if (complete_h <= overnight_h)
+                os << "COMPLETE fits an overnight run.\n";
+            else if (fast_h <= overnight_h)
+                os << "complete is ~" << (complete_h / overnight_h) << "x over; FAST (~" << fast_h
+                   << "h) fits overnight -- or run complete on another machine / over a weekend.\n";
+            else
+                os << "BOTH exceed overnight (~" << (fast_h / overnight_h)
+                   << "x even for fast); use another machine or a weekend run.\n";
+            os.unsetf(std::ios::floatfield);
+            os << "=============================================\n" << std::flush;
+        }
+        if (cfg.recommend_only)
+        {
+            os << "recommend mode: stopping after the floor pass (no refine, no profile written).\n"
+               << std::flush;
+            return;
+        }
+    }
+
     // Save the (expensive) floor investment immediately -- refine waves can be long, so don't wait for
     // the first wave boundary. A complete-floor sidecar is already a valid (low-R) recoverable state.
     if (adaptive && !continuous) { maybe_checkpoint(); }

@@ -616,10 +616,18 @@ int main(int argc, char* argv[])
                 {
                     cfg.rollouts = 30; cfg.r_floor = 2; cfg.adaptive_bottom = true;   // adaptive bottoming, R30
                 }
+                else if (gen_recipe == "recommend")
+                {
+                    // Scout only: run discovery + the cheap floor pass, project the full-gen wall-clock vs an
+                    // overnight window, then STOP (no refine, no profile). MUST use adaptive bottoming so the
+                    // floor pass drives EVERY cell (keep + sub) to just r_floor -- full bottoming would drive
+                    // the sub-tables straight to the cap, making the "probe" as expensive as a real gen.
+                    cfg.rollouts = 40; cfg.r_floor = 2; cfg.adaptive_bottom = true; cfg.recommend_only = true;
+                }
                 else
                 {
                     std::cerr << "Unknown --gen-mulligan recipe '" << gen_recipe
-                              << "'. Use: complete | fast\n";
+                              << "'. Use: complete | fast | recommend\n";
                     return 1;
                 }
             }
