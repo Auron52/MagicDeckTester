@@ -9,6 +9,7 @@
 #include <thread>
 #include <sstream>
 #include <cstdlib>
+#include <map>
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
 #include "core/HeuristicDefaults.h"
@@ -406,11 +407,17 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                               const std::vector<TurnSolver::Plan>& plans,
                               bool is_pre_combat, int decision_index, int reveal_count,
                               const std::vector<std::pair<int, std::string>>& drew = {},
-                              const std::vector<PlayEvent>& events = {})
+                              const std::vector<PlayEvent>& events = {},
+                              const std::vector<std::string>& dropped_casts = {},
+                              int main_ordinal = -1)
 {
     const Player& me  = s.ActivePlayer();
     os << "{\n";
     os << "  \"decision_index\": " << decision_index << ",\n";
+    // #10 cast-order key: the ordinal of THIS main-phase decision among all main-phase decisions (0-based),
+    // matching AIEngine::m_ext_main_ordinal at reorder time. The viewer keys S.castOrder by it directly
+    // (no fragile client-side counting). -1 => not supplied (validation/replay contexts that don't reorder).
+    if (main_ordinal >= 0) { os << "  \"main_ordinal\": " << main_ordinal << ",\n"; }
     os << "  \"type\": \"main_phase\",\n";
     os << "  \"turn\": " << s.turn_number << ",\n";
     os << "  \"phase\": \"" << (is_pre_combat ? "pre_main" : "post_main") << "\",\n";
@@ -444,6 +451,20 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             os << ", \"text\": ";
             JsonStr(os, events[ei].text);
             os << " }";
+        }
+        os << "],\n";
+    }
+    // Server-truth resolution: the DECLARED casts of the just-committed plan the executor could not pay
+    // (dropped, left in hand). The viewer reads this to know AUTHORITATIVELY that a line partially
+    // failed -- and rolls it back -- instead of inferring it from a board diff (detectDropped, which
+    // false-positived on working lines). Empty (the common case) => the line fully resolved.
+    if (!dropped_casts.empty())
+    {
+        os << "  \"dropped_casts\": [";
+        for (size_t di = 0; di < dropped_casts.size(); ++di)
+        {
+            if (di) { os << ", "; }
+            JsonStr(os, dropped_casts[di]);
         }
         os << "],\n";
     }
@@ -500,6 +521,18 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
         }
         os << "]";
+        // #10 cast-order: the CANONICAL execution order of this plan's non-sac hand casts, so the viewer
+        // can tell whether the human's queued order is a REORDER (=> emit --cast-order) or already
+        // canonical (=> omit, keeping references byte-identical). Emitted only when >=2 non-sac casts.
+        {
+            std::vector<std::string> canon = TurnSolver::CanonicalNonSacCastOrder(s, p);
+            if (canon.size() >= 2)
+            {
+                os << ", \"cast_order_canonical\": [";
+                for (size_t ci = 0; ci < canon.size(); ++ci) { if (ci) os << ", "; JsonStr(os, canon[ci]); }
+                os << "]";
+            }
+        }
         // ... plus the per-action variant params (tutor target / X / Ponder keep / Soulfire
         // own-targets) so the GUI can show WHICH variant when several plans share the same casts.
         os << ", \"actions\": [";
@@ -1220,6 +1253,71 @@ static void WriteReplicateDecisionJson(std::ostream& os, const GameState& s, con
     os << "}\n";
 }
 
+// Firebreathe-amount decision (#4): at combat, how many pump ACTIVATIONS to buy with leftover mana
+// (Scourge {R}:+1/+0 self, Lathliss {1}{R}: team +1/+0). Reply = count in [0, max_count]; default =
+// max (the current greedy spend). Rides the turn-keyed --firebreathe side-channel, NOT --choices.
+static void WriteFirebreatheDecisionJson(std::ostream& os, const GameState& s,
+                                         const std::vector<int>& attacker_indices,
+                                         int max_count, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"firebreathe\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"max_count\": " << max_count << ",\n";
+    os << "  \"heuristic_default\": " << max_count << ",\n";
+    os << "  \"attackers\": [";
+    for (size_t j = 0; j < attacker_indices.size(); ++j)
+    {
+        const Permanent& p = s.battlefield[attacker_indices[j]];
+        os << (j ? ", " : "") << "{ \"name\": "; JsonStr(os, p.card.m_name.str()); os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply how many firebreathing activations to spend leftover combat mana on (0.."
+       << max_count << "); each pumps an attacker. Default = spend the maximum.\"\n";
+    os << "}\n";
+}
+
+// Storage-land tap-vs-charge decision (#6, Dwarven Hold / Mercadian Bazaar): a charged storage land can
+// either BURST this turn (tap, spend counters as {R}) or CHARGE (stay untapped -> +1 counter at end of
+// turn). Reply = 1 to HOLD (charge / build the battery), 0 to allow the normal tap/burst. Default = 0
+// (the current heuristic: burst when a committed line needs it, reserve otherwise). Rides the
+// (turn, land number)-keyed --storage-hold side-channel, NOT --choices.
+static void WriteStorageHoldDecisionJson(std::ostream& os, const GameState& s,
+                                         const Permanent& land, int counters, int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"storage_hold\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"land\": "; JsonStr(os, land.card.m_name.str()); os << ",\n";
+    // Side-channel key: the land's BATTLEFIELD INDEX (its position in state.battlefield). Unique per
+    // permanent and deterministic across the stateless replay (same seed/choices/holds => same board =>
+    // same index at this consult), so it distinguishes two storage lands charged the same turn -- unlike
+    // the card m_number, which is 0 for a played land and whose preservation would perturb the autonomous
+    // behaviour digest. Computed from the reference's position (land is always an element of s.battlefield).
+    os << "  \"land_idx\": " << static_cast<int>(&land - s.battlefield.data()) << ",\n";
+    os << "  \"counters\": " << counters << ",\n";
+    os << "  \"heuristic_default\": 0,\n";
+    // Charge-mode drives the decision TIMING: "upkeep_if_tapped" (Dwarven Hold) is decided PRE-DRAW
+    // (at upkeep -- the human commits without seeing this turn's draw); "tap" (Mercadian Bazaar) is a
+    // post-draw main-phase tap. The viewer uses pre_draw to label the harder blind commitment.
+    const CardDefinition* ld = CardDatabase::Instance().LookupCached(land.card);
+    const bool pre_draw = ld && ld->params.storage_charge_mode == "upkeep_if_tapped";
+    os << "  \"charge_mode\": "; JsonStr(os, ld ? ld->params.storage_charge_mode : std::string()); os << ",\n";
+    os << "  \"pre_draw\": " << (pre_draw ? "true" : "false") << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"note\": ";
+    JsonStr(os, std::string("reply 1 to HOLD this storage land untapped this turn (charge it: +1 counter at"
+              " end of turn), or 0 to let it tap/burst as needed. ")
+              + (pre_draw
+                 ? "NOTE: decided at UPKEEP, BEFORE your draw -- you commit without seeing this turn's card."
+                 : "Holding forgoes bursting now to build toward a bigger future burst."));
+    os << "\n";
+    os << "}\n";
+}
+
 // Land-entry decision (shock lands, and reveal lands like Frostboil Snarl): as the land enters you may
 // pay a cost to have it enter UNTAPPED, or let it enter tapped. Shock lands pay `pay_life` life; reveal
 // lands reveal a matching land (`reveal_types`) already in hand -- free, but shown as a choice. The AI
@@ -1282,7 +1380,12 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          int lookahead_depth, int timeout_ms, std::vector<int> choices,
                          int reveal_count, const std::filesystem::path& log_dir,
                          const std::string& validate_line = "",
-                         const std::string& force_mulligan = "")
+                         const std::string& force_mulligan = "",
+                         const std::string& firebreathe_spec = "",
+                         bool firebreathe_prompt = false,
+                         const std::string& cast_order_spec = "",
+                         const std::string& storage_hold_spec = "",
+                         bool storage_hold_prompt = false)
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -1313,6 +1416,10 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     }
     size_t cursor = 0;
     int decisions_made = 0;
+    // #10: ordinal of the current main-phase decision among all main-phase decisions (the external chooser
+    // is called once per main-phase decision, exactly mirroring AIEngine::m_ext_main_ordinal). Emitted in
+    // the decision JSON so the viewer keys --cast-order by it. Post-incremented at each external-chooser call.
+    int main_ordinal = 0;
     std::vector<std::string> trace;   // one entry per RESOLVED decision (for --log-dir)
     // Accurate per-draw reporting: the real draw sites append (turn, card_name) here as cards are
     // drawn (see g_play_draw_sink). It accumulates the draws since the last RESOLVED main-phase
@@ -1324,10 +1431,17 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // viewer history. Same lifecycle as draw_log: real sites append, cleared when a decision is consumed.
     std::vector<PlayEvent> event_log;
     g_play_event_sink = &event_log;
+    // Server-truth resolution: the DECLARED casts of the last-applied committed plan that the executor
+    // could not pay (dropped, left in hand). Same lifecycle as draw_log -- the apply site appends, and
+    // it is cleared when a decision is consumed, so the next emitted decision carries exactly the
+    // just-committed plan's dropped casts. The browser reads this instead of guessing via detectDropped.
+    std::vector<std::string> dropped_log;
+    g_play_dropped_cast_sink = &dropped_log;
     ai.SetExternalChooser(
         [&](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
         {
             int di = static_cast<int>(cursor);
+            const int this_main_ordinal = main_ordinal++;   // #10: this decision's main-phase ordinal
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -1337,8 +1451,23 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                     // Record this resolved decision (state + plans + the chosen index).
                     // Only the completing full-CSV run writes the trace file (below).
                     std::ostringstream ss;
-                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log);
+                    ss << "{ \"chosen\": " << chosen;
+                    // #10 reference round-trip: record the APPLIED cast order (the human's pin) on the
+                    // main-phase trace entry, so a saved reference that reordered can be replayed by the
+                    // reference checks (which reconstruct --cast-order "<main_ordinal>:names" from this).
+                    // Absent (no reorder) => omitted => the reference replays in canonical order unchanged.
+                    if (g_play_cast_order_chooser)
+                    {
+                        std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
+                        if (!ord.empty())
+                        {
+                            ss << ", \"cast_order\": [";
+                            for (size_t j = 0; j < ord.size(); ++j) { if (j) ss << ", "; JsonStr(ss, ord[j]); }
+                            ss << "]";
+                        }
+                    }
+                    ss << ", \"decision\": ";
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
@@ -1347,6 +1476,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 // the draws that happen AFTER it (turn draw / cantrip draws of the next segment).
                 draw_log.clear();
                 event_log.clear();
+                dropped_log.clear();
                 return chosen;
             }
             // Human-play line reconciliation: if a --validate-line was supplied, this is the
@@ -1399,13 +1529,13 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                 }
                 std::cout << "],\n";
                 std::cout << "  \"decision\": ";
-                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log);
+                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
                 std::cout << "}\n<<<END_VALIDATION>>>\n";
                 std::cout.flush();
                 std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log);
+            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);   // distinct code: "more input needed"
@@ -1973,6 +2103,138 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
         };
     g_play_replicate_chooser = &replicate_chooser;
 
+    // #4 Firebreathe-amount: at combat, how many pump activations to buy with leftover mana. Rides a
+    // TURN-keyed side-channel (--firebreathe "turn:count,..."), NOT the positional --choices cursor, so
+    // it never shifts the stream and existing references (no --firebreathe) replay byte-identically as
+    // greedy. Installed ONLY when there is something to do -- a recorded answer to apply (non-empty map)
+    // or live prompting (--firebreathe-prompt). Otherwise left null -> AIEngine::Firebreathe stays greedy
+    // (no probe, byte-identical) -- which is exactly the reference-check / autonomous case.
+    std::map<int, int> firebreathe_by_turn;
+    {
+        std::stringstream fs(firebreathe_spec);
+        std::string ftok;
+        while (std::getline(fs, ftok, ','))
+        {
+            auto fc = ftok.find(':');
+            if (fc == std::string::npos) { continue; }
+            try { firebreathe_by_turn[std::stoi(ftok.substr(0, fc))] = std::stoi(ftok.substr(fc + 1)); }
+            catch (...) { /* skip malformed token */ }
+        }
+    }
+    FirebreatheChooser firebreathe_chooser =
+        [&](const GameState& s, int controller, const std::vector<int>& attackers, int max_count) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
+            auto it = firebreathe_by_turn.find(s.turn_number);
+            if (it != firebreathe_by_turn.end())
+            {
+                int chosen = it->second;
+                if (chosen < 0 || chosen > max_count) { chosen = max_count; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteFirebreatheDecisionJson(ss, s, attackers, max_count, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            if (!firebreathe_prompt) { return -1; }   // reference replay / not-yet-live -> greedy default
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteFirebreatheDecisionJson(std::cout, s, attackers, max_count, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    if (firebreathe_prompt || !firebreathe_by_turn.empty()) { g_play_firebreathe_chooser = &firebreathe_chooser; }
+
+    // #10 Cast-order: the human-pinned execution order of a committed main plan's non-sacrifice hand
+    // casts. Rides a MAIN-PHASE-ORDINAL-keyed side-channel (--cast-order "<ord>:A|B|C;<ord>:X|Y"),
+    // NOT the positional --choices cursor -- the ordinal is the Nth main-phase decision (0-based),
+    // names pipe-separated (pipe never appears in a card name, unlike ',' which some names carry).
+    // Absent => the map is empty => the chooser returns {} for every ordinal => canonical order =>
+    // existing references (no --cast-order) replay byte-identically. Installed only when non-empty.
+    std::map<int, std::vector<std::string>> cast_order_by_main;
+    {
+        std::stringstream cs(cast_order_spec);
+        std::string entry;
+        while (std::getline(cs, entry, ';'))
+        {
+            auto colon = entry.find(':');
+            if (colon == std::string::npos) { continue; }
+            int ord = 0;
+            try { ord = std::stoi(entry.substr(0, colon)); }
+            catch (...) { continue; }
+            std::vector<std::string> names;
+            std::stringstream ns(entry.substr(colon + 1));
+            std::string nm;
+            while (std::getline(ns, nm, '|')) { if (!nm.empty()) { names.push_back(nm); } }
+            if (!names.empty()) { cast_order_by_main[ord] = std::move(names); }
+        }
+    }
+    CastOrderChooser cast_order_chooser =
+        [&](int main_ordinal) -> std::vector<std::string>
+        {
+            auto it = cast_order_by_main.find(main_ordinal);
+            return it != cast_order_by_main.end() ? it->second : std::vector<std::string>{};
+        };
+    if (!cast_order_by_main.empty()) { g_play_cast_order_chooser = &cast_order_chooser; }
+
+    // #6 Storage-land tap-vs-charge: the human's per-(turn, land) tap-vs-charge answers. Keyed by
+    // (turn, land BATTLEFIELD INDEX) on a side-channel (--storage-hold "turn:idx:val,...", val 1=HOLD/charge,
+    // 0=allow tap), NOT the positional --choices cursor -> existing references (no --storage-hold) replay
+    // byte-identically as the burst heuristic. BOTH answers are recorded (a 0 = an explicit "no hold")
+    // so live prompting never re-asks an answered land. Installed only when there is a recorded answer or
+    // live prompting (--storage-hold-prompt); otherwise null -> the engine never consults it (no hold).
+    std::map<std::pair<int, int>, bool> storage_hold_by_land;   // (turn, land battlefield index) -> hold?
+    {
+        std::stringstream ss(storage_hold_spec);
+        std::string tok;
+        while (std::getline(ss, tok, ','))
+        {
+            auto c1 = tok.find(':');
+            if (c1 == std::string::npos) { continue; }
+            auto c2 = tok.find(':', c1 + 1);
+            if (c2 == std::string::npos) { continue; }
+            try
+            {
+                int t = std::stoi(tok.substr(0, c1));
+                int n = std::stoi(tok.substr(c1 + 1, c2 - c1 - 1));
+                int v = std::stoi(tok.substr(c2 + 1));
+                storage_hold_by_land[{ t, n }] = (v != 0);
+            }
+            catch (...) { /* skip malformed token */ }
+        }
+    }
+    StorageHoldChooser storage_hold_chooser =
+        [&](const GameState& s, const Permanent& land, int counters) -> bool
+        {
+            int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
+            const int land_idx = static_cast<int>(&land - s.battlefield.data());   // #6 side-channel key
+            auto it = storage_hold_by_land.find({ s.turn_number, land_idx });
+            if (it != storage_hold_by_land.end())
+            {
+                if (!log_dir.empty())
+                {
+                    std::ostringstream tss;
+                    tss << "{ \"chosen\": " << (it->second ? 1 : 0) << ", \"decision\": ";
+                    WriteStorageHoldDecisionJson(tss, s, land, counters, di);
+                    tss << "}";
+                    trace.push_back(tss.str());
+                }
+                return it->second;   // recorded answer (hold / allow)
+            }
+            if (!storage_hold_prompt) { return false; }   // reference replay / not-yet-live -> heuristic (no hold)
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteStorageHoldDecisionJson(std::cout, s, land, counters, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    if (storage_hold_prompt || !storage_hold_by_land.empty()) { g_play_storage_hold_chooser = &storage_hold_chooser; }
+
     // Land entry (shock lands / Frostboil Snarl): the player chooses whether the land enters untapped
     // (paying its life / revealing a matching land) or tapped. Shares the --choices stream; the reply
     // is 1 (untapped, pay) or 0 (tapped). Default (out-of-range or absent) = the engine's heuristic.
@@ -2108,8 +2370,12 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_land_entry_chooser = nullptr;
     g_play_dragon_chooser = nullptr;
     g_play_lightpaws_chooser = nullptr;
+    g_play_firebreathe_chooser = nullptr;
+    g_play_cast_order_chooser = nullptr;
+    g_play_storage_hold_chooser = nullptr;
     g_play_draw_sink = nullptr;
     g_play_event_sink = nullptr;
+    g_play_dropped_cast_sink = nullptr;
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Mulligan reproducibility: the actual (count, bottomed-card-numbers) this game used. Recorded
@@ -2167,6 +2433,19 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::cout << ", \"text\": ";
             JsonStr(std::cout, event_log[ei].text);
             std::cout << " }";
+        }
+        std::cout << "],\n";
+    }
+    // Server-truth: casts of the final committed line the executor couldn't pay (dropped). Carried on
+    // the result too so a line that drops a cast AS the game ends is still caught by the viewer (parity
+    // with the per-decision dropped_casts). Empty (the common case) => the final line fully resolved.
+    if (!dropped_log.empty())
+    {
+        std::cout << "  \"dropped_casts\": [";
+        for (size_t di = 0; di < dropped_log.size(); ++di)
+        {
+            if (di) { std::cout << ", "; }
+            JsonStr(std::cout, dropped_log[di]);
         }
         std::cout << "],\n";
     }
@@ -2747,6 +3026,11 @@ int main(int argc, char* argv[])
     bool        force_exhaustive_keep = false;  // --exhaustive-keep: load the exhaustive keep sidecar
                                                 // even under claude-play (which skips it by default)
     std::string choices_str;          // comma-separated plan indices for --claude-play
+    std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
+    bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
+    std::string cast_order_str;       // #10: "<ord>:A|B|C;..." cast-order side-channel (main-ordinal-keyed)
+    std::string storage_hold_str;     // #6: "turn:num:val,..." storage tap-vs-charge side-channel
+    bool storage_hold_prompt = false; // #6: --storage-hold-prompt -> exit-70 to ask per charged storage land
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
     std::string validate_line;        // --validate-line "<spec>": human-play line to reconcile
                                        // at the first un-chosen main phase (tools/play GUI)
@@ -2771,6 +3055,7 @@ int main(int argc, char* argv[])
         if (flag == "--exhaustive-keep")     { force_exhaustive_keep = true; continue; }
         if (flag == "--ignore-play-profile") { ignore_play_profile = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
+        if (flag == "--storage-hold-prompt") { storage_hold_prompt = true; continue; }   // #6: value-less; parse regardless of position (the else-if chain below is gated on i+1<argc, so a trailing value-less flag would be dropped)
         try
         {
             if (i + 1 < argc)
@@ -2803,6 +3088,34 @@ int main(int argc, char* argv[])
                 else if (flag == "--choices")
                 {
                     choices_str = argv[++i];
+                }
+                else if (flag == "--firebreathe")
+                {
+                    // #4 firebreathe-amount side-channel: "turn:count,turn:count" (turn -> pump
+                    // activations). Keyed by turn (firebreathing fires once per combat), so it never
+                    // touches the positional --choices stream -> existing references replay unchanged.
+                    firebreathe_str = argv[++i];
+                }
+                else if (flag == "--firebreathe-prompt")
+                {
+                    // Live viewer mode: emit the firebreathe decision (exit 70) for any combat turn not
+                    // already answered in --firebreathe. Without this flag an unanswered turn falls back
+                    // to the greedy default (reference replay / autonomous), so the checks never exit-70.
+                    firebreathe_prompt = true;
+                }
+                else if (flag == "--cast-order")
+                {
+                    // #10 cast-order side-channel: "<ord>:A|B|C;<ord>:X|Y" (main-phase decision ordinal ->
+                    // pinned non-sac hand-cast order, pipe-separated names). Keyed by main-phase ordinal, so
+                    // it never touches the positional --choices stream -> existing references replay unchanged.
+                    cast_order_str = argv[++i];
+                }
+                else if (flag == "--storage-hold")
+                {
+                    // #6 storage tap-vs-charge side-channel: "turn:idx:val,..." (val 1=hold/charge, 0=allow
+                    // tap; idx = land battlefield index). Keyed by (turn, index), so it never touches the
+                    // positional --choices stream -> existing references replay unchanged (burst heuristic).
+                    storage_hold_str = argv[++i];
                 }
                 else if (flag == "--reveal")
                 {
@@ -2978,7 +3291,8 @@ int main(int argc, char* argv[])
             }
             return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
-                                 validate_line, force_mulligan);
+                                 validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
+                                 cast_order_str, storage_hold_str, storage_hold_prompt);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

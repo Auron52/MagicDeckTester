@@ -150,6 +150,7 @@
   #planbar .chip.retrace { border-color:#7a5a2e; background:#332817; } #planbar .chip.retrace .nm { color:#e6a94c; }
   /* planned (this-turn) card: green ring + order badge + remove */
   .thumb.planned img { box-shadow:0 0 0 2px var(--good); }
+  .thumb.planned.aura-plan { cursor:grab; }   /* untargeted queued aura: drag onto a creature (issue #11) */
   .thumb.planned .ord { position:absolute; top:-7px; left:-7px; background:var(--good); color:#0c1116;
       border-radius:11px; width:20px; height:20px; font-size:12px; font-weight:700; z-index:3;
       display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px #0b0c0e; }
@@ -434,12 +435,15 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
-          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null };
+          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{} };
 
 function cfg(extra) {
   return Object.assign({
     deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
+    firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
+    storageHold:S.storageHold||{},   // #6 (turn,land_idx)-keyed tap-vs-charge side-channel
+    castOrder:S.castOrder||{},       // #10 main-ordinal-keyed cast-order side-channel
   }, extra || {});
 }
 async function post(path, body) {
@@ -602,7 +606,16 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
             : entry.kind==='retrace' ? `<span class="srcbadge retrace" title="cast from graveyard via Retrace (discards a land)">↩</span>` : '';
   // data-num on a queued creature makes it a drop target for a same-turn Aura (drag Rancor onto it).
   const numAttr = (entry.num && !entry.target) ? ` data-num="${entry.num}"` : '';
-  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}" data-name="${esc(entry.name)}"${numAttr}>`+
+  // An UNTARGETED queued Aura is draggable straight onto a creature to set its enchant target --
+  // reuses retargetPlanAura via the #playfield drop funnel (no bounce to hand, no duplicate). Tagging
+  // it .aura-plan[data-pi] makes wireBoard's EXISTING dragstart wiring pick it up; the .aura-plan
+  // positioning CSS is .enchgroup-scoped, so this flat thumb keeps normal .planned styling (issue #11).
+  const isQueuedAura = entry.kind!=='land' && entry.kind!=='le' && entry.kind!=='vial'
+                    && entry.kind!=='retrace' && !entry.target
+                    && Object.keys(enchantTargetsFor(entry.name)).length>0;
+  const dragAttr = isQueuedAura
+    ? ` draggable="true" data-pi="${planIdx}" title="${esc(entry.name)} — queued; drag onto a creature to enchant it"` : '';
+  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}${isQueuedAura?' aura-plan':''}" data-name="${esc(entry.name)}"${numAttr}${dragAttr}>`+
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
     src+`<em>${esc(entry.name)}</em></span>`;
@@ -649,7 +662,7 @@ function plannedEnchantGroup(entry, planIdx, ord, planned) {
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -874,7 +887,7 @@ function renderPlanbar() {
     : '';
   // Buttons FIRST (left edge, next to the hand) so Commit/Clear are within easy reach while
   // you build the line; the Turn-plan label + chips follow and the chips flex to fill the rest.
-  pb.innerHTML = `<button id="commit" class="primary" title="${empty?'Pass just THIS phase — you\'ll still get Main 2 to cast in (use Pass turn to skip the whole turn)':'Commit this line for this phase only'}">${empty?'Pass phase':'Commit phase'}</button>`+
+  pb.innerHTML = `<button id="commit" class="primary" title="${empty?'Pass just THIS phase — you\'ll still get Main 2 to cast in (use Pass turn to skip the whole turn)':'Commit this line; you stay in this phase to re-decide if it draws a card or opens an ability (e.g. a same-turn Horizon Canopy sac)'}">${empty?'Pass phase':'Commit Line'}</button>`+
     `<button id="committurn" class="primary" title="${empty?'Do nothing this turn and skip to the next turn':'Commit this line, then auto-pass the rest of this turn (skip Main 2 / any re-prompts)'}">${empty?'Pass turn':'Commit turn'}</button>`+
     (empty?'':`<button id="clearp" class="ghost">Clear</button>`)+
     `<span class="lbl">Turn plan</span>`+
@@ -1214,26 +1227,32 @@ function applyAccepted(planIndex, label) {
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));
-  // Dropped-cast detection (issue 2): remember the non-land casts we INTENDED plus the pre-commit
-  // hand, graveyard AND battlefield counts, so after the line resolves we can tell if a queued cast
-  // never actually resolved (silently dropped for mana — e.g. an over-generated line the board can't
-  // pay). A cast is "dropped" only if it stayed in hand AND did not reach the graveyard AND did not
-  // reach the battlefield. The graveyard check avoids a false positive when the same-named card is
-  // cast (→ gy) but a fresh copy is re-staged into hand (Soulfire's dig), leaving the hand count
-  // unchanged; the BATTLEFIELD check avoids the same false positive for permanents — a creature/
-  // artifact resolves to the battlefield (never the gy), and with 4-of decks a redrawn copy restores
-  // the hand count, which otherwise looked like a drop. Compared in step() against the next state; a
-  // real drop rolls the whole line back (rollbackLine).
-  S._intendedCasts = (S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le'&&p.kind!=='retrace').map(p=>p.name);
-  S._preHandCounts = {};
-  (((S.decision||{}).me||{}).hand||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preHandCounts[nm]=(S._preHandCounts[nm]||0)+1; } });
-  S._preGyCounts = {};
-  (((S.decision||{}).me||{}).graveyard||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preGyCounts[nm]=(S._preGyCounts[nm]||0)+1; } });
-  S._preBfCounts = {};
-  (((S.decision||{}).me||{}).battlefield||[]).forEach(c=>{ const nm=typeof c==='string'?c:(c&&c.name); if(nm){ S._preBfCounts[nm]=(S._preBfCounts[nm]||0)+1; } });
-  // Record a one-int step so undo can pop this main-phase decision. Without it S.steps desyncs from
+  // Dropped-cast detection is now SERVER-TRUTH (issue #3a): the engine reports decision.dropped_casts,
+  // so step() no longer needs pre-commit hand/gy/battlefield snapshots to infer a silent drop. (The old
+  // board-diff detectDropped false-positived on self-sacrificing/redrawn casts.)
+  // Record a step so undo can pop this main-phase decision. Without it S.steps desyncs from
   // S.choices and undo() (which bails when S.steps is empty) silently does nothing after any line.
-  S.prev = S.decision; S.choices.push(planIndex); (S.steps=S.steps||[]).push(1);
+  // {n, auto}: n = ints this decision contributed; auto = it was committed WITHOUT a user rest
+  // (dead-opponent / commit-turn auto-pass / auto-resolve), so undo rolls it back together with the
+  // preceding user step rather than landing mid-auto-sequence (issue #2).
+  // #10 cast-order: if the human queued the accepted plan's non-sac casts in a NON-canonical order, pin
+  // that order via the main-ordinal-keyed side-channel (S.castOrder). The engine emits each plan's
+  // cast_order_canonical (>=2 casts) + the decision's main_ordinal; we send --cast-order ONLY when the
+  // human's queued sequence differs from canonical (same multiset, different order) -> references that
+  // aren't reordered stay byte-identical. Keyed step marker `co` so undo drops the side-channel entry.
+  let coKey = null;
+  const dec0 = S.decision, plan0 = dec0 && dec0.plans && dec0.plans[planIndex];
+  const canon = plan0 && plan0.cast_order_canonical;
+  if (canon && canon.length >= 2 && dec0.main_ordinal != null) {
+    const human = (S.plan||[]).map(p=>p.name).filter(n => canon.includes(n));
+    const ms = a => a.slice().sort().join('');
+    if (ms(human) === ms(canon) && human.some((n,i)=>n!==canon[i])) {   // same casts, different order
+      coKey = String(dec0.main_ordinal);
+      (S.castOrder=S.castOrder||{})[coKey] = human;
+    }
+  }
+  S.prev = S.decision; S.choices.push(planIndex);
+  (S.steps=S.steps||[]).push({ n:1, auto:!!(S.decision && S.decision._autoStep), co:coKey });
   S.plan=[]; S.leMode=false; S.vialMode=null;
   renderHistory(); hideVerdict(); step();
 }
@@ -1412,7 +1431,7 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'
-                || dec==='lightpaws'; // centered card-image modals
+                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1426,6 +1445,8 @@ function renderDecisionPanel(d, dec){
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : dec==='dragon' ? dragonPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
+                  : dec==='firebreathe' ? firebreathePanelHtml(d)
+                  : dec==='storage_hold' ? storageHoldPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -1858,6 +1879,10 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitRetraceDiscard(d, +b.dataset.opt));
   else if (dec==='replicate')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitReplicate(d, +b.dataset.opt));
+  else if (dec==='firebreathe')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFirebreathe(d, +b.dataset.opt));
+  else if (dec==='storage_hold')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitStorageHold(d, +b.dataset.opt));
   else if (dec==='land_entry')
     panel.querySelectorAll('button[data-le]').forEach(b=>b.onclick=()=>commitLandEntry(d, +b.dataset.le));
   else if (dec==='mulligan')
@@ -1875,7 +1900,8 @@ function pushChoice(d, oi, lab){ pushChoices(d, [oi], lab); }
 // target). Existing single-int decisions record a step of 1 -> behaviour unchanged.
 function pushChoices(d, arr, lab){
   S.history.push({ turn:d.turn, label:lab });
-  S.prev=S.decision; arr.forEach(x=>S.choices.push(x)); (S.steps=S.steps||[]).push(arr.length);
+  S.prev=S.decision; arr.forEach(x=>S.choices.push(x));
+  (S.steps=S.steps||[]).push({ n:arr.length, auto:!!(d && d._autoStep) });   // auto -> undo pops with prior user step (#2)
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null;
   renderHistory(); hideDecPanel(); step();
 }
@@ -1947,6 +1973,57 @@ function commitRetraceDiscard(d, oi){
 }
 function commitReplicate(d, n){
   pushChoice(d, n, `${d.source}: replicate ×${n}`);
+}
+// Firebreathe amount modal (#4): a combat-phase decision (the viewer's first NON-main-phase breakpoint
+// that isn't a spell sub-decision). Buttons 0..max, default = greedy max. The amount rides a TURN-keyed
+// side-channel (S.firebreathe), NOT the --choices stream, so it never shifts plan indices.
+function firebreathePanelHtml(d){
+  const max=d.max_count||0, def=(d.heuristic_default==null?max:d.heuristic_default);
+  const atk=(d.attackers||[]).map(a=>a.name);
+  let h=`<h3>Firebreathing — pump how much?</h3>`;
+  h+=`<div class="sub">Spend leftover combat mana on attacker pumps (each activation = +power, e.g. Scourge {R}:+1/+0). You can spend up to <b>${max}</b>; the AI spends the maximum. Hold back to keep mana for a trick.</div>`;
+  h+=`<div class="tutgrid">`+atk.map(n=>cardMini(n)).join('')+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+  for (let k=0;k<=max;k++)
+    h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
+  return h+`</div>`;
+}
+// Commit the firebreathe amount: record it in the turn-keyed side-channel and re-step. Unlike the
+// plan/sub-decision commits it appends NO --choices int; instead it pushes a ZERO-int step carrying the
+// turn key (fb) so undo (rollbackStep) can pop it and drop the side-channel entry, keeping the #2
+// checkpoint/step bookkeeping 1:1 (one shown decision -> one checkpoint -> one step).
+function commitFirebreathe(d, k){
+  const t=d.turn, max=d.max_count||0;
+  (S.firebreathe=S.firebreathe||{})[t]=k;
+  S.history.push({ turn:t, label:`firebreathe ×${k}${k<max?` (held ${max-k})`:''}` });
+  S.prev=S.decision;
+  (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), fb:t });   // consumes NO --choices slot
+  renderHistory(); hideDecPanel(); step();
+}
+// #6 storage tap-vs-charge (Dwarven Hold / Mercadian Bazaar): HOLD the land untapped this turn (charge it)
+// or ALLOW the normal tap/burst. Rides the (turn, land-number)-keyed side-channel (S.storageHold), NOT the
+// --choices stream. pre_draw=true (Dwarven Hold) surfaces at UPKEEP -- the blind, pre-draw commitment.
+function storageHoldPanelHtml(d){
+  const land=d.land||'this storage land', c=d.counters||0, pre=!!d.pre_draw;
+  let h=`<h3>${esc(land)} — charge or burst?</h3>`;
+  h+=`<div class="sub">It holds <b>${c}</b> storage counter${c===1?'':'s'} ({R} each on burst). <b>Hold</b> it untapped this turn to bank <b>+1</b> more at end of turn; <b>Allow</b> lets it tap/burst as your plays need. `
+    + (pre ? `<b>Decided now, at UPKEEP — before your draw:</b> you commit without seeing this turn's card.`
+           : `Decided in your main phase, after the draw.`) + `</div>`;
+  h+=`<div class="tutgrid">`+cardMini(land)+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  h+=`<button class="ghost" data-opt="1">Hold (charge)</button>`;
+  h+=`<button class="primary" data-opt="0">Allow tap  ·  AI</button>`;
+  return h+`</div>`;
+}
+// Record the hold answer in the (turn, land-number)-keyed side-channel and re-step. Like commitFirebreathe
+// it appends NO --choices int; it pushes a ZERO-int step carrying the side-channel key (sh) so undo drops it.
+function commitStorageHold(d, k){
+  const key=`${d.turn}:${d.land_idx}`;
+  (S.storageHold=S.storageHold||{})[key]=k;
+  S.history.push({ turn:d.turn, label:`${d.land||'storage'} ${k?'hold (charge)':'allow tap'}` });
+  S.prev=S.decision;
+  (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), sh:key });   // consumes NO --choices slot
+  renderHistory(); hideDecPanel(); step();
 }
 function commitLandEntry(d, v){
   pushChoice(d, v, landEntryLabel(d, v));
@@ -2089,6 +2166,8 @@ const AUTO_RESOLVABLE = {
   replicate:       'Replicate — how many token copies to make',
   retrace_discard: 'Retrace — which land to discard',
   vial_charge:     'Aether Vial — add a counter',
+  firebreathe:     'Firebreathing — how much leftover mana to pump',
+  storage_hold:    'Storage lands — hold to charge vs. tap/burst',
 };
 const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
@@ -2121,11 +2200,18 @@ function autoResolveDecision(dec){
   if (!dec || !(dec.type in AUTO_RESOLVABLE)) return false;
   if (surfaceEnabled(dec.type)) return false;
   const def = (dec.heuristic_default==null ? 0 : dec.heuristic_default);
+  // Firebreathe rides the turn-keyed side-channel, not --choices, so it auto-resolves via its own
+  // committer (a zero-int step) rather than pushChoice. "Let AI decide" => spend the greedy max.
+  if (dec.type==='firebreathe') { dec._autoStep = true; commitFirebreathe(dec, def); return true; }
+  // Storage tap-vs-charge rides the (turn,land_idx) side-channel too. "Let AI decide" => the heuristic
+  // default (0 = allow the normal tap/burst), committed via its zero-int step.
+  if (dec.type==='storage_hold') { dec._autoStep = true; commitStorageHold(dec, def); return true; }
   const lab = dec.type==='land_entry' ? landEntryLabel(dec, def)+' · auto'
             : dec.type==='replicate'  ? `${dec.source}: replicate ×${def} · auto`
             : dec.type==='retrace_discard' ? (()=>{ const c=(dec.options||[]).find(x=>x.index===def); return `${dec.source} (retrace): discard ${c?c.name:'land'} · auto`; })()
             : dec.type==='vial_charge' ? `Vial: ${def?'+counter':'hold'} · auto`
             : `${dec.source||dec.type}: auto`;
+  dec._autoStep = true;        // committed WITHOUT a user rest -> undo rolls it back with the prior user step (#2)
   pushChoice(dec, def, lab);   // appends the choice, records history, hides the panel, re-steps
   return true;
 }
@@ -2153,14 +2239,14 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // re-prompt in the SAME main -- e.g. Anti-Lifegain seed 1 game 0, which re-prompts a pre_main at
   // turn 4 with the opponent at -1). Don't make the user click through a decided game -- auto-pass an
   // empty line to fetch the result. Fires on ANY main decision with a dead opponent (both phases).
-  if (!undoing && isDeadOpponentMain(dec)) { S.plan=[]; commitLine(); return; }
+  if (!undoing && isDeadOpponentMain(dec)) { dec._autoStep=true; S.plan=[]; commitLine(); return; }
   // "Commit turn": auto-pass every remaining MAIN-phase decision of the same turn (a post-combat
   // Main 2, or a draw-breakpoint re-prompt) so the user jumps to the next turn without clicking
   // through the rest of this one. Stops as soon as the turn advances, a non-main decision appears
   // (needs a real choice), or the game ends (result -> showResult clears the flag). Capped defensively.
   if (!undoing && S.commitTurn != null) {
     if (dec && dec.type==='main_phase' && dec.turn===S.commitTurn && (S.commitTurnPasses||0) < 40) {
-      S.commitTurnPasses = (S.commitTurnPasses||0) + 1; S.plan=[]; commitLine(); return;
+      S.commitTurnPasses = (S.commitTurnPasses||0) + 1; dec._autoStep=true; S.plan=[]; commitLine(); return;
     }
     S.commitTurn = null;   // turn advanced / non-main / cap hit -> resume normal interaction
   }
@@ -2203,53 +2289,24 @@ async function step() {
   S.busy=false; $('undo').disabled = S.choices.length===0;
   if (res.kind==='decision') {
     advanceTo(res.decision);
-    // Defer the dropped-cast check while the committed plan is STILL APPLYING. A resolution-time
-    // sub-decision (Light-Paws / dig / scry / target / sacrifice / ...) is returned MID-plan, before the
-    // plan's later casts resolve. E.g. Ethereal Armor + Daybreak Coronet: Ethereal Armor resolves, triggers
-    // Light-Paws, and the engine PAUSES here with Daybreak Coronet still in hand -- judging droppedness now
-    // wrongly flags Coronet as unpayable and rolls the line back, pre-empting the very trigger the user
-    // never gets to see. _intendedCasts persists across the sub-decision reply (pushChoices does not clear
-    // it), so the check runs once the plan is fully resolved: the next non-sub decision, or a result. A
-    // genuinely dropped cast produces no trigger, so it never lands on a sub-decision -- it surfaces at the
-    // plan's end and is still caught there.
-    if (!SUBDECISIONS.includes((res.decision||{}).type)) {
-      const dropped=detectDropped((res.decision||{}).me);
-      if (dropped.length) return rollbackLine(dropped);
-    }
+    // SERVER-TRUTH RESOLUTION: the engine reports which committed casts it could not pay (dropped, left
+    // in hand) as decision.dropped_casts -- authoritative, replacing the old detectDropped board-diff
+    // heuristic that false-positived on working lines (a self-sacrificing/redrawn cast read as dropped;
+    // viewer issue #3a). It naturally DEFERS past mid-plan sub-decisions with no snapshot bookkeeping: a
+    // cast that drops never resolves, so it never triggers a sub-decision (Light-Paws / dig / target),
+    // and only a main-phase decision/result carries the field -- so a sub-decision reply never sees a
+    // premature drop. The stateless replay records the drop in the final segment after the last consumed
+    // choice, so it surfaces at the next main-phase decision.
+    const dropped=(res.decision||{}).dropped_casts||[];
+    if (dropped.length) return rollbackLine(dropped);
   } else if (res.kind==='result') {
-    const dropped=detectDropped((res.result||{}).me);
+    const dropped=(res.result||{}).dropped_casts||[];
     if (dropped.length) return rollbackLine(dropped);
     showResult(res.result);
   } else showError(res.error||'unknown error', res.raw);
 }
-// Dropped-cast detection (issue 2): return the intended non-land casts that never resolved. A cast
-// is "dropped" only if it stayed in hand (count did not fall below pre-commit) AND did not reach the
-// graveyard (an instant/sorcery that resolved always lands there) AND did not reach the battlefield
-// (a creature/artifact/permanent that resolved lands there). The gy check keeps a cast-then-re-staged
-// copy (Soulfire's dig re-adds a same-named card, so the hand count is unchanged) from being misread
-// as dropped; the BATTLEFIELD check does the same for permanents — a resolved permanent increments
-// its battlefield count, and battlefield counts are stable across the next draw step, so a redrawn
-// 4-of copy no longer looks like a drop. A discard (left hand → gy, never cast) is still caught.
-// A genuine over-generated/unpayable line reaches none of gy/battlefield, so step() rolls the whole
-// thing back (rollbackLine).
-function detectDropped(meAfter){
-  const intended=S._intendedCasts; S._intendedCasts=null;
-  const preH=S._preHandCounts||{}; S._preHandCounts=null;
-  const preG=S._preGyCounts||{};   S._preGyCounts=null;
-  const preB=S._preBfCounts||{};   S._preBfCounts=null;
-  if (!intended || !intended.length || !meAfter) return [];
-  const cn=c=>typeof c==='string'?c:(c&&c.name);
-  const afterH={}; (meAfter.hand||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterH[nm]=(afterH[nm]||0)+1; } });
-  const afterG={}; (meAfter.graveyard||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterG[nm]=(afterG[nm]||0)+1; } });
-  const afterB={}; (meAfter.battlefield||[]).forEach(c=>{ const nm=cn(c); if(nm){ afterB[nm]=(afterB[nm]||0)+1; } });
-  const dropped=[]; const seen=new Set();
-  intended.forEach(nm=>{ if(seen.has(nm)) return; seen.add(nm);
-    const stillInHand=(afterH[nm]||0) >= (preH[nm]||0) && (preH[nm]||0) > 0;
-    const reachedGy  =(afterG[nm]||0) >  (preG[nm]||0);
-    const reachedBf  =(afterB[nm]||0) >  (preB[nm]||0);
-    if (stillInHand && !reachedGy && !reachedBf) dropped.push(nm); });
-  return dropped;
-}
+// (detectDropped removed: dropped-cast detection is now server-truth via decision.dropped_casts,
+// read directly in step(). The old board-diff inference false-positived on working lines — issue #3a.)
 function notifyDropped(names){
   const ve=$('verdict'); ve.className='unsupported';
   ve.innerHTML=`<span class="vtag">line rejected</span>`+
@@ -2262,7 +2319,7 @@ function notifyDropped(names){
   $('dropok').onclick=hideVerdict;
 }
 async function newGame() {
-  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set() };
+  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{}, storageHold:{}, castOrder:{} };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed and start the next game — for playing several in a row. (Game index is always 0;
@@ -2278,7 +2335,23 @@ async function nextGame() {
 // there was nothing to pop. Callers then step() to replay + re-log the returned decision exactly.
 function rollbackStep() {
   if (!(S.steps&&S.steps.length)) return false;
-  const n=S.steps.pop();                       // ints the last-committed decision contributed (>=1)
+  // Pop the last USER action AND any auto-advanced steps that trailed it. A single user click ("Commit
+  // turn", or a lethal line that leaves the dead opponent still being prompted, or an auto-resolved
+  // land-entry) can commit SEVERAL engine decisions with no user rest between them; popping only the
+  // last one lands mid-auto-sequence and re-logs a phantom pass line (issue #2). So keep popping while
+  // the step we just removed was auto-committed, stopping once we've removed the user step above it.
+  let n=0, wasAuto;
+  do {
+    const st=S.steps.pop(); n += (st&&st.n)||0; wasAuto = !!(st&&st.auto);
+    // A firebreathe step consumed no --choices int; it recorded a turn-keyed side-channel entry -> drop
+    // it so the re-step re-emits the firebreathe decision (rather than replaying the popped amount).
+    if (st && st.fb != null && S.firebreathe) { delete S.firebreathe[st.fb]; }
+    // #6: a storage_hold step likewise consumed no --choices int -> drop its (turn,land_idx) side-channel entry.
+    if (st && st.sh != null && S.storageHold) { delete S.storageHold[st.sh]; }
+    // #10: a main-phase step that PINNED a cast order -> drop its main-ordinal cast-order side-channel entry
+    // (the --choices plan int itself is dropped via `n` above).
+    if (st && st.co != null && S.castOrder) { delete S.castOrder[st.co]; }
+  } while (wasAuto && S.steps.length);
   S.choices.length=Math.max(0,S.choices.length-n);
   S.history=S.history.filter(h=>!h.win);
   const cp=(S.checkpoints||[])[S.steps.length];
@@ -2289,9 +2362,6 @@ function rollbackStep() {
   (S.checkpoints||[]).length=S.steps.length;   // drop this + the returned decision's cp; advanceTo recreates it
   S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null; hideDecPanel();
-  // Clear the dropped-cast snapshot: since the drop-check is now deferred across mid-plan sub-decisions,
-  // it can outlive a single step -- an undo mid-plan must not leave a stale snapshot to mis-fire later.
-  S._intendedCasts=null; S._preHandCounts=null; S._preGyCounts=null; S._preBfCounts=null;
   return true;
 }
 async function undo() {
@@ -2299,12 +2369,17 @@ async function undo() {
   S.undoing = true;   // land INSIDE the replayed decision (suppress the dead-opponent/commit-turn auto-advance once)
   renderHistory(); await step();
 }
-// Auto-reject: the committed line dropped a cast it couldn't pay for (detectDropped). Roll the whole
-// line back to the previous phase — as if it was never committed (nothing cast/tapped/drawn, history
-// entries removed) — then re-fetch that decision and tell the user why. Stateless replay makes the
-// rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
+// Auto-reject: the committed line dropped a cast it couldn't pay for (engine decision.dropped_casts).
+// Roll the whole line back to the previous phase — as if it was never committed (nothing cast/tapped/
+// drawn, history entries removed) — then re-fetch that decision and tell the user why. Stateless replay
+// makes the rollback exact: reducing S.choices and re-stepping reconstructs the pre-commit board.
 async function rollbackLine(names) {
+  // A rolled-back line voids any pending "Commit turn" skip (mirror handleVerdict's reject branch):
+  // otherwise the post-rollback advanceTo re-fires the commit-turn auto-pass and BURNS the turn --
+  // the user reported "Commit turn played nothing and went to turn N+1" after a rejected line.
+  S.commitTurn = null; S.commitTurnPasses = 0;
   rollbackStep();
+  S.undoing = true;                // land ON the restored pre-commit decision, don't auto-advance it (mirror undo())
   renderHistory(); await step();   // re-fetch the pre-commit decision (board fully restored)
   notifyDropped(names);            // then surface why the line was rejected
 }

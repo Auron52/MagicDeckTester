@@ -4135,6 +4135,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!TapForCostDirect(state, ec, is_creature))
             {
                 if (AffordAuditOn()) { g_afford_rollout_fails.fetch_add(1, std::memory_order_relaxed); }
+                // SERVER-TRUTH RESOLUTION: a declared cast that can't be paid is dropped (left in hand).
+                // Record its name so the play viewer learns AUTHORITATIVELY which casts failed, instead of
+                // inferring it from a board diff (the false-positiving detectDropped). Only top-level
+                // main-plan casts (sink_stack empty) -- nested breakpoint re-solve casts are engine-driven,
+                // not part of the user's committed line. Sink is nulled off real play so GT stays identical.
+                if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
                 return;
             }
         }
@@ -10517,13 +10523,24 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             }
             addSub(p.land_to_play + " face " + faceName, p.land_to_play + " face", faceName, faceName, "face");
         }
-        // Sort the derived token strings so plans differing only in cast order share a signature.
-        // The label preserves the old " → "/" X="/" +N own"/" fetches " spacing (key already ends
-        // with the operator, choice follows a single space) so displayed labels are unchanged.
-        std::sort(toks.begin(), toks.end());
-        std::string sig, label;
-        for (size_t t = 0; t < toks.size(); ++t) { sig += "|" + toks[t]; label += (t?"; ":"") + toks[t]; }
-        if (label.empty()) { label = LineSummaryOfPlan(p); }
+        // SIGNATURE (dedup): sort the derived tokens so plans differing only in cast ORDER share a
+        // signature; a real sub-decision difference (target / X / splice / fetch) splits it. Kept
+        // byte-identical to before (a sorted copy -- `toks` itself stays in cast order for the label).
+        std::vector<std::string> sortedToks = toks;
+        std::sort(sortedToks.begin(), sortedToks.end());
+        std::string sig;
+        for (const std::string& t : sortedToks) { sig += "|" + t; }
+        // LABEL (displayed in the choose dialog): the FULL ordered line -- land + EVERY cast, including
+        // plain casts (Rite of Flame) that carry no sub-decision and so were previously DROPPED -- then
+        // the sub-decisions in CAST ORDER (unsorted `toks`), so two Desperate Rituals read
+        // "splice+0; splice+1" in the order cast, not alpha-scrambled (viewer issue #8). Empty subs ->
+        // just the line summary (unchanged from the old label.empty() fallback).
+        std::string label = LineSummaryOfPlan(p);
+        if (!toks.empty())
+        {
+            label += " \xE2\x80\x94 ";   // em dash separating the line from its sub-decisions
+            for (size_t t = 0; t < toks.size(); ++t) { label += (t ? "; " : "") + toks[t]; }
+        }
         cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs, planSacs });
     }
 
@@ -10580,6 +10597,15 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                          return a->sacs < b->sacs;           // then save one-shot sources when we can
                      });
 
+    // NOTE (viewer issue #1 payability accept-gate): a matched-but-UNPAYABLE plan being accepted lets
+    // ApplyPlanDirect resolve only its affordable subset (e.g. Reverent Silence's free alt-cost destroying
+    // the player's own enchantment) while dropping the rest -- the partial-state bug. The obvious gate --
+    // "drop candidates plan_pays reports unpayable" -- is UNSOUND here: plan_pays trial-applies under
+    // RevealLogPause (choosers NULLED), which cannot reproduce a chooser/order-dependent combo (Apex of
+    // Power's add-ten-mana + exile-and-cast, storm, dragon-put), so it false-NEGATIVES real combo lines
+    // and would reject payable Dragonstorm turns. plan_pays stays advisory (payable-first ORDERING only).
+    // The real fix needs an ACCURATE resolution oracle (does the committed plan fully resolve?) -- built
+    // in the server-truth resolution workstream; see docs/design/viewer-fixes-2026-07-27.md.
     std::vector<std::string> seenSig;
     for (const Cand* c : pool)
     {
@@ -10592,6 +10618,53 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         out.verdict = V::Accept; out.plan_index = out.variants[0].plan_index;
         out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index]);
         return out;
+    }
+    // #7 SPLICE default: the player does NOT get a splice-count picker -- the line just splices as many
+    // copies as the mana affords (greedy MAX-affordable) in the committed order. Only when MTG_SPLICE_
+    // PROMPT is set does splice stay a Choose so the human dials k. Applies ONLY to a PURE splice fan-out
+    // (variants differ SOLELY in the splice dimension); a line with a genuine OTHER sub-decision (tutor /
+    // fetch / X / enchant target) still prompts for all of them. Max-affordable = the highest TOTAL
+    // splice_count whose trial-apply pays (plan_pays); if NONE pays (a chooser/combo line the nulled-
+    // chooser sim under-reports -- see the plan_pays caveat above), fall back to the highest total and let
+    // the executor + server-truth dropped_casts surface any real shortfall. CheckLine is viewer-only -> GT-neutral.
+    static const bool s_splice_prompt = std::getenv("MTG_SPLICE_PROMPT") != nullptr;
+    if (out.variants.size() > 1 && !s_splice_prompt)
+    {
+        auto nonSpliceSig = [](const std::vector<SubChoice>& subs) -> std::string {
+            std::vector<std::string> ks;
+            for (const SubChoice& sc : subs) { if (sc.kind != "splice") { ks.push_back(sc.key + "\x1f" + sc.choice); } }
+            std::sort(ks.begin(), ks.end());
+            std::string r; for (const std::string& k : ks) { r += "\x1e" + k; } return r;
+        };
+        bool pure_splice = true, any_splice = false;
+        std::string base_ns;
+        for (size_t i = 0; i < out.variants.size(); ++i)
+        {
+            bool hs = false;
+            for (const SubChoice& sc : out.variants[i].subs) { if (sc.kind == "splice") { hs = true; break; } }
+            if (!hs) { pure_splice = false; break; }   // a variant without a splice sub -> not pure splice
+            any_splice = true;
+            std::string ns = nonSpliceSig(out.variants[i].subs);
+            if (i == 0) { base_ns = ns; } else if (ns != base_ns) { pure_splice = false; break; }
+        }
+        if (any_splice && pure_splice)
+        {
+            auto totalSplice = [&](int plan_idx) -> int {
+                int t = 0;
+                for (const Action& a : plans[plan_idx].actions)
+                { if (a.kind == Action::Kind::CastFromHand && a.splice_count > 0) { t += a.splice_count; } }
+                return t;
+            };
+            int pick = -1, pick_total = -1;
+            for (const LineVariant& v : out.variants)   // highest TOTAL splice among PAYABLE variants
+            { if (plan_pays(v.plan_index)) { int t = totalSplice(v.plan_index); if (t > pick_total) { pick_total = t; pick = v.plan_index; } } }
+            if (pick < 0)   // none reported payable (combo sim under-report) -> greedy max, trust the human
+            { for (const LineVariant& v : out.variants) { int t = totalSplice(v.plan_index); if (t > pick_total) { pick_total = t; pick = v.plan_index; } } }
+            out.variants.clear();
+            out.verdict = V::Accept; out.plan_index = pick;
+            out.matched_summary = LineSummaryOfPlan(plans[pick]);
+            return out;
+        }
     }
     if (out.variants.size() > 1)
     {
@@ -10688,6 +10761,23 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         }
     }
 
+    // Credit in-play untapped SAC-FOR-MANA sources (Lotus Bloom: "{T}, Sacrifice: add three mana of
+    // ANY one color"). BuildPool / ComputeAvailableColors omit them -- they're modelled as a sac ACTION
+    // (ritual_float credited as wild), not a standing source -- so the affordability sim below would
+    // FALSE-REJECT a line they pay for: Dragonlord Kolaghan {4}{B}{R} off a Lotus Bloom's black + five
+    // Mountains was reported "illegal: no source of black" (Dragonstorm s21 viewer artifact, issue #9).
+    // Amount is credited as WILD (any single pip); the color gate credits all five (Lotus makes any one
+    // colour). Contention (one Lotus, two colours needed) is left to the real payment, matching the
+    // gate's maximally-conservative design -- and CheckLine only ever classifies here (Stage 1's
+    // payability gate is the real accept), so an over-lenient legal_not_enumerated label is harmless.
+    int sac_wild = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.tapped) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd && pd->params.sac_for_mana_amount > 0) { sac_wild += pd->params.sac_for_mana_amount; }
+    }
+
     // Restricted-color gate: reject a line that needs a colored pip NO untapped source can produce
     // (see LineColorGateEnabled). `s` already has this line's land played, so its color is credited;
     // a mana rock cast in this line also contributes its colors (the greedy below casts rocks first).
@@ -10697,6 +10787,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     {
         bool have[5];
         ComputeAvailableColors(s, have);
+        if (sac_wild > 0) { have[0] = have[1] = have[2] = have[3] = have[4] = true; }  // Lotus Bloom: any one colour
         for (const PendingCast& pc : pending)
         {
             if (!pc.rock || !pc.def) { continue; }
@@ -10737,6 +10828,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // line (the same-turn ramp the enumerator's BuildPool does not credit). Order-
     // independent, so it doesn't penalise the human's click order.
     ManaPool avail = BuildPool(s);
+    avail.wild += sac_wild;                                // Lotus Bloom & co. (see sac_wild above)
     bool spectacle_on = s.opponent_lost_life_this_turn;   // set as damage spells cast in this line
     // The mana cost to pay for pending[k] RIGHT NOW: free for an available alt cost; the spectacle
     // cost once a same-line burn has turned spectacle on; else the printed cost.
@@ -10778,6 +10870,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // viewer-only (sole caller --validate-line), so this is GT-neutral and only ever ACCEPTS more.
     {
         ManaPool p = BuildPool(s);
+        p.wild += sac_wild;                  // Lotus Bloom & co. (see sac_wild above)
         bool spec = s.opponent_lost_life_this_turn;
         std::vector<std::string> reducers;   // reduces_spell_color of Medallions cast so far in-line
         bool ok = true;
@@ -10922,4 +11015,26 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
 void TurnSolver::ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat)
 {
     ApplyPlanDirect(state, plan, is_pre_combat);
+}
+
+// #10 cast-order: the CANONICAL execution order of a plan's non-sacrifice hand casts -- what the
+// executor's clean-set branch casts (stable-sort by CastOrderRank; plan order breaks ties). The viewer
+// diffs the human's queued order against this to decide whether to emit --cast-order at all (equal =>
+// omit => byte-identical / references stay clean). Opaque sets (draw/stage/cascade breakpoint cards)
+// keep their plan/breakpoint order in the executor, not this sort; there the diff may over-report a
+// reorder, which is benign -- the engine then honours the human's exact queued order via searched_order.
+std::vector<std::string> TurnSolver::CanonicalNonSacCastOrder(const GameState& state, const Plan& plan)
+{
+    std::vector<int> order;
+    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+    {
+        const Action& a = plan.actions[i];
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { order.push_back(i); }
+    }
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    { return CastRankOf(state, plan.actions[x].card_name) < CastRankOf(state, plan.actions[y].card_name); });
+    std::vector<std::string> names;
+    names.reserve(order.size());
+    for (int i : order) { names.push_back(plan.actions[i].card_name); }
+    return names;
 }

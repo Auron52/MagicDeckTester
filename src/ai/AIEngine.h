@@ -210,6 +210,9 @@ private:
     std::vector<int>         m_forced_bottom_numbers;
     GameLogger*              m_logger            = nullptr;
     ExternalChooser          m_external_chooser;          // unset => normal AI path
+    int                      m_ext_main_ordinal   = 0;    // #10: cumulative main-phase-decision
+                                                          // ordinal for the cast-order side-channel
+                                                          // (increments once per external-chooser call)
     ExternalVialChooser      m_external_vial_chooser;     // unset => heuristic charge
     ExternalMulliganChooser  m_external_mulligan_chooser; // unset => engine KeepHand
     ExternalBottomChooser    m_external_bottom_chooser;   // unset => engine bottom pick

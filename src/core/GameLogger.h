@@ -218,6 +218,7 @@ extern thread_local GameLogger* g_reveal_logger;
 // for the duration of every search/rollout "thinking" scope, so it fires ONLY during REAL
 // resolution (which is never paused) -- making the search byte-identical by construction.
 struct GameState;
+struct Permanent;
 struct Card;
 enum class LookKind { Scry, Reorder, Surveil };
 
@@ -350,6 +351,45 @@ using ReplicateChooser = std::function<int(const GameState& state, int controlle
                                            const std::string& source, int max_count)>;
 extern thread_local ReplicateChooser* g_play_replicate_chooser;
 
+// ---- Human-play firebreathing-amount chooser (#4) ----------------------------------------------
+// At combat, LEFTOVER mana is spent greedily on attacker pumps (Scourge {R}:+1/+0, Lathliss {1}{R}:
+// team +1/+0) by ApplyFirebreathing. Under --claude-play the human instead chooses how many pump
+// ACTIVATIONS to make (0..max, default = the greedy max), so they can hold mana back. Fires at most
+// once per combat (once per turn), so it rides a TURN-keyed side-channel (--firebreathe), NOT the
+// positional --choices stream -> existing references (no --firebreathe) replay byte-identically as
+// greedy. Returns the chosen count, or -1 for the greedy default. Nulled by RevealLogPause so every
+// search/rollout pumps greedily -> autonomous byte-identical. Inert (greedy) unless set.
+using FirebreatheChooser = std::function<int(const GameState& state, int controller,
+    const std::vector<int>& attacker_indices, int max_activations)>;
+extern thread_local FirebreatheChooser* g_play_firebreathe_chooser;
+
+// ---- Human-play cast-ORDER chooser (#10) -------------------------------------------------------
+// After the human commits a main-phase plan, they may pin the ORDER its non-sacrifice hand casts
+// resolve in (e.g. cast payoff before enabler, or a specific Dragonstorm go-off sequence the
+// canonical CastOrderRank batches wrong). Rather than enumerate permutations (O(k!), capped, and
+// index-churning the positional --choices stream), the committed order rides a MAIN-PHASE-ORDINAL-
+// keyed side-channel (--cast-order): given the ordinal of the just-chosen main-phase decision, the
+// chooser returns the human's card-name order (empty => keep canonical). The executor reorders the
+// chosen plan's non-sac casts to match and flags searched_order so ApplyPlanDirect honours vector
+// order. Absent --cast-order => empty => canonical => existing references replay byte-identically.
+// Consulted ONLY at the top-level external-chooser site (never in a rollout), so no RevealLogPause
+// gating is strictly required; nulled there anyway for consistency. Inert unless set.
+using CastOrderChooser = std::function<std::vector<std::string>(int main_ordinal)>;
+extern thread_local CastOrderChooser* g_play_cast_order_chooser;
+
+// ---- Human-play storage-land TAP-vs-CHARGE chooser (#6, Dwarven Hold / Mercadian Bazaar) -------
+// A charged storage land either BURSTS this turn (tap it, spend counters as {R}) or CHARGES (leave it
+// untapped -> +1 counter at end of turn). The clairvoyant search decides this from foresight (burst =
+// payment shortfall, reserve when unneeded), but the NON-clairvoyant human -- who can't see their next
+// draws -- must be able to explicitly HOLD the battery to build toward a future big burst. Fires once
+// per (turn, charged storage land) at the START of the pre-combat main, BEFORE plan enumeration, so the
+// offered plans reflect the hold. Returns true => hold (reserve untapped this turn); false => allow the
+// normal tap/burst (the current heuristic). Keyed by (turn, land BATTLEFIELD INDEX) on a side-channel
+// (--storage-hold), NOT the positional --choices stream -> existing references (no --storage-hold)
+// replay byte-identically as the heuristic. Nulled by RevealLogPause; inert unless set.
+using StorageHoldChooser = std::function<bool(const GameState& state, const Permanent& land, int counters)>;
+extern thread_local StorageHoldChooser* g_play_storage_hold_chooser;
+
 // ---- Human-play land-entry chooser (enter a "pay a cost, or the land enters tapped" land) ------
 // Two lands present this choice as they enter: a shock land (etb_pay_life_to_untap -> pay N life to
 // enter untapped) and a reveal land like Frostboil Snarl (etb_untap_reveal_subtypes -> reveal a
@@ -437,6 +477,16 @@ inline void EmitPlayEvent(int turn, const char* kind, std::string text)
     if (g_play_event_sink) { g_play_event_sink->push_back({ turn, kind, std::move(text) }); }
 }
 
+// Server-truth "dropped cast" sink for the play viewer (SERVER-TRUTH RESOLUTION). When a committed
+// main-phase plan is applied through TurnSolver::ApplyPlanDirect::apply_one and a declared hand cast
+// CANNOT be paid, that cast is silently left in hand; the apply site appends its name here. The next
+// emitted decision reports "dropped_casts" so the browser knows AUTHORITATIVELY which casts failed --
+// replacing the client-side detectDropped board-diff heuristic that false-positived on working lines
+// (e.g. a self-sacrificing/redrawn cast, or a mid-plan pause). Nulled by RevealLogPause during every
+// search/rollout/enumeration scope (incl. CheckLine's plan_pays trial-apply), so autonomous play is
+// byte-identical (appending to an external vector never touches GameState). Inert unless set.
+extern thread_local std::vector<std::string>* g_play_dropped_cast_sink;
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -453,33 +503,47 @@ struct RevealLogPause
     SoulfireTargetChooser* saved_sfchooser;
     std::vector<std::pair<int, std::string>>* saved_drawsink;
     std::vector<PlayEvent>* saved_evsink;
+    std::vector<std::string>* saved_dropsink;
     BounceChooser* saved_sacchooser;
     ReplicateChooser* saved_repchooser;
     LandEntryChooser* saved_lechooser;
     DragonChooser* saved_dragchooser;
     LightPawsChooser* saved_lpchooser;
+    FirebreatheChooser* saved_fbchooser;
+    CastOrderChooser* saved_cochooser;
+    StorageHoldChooser* saved_shchooser;
     RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
                        saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
-                       saved_evsink(g_play_event_sink), saved_sacchooser(g_play_sacrifice_chooser),
+                       saved_evsink(g_play_event_sink), saved_dropsink(g_play_dropped_cast_sink),
+                       saved_sacchooser(g_play_sacrifice_chooser),
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
-                       saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser)
+                       saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser),
+                       saved_fbchooser(g_play_firebreathe_chooser),
+                       saved_cochooser(g_play_cast_order_chooser),
+                       saved_shchooser(g_play_storage_hold_chooser)
     { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
-      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_sacrifice_chooser = nullptr;
+      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
+      g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
-      g_play_lightpaws_chooser = nullptr; }
+      g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
+      g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
-                        g_play_event_sink = saved_evsink; g_play_sacrifice_chooser = saved_sacchooser;
+                        g_play_event_sink = saved_evsink; g_play_dropped_cast_sink = saved_dropsink;
+                        g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
-                        g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser; }
+                        g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser;
+                        g_play_firebreathe_chooser = saved_fbchooser;
+                        g_play_cast_order_chooser = saved_cochooser;
+                        g_play_storage_hold_chooser = saved_shchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

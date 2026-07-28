@@ -111,6 +111,36 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
   // legitimate no-foresight ground-truth bound the AI should be able to match (see README).
   if (logDir) args.push('--log-dir', logDir);
   args.push('--choices', Array.isArray(p.choices) ? p.choices.join(',') : '');
+  // #4 firebreathe-amount side-channel: p.firebreathe is a { turn: count } map of the human's picks,
+  // passed as "turn:count,..." (turn-keyed, NEVER a --choices slot -> existing references unaffected).
+  // --firebreathe-prompt makes the engine emit a firebreathe decision (exit 70) for any combat turn not
+  // yet answered, so the viewer can surface the modal. A fully-answered map simply never prompts.
+  if (p.firebreathe && typeof p.firebreathe === 'object') {
+    const pairs = Object.keys(p.firebreathe).map(t => `${t}:${p.firebreathe[t]}`);
+    if (pairs.length) args.push('--firebreathe', pairs.join(','));
+  }
+  args.push('--firebreathe-prompt');
+  // #10 cast-order side-channel: p.castOrder is a { mainOrdinal: [name, ...] } map of the human's
+  // pinned non-sac hand-cast order for that main-phase decision. Passed as "<ord>:A|B|C;..." (pipe-
+  // separated names, since MTG names contain ',' but never '|'), keyed by main-phase ordinal — NEVER
+  // a --choices slot, so existing references (no --cast-order) replay in canonical order unchanged.
+  if (p.castOrder && typeof p.castOrder === 'object') {
+    const entries = Object.keys(p.castOrder)
+      .filter(k => Array.isArray(p.castOrder[k]) && p.castOrder[k].length)
+      .map(k => `${k}:${p.castOrder[k].join('|')}`);
+    if (entries.length) args.push('--cast-order', entries.join(';'));
+  }
+  // #6 storage tap-vs-charge side-channel: p.storageHold is a { "turn:num": 0|1 } map of the human's
+  // per-(turn, land) hold answers (1 = hold/charge, 0 = allow tap). Passed as "turn:num:val,..." keyed by
+  // (turn, land number) — NEVER a --choices slot, so existing references (no --storage-hold) replay as the
+  // burst heuristic. --storage-hold-prompt makes the engine emit a storage_hold decision (exit 70) for any
+  // charged storage land not yet answered, so the viewer's modal (which handles it) can surface it; a
+  // fully-answered map simply never prompts.
+  if (p.storageHold && typeof p.storageHold === 'object') {
+    const trips = Object.keys(p.storageHold).map(k => `${k}:${p.storageHold[k] ? 1 : 0}`);
+    if (trips.length) args.push('--storage-hold', trips.join(','));
+  }
+  args.push('--storage-hold-prompt');
   if (validateLine != null) args.push('--validate-line', validateLine);
   return args;
 }
@@ -408,8 +438,16 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`MagicDeckTester play GUI: http://localhost:${PORT}  (bound ${HOST}:${PORT})`);
-  console.log(`  binary: ${BIN} ${fs.existsSync(BIN) ? '(found)' : '(MISSING — build Release first)'}`);
-  console.log(`  decks:  ${DECKS_DIR}`);
-});
+// Only bind the port when run as a script (node tools/play/server.js). When require()d — by the
+// jsdom client check (test/viewer_client_check.js), which reuses runStep/runValidate/listDecks to
+// serve the exact same protocol the browser talks — do NOT listen (no port bind, no console spam).
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`MagicDeckTester play GUI: http://localhost:${PORT}  (bound ${HOST}:${PORT})`);
+    console.log(`  binary: ${BIN} ${fs.existsSync(BIN) ? '(found)' : '(MISSING — build Release first)'}`);
+    console.log(`  decks:  ${DECKS_DIR}`);
+  });
+}
+
+// Exported for the headless jsdom client check so it drives the REAL protocol (not a reimplementation).
+module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN };

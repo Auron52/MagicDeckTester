@@ -77,7 +77,7 @@
     "min_color_sources": {},
     "min_lands": 1,
     "min_playable": 0,
-    "required_pieces": [],
+    "required_pieces": ["Apex of Power", "Dragonstorm"],
     "stop_at": 4
   },
   "version": 1

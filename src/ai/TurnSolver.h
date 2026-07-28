@@ -268,6 +268,9 @@ public:
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
+    // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the
+    // viewer to diff the human's queued order against (equal => don't emit --cast-order).
+    static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);
 
     // --- Whole-turn (batch) mana pre-payment ------------------------------------
     // Pays the COMBINED mana cost of this turn's main hand casts in a SINGLE complete-solver call,

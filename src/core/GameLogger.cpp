@@ -21,8 +21,12 @@ thread_local LandEntryChooser* g_play_land_entry_chooser = nullptr;
 thread_local SoulfireTargetChooser* g_play_soulfire_chooser = nullptr;
 thread_local DragonChooser*  g_play_dragon_chooser = nullptr;
 thread_local LightPawsChooser* g_play_lightpaws_chooser = nullptr;
+thread_local FirebreatheChooser* g_play_firebreathe_chooser = nullptr;
+thread_local CastOrderChooser* g_play_cast_order_chooser = nullptr;
+thread_local StorageHoldChooser* g_play_storage_hold_chooser = nullptr;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;
+thread_local std::vector<std::string>* g_play_dropped_cast_sink = nullptr;
 thread_local bool g_human_play_suppressed = false;
 
 // Affordability audit (MTG_AFFORD_AUDIT): plan-cast payment-failure counters, dumped at process exit.

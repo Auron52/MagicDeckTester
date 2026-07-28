@@ -25,6 +25,44 @@
 // record whenever a later turn's verified win turn exceeds one proved earlier.
 static const bool s_flag_nonconv = std::getenv("MTG_FLAG_NONCONV") != nullptr;
 
+// #10 cast-order side-channel: reorder a committed plan's non-sacrifice hand casts to the
+// human's pinned name order and flag searched_order so ApplyPlanDirect executes them in vector
+// order (no CastOrderRank re-sort). Only the non-sac CastFromHand actions move -- sac casts,
+// graveyard casts, vial activations and the land keep their positions (they run in separate
+// canonical loops regardless). Names in `order` are matched greedily (duplicate copies match in
+// listed order); any non-sac cast NOT named in `order` keeps its original relative position,
+// appended after the pinned ones. Empty `order` (the common / no-reorder case) is a no-op, so
+// existing references -- which pass no --cast-order -- stay byte-identical.
+static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::string>& order)
+{
+    if (order.empty()) { return; }
+    // Positions in plan.actions that hold a reorderable (non-sac hand) cast.
+    std::vector<size_t> slots;
+    for (size_t i = 0; i < plan.actions.size(); ++i)
+    {
+        const auto& a = plan.actions[i];
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+        { slots.push_back(i); }
+    }
+    if (slots.size() < 2) { plan.searched_order = true; return; }  // nothing to reorder, but honour order
+    // Greedily pick, for each name in `order`, the first not-yet-used slot whose card matches.
+    std::vector<size_t> remaining = slots;   // slot positions still to place
+    std::vector<Action> seq;                 // reordered actions
+    for (const std::string& name : order)
+    {
+        for (auto it = remaining.begin(); it != remaining.end(); ++it)
+        {
+            if (plan.actions[*it].card_name == name)
+            { seq.push_back(plan.actions[*it]); remaining.erase(it); break; }
+        }
+    }
+    // Any non-sac casts the human didn't name keep their original relative order, after the pinned ones.
+    for (size_t pos : remaining) { seq.push_back(plan.actions[pos]); }
+    // Write the reordered actions back into the same slot positions.
+    for (size_t k = 0; k < slots.size(); ++k) { plan.actions[slots[k]] = seq[k]; }
+    plan.searched_order = true;
+}
+
 // Route pre-combat (and second-main) decisions through the full-depth
 // commit-the-line search instead of SolveWithLookahead, so "depth N" means fully
 // searching N complete turns. This is now the DEFAULT engine (validated by the
@@ -1247,18 +1285,90 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // terminates when the library empties or the human passes. In the autonomous (search) AI
         // path ApplyPlan resolves draws inline and never shrinks the library across a no-draw
         // plan, so non-human external choosers still see exactly one decision per phase.
+        // #12 "Commit Line": the phase re-prompts not only after a DRAW (the classic breakpoint below)
+        // but also when the committed line's plays put a NEW permanent with a player-activated ability
+        // into play -- e.g. playing Horizon Canopy (a land) this turn enables its same-turn
+        // "{1},{T},Sacrifice: draw" dig, which the old draw-only breakpoint skipped (playing a land
+        // draws nothing), forcing the sac to the next turn. Human-play only (inside use_external) ->
+        // GT-neutral; the autonomous search never enters this branch. "Commit turn" naturally skips this
+        // breakpoint: its auto-pass (index.html advanceTo) fires on every same-turn main_phase decision.
+        // Two signals decide the #12 breakpoint precisely -- their INTERSECTION on a source that
+        // BECAME both this segment:
+        //   inplay_sac(state) -- sac-to-draw sources IN PLAY and UNTAPPED (Horizon Canopy, Fiery Islet).
+        //     A source appears here the segment you PLAY it untapped; a STANDING one is present at
+        //     phase start (so it never counts as "new"), which is what stops per-turn re-prompt spam.
+        //   offer_sac(plans)  -- sac-to-draw digs actually OFFERED among the enumerated plans
+        //     (AppendHumanPlayDigPlans additionally gates on the {1}-style sac cost being affordable
+        //     THIS phase). This is the affordability signal.
+        // Re-prompt iff a source is NEWLY in inplay_sac (just played untapped) AND currently in
+        // offer_sac (its sac is affordable). Requiring BOTH excludes: (a) a standing source whose sac
+        // merely became affordable when you played a second land -- spam, not "a just-played ability";
+        // and (b) a source you played untapped but cannot yet pay to sac -- a pointless re-prompt.
+        auto inplay_sac = [](const GameState& gs) -> std::set<std::string>
+        {
+            std::set<std::string> s;
+            for (const Permanent& perm : gs.battlefield)
+            {
+                if (perm.controller_index != gs.active_player_index || perm.tapped) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
+                if (d && d->params.sacrifice_draw_cost.has_value())
+                { s.insert(perm.card.m_name.str()); }
+            }
+            return s;
+        };
+        auto offer_sac = [](const std::vector<TurnSolver::Plan>& plans) -> std::set<std::string>
+        {
+            std::set<std::string> s;
+            for (const TurnSolver::Plan& p : plans)
+            { for (const Action& a : p.actions)
+              { if (a.kind == Action::Kind::DigDraw && a.dig_sacrifice)
+                { s.insert(a.card_name); } } }
+            return s;
+        };
+        std::set<std::string> prev_inplay;  // untapped in-play sac sources before the last applied plan
+        bool drew_last = false;             // did the last applied plan draw (library shrank)?
         for (int seg = 0; seg < 64; ++seg)
         {
+            // #6 storage-land TAP-vs-CHARGE, POST-DRAW variant (Mercadian Bazaar, storage_charge_mode
+            // "tap"): its "{T}: put a counter" is an active MAIN-PHASE tap, so the human decides hold-vs-
+            // burst AFTER the draw, with full information. Consulted once per turn at the START of the pre-
+            // combat main and BEFORE plan enumeration (so the offered plans respect the hold). Dwarven Hold
+            // ("upkeep_if_tapped") is EXCLUDED here -- its commitment is pre-draw, surfaced in
+            // GameEngine::UpkeepStep. A hold flags the land not-live for the turn -> never tapped for mana ->
+            // stays untapped -> charges. Human-play only (chooser null autonomously / in rollout) ->
+            // byte-identical for the search and every non-storage deck.
+            if (seg == 0 && is_pre_combat_main && g_play_storage_hold_chooser)
+            {
+                for (Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    if (p.tapped || p.storage_counters <= 0) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (!d || !d->params.storage_land
+                        || d->params.storage_charge_mode == "upkeep_if_tapped") { continue; }
+                    if ((*g_play_storage_hold_chooser)(state, p, p.storage_counters))
+                    { p.storage_hold_this_turn = true; }
+                }
+            }
             std::vector<TurnSolver::Plan> plans =
                 TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
             if (plans.empty()) { break; }
+            std::set<std::string> cur_inplay = inplay_sac(state);
+            std::set<std::string> cur_offer  = offer_sac(plans);
+            // Phase complete once a committed plan neither DREW (draw breakpoint) nor put a NEW,
+            // AFFORDABLE sac source into play (#12 breakpoint). seg==0 is the initial prompt, shown.
+            if (seg > 0 && !drew_last)
+            {
+                bool new_activation = false;
+                for (const std::string& name : cur_inplay)
+                { if (!prev_inplay.count(name) && cur_offer.count(name)) { new_activation = true; break; } }
+                if (!new_activation) { break; }
+            }
             // Post-combat (second) main: on the FIRST entry, only prompt when there is a real play
             // available (a Spectacle spell unlocked by combat, a castable spell, or a land drop) --
             // with nothing to do the second main is a no-op, so skip it silently rather than asking
-            // the human to "pass" every single turn. But on a re-prompt AFTER a draw/stage breakpoint
-            // (seg > 0, e.g. Light Up the Stage just exiled cards), ALWAYS re-prompt so the player can
-            // see and play the revealed cards -- matching the first main, which never suppresses. This
-            // fixes "no breakpoint after Light Up" when the dig leaves you tapped out for the moment.
+            // the human to "pass" every single turn. A seg>0 re-prompt (draw or #12 new-activation)
+            // is handled above and always shows -- matching the first main, which never suppresses.
             if (!is_pre_combat_main && seg == 0)
             {
                 bool any_play = false;
@@ -1267,11 +1377,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (!any_play) { break; }
             }
             size_t lib_before = state.ActivePlayer().library.size();
+            const int this_main_ordinal = m_ext_main_ordinal++;   // #10 side-channel key
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
             if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
-            TurnSolver::ApplyPlan(state, plans[idx], is_pre_combat_main);
-            // No draw this segment -> phase complete; a draw -> loop and let the human re-decide.
-            if (state.ActivePlayer().library.size() >= lib_before) { break; }
+            // #10: honour a human-pinned cast order for this main-phase decision (empty / unset =>
+            // no-op => canonical). Copy the chosen plan so the enumerated menu stays untouched.
+            TurnSolver::Plan chosen = plans[idx];
+            if (g_play_cast_order_chooser)
+            {
+                std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
+                ReorderPlanCasts(chosen, ord);
+            }
+            TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
+            drew_last = state.ActivePlayer().library.size() < lib_before;
+            prev_inplay = std::move(cur_inplay);
         }
 
         // Restore unplayed staged cards (mirror the normal end-of-TakeTurn restore):
@@ -2669,8 +2788,24 @@ void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_in
 {
     if (attacker_indices.empty()) { return; }
     if (!ControlsFirebreathingSource(state, state.active_player_index)) { return; }
-    ApplyFirebreathing(state, state.active_player_index, attacker_indices,
-                       BuildAvailableMana(state));
+    ManaPool pool = BuildAvailableMana(state);
+    // Human play (#4): let the player cap the pump. Probe the greedy-max activation count on a COPY
+    // (ApplyFirebreathing takes the pool by value, so the probe does not consume it), ask the chooser
+    // for k in [0, max], then apply exactly k. The chooser is nulled in every search/rollout
+    // (RevealLogPause) and installed only under --claude-play, so autonomous stays greedy = byte-identical.
+    if (g_play_firebreathe_chooser)
+    {
+        GameState probe = state;
+        int max_k = ApplyFirebreathing(probe, state.active_player_index, attacker_indices, pool);
+        if (max_k > 0)
+        {
+            int k = (*g_play_firebreathe_chooser)(state, state.active_player_index, attacker_indices, max_k);
+            if (k < 0 || k > max_k) { k = max_k; }   // -1 / out-of-range -> greedy default (current behaviour)
+            ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, k);
+            return;
+        }
+    }
+    ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool);
 }
 
 // ---- Tap-and-pay token abilities (e.g. Sliver Hive) ----
