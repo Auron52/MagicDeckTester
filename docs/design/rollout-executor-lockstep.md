@@ -108,15 +108,58 @@ Enabling #5 alone (hands still differing in CONTENT) took Hinata 2 -> 4 per 500.
 3 -> 1 only after #4 landed too. Any index-based pick lands on a different card when the sets differ,
 however it is canonicalised.
 
-## Open leads (next session)
+## Both remaining leads: ROOT-CAUSED, and NEITHER is a lockstep bug
 
-- **Hinata seed 4259** — the one divergence `MTG_CANON_TUTOR_DISCARD` exposes. The discards agree;
-  at T5 the hand and library match the committed line exactly, yet the executor plans `(idle)` where
-  the proven line casts Expressive Iteration + Ponder + Ponder for lethal. Root-cause this and #5
-  becomes free.
-- **Overnight seed 4661** (`realized=9 predicted=5`, delta 4) — the one SEVERE divergence in the
-  suite. Pre-existing and unchanged by #3/#4 (present identically in both A/B arms), so it is its own
-  bug. This is the largest single unexplained gap left.
+This matters for the metric: **`fd-diverge` is not a pure bug count.** It flags "the search proved a
+better line than the game realised", and there are two legitimate ways that happens without any
+engine defect. Both of the leads left after #1-#4 turned out to be one of them.
+
+### Overnight seed 4661 (TH, `realized=9 predicted=5`) — the non-clairvoyance gate, WORKING AS DESIGNED
+
+Not a bug; do not "fix" it. `MTG_TH_STRICT_FLOOD=0` and `MTG_UNPRUNE=drawengine` both recover the
+T5 win, so the cause is `TreasureHuntProvider::ShouldCastDrawEngine` — the adopted (2026-07-16)
+strict-flood gate that refuses to cast Treasure Hunt once the land drop is spent with no Land's Edge
+outlet in play. The proven T5 line casts Treasure Hunt into a library whose next ~9 cards are lands
+followed by Land's Edge, then casts it and throws 17 lands for 34. **That proof is clairvoyant** —
+it is only correct because the search knows where Land's Edge is. The gate deliberately declines the
+gamble, which is the whole point of the adoption.
+
+Re-measuring the gate confirms the original adoption note rather than contradicting it (TH, held-out
+seeds 4004-7007, `MTG_UNPRUNE=drawengine` vs default):
+
+| depth | removing the gate |
+|---|---|
+| d0 (greedy, no lookahead) | **worse** on 4/4 cases (+0.062 … +0.115) |
+| d3 / d5 (searched) | "better" on 8/8 cases (-0.066 … -0.077) |
+
+The searched-depth "gain" is exactly the `+0.11..+0.125 clairvoyantly WORSE` figure the adoption note
+already recorded and audited across 1012 games, finding 0 real regressions. So TH has an
+**irreducible fd-diverge floor** at searched depth: a clairvoyant oracle will always be able to prove
+wins that a non-clairvoyant gate correctly refuses. Judge TH by avg turn-to-win, not by fd-diverge.
+
+### Hinata seed 4259 — breakpoint continuation WIDTH, and #5 is not at fault
+
+`MTG_BP_SEARCH=4` recovers the T5 win; the default width is W=2, so the winning post-breakpoint
+continuation is simply not among the two variants searched. The decisive control:
+
+| discard | W=2 | W=4 |
+|---|---|---|
+| default (raw order) | T6, no proof | T6, no proof |
+| `MTG_CANON_TUTOR_DISCARD=1` | T6, **proof of T5** | **T5** |
+
+With the default discard the T5 win **does not exist at all**. The canonical discard *creates* it;
+only the default width fails to cash it. Realised turns are T6 either way, so #5 costs nothing in
+the metric — the `0 -> 1` fd-diverge was the oracle correctly reporting a newly-available line, not
+a regression. Widening the breakpoint search is its own (measured, node-costly) question — see
+`post-breakpoint-search.md`.
+
+**Where that leaves #5.** Suite A/B with the flag on, all three modes: searched-depth net **-0.105**,
+but that splits into train (smoke+regression) **-0.113** and held-out (overnight) **+0.008** — i.e.
+train-positive, **held-out neutral**. The d0 cases move +0.044, which is noise: at depth 0 there is
+no lookahead, so changing which card a random discard takes just reshuffles. Conclusion: it is a
+genuine lockstep correctness fix with no measurable quality cost or gain, and its stated blocker is
+cleared. Flipping the default is now purely a correctness-vs-rebaseline-churn call (12+ Hinata GT
+cases across 3 modes), not a quality one.
 
 ## Why this is worth doing
 

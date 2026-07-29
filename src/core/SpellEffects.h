@@ -528,10 +528,16 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
     // over the same set, so the modelled randomness is unchanged; it just stops depending on a vector's
     // layout, and it does put the two sides in lockstep on the traced game.
     //
-    // Why it is NOT the default (measured 2026-07-29, 4000 held-out games over 8 decks): avg-neutral
-    // on every deck, but it takes the fd-diverge count 0 -> 1 (Hinata seed 4259) -- the discards there
-    // AGREE, so the changed line simply walks into a different, still-unidentified divergence. Raising
-    // the metric this workstream exists to drive down is not defensible until seed 4259 is root-caused.
+    // Why it is NOT the default (measured 2026-07-29). Suite A/B, all three modes: searched-depth net
+    // -0.105, which splits into train (smoke+regression) -0.113 and HELD-OUT (overnight) +0.008 --
+    // train-positive, held-out NEUTRAL. The d0 cases move +0.044, which is noise (no lookahead, so
+    // changing which card a random discard takes just reshuffles). So this buys no measurable quality;
+    // it is correctness only, against a 12+ case Hinata GT rebaseline.
+    //
+    // Its one fd-diverge (0 -> 1, Hinata seed 4259) was ROOT-CAUSED and is NOT a defect here: with the
+    // default discard that game has no T5 win at all, even at width 4; this change CREATES one, and
+    // only the default breakpoint continuation width (W=2) fails to cash it (MTG_BP_SEARCH=4 realises
+    // T5). Realised turns are T6 either way. See docs/design/rollout-executor-lockstep.md.
     //
     // ORDER OF FIXES MATTERS. Enabling this while the two hands still differed in CONTENT took Hinata
     // 2 -> 4 per 500: any index-based pick lands on a different card when the sets differ, however it
