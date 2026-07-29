@@ -1070,9 +1070,30 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
 // the battlefield attached to that Light-Paws, then shuffle. WHICH aura is a heuristic pick (highest
 // power contribution; disclosed 6a). The put does NOT re-trigger (it was not cast) -> bounded to one
 // fetch per cast aura. Deterministic + lockstep (executor + rollout call it identically).
-inline void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv)
+inline void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
+                                   const char* side = "?")
 {
     Player& ap = state.players[controller];
+    // Light-Paws fetch/shuffle trace (MTG_LP_TRACE; DIAGNOSIS ONLY). `side` distinguishes the
+    // rollout's committed-line replay (APPLY) from the real executor (EXEC) so the two fetch
+    // sequences can be diffed -- how the legend-rule divergence below was found. Static: one getenv
+    // for the process, so the off case is a predictable branch in this hot path.
+    static const bool lp_trace = std::getenv("MTG_LP_TRACE") != nullptr;
+    if (lp_trace)
+    {
+        int nlp = 0; std::string lpnums;
+        for (const Permanent& q : state.battlefield)
+        {
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd && qd->params.aura_cast_tutor_attach && q.controller_index == controller)
+            { ++nlp; lpnums += " #" + std::to_string(q.card.m_number); }
+        }
+        std::fprintf(stderr, "[lp:%s] turn=%d ENTER mv=%d search_count=%llu libsize=%zu lightpaws=%d[%s] top=%s\n",
+                     side, state.turn_number, cast_aura_mv,
+                     static_cast<unsigned long long>(state.search_count), ap.library.size(),
+                     nlp, lpnums.c_str(),
+                     ap.library.empty() ? "-" : ap.library[0].m_name.str().c_str());
+    }
     // Names of every Aura the controller currently controls (the "different name than each Aura you
     // control" restriction). Recomputed per Light-Paws (a prior fetch adds a name).
     for (int li = 0; li < static_cast<int>(state.battlefield.size()); ++li)
@@ -1168,6 +1189,11 @@ inline void PerformLightPawsAttach(GameState& state, int controller, int cast_au
         }
 
         Card fetched = ap.library[best_idx];
+        if (lp_trace)
+        {
+            std::fprintf(stderr, "[lp:%s] turn=%d FETCH %s (idx=%d, contrib=%d)\n",
+                         side, state.turn_number, fetched.m_name.str().c_str(), best_idx, best_pw);
+        }
         ap.library.erase(ap.library.begin() + best_idx);
         Permanent perm;
         const CardDefinition* fd = CardDatabase::Instance().LookupCached(fetched);
@@ -1179,6 +1205,15 @@ inline void PerformLightPawsAttach(GameState& state, int controller, int cast_au
         perm.aura_attached_to  = lp.card.m_number;   // attached to Light-Paws
         state.battlefield.push_back(perm);
         ShuffleAfterSearch(state, controller);
+        if (lp_trace)
+        {
+            std::fprintf(stderr, "[lp:%s] turn=%d POST-SHUFFLE search_count=%llu top=%s;%s;%s\n",
+                         side, state.turn_number,
+                         static_cast<unsigned long long>(state.search_count),
+                         ap.library.size() > 0 ? ap.library[0].m_name.str().c_str() : "-",
+                         ap.library.size() > 1 ? ap.library[1].m_name.str().c_str() : "-",
+                         ap.library.size() > 2 ? ap.library[2].m_name.str().c_str() : "-");
+        }
     }
 }
 

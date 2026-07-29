@@ -5330,11 +5330,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 state.battlefield.back().aura_attached_to =
                     ResolveEnchantTarget(state, state.active_player_index, enchant_target);
                 PerformLightPawsAttach(state, state.active_player_index,
-                                       def.card.m_mana_cost.ManaValue());
+                                       def.card.m_mana_cost.ManaValue(),
+                                       g_bp_trace_arm ? "APPLY" : "rollout");
             }
             if (def.params.etb_opponent_lifegain > 0)
             {
                 OpponentGainsLife(state, state.active_player_index, def.params.etb_opponent_lifegain);
+            }
+            // Legend rule (CR 704.5j, a state-based action) for a legendary NON-creature permanent
+            // too, so this branch matches both the creature branch above and the executor's single
+            // post-dispatch site (EffectHandler::Resolve). No legendary non-creature permanent
+            // exists in any deck today, so this is inert -- it is here so the two sides cannot
+            // silently disagree the day one is added.
+            if (def.card.HasSupertype(Supertype::Legendary))
+            {
+                EnforceLegendRule(state, state.active_player_index);
             }
         }
 

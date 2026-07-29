@@ -12,6 +12,11 @@ public:
     static bool Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def);
 
 private:
+    // The per-template dispatch. Resolve() wraps it so the legend rule -- a STATE-BASED action --
+    // runs as soon as the permanent has entered and its ETB effects have run, for EVERY template,
+    // rather than being repeated in each resolver (and forgotten in one). See Resolve().
+    static bool ResolveImpl(GameState& state, const StackEntry& entry, const CardDefinition& def);
+
     static void EnterBattlefield(GameState& state, const StackEntry& entry, const CardDefinition& def);
     static void MoveToGraveyard(GameState& state, const StackEntry& entry);
 

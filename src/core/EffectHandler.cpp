@@ -36,6 +36,30 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 
 bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def)
 {
+    const bool ok = ResolveImpl(state, entry, def);
+    // Legend rule (CR 704.5j) is a STATE-BASED ACTION: it is checked the moment the duplicate is on
+    // the battlefield, NOT deferred. The executor used to enforce it only for Vial-deployed
+    // creatures (AIEngine) and at the start of combat (GameEngine::CombatPhase), so a legendary CAST
+    // from hand sat beside its twin for the whole main phase -- and anything that counts permanents
+    // or triggers off them saw two. The rollout (TurnSolver::ApplyPlanDirect) always enforced it on
+    // entry, so this was a rollout/executor DIVERGENCE, not just a rules gap: on Auras a second
+    // Light-Paws, Emperor's Voice survived in the real game and its Aura-tutor trigger fired TWICE,
+    // fetching an extra Aura and shuffling the library an extra time -- so the realised draws stopped
+    // matching the line the search had proved (seed 4227: predicted win T4, realised T5).
+    //
+    // Placed AFTER the dispatch so it runs after the permanent has entered and its ETB effects have
+    // resolved (dig, Dragon cascade), which is exactly the rollout's ordering -- and after, not
+    // before, so an ETB dig's `battlefield.back()` self-pointer is never invalidated underneath it.
+    // No-op for every deck with no legendary permanent.
+    if (def.card.HasSupertype(Supertype::Legendary))
+    {
+        EnforceLegendRule(state, entry.controller_index);
+    }
+    return ok;
+}
+
+bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const CardDefinition& def)
+{
     // Execution-trace: this card's effect is about to run -> record it as touched (no-op when off).
     rollout_touch::Record(entry.source.m_name.str());
     switch (def.tmpl)
@@ -133,7 +157,7 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
                     state.battlefield.back().aura_attached_to =
                         ResolveEnchantTarget(state, entry.controller_index, entry.enchant_target);
                     PerformLightPawsAttach(state, entry.controller_index,
-                                           def.card.m_mana_cost.ManaValue());
+                                           def.card.m_mana_cost.ManaValue(), "EXEC");
                 }
                 // ETB "each opponent gains N life" (Aria of Flame) -> reversed to damage by
                 // a Tainted Remedy / Plague Drone via OpponentGainsLife.
