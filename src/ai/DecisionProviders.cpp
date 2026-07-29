@@ -1051,11 +1051,11 @@ bool TreasureHuntProvider::DiscardLandsFirst(const GameState& s) const
 //       rather than skipped. This is the one case where stacking lands on top is pure profit.
 //   (2) Land's Edge in hand with >= 10 lands in hand is LETHAL (2 damage a land) -- the only thing
 //       that matters is CASTING it, so keep a land only while {1}{R}{R} is not yet payable.
-//   (3) Treasure Hunt in hand and no Land's Edge in play: keep a land that fills a REAL gap --
-//       a first Reliquary Tower (stops the flood being discarded), a missing colour for Treasure
-//       Hunt ({U}) or Land's Edge ({R}{R}), or an untapped source of a colour we can otherwise only
-//       make off a tapped land next turn. Cards already in HAND count toward all of these, which is
-//       what usually makes the top card unnecessary.
+//   (3) Something castable to build toward: keep a land that fills a REAL gap -- a first Reliquary
+//       Tower (stops the flood being discarded), a missing colour for Treasure Hunt ({U}) or Land's
+//       Edge ({R}{R}), or an untapped source of a colour we can otherwise only make off a tapped
+//       land next turn. Cards already in HAND count toward all of these, which is what usually makes
+//       the top card unnecessary.
 //   (4) Otherwise bottom.
 static bool THLegacyScry()
 {
@@ -1063,7 +1063,57 @@ static bool THLegacyScry()
     return on;
 }
 
-bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+// Same four rules, three corrections to what they MEASURE (2026-07-29 sweep). Two further
+// corrections were authored, measured and REJECTED; they are recorded at the bottom because the
+// reason they lose is the most useful thing the sweep found. Full numbers:
+// docs/design/treasure-hunt-open-findings.md section 3b.
+//
+//  (a) FILTER LANDS ARE NOT UNCONDITIONAL COLOUR SOURCES. Cascade Bluffs (is_filter) and Ferrous
+//      Lake (ramp_filter) are 8 of the 53 lands and list produces [U,R], but neither makes a
+//      coloured mana alone. Their inputs differ and the old rule counted both at face value:
+//        * Ferrous Lake needs {1} GENERIC -- literally any other land switches it on, including
+//          Reliquary Tower's {C}. Cheap to satisfy, so it is live from the second land onward.
+//        * Cascade Bluffs needs a {U/R} PIP, so it needs another land that makes U or R on its
+//          own. It cannot feed itself, and Reliquary Tower cannot feed it either.
+//      This is what made a Steam Vents look redundant next to a Ferrous Lake and get bottomed.
+//  (b) COUNT MANA, NOT CARDS. A depletion land taps for two of its colour, so ONE Sandstone Needle
+//      covers BOTH of Land's Edge's red pips; the old rule counted it as a single source and kept a
+//      second red land it did not need.
+//  (c) CONDITIONAL-UNTAP LANDS ARE NOT UNCONDITIONALLY UNTAPPED. Frostboil Snarl only enters
+//      untapped if an Island or Mountain can be revealed (in this deck: Island, Steam Vents,
+//      Thundering Falls). The old rule tested the raw enters_tapped flag, which Snarl does not set,
+//      so it counted as a guaranteed untapped source. LandWouldEnterTapped answers this properly
+//      (and covers Steam Vents' life payment too).
+//  (d) LAND'S EDGE IN PLAY DOES NOT END THE COLOUR PROBLEM. The old rule gated the whole colour path
+//      on !le_in_play, so once Land's Edge resolved every land fell through to "bottom" -- but we
+//      still need {1}{U} for the next Treasure Hunt. Red, conversely, becomes worthless the moment
+//      Land's Edge is on the battlefield: its damage ability costs no mana at all.
+//
+// MEASURED AND REJECTED -- do not re-add either without a new measurement:
+//
+//  * KEEPING DEPLETION LANDS as double-spell enablers. Skerry / Needle are the only lands that turn
+//    one drop into two mana, which is how the deck casts Treasure Hunt + Treasure Hunt or Treasure
+//    Hunt + Land's Edge in a turn, and the untapped test below ranks them last. Crediting that burst
+//    measured WORSE on the held-out seeds: +0.0060 alone, +0.0200 with the rest, 14 games slower and
+//    0 faster, never once a gain. The mechanism is TIMING -- a depletion land ENTERS TAPPED, so
+//    keeping one converts a spell-casting turn into a do-nothing turn, and this deck's clock (T3-T4)
+//    leaves no room to ramp. In all three isolated slowdowns the designed double-spell turn really
+//    does happen, one turn too late (s6006 gi188: bottoming the Skerry draws Reliquary Tower and
+//    casts Treasure Hunt on T2 for a T3 win; keeping it makes T2 a blank tapped land, then casts
+//    Treasure Hunt TWICE on T3 and wins T4). A depletion land is worth having when a spare tapped
+//    turn exists anyway -- realistically only the T1 drop -- never something to dig toward.
+//  * TARGETING A TWO-TREASURE-HUNT TURN (2 blue / 4 mana). d0 +0.0050 with no searched gain, and it
+//    is what armed the depletion clause most often (dropping it cut that clause's damage from
+//    +0.0200 to +0.0160). Same lesson one level up: at this clock, a turn spent assembling the
+//    bigger turn costs more than the turn buys.
+//
+// The horizon is fixed and needs no simulation: EVERY scry/surveil in this deck comes from Temple
+// of Epiphany (etb_scry) or Thundering Falls (etb_surveil), and BOTH enter tapped. So the land drop
+// is always already spent and the new land is already on the battlefield when we choose -- the top
+// card cannot produce mana before NEXT turn, which makes the outlook a static count (every land in
+// play untaps; one land in hand is a drop away). That is why the drop-simulating variant this
+// replaces bought nothing for its +77% wall time.
+static bool ScryKeepOnTopLands(const GameState& s, const Card& top_card)
 {
     const CardDefinition* tdef = CardDatabase::Instance().LookupCached(top_card);
     const bool is_land = tdef ? tdef->card.IsLand() : top_card.IsLand();
@@ -1071,29 +1121,21 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
     const int      me = s.active_player_index;
     const Player&  ap = s.players[me];
 
-    if (THLegacyScry())
+    auto land_of = [](const Card& c) -> const CardDefinition*
     {
-        if (!is_land) { return true; }
-        for (const Card& c : ap.hand)
-        {
-            const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-            if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { return true; }
-        }
-        int lip = 0;
-        for (const Permanent& p : s.battlefield)
-        { if (p.controller_index == me && p.card.IsLand()) { ++lip; } }
-        return lip < 2;
-    }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return (d && d->card.IsLand()) ? d : nullptr;
+    };
 
     // --- what we hold -------------------------------------------------------------------------
     const CardDefinition* th_def = nullptr;   // Treasure Hunt in hand (the draw engine)
     const CardDefinition* le_def = nullptr;   // Land's Edge in hand (the wincon)
-    int lands_in_hand = 0;
+    int th_in_hand = 0, lands_in_hand = 0;
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d) { continue; }
-        if (d->tmpl == CardTemplate::DrawUntilNonland)      { th_def = d; }
+        if (d->tmpl == CardTemplate::DrawUntilNonland)      { th_def = d; ++th_in_hand; }
         if (d->params.discard_land_damage > 0)              { le_def = d; }
         if (d->card.IsLand())                               { ++lands_in_hand; }
     }
@@ -1115,6 +1157,7 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
     // never discarded). Their presence is exactly what lets ShouldCastDrawEngine cast the engine
     // with the land drop already SPENT -- i.e. the land was played BEFORE Treasure Hunt.
     bool le_in_play = false, rt_in_play = false;
+    int  lands_in_play = 0;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me) { continue; }
@@ -1122,6 +1165,7 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
         if (!d) { continue; }
         if (d->params.discard_land_damage > 0)                 { le_in_play = true; }
         if (d->params.no_max_hand_size && d->card.IsLand())     { rt_in_play = true; }
+        if (d->card.IsLand())                                  { ++lands_in_play; }
     }
 
     // (1) Treasure Hunt castable THIS turn, with this land played BEFORE it -> the revealed lands
@@ -1133,16 +1177,13 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
         th_def && (le_in_play || rt_in_play) && pool.CanPay(th_def->card.m_mana_cost);
 
     // --- NONLAND on top ------------------------------------------------------------------------
-    // A spell is normally exactly what we are digging for, with two exceptions:
-    //   * a DUPLICATE Land's Edge is dead weight -- one outlet discards every land we own, so a
-    //     second copy adds nothing;
-    //   * a Treasure Hunt on top while we are about to cast one is actively harmful: Treasure Hunt
-    //     reveals until it hits a NONLAND, so a Treasure Hunt sitting on top truncates the reveal
-    //     to a single card. Bottoming it puts a land there instead (53 of 60 cards), which is both
-    //     a bigger draw and a card we actually want.
-    // The FIRST Land's Edge is deliberately NOT handled here: whether to scry it away before a
-    // Treasure Hunt depends on land count and spare copies, it comes up rarely, and it is a real
-    // trade-off the search is better placed to make than a fixed rule.
+    // Unchanged from V1: a spell is what we are digging for, except a DUPLICATE Land's Edge (one
+    // outlet already discards every land we own) and a Treasure Hunt while we are about to cast one
+    // (Treasure Hunt reveals until a NONLAND, so a Treasure Hunt on top truncates the reveal to a
+    // single card; moving it away puts a land there instead -- 53 of 60 cards). Scry-bottom and
+    // surveil-bin are deliberately treated the SAME: in a 53-land deck the bottom is as unreachable
+    // as the graveyard, and either way removing a nonland RAISES the density of lands the next
+    // Treasure Hunt reveals. The FIRST Land's Edge stays a search decision.
     if (!is_land)
     {
         if (tdef && tdef->params.discard_land_damage > 0 && (le_in_play || le_def != nullptr))
@@ -1154,48 +1195,71 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
 
     if (casting_th_now) { return true; }
 
-    // Colour sources we can reach, counting the battlefield AND the hand (a land in hand is a drop
-    // away from being a source -- this is what usually makes the top card redundant).
+    // --- land-base facts, resolved once --------------------------------------------------------
+    // (a) A filter land only counts once its feeder exists. Ferrous Lake takes any second land;
+    // Cascade Bluffs takes a land that makes U or R WITHOUT being a filter itself.
+    bool plain_ur = false;
+    auto note_plain = [&](const CardDefinition& d)
+    {
+        if (d.params.is_filter || d.params.ramp_filter) { return; }
+        for (Color c : d.params.produces)
+        { if (c == Color::Blue || c == Color::Red) { plain_ur = true; return; } }
+        for (Color c : d.params.mdfc_back_produces)
+        { if (c == Color::Blue || c == Color::Red) { plain_ur = true; return; } }
+    };
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == me) { if (const CardDefinition* d = land_of(p.card)) { note_plain(*d); } } }
+    for (const Card& c : ap.hand)
+    { if (const CardDefinition* d = land_of(c)) { note_plain(*d); } }
+
+    const bool ramp_filter_live = (lands_in_play + lands_in_hand) >= 2;   // any other land pays {1}
+    const bool filter_live      = plain_ur;                              // needs a real {U}/{R} pip
+
+    // (b) Colour output in MANA per tap, with filters resolved. A depletion land yields two.
+    auto amount_of = [&](const CardDefinition& d) { return std::max(1, d.params.produces_amount); };
+    auto colour_mana = [&](const CardDefinition& d, Color want) -> int
+    {
+        auto has = [&](const std::vector<Color>& prod)
+        { return std::find(prod.begin(), prod.end(), want) != prod.end(); };
+        if (!has(d.params.produces) && !has(d.params.mdfc_back_produces)) { return 0; }
+        if (d.params.ramp_filter) { return ramp_filter_live ? 1 : 0; }   // {1} -> {U}{R}: net +1 each
+        if (d.params.is_filter)   { return filter_live      ? 1 : 0; }   // {U/R} -> two: net +1
+        return amount_of(d);
+    };
     auto count_sources = [&](Color want)
     {
         int n = 0;
-        auto has = [&](const std::vector<Color>& prod)
-        { return std::find(prod.begin(), prod.end(), want) != prod.end(); };
         for (const Permanent& p : s.battlefield)
-        {
-            if (p.controller_index != me) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && d->card.IsLand() && has(d->params.produces)) { ++n; }
-        }
+        { if (p.controller_index == me) { if (const CardDefinition* d = land_of(p.card)) { n += colour_mana(*d, want); } } }
         for (const Card& c : ap.hand)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (!d || !d->card.IsLand()) { continue; }
-            if (has(d->params.produces) || has(d->params.mdfc_back_produces)) { ++n; }
-        }
+        { if (const CardDefinition* d = land_of(c)) { n += colour_mana(*d, want); } }
         return n;
     };
-    auto top_makes = [&](Color want)
-    {
-        if (!tdef) { return false; }
-        auto has = [&](const std::vector<Color>& prod)
-        { return std::find(prod.begin(), prod.end(), want) != prod.end(); };
-        return has(tdef->params.produces) || has(tdef->params.mdfc_back_produces);
-    };
+    auto top_makes = [&](Color want) { return tdef && colour_mana(*tdef, want) > 0; };
 
     // (2) Land's Edge + 10 lands in hand = lethal. Nothing matters but casting {1}{R}{R}.
     if (le_def && lands_in_hand >= 10)
     {
         if (pool.CanPay(le_def->card.m_mana_cost)) { return false; }   // already lethal -> dig
-        const int reds = count_sources(Color::Red);
-        return top_makes(Color::Red) && reds < le_def->card.m_mana_cost.red;
+        return top_makes(Color::Red) && count_sources(Color::Red) < le_def->card.m_mana_cost.red;
     }
 
-    // (3) Draw engine in hand and no Land's Edge online yet -> keep only a land that fills a gap.
-    if (th_def && !le_in_play)
+    // --- what we are trying to cast -------------------------------------------------------------
+    // Blue is for Treasure Hunt ({1}{U}); red is ONLY ever for casting Land's Edge, whose damage
+    // ability costs no mana at all -- so once it is on the battlefield red is worthless and only
+    // {1}{U} matters. While it is not online we keep the speculative {R}{R} target: it is the deck's
+    // one wincon. (Deliberately NOT scaled up for a two-Treasure-Hunt turn -- measured worse.)
+    const int want_blue = th_def ? 1 : 0;
+    const int want_red  = le_in_play ? 0 : 2;
+
+    // (3) Something castable to build toward -> keep a land that fills a REAL gap. (d) applies
+    // whether or not Land's Edge is already in play: the engine still costs {1}{U}.
+    if (th_def || (le_def && !le_in_play))
     {
-        // A first Reliquary Tower: without one the flood Treasure Hunt draws is discarded at cleanup.
-        if (tdef->params.no_max_hand_size)
+        // A first Reliquary Tower: without one the flood Treasure Hunt draws is discarded at
+        // cleanup. Pointless once Land's Edge is online -- there the flood is ammunition, not
+        // overdraw -- and only relevant while the engine is actually in hand.
+        if (th_def && !le_in_play && tdef->params.no_max_hand_size)
         {
             bool have_rt = rt_in_play;
             for (const Card& c : ap.hand)
@@ -1206,40 +1270,61 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
             if (!have_rt) { return true; }
         }
         // A colour we are actually short of, for Treasure Hunt ({U}) or Land's Edge ({R}{R}).
-        if (top_makes(Color::Blue) && count_sources(Color::Blue) < th_def->card.m_mana_cost.blue)
-        { return true; }
-        const int red_need = le_def ? le_def->card.m_mana_cost.red : 2;   // LE is {1}{R}{R}
-        if (top_makes(Color::Red) && count_sources(Color::Red) < red_need) { return true; }
-        // An UNTAPPED source of a needed colour, when everything we hold enters tapped -- that is
-        // the difference between casting the engine next turn and durdling another turn.
-        if (!tdef->params.enters_tapped)
+        if (top_makes(Color::Blue) && count_sources(Color::Blue) < want_blue) { return true; }
+        if (top_makes(Color::Red)  && count_sources(Color::Red)  < want_red)  { return true; }
+
+        // (c) An UNTAPPED source of a needed colour, when everything we hold enters tapped -- that
+        // is the difference between casting the engine next turn and durdling another turn. Every
+        // land already in play untaps on its own; a land in hand has to enter untapped, which for a
+        // reveal/shock land is conditional (LandWouldEnterTapped resolves it).
+        if (!LandWouldEnterTapped(s, *tdef))
         {
             auto untapped_source_of = [&](Color want)
             {
-                auto has = [&](const std::vector<Color>& prod)
-                { return std::find(prod.begin(), prod.end(), want) != prod.end(); };
                 for (const Permanent& p : s.battlefield)
                 {
                     if (p.controller_index != me) { continue; }
-                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                    if (d && d->card.IsLand() && has(d->params.produces)) { return true; }
+                    const CardDefinition* d = land_of(p.card);
+                    if (d && colour_mana(*d, want) > 0) { return true; }
                 }
                 for (const Card& c : ap.hand)
                 {
-                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                    if (!d || !d->card.IsLand() || d->params.enters_tapped) { continue; }
-                    if (has(d->params.produces) || has(d->params.mdfc_back_produces)) { return true; }
+                    const CardDefinition* d = land_of(c);
+                    if (!d || colour_mana(*d, want) == 0) { continue; }
+                    if (!LandWouldEnterTapped(s, *d)) { return true; }
                 }
                 return false;
             };
-            if (top_makes(Color::Blue) && !untapped_source_of(Color::Blue)) { return true; }
-            if (top_makes(Color::Red)  && !untapped_source_of(Color::Red))  { return true; }
+            if (want_blue > 0 && top_makes(Color::Blue) && !untapped_source_of(Color::Blue)) { return true; }
+            if (want_red  > 0 && top_makes(Color::Red)  && !untapped_source_of(Color::Red))  { return true; }
         }
         return false;
     }
 
     // (4) No engine, no lethal -> a land on top is just another land in a 53-land deck.
     return false;
+}
+
+bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+{
+    if (THLegacyScry())
+    {
+        const CardDefinition* tdef = CardDatabase::Instance().LookupCached(top_card);
+        const bool is_land = tdef ? tdef->card.IsLand() : top_card.IsLand();
+        if (!is_land) { return true; }
+        const int     me = s.active_player_index;
+        const Player& ap = s.players[me];
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+            if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { return true; }
+        }
+        int lip = 0;
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && p.card.IsLand()) { ++lip; } }
+        return lip < 2;
+    }
+    return ScryKeepOnTopLands(s, top_card);
 }
 
 bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,

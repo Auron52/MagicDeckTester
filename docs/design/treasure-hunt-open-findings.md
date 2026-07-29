@@ -55,6 +55,72 @@ makespan went 269s -> 477s (+77%) because the drop-counting loop runs per scry. 
 gi385 case below, but pays for that one game everywhere else. Do not re-adopt without a cheaper
 formulation.
 
+## 3b. The V2 scry sweep: six corrections, two harmful, four inert (2026-07-29)
+
+A second pass took the six most concrete remaining gaps in `TreasureHuntProvider::ScryKeepOnTop` and
+measured each one in isolation (`MTG_TH_SCRY_OFF=<letters>`, leave-one-out and one-at-a-time, on the
+held-out overnight seeds). The `OFF=abcdef` arm reproduces ground truth exactly, so the gating is
+verified, and only Treasure Hunt moved -- the other 86 suite configs are untouched.
+
+| # | correction | alone (searched) | alone (d0) | verdict |
+|---|-----------|------------------|------------|---------|
+| a | filter lands need a feeder (Cascade Bluffs `{U/R}`, Ferrous Lake `{1}`) | 0.0000, 0 games | 0.0000 | inert |
+| b | count MANA not CARDS (`produces_amount`: Needle taps `{R}{R}`) | 0.0000, 0 games | 0.0000 | inert |
+| c | keep depletion lands as double-spell enablers | **+0.0060, 6 slower / 0 faster** | +0.0010 | **REJECTED** |
+| d | conditional untap via `LandWouldEnterTapped` (Frostboil Snarl's reveal) | 0.0000, 0 games | 0.0000 | inert |
+| e | Land's Edge in play does not end the colour problem | 0.0000, 0 games | -0.0030 | inert (see below) |
+| f | target 2 blue / 4 mana for a two-Treasure-Hunt turn | 0.0000, 0 games | +0.0050 | **REJECTED** |
+
+All six together measured **+0.0200 across the 8 searched overnight cases, 14 games slower and 0
+faster** -- every case regressed. Removing (c) alone collapses that to **exactly 0.0000 with no game
+changed**, so the depletion clause is the whole regression and (a)/(b)/(d)/(e)/(f) only ever mattered
+by changing how often it fired.
+
+**Why (c) loses -- the reusable lesson.** A depletion land ENTERS TAPPED, so keeping one converts a
+spell-casting turn into a do-nothing turn, and this deck's clock (T3-T4 wins) leaves no room to ramp.
+All three isolated slowdowns are the same shape, and in each the designed double-spell turn really
+does happen, one turn too late. s6006 gi188:
+
+```
+T1  play Temple of Epiphany, scry -> Saprazzan Skerry on top
+    V1:  bottom it  -> draw Reliquary Tower -> T2 Tower + Treasure Hunt -> WIN T3
+    (c): keep it    -> draw Skerry -> T2 plays a TAPPED land, casts nothing
+                    -> T3 Tower + Treasure Hunt + Treasure Hunt -> WIN T4
+```
+
+(f) is the same lesson one level up: *building toward* the bigger turn costs more than the turn buys,
+and it is also what armed (c) most often (dropping (f) cut (c)'s damage from +0.0200 to +0.0160).
+Depletion lands are good when a spare tapped-land turn exists anyway -- not something to seek out.
+
+**Why (a)/(b)/(d) are inert.** They are accuracy fixes to counts that never reach a decision
+boundary: the colour thresholds are 1 blue / 2 red, and 36 of the 53 lands make red with ~30 making
+blue, so `count_sources < want` essentially never fires once two lands are down. They make the rule
+say what it means but change no decision in 20 cases.
+
+**(e) does not survive all the seeds.** On the overnight seeds alone it looks like the one winner
+(-0.0030, 2 d0 games faster / 0 slower). Across all 8 d0 cases it nets **+0.0010**: smoke s1001
++0.0040 (1 game slower), regression s2002 0.0000, overnight -0.0030. Three games out of 9000 move.
+It is still the correct model -- Land's Edge's damage ability costs no mana, so red really is
+worthless once it is on the battlefield while `{1}{U}` is still needed -- but it is not a measured
+gain, and adopting it costs a 10-case ground-truth rebaseline for score-identical play.
+
+**Adopted: (a), (b), (d) and (e)** -- the four corrections that are not measurably harmful. They ship
+as accuracy, not as a win: not one searched game's score moves across all 20 Treasure Hunt cases in
+either direction, and d0 nets +0.0010 (3 games out of 9,000, 2 better and 1 worse). The rule now
+models the land base correctly, which matters for the next person tuning it and for the keep-model
+regeneration in section 5. Ground truth was rebaselined for the score-identical digest churn.
+(c) and (f) are recorded as rejected in the code comment so they are not re-proposed.
+
+### Deferred: depletion lands restricted to the T1 drop
+
+The rejection of (c) is about TIMING, not about depletion lands being bad. A Skerry played on T3 is
+too slow because T4 is usually the win; a Skerry played on **T1** costs nothing, because T1 has no
+spell to cast anyway. So the clause might survive if restricted to the first land drop -- keep a
+depletion land on top only on turn 1. Not pursued: the trigger is rare (the top card must be one of
+8 depletion lands, on turn 1, with the target unaffordable), so the measurable effect would be a
+handful of games in 20,000, and the sweep above shows this rule family sits well inside the noise
+floor. Worth revisiting only if a cheaper high-volume signal than win-turn becomes available.
+
 ## 4. Residual slower games from the scry rewrite (accepted)
 
 11 searched games are slower against 452 faster + 9 new wins (zero to-unwon). Two distinct causes,
