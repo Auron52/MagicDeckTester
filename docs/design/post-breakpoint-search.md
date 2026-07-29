@@ -820,6 +820,50 @@ Under a budget the guarantee is still only approximate — pass L-1 refutes wave
 deferred ranks its budget bought — but that is strictly better than the constant cap it replaces,
 and the pass-level start gate and overrun abort are larger holes in the same premise.
 
+## Does the rule generalize to normal turns? MEASURED: the one live target does not need it
+
+Asked by the user, 2026-07-29. The pattern is "a rank cap over a heuristically-ranked list is a
+QUALITY prune, because rank >= W is unreachable at any budget; defer the tail instead." Surveying
+the engine, ordinary turn decisions have exactly **one** such cap: the escalation beam
+(`_beam_i++ >= g_esc_beam_width` in `FSLineWin`), gated to near-leaf nodes (`beam_leafdepth`) and
+active only under the heuristic escalation (`EscBeamGuard`).
+
+It is live and binding: `value_play` in `<deck>.value.json` ships `beam_width=3, beam_leafdepth=2`
+on **Anti-Lifegain, Dragonstorm and Hinata** (the other five carry no beam), and `MTG_ESC_BEAM=0`
+changes 2 smoke cases. Its documented carve-out — "never applies at the root, so it can never drop
+the heuristic-best PLAY" — is narrower than it sounds, because the beam applies at the near-leaf
+nodes that ARE the leaf evaluator, and leaf mis-scoring is precisely how the root ends up ranking on
+bad estimates (the same mechanism that made root-only waves recover nothing).
+
+**But it is already a cost prune, not a quality ceiling.** 25 games/deck at `--budget-ms 0`:
+
+| deck | beam W=3 | beam lifted (`MTG_ESC_BEAM=0`) |
+|---|---|---|
+| hinata | 5.8800 | 5.8800 |
+| dragonstorm | 4.3600 | 4.3600 |
+| antilife | 4.1200 | 4.1200 |
+
+Identical on all three — at an unbounded budget the search reaches the same answer with or without
+it. That is the opposite of `bp_choice`, where W=2 vs W=16 was a hard T6/T5 split no budget could
+cross. **So there is nothing for waves to recover there, and porting them would add machinery for a
+measured zero.** Do not re-derive this; re-measure only if a deck's beam config changes.
+
+Two further notes for anyone who revisits it:
+
+* **The port would not be a free copy.** Breakpoint waves are SPARSE — they fire only on
+  breakpoint-opening plans, on 4 of 8 decks, and `MTG_BP_WAVE_PROBE` shows `budget-stopped=1`, i.e.
+  the continuation lists run out before the budget does. That is *why* "spend what's left" behaves
+  like a lever. A beam wave would be DENSE (every near-leaf node of every escalation, `pre` running
+  to hundreds of plans), so with `Exhausted()` as the only gate the first nodes visited would
+  swallow the whole remainder — not a lever, just an uneven removal of the beam. Making it a real
+  lever needs a GLOBAL deferred frontier (one priority queue across the search, spent best-first);
+  a per-node *share* would reintroduce exactly the kind of constant this work removed.
+* **Outside the beam, normal turns are not rank-capped at all** — `SolveWithLookahead`'s candidate
+  loop and un-beamed `FSLineWin` iterate every candidate. The remaining place where a line can be
+  unreachable at infinite budget is a different mechanism: the **enumeration prune-set**
+  (`MTG_UNPRUNED`), where plans are never GENERATED. Deferring there would mean deferring
+  generation, not ranking — same spirit, different design, and the obvious next frontier.
+
 ## What this costs: the measured delta the accept decision rests on
 
 The "wider wave 0" arm this section asked to compare against is the W-sweep above (net −0.040 at
