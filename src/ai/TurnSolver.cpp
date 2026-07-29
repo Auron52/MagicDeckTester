@@ -1348,6 +1348,39 @@ static int BpSearchWidth()
     return w;
 }
 
+// How many breakpoints deep the fan-out reaches (MTG_BP_DEPTH). Breakpoint i in [0, depth) gets
+// its own W variants via Plan::bp_at, so the emitted count is depth*W per base plan.
+//
+// DEFAULT 1 (first breakpoint only) -- depth 2 was built, measured twice, and NOT adopted.
+//
+// The FIRST measurement was confounded: two Dragonstorm regressions survived depth 9 at unbounded
+// budget, i.e. real DEFECTS, and they turned out to be a rollout mana-payment bug (the scarcity path
+// paid coloured pips off a colored_creature_only land) that nesting merely EXPOSED, not caused. With
+// that fixed both games recover -- one of them realising the turn-6 win the nested search predicted.
+//
+// Re-measured on the fixed engine, the verdict holds anyway: TRAIN (smoke + regression) is 10 better
+// / 0 worse and the regression suite gets FASTER (59s -> 33s, most depth-2 variants dedup away),
+// but the HELD-OUT overnight seeds reverse it -- 3 better, 8 worse, net +0.00020 avg. All 12 held-out
+// slowdowns RECOVER at depth 9 / unbounded, so this is budget DILUTION (a wider candidate set at a
+// fixed per-decision budget makes every rollout shallower), not a defect -- the same failure mode
+// that pruned the plain-cantrip site, and Hinata is again the clearest loser. A textbook train/
+// held-out split, which is exactly what the suite's disjoint seeds exist to catch.
+//
+// The axis is kept because nested breakpoints ARE genuinely unsearched (on Dragonstorm they
+// OUTNUMBER searched ones, 183 vs 145 per 40 games), it is now DEFECT-FREE, and it is a strict gain
+// at unbounded budget; MTG_BP_DEPTH=2 turns it on. See docs/design/post-breakpoint-search.md.
+static int BpSearchDepth()
+{
+    static const int d = []() -> int
+    {
+        const char* v = std::getenv("MTG_BP_DEPTH");
+        if (v == nullptr || *v == '\0') { return 1; }
+        const int n = std::atoi(v);
+        return n < 1 ? 1 : n;
+    }();
+    return d;
+}
+
 // Per-SITE enable mask (MTG_BP_SITES, default all five). Bit i == site i of kBpSiteName:
 //   0 stages/EI (Light Up the Stage, Expressive Iteration)   1 DrawUntilNonland (Treasure Hunt)
 //   2 impulse_exile (Apex of Power)                          3 plain cantrip (Ponder / Preordain)
@@ -1373,6 +1406,12 @@ static int BpSiteMask()
 // Only the first breakpoint of an apply is searched (deeper ones stay greedy), so nested variants
 // would be pure duplicates burning nodes. Thread-local -- the search is single-threaded per game.
 static thread_local int g_bp_enum_depth = 0;
+
+// Lockstep trace arming flag (MTG_BP_TRACE, diagnosis only). ApplyPlanDirect runs millions of times
+// inside rollouts, so an unconditional print is useless; this is set ONLY around the fd-trace's
+// replay of the COMMITTED line, which is the exact apply the executor is supposed to reproduce.
+// Its [bp-apply] lines then diff line-for-line against the executor's [bp-exec] lines.
+static thread_local bool g_bp_trace_arm = false;
 
 // Fan out at EVERY ply, or only at the turn's COMMITTED decision? MEASURED: root-only is nearly
 // free but recovers NONE of the gain (TH stays 4.1333, Dragonstorm stays 4.6267). The greedy
@@ -3315,6 +3354,20 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 // Multi-turn lookahead
 // ============================================================
 
+// A/B hatch for the colored_creature_only payment fix (MTG_LEGACY_CCO_PAY=1 -> the pre-fix
+// behaviour, byte-identical to the engine before it). DIAGNOSIS ONLY: the legacy branch lets the
+// ROLLOUT pay a coloured pip off Unclaimed Territory / Cavern of Souls / Sliver Hive / Secluded
+// Courtyard for a NON-creature spell, which the real executor refuses -- i.e. it re-enables a
+// rules violation that makes the rollout score lines the game cannot realise. Kept only so the
+// fix's effect stays measurable in one binary. See docs/design/post-breakpoint-search.md.
+static const std::vector<Color>& PayProduces(const GameState& state, int controller,
+                                             const CardDefinition& def, bool for_creature)
+{
+    static const bool legacy = std::getenv("MTG_LEGACY_CCO_PAY") != nullptr;
+    if (legacy) { return EffectiveProduces(state, controller, def); }
+    return ProducesForPayment(state, controller, def, for_creature);
+}
+
 // Tap mana sources in-place to pay a cost. Returns false if mana is unavailable.
 // for_creature: if false, skip creature-only mana sources (e.g. Ancient Ziggurat)
 //               since non-creature spells cannot be paid with that mana.
@@ -3353,6 +3406,7 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
 
     auto tap_source = [&](Permanent& p, const CardDefinition& def, Color col)
     {
+        CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
         p.tapped = true;
         DecrementDepletionOnTap(p);
         if (def.params.tap_self_damage > 0) { state.players[active].life -= def.params.tap_self_damage; }
@@ -3436,7 +3490,18 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
                 else if (def->params.ramp_filter) { continue; }
                 else
                 {
-                    const std::vector<Color>& prod = EffectiveProduces(state, active, *def);
+                    // ProducesForPayment (NOT EffectiveProduces): a colored_creature_only land
+                    // (Unclaimed Territory / Cavern of Souls / Sliver Hive / Secluded Courtyard)
+                    // makes only {C} for a NON-creature spell, so it must not be selected for a
+                    // coloured pip there -- it still pays a generic pip as {C}. The legacy
+                    // (MTG_TAP_LEGACY) path below and BOTH of AIEngine::TapForCost's mirrors always
+                    // did this; only this scarcity-first path did not, so the ROLLOUT could pay
+                    // {R}{R}{R} off two floating red plus Unclaimed Territory while the executor --
+                    // correctly -- could not. That is a prediction/realisation divergence, not a
+                    // heuristic disagreement: the rollout scores and commits a line whose last casts
+                    // the real game then drops (Dragonstorm s4004 gi372 / s5005 gi4 stopped mid-script
+                    // at Irencrag Feat). See docs/design/post-breakpoint-search.md.
+                    const std::vector<Color>& prod = PayProduces(state, active, *def, for_creature);
                     bool makes = false;
                     if (any) { makes = !prod.empty(); }
                     else { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
@@ -3451,7 +3516,10 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
             const CardDefinition* bdef = CardDatabase::Instance().LookupCached(bp.card);
             if (best_kind == 1)
             {
-                const std::vector<Color>& prod = EffectiveProduces(state, active, *bdef);
+                // {C}-only for a non-creature colored_creature_only land -> the generic tap uses {C}
+                // (prod[0]) rather than a colour that could leak to pay a coloured pip. Mirrors
+                // AIEngine::TapForCost byte-for-byte.
+                const std::vector<Color>& prod = PayProduces(state, active, *bdef, for_creature);
                 tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, prod[0]) : needed);
                 return true;
             }
@@ -3783,6 +3851,7 @@ namespace
         std::atomic<uint64_t> hit[5]{};       // all invocations (incl. rollout evaluation)
         std::atomic<uint64_t> committed[5]{}; // subset on a COMMITTED line -> a real game decision
         std::atomic<uint64_t> searched[5]{};  // subset resolved by SEARCH (Plan::bp_choice)
+        std::atomic<uint64_t> nested[5]{};    // NESTED (2nd+ breakpoint of an apply) -> still greedy
         ~BpProbe()
         {
             if (std::getenv("MTG_BP_PROBE") == nullptr) { return; }
@@ -3791,12 +3860,14 @@ namespace
                 const uint64_t n = hit[i].load(std::memory_order_relaxed);
                 const uint64_t c = committed[i].load(std::memory_order_relaxed);
                 const uint64_t q = searched[i].load(std::memory_order_relaxed);
+                const uint64_t z = nested[i].load(std::memory_order_relaxed);
                 if (n) { std::fprintf(stderr,
                                       "[bp-probe] %-58s total=%-10llu greedy=%-10llu searched=%-10llu"
-                                      " (%.1f%% searched, committed-line: %llu)\n",
+                                      " nested-unsearchable=%-10llu (%.1f%% searched, committed-line: %llu)\n",
                                       kBpSiteName[i], static_cast<unsigned long long>(n),
                                       static_cast<unsigned long long>(n - q),
                                       static_cast<unsigned long long>(q),
+                                      static_cast<unsigned long long>(z),
                                       n ? (100.0 * static_cast<double>(q) / static_cast<double>(n)) : 0.0,
                                       static_cast<unsigned long long>(c)); }
             }
@@ -3807,13 +3878,14 @@ namespace
     // one that still fell through to greedy TurnSolver::Solve. The purge is complete for a site when
     // greedy reaches 0 -- total alone cannot show that, and rises simply because more plans are
     // applied. See docs/design/post-breakpoint-search.md.
-    inline void BpHit(int i, bool on_committed_line, bool resolved_by_search)
+    inline void BpHit(int i, bool on_committed_line, bool resolved_by_search, bool nested_blocked)
     {
         static const bool on = std::getenv("MTG_BP_PROBE") != nullptr;
         if (!on) { return; }
         g_bp_probe.hit[i].fetch_add(1, std::memory_order_relaxed);
         if (on_committed_line)   { g_bp_probe.committed[i].fetch_add(1, std::memory_order_relaxed); }
         if (resolved_by_search)  { g_bp_probe.searched[i].fetch_add(1, std::memory_order_relaxed); }
+        if (nested_blocked)      { g_bp_probe.nested[i].fetch_add(1, std::memory_order_relaxed); }
     }
 }
 
@@ -4252,9 +4324,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     int  bp_seen = 0;
     auto bp_searched_plan = [&](int site, TurnSolver::Plan& out) -> bool
     {
-        const bool eligible = plan.bp_choice >= 0
-                           && (BpSiteMask() & (1 << site)) != 0    // this class is pruned when clear
-                           && bp_seen++ == 0;
+        // bp_seen counts only breakpoints of an ENABLED class, and only for a plan that carries a
+        // choice -- exactly the original short-circuit. Counting pruned-class breakpoints too would
+        // shift every later index (Hinata prunes the cantrip class, so its first ENABLED breakpoint
+        // is often not the apply's first) and silently change play.
+        const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
+        const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
+        const bool eligible    = plan.bp_choice >= 0 && class_on && seen_before == plan.bp_at;
+        // A 2nd+ breakpoint in the same apply that WOULD have been searched if bp_choice covered
+        // nesting. Measures the last remaining unsearchable continuation. See the doc.
+        const bool nested_blocked = plan.bp_choice >= 0 && class_on
+                                 && seen_before >= BpSearchDepth();
         bool resolved = false;
         if (eligible)
         {
@@ -4269,7 +4349,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 resolved = true;
             }
         }
-        BpHit(site, out_breakpoint != nullptr, resolved);
+        // Lockstep trace (MTG_BP_TRACE): the apply side's breakpoint SEQUENCE for the committed
+        // line, printed only while g_bp_trace_arm is set (the fd-trace committed-line replay), so
+        // it can be diffed line-for-line against the executor's [bp-exec] sequence. A searched
+        // continuation applied at a DIFFERENT index on the two sides is the lockstep defect.
+        if (g_bp_trace_arm)
+        {
+            std::fprintf(stderr,
+                         "[bp-apply] turn=%d site=%d idx=%d bp_at=%d bp_choice=%d searched=%d%s\n",
+                         state.turn_number, site, seen_before, plan.bp_at, plan.bp_choice,
+                         resolved ? 1 : 0, class_on ? "" : " (class off)");
+        }
+        BpHit(site, out_breakpoint != nullptr, resolved, nested_blocked);
         return resolved;
     };
     // Play a continuation's SEARCHED land drop and record it for commit-the-line replay. Inert for
@@ -4384,8 +4475,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!free_cast && !alt_cost)
         {
             if (AffordAuditOn()) { g_afford_rollout_attempts.fetch_add(1, std::memory_order_relaxed); }
+            if (g_bp_trace_arm) { BpTraceCast("apply", state, name, ec, is_creature); }
             if (!TapForCostDirect(state, ec, is_creature))
             {
+                if (g_bp_trace_arm) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
                 if (AffordAuditOn()) { g_afford_rollout_fails.fetch_add(1, std::memory_order_relaxed); }
                 // SERVER-TRUTH RESOLUTION: a declared cast that can't be paid is dropped (left in hand).
                 // Record its name so the play viewer learns AUTHORITATIVELY which casts failed, instead of
@@ -7709,11 +7802,15 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
     {
         if (!dig_bp && (PlanOpensBreakpoint(p) & sites) == 0) { continue; }
         if (s_max_base > 0 && fanned++ >= s_max_base) { break; }
-        for (int k = 0; k < w; ++k)
+        for (int at = 0; at < BpSearchDepth(); ++at)
         {
-            TurnSolver::Plan v = p;
-            v.bp_choice = k;
-            variants.push_back(std::move(v));
+            for (int k = 0; k < w; ++k)
+            {
+                TurnSolver::Plan v = p;
+                v.bp_choice = k;
+                v.bp_at     = at;
+                variants.push_back(std::move(v));
+            }
         }
     }
     plans.insert(plans.end(), std::make_move_iterator(variants.begin()),
@@ -9053,7 +9150,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     }
     if (out_committed_depth != nullptr) { *out_committed_depth = committed_depth; }
 
-    static const bool fd_trace = std::getenv("MTG_FD_TRACE") != nullptr;
+    static const bool fd_trace   = std::getenv("MTG_FD_TRACE") != nullptr;
+    static const bool s_bp_trace = std::getenv("MTG_BP_TRACE") != nullptr;
     if (fd_trace)
     {
         std::cerr << "[fd] T" << state.turn_number << " LINE win=" << line.win_turn;
@@ -9105,14 +9203,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     { std::cerr << lib[li].m_name << "; "; }
                     std::cerr << " (libsize=" << lib.size() << ")\n";
                 }
+                g_bp_trace_arm = s_bp_trace;
                 ApplyPlanDirect(copy, pp.plan, true);
+                g_bp_trace_arm = false;
                 SimulateAnimateLands(copy);
                 SimulateTapTokens(copy);
                 SimulateCombat(copy);
             }
             else
             {
+                g_bp_trace_arm = s_bp_trace;
                 ApplyPlanDirect(copy, pp.plan, false);
+                g_bp_trace_arm = false;
             }
             int my_creatures = 0;
             for (const Permanent& perm : copy.battlefield)

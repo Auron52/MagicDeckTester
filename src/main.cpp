@@ -2901,6 +2901,8 @@ int main(int argc, char* argv[])
 {
     // Apply committed heuristic defaults BEFORE anything reads a toggle (env vars still override).
     ApplyHeuristicDefaults();
+    // Arm the colored_creature_only legality audit's exit dump (MTG_CCO_AUDIT); no-op when unset.
+    CcoAuditDumper();
     if (argc < 2)
     {
         PrintUsage(argv[0]);

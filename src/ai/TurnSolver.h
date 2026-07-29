@@ -263,6 +263,20 @@ public:
         // resolved at apply time, searched rather than narrowed.
         int bp_choice = -1;
 
+        // WHICH breakpoint of the apply bp_choice applies to (0 = the first, the original
+        // behaviour). Nested breakpoints -- a second Treasure Hunt, an Apex cast off another
+        // Apex's exile, a cantrip chain -- used to be unreachable by search entirely: only the
+        // first was searched and every later one fell back to greedy. Measured on Dragonstorm,
+        // nested breakpoints OUTNUMBER searched ones (183 vs 145 per 40 games), which is why the
+        // Apex chain reference (claude_s1_gi0) stayed a turn behind the human.
+        //
+        // This is a second AXIS, not a cross product: the enumeration emits one variant per
+        // (breakpoint index, candidate) pair, so cost is L*W, not W^L. Every individual
+        // breakpoint's alternative continuation is therefore reachable by search; a line needing
+        // TWO simultaneous non-greedy choices is not, which is the deliberate cost/coverage trade
+        // (see MTG_BP_DEPTH). Ignored when bp_choice < 0.
+        int bp_at = 0;
+
         bool empty() const { return actions.empty(); }
     };
 
