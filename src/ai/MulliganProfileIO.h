@@ -325,6 +325,13 @@ inline nlohmann::json MulliganProfileToJsonObj(const MulliganProfile& profile)
     for (const std::string& s : profile.required_pieces) { pieces.push_back(s); }
     m["required_pieces"] = pieces;
 
+    // Emitted only when non-default, so regenerating any deck that never set it leaves its profile
+    // byte-identical instead of sprouting a "discard_protect": "all" line everywhere.
+    if (profile.discard_protect != DiscardProtectScope::All)
+    {
+        m["discard_protect"] = DiscardProtectScopeToString(profile.discard_protect);
+    }
+
     json color_sources = json::object();
     for (const std::pair<const Color, int>& kv : profile.min_color_sources)
     {
@@ -535,6 +542,11 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
         {
             profile.required_pieces.push_back(piece.get<std::string>());
         }
+    }
+
+    if (m.contains("discard_protect"))
+    {
+        profile.discard_protect = DiscardProtectScopeFromString(m["discard_protect"].get<std::string>());
     }
 
     if (m.contains("min_color_sources"))

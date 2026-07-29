@@ -40,13 +40,46 @@ Two reasons it can regress:
 Adopting a measured regression violates the heuristic-optimization discipline, so it ships behind the
 flag, default off, pending a **reproduced combo-discard win**.
 
-## Path forward
-- Reproduce the Dragonstorm case where the heuristic pitches Apex/Dragonstorm (the user saw it in a
-  seed-6/7 game; it isn't in seed 1001). Confirm `MTG_SEARCHED_DISCARD=1` fixes it and by how much.
-- If the combo-win benefit outweighs the TH cost across regression/overnight seeds, adopt (flip the
-  default, rebaseline GT). Otherwise keep OFF.
-- Cheaper alternative to weigh: improve the *heuristic* itself (used in rollouts AND as fallback) so
-  it never pitches the only copy of a high-value spell — e.g. rank by the deck's `card_scores`
-  (keep-value) rather than raw MV, protecting unique payoffs while shedding redundant copies / excess
-  mana. Deterministic, no rollout cost, and it also improves the rollout labels the search learns
-  from. This may capture most of the benefit without the train/serve/clairvoyance downsides.
+## 2026-07-28 update — the reproduction exists, and the heuristic route is now exhausted
+
+**The combo-discard case this doc was waiting for has been found and is committed as ground truth:**
+overnight seed 7007, games `gi79` / `gi193` / `gi379` (d3 and d5). All three keep an IDENTICAL hand
+and draws, so they are clean like-for-like line changes, and in each the heuristic sheds the
+rituals that are the deck's mana — casting 0–5 spells instead of 6–8 and turning wins on T8/T6/T5
+into unwon. They are unreachable by more search: all three stay unwon at **depth 8 / 20 000 ms**,
+because the discard is not a searched decision at all.
+
+`MTG_SEARCHED_DISCARD=1` recovers **all three**, including `gi79`, which no heuristic scope can
+reach (see below). That is the "reproduced combo-discard win" this doc set as the adoption
+precondition.
+
+The cheaper heuristic alternative (last bullet of the old path forward) has since been taken as far
+as it goes, in two steps, and it is now provably short of the searched result:
+
+1. `a12b753` protected `required_pieces` from the cleanup discard. This is what CAUSED the three
+   games above — protecting *every* copy leaves the rituals as the highest-MV shed.
+2. `mulligan.discard_protect` (this session) made the protection **per-deck and last-copy-only**.
+   Measured over the overnight suite: dragonstorm −0.0128 searched / −0.0265 d0, antilife −0.001,
+   th and burn untouched (they keep `all`; th genuinely prefers protecting duplicates), every deck
+   with empty `required_pieces` byte-identical. It recovers `gi193` and `gi379`.
+
+`gi79` is the residual and it shows the ceiling of the static approach: the hand holds ONE Apex and
+ONE Dragonstorm — both last-in-hand, so both protected — while the LIBRARY still holds more copies,
+and the deck is mana-screwed. The correct shed depends on board state (screwed vs not), which a
+static per-deck constant cannot express. A `deck`-scope variant (protect only when no copy remains
+in hand or library) was measured too: it reproduces the pre-`a12b753` ground truth EXACTLY on all 12
+overnight cases, i.e. it never fires and is a silent full revert. So the three scopes bracket the
+whole static design space, and none of them gets `gi79`.
+
+### Remaining path forward
+- A/B `MTG_SEARCHED_DISCARD=1` across regression + overnight **against the new per-deck-heuristic
+  baseline** (not the old one the 2026-07-21 measurement used — that baseline no longer exists).
+  The old TH cost (+0.007 d3 / +0.013 d5 on smoke seed 1001) is the number to re-check first, since
+  TH is the deck that prefers the protective behaviour.
+- Note the searched path uses the heuristic for its *rollouts'* own discards (`m_in_rollout`), so
+  the improved per-deck heuristic now also improves the labels the search ranks on — the two changes
+  compose rather than compete, and the train/serve mismatch of reason 1 above is smaller than when
+  it was first measured.
+- If it wins, flip the default and rebaseline; the `discard_protect` field then becomes the
+  rollout/fallback policy only, and should be re-measured (its per-deck values were tuned against a
+  heuristic-only engine).

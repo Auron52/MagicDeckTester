@@ -533,6 +533,7 @@
   "mulligan": {
     "bottom_order": "count_first",
     "curve_check": "one_drop",
+    "discard_protect": "hand",
     "max_lands": 5,
     "min_color_sources": {
       "B": 1,

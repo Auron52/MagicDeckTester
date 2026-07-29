@@ -81,6 +81,27 @@ inline int LandsEdgeHeuristicFireCount(const GameState& state, int rate)
 // Otherwise discard the highest-MV non-staged card that is NOT a required combo piece; required
 // pieces and staged cards are shed only as a last resort. Returns an index into the active
 // player's hand, or -1 if the hand is empty. `required_pieces` may be null (no protection).
+//
+// Protection SCOPE is per-deck (GameState::m_discard_protect, from the profile's
+// mulligan.discard_protect; see DiscardPolicy.h for the measured per-deck rationale). Protecting
+// EVERY copy regressed Dragonstorm badly, because the highest-MV survivors are then the rituals
+// that ARE the deck's mana: overnight s7007 gi79/gi193/gi379 each kept an identical hand but shed
+// 4-5 rituals to save payoffs, cast 0-5 spells instead of 6-8, and turned wins on T8/T6/T5 into
+// unwon. (gi193's opening hand held TWO Apex of Power; the old code pitched one and won on T6;
+// gi79 held one of each but the LIBRARY held more, and pitching it to keep the rituals won on T8.)
+// Cleanup discard is NOT a searched decision -- it is this fixed rule, shared by the engine and the
+// rollout so they shed in lockstep -- so no amount of depth or budget can route around a bad choice
+// here: all three stayed unwon at depth 8 / 20000 ms. Hence the rule itself has to be right.
+// Making the discard a real searched decision is the planned successor -- see
+// docs/design/searched-cleanup-discard.md.
+//
+// Counting library copies (LastInDeck) is deck knowledge, not clairvoyance: it is a multiset count
+// of what remains, never the ORDER, so it cannot leak which card is drawn next.
+inline DiscardProtectScope EffectiveDiscardProtectScope(const GameState& state)
+{
+    if (const char* ov = DiscardProtectScopeOverride()) { return DiscardProtectScopeFromString(ov); }
+    return state.m_discard_protect;
+}
 inline int SelectCleanupDiscardIndex(const GameState& state,
                                      const std::vector<std::string>* required_pieces)
 {
@@ -112,7 +133,22 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
                 if (ap.hand[i].m_name == piece) { is_req = true; break; }
             }
         }
-        if (is_req) { continue; }
+        // A redundant required piece stays discardable (and, being high-MV, is picked ahead of the
+        // rituals). Count copies in hand -- staged included, since a staged copy is already
+        // committed to a line, which is exactly what makes the loose one spare -- plus, under the
+        // `deck` scope, the copies still in the library. Protection re-engages once the count hits 1.
+        if (is_req)
+        {
+            const DiscardProtectScope scope = EffectiveDiscardProtectScope(state);
+            if (scope == DiscardProtectScope::All) { continue; }
+            int copies = 0;
+            for (const Card& c : ap.hand) { if (c.m_name == ap.hand[i].m_name) { ++copies; } }
+            if (scope == DiscardProtectScope::LastInDeck)
+            {
+                for (const Card& c : ap.library) { if (c.m_name == ap.hand[i].m_name) { ++copies; } }
+            }
+            if (copies <= 1) { continue; }
+        }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
         int mv = def ? def->card.m_mana_cost.ManaValue() : ap.hand[i].m_mana_cost.ManaValue();
         if (mv > best_mv) { best_mv = mv; best_idx = i; }

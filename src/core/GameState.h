@@ -2,6 +2,7 @@
 #include "Player.h"
 #include "Permanent.h"
 #include "ManaPool.h"
+#include "DiscardPolicy.h"
 #include <array>
 #include <vector>
 #include <optional>
@@ -218,6 +219,11 @@ struct GameState
     // hoarded lands, over-counting a Land's Edge flood the real game never accumulates (gi=220).
     // nullptr -> no protection (matches a raw GameState with no profile attached).
     const std::vector<std::string>* m_required_pieces = nullptr;
+    // How widely m_required_pieces is protected from the cleanup discard (profile field
+    // mulligan.discard_protect). A plain value member, so every deep copy / rollout trial carries
+    // it exactly like m_required_pieces. Default All = the established behaviour, so a raw
+    // GameState and every deck that does not set the field are unchanged. See DiscardPolicy.h.
+    DiscardProtectScope m_discard_protect = DiscardProtectScope::All;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),
     // stamped in AIEngine::HandleMulligan and propagated through every deep copy. Ranks NON-lethal
     // turn-plans in TurnSolver::Solve (the d0 decision + every rollout leaf) when MTG_EVAL_MODEL is

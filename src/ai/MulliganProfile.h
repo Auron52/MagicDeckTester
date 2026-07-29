@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/Card.h"
+#include "../core/DiscardPolicy.h"
 #include "KeepModel.h"
 #include "ExhaustiveKeepPolicy.h"
 #include <map>
@@ -90,6 +91,13 @@ struct MulliganProfile
     // Mulligan unless at least one of these card names is in the opening hand (OR logic).
     // For AND requirements, encode as a custom KeepHand override or flag the deck for review.
     std::vector<std::string> required_pieces;
+
+    // How widely required_pieces are protected from the CLEANUP DISCARD (a play-time use of the
+    // same list). Default All keeps the established behaviour; a deck whose pieces come in
+    // multiples -- where pitching the excess copy is correct and protecting it sheds the deck's
+    // real engine instead -- sets "hand". See ../core/DiscardPolicy.h for the measured per-deck
+    // numbers that motivate this being per-deck rather than one global rule.
+    DiscardProtectScope discard_protect = DiscardProtectScope::All;
 
     // Minimum number of permanent mana sources (lands, mana dorks) for each color that
     // must appear in the opening hand. Only colors present in the deck are populated.

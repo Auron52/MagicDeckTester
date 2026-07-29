@@ -25,6 +25,7 @@ declare -A DECK_FILE=(
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
   [hinata]=decks/Hinata2/Hinata2.cod
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.cod
+  [auras]=decks/Auras/Auras.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -34,6 +35,7 @@ declare -A DECK_PROF=(
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
   [hinata]=decks/Hinata2/Hinata2.profile.json
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.profile.json
+  [auras]=decks/Auras/Auras.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -74,6 +76,14 @@ SMOKE_CASES=(
   "dragonstorm 0 1001 1000 0"
   "dragonstorm 3 1001  150 10"
   "dragonstorm 5 1001   75 20"
+  # auras: the cheapest deep-search deck in the suite (measured 2026-07-28, single-thread:
+  # d3 b10 ~0.023 s/game, d5 b20 ~0.0086 s/game -- d5 is CHEAPER than d3 because its value_play
+  # block routes d5 through the O(1) value leaf while the d0/d3 coverage cases bypass it via
+  # ignore_play_profile). No heavy tail at any of the 7 suite seeds. That buys it burn-tier
+  # counts rather than the smaller th/hinata/dragonstorm sizing: ~9 s added single-thread.
+  "auras   0 1001 1000 0"
+  "auras   3 1001  300 10"
+  "auras   5 1001  250 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -121,6 +131,12 @@ REGRESSION_CASES=(
   "dragonstorm 3 3003  300 10"
   "dragonstorm 5 2002  250 20"
   "dragonstorm 5 3003  250 20"
+  # auras: burn-tier counts at gate budgets -- ~32 s added single-thread (see SMOKE block).
+  "auras   0 2002 1000 0"
+  "auras   3 2002  500 10"
+  "auras   3 3003  500 10"
+  "auras   5 2002  500 20"
+  "auras   5 3003  500 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -224,4 +240,25 @@ OVERNIGHT_CASES=(
   "dragonstorm 5 5005  300 20"
   "dragonstorm 5 6006  300 20"
   "dragonstorm 5 7007  300 20"
+  # auras: full burn-tier 1000g x 4 seeds -- it is cheap enough (see SMOKE block) that the deep
+  # decks still own the makespan. Budgets are split on MEASUREMENT, not by mode convention:
+  #   d5 stays at the gate budget 20 because it is CONVERGED there -- re-running all four overnight
+  #     seeds at budget 80 reproduced all four play digests BYTE-IDENTICALLY (96deaf67/40d23059/
+  #     1422766f/d0945e74) for ~the same wall time. Generosity at d5 is provably zero-value here.
+  #   d3 gets the generous 80 (the burn/th overnight level): unlike d5 it is NOT converged at 10 --
+  #     budget 80 moved every seed's digest and shaved ~0.004 avg turns. That is noise on the
+  #     metric, but it is real extra state exploration, which is what the overnight budget is for.
+  #     Cost measured at 0.066 s/game vs 0.023 (2.8x) = ~4 min single-thread across the 4 seeds.
+  "auras   0 4004 2000 0"
+  "auras   0 5005 2000 0"
+  "auras   0 6006 2000 0"
+  "auras   0 7007 2000 0"
+  "auras   3 4004 1000 80"
+  "auras   3 5005 1000 80"
+  "auras   3 6006 1000 80"
+  "auras   3 7007 1000 80"
+  "auras   5 4004 1000 20"
+  "auras   5 5005 1000 20"
+  "auras   5 6006 1000 20"
+  "auras   5 7007 1000 20"
 )

@@ -24,6 +24,27 @@ Ground truth is recorded by running a mode and, once inspected, promoting it wit
 | hinata  | 0     | -      | 1000  | ~0s         | ~48% win at d0 |
 | hinata  | 3     | 10     | 400   | ~237s (1thr) | **~0.59 s/game, tail-inclusive** — post max-mana gate (commit 9229b25); was ~40x this pre-gate |
 | hinata  | 5     | 20     | 300   | ~375s (1thr) | **~1.25 s/game** — the gate tamed the multi-minute combo turns |
+| auras   | 0     | -      | 1000  | ~1s         | ~99.7% win at d0; goldfish horizon is max_turns=8 |
+| auras   | 3     | 10     | 2000  | ~47s (1thr) | **~0.023 s/game**; at budget 80 it is ~0.066 s/game (2.8x) |
+| auras   | 5     | 20     | 1200  | ~10s (1thr) | **~0.0086 s/game** — CHEAPER than its own d3, see note below |
+
+### Auras: why d5 costs less than d3, and why its budgets differ per depth
+
+Measured 2026-07-28 (single-thread, 4 overnight seeds). Two Auras-specific facts drive
+its matrix entries:
+
+- **d5 is cheaper than d3.** The d5 case drops the `depth` key so the profile's
+  `value_play` block owns it (`target_depth 5`, `regime light`), routing the leaf
+  through the O(1) value model; the d0/d3 coverage cases carry `ignore_play_profile`
+  and so pay full heuristic rollouts. Hence d5 ~0.0086 s/game vs d3 ~0.023 s/game.
+- **d5 is CONVERGED at budget 20.** Re-running all four overnight seeds at budget 80
+  reproduced every play digest **byte-identically** (96deaf67 / 40d23059 / 1422766f /
+  d0945e74) at the same wall time, so overnight generosity at d5 would be provably
+  zero-value — it stays at 20. d3 is *not* converged at 10 (budget 80 moved all four
+  digests, ~0.004 avg turns), so d3 takes the generous 80 overnight.
+
+No heavy tail at any of the seven suite seeds, which is why Auras carries burn-tier
+game counts (1000/seed deep) rather than the smaller th/hinata/dragonstorm sizing.
 
 ## The slivers heavy tail — read before sizing
 

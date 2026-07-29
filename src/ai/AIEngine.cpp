@@ -318,6 +318,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // pointer is non-owning (m_profile outlives the game) and propagates through every
     // deep copy / rollout trial (each a copy of this live state). See GameState::m_required_pieces.
     state.m_required_pieces = &m_profile.required_pieces;
+    state.m_discard_protect = m_profile.discard_protect;
 
     // Attach the deck's learned mid-game play evaluator (nothing to do with the mulligan itself --
     // this is just the first per-game hook that has BOTH the live state and the profile). Non-owning
