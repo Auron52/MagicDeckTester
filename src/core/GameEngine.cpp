@@ -377,6 +377,11 @@ void GameEngine::CombatPhase(GameState& state)
         }
     }
 
+    // Goblins attack-trigger self-pumps (Piledriver +2/+0 per other attacking Goblin; Muxus +1/+1
+    // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
+    // as until-end-of-turn temp bonuses. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.
+    ApplyAttackSelfPumps(state, state.active_player_index, atk_idx);
+
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Delegated to the
     // AIEngine (it owns BuildAvailableMana/TapForCost); the shared ApplyFirebreathing reads a pool
@@ -390,6 +395,7 @@ void GameEngine::CombatPhase(GameState& state)
     int total_combat_dmg = 0;
     const int opp_life_before = opp.life;                 // play-viewer event: "(before→after)"
     std::vector<std::string> atk_desc;                    // "<name> (<power>)" per attacker, real play only
+    std::vector<int> damaging_idx;                        // attackers that dealt >0 damage (Goblin Lackey)
     for (int idx : atk_idx)
     {
         Permanent* attacker = &state.battlefield[idx];
@@ -416,6 +422,7 @@ void GameEngine::CombatPhase(GameState& state)
         if (power > 0)
         {
             state.opponent_lost_life_this_turn = true;
+            damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
             // Lifelink (modeled): combat damage also gains the controller that much life.
             if (CreatureHasLifelink(*attacker, state))
             { state.players[state.active_player_index].life += power; }
@@ -445,6 +452,11 @@ void GameEngine::CombatPhase(GameState& state)
     // token) via CreateToken. Mirrors TurnSolver::SimulateCombat (rollout). attacker_ptrs still
     // holds the pre-token attacker pointers (read before any CreateToken).
     FireUtvaraAttackTokens(state, state.active_player_index, attacker_ptrs);
+
+    // Goblin Lackey: each attacker that dealt combat damage to the player may put a matching Goblin
+    // permanent from hand onto the battlefield (shared enter cascade). Fired AFTER Utvara so the
+    // pre-token attacker pointers above are already consumed. Mirrors TurnSolver::SimulateCombat.
+    FireCombatDamageCheatIntoPlay(state, state.active_player_index, damaging_idx);
 
     if (m_logger && total_combat_dmg > 0)
     {

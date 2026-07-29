@@ -2084,6 +2084,135 @@ inline void FireUtvaraAttackTokens(GameState& state, int controller,
     }
 }
 
+// ---- Goblins combat attack-trigger self-pumps (Piledriver / Muxus) -------------------------------
+// "Whenever this attacks, it gets +X/+Y until end of turn for each other <...>." Applied at
+// declare-attackers in BOTH worlds (executor CombatPhase + rollout SimulateCombat), writing
+// temp_power_bonus / temp_tough_bonus on the matching attacker so EffectivePower()/EffectiveToughness()
+// pick it up in the damage loop. `attacker_indices` are stable battlefield indices of the finalized
+// declared attackers (after any attack-trigger token creation). Two flavours, keyed by param:
+//   * Goblin Piledriver -- attack_pump_power_per_other_matching over subtypes_affected: +power per
+//     OTHER attacking creature whose subtype matches (self-excluded). Mirrors CountAttackTriggerLifeLoss.
+//   * Muxus -- attack_self_pump_per_other_subtype/_power/_tough: base is other CONTROLLED permanents
+//     (not just attackers) whose subtype matches (self-excluded).
+// Gated: an attacker whose def sets neither param is untouched -> every other deck byte-identical.
+inline void ApplyAttackSelfPumps(GameState& state, int controller,
+                                 const std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        Permanent& self = state.battlefield[idx];
+        if (self.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
+        if (!d) { continue; }
+        const CardParams& p = d->params;
+
+        // Piledriver: +power per OTHER attacking creature whose subtype is in subtypes_affected.
+        if (p.attack_pump_power_per_other_matching > 0 && !p.subtypes_affected.empty())
+        {
+            int others = 0;
+            for (int oidx : attacker_indices)
+            {
+                if (oidx == idx || oidx < 0 || oidx >= bf_size) { continue; }   // "each OTHER"
+                const Permanent& other = state.battlefield[oidx];
+                bool m = other.is_animated;   // animated land = every creature type
+                for (const std::string& sub : p.subtypes_affected)
+                {
+                    if (m) { break; }
+                    if (CardHasSubtype(other.card, sub)) { m = true; }
+                }
+                if (m) { ++others; }
+            }
+            self.temp_power_bonus += p.attack_pump_power_per_other_matching * others;
+        }
+
+        // Muxus: +power/+tough per OTHER permanent you control whose subtype matches.
+        if (!p.attack_self_pump_per_other_subtype.empty()
+            && (p.attack_self_pump_power != 0 || p.attack_self_pump_tough != 0))
+        {
+            int others = 0;
+            for (int j = 0; j < bf_size; ++j)
+            {
+                if (j == idx) { continue; }                            // "each OTHER"
+                const Permanent& q = state.battlefield[j];
+                if (q.controller_index != controller) { continue; }
+                if (q.is_animated
+                    || CardHasSubtype(q.card, p.attack_self_pump_per_other_subtype))
+                { ++others; }
+            }
+            self.temp_power_bonus += p.attack_self_pump_power * others;
+            self.temp_tough_bonus += p.attack_self_pump_tough * others;
+        }
+    }
+}
+
+// ---- Goblin Lackey: cheat a Goblin permanent into play on combat damage --------------------------
+// "Whenever this creature deals combat damage to a player, you may put a Goblin permanent card from
+// your hand onto the battlefield." Fired at the combat-damage step (both worlds) for each of the
+// controller's attackers that (a) has combat_damage_puts_subtype_from_hand non-empty and (b) dealt
+// positive combat damage (its index is in `damaging_attacker_indices`). For each, deterministically
+// cheat the HIGHEST-impact matching permanent from hand into play through the shared enter cascade
+// (OnDragonEnters + OnGoblinEnters -- mirroring PerformMuxusReveal), so the cheated body fires its own
+// ETB (Siege-Gang tokens, Muxus reveal, ...). Heuristic pick: highest mana value, tie-break higher
+// printed power then lower card number (deterministic; the human-play/viewer chooser is wired later).
+// Gated: no Lackey-flagged damaging attacker (or no matching hand card) -> no-op, other decks identical.
+inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
+                                          const std::vector<int>& damaging_attacker_indices)
+{
+    if (damaging_attacker_indices.empty()) { return; }
+    Player& ap = state.players[controller];
+    for (int idx : damaging_attacker_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& src = state.battlefield[idx];
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (!sd || sd->params.combat_damage_puts_subtype_from_hand.empty()) { continue; }
+        const std::vector<std::string>& want = sd->params.combat_damage_puts_subtype_from_hand;
+
+        // A "permanent card" = anything that is not an instant/sorcery. Must carry a matching subtype.
+        auto is_match = [&](const Card& c) -> bool {
+            if (c.IsInstant() || c.IsSorcery()) { return false; }
+            for (const std::string& sub : want) { if (CardHasSubtype(c, sub)) { return true; } }
+            return false;
+        };
+
+        int best = -1;
+        for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[h]);
+            const Card& hc = hd ? hd->card : ap.hand[h];
+            if (!is_match(hc)) { continue; }
+            if (best < 0) { best = h; continue; }
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(ap.hand[best]);
+            const Card& bc = bd ? bd->card : ap.hand[best];
+            const int hmv = hc.m_mana_cost.ManaValue(), bmv = bc.m_mana_cost.ManaValue();
+            const int hp  = hc.m_power.value_or(0),     bp  = bc.m_power.value_or(0);
+            if (hmv > bmv
+                || (hmv == bmv && hp > bp)
+                || (hmv == bmv && hp == bp && ap.hand[h].m_number < ap.hand[best].m_number))
+            { best = h; }
+        }
+        if (best < 0) { continue; }   // "may": nothing matching to put -> decline
+
+        Card raw = ap.hand[best];
+        ap.hand.erase(ap.hand.begin() + best);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+        Permanent perm;
+        perm.card              = d ? d->card : raw;
+        perm.card.m_number     = raw.m_number;
+        perm.controller_index  = controller;
+        perm.owner_index       = controller;
+        perm.entered_this_turn = true;
+        state.battlefield.push_back(perm);
+        const int slot = static_cast<int>(state.battlefield.size()) - 1;
+        OnDragonEnters(state, controller, slot);   // in case a put permanent is ever a Dragon
+        OnGoblinEnters(state, controller, slot);   // fire the put permanent's own Goblin ETB cascade
+    }
+}
+
 // Consume `cost` from a flat ManaPool (assumes pool.CanPay(cost) is true). Colored pips are paid
 // from their own colour first (wild covers a shortfall); generic is paid from off-colours / wild
 // first, red last, so scarce coloured mana is preserved for coloured firebreathing pips.
@@ -2652,6 +2781,70 @@ inline int PermanentManaYield(const Permanent& perm, const CardDefinition& def)
 {
     if (def.params.storage_land) { return perm.storage_counters; }
     return ManaProducedPerTap(def);
+}
+
+// --- Three Tree City scaled mana ability ------------------------------------------------------
+// "{2}, {T}: Choose a color. Add an amount of mana of that color equal to the number of creatures
+// you control of the chosen type." Modelled as an activated mana ability that pays a generic feeder
+// ({2}) + taps the land, then adds N mana of a SEARCH-CHOSEN single colour where N = creatures you
+// control. The chosen creature TYPE is simplified to "any creature you control" (Cavern of Souls
+// precedent for single-tribe decks). The basic "{T}: Add {C}" mode lives in `produces` (handled by
+// the normal source path). A card is a scaled-mana land iff it declares a subtype AND a positive
+// feeder cost; empty subtype -> not a scaled land, so every non-Three-Tree deck stays byte-identical.
+inline bool IsScaledManaLand(const CardDefinition& def)
+{
+    return !def.params.mana_per_creature_subtype.empty()
+        && def.params.mana_per_creature_feeder_generic > 0;
+}
+
+// N = creatures the active player controls (simplified any-creature count -- the chosen TYPE is
+// collapsed to "any creature" per the analysis-goblins spec). This is the raw yield of one scaled tap.
+inline int ScaledManaCreatureCount(const GameState& state)
+{
+    const int active = state.active_player_index;
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == active && p.card.IsCreature()) { ++n; } }
+    return n;
+}
+
+// Untapped generic mana available to FEED a scaled land's activation cost, summed over the active
+// player's OTHER untapped sources (the scaled land itself is tapped for the ability, so a scaled land
+// never feeds itself or another scaled land -- mirrors the ramp-filter no-chain rule). A ramp filter
+// has no free mode, so it is not a feeder. A crude per-source sum (enough to gate payability of {2}).
+inline int ScaledManaFeederMana(const GameState& state)
+{
+    const int active = state.active_player_index;
+    int total = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (IsScaledManaLand(*d) || d->params.ramp_filter) { continue; }
+        const bool is_src = (d->tmpl == CardTemplate::BasicLand)
+                         || (d->tmpl == CardTemplate::ManaDork && p.CanTap())
+                         || d->params.mana_rock;
+        if (!is_src) { continue; }
+        total += PermanentManaYield(p, *d);
+    }
+    return total;
+}
+
+// NET mana a scaled tap adds over its basic "{T}: Add {C}" mode. The scaled ability makes N of a
+// chosen colour for a {feeder} generic cost -> net (N - feeder). The basic mode already yields 1 {C},
+// so scaled is only worth taking when its net beats that (net >= 1, i.e. N >= feeder + 1 -- "3+
+// creatures" for the {2} feeder), and the extra colourless->colour upgrade makes net-1 strictly
+// better even at the tie. Returns the net WILD mana (>= 1, colour is search-chosen) when beneficial
+// AND a {feeder}-capable feeder exists, else 0 (the source falls back to its basic {C} tap).
+inline int ScaledManaNetYield(const GameState& state, const CardDefinition& def)
+{
+    if (!IsScaledManaLand(def)) { return 0; }
+    const int feeder = def.params.mana_per_creature_feeder_generic;
+    const int net    = ScaledManaCreatureCount(state) - feeder;
+    if (net < 1) { return 0; }                              // net <= 0 -> basic {C} is no worse
+    if (ScaledManaFeederMana(state) < feeder) { return 0; } // cannot pay the {feeder} generic
+    return net;
 }
 
 // A storage land is a live mana source only while charged (>= 1 counter). Non-storage sources are
@@ -3753,6 +3946,15 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         if (HasUntappedRampFeeder(state)) { ++pool.wild; }
         return;
     }
+    // Three Tree City scaled ability: "{2},{T}: add N of a chosen colour", N = creatures you control
+    // (any-creature simplification). Modelled like a ramp filter but with a {feeder}-generic feed and
+    // a board-count yield: when a feeder can pay the {feeder} and the net (N - feeder) beats the basic
+    // {C} tap, this source contributes that net as WILD (the colour is search-chosen). Otherwise it
+    // falls through to its basic "{T}: Add {C}" produces below. Empty subtype -> never taken here.
+    if (IsScaledManaLand(def))
+    {
+        if (int net = ScaledManaNetYield(state, def)) { pool.wild += net; return; }
+    }
     int amt = (yield_override >= 0) ? yield_override : ManaProducedPerTap(def);
     // Reflecting Pool: its colours are the union of the controller's other lands (empty -> adds
     // nothing, the solo-RP dead case). For every normal source this is the static produces[].
@@ -4676,6 +4878,18 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     const int active = state.active_player_index;
     const int n      = static_cast<int>(state.battlefield.size());
 
+    // Upper bound on one source's net mana, state-aware for the scaled land (SourceMaxNet has no
+    // GameState, so it under-counts Three Tree City's board-scaled net -> a losslessness violation
+    // that could prune a payable scaled line). The B&B gate needs an OVER-count, so take the larger
+    // of the static bound and the scaled net (N - feeder). Identity for every non-scaled source.
+    auto source_max_net = [&](const Permanent& pp, const CardDefinition& dd) -> int
+    {
+        int b = SourceMaxNet(pp, dd);
+        if (IsScaledManaLand(dd))
+        { b = std::max(b, ScaledManaCreatureCount(state) - dd.params.mana_per_creature_feeder_generic); }
+        return b;
+    };
+
     // Failure-state memo. The backtracker explores tap ORDERINGS, and many orderings converge on the
     // same (tapped-source set, floating pool) state -- once such a state is proven to admit no legal
     // payment, every other ordering reaching it also fails, so re-exploring it is pure waste. Caching
@@ -4745,7 +4959,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 if (!is_src) { continue; }
                 if (d->params.creature_mana_only && !for_creature) { continue; }
                 if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
-                untapped_max += SourceMaxNet(p, *d);
+                untapped_max += source_max_net(p, *d);
             }
         }
         if (floating.Total() + untapped_max < cost.ManaValue())
@@ -4819,7 +5033,7 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         std::vector<Counter> counters_snap;
         if (has_counters) { counters_snap = state.battlefield[i].counters; }
         const int storage_snap = state.battlefield[i].storage_counters;   // burst zeroes it (undo below)
-        const int src_max_net  = SourceMaxNet(state.battlefield[i], *def); // captured pre-tap (storage_snap-aware)
+        const int src_max_net  = source_max_net(state.battlefield[i], *def); // captured pre-tap (storage_snap-aware)
         const int life_snap = state.players[active].life;
         const int opp_life_snap = state.players[1 - active].life;   // for tap_opponent_lifegain undo
         const bool oll_snap = state.opponent_lost_life_this_turn;
@@ -4909,6 +5123,29 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 for (Color c : produces)
                 { CcoAuditTap(*def, c, for_creature);   // audit: `produces` is cco-stripped above
                   ManaPool f = floating; f.Add(c, amt); if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; } }
+            }
+            // Three Tree City scaled mode: "{feeder},{T}: add N of a chosen colour" (N = creatures you
+            // control). Offered IN ADDITION to the basic {C} tap above -- reached only if the basic tap
+            // did not lead to a payment. Requires >= {feeder} already-produced floating (fed by prior
+            // taps in this DFS ordering, like a ramp filter); consumes the {feeder} generic, then adds
+            // N of ONE chosen colour (branch over all five). Net (N - feeder) mana. Empty subtype (every
+            // non-scaled source) -> never entered, so byte-identical off Three Tree.
+            if (IsScaledManaLand(*def))
+            {
+                const int feeder = def->params.mana_per_creature_feeder_generic;
+                const int give   = ScaledManaCreatureCount(state);        // N of the chosen colour
+                if (give >= 1 && floating.Total() >= feeder)
+                {
+                    const Color cols[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+                    for (Color c : cols)
+                    {
+                        ManaPool f = floating; bool ok = true;
+                        for (int k = 0; k < feeder; ++k) { Color took; if (!ConsumeFloatingAny(f, took)) { ok = false; break; } }
+                        if (!ok) { break; }
+                        f.Add(c, give);
+                        if (activate(f)) { return true; }
+                    }
+                }
             }
         }
     }

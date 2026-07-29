@@ -1182,6 +1182,49 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         ap_ref.hand.push_back(sc.card);
     }
 
+    // Echo upkeep resolution (Mogg War Marshal {1}{R}, Stingscourger {3}{R}) -- executor world.
+    // "At the beginning of your upkeep, if this came under your control since your last upkeep,
+    // sacrifice it unless you pay its echo cost" (CR 702.29). This lives at the top of the pre-combat
+    // main rather than GameEngine::UpkeepStep because paying the echo taps lands through AIEngine's
+    // (private) mana API -- BuildAvailableMana + TapForCost, the byte-identical mirror of the rollout's
+    // TapForCostDirect -- so both worlds spend identical mana. Resolving here (before any land drop or
+    // cast, and before the search/ewins enumeration below) makes the tapped mana unavailable for this
+    // turn's plays and removes any declined body before combat -- functionally the upkeep timing for a
+    // goldfish. Guarded to pre_combat so a permanent that entered THIS turn is not charged until its
+    // next upkeep, and the per-permanent echo_resolved flag makes it idempotent (a no-op in-rollout,
+    // where SimulateEndAndStartNextTurn already resolved it). Heuristic (deterministic, no branch): a
+    // creature whose own death makes a replacement token (Mogg -- dies_watch_includes_self + a death
+    // token) DECLINES (net same body, saves mana); any other echo creature (Stingscourger) PAYS if
+    // affordable, else is sacrificed. Gated on echo_cost -> byte-identical for every non-echo deck.
+    if (is_pre_combat_main)
+    {
+        for (std::size_t i = 0; i < state.battlefield.size(); )
+        {
+            Permanent& p = state.battlefield[i];
+            if (p.controller_index != state.active_player_index || p.echo_resolved)
+            { ++i; continue; }
+            const CardDefinition* edef = CardDatabase::Instance().LookupCached(p.card);
+            if (!edef || !edef->params.echo_cost) { ++i; continue; }
+            p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
+            const CardParams& ep = edef->params;
+            const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
+            bool kept = false;
+            if (!self_token)
+            {
+                ManaPool avail = BuildAvailableMana(state);
+                kept = TapForCost(state, *ep.echo_cost, avail, /*for_creature=*/false);
+            }
+            if (kept) { ++i; continue; }
+            // Declined or unaffordable -> sacrifice; fire OnCreatureDies (Mogg's death token, etc.).
+            const Card dead = p.card;
+            const int  ctrl = p.controller_index;
+            state.players[ctrl].graveyard.push_back(dead);
+            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            OnCreatureDies(state, ctrl, dead);   // may append a token at the end -> safe (no echo_cost)
+            // Do not advance i: the erased slot now holds the next permanent.
+        }
+    }
+
     // Enumerate-all-earliest-wins dump (offline rule-miner; inert unless MTG_DUMP_EWINS).
     // Emitted here -- after the staged merge, before any play -- so the candidate set matches
     // what the search sees. One compact JSON line per real pre-combat decision (or only the

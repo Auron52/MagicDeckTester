@@ -275,6 +275,11 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
                 default: break;
             }
         }
+        // Three Tree City scaled ability yields a SEARCH-CHOSEN colour (any of W/U/B/R/G), so when it
+        // can fire (a feeder pays the {2} and its net beats the basic {C}) every colour is producible.
+        // Empty subtype on every board without the land -> byte-identical.
+        if (ScaledManaNetYield(state, *def) > 0)
+        { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
     }
     // Floating mana (turn-scoped reserve) also satisfies colored pips: a floated {U} pays a {U}
     // pip even when no untapped land produces blue. AvailableManaPool already credits floating into the
@@ -491,7 +496,9 @@ static bool HasUntappedFilterSource(const GameState& state)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && (d->params.is_filter || d->params.ramp_filter)) { return true; }
+        // Three Tree City's scaled tap is a colour conversion (feed {2} -> N chosen colour) the flat
+        // pool cannot fully express, so it too needs the real-payment affordability retry.
+        if (d && (d->params.is_filter || d->params.ramp_filter || IsScaledManaLand(*d))) { return true; }
     }
     return false;
 }
@@ -6416,6 +6423,11 @@ static void SimulateCombat(GameState& state)
         }
     }
 
+    // Goblins attack-trigger self-pumps (Piledriver +2/+0 per other attacking Goblin; Muxus +1/+1
+    // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
+    // as until-end-of-turn temp bonuses. Mirrors GameEngine::CombatPhase (executor). Gated inert.
+    ApplyAttackSelfPumps(state, active, atk_idx);
+
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, active) : 0;
@@ -6429,6 +6441,7 @@ static void SimulateCombat(GameState& state)
 
     std::vector<const Permanent*> attackers;
     attackers.reserve(atk_idx.size());
+    std::vector<int> damaging_idx;   // attackers that dealt >0 damage (Goblin Lackey cheat)
     for (int idx : atk_idx)
     {
         Permanent& p = state.battlefield[idx];
@@ -6452,6 +6465,7 @@ static void SimulateCombat(GameState& state)
         if (power > 0)
         {
             state.opponent_lost_life_this_turn = true;
+            damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
             // Lifelink (modeled): the enchanted creature's damage also gains its controller that
             // much life. Inert vs the passive opponent's clock, tracked for life-total decks.
             if (CreatureHasLifelink(p, state)) { state.players[active].life += power; }
@@ -6471,6 +6485,11 @@ static void SimulateCombat(GameState& state)
     // token) via CreateToken. Mirrors GameEngine::CombatPhase (executor). `attackers` still holds
     // the pre-token attacker pointers (FireUtvaraAttackTokens reads them before any CreateToken).
     FireUtvaraAttackTokens(state, active, attackers);
+
+    // Goblin Lackey: each attacker that dealt combat damage to the player may put a matching Goblin
+    // permanent from hand onto the battlefield (shared enter cascade). Fired AFTER Utvara so the
+    // pre-token attacker pointers above are already consumed. Mirrors GameEngine::CombatPhase.
+    FireCombatDamageCheatIntoPlay(state, active, damaging_idx);
 }
 
 
@@ -6670,6 +6689,43 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
                         def->params.upkeep_token_toughness,
                         def->params.upkeep_token_subtypes);
         }
+    }
+
+    // Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): "At the beginning of your upkeep, if this
+    // came under your control since your last upkeep, sacrifice it unless you pay its echo cost."
+    // (CR 702.29). The FIRST upkeep an echo permanent's controller takes after it entered resolves the
+    // obligation (Permanent::echo_resolved flips true here regardless of outcome, so no later upkeep
+    // re-charges it). Deterministic heuristic (the search need not branch echo): a creature whose OWN
+    // death makes a replacement token (Mogg War Marshal -- dies_watch_includes_self + a death token)
+    // DECLINES -- sacrificing it fires OnCreatureDies for a fresh 1/1, net the same body while saving
+    // the mana; any other echo creature (Stingscourger) PAYS if it can afford the cost, else is
+    // sacrificed. This is the rollout/search world; it mirrors the executor block at the top of
+    // AIEngine::TakeTurn using TapForCostDirect (the byte-identical mirror of AIEngine::TapForCost)
+    // and OnCreatureDies -> lockstep. Gated on echo_cost, so it is a no-op for every non-echo deck.
+    for (std::size_t i = 0; i < state.battlefield.size(); )
+    {
+        Permanent& p = state.battlefield[i];
+        if (p.controller_index != state.active_player_index || p.echo_resolved)
+        { ++i; continue; }
+        const CardDefinition* edef = CardDatabase::Instance().LookupCached(p.card);
+        if (!edef || !edef->params.echo_cost) { ++i; continue; }
+        p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
+        const CardParams& ep = edef->params;
+        const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
+        bool kept = false;
+        if (!self_token)
+        {
+            // Pay the echo to keep the body (taps real lands -> unavailable for this turn's plays).
+            kept = TapForCostDirect(state, *ep.echo_cost, /*for_creature=*/false);
+        }
+        if (kept) { ++i; continue; }
+        // Declined or unaffordable -> sacrifice; fire OnCreatureDies (Mogg's death token, etc.).
+        const Card dead = p.card;
+        const int  ctrl = p.controller_index;
+        state.players[ctrl].graveyard.push_back(dead);
+        state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+        OnCreatureDies(state, ctrl, dead);   // may append a token at the end -> safe (no echo_cost)
+        // Do not advance i: the erased slot now holds the next permanent.
     }
 
     // Draw

@@ -52,6 +52,16 @@ struct Permanent
                                             // "nontoken Dragon" gate reads this so a created 5/5 Dragon
                                             // token re-pings Scourge but never re-triggers Lathliss
                                             // (loop-safe). Set true in every CreateToken path.
+    bool      echo_resolved        = false; // Echo (Mogg War Marshal, Stingscourger; CardParams::echo_cost).
+                                            // "At the beginning of your upkeep, if this came under your
+                                            // control since your last upkeep, sacrifice it unless you pay
+                                            // its echo cost." Instead of flagging it at every enter site,
+                                            // this starts false and the FIRST upkeep its controller takes
+                                            // after it entered flips it true after resolving the pay-or-
+                                            // sacrifice decision -- so no later upkeep re-charges echo. Only
+                                            // read for a permanent whose card has a non-empty echo_cost, so
+                                            // it is inert (never inspected) for every non-echo deck ->
+                                            // byte-identical.
 
     int  EffectivePower()     const;
     int  EffectiveToughness() const;

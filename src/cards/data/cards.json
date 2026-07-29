@@ -2030,6 +2030,309 @@
             "oracle_text": "{T}: Add {G}. // Boulderloft Pathway: {T}: Add {W}. [Modal double-faced LAND: play EITHER Branchloft ({G}) OR Boulderloft ({W}); the chosen face enters untapped and taps for its one colour, committing to one colour like the real card. In hand it counts as its FRONT colour ({G}) for mulligan/colour eval (minor disclosed simplification); the played battlefield face is exact.]",
             "template": "basic_land",
             "parameters": { "produces": ["G"], "mdfc_back_name": "Boulderloft Pathway", "mdfc_back_produces": ["W"] }
+        },
+        {
+            "name": "Goblin King",
+            "mana_cost": "{1}{R}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Other Goblins get +1/+1 and have mountainwalk. (They can't be blocked as long as defending player controls a Mountain.) [Mountainwalk lord grant INERT in goldfishing (evasion vs a passive non-blocking opponent); the +1/+1 Goblin lord is modelled.]",
+            "template": "lord_effect",
+            "parameters": {
+                "subtypes_affected": ["Goblin"],
+                "power_bonus": 1,
+                "tough_bonus": 1,
+                "lord_excludes_self": true
+            }
+        },
+        {
+            "name": "Goblin Chieftain",
+            "mana_cost": "{1}{R}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin"],
+            "keywords": ["Haste"],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Haste\nOther Goblin creatures you control get +1/+1 and have haste. [Self haste (live) + a +1/+1 and haste Goblin lord: the stat buff via lord_effect, the haste grant via grants_haste to Goblins.]",
+            "template": "lord_effect",
+            "parameters": {
+                "subtypes_affected": ["Goblin"],
+                "power_bonus": 1,
+                "tough_bonus": 1,
+                "lord_excludes_self": true,
+                "grants_haste": true
+            }
+        },
+        {
+            "name": "Goblin Warchief",
+            "mana_cost": "{1}{R}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin", "Warrior"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Goblin spells you cast cost {1} less to cast.\nGoblins you control have haste. [Subtype cost reducer via reduces_spell_subtype (Goblin spells cost {1} less) + a haste grant to your Goblins via grants_haste. No stat buff.]",
+            "template": "lord_effect",
+            "parameters": {
+                "subtypes_affected": ["Goblin"],
+                "grants_haste": true,
+                "reduces_spell_subtype": "Goblin"
+            }
+        },
+        {
+            "name": "Goblin Piledriver",
+            "mana_cost": "{1}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin", "Warrior"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 2,
+            "oracle_text": "Protection from blue\nWhenever Goblin Piledriver attacks, it gets +2/+0 until end of turn for each other attacking Goblin. [Protection from blue INERT in goldfishing (no opponent blue sources/targeting); the attack-trigger +2/+0 per other attacking Goblin is modelled via attack_pump_power_per_other_matching (self-excluded).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "attack_pump_power_per_other_matching": 2,
+                "subtypes_affected": ["Goblin"]
+            }
+        },
+        {
+            "name": "Goblin Matron",
+            "mana_cost": "{2}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "When Goblin Matron enters, you may search your library for a Goblin card, reveal that card, put it into your hand, then shuffle. [ETB tutor for a Goblin card to hand (subtype match) via tutor_to_hand + tutor_types [Goblin] + tutor_shuffle_after.]",
+            "template": "custom",
+            "parameters": {
+                "tutor_to_hand": true,
+                "tutor_types": ["Goblin"],
+                "tutor_shuffle_after": true
+            }
+        },
+        {
+            "name": "Mogg War Marshal",
+            "mana_cost": "{1}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin", "Warrior"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Echo {1}{R} (At the beginning of your upkeep, if this came under your control since your last upkeep, sacrifice it unless you pay its echo cost.)\nWhen Mogg War Marshal enters, create a 1/1 red Goblin creature token.\nWhen Mogg War Marshal dies, create a 1/1 red Goblin creature token. [ETB and self-death each create a 1/1 red Goblin (etb_self_creates_tokens + dies self-watch token). Echo {1}{R} modelled as an upkeep pay-or-sacrifice decision; letting echo lapse sacrifices it, whose death token nets the same body.]",
+            "template": "custom",
+            "parameters": {
+                "etb_self_creates_tokens": 1,
+                "etb_created_token_power": 1,
+                "etb_created_token_toughness": 1,
+                "etb_created_token_subtypes": ["Goblin"],
+                "echo_cost": "{1}{R}",
+                "dies_watch_includes_self": true,
+                "dies_trigger_creates_tokens": 1,
+                "dies_token_power": 1,
+                "dies_token_toughness": 1,
+                "dies_token_subtypes": ["Goblin"]
+            }
+        },
+        {
+            "name": "Siege-Gang Commander",
+            "mana_cost": "{3}{R}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "When Siege-Gang Commander enters, create three 1/1 red Goblin creature tokens.\n{1}{R}, Sacrifice a Goblin: Siege-Gang Commander deals 2 damage to any target. [ETB makes three 1/1 red Goblins (etb_self_creates_tokens 3); repeatable sac-a-Goblin burn outlet ({1}{R}, sac a Goblin -> 2 damage to any target -> face in goldfishing).]",
+            "template": "custom",
+            "parameters": {
+                "etb_self_creates_tokens": 3,
+                "etb_created_token_power": 1,
+                "etb_created_token_toughness": 1,
+                "etb_created_token_subtypes": ["Goblin"],
+                "sac_creature_outlet": true,
+                "sac_creature_cost": "{1}{R}",
+                "sac_creature_requires_subtype": "Goblin",
+                "sac_outlet_damage": 2,
+                "targeting": "any"
+            }
+        },
+        {
+            "name": "Skirk Prospector",
+            "mana_cost": "{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Sacrifice a Goblin: Add {R}. [Repeatable no-tap sac-a-Goblin (incl. itself) mana outlet -> add {R}, via sac_creature_outlet with sac_outlet_add_mana.]",
+            "template": "custom",
+            "parameters": {
+                "sac_creature_outlet": true,
+                "sac_creature_requires_subtype": "Goblin",
+                "sac_outlet_add_mana_color": "R",
+                "sac_outlet_add_mana_amount": 1
+            }
+        },
+        {
+            "name": "Krenko, Mob Boss",
+            "mana_cost": "{2}{R}{R}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Goblin", "Warrior"],
+            "keywords": [],
+            "power": 3,
+            "toughness": 3,
+            "oracle_text": "{T}: Create X 1/1 red Goblin creature tokens, where X is the number of Goblins you control. [Tap (no mana) to create one 1/1 red Goblin per Goblin you control at resolution (incl. self + tokens), via tap_creates_tokens_per_controlled_subtype. Summoning-sick gating via CanTap. Legend rule modelled but inert (deck runs 1 copy).]",
+            "template": "custom",
+            "parameters": {
+                "tap_creates_tokens_per_controlled_subtype": "Goblin",
+                "tap_created_token_power": 1,
+                "tap_created_token_toughness": 1,
+                "tap_created_token_subtypes": ["Goblin"]
+            }
+        },
+        {
+            "name": "Pashalik Mons",
+            "mana_cost": "{2}{R}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Goblin", "Warrior"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Whenever Pashalik Mons or another Goblin you control dies, Pashalik Mons deals 1 damage to any target.\n{3}{R}, Sacrifice a Goblin: Create two 1/1 red Goblin creature tokens. [Death trigger: per Goblin death (incl. its own) deal 1 to any target -> face, via dies_watch_subtype Goblin + includes_self + dies_trigger_damage 1. Sac outlet {3}{R}, sac a Goblin -> create two 1/1 red Goblins (no damage rider). Legend rule modelled but inert (1 copy).]",
+            "template": "custom",
+            "parameters": {
+                "dies_watch_subtype": "Goblin",
+                "dies_watch_includes_self": true,
+                "dies_trigger_damage": 1,
+                "sac_creature_outlet": true,
+                "sac_creature_cost": "{3}{R}",
+                "sac_creature_requires_subtype": "Goblin",
+                "sac_outlet_creates_tokens": 2,
+                "sac_outlet_token_power": 1,
+                "sac_outlet_token_toughness": 1,
+                "sac_outlet_token_subtypes": ["Goblin"]
+            }
+        },
+        {
+            "name": "Rundvelt Hordemaster",
+            "mana_cost": "{1}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin", "Warrior"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Other Goblins you control get +1/+1.\nWhenever a Goblin you control dies, exile the top card of your library. Until the end of your next turn, you may play that card if it's a Goblin card. [A +1/+1 Goblin lord (lord_effect). On any Goblin death (incl. its own) impulse-exile the top card; if it's a Goblin card it is playable until end of your next turn (dies_trigger_impulse_exile + dies_impulse_requires_subtype Goblin + expiry next turn); a non-Goblin stays exiled (inert deck-thinning).]",
+            "template": "lord_effect",
+            "parameters": {
+                "subtypes_affected": ["Goblin"],
+                "power_bonus": 1,
+                "tough_bonus": 1,
+                "lord_excludes_self": true,
+                "dies_watch_subtype": "Goblin",
+                "dies_watch_includes_self": true,
+                "dies_trigger_impulse_exile": true,
+                "dies_impulse_requires_subtype": "Goblin",
+                "dies_impulse_expiry_next_turn": true
+            }
+        },
+        {
+            "name": "Goblin Lackey",
+            "mana_cost": "{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Whenever Goblin Lackey deals combat damage to a player, you may put a Goblin permanent card from your hand onto the battlefield. [Combat-damage-to-player trigger cheats a Goblin permanent from hand onto the battlefield via combat_damage_puts_subtype_from_hand [Goblin] (shared enter cascade).]",
+            "template": "custom",
+            "parameters": {
+                "combat_damage_puts_subtype_from_hand": ["Goblin"]
+            }
+        },
+        {
+            "name": "Muxus, Goblin Grandee",
+            "mana_cost": "{4}{R}{R}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Goblin", "Noble"],
+            "keywords": [],
+            "power": 4,
+            "toughness": 4,
+            "oracle_text": "Whenever Muxus, Goblin Grandee enters or attacks, reveal the top six cards of your library. Put all Goblin creature cards with mana value 5 or less from among them onto the battlefield and the rest on the bottom of your library in a random order. [ETB reveal-6, put all Goblin creatures MV<=5 onto the battlefield (each through the shared Goblin enter cascade), rest to bottom -- via etb_reveal_count 6 + etb_reveal_put_subtypes [Goblin] + creatures_only + max_mv 5. The 'or attacks' reveal is modelled as an attack-trigger +1/+1 per other Goblin (attack_self_pump_per_other_subtype), a body proxy for the on-attack recursion. NO Menace (4/4). Legend rule modelled but inert (deck runs up to 3, only 1 resolves at a time).]",
+            "template": "custom",
+            "parameters": {
+                "etb_reveal_count": 6,
+                "etb_reveal_put_subtypes": ["Goblin"],
+                "etb_reveal_put_creatures_only": true,
+                "etb_reveal_put_max_mv": 5,
+                "attack_self_pump_per_other_subtype": "Goblin",
+                "attack_self_pump_power": 1,
+                "attack_self_pump_tough": 1
+            }
+        },
+        {
+            "name": "Goblin Chainwhirler",
+            "mana_cost": "{R}{R}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin", "Warrior"],
+            "keywords": ["First Strike"],
+            "power": 3,
+            "toughness": 3,
+            "oracle_text": "First strike\nWhen Goblin Chainwhirler enters, it deals 1 damage to each creature and each planeswalker your opponents control and each opponent. [First strike INERT in goldfishing (no blockers). ETB pings 1 to each opponent (face, race-relevant) and each opponent creature/planeswalker via etb_damage_each_opponent (only matters vs opponent spawn tokens).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "etb_damage_each_opponent": 1
+            }
+        },
+        {
+            "name": "Twinshot Sniper",
+            "mana_cost": "{3}{R}",
+            "types": ["Artifact", "Creature"],
+            "subtypes": ["Goblin", "Archer"],
+            "keywords": ["Reach"],
+            "power": 2,
+            "toughness": 3,
+            "oracle_text": "Reach\nWhen Twinshot Sniper enters, it deals 2 damage to any target.\nChannel — {1}{R}, Discard Twinshot Sniper: It deals 2 damage to any target. [Reach INERT in goldfishing (no attackers to block). ETB 2 to any target -> face (etb_damage_any 2). Channel from hand: {1}{R}, discard -> 2 damage to any target -> face (channel_cost + channel_damage), a from-hand burn action.]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "etb_damage_any": 2,
+                "channel_cost": "{1}{R}",
+                "channel_damage": 2,
+                "targeting": "any"
+            }
+        },
+        {
+            "name": "Stingscourger",
+            "mana_cost": "{1}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Goblin", "Warrior"],
+            "keywords": [],
+            "power": 2,
+            "toughness": 2,
+            "oracle_text": "Echo {3}{R} (At the beginning of your upkeep, if this came under your control since your last upkeep, sacrifice it unless you pay its echo cost.)\nWhen Stingscourger enters, return target creature an opponent controls to its owner's hand. [ETB bounce a target opponent creature is GOLDFISH-INERT (passive opponent creatures never block/attack). Echo {3}{R} modelled as an upkeep pay-or-sacrifice decision.]",
+            "template": "custom",
+            "parameters": {
+                "echo_cost": "{3}{R}"
+            }
+        },
+        {
+            "name": "Three Tree City",
+            "mana_cost": "",
+            "types": ["Land"],
+            "supertypes": ["Legendary"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "As Three Tree City enters, choose a creature type.\n{T}: Add {C}.\n{2}, {T}: Add an amount of {R} equal to the number of creatures you control of the chosen type. [ETB type-choice simplified to Goblin (Cavern precedent). Base mode {T}: Add {C}. Board-scaled mode: {2}, {T} -> N colored mana where N = creatures you control of the chosen type, via mana_per_creature_subtype (Goblin) + mana_per_creature_feeder_generic 2. Legendary (deck runs 1 copy).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["C"],
+                "mana_per_creature_subtype": "Goblin",
+                "mana_per_creature_feeder_generic": 2
+            }
         }
     ]
 }

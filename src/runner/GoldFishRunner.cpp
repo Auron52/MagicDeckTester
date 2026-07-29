@@ -62,6 +62,13 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     NOT need main 1 for combat pump (it plays no growing board), so main 1
         //     stays available but the win lands via the post-combat main.
         if (def->params.hinata_cost_reducer)        { return true; }
+
+        //   * GOBLIN LACKEY (combat-damage cheat-into-play): dealing combat damage puts a Goblin
+        //     permanent from hand onto the battlefield — a resource GENERATED DURING COMBAT (2c-bis).
+        //     The cheated body (and any it draws in via a Muxus/Siege-Gang ETB) is only usable in a
+        //     post-combat main, so the deck needs a searched second main to sequence its follow-ups.
+        //     Mirrors spectacle_cost / hinata_cost_reducer detection above.
+        if (!def->params.combat_damage_puts_subtype_from_hand.empty()) { return true; }
     }
     return false;
 }

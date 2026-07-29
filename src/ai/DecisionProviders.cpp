@@ -2583,11 +2583,28 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
+    bool goblin = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+
+        // Goblins archetype: any Goblin-specific gated param marks the deck. Goblin Matron carries
+        // tutor_to_hand, which would otherwise trip the anti-lifegain signature below and MISROUTE
+        // the whole deck to AntiLifegainProvider. Detecting a Goblin signature here lets us route
+        // the deck to GenericProvider before the anti check (see the goblin return below). Every
+        // one of these fields is new + gated (0/false/empty inert), so ONLY a deck carrying the new
+        // Goblin params sets this -- all existing decks are byte-identical.
+        if (p.sac_creature_outlet
+            || !p.tap_creates_tokens_per_controlled_subtype.empty()
+            || !p.reduces_spell_subtype.empty()
+            || !p.dies_watch_subtype.empty()
+            || !p.combat_damage_puts_subtype_from_hand.empty()
+            || p.etb_self_creates_tokens > 0)
+        {
+            goblin = true;
+        }
 
         // Dragonstorm (Storm ritual-storm): the tutor-to-battlefield put IS the archetype signature
         // (a {8}{R} that puts a wave of Dragons in). Owns the put-order / selection heuristic.
@@ -2622,6 +2639,12 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
+    // Goblins ride GenericProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
+    // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
+    // It sits below dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those
+    // signatures (no tutor_to_battlefield / hinata_cost_reducer), so exclusivity is preserved: this
+    // branch fires iff the deck has a Goblin gated param, which no other suite deck does.
+    if (goblin) { return g_generic; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }
