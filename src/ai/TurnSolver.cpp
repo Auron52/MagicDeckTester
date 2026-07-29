@@ -2287,6 +2287,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         }
     }
 
+    // --- Goblins tribal activated outlets (Krenko tap / sac-a-Goblin / Twinshot channel) ---
+    {
+        constexpr int DMG = 100;
+        // Krenko, Mob Boss: one TapForTokens per untapped, non-summoning-sick Krenko. Free ({T} only).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            if (p.entered_this_turn && !p.card.HasKeyword(Keyword::Haste)
+                && !HasHasteFromLords(p.card, state.battlefield, state.active_player_index)) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || pd->params.tap_creates_tokens_per_controlled_subtype.empty()) { continue; }
+            const int x = CountControlledSubtype(state, state.active_player_index,
+                              pd->params.tap_creates_tokens_per_controlled_subtype);
+            if (x <= 0) { continue; }
+            Action a;
+            a.kind           = Action::Kind::TapForTokens;
+            a.card_name      = p.card.m_name;
+            a.hand_index     = -1;
+            a.cost           = ManaCost{};                 // {0}: the cost is the tap
+            a.sac_source_id  = p.card.m_number;
+            a.eval           = x * pd->params.tap_created_token_power * DMG;   // X bodies ~ board value
+            a.is_noncreature = false;
+            actions.push_back(std::move(a));
+        }
+
+        // NOTE (serial follow-up): the COSTED outlets -- SacCreatureOutlet (Siege-Gang damage /
+        // Pashalik tokens) and Channel (Twinshot from-hand burn) -- are enumerated + applied in the
+        // next serial pass, together with their real mana DEDUCTION at apply. Enumerating them before
+        // their apply pays mana would let the subset select a positive-eval action the rollout never
+        // realises (fd-diverge / over-rating), so they are deliberately NOT emitted yet. Skirk's MANA
+        // outlet (sac a Goblin -> {R}) integrates with the mana solver in that same pass. Krenko's
+        // free TapForTokens above is complete. See docs/design/analysis-goblins.md.
+    }
+
     // Resolve each action's card definition ONCE so the per-node subset evaluators read the
     // cached pointer instead of re-hashing card_name. Equivalent to Lookup(card_name) at each
     // use site (every kind's card_name is a real DB name: hand-cast/vial creature/dig source).
@@ -6161,6 +6195,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
     apply_plan_actions(plan.actions, plan.searched_order);
 
+    // Krenko, Mob Boss taps AFTER the main casts, so X = Goblins you control counts this turn's
+    // developed board (the tokens then count toward Skirk fuel / a later attack). Free ({T} only).
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::TapForTokens)
+        { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
+    }
+
     // Play the deferred Karoo bounce land now -- after the main casts have tapped the lands we
     // needed, so BounceKarooLand returns a SPENT land at no tempo cost (see karoo_deferred
     // above). Done before the deferred-cantrip re-solve so the drop is taken (lands_played==1)
@@ -7958,6 +8000,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                   + "#" + std::to_string(act.sac_source_id)); break;
                 case Action::Kind::DigDraw:  break;  // human-play only; not a plan.actions signature key
                 case Action::Kind::PlayLand: break;  // never appears in plan.actions
+                // Krenko tap: key on which source so a tap plan is distinct from a no-tap plan.
+                case Action::Kind::TapForTokens:
+                    u.push_back("KRENKO#" + std::to_string(act.sac_source_id)); break;
+                // Costed outlets (not yet emitted -- see the enumeration note); future signature keys.
+                case Action::Kind::SacCreatureOutlet:
+                    msf.push_back("SAC#" + std::to_string(act.sac_source_id)
+                                  + ">" + std::to_string(act.sac_victim_id)); break;
+                case Action::Kind::Channel:
+                    s.push_back("CHANNEL#" + act.card_name); break;
             }
         }
         std::sort(v.begin(), v.end());

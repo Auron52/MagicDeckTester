@@ -1941,6 +1941,103 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
     }
 }
 
+// ---- Goblins tribal activated outlets (Krenko tap / sac-a-Goblin / Twinshot channel) -----------
+// Count creatures `controller` controls whose subtype includes `sub` (tokens count; they carry the
+// subtype). Used by Krenko's X and Piledriver-style scans.
+inline int CountControlledSubtype(const GameState& state, int controller, const std::string& sub)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.IsCreature() && CardHasSubtype(p.card, sub)) { ++n; } }
+    return n;
+}
+
+// Krenko, Mob Boss "{T}: Create X 1/1 Goblins, X = Goblins you control." Tap the source, then create
+// X tokens (X counted at resolution, including Krenko himself + existing tokens). Lockstep both worlds.
+inline void ApplyTapForTokens(GameState& state, int controller, int source_id)
+{
+    const CardDefinition* d = nullptr;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        if (p.card.m_number != source_id) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (!pd || pd->params.tap_creates_tokens_per_controlled_subtype.empty()) { continue; }
+        p.tapped = true;   // {T} cost
+        d = pd;
+        break;
+    }
+    if (!d) { return; }
+    const int x = CountControlledSubtype(state, controller,
+                                         d->params.tap_creates_tokens_per_controlled_subtype);
+    for (int k = 0; k < x; ++k)   // CreateToken reallocates battlefield; `d` (DB cache ptr) stays valid
+    {
+        CreateToken(state, controller, d->params.tap_created_token_power,
+                    d->params.tap_created_token_toughness, d->params.tap_created_token_subtypes);
+    }
+}
+
+// Sacrifice-a-creature outlet (Skirk Prospector -> {R}; Siege-Gang -> 2 face damage; Pashalik -> two
+// tokens). The mana cost is paid by the caller (subset math); here we SACRIFICE the chosen victim,
+// apply the outlet payload from the source's params, and fire the victim's death-watchers.
+inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id)
+{
+    const CardParams* op = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == source_id)
+        {
+            const CardDefinition* od = CardDatabase::Instance().LookupCached(p.card);
+            if (od && od->params.sac_creature_outlet) { op = &od->params; }
+            break;
+        }
+    }
+    if (!op) { return; }
+    // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
+    Card victim; bool found = false;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        Permanent& q = state.battlefield[i];
+        if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+        if (q.card.m_number != victim_id) { continue; }
+        if (!op->sac_creature_requires_subtype.empty()
+            && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
+        victim = q.card; found = true;
+        state.players[controller].graveyard.push_back(q.card);
+        state.battlefield.erase(state.battlefield.begin() + i);
+        break;
+    }
+    if (!found) { return; }
+    // Payload (copy the scalars before CreateToken invalidates `op` via battlefield realloc).
+    const std::string mana_color = op->sac_outlet_add_mana_color;
+    const int mana_amt = op->sac_outlet_add_mana_amount, dmg = op->sac_outlet_damage;
+    const int ntok = op->sac_outlet_creates_tokens, tp = op->sac_outlet_token_power,
+              tt = op->sac_outlet_token_toughness;
+    const std::vector<std::string> tsub = op->sac_outlet_token_subtypes;
+    if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
+    if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
+    for (int k = 0; k < ntok; ++k) { CreateToken(state, controller, tp, tt, tsub); }
+    OnCreatureDies(state, controller, victim);   // Pashalik ping / Rundvelt impulse / Mogg death token
+}
+
+// Twinshot Sniper "Channel -- {1}{R}, Discard this card: 2 damage to any target." From HAND: discard
+// the card (mana cost paid by the caller) -> channel_damage to the opponent face. Lockstep.
+inline void ApplyChannel(GameState& state, int controller, int hand_index,
+                         const std::string& card_name, int damage)
+{
+    Player& ap = state.players[controller];
+    int idx = -1;
+    if (hand_index >= 0 && hand_index < static_cast<int>(ap.hand.size())
+        && ap.hand[hand_index].m_name == card_name) { idx = hand_index; }
+    else { for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+           { if (ap.hand[i].m_name == card_name) { idx = i; break; } } }
+    if (idx < 0) { return; }
+    ap.graveyard.push_back(ap.hand[idx]);
+    ap.hand.erase(ap.hand.begin() + idx);
+    state.players[1 - controller].life -= damage;
+    state.opponent_lost_life_this_turn = true;
+}
+
 // Utvara Hellkite: "Whenever a Dragon you control attacks, create a 6/6 Dragon token." Per
 // ATTACKING matching creature. Called at declare-attackers with the finalized `attackers`. Tokens
 // enter UNTAPPED + summoning-sick via CreateToken (so each fires OnDragonEnters: Scourge ping /

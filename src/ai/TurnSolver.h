@@ -41,6 +41,17 @@ struct Action
                              // ritual_float mana of chosen_float_color into state.floating_mana. cost
                              // = {0} (the cost is tap+sac). Emitted only when sac_for_mana_amount > 0;
                              // one variant per candidate colour (mutually exclusive per source).
+        TapForTokens,        // Krenko, Mob Boss "{T}: Create X 1/1 Goblins, X = Goblins you control":
+                             // tap the source (sac_source_id = its card.m_number); at apply, create
+                             // (controlled matching-subtype permanents) tokens. cost = {0} (tap only).
+                             // Emitted only when tap_creates_tokens_per_controlled_subtype is set.
+        SacCreatureOutlet,   // Skirk Prospector / Siege-Gang / Pashalik: pay sac_creature_cost + Sacrifice
+                             // one controlled creature with sac_creature_requires_subtype (sac_source_id),
+                             // then apply the outlet payload (float mana / face damage / create tokens).
+                             // The sacrificed creature fires OnCreatureDies. cost = sac_creature_cost.
+        Channel,             // Twinshot Sniper "Channel -- {1}{R}, Discard this: 2 damage to any target":
+                             // a from-HAND ability. Pay channel_cost + discard card_name (hand_index) ->
+                             // channel_damage to the opponent face. cost = channel_cost.
     };
 
     Kind        kind           = Kind::CastFromHand;
@@ -105,6 +116,10 @@ struct Action
                                        // (a stable per-instance id). Used to keep the colour variants
                                        // of ONE source mutually exclusive in the subset enumeration
                                        // (you can sac a given Lotus only once). 0 for every other kind.
+                                       // TapForTokens / SacCreatureOutlet: the OUTLET permanent's id
+                                       // (Krenko / Skirk / Siege-Gang / Pashalik).
+    int         sac_victim_id  = 0;    // SacCreatureOutlet: the sacrificed creature's card.m_number
+                                       // (the chosen Goblin fed to the outlet). 0 for every other kind.
     int         soulfire_own_targets = 0;
                                        // Soulfire Eruption: searched COUNT of own creatures to add
                                        // as extra targets (0..#own creatures). CollectActions emits
