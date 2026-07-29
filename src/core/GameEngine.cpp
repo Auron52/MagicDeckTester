@@ -608,12 +608,17 @@ void GameEngine::CheckStateBasedActions(GameState& state)
     while (changed)
     {
         changed = false;
+        // Collect creatures that died this pass so their death-watchers (Pashalik ping / Rundvelt
+        // impulse / Mogg death token) fire AFTER the erase loop -- OnCreatureDies may append tokens
+        // to the battlefield, which would invalidate the iterator if fired mid-loop.
+        std::vector<std::pair<Card, int>> died;   // (dead card, controller)
         for (std::vector<Permanent>::iterator it = state.battlefield.begin();
              it != state.battlefield.end(); )
         {
             Permanent& p = *it;
             bool destroy = p.marked_for_destruction;
-            if (p.card.IsCreature())
+            const bool is_creature = p.card.IsCreature();
+            if (is_creature)
             {
                 if (p.EffectiveToughness() <= 0) { destroy = true; }
                 if (p.damage >= p.EffectiveToughness()
@@ -621,11 +626,16 @@ void GameEngine::CheckStateBasedActions(GameState& state)
             }
             if (destroy)
             {
+                if (is_creature) { died.emplace_back(p.card, p.controller_index); }
                 state.players[p.controller_index].graveyard.push_back(p.card);
                 it = state.battlefield.erase(it);
                 changed = true;
             }
             else { ++it; }
+        }
+        for (const std::pair<Card, int>& d : died)
+        {
+            OnCreatureDies(state, d.second, d.first);   // no-op unless a death-watcher is in play
         }
     }
 }

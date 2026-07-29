@@ -487,6 +487,26 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
         }
         cost.generic = std::max(0, cost.generic - color_reduction);
     }
+    // Goblin Warchief-style SUBTYPE cost reduction: each permanent you control whose
+    // reduces_spell_subtype matches a SUBTYPE of THIS spell reduces its GENERIC by 1 (floored at 0,
+    // stacks per copy). The subtype twin of reduces_spell_color above; gated on a reducer in play so
+    // decks without one are byte-identical. (Same-turn-cast Warchief handled by the in-order walk.)
+    if (!def.card.m_subtypes.empty())
+    {
+        int subtype_reduction = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || pd->params.reduces_spell_subtype.empty()) { continue; }
+            const std::string& rs = pd->params.reduces_spell_subtype;
+            for (const std::string& cs : def.card.m_subtypes)
+            {
+                if (cs == rs) { ++subtype_reduction; break; }
+            }
+        }
+        cost.generic = std::max(0, cost.generic - subtype_reduction);
+    }
     // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
     // sites where the whole generic, incl. X, is known -- CastSpellFromHand / apply_one).
     if (!def.card.m_mana_cost.has_x)

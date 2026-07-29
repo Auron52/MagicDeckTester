@@ -1741,6 +1741,206 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
     }
 }
 
+// ---- Goblins tribal ETB cascade (self-tokens / ETB burn / Matron tutor / Muxus reveal) --------
+// One shared hook, called IDENTICALLY from the executor (EffectHandler::EnterBattlefield) and the
+// rollout (TurnSolver creature-enter) so the ETB effects stay lockstep (fd-diverge otherwise).
+// Every branch is gated on a param, so a non-Goblin permanent entering is an early no-op.
+//
+// `entered_index` is the just-entered permanent's battlefield slot; `chosen_tutor` (optional) is a
+// search/human-chosen Goblin Matron fetch target (empty -> the provider's TutorCandidates pick).
+inline void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp);
+inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
+                           const std::string& chosen_tutor = "")
+{
+    if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    const CardDefinition* def =
+        CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
+    if (!def) { return; }
+    const CardParams& p = def->params;
+
+    // (1) ETB fixed-token creation ("create N 1/1 red Goblin tokens" -- Mogg War Marshal 1,
+    //     Siege-Gang Commander 3). Uses the shared etb_created_token_* spec.
+    for (int k = 0; k < p.etb_self_creates_tokens; ++k)
+    {
+        CreateToken(state, controller, p.etb_created_token_power,
+                    p.etb_created_token_toughness, p.etb_created_token_subtypes);
+    }
+
+    // (2) ETB single-target burn ("deals N damage to any target" -> opponent face; Twinshot 2)
+    //     and (3) "each opponent" ping (Chainwhirler 1: face + each opponent creature/pw).
+    const int opp = 1 - controller;
+    const int face_dmg = p.etb_damage_any + p.etb_damage_each_opponent;
+    if (face_dmg > 0)
+    {
+        state.players[opp].life -= face_dmg;
+        state.opponent_lost_life_this_turn = true;
+    }
+    if (p.etb_damage_each_opponent > 0)
+    {
+        // Ping each opponent creature; remove any that die (opponent has creatures only from spawn
+        // effects, so this is a no-op in the usual passive goldfish). No SBA re-entrancy: we prune
+        // inline. entered_index belongs to `controller`, never the opponent, so it is untouched.
+        for (std::size_t i = state.battlefield.size(); i-- > 0; )
+        {
+            Permanent& q = state.battlefield[i];
+            if (q.controller_index != opp || !q.card.IsCreature()) { continue; }
+            q.damage += p.etb_damage_each_opponent;
+            if (q.damage >= q.EffectiveToughness()
+                && !q.card.HasKeyword(Keyword::Indestructible))
+            {
+                state.players[q.owner_index].graveyard.push_back(q.card);
+                state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            }
+        }
+    }
+
+    // (4) ETB tutor to hand keyed on subtype (Goblin Matron). Reuses PerformTutor; the chosen
+    //     target rides in from the cast (search/human) or falls back to the provider's pick.
+    if ((p.tutor_to_hand || p.tutor_to_top) && !p.tutor_types.empty()
+        && p.etb_reveal_count == 0)   // Muxus (reveal) is handled below, not as a tutor
+    {
+        PerformTutor(state, controller, p, chosen_tutor, def->card.m_name.str());
+    }
+
+    // (5) ETB reveal-and-cheat (Muxus): reveal top N, put matching creatures MV<=k onto the
+    //     battlefield (each firing its OWN ETB via this same cascade), rest to the library bottom.
+    if (p.etb_reveal_count > 0)
+    {
+        PerformMuxusReveal(state, controller, p);
+    }
+}
+
+// Muxus, Goblin Grandee: "reveal the top six cards; put all Goblin creature cards with mana value
+// 5 or less onto the battlefield and the rest on the bottom of your library in a random order."
+// Deterministic reveal order (the printed "random" bottom order is unobservable in goldfishing --
+// same accepted collapse as etb_dig). Each put creature enters through OnGoblinEnters, so a
+// revealed Siege-Gang/Mogg fires its own ETB tokens (the cascade). Lockstep executor + rollout.
+inline void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp)
+{
+    Player& ap = state.players[controller];
+    if (pp.etb_reveal_count <= 0 || ap.library.empty()) { return; }
+
+    // Draw the top N off the library (removes them); DrawN caps at the library size.
+    std::vector<Card> revealed;
+    ap.library.DrawN(pp.etb_reveal_count, revealed);
+    if (revealed.empty()) { return; }
+    std::vector<int>         revealed_nums;
+    std::vector<std::string> revealed_names;
+    for (const Card& rc : revealed)
+    { revealed_nums.push_back(rc.m_number); revealed_names.push_back(rc.m_name.str()); }
+
+    auto matches_put = [&](const Card& raw) -> bool {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+        const Card& c = d ? d->card : raw;
+        if (pp.etb_reveal_put_creatures_only && !c.IsCreature()) { return false; }
+        if (pp.etb_reveal_put_max_mv > 0 && c.m_mana_cost.ManaValue() > pp.etb_reveal_put_max_mv)
+        { return false; }
+        for (const std::string& sub : pp.etb_reveal_put_subtypes)
+        { if (CardHasSubtype(c, sub)) { return true; } }
+        return pp.etb_reveal_put_subtypes.empty();
+    };
+
+    if (g_reveal_logger)
+    { g_reveal_logger->LogReveal("Muxus (reveal)", revealed_nums, revealed_names, {}, {}); }
+
+    // Put matching cards onto the battlefield (each fires its own ETB cascade); bottom the rest.
+    for (const Card& raw : revealed)
+    {
+        if (matches_put(raw))
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+            Permanent perm;
+            perm.card              = d ? d->card : raw;
+            perm.card.m_number     = raw.m_number;
+            perm.controller_index  = controller;
+            perm.owner_index       = controller;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+            const int slot = static_cast<int>(state.battlefield.size()) - 1;
+            OnDragonEnters(state, controller, slot);   // in case a put creature is ever a Dragon
+            OnGoblinEnters(state, controller, slot);   // fire the put creature's own Goblin ETB
+        }
+        else
+        {
+            ap.library.push_back(raw);   // to the bottom of the library
+        }
+    }
+}
+
+// ---- Goblins tribal death-watcher ("whenever [this or] another <subtype> you control dies") ------
+// `dead_card` (a creature controlled by `dead_controller`) has just LEFT the battlefield and must
+// ALREADY be removed before calling. Fires, for every matching watcher, its effect: damage to the
+// opponent's face, token creation, and/or impulse-exile of the top library card. Called at every
+// death site -- the executor SBA (GameEngine::CheckStateBasedActions) and each sacrifice outlet
+// (lockstep executor + rollout). Gated: a death with no watcher in play is a no-op.
+//
+// Approximation (documented): simultaneous multi-death (two watched creatures dying in the SAME SBA
+// pass) resolves each against the survivors, so a watcher that dies alongside another watched
+// creature does not see that co-death. This is essentially unreachable in goldfishing (our creatures
+// die one-at-a-time via sacrifice outlets, never in combat vs the passive opponent).
+inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card)
+{
+    std::vector<CardParams> reactions;
+    // Other watchers still in play under the same controller: "another <subtype> you control dies".
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != dead_controller) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (!wd) { continue; }
+        const CardParams& wp = wd->params;
+        if (wp.dies_watch_subtype.empty()) { continue; }   // self-only watchers can't fire for others
+        if (CardHasSubtype(dead_card, wp.dies_watch_subtype)) { reactions.push_back(wp); }
+    }
+    // The dead creature's OWN watcher (self death), if it includes itself.
+    {
+        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
+        if (dd && dd->params.dies_watch_includes_self)
+        {
+            const CardParams& dp = dd->params;
+            const bool self_ok = dp.dies_watch_subtype.empty()
+                              || CardHasSubtype(dead_card, dp.dies_watch_subtype);
+            if (self_ok) { reactions.push_back(dp); }
+        }
+    }
+    if (reactions.empty()) { return; }
+
+    const int opp = 1 - dead_controller;
+    Player&   ap  = state.players[dead_controller];
+    for (const CardParams& wp : reactions)
+    {
+        if (wp.dies_trigger_damage > 0)
+        {
+            state.players[opp].life -= wp.dies_trigger_damage;   // "1 damage to any target" -> face
+            state.opponent_lost_life_this_turn = true;
+        }
+        for (int k = 0; k < wp.dies_trigger_creates_tokens; ++k)
+        {
+            CreateToken(state, dead_controller, wp.dies_token_power,
+                        wp.dies_token_toughness, wp.dies_token_subtypes);
+        }
+        if (wp.dies_trigger_impulse_exile && !ap.library.empty())
+        {
+            // "Exile the top card; if it's a <type> <subtype> card, you may cast it until end of your
+            // next turn" (Rundvelt: Goblin creature). A match is staged into hand (playable, expiry);
+            // a non-match stays exiled and inert (nothing reads exile in goldfish -> deck thinning).
+            Card c = ap.library.DrawTop();
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            const Card& cc = cd ? cd->card : c;
+            bool ok = true;
+            if (!wp.dies_impulse_requires_type.empty())
+            { ok = ok && CardMatchesTypeName(cc, wp.dies_impulse_requires_type); }
+            if (!wp.dies_impulse_requires_subtype.empty())
+            { ok = ok && CardHasSubtype(cc, wp.dies_impulse_requires_subtype); }
+            if (ok)
+            {
+                c.m_is_staged     = true;
+                c.m_staged_expiry = state.turn_number + (wp.dies_impulse_expiry_next_turn ? 1 : 0);
+                ap.hand.push_back(std::move(c));
+            }
+        }
+    }
+}
+
 // Utvara Hellkite: "Whenever a Dragon you control attacks, create a 6/6 Dragon token." Per
 // ATTACKING matching creature. Called at declare-attackers with the finalized `attackers`. Tokens
 // enter UNTAPPED + summoning-sick via CreateToken (so each fires OnDragonEnters: Scourge ping /

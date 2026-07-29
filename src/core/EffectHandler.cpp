@@ -25,6 +25,11 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // subtype return) so all other decks are byte-identical. Mirrors the rollout's creature-enter
     // site in TurnSolver::ApplyPlanDirect (lockstep).
     OnDragonEnters(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1);
+    // Goblins tribal ETB cascade (self-tokens / ETB burn / Matron tutor / Muxus reveal). No-op for
+    // every non-Goblin permanent (early param return). entry.tutor_target carries a search/human
+    // Goblin Matron fetch target (empty -> the provider's pick).
+    OnGoblinEnters(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1,
+                   entry.tutor_target);
 }
 
 void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)

@@ -2716,6 +2716,7 @@ ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& sta
 {
     // Delegates to the UNIFIED EffectiveSpellCost (ManaPayment.cpp) -- formerly a byte-identical
     // twin of TurnSolver's file-static EffectiveCost kept in lockstep by comment discipline.
+    // (Goblin Warchief's reduces_spell_subtype reduction lives inside EffectiveSpellCost.)
     return EffectiveSpellCost(def, state, copies);
 }
 

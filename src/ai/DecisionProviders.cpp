@@ -341,6 +341,10 @@ int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) 
     // (Aria with the Remedy now gone) HEAL the opponent. Ranked alongside the self-damage tier.
     if (def.params.destroy_all_enchantments)   { return 30; }
     if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature()) { return 5; }
+    // Goblin Warchief (a subtype cost reducer): cast it just BEFORE other creatures (8 < 10) so a
+    // same-turn Goblin it discounts is enumerated after the reducer is online. Gated on the param,
+    // so every non-reducer deck keeps creatures at 10 (byte-identical).
+    if (!def.params.reduces_spell_subtype.empty()) { return 8; }
     if (def.card.IsCreature())                 { return 10; }
     return 20;
 }

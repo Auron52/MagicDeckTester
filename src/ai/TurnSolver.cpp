@@ -396,16 +396,20 @@ static int SameTurnReducerGenericCredit(const GameState& state, const std::vecto
     (void)state;
     // Count same-turn reducers per colour in the subset (only "R" exists today, but generalise).
     int red = 0, white = 0, blue = 0, black = 0, green = 0;
+    // Count same-turn SUBTYPE reducers (Goblin Warchief) per subtype string.
+    std::unordered_map<std::string, int> sub_reducers;
     for (int j : sel)
     {
         const CardDefinition* d = cands[j].def;
-        if (!d || d->params.reduces_spell_color.empty()) { continue; }
+        if (!d) { continue; }
+        if (!d->params.reduces_spell_subtype.empty()) { ++sub_reducers[d->params.reduces_spell_subtype]; }
+        if (d->params.reduces_spell_color.empty()) { continue; }
         const std::string& rc = d->params.reduces_spell_color;
         if      (rc == "R") { ++red; }   else if (rc == "W") { ++white; }
         else if (rc == "U") { ++blue; }  else if (rc == "B") { ++black; }
         else if (rc == "G") { ++green; }
     }
-    if (red + white + blue + black + green == 0) { return 0; }
+    if (red + white + blue + black + green == 0 && sub_reducers.empty()) { return 0; }
     int credit = 0;
     for (int j : sel)
     {
@@ -418,8 +422,19 @@ static int SameTurnReducerGenericCredit(const GameState& state, const std::vecto
         if (mc.blue  > 0) { reducers += blue; }
         if (mc.black > 0) { reducers += black; }
         if (mc.green > 0) { reducers += green; }
-        // A reducer never discounts itself (its own printed cost carries no matching colour pip -- a
-        // Ruby Medallion is {2}, colourless), so no self-exclusion is needed here.
+        // Subtype reducers (Warchief): a Goblin spell gets -1 per OTHER same-turn Warchief in the
+        // subset. Warchief is itself a Goblin, so exclude the spell's own reducer copy (a lone
+        // Warchief never discounts itself; two Warchiefs each discount the other).
+        for (const std::string& cs : dj->card.m_subtypes)
+        {
+            auto it = sub_reducers.find(cs);
+            if (it == sub_reducers.end()) { continue; }
+            int n = it->second;
+            if (dj->params.reduces_spell_subtype == cs) { --n; }   // exclude self
+            reducers += n;
+        }
+        // A colour reducer never discounts itself (a Ruby Medallion is {2}, colourless); Warchief's
+        // own subtype match is excluded above.
         credit += std::min(reducers, cands[j].cost.generic);
     }
     return credit;
@@ -600,6 +615,7 @@ static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state,
 {
     // Delegates to the UNIFIED EffectiveSpellCost (ManaPayment.cpp) -- formerly a byte-identical
     // twin of AIEngine::EffectiveCost kept in lockstep by comment discipline.
+    // (Goblin Warchief's reduces_spell_subtype reduction lives inside EffectiveSpellCost.)
     return EffectiveSpellCost(def, state, copies);
 }
 
@@ -5354,6 +5370,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // ping toward lethal. No-op for every non-Dragon creature -> other decks byte-identical.
             OnDragonEnters(state, state.active_player_index,
                            static_cast<int>(state.battlefield.size()) - 1);
+
+            // Goblins tribal ETB cascade (rollout side, lockstep with EffectHandler): self-tokens,
+            // ETB burn, Matron tutor (search target = tutor_target), Muxus reveal. No-op for every
+            // non-Goblin creature -> other decks byte-identical.
+            OnGoblinEnters(state, state.active_player_index,
+                           static_cast<int>(state.battlefield.size()) - 1, tutor_target);
 
             // ETB library dig (Acclaimed Contender): performed inline so the clairvoyant
             // rollout sees the dug card in hand for later turns. The real game does the
@@ -12358,6 +12380,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         p.wild += sac_wild;                  // Lotus Bloom & co. (see sac_wild above)
         bool spec = s.opponent_lost_life_this_turn;
         std::vector<std::string> reducers;   // reduces_spell_color of Medallions cast so far in-line
+        std::vector<std::string> sub_reducers; // reduces_spell_subtype of Warchiefs cast so far in-line
         bool ok = true;
         for (const PendingCast& pc : pending)
         {
@@ -12376,6 +12399,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                         || (rc == "G" && mc.green > 0);
                     if (matches) { ++disc; }
                 }
+                // Goblin Warchief same-turn subtype discount (generic -1 per matching Warchief in-line).
+                for (const std::string& rs : sub_reducers)
+                {
+                    for (const std::string& cs : pc.def->card.m_subtypes)
+                    {
+                        if (cs == rs) { ++disc; break; }
+                    }
+                }
                 cost.generic = std::max(0, cost.generic - disc);
             }
             if (!p.CanPay(cost)) { ok = false; break; }
@@ -12389,6 +12420,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             if (pc.def && !pc.def->params.reduces_spell_color.empty())
             {
                 reducers.push_back(pc.def->params.reduces_spell_color);
+            }
+            if (pc.def && !pc.def->params.reduces_spell_subtype.empty())
+            {
+                sub_reducers.push_back(pc.def->params.reduces_spell_subtype);
             }
             if (pc.def && deals_opponent_damage(*pc.def)) { spec = true; }
         }

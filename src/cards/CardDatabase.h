@@ -673,6 +673,146 @@ struct CardParams
     // (PerformLightPawsAttach: max power contribution; disclosed 6a as a heuristic-narrowed target, like a
     // cascade target) -- a future search-decision candidate. false => no trigger.
     bool aura_cast_tutor_attach = false;
+
+    // ================= Goblins tribal (mono-red aggro/sacrifice) =================
+    // Every field below is gated (0/false/empty = inert) so decks that don't run Goblins
+    // stay byte-identical. See docs/design/analysis-goblins.md for the per-card mapping.
+
+    // Subtype cost reducer (Goblin Warchief: "Goblin spells you cast cost {1} less"). A
+    // permanent you control whose reduces_spell_subtype matches a SUBTYPE of the spell being
+    // cast reduces that spell's GENERIC cost by 1, floored at 0, stacking per copy. The subtype
+    // twin of reduces_spell_color (which keys on colour pips); matching scans def.card.m_subtypes
+    // like affinity_for_subtype. Empty = not a reducer.
+    std::string reduces_spell_subtype;
+
+    // ETB fixed-token creation ("When THIS creature enters, create N 1/1 red Goblin tokens" —
+    // Mogg War Marshal 1, Siege-Gang Commander 3). > 0 fires at THIS permanent's own ETB, using
+    // the shared etb_created_token_power/toughness/subtypes spec (Lathliss). A card sets exactly
+    // one ETB-token gate, so reusing that spec never conflicts with etb_other_subtype_creates_tokens.
+    int etb_self_creates_tokens = 0;
+
+    // ETB single-target burn ("When THIS enters, it deals N damage to any target" — Twinshot
+    // Sniper 2). Collapses to the opponent's face vs a passive goldfish (optimal). > 0 gates it.
+    int etb_damage_any = 0;
+    // ETB "each opponent" ping ("deals N damage to each opponent and each creature/planeswalker
+    // they control" — Goblin Chainwhirler 1). N to the opponent face (race-relevant, via the
+    // OpponentGainsLife life-loss path so the win projection sees it) AND N to each permanent the
+    // opponent controls (only nonzero when the opponent has spawn tokens). > 0 gates it.
+    int etb_damage_each_opponent = 0;
+
+    // ETB reveal-and-cheat (Muxus, Goblin Grandee: "reveal the top six cards; put all Goblin
+    // creature cards with mana value 5 or less onto the battlefield and the rest on the bottom").
+    // etb_reveal_count > 0 gates it: reveal the top N, put every revealed card matching
+    // etb_reveal_put_subtypes (and, if etb_reveal_put_creatures_only, a Creature) with mana value
+    // <= etb_reveal_put_max_mv onto the battlefield through the shared enter cascade (each put
+    // creature's own ETB fires); the rest go to the library bottom (deterministic order — the
+    // printed "random order" is unobservable in goldfishing, same rationale as etb_dig).
+    int                      etb_reveal_count = 0;
+    std::vector<std::string> etb_reveal_put_subtypes;
+    bool                     etb_reveal_put_creatures_only = false;
+    int                      etb_reveal_put_max_mv = 0;
+
+    // Attack self-pump, base = other ATTACKING matching creatures (Goblin Piledriver: "Whenever
+    // this attacks, it gets +2/+0 until end of turn for each other attacking Goblin"). > 0 gates
+    // it; +power per OTHER declared attacker whose subtype is in subtypes_affected (self-excluded),
+    // applied at declare-attackers in both worlds (mirrors attack_trigger_life_loss's scan).
+    int attack_pump_power_per_other_matching = 0;
+    // Attack self-pump, base = other CONTROLLED matching permanents (Muxus: "Whenever Muxus
+    // attacks, it gets +1/+1 until end of turn for each other Goblin you control"). Non-empty
+    // subtype gates it; +power/+tough per OTHER permanent you control whose subtype matches.
+    std::string attack_self_pump_per_other_subtype;
+    int         attack_self_pump_power = 0;
+    int         attack_self_pump_tough = 0;
+
+    // Permanent death-watcher ("Whenever [this or] another <subtype> you control dies, ...").
+    // Fired from the SBA creature-death site (executor) and the rollout death path (lockstep) for
+    // every creature the controller controls that dies while this permanent is in play. Gates:
+    //   dies_watch_subtype  -- subtype the dead creature must have (empty = watch ONLY this
+    //                          permanent's own death, e.g. Mogg War Marshal's self-death token).
+    //   dies_watch_includes_self -- also fire on this permanent's own death (Pashalik/Rundvelt/
+    //                          Mogg = true). With an empty subtype this must be true to fire.
+    // Effects per matching death (any combination):
+    //   dies_trigger_damage           -- deal N to any target -> opponent face (Pashalik 1).
+    //   dies_trigger_creates_tokens   -- create N tokens (Rundvelt 1, Mogg 1) with dies_token_*.
+    //   dies_trigger_impulse_exile    -- exile the top library card; if it matches
+    //                          dies_impulse_requires_type/subtype, it is playable until end of
+    //                          this turn (dies_impulse_expiry_next_turn=false) or end of the
+    //                          controller's NEXT turn (true — Rundvelt) via the staged-exile zone.
+    // These use the dies_* prefix to avoid colliding with death_trigger_damage (Searing Blood,
+    // a spell-target-death rider, unrelated).
+    std::string              dies_watch_subtype;
+    bool                     dies_watch_includes_self = false;
+    int                      dies_trigger_damage = 0;
+    int                      dies_trigger_creates_tokens = 0;
+    int                      dies_token_power = 0;
+    int                      dies_token_toughness = 0;
+    std::vector<std::string> dies_token_subtypes;
+    bool                     dies_trigger_impulse_exile = false;
+    std::string              dies_impulse_requires_type;     // "Creature"
+    std::string              dies_impulse_requires_subtype;  // "Goblin"
+    bool                     dies_impulse_expiry_next_turn = false;
+
+    // Sacrifice-a-creature activated outlets. A permanent you control offers an activated ability
+    // whose cost is {sac_creature_cost} mana + Sacrifice one creature you control whose subtype is
+    // sac_creature_requires_subtype (self-inclusive). Distinct from sac_for_mana_amount (Lotus:
+    // tap + sac SELF for mana). Enumerated as new Action kinds; each activation sacrifices one
+    // chosen creature (firing its own dies-watchers) and applies exactly one payload:
+    //   sac_outlet_add_mana_color  -- MANA ability (no stack): float this colour (Skirk Prospector
+    //                                 "Sacrifice a Goblin: Add {R}"; sac_creature_cost empty).
+    //   sac_outlet_damage          -- deal N to any target -> face (Siege-Gang "{1}{R}, Sacrifice a
+    //                                 Goblin: 2 damage to any target").
+    //   sac_outlet_creates_tokens  -- create N tokens with sac_outlet_token_* (Pashalik "{3}{R},
+    //                                 Sacrifice a Goblin: create two 1/1 Goblins").
+    bool                     sac_creature_outlet = false;
+    std::optional<ManaCost>  sac_creature_cost;
+    std::string              sac_creature_requires_subtype;
+    std::string              sac_outlet_add_mana_color;   // "R" for Skirk (empty = not a mana outlet)
+    int                      sac_outlet_add_mana_amount = 0;
+    int                      sac_outlet_damage = 0;
+    int                      sac_outlet_creates_tokens = 0;
+    int                      sac_outlet_token_power = 0;
+    int                      sac_outlet_token_toughness = 0;
+    std::vector<std::string> sac_outlet_token_subtypes;
+
+    // Krenko, Mob Boss: "{T}: Create X 1/1 red Goblin tokens, where X = the number of Goblins you
+    // control." Non-empty subtype gates a {T}-activated (no mana) ability creating N tokens where
+    // N = permanents you control whose subtype matches (counted at resolution, incl. self+tokens).
+    // Summoning sickness applies (Krenko is a creature — the tap respects CanTap()).
+    std::string              tap_creates_tokens_per_controlled_subtype;
+    int                      tap_created_token_power = 0;
+    int                      tap_created_token_toughness = 0;
+    std::vector<std::string> tap_created_token_subtypes;
+
+    // Channel (Twinshot Sniper: "Channel — {1}{R}, Discard this card: it deals 2 damage to any
+    // target"). A from-HAND activated ability (not a battlefield permanent): pay channel_cost +
+    // discard this card from hand -> deal channel_damage to the opponent face. Enumerated as a
+    // hand action when the card is in hand. Empty cost / 0 damage = inert.
+    std::optional<ManaCost>  channel_cost;
+    int                      channel_damage = 0;
+
+    // Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): "At the beginning of your upkeep, if
+    // this came under your control since your last upkeep, sacrifice it unless you pay its echo
+    // cost." Modelled as an upkeep pay-echo_cost-or-sacrifice decision. The pay-or-not is a real
+    // choice (Mogg's death token means NOT paying keeps a body while saving mana). Empty = no echo.
+    std::optional<ManaCost>  echo_cost;
+
+    // Goblin Lackey: "Whenever this creature deals damage to a player, you may put a Goblin
+    // permanent card from your hand onto the battlefield." Non-empty gates a combat-damage-to-
+    // player trigger: after this creature deals combat damage, optionally put a hand card whose
+    // subtype is in this list onto the battlefield (shared enter cascade). A "resource generated
+    // during combat" -> DeckUsesSecondMain returns true for a deck running it (2c-bis), enabling
+    // the post-combat second main so the cheated creature's follow-up plays are evaluated. WHICH
+    // card is a search/viewer decision (bucket B).
+    std::vector<std::string> combat_damage_puts_subtype_from_hand;
+
+    // Three Tree City: "{2}, {T}: Choose a color. Add an amount of mana of that color equal to the
+    // number of creatures you control of the chosen type." Non-empty subtype gates a {T}-activated
+    // mana ability with a mana_per_creature_feeder generic cost, yielding N mana of a search-chosen
+    // colour where N = creatures you control whose subtype matches. The chosen creature TYPE is
+    // simplified to "any creature" (Cavern of Souls precedent — single-tribe decks). The basic
+    // "{T}: Add {C}" lives in `produces`. Empty = not a scaled-mana land.
+    std::string              mana_per_creature_subtype;
+    int                      mana_per_creature_feeder_generic = 0;   // {2}
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

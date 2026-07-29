@@ -545,5 +545,58 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.draw_on_aura_cast         = params.value("draw_on_aura_cast", false);
     p.aura_cast_tutor_attach    = params.value("aura_cast_tutor_attach", false);
 
+    // --- Goblins tribal ---
+    p.reduces_spell_subtype     = params.value("reduces_spell_subtype", std::string());
+    p.etb_self_creates_tokens   = params.value("etb_self_creates_tokens", 0);
+    p.etb_damage_any            = params.value("etb_damage_any", 0);
+    p.etb_damage_each_opponent  = params.value("etb_damage_each_opponent", 0);
+    p.etb_reveal_count          = params.value("etb_reveal_count", 0);
+    for (const std::string& s : params.value("etb_reveal_put_subtypes", json::array()))
+        p.etb_reveal_put_subtypes.push_back(s);
+    p.etb_reveal_put_creatures_only = params.value("etb_reveal_put_creatures_only", false);
+    p.etb_reveal_put_max_mv     = params.value("etb_reveal_put_max_mv", 0);
+    p.attack_pump_power_per_other_matching = params.value("attack_pump_power_per_other_matching", 0);
+    p.attack_self_pump_per_other_subtype   = params.value("attack_self_pump_per_other_subtype", std::string());
+    p.attack_self_pump_power    = params.value("attack_self_pump_power", 0);
+    p.attack_self_pump_tough    = params.value("attack_self_pump_tough", 0);
+    p.dies_watch_subtype        = params.value("dies_watch_subtype", std::string());
+    p.dies_watch_includes_self  = params.value("dies_watch_includes_self", false);
+    p.dies_trigger_damage       = params.value("dies_trigger_damage", 0);
+    p.dies_trigger_creates_tokens = params.value("dies_trigger_creates_tokens", 0);
+    p.dies_token_power          = params.value("dies_token_power", 0);
+    p.dies_token_toughness      = params.value("dies_token_toughness", 0);
+    for (const std::string& s : params.value("dies_token_subtypes", json::array()))
+        p.dies_token_subtypes.push_back(s);
+    p.dies_trigger_impulse_exile   = params.value("dies_trigger_impulse_exile", false);
+    p.dies_impulse_requires_type    = params.value("dies_impulse_requires_type", std::string());
+    p.dies_impulse_requires_subtype = params.value("dies_impulse_requires_subtype", std::string());
+    p.dies_impulse_expiry_next_turn = params.value("dies_impulse_expiry_next_turn", false);
+    p.sac_creature_outlet       = params.value("sac_creature_outlet", false);
+    if (params.contains("sac_creature_cost"))
+        p.sac_creature_cost = ManaCostFromString(params["sac_creature_cost"].get<std::string>());
+    p.sac_creature_requires_subtype = params.value("sac_creature_requires_subtype", std::string());
+    p.sac_outlet_add_mana_color = params.value("sac_outlet_add_mana_color", std::string());
+    p.sac_outlet_add_mana_amount = params.value("sac_outlet_add_mana_amount", 0);
+    p.sac_outlet_damage         = params.value("sac_outlet_damage", 0);
+    p.sac_outlet_creates_tokens = params.value("sac_outlet_creates_tokens", 0);
+    p.sac_outlet_token_power    = params.value("sac_outlet_token_power", 0);
+    p.sac_outlet_token_toughness = params.value("sac_outlet_token_toughness", 0);
+    for (const std::string& s : params.value("sac_outlet_token_subtypes", json::array()))
+        p.sac_outlet_token_subtypes.push_back(s);
+    p.tap_creates_tokens_per_controlled_subtype = params.value("tap_creates_tokens_per_controlled_subtype", std::string());
+    p.tap_created_token_power     = params.value("tap_created_token_power", 0);
+    p.tap_created_token_toughness = params.value("tap_created_token_toughness", 0);
+    for (const std::string& s : params.value("tap_created_token_subtypes", json::array()))
+        p.tap_created_token_subtypes.push_back(s);
+    if (params.contains("channel_cost"))
+        p.channel_cost = ManaCostFromString(params["channel_cost"].get<std::string>());
+    p.channel_damage            = params.value("channel_damage", 0);
+    if (params.contains("echo_cost"))
+        p.echo_cost = ManaCostFromString(params["echo_cost"].get<std::string>());
+    for (const std::string& s : params.value("combat_damage_puts_subtype_from_hand", json::array()))
+        p.combat_damage_puts_subtype_from_hand.push_back(s);
+    p.mana_per_creature_subtype       = params.value("mana_per_creature_subtype", std::string());
+    p.mana_per_creature_feeder_generic = params.value("mana_per_creature_feeder_generic", 0);
+
     return p;
 }
