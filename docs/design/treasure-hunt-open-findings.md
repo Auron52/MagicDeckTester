@@ -172,7 +172,15 @@ Dragonstorm 19, Knights 15), so there is no secondary land-quality signal anywhe
   exactly 0.0000 after. Candidate to revert to the `all` default, leaving only dragonstorm opted in.
 - **Auras `value_trust_depth = 5`** is provisional per its own note ("within 2-seed noise of
   UNSET"), from a 2-seed/400-game run, and is now baselined into the suite. Cheap to re-derive at
-  4 seeds.
+  4 seeds. **NOT implicated in the Auras d0 movement** — see next item.
+- **Auras d0 +0.0155 at the waves merge was a CORRECTNESS fix, not a regression** (user, 2026-07-29).
+  The `6afaee4` rebaseline commit message flags it as unexplained and names `value_trust_depth` as
+  the place to look; that lead is wrong, so do not chase it. The real cause is upstream's legend-rule
+  work (`b71e5e3` enforcing it as a state-based action, `46678a6` correcting the window): a bug had
+  let **two Light-Paws live simultaneously for part of a turn**, so the old baseline was collecting
+  two aura-tutor triggers off an illegal board state. The deck getting slower is it losing an
+  advantage it was never entitled to — the expected direction for a rules fix, and a reminder that a
+  d0 slowdown after a correctness change is not automatically a regression to investigate.
 - **Value leaf at unbounded budget** (reviewed and accepted as not worth chasing): at d5 with
   budget 0 the leaf preferred banking a cycling land as a tapped land drop over cycling it, losing a
   mull-to-one game it otherwise wins on T7. Confined to a pathological state at a non-shipped
