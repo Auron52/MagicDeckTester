@@ -2319,13 +2319,53 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             actions.push_back(std::move(a));
         }
 
-        // NOTE (serial follow-up): the COSTED outlets -- SacCreatureOutlet (Siege-Gang damage /
-        // Pashalik tokens) and Channel (Twinshot from-hand burn) -- are enumerated + applied in the
-        // next serial pass, together with their real mana DEDUCTION at apply. Enumerating them before
-        // their apply pays mana would let the subset select a positive-eval action the rollout never
-        // realises (fd-diverge / over-rating), so they are deliberately NOT emitted yet. Skirk's MANA
-        // outlet (sac a Goblin -> {R}) integrates with the mana solver in that same pass. Krenko's
-        // free TapForTokens above is complete. See docs/design/analysis-goblins.md.
+        // Costed VALUE outlets (Siege-Gang "{1}{R}, Sac a Goblin: 2 damage"; Pashalik "{3}{R}, Sac a
+        // Goblin: two 1/1 Goblins"): one action per (outlet source, candidate Goblin victim). The mana
+        // cost rides on a.cost so the subset math reserves it; the trailing apply pass pays it (both
+        // worlds) and only realises the effect if paid, so a stranded outlet is a no-op, not a phantom.
+        // Skirk's MANA outlet (sac_outlet_add_mana_color set) is NOT emitted here -- it floats mana and
+        // needs the mana-solver float path (separate follow-up); this pass is the value outlets only.
+        for (const Permanent& src : state.battlefield)
+        {
+            if (src.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || !sd->params.sac_creature_outlet) { continue; }
+            if (!sd->params.sac_outlet_add_mana_color.empty()) { continue; }   // Skirk mana outlet -> later
+            const std::string& need_sub = sd->params.sac_creature_requires_subtype;
+            for (const Permanent& v : state.battlefield)
+            {
+                if (v.controller_index != state.active_player_index || !v.card.IsCreature()) { continue; }
+                if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+                Action a;
+                a.kind           = Action::Kind::SacCreatureOutlet;
+                a.card_name      = src.card.m_name;
+                a.hand_index     = -1;
+                a.cost           = sd->params.sac_creature_cost.value_or(ManaCost{});
+                a.sac_source_id  = src.card.m_number;      // the outlet permanent
+                a.sac_victim_id  = v.card.m_number;        // the sacrificed Goblin
+                a.direct_damage  = sd->params.sac_outlet_damage;
+                a.eval           = (sd->params.sac_outlet_damage
+                                    + sd->params.sac_outlet_creates_tokens) * DMG;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
+        // Twinshot Sniper channel: a from-hand ability (pay channel_cost + discard -> 2 face damage).
+        for (int i = 0; i < n; ++i)
+        {
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            if (!cd || !cd->params.channel_cost.has_value() || cd->params.channel_damage <= 0) { continue; }
+            Action a;
+            a.kind           = Action::Kind::Channel;
+            a.card_name      = ap.hand[i].m_name;
+            a.hand_index     = i;
+            a.cost           = cd->params.channel_cost.value();
+            a.direct_damage  = cd->params.channel_damage;
+            a.eval           = cd->params.channel_damage * DMG;
+            a.is_noncreature = true;
+            actions.push_back(std::move(a));
+        }
     }
 
     // Resolve each action's card definition ONCE so the per-node subset evaluators read the
@@ -6208,6 +6248,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         if (a.kind == Action::Kind::TapForTokens)
         { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
+    }
+
+    // Costed sac outlets (Siege-Gang / Pashalik) + Twinshot channel: pay the mana cost from the pool
+    // left after the main casts (TapForCostDirect, the rollout pay path), then realise the effect.
+    // If the cost can't be paid (mana stranded), the outlet is a no-op -- the leaf/executor share this
+    // same apply, so the win projection matches realisation (no fd-diverge from a phantom outlet).
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::SacCreatureOutlet)
+        {
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+        }
+        else if (a.kind == Action::Kind::Channel)
+        {
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
+        }
     }
 
     // Play the deferred Karoo bounce land now -- after the main casts have tapped the lands we

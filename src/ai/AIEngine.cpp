@@ -2482,6 +2482,26 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
     }
 
+    // Costed sac outlets (Siege-Gang / Pashalik) + Twinshot channel: executor mirror of the rollout
+    // trailing pass. Pay the mana from the pool left after casts (BuildAvailableMana + TapForCost,
+    // the byte-identical mirror of TapForCostDirect), then realise the effect; a stranded outlet is
+    // a no-op in both worlds -> lockstep.
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::SacCreatureOutlet)
+        {
+            ManaPool avail = BuildAvailableMana(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+        }
+        else if (a.kind == Action::Kind::Channel)
+        {
+            ManaPool avail = BuildAvailableMana(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
+        }
+    }
+
     // Play the deferred Karoo bounce land now (mirror of ApplyPlanDirect): the main casts have
     // tapped the lands we needed, so BounceKarooLand returns a spent land at no tempo cost. Sits
     // after the cast loop (incl. any inline draw-engine breakpoint replay) and before the
