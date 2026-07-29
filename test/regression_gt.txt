@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 0c16798  date 2026-07-29
+# Regression ground truth -- commit 46678a6  date 2026-07-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -20,10 +20,10 @@ antilife_smoke_d0_s1001=5.5820/b8f0a980a8a99381
 antilife_smoke_d3_s1001=4.2200/142a40e97cc48f60
 antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
 hinata_smoke_d0_s1001=7.1270/ab23db1aa56193c3
-hinata_smoke_d3_s1001=5.9400/499ab967ce5224b8
-hinata_smoke_d5_s1001=6.0400/c197c9a3c119607b
+hinata_smoke_d3_s1001=5.9200/53de63bba4004cf9
+hinata_smoke_d5_s1001=6.0400/aa308831807c5ac2
 dragonstorm_smoke_d0_s1001=5.5240/1c094d947dded4c0
-dragonstorm_smoke_d3_s1001=4.6133/8d46e667868f9b09
+dragonstorm_smoke_d3_s1001=4.6133/e67bd60467188e22
 dragonstorm_smoke_d5_s1001=4.5600/3f860d1f710bea00
 
 # --- regression ---
@@ -33,9 +33,9 @@ slivers_regression_d3_s3003=4.2500/1a4ba532b72876c8
 slivers_regression_d5_s2002=4.2267/f3142e8c01f952fc
 slivers_regression_d5_s3003=4.2500/f0cc3c5d343202f8
 burn_regression_d0_s2002=4.5530/bb5297f293a22283
-burn_regression_d3_s2002=4.3500/a15e95040dc21b5d
+burn_regression_d3_s2002=4.3480/bf1594e9bf51101a
 burn_regression_d3_s3003=4.2500/11661746205ded82
-burn_regression_d5_s2002=4.3500/a15e95040dc21b5d
+burn_regression_d5_s2002=4.3480/bf1594e9bf51101a
 burn_regression_d5_s3003=4.2500/698dd7b37ebba01e
 th_regression_d0_s2002=5.4820/9cd6205f57f63736
 th_regression_d3_s2002=4.2500/4d8e810272d1f8a4
@@ -53,15 +53,15 @@ antilife_regression_d3_s3003=4.2733/b8aee22e65838e70
 antilife_regression_d5_s2002=4.3160/80e88e4ad09954a2
 antilife_regression_d5_s3003=4.2560/e4d7273b75ec2273
 hinata_regression_d0_s2002=7.2070/d3978c16c6a1eb21
-hinata_regression_d3_s2002=5.9100/52748e5b7251545b
-hinata_regression_d3_s3003=5.9050/adc3a27560bfc360
-hinata_regression_d5_s2002=5.8800/57a4304d652cdc09
-hinata_regression_d5_s3003=5.8500/54dbe288c01269be
+hinata_regression_d3_s2002=5.9100/b9ffd31c25c8b2c2
+hinata_regression_d3_s3003=5.8750/2317768152f79d7e
+hinata_regression_d5_s2002=5.8800/d2ea307bc340d757
+hinata_regression_d5_s3003=5.8200/a11bc0ff3794f611
 dragonstorm_regression_d0_s2002=5.5490/c6255a51d4171bad
 dragonstorm_regression_d3_s2002=4.3900/ce2b22198739ee9e
 dragonstorm_regression_d3_s3003=4.5300/6a4cc8cd06bc9a54
-dragonstorm_regression_d5_s2002=4.3640/1c74d390a697bf0a
-dragonstorm_regression_d5_s3003=4.5280/98551974f90fbd5b
+dragonstorm_regression_d5_s2002=4.3640/0bf903c3224323b1
+dragonstorm_regression_d5_s3003=4.5240/b7510b4c56ced1ed
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/3c364eea0dbc63eb
@@ -80,14 +80,14 @@ burn_overnight_d0_s4004=4.5740/bb4c95f8ea8b0c13
 burn_overnight_d0_s5005=4.5705/b5860e9d6ded69b7
 burn_overnight_d0_s6006=4.5880/f23966751e50e223
 burn_overnight_d0_s7007=4.5470/7dc58015fd1189ec
-burn_overnight_d3_s4004=4.3500/313ea7efa82e898e
+burn_overnight_d3_s4004=4.3500/2c966da2f791e74a
 burn_overnight_d3_s5005=4.3360/83349ee93e226d46
 burn_overnight_d3_s6006=4.3510/605e4e4efcc6729a
-burn_overnight_d3_s7007=4.3740/efd944fcbaac8317
-burn_overnight_d5_s4004=4.3500/e75d2d32cc521adb
-burn_overnight_d5_s5005=4.3350/1422a65ff96c14b0
+burn_overnight_d3_s7007=4.3730/ddd17f439d32fbfa
+burn_overnight_d5_s4004=4.3500/6e08d121525b84eb
+burn_overnight_d5_s5005=4.3350/e42c35e1ac028fa9
 burn_overnight_d5_s6006=4.3520/ac1b6b257b3e2de5
-burn_overnight_d5_s7007=4.3740/4ce15e5dbfe118ec
+burn_overnight_d5_s7007=4.3730/e9b3e6df99ef8fc1
 th_overnight_d0_s4004=5.4705/00167c9ed4f1b6f6
 th_overnight_d0_s5005=5.4460/ae794a0a0d999b2a
 th_overnight_d0_s6006=5.4280/c5e8f932f6d40e30
@@ -128,14 +128,14 @@ hinata_overnight_d0_s4004=7.1910/a2ac1cf15db9ec7b
 hinata_overnight_d0_s5005=7.1265/64c75bf86ea47808
 hinata_overnight_d0_s6006=7.1480/3be71f357d27aa18
 hinata_overnight_d0_s7007=7.2190/c1d410e659e62dd1
-hinata_overnight_d3_s4004=5.9850/16c6cc46281ab177
-hinata_overnight_d3_s5005=5.9625/27e953320f5d6e84
-hinata_overnight_d3_s6006=6.0075/aa46d4c999553c07
-hinata_overnight_d3_s7007=6.0175/018f0c75af2d0d48
-hinata_overnight_d5_s4004=5.9300/cacbb7781301f698
-hinata_overnight_d5_s5005=5.9267/dd3fbbacc286d971
-hinata_overnight_d5_s6006=5.9767/ace51b0e203bea16
-hinata_overnight_d5_s7007=5.9500/2cb4e240b9aad19b
+hinata_overnight_d3_s4004=5.9650/de6ce6c98594694f
+hinata_overnight_d3_s5005=5.9250/a4d0288d4c7db803
+hinata_overnight_d3_s6006=5.9875/e31113a61f4d265a
+hinata_overnight_d3_s7007=6.0150/c66b4211c414bd04
+hinata_overnight_d5_s4004=5.9067/f32a7b1f8d4a23e2
+hinata_overnight_d5_s5005=5.8733/cad1447ab04f4233
+hinata_overnight_d5_s6006=5.9667/be314dcd73de7cbb
+hinata_overnight_d5_s7007=5.9267/ced87cfd9702e0f4
 dragonstorm_overnight_d0_s4004=5.5085/027fb2f627af12e5
 dragonstorm_overnight_d0_s5005=5.5490/30e3de40fd678891
 dragonstorm_overnight_d0_s6006=5.6345/249bdbeea6b735e8
@@ -143,8 +143,8 @@ dragonstorm_overnight_d0_s7007=5.5620/925a41dffbbc4e7c
 dragonstorm_overnight_d3_s4004=4.4280/99b0f44a29623c54
 dragonstorm_overnight_d3_s5005=4.3560/9552bab6646d9688
 dragonstorm_overnight_d3_s6006=4.3780/e52ed895523d4891
-dragonstorm_overnight_d3_s7007=4.5000/fbadaa3af24e0189
+dragonstorm_overnight_d3_s7007=4.5000/a1232d2bc65240a8
 dragonstorm_overnight_d5_s4004=4.4700/a51ab82e43d0c72b
 dragonstorm_overnight_d5_s5005=4.4067/050807dac3a8dc02
 dragonstorm_overnight_d5_s6006=4.2933/f60e67ee25a21cca
-dragonstorm_overnight_d5_s7007=4.4667/caf2dd6280515e39
+dragonstorm_overnight_d5_s7007=4.4667/1b8f1c5f6d7717f6

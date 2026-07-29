@@ -29,9 +29,16 @@ search had already PROVEN, and prints `[fd-diverge] seed=N realized_win=.. predi
    | both identical but life or creature counts differ | combat, a continuous effect, or a missing SBA |
    | the two sides cast a DIFFERENT NUMBER of spells | something upstream changed the hand |
 
-Targeted traces exist for the two subsystems that have bitten: `MTG_LP_TRACE` (Light-Paws fetch +
-shuffle, tagged `APPLY` vs `EXEC`) and `MTG_DISCARD_TRACE` (Gamble's random discard: seed inputs,
-hand size, victim). All are inert unless set.
+Targeted traces exist for the subsystems that have bitten, all inert unless set:
+`MTG_LP_TRACE` (Light-Paws fetch + shuffle, tagged `APPLY` vs `EXEC`), `MTG_DISCARD_TRACE` (Gamble's
+random discard: seed inputs, hand size, victim, and every hand card's `m_number`), `MTG_SOULFIRE_TRACE`
+(the Soulfire dig from both sides: life, opponent creatures, target count, chosen targets, exiled
+cards), `MTG_BP_TRACE` (per-cast mana from both sides) and `MTG_CCO_AUDIT` (illegal creature-only
+taps).
+
+**Print the per-copy `m_number`, not just card names.** Two hands that print identically by name can
+hold different physical copies (#4 below was invisible until the trace showed `Island#0` vs
+`Island#23`), and a name-only trace will send you looking for a decision bug that isn't there.
 
 ## Found so far
 
@@ -39,50 +46,94 @@ hand size, victim). All are inert unless set.
 |---|---|---|
 | 1 | rollout paid coloured pips off a `colored_creature_only` land for a non-creature spell | **FIXED** (`6bb2791`) |
 | 2 | legend rule not enforced as a state-based action in the executor | **FIXED** (`b71e5e3`) |
-| 3 | Gamble's "discard a card at random" depends on hand SIZE and ORDER | **measured, NOT adopted** (below) |
+| 3 | rollout counted STAGED cards toward the 7-card cleanup limit; the executor never does | **FIXED** (below) |
+| 4 | rollout did not stamp a played LAND's per-copy `m_number`; the executor always has | **FIXED** (below) |
+| 5 | Gamble's "discard a card at random" indexes the hand AS STORED | **built, opt-in, NOT default** (below) |
 
-Rate per 500 games after 1 and 2: slivers, burn, TH, Knights, Anti-Lifegain, Dragonstorm, Auras all
-**0**. Hinata **2**. (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2.)
+Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
+(Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
+#3.)
 
-## The open case: Hinata (2 per 500)
+## #3 — staged cards counted against maximum hand size (the Hinata case, root-caused)
 
-`PerformTutor`'s random discard seeds on `ap.hand.size()` and then indexes the hand **as stored**, so
-the victim depends on the hand's size and order. Neither is part of the lockstep contract: the
-rollout pushes staged (Expressive Iteration / impulse) cards straight into hand, while the executor
-merges `Player::staged_cards` at its own breakpoints, so the two legitimately hold the same cards in
-a different order.
+CR 514.1 discards down to maximum hand size from the **hand**. A card exiled with "you may play it
+until ..." — Soulfire Eruption's dig, Light Up the Stage, Expressive Iteration, Apex of Power, an
+Apex land — is in **exile**, not hand, and does not count. The engine models those as hand cards
+flagged `m_is_staged` purely so the castable-set code can see them, and the real executor moves them
+back out to `Player::staged_cards` at the end of `AIEngine::TakeTurn` — so by the time
+`GameEngine::CleanupStep` runs they are simply not in hand. The rollout
+(`SimulateEndAndStartNextTurn`) kept them in `ap.hand` for its whole lookahead and counted them.
 
-Measured on seed 4010 (predicted win T6, realised T7):
+Hinata seed 4010: the T5 Soulfire dig staged 8 cards into an otherwise-empty hand, so the rollout
+shed one at cleanup and planned turn 6 one card short. The realised turn kept that card, cast it,
+and reached Crackle with Power one mana short of the lethal X the search had proved (predicted T6,
+realised T7). Fix: count and shed only non-staged cards. Hatch `MTG_LEGACY_STAGED_HANDLIMIT`.
+
+**This is the bug the previous write-up mis-attributed to `SoulfireDig`.** A both-sides dig trace
+(`MTG_SOULFIRE_TRACE`) showed the two sides exiling the *identical* 8 cards — the target count was
+never wrong. Reading the first difference, not the most plausible suspect, is what found it.
+
+## #4 — a played land lost its per-copy number in the rollout
+
+`AIEngine::TryPlaySpecificLand` has always done `perm.card.m_number = it->m_number`; the rollout's
+`PlayLandByName` did not, so every land the rollout played became permanent `#0`. Invisible until
+something reads a LAND permanent's number — `BounceKarooLand` returns `battlefield[pick].card` to
+hand, so an Izzet Boilerworks bounce handed the rollout an unnumbered Island while the real game got
+the numbered one (Hinata seed 4153 T3). The Vial-deploy path had the same gap on the rollout side.
+Every real-board permanent-creation site now stamps the number; the only unstamped ones left are
+opponent tokens (no card) and the speculative mana-rock copies inside the scratch feasibility state.
+
+## #5 — Gamble's random discard: built, opt-in, deliberately NOT the default
+
+`PerformTutor` picks `mix % hand.size()` as an index into the hand **as stored**, and storage order
+is not part of the lockstep contract (the rollout pushes staged cards straight into hand; the
+executor merges `Player::staged_cards` at its own breakpoints). After #3 the two hands hold the same
+cards — in a different order — and still shed different ones:
 
 ```
-[discard] T6 search_count=2 handsize=7 victim=3(Ponder)  hand=[Island,Mountain,Reflecting Pool,Ponder,Reality Spasm,...]   <- rollout
-[discard] T6 search_count=2 handsize=8 victim=2(Island)  hand=[Reality Spasm,Distorting Wake,Island,Mountain,...]          <- executor
+[discard] T6 handsize=8 victim=1(Island)  hand=[Distorting Wake,Island,Mountain,...]      <- rollout
+[discard] T6 handsize=8 victim=2(Island)  hand=[Reality Spasm,Distorting Wake,Island,...] <- executor
 ```
 
-The rollout discarded the second Ponder, so its committed line never casts it. The executor kept it,
-cast it, spent one more `{U}`, and reached Crackle with Power one mana short of the lethal X the
-search had proved.
+`MTG_CANON_TUTOR_DISCARD=1` draws over ascending `m_number` instead — still a uniform draw over the
+same set, and it does put the two sides in lockstep (both shed `Island#21` above).
 
-**Choosing over a canonical order was BUILT AND MEASURED, and is NOT adopted.** Seeding on stable
-scalars only and picking over ascending `m_number` fixes this game exactly (T7 -> T6, divergence
-gone) — but Hinata's rate went **2 -> 4 per 500**. Order-sensitivity is only the last link: note the
-hand sizes above, **7 vs 8**. The hands already differ in CONTENT, so any index-based pick lands on a
-different card however it is canonicalised; canonicalising alone just reshuffles which games diverge.
+**Why it is off by default.** Measured over 4000 held-out games on 8 decks: avg-neutral everywhere,
+but it takes the fd-diverge count **0 -> 1** (Hinata seed 4259, where the discards themselves
+AGREE — the changed line simply walks into a different, still-unidentified divergence). Raising the
+metric this workstream exists to drive down is not defensible until 4259 is root-caused.
 
-**Next step — fix the upstream content divergence first.** The extra card appears during turn 5,
-whose second main casts Soulfire Eruption. `SoulfireDig` exiles one card per target and its target
-count is `1 + (controller life > 9) + #opponent creatures + searched own targets`, so a single
-differing life total or creature count changes how many cards land in hand. Confirm that with a
-target-count trace on both sides, fix it, THEN canonicalise the discard, then re-measure. Treat the
-canonical-order change as staged work, not as a rejected idea — it is correct, just not sufficient
-on its own.
+**Order of fixes mattered, and the earlier write-up's conclusion was budget-limited, not wrong.**
+Enabling #5 alone (hands still differing in CONTENT) took Hinata 2 -> 4 per 500. With #3 it went
+3 -> 1 only after #4 landed too. Any index-based pick lands on a different card when the sets differ,
+however it is canonicalised.
+
+## Open leads (next session)
+
+- **Hinata seed 4259** — the one divergence `MTG_CANON_TUTOR_DISCARD` exposes. The discards agree;
+  at T5 the hand and library match the committed line exactly, yet the executor plans `(idle)` where
+  the proven line casts Expressive Iteration + Ponder + Ponder for lethal. Root-cause this and #5
+  becomes free.
+- **Overnight seed 4661** (`realized=9 predicted=5`, delta 4) — the one SEVERE divergence in the
+  suite. Pre-existing and unchanged by #3/#4 (present identically in both A/B arms), so it is its own
+  bug. This is the largest single unexplained gap left.
 
 ## Why this is worth doing
 
 Every one of these silently caps the search: the engine proves a better line than it plays. #1 was
 worth -0.010..-0.033 avg across 8 of 8 held-out Dragonstorm cases with zero regressions; #2 took a
 tracked Auras game from T5 to the T4 the search had already found, and stopped the executor
-double-counting a legendary's cost discount. Neither was reachable by tuning a heuristic.
+double-counting a legendary's cost discount. #3+#4 measured, on all three suite modes:
+
+| mode | changed cases | net avg | per-game |
+|---|---|---|---|
+| smoke | 3 (hinata x2, dragonstorm) | -0.020 | 0 slower, 3 faster, 28 play-changed |
+| regression | 8 (hinata x4, burn x2, dragonstorm x2) | -0.068 | 2 slower (both draw-divergent variance), 10 faster incl. one unwon -> T6 |
+| overnight | 15 | **-0.192**, every case better or neutral | 15 slower (10 budget churn, 2 variance, 1 recovers to T6 = better than its old T8, 1 same-draws one-turn), 8/8 hinata cases improved |
+
+`nonconv` stayed 0 in every arm. Suite-wide fd-diverge fell 23 -> 17 on overnight and 3 -> 1 on
+regression, with the single surviving SEVERE case (seed 4661) present identically in both A/B arms —
+i.e. pre-existing, not introduced. None of this was reachable by tuning a heuristic.
 
 ## A note on #2: how long the duplicate actually lived
 

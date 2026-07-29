@@ -518,26 +518,27 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
     // known-library simplification), but it can still hit the just-tutored card (the real Gamble
     // risk on a small hand). Only fires for to-hand tutors that set the flag; off everywhere else.
     //
-    // KNOWN-IMPERFECT (measured 2026-07-29, deliberately NOT changed -- read this before "fixing" it).
-    // The seed folds in ap.hand.size() and the victim is then an index into the hand AS STORED, so the
-    // pick depends on the hand's SIZE and ORDER -- neither of which is part of the rollout/executor
-    // lockstep contract (the rollout pushes staged Expressive-Iteration / impulse cards straight into
-    // hand, while the executor merges Player::staged_cards at its own breakpoints). Measured on Hinata
-    // seed 4010: rollout hand [Island, Mountain, Reflecting Pool, Ponder, Reality Spasm, ...] discarded
-    // Ponder; executor hand [Reality Spasm, Distorting Wake, Island, ...] discarded Island -- so the
-    // real game still held a Ponder the search had spent, cast it, and reached Crackle with Power one
-    // mana short of the lethal X the search proved (predicted win T6, realised T7).
+    // KNOWN ORDER-SENSITIVITY, opt-in fix behind MTG_CANON_TUTOR_DISCARD (default OFF -- read this
+    // before flipping it). The victim is an index into the hand AS STORED, and storage order is NOT
+    // part of the rollout/executor lockstep contract: the rollout pushes staged (Soulfire / Expressive
+    // Iteration / impulse) cards straight into hand while the executor merges Player::staged_cards at
+    // its own breakpoints, so the two legitimately hold the SAME cards in a different order and then
+    // shed DIFFERENT cards (Hinata seed 4010 post-fix: rollout Mountain, executor Island, same index).
+    // MTG_CANON_TUTOR_DISCARD draws over ascending per-copy m_number instead -- still a uniform draw
+    // over the same set, so the modelled randomness is unchanged; it just stops depending on a vector's
+    // layout, and it does put the two sides in lockstep on the traced game.
     //
-    // Choosing over a CANONICAL order (ascending m_number) instead was BUILT AND MEASURED: it fixes
-    // that game (T7 -> T6, divergence gone) but Hinata's fd-diverge rate went 2 -> 4 per 500 games,
-    // because order-sensitivity is only the LAST link. The hands already differ in CONTENT by then
-    // (7 cards vs 8 -- the executor still held a Distorting Wake), so any index-based pick lands on a
-    // different card no matter how it is canonicalised. Fixing this without first fixing the hand-
-    // content divergence just reshuffles WHICH games diverge. The upstream suspect is the T5 Soulfire
-    // Eruption dig: SoulfireDig's target count is `1 + (life > 9) + #opp creatures + searched own
-    // targets`, so one differing life total or creature count changes how many cards are exiled into
-    // hand. Fix that first, then canonicalise this, then re-measure. See
-    // docs/design/rollout-executor-lockstep.md.
+    // Why it is NOT the default (measured 2026-07-29, 4000 held-out games over 8 decks): avg-neutral
+    // on every deck, but it takes the fd-diverge count 0 -> 1 (Hinata seed 4259) -- the discards there
+    // AGREE, so the changed line simply walks into a different, still-unidentified divergence. Raising
+    // the metric this workstream exists to drive down is not defensible until seed 4259 is root-caused.
+    //
+    // ORDER OF FIXES MATTERS. Enabling this while the two hands still differed in CONTENT took Hinata
+    // 2 -> 4 per 500: any index-based pick lands on a different card when the sets differ, however it
+    // is canonicalised. Two upstream fixes had to land first -- the rollout counting staged cards
+    // toward the 7-card cleanup limit (SimulateEndAndStartNextTurn) and the rollout not stamping a
+    // played land's per-copy m_number (PlayLandByName), which made a Karoo bounce hand the rollout an
+    // unnumbered Island. Those took it 3 -> 1. See docs/design/rollout-executor-lockstep.md.
     if (pp.discard_random_after_tutor && pp.tutor_to_hand && !ap.hand.empty())
     {
         uint64_t mix = state.game_seed * 0x9E3779B97F4A7C15ull
@@ -548,7 +549,18 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         mix ^= mix >> 27; mix *= 0x94D049BB133111EBull;
         mix ^= mix >> 31;
         mix = SaltSeed(mix, g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt);   // shuffle-variance: a mid-game random event
+        // Canonical draw order: hand indices sorted by m_number (stable on ties, so two copies that
+        // somehow share a number still resolve deterministically). Opt-in only.
+        static const bool s_canon_discard = std::getenv("MTG_CANON_TUTOR_DISCARD") != nullptr;
         int victim = static_cast<int>(mix % ap.hand.size());
+        if (s_canon_discard)
+        {
+            std::vector<int> order(ap.hand.size());
+            for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { order[i] = i; }
+            std::stable_sort(order.begin(), order.end(),
+                             [&](int a, int b) { return ap.hand[a].m_number < ap.hand[b].m_number; });
+            victim = order[victim];
+        }
         const int         victim_num  = ap.hand[victim].m_number;
         const std::string victim_name = ap.hand[victim].m_name;
         // Discard goes to the graveyard (CR 701.8 / a discarded card is put into its owner's
@@ -560,7 +572,8 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         if (dtrace)
         {
             std::string hs;
-            for (const Card& hc : ap.hand) { hs += hc.m_name.str(); hs += ","; }
+            for (const Card& hc : ap.hand)
+            { hs += hc.m_name.str(); hs += "#"; hs += std::to_string(hc.m_number); hs += ","; }
             std::fprintf(stderr,
                          "[discard] T%d seed=%llu search_count=%llu handsize=%zu victim=%d(%s) hand=[%s]\n",
                          state.turn_number, static_cast<unsigned long long>(state.game_seed),
@@ -2513,7 +2526,8 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took);        // defin
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
                             int yield_override = -1);  // below
 inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targets = 0,
-                                  const CardDefinition* def = nullptr)
+                                  const CardDefinition* def = nullptr,
+                                  const char* trace_side = "?")
 {
     Player& ap = state.players[controller];
 
@@ -2600,6 +2614,43 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     }
 
     const int n = static_cast<int>(chosen.size());
+
+    // Dig trace (MTG_SOULFIRE_TRACE; DIAGNOSIS ONLY, no behaviour). The target COUNT is what decides
+    // how many cards land in hand, and it is derived from board facts (life, opponent creatures) plus
+    // the searched own_targets -- so a one-off in any of those makes the rollout and executor hold a
+    // different NUMBER of cards from here on. Printed from both sides so they can be diffed.
+    {
+        static const bool sf_trace = std::getenv("MTG_SOULFIRE_TRACE") != nullptr;
+        if (sf_trace)
+        {
+            std::string tgts;
+            for (int t : chosen)
+            {
+                if (!tgts.empty()) { tgts += ","; }
+                if (t == TARGET_OPP_FACE)       { tgts += "oppface"; }
+                else if (t == TARGET_SELF_FACE) { tgts += "self"; }
+                else if (t >= 0 && t < static_cast<int>(state.battlefield.size()))
+                {
+                    tgts += state.battlefield[t].card.m_name.str();
+                    tgts += (state.battlefield[t].controller_index == controller) ? "(own)" : "(opp)";
+                }
+                else { tgts += "?"; }
+            }
+            std::string top;
+            for (int i = 0; i < n && i < static_cast<int>(ap.library.size()); ++i)
+            {
+                if (!top.empty()) { top += ","; }
+                top += ap.library[i].m_name.str();
+            }
+            std::fprintf(stderr,
+                         "[soulfire] %-5s T%-2d search_count=%llu life=%d opp_creatures=%zu"
+                         " own_targets=%d base=%d n=%d hand=%zu lib=%zu targets=[%s] exile=[%s]\n",
+                         trace_side, state.turn_number,
+                         static_cast<unsigned long long>(state.search_count), ap.life,
+                         SoulfireOppCreatureOrder(state, controller).size(), own_targets, base, n,
+                         ap.hand.size(), ap.library.size(), tgts.c_str(), top.c_str());
+        }
+    }
 
     // Exile n cards top-down; every exiled card is staged (the dig). Keep per-flip MV in flip order.
     const bool               capture = (g_reveal_logger != nullptr);
