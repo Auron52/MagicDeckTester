@@ -1100,8 +1100,8 @@ static bool THLegacyScry()
 //    leaves no room to ramp. In all three isolated slowdowns the designed double-spell turn really
 //    does happen, one turn too late (s6006 gi188: bottoming the Skerry draws Reliquary Tower and
 //    casts Treasure Hunt on T2 for a T3 win; keeping it makes T2 a blank tapped land, then casts
-//    Treasure Hunt TWICE on T3 and wins T4). A depletion land is worth having when a spare tapped
-//    turn exists anyway -- realistically only the T1 drop -- never something to dig toward.
+//    Treasure Hunt TWICE on T3 and wins T4). A depletion land is worth having when the tapped turn
+//    it costs is one we were going to spend anyway -- never something to dig toward.
 //  * TARGETING A TWO-TREASURE-HUNT TURN (2 blue / 4 mana). d0 +0.0050 with no searched gain, and it
 //    is what armed the depletion clause most often (dropping it cut that clause's damage from
 //    +0.0200 to +0.0160). Same lesson one level up: at this clock, a turn spent assembling the

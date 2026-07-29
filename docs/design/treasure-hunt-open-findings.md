@@ -90,7 +90,8 @@ T1  play Temple of Epiphany, scry -> Saprazzan Skerry on top
 
 (f) is the same lesson one level up: *building toward* the bigger turn costs more than the turn buys,
 and it is also what armed (c) most often (dropping (f) cut (c)'s damage from +0.0200 to +0.0160).
-Depletion lands are good when a spare tapped-land turn exists anyway -- not something to seek out.
+Depletion lands are good when the tapped turn they cost is one we were going to spend anyway -- not
+something to seek out.
 
 **Why (a)/(b)/(d) are inert.** They are accuracy fixes to counts that never reach a decision
 boundary: the colour thresholds are 1 blue / 2 red, and 36 of the 53 lands make red with ~30 making
@@ -111,15 +112,29 @@ models the land base correctly, which matters for the next person tuning it and 
 regeneration in section 5. Ground truth was rebaselined for the score-identical digest churn.
 (c) and (f) are recorded as rejected in the code comment so they are not re-proposed.
 
-### Deferred: depletion lands restricted to the T1 drop
+### Deferred: keep a depletion land only when the SCRY happens on T1
 
-The rejection of (c) is about TIMING, not about depletion lands being bad. A Skerry played on T3 is
-too slow because T4 is usually the win; a Skerry played on **T1** costs nothing, because T1 has no
-spell to cast anyway. So the clause might survive if restricted to the first land drop -- keep a
-depletion land on top only on turn 1. Not pursued: the trigger is rare (the top card must be one of
-8 depletion lands, on turn 1, with the target unaffordable), so the measurable effect would be a
-handful of games in 20,000, and the sweep above shows this rule family sits well inside the noise
-floor. Worth revisiting only if a cheaper high-volume signal than win-turn becomes available.
+The rejection above is about TIMING, not about depletion lands being bad, and the timing that matters
+is **when the scry happens**, not when the land is played -- the card is on top of the library, so it
+cannot be played on the turn it is selected at all. The narrower rule is therefore: a scry (or
+surveil) resolving on **T1** may keep a depletion land, because it is drawn on T2 and played around
+T3, by which point the tapped turn it costs is one the deck was going to spend anyway. A scry on any
+later turn bottoms it, because from T3 on the tapped turn is the turn that would have won.
+
+Not pursued, and the user's own read is that it "might even be negative, though more likely positive
+than" the unconditional clause. The trigger is rare -- the top card must be one of 8 depletion lands,
+on turn 1 specifically -- so the reachable effect is a handful of games in 20,000, well inside the
+noise floor this whole rule family sits in (section 3b: the four adopted corrections moved 3 games in
+9,000).
+
+**The real conclusion is that this is a SEARCH-shaped decision, not a heuristic-shaped one.** Whether
+a particular depletion land is worth its tapped turn depends on the rest of the hand and the draw,
+which is exactly what a fixed rule cannot express and what the search resolves for free. Scry-keep is
+already on the list of pure policy hooks the search never branches over (see the `MTG_UNPRUNED`
+comment in `DecisionProviders.cpp`: cast-order, vial-charge, **scry-keep**, discard-order and combat
+"are NOT yet opened here: making the search branch on them needs new enumeration"). If that
+enumeration is ever built, this decision should come along with it rather than being re-attempted as
+a rule -- the same reasoning that moves cleanup discard to search (`searched-cleanup-discard.md`).
 
 ## 4. Residual slower games from the scry rewrite (accepted)
 
