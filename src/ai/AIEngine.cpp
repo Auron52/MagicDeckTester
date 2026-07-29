@@ -2474,6 +2474,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
     }
 
+    // Krenko, Mob Boss taps AFTER the main casts (executor mirror of ApplyPlanDirect's trailing
+    // TapForTokens pass): X = Goblins you control counts this turn's developed board. Free ({T}).
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::TapForTokens)
+        { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
+    }
+
     // Play the deferred Karoo bounce land now (mirror of ApplyPlanDirect): the main casts have
     // tapped the lands we needed, so BounceKarooLand returns a spent land at no tempo cost. Sits
     // after the cast loop (incl. any inline draw-engine breakpoint replay) and before the

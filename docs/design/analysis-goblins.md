@@ -99,10 +99,22 @@ Against the **passive goldfish opponent, our Goblins never die in combat** — d
 - [ ] Viewer wiring (Lackey put-from-hand; sac-outlet target; Krenko/echo choices).
 - [ ] cards.json entries (17) + audits + coverage + profile + Stage 5.
 
+## Parallel workflow (wf_e288902a-c63) — INTEGRATED 2026-07-29
+All 5 worktree agents built clean; diffs applied via `git apply --3way` onto the Krenko commit (no conflicts); combined tree builds clean; coverage `missing:[]`; deck runs (3 games d3 → ~4.3 avg win turn). Patches saved under logs/goblins_patches/.
+- [x] Echo (Permanent::echo_resolved + upkeep pay-or-sac in AIEngine::TakeTurn + rollout SimulateEndAndStartNextTurn; Mogg declines→death token, Stingscourger pays-or-sacs).
+- [x] Combat pumps (Piledriver attack_pump_power_per_other_matching; Muxus attack_self_pump) + Goblin Lackey combat-damage cheat + DeckUsesSecondMain extension.
+- [x] Three Tree City scaled mana ({2},{T} → N colored = creatures of type).
+- [x] Provider routing guard (Goblins → GenericProvider before anti; Matron tutor no longer misroutes).
+- [x] cards.json — all 17 entries (costs Scryfall-verified; param keys match parser).
+
 ## Status
 - [x] Stage 1 coverage
 - [x] Stage 2 research (fan-out) — 8 agents, authoritative Scryfall drafts collected
-- [~] Stage 2 integration — foundation (params+parser) done, effects in progress
+- [x] Stage 3 coverage clean (missing:[])
+- [~] Stage 2 integration — 8 subsystems in; REMAINING: costed sac outlets (Siege-Gang/Pashalik/Channel) + Skirk mana + executor Krenko apply; viewer bucket-B wiring
+- [ ] Stage 2d/2d-bis audits (cost audit running)
+- [ ] Stage 4 baseline profile
+- [ ] Stage 5 verify
 - [ ] Stage 2d / 2d-bis audits
 - [ ] Stage 3 coverage clean
 - [ ] Stage 4 baseline profile
