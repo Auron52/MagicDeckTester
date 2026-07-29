@@ -564,3 +564,102 @@ is legitimate at unbounded budget, where it is a strict gain.
 
 It still does NOT close `Dragonstorm/claude_s1_gi0` (engine 5 vs human 4, both arms, and unchanged by
 the payment fix) -- that reference needs its own investigation.
+
+---
+
+# The width cap is itself a quality prune (2026-07-29)
+
+**Status: AGREED DESIGN, not yet built.** `Plan::bp_choice` fixed the greedy continuation by making
+`W` of them searchable. It did **not** fix the class: `bp_choice = k` indexes `cands[k]` of a
+HEURISTICALLY RANKED list, so a continuation ranked `>= W` is unreachable at **any** depth and **any**
+budget. That is the same defect this document opens by describing, reproduced one rank later.
+
+## The measurement
+
+Decisive case — Hinata seed 4259 (`--game-index 255`), **unbounded budget** (`--budget-ms 0`,
+depth 5, `MTG_CANON_TUTOR_DISCARD=1`):
+
+| W | result |
+|---|---|
+| 2 (default) | T6, and `[fd-diverge] predicted_win=5` |
+| 16 | **T5** |
+
+An infinite budget does not reach the line. The cap is not an allocation, it is a ceiling.
+
+Under a BUDGET the picture is different — smoke (train seeds, 10-20 ms cases), net avg vs W=2:
+
+| W | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|
+| net | -0.040 | -0.040 | -0.020 | -0.020 | +0.000 |
+
+Treasure Hunt d3 alone degrades monotonically past 8: 4.1533 (W=8) -> 4.1733 (W=32) -> 4.1867 (W=64).
+That is budget dilution: a CONSTANT W pays the fan-out at every breakpoint, including the ones where
+it buys nothing. Note also that the digests never converge even at W=64 — the continuation list is
+longer than 64 in places, so "set W high" is NOT a valid unbounded arm.
+
+**User's bar (2026-07-29):** a width cap is defensible *under a budget* only if it beats spending
+those nodes elsewhere; **under an unbounded search, nothing of this kind is acceptable.**
+
+## The design: defer, don't cap (user's proposal)
+
+Replace the constant cap with a **fallback/wave loop**, converting it from a QUALITY prune into a
+COST prune:
+
+- **Wave 0** — emit today's `bp_choice = 0..W-1` and search normally. Byte-identical to current
+  behaviour when the budget is tight.
+- **Record, don't guess** — `bp_searched_plan` already computes the full `cands` at apply time.
+  Record `cands.size()` per breakpoint (thread_local, keyed like the existing enum memo). After
+  wave 0 the engine KNOWS how many continuations exist; no magic number survives anywhere.
+- **Waves 1..n** — while the deterministic budget has room, emit `bp_choice = W .. cands.size()-1`,
+  score, keep the best. Unbounded runs exhaust the list, so full coverage is structural.
+
+**Why stopping mid-wave is safe.** A variant can only win on a *strictly better* rolled-out win turn
+(the equal-turn tiebreak is `value`, which it shares with its base plan). So an aborted wave can
+never make the answer worse than the previous wave — this is an anytime algorithm, the same contract
+the value-escalation already relies on.
+
+**It self-tunes per position**, which is why it should beat any constant: cheap positions explore
+more continuations, expensive ones don't. That is exactly the dilution the W-sweep above exposes.
+
+### Waves run AFTER the heuristic escalation, as a distinct third phase
+
+Not a preference — a hazard. The escalation reuses the probe's per-node plan ranks **indexed by
+POSITION** in the ordered `pre`, keyed by `BuildSimKey` ("the escalation's identical `pre` maps
+position-for-position", `g_probe_plan_vals`). Injecting wave variants BETWEEN the probe and the
+escalation changes the plan set while the node key stays the same, so the recorded rank vector is
+applied to the wrong plans — a SILENT mis-ordering, not a crash. Running waves as a separate phase
+after the hybrid returns keeps the probe/escalation pair on a stable plan set. Putting waves *inside*
+the escalation would first require re-keying those ranks by plan identity instead of position.
+
+Running after is also CHEAPER per candidate: the waves inherit wave 0's committed win turn as a
+branch-and-bound bound, so most extra continuations are refuted without a full rollout. Running them
+first would evaluate them with a weak bound.
+
+### Pruning still applies — but cost-only
+
+The waves must ride the existing machinery: the B&B frontier (`FSLineWin`/`FSLineTail`) bounded by
+wave 0's incumbent, `ManaPruneBound`'s total-mana cut, the per-subset feasibility bounds, and the
+strictly-better-win-turn rule. **Do NOT reuse the rank-based escalation beam (`g_esc_beam_width`)
+inside a wave** — that would reintroduce this exact defect one level down.
+
+### Constraints
+
+1. **Determinism is the hard one.** Runs are thread-invariant because the budget is a deterministic
+   VIRTUAL counter. The wave decision must read that counter and never wall-clock, or every
+   ground-truth comparison silently stops being reproducible.
+2. **Ordering stability** — waves append AFTER the caller's sort, as today, or the win-this-turn
+   shortcut and every non-breakpoint decision shift.
+3. **`MTG_BP_MAXBASE=16` is the same class of cap** (top-N base plans fanned out at all) and needs
+   the same treatment, or which continuations are reachable stays rank-gated one level up.
+4. The escalation BEAM is a third rank cap, but it carries a reasoned carve-out: it never applies at
+   the root, so it "can never drop the heuristic-best PLAY". Left alone for now; noted here so it is
+   not mistaken for an oversight.
+
+### Plan
+
+1. Instrument `cands.size()` per breakpoint (byte-identical).
+2. Wave loop as a post-hybrid phase, gated on the remaining deterministic budget; unbounded => run
+   to exhaustion.
+3. Verify: seed 4259 at `--budget-ms 0` reaches T5; smoke byte-identical at tight budgets.
+4. A/B the two orderings the user asked for — waves-after vs a wider wave 0 (the W-sweep above IS
+   the "before" arm) — then measure what the waves earn at suite budgets on held-out seeds.

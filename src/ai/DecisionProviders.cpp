@@ -949,6 +949,17 @@ int TreasureHuntProvider::LandsEdgeFireCount(const GameState& s, int rate) const
 // that is FAKE known-draw speed: all 1012 clairvoyantly-slower games across 4 seeds carry the
 // clairvoyance signature (legacy spends the drop, casts the flood, discards the overflow it only
 // tolerates because it foresees the kill; the gate defers and keeps the enabler) -- 0 real regressions.
+// RE-CONFIRMED 2026-07-29 from the other direction. Overnight seed 4661 is the suite's single SEVERE
+// fd-diverge (realized=9 predicted=5): the search proves a T5 win by casting Treasure Hunt with the
+// drop spent and no outlet, into a library whose next ~9 cards are lands followed by Land's Edge,
+// then casting it and throwing 17 lands for 34. Both MTG_TH_STRICT_FLOOD=0 and
+// MTG_UNPRUNE=drawengine recover that win -- i.e. this gate is exactly what declines it, and the
+// "proof" is clairvoyant. Re-A/B on held-out seeds 4004-7007 reproduces the note above: removing the
+// gate is WORSE at d0 (4/4 cases, +0.062..+0.115) and "better" at searched depth (8/8, -0.066..-0.077),
+// the latter being the same fake known-draw speed audited across 1012 games with 0 real regressions.
+// CONSEQUENCE: TH has an irreducible fd-diverge FLOOR at searched depth -- a clairvoyant oracle can
+// always prove wins a non-clairvoyant gate correctly refuses. Do NOT "fix" seed 4661; judge TH by
+// avg turn-to-win. See docs/design/rollout-executor-lockstep.md.
 bool THStrictFlood()
 {
     static const bool on = []{ const char* e = std::getenv("MTG_TH_STRICT_FLOOD");

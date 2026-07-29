@@ -549,11 +549,38 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
                                    { fetched_num }, { fetched_name }, { fetched_num }, {});
     }
 
-    // Gamble: "then discard a card at random." Deterministic seed (game_seed / turn /
-    // search_count) so the rollout and the real executor pick the IDENTICAL victim -- the
-    // search resolves it clairvoyantly (the engine-wide known-library simplification), but it
-    // can still hit the just-tutored card (the real Gamble risk on a small hand). Only fires
-    // for to-hand tutors that set the flag; off everywhere else.
+    // Gamble: "then discard a card at random." Deterministic so the rollout and the real executor
+    // pick the IDENTICAL victim -- the search resolves it clairvoyantly (the engine-wide
+    // known-library simplification), but it can still hit the just-tutored card (the real Gamble
+    // risk on a small hand). Only fires for to-hand tutors that set the flag; off everywhere else.
+    //
+    // KNOWN ORDER-SENSITIVITY, opt-in fix behind MTG_CANON_TUTOR_DISCARD (default OFF -- read this
+    // before flipping it). The victim is an index into the hand AS STORED, and storage order is NOT
+    // part of the rollout/executor lockstep contract: the rollout pushes staged (Soulfire / Expressive
+    // Iteration / impulse) cards straight into hand while the executor merges Player::staged_cards at
+    // its own breakpoints, so the two legitimately hold the SAME cards in a different order and then
+    // shed DIFFERENT cards (Hinata seed 4010 post-fix: rollout Mountain, executor Island, same index).
+    // MTG_CANON_TUTOR_DISCARD draws over ascending per-copy m_number instead -- still a uniform draw
+    // over the same set, so the modelled randomness is unchanged; it just stops depending on a vector's
+    // layout, and it does put the two sides in lockstep on the traced game.
+    //
+    // Why it is NOT the default (measured 2026-07-29). Suite A/B, all three modes: searched-depth net
+    // -0.105, which splits into train (smoke+regression) -0.113 and HELD-OUT (overnight) +0.008 --
+    // train-positive, held-out NEUTRAL. The d0 cases move +0.044, which is noise (no lookahead, so
+    // changing which card a random discard takes just reshuffles). So this buys no measurable quality;
+    // it is correctness only, against a 12+ case Hinata GT rebaseline.
+    //
+    // Its one fd-diverge (0 -> 1, Hinata seed 4259) was ROOT-CAUSED and is NOT a defect here: with the
+    // default discard that game has no T5 win at all, even at width 4; this change CREATES one, and
+    // only the default breakpoint continuation width (W=2) fails to cash it (MTG_BP_SEARCH=4 realises
+    // T5). Realised turns are T6 either way. See docs/design/rollout-executor-lockstep.md.
+    //
+    // ORDER OF FIXES MATTERS. Enabling this while the two hands still differed in CONTENT took Hinata
+    // 2 -> 4 per 500: any index-based pick lands on a different card when the sets differ, however it
+    // is canonicalised. Two upstream fixes had to land first -- the rollout counting staged cards
+    // toward the 7-card cleanup limit (SimulateEndAndStartNextTurn) and the rollout not stamping a
+    // played land's per-copy m_number (PlayLandByName), which made a Karoo bounce hand the rollout an
+    // unnumbered Island. Those took it 3 -> 1. See docs/design/rollout-executor-lockstep.md.
     if (pp.discard_random_after_tutor && pp.tutor_to_hand && !ap.hand.empty())
     {
         uint64_t mix = state.game_seed * 0x9E3779B97F4A7C15ull
@@ -564,7 +591,18 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         mix ^= mix >> 27; mix *= 0x94D049BB133111EBull;
         mix ^= mix >> 31;
         mix = SaltSeed(mix, g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt);   // shuffle-variance: a mid-game random event
+        // Canonical draw order: hand indices sorted by m_number (stable on ties, so two copies that
+        // somehow share a number still resolve deterministically). Opt-in only.
+        static const bool s_canon_discard = std::getenv("MTG_CANON_TUTOR_DISCARD") != nullptr;
         int victim = static_cast<int>(mix % ap.hand.size());
+        if (s_canon_discard)
+        {
+            std::vector<int> order(ap.hand.size());
+            for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { order[i] = i; }
+            std::stable_sort(order.begin(), order.end(),
+                             [&](int a, int b) { return ap.hand[a].m_number < ap.hand[b].m_number; });
+            victim = order[victim];
+        }
         const int         victim_num  = ap.hand[victim].m_number;
         const std::string victim_name = ap.hand[victim].m_name;
         // Discard goes to the graveyard (CR 701.8 / a discarded card is put into its owner's
@@ -572,6 +610,18 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         // left the game and never showed up in the graveyard zone. Inert for the search on every
         // current deck (no Gamble deck reads graveyard contents -- no retrace/delve/escape/
         // threshold), so this only restores the correct zone + surfaces the card to the viewer.
+        static const bool dtrace = std::getenv("MTG_DISCARD_TRACE") != nullptr;
+        if (dtrace)
+        {
+            std::string hs;
+            for (const Card& hc : ap.hand)
+            { hs += hc.m_name.str(); hs += "#"; hs += std::to_string(hc.m_number); hs += ","; }
+            std::fprintf(stderr,
+                         "[discard] T%d seed=%llu search_count=%llu handsize=%zu victim=%d(%s) hand=[%s]\n",
+                         state.turn_number, static_cast<unsigned long long>(state.game_seed),
+                         static_cast<unsigned long long>(state.search_count), ap.hand.size(),
+                         victim, victim_name.c_str(), hs.c_str());
+        }
         ap.graveyard.push_back(ap.hand[victim]);
         ap.hand.erase(ap.hand.begin() + victim);
         if (g_reveal_logger) { g_reveal_logger->LogDiscard(victim_num, victim_name); }
@@ -1106,9 +1156,30 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
 // the battlefield attached to that Light-Paws, then shuffle. WHICH aura is a heuristic pick (highest
 // power contribution; disclosed 6a). The put does NOT re-trigger (it was not cast) -> bounded to one
 // fetch per cast aura. Deterministic + lockstep (executor + rollout call it identically).
-inline void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv)
+inline void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
+                                   const char* side = "?")
 {
     Player& ap = state.players[controller];
+    // Light-Paws fetch/shuffle trace (MTG_LP_TRACE; DIAGNOSIS ONLY). `side` distinguishes the
+    // rollout's committed-line replay (APPLY) from the real executor (EXEC) so the two fetch
+    // sequences can be diffed -- how the legend-rule divergence below was found. Static: one getenv
+    // for the process, so the off case is a predictable branch in this hot path.
+    static const bool lp_trace = std::getenv("MTG_LP_TRACE") != nullptr;
+    if (lp_trace)
+    {
+        int nlp = 0; std::string lpnums;
+        for (const Permanent& q : state.battlefield)
+        {
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd && qd->params.aura_cast_tutor_attach && q.controller_index == controller)
+            { ++nlp; lpnums += " #" + std::to_string(q.card.m_number); }
+        }
+        std::fprintf(stderr, "[lp:%s] turn=%d ENTER mv=%d search_count=%llu libsize=%zu lightpaws=%d[%s] top=%s\n",
+                     side, state.turn_number, cast_aura_mv,
+                     static_cast<unsigned long long>(state.search_count), ap.library.size(),
+                     nlp, lpnums.c_str(),
+                     ap.library.empty() ? "-" : ap.library[0].m_name.str().c_str());
+    }
     // Names of every Aura the controller currently controls (the "different name than each Aura you
     // control" restriction). Recomputed per Light-Paws (a prior fetch adds a name).
     for (int li = 0; li < static_cast<int>(state.battlefield.size()); ++li)
@@ -1204,6 +1275,11 @@ inline void PerformLightPawsAttach(GameState& state, int controller, int cast_au
         }
 
         Card fetched = ap.library[best_idx];
+        if (lp_trace)
+        {
+            std::fprintf(stderr, "[lp:%s] turn=%d FETCH %s (idx=%d, contrib=%d)\n",
+                         side, state.turn_number, fetched.m_name.str().c_str(), best_idx, best_pw);
+        }
         ap.library.erase(ap.library.begin() + best_idx);
         Permanent perm;
         const CardDefinition* fd = CardDatabase::Instance().LookupCached(fetched);
@@ -1215,6 +1291,15 @@ inline void PerformLightPawsAttach(GameState& state, int controller, int cast_au
         perm.aura_attached_to  = lp.card.m_number;   // attached to Light-Paws
         state.battlefield.push_back(perm);
         ShuffleAfterSearch(state, controller);
+        if (lp_trace)
+        {
+            std::fprintf(stderr, "[lp:%s] turn=%d POST-SHUFFLE search_count=%llu top=%s;%s;%s\n",
+                         side, state.turn_number,
+                         static_cast<unsigned long long>(state.search_count),
+                         ap.library.size() > 0 ? ap.library[0].m_name.str().c_str() : "-",
+                         ap.library.size() > 1 ? ap.library[1].m_name.str().c_str() : "-",
+                         ap.library.size() > 2 ? ap.library[2].m_name.str().c_str() : "-");
+        }
     }
 }
 
@@ -2483,7 +2568,8 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took);        // defin
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
                             int yield_override = -1);  // below
 inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targets = 0,
-                                  const CardDefinition* def = nullptr)
+                                  const CardDefinition* def = nullptr,
+                                  const char* trace_side = "?")
 {
     Player& ap = state.players[controller];
 
@@ -2570,6 +2656,43 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     }
 
     const int n = static_cast<int>(chosen.size());
+
+    // Dig trace (MTG_SOULFIRE_TRACE; DIAGNOSIS ONLY, no behaviour). The target COUNT is what decides
+    // how many cards land in hand, and it is derived from board facts (life, opponent creatures) plus
+    // the searched own_targets -- so a one-off in any of those makes the rollout and executor hold a
+    // different NUMBER of cards from here on. Printed from both sides so they can be diffed.
+    {
+        static const bool sf_trace = std::getenv("MTG_SOULFIRE_TRACE") != nullptr;
+        if (sf_trace)
+        {
+            std::string tgts;
+            for (int t : chosen)
+            {
+                if (!tgts.empty()) { tgts += ","; }
+                if (t == TARGET_OPP_FACE)       { tgts += "oppface"; }
+                else if (t == TARGET_SELF_FACE) { tgts += "self"; }
+                else if (t >= 0 && t < static_cast<int>(state.battlefield.size()))
+                {
+                    tgts += state.battlefield[t].card.m_name.str();
+                    tgts += (state.battlefield[t].controller_index == controller) ? "(own)" : "(opp)";
+                }
+                else { tgts += "?"; }
+            }
+            std::string top;
+            for (int i = 0; i < n && i < static_cast<int>(ap.library.size()); ++i)
+            {
+                if (!top.empty()) { top += ","; }
+                top += ap.library[i].m_name.str();
+            }
+            std::fprintf(stderr,
+                         "[soulfire] %-5s T%-2d search_count=%llu life=%d opp_creatures=%zu"
+                         " own_targets=%d base=%d n=%d hand=%zu lib=%zu targets=[%s] exile=[%s]\n",
+                         trace_side, state.turn_number,
+                         static_cast<unsigned long long>(state.search_count), ap.life,
+                         SoulfireOppCreatureOrder(state, controller).size(), own_targets, base, n,
+                         ap.hand.size(), ap.library.size(), tgts.c_str(), top.c_str());
+        }
+    }
 
     // Exile n cards top-down; every exiled card is staged (the dig). Keep per-flip MV in flip order.
     const bool               capture = (g_reveal_logger != nullptr);
@@ -3133,9 +3256,10 @@ inline void BpTraceCast(const char* side, const GameState& state, const std::str
         untapped += p.card.m_name.str();
     }
     std::fprintf(stderr,
-                 "[bp-pay] %-5s cast=%-24s cost=%d/W%d U%d B%d R%d G%d C%d creature=%d"
+                 "[bp-pay] %-5s T%-2d cast=%-24s cost=%d/W%d U%d B%d R%d G%d C%d creature=%d"
                  " float=W%d U%d B%d R%d G%d C%d wild%d untapped=[%s]\n",
-                 side, name.c_str(), cost.generic, cost.white, cost.blue, cost.black, cost.red,
+                 side, state.turn_number, name.c_str(),
+                 cost.generic, cost.white, cost.blue, cost.black, cost.red,
                  cost.green, cost.colorless, for_creature ? 1 : 0,
                  f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
                  untapped.c_str());

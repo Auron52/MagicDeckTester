@@ -4203,6 +4203,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (vp.charge_counters != mv) { continue; }
             Permanent perm;
             perm.card              = copt->card;
+            perm.card.m_number     = hand_it->m_number;   // per-copy ID (mirror AIEngine's Vial deploy)
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
@@ -4624,7 +4625,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // self = min MV). Mirrors EffectHandler so the rollout matches the executor (lockstep).
             if (def.params.damage_equals_top_mv)
             {
-                SoulfireResult sr = SoulfireDig(state, state.active_player_index, own_targets, &def);
+                SoulfireResult sr = SoulfireDig(state, state.active_player_index, own_targets, &def, "apply");
                 dmg = sr.face_damage;
                 state.players[state.active_player_index].life -= sr.self_damage;
             }
@@ -5330,11 +5331,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 state.battlefield.back().aura_attached_to =
                     ResolveEnchantTarget(state, state.active_player_index, enchant_target);
                 PerformLightPawsAttach(state, state.active_player_index,
-                                       def.card.m_mana_cost.ManaValue());
+                                       def.card.m_mana_cost.ManaValue(),
+                                       g_bp_trace_arm ? "APPLY" : "rollout");
             }
             if (def.params.etb_opponent_lifegain > 0)
             {
                 OpponentGainsLife(state, state.active_player_index, def.params.etb_opponent_lifegain);
+            }
+            // Legend rule (CR 704.5j, a state-based action) for a legendary NON-creature permanent
+            // too, so this branch matches both the creature branch above and the executor's single
+            // post-dispatch site (EffectHandler::Resolve). No legendary non-creature permanent
+            // exists in any deck today, so this is inert -- it is here so the two sides cannot
+            // silently disagree the day one is added.
+            if (def.card.HasSupertype(Supertype::Legendary))
+            {
+                EnforceLegendRule(state, state.active_player_index);
             }
         }
 
@@ -6012,7 +6023,27 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // truth). Without this the search kept every drawn land as Land's Edge ammo while
     // the real game discards lands here, over-counting Land's Edge damage (gi=947).
     static const bool s_fd_discard = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
-    while (!unlimited_hand && ap.hand.size() > 7)
+
+    // STAGED cards do NOT count toward maximum hand size (CR 514.1 counts the HAND; a card exiled
+    // with "you may play it until ..." -- Soulfire Eruption, Light Up the Stage, Expressive
+    // Iteration, an Apex land -- is in EXILE, not hand). The engine models those as hand cards
+    // flagged m_is_staged purely so the castable-set code can see them; the real executor moves
+    // them back out to Player::staged_cards at the end of AIEngine::TakeTurn, so by the time
+    // GameEngine::CleanupStep runs they are simply not in hand and can never be shed here.
+    // The rollout keeps them in ap.hand for its whole lookahead, so counting them made it discard
+    // cards the real game keeps -- a pure rollout/executor divergence (Hinata seed 4010: the T5
+    // Soulfire dig staged 8 cards into an otherwise-empty hand, the rollout shed one at cleanup and
+    // planned turn 6 a card short, so the realised turn missed the lethal Crackle X by one mana:
+    // predicted T6, realised T7). Count and shed only NON-staged cards -> exact parity with
+    // CleanupStep. Hatch: MTG_LEGACY_STAGED_HANDLIMIT restores the old counting.
+    static const bool s_staged_exempt = std::getenv("MTG_LEGACY_STAGED_HANDLIMIT") == nullptr;
+    auto hand_count = [&]() {
+        if (!s_staged_exempt) { return ap.hand.size(); }
+        size_t n = 0;
+        for (const Card& c : ap.hand) { if (!c.m_is_staged) { ++n; } }
+        return n;
+    };
+    while (!unlimited_hand && hand_count() > 7)
     {
         // Default (commit-the-line): use the SHARED selector so the rollout sheds exactly the
         // card the real engine's ChooseDiscard would -- required-piece protection + land-outlet
@@ -6032,6 +6063,16 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
                 {
                     return a.m_mana_cost.ManaValue() < b.m_mana_cost.ManaValue();
                 });
+        }
+        // Both selectors may still land on a staged card (SelectCleanupDiscardIndex sheds one as a
+        // last resort when every non-staged card is a required piece; max_element ignores the flag).
+        // The count above proves a non-staged card exists, so fall back to the first one rather than
+        // shedding something the real cleanup could not reach.
+        if (s_staged_exempt && victim != ap.hand.end() && victim->m_is_staged)
+        {
+            victim = std::find_if(ap.hand.begin(), ap.hand.end(),
+                                  [](const Card& c) { return !c.m_is_staged; });
+            if (victim == ap.hand.end()) { break; }
         }
         ap.graveyard.push_back(*victim);
         ap.hand.erase(victim);
@@ -6251,6 +6292,13 @@ static bool PlayLandByName(GameState& state, const std::string& name,
         }
         Permanent perm;
         perm.card              = face_def->card;   // chosen face's identity -> locks its colour
+        // Preserve the per-copy ID from the hand card. The executor's mirror
+        // (AIEngine::TryPlaySpecificLand) has always done this; the rollout did not, so every land
+        // the rollout played became permanent #0. Invisible until something reads a LAND permanent's
+        // number -- BounceKarooLand returns `battlefield[pick].card` to hand, so an Izzet Boilerworks
+        // bounce handed the rollout an unnumbered Island while the real game got the numbered one
+        // (Hinata seed 4153 T3). Any hand decision keyed on card identity then diverges.
+        perm.card.m_number     = it->m_number;
         perm.controller_index  = state.active_player_index;
         perm.owner_index       = state.active_player_index;
         perm.entered_this_turn = true;
