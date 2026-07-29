@@ -8054,14 +8054,18 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
 // DETERMINISM: every stop decision reads the deterministic VIRTUAL work-unit counter (SearchBudget),
 // never the clock, so runs stay thread-invariant and ground-truth comparisons stay reproducible.
 //
-//   MTG_BP_WAVES=0   off -- byte-identical to the pre-wave engine.
-//   MTG_BP_WAVES=1   DEFAULT: waves run only when the budget is UNLIMITED. Every budgeted run
-//                    (the whole regression suite, all real play) is byte-identical; only an
-//                    unbounded search loses the rank ceiling -- which is exactly the bar, since a
-//                    cap "is defensible under a budget" but not under an unbounded search.
-//   MTG_BP_WAVES=2   ALSO run under a budget, while the node still has budget left. This is the arm
-//                    that measures whether spending nodes on deferred ranks beats spending them on
-//                    the search; it is the A/B knob, not yet a default.
+// THE WAVES ARE A BUDGET LEVER, NOT AN UNBOUNDED-ONLY MODE. A node runs waves while it still has
+// budget, so raising the budget buys deeper rank coverage continuously -- there is no cliff where a
+// large-but-finite budget behaves like a tiny one. An UNLIMITED budget is just the end of that
+// scale: every rank is reached, and the ceiling is gone entirely.
+//
+// Gating waves on Unlimited() alone was tried and REJECTED (user, 2026-07-29): it made a very high
+// budget buy nothing, which is precisely the "cap that no budget can lift" this whole mechanism
+// exists to remove. The measurement backs the lever -- on HELD-OUT seeds, spending the budget on
+// deferred ranks is -0.00228 avg with 21 cases better, 0 worse, AND a faster suite.
+//
+//   MTG_BP_WAVES=0   off -- byte-identical to the pre-wave engine (the A/B hatch).
+//   MTG_BP_WAVES=1   DEFAULT: waves run while the node's budget allows; unlimited => exhaustive.
 static int BpWaveMode()
 {
     static const int m = []() -> int
@@ -8074,14 +8078,45 @@ static int BpWaveMode()
     return m;
 }
 
-// May this node run a wave phase at all? Mode 1 requires an unlimited budget; mode 2 additionally
-// allows a budgeted node while budget remains (re-checked per candidate inside the loop).
+// May this node run a wave phase at all? Only the budget decides: an unlimited budget always may, a
+// budgeted one may while it has anything left (re-checked per candidate inside the loop, so the
+// phase stops the moment the budget does -- that is the anytime contract).
 static bool BpWavesHere(const SearchBudget* budget)
 {
-    const int mode = BpWaveMode();
-    if (mode <= 0 || BpSearchWidth() <= 0) { return false; }
+    if (BpWaveMode() <= 0 || BpSearchWidth() <= 0) { return false; }
     if (budget == nullptr || budget->Unlimited()) { return true; }
-    return mode >= 2 && !budget->Exhausted();
+    return !budget->Exhausted();
+}
+
+// COMPLETE NODES (MTG_BP_WAVE_COMPLETE, default ON).
+//
+// `FSLineWin` returns the FIRST in-horizon win it finds, and that shortcut is only sound because
+// `FullSearchLine` breaks its ladder at the first verified win: pass L runs only after passes
+// 1..L-1 found none, so nothing can win before this pass's horizon edge and the first in-horizon
+// win must BE that edge. The premise is "pass L-1 was a COMPLETE refutation".
+//
+// The width cap already broke that premise -- pass L-1 could not see any continuation ranked >= W,
+// so a turn-4 line hiding at rank 5 was invisible and the turn-5 win was returned as optimal. Waves
+// restore it at an unlimited budget (every pass exhausts every rank). But with the shortcut in
+// place a node that finds an in-horizon win RETURNS BEFORE ITS OWN WAVE PHASE RUNS, so under a
+// budget it can still answer turn+L-1 while a deferred rank held turn+L-2.
+//
+// With this on, an in-horizon win BREAKS the candidate loop instead of returning: the wave phase
+// runs and the node answers with the minimum over every rank it could afford, not the first win it
+// stumbled on. A THIS-TURN win still returns immediately -- `turn_number` is the absolute floor, so
+// no rank can beat it and the premise is irrelevant there.
+//
+// 0 restores the first-in-horizon-win shortcut (and is byte-identical whenever waves are off, since
+// the deferral is gated on a wave phase actually being able to run).
+static bool BpWaveCompleteNodes()
+{
+    static const bool on = []() -> bool
+    {
+        const char* v = std::getenv("MTG_BP_WAVE_COMPLETE");
+        if (v == nullptr || *v == '\0') { return true; }
+        return std::atoi(v) != 0;
+    }();
+    return on;
 }
 
 // MTG_BP_WAVE_PROBE=1: did a wave phase get to run, how far up the ranks did it reach, and did the
@@ -9276,6 +9311,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     int _beam_i = 0;
     std::size_t scanned = 0;   // how far the loop actually got (the beam can cut it short) -- the
                                // deferred wave phase below stays inside it
+    // Set when an in-horizon win BROKE the loop so the wave phase can try to beat it (see
+    // BpWaveCompleteNodes). Suppresses the node_vals store exactly as the old early RETURN did.
+    bool deferred_win = false;
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -9347,6 +9385,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // standalone earliest-win finder.
             if (tail.win_turn <= state.turn_number + depth - 1)
             {
+                // COMPLETE NODES: this win is only known-optimal if every shallower pass was a
+                // complete refutation, which a budget-truncated wave phase cannot promise. Break
+                // instead of returning so this node's own deferred ranks get a chance to beat it.
+                if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                 if (lc != nullptr) { lc->emplace(key, best); }
                 return best;
             }
@@ -9356,7 +9398,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // Store the probe's per-plan value ranks for this fully-evaluated node (loop completed = every plan
     // scored), so the escalation's beam can reorder by them. Win-node early-returns above skip this (they
     // don't need reordering). Overwrites are harmless (depth is folded into the key, so no cross-pass clash).
-    if (rec_vals && !node_vals.empty()) { (*g_probe_plan_vals)[key] = std::move(node_vals); }
+    if (rec_vals && !node_vals.empty() && !deferred_win) { (*g_probe_plan_vals)[key] = std::move(node_vals); }
 
     // ---- DEFERRED CONTINUATION WAVES (see BpWaveWalker) ------------------------------------------
     // Wave 0 above reached only ranks 0..W-1 of each breakpoint's RANKED continuation list; walk the
@@ -9428,7 +9470,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     p_rec.breakpoint_actions = std::move(bp);
                     best.phases.push_back({ true, std::move(p_rec) });
                     best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
-                    if (tail.win_turn <= state.turn_number + depth - 1)   // in-horizon == optimal
+                    // Same reasoning as the main loop: with COMPLETE NODES on we keep walking the
+                    // remaining ranks rather than stopping at the first in-horizon win, so the node
+                    // answers with the minimum over every rank it could afford. The walk still ends
+                    // on its own when the slots retire or the budget runs out.
+                    if (!BpWaveCompleteNodes() && tail.win_turn <= state.turn_number + depth - 1)
                     {
                         if (lc != nullptr) { lc->emplace(key, best); }
                         return best;
