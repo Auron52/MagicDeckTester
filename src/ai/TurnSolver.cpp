@@ -1407,6 +1407,26 @@ static int BpSiteMask()
 // would be pure duplicates burning nodes. Thread-local -- the search is single-threaded per game.
 static thread_local int g_bp_enum_depth = 0;
 
+// ---- How many continuations does this breakpoint actually HAVE? ------------------------------
+// bp_choice = k indexes cands[k] of a HEURISTICALLY RANKED list, so a continuation ranked >= W is
+// unreachable at ANY depth and ANY budget -- the width cap is a QUALITY prune, not a cost prune
+// (proof: Hinata seed 4259 gi255 at --budget-ms 0 is T6 at W=2 and T5 at W=16). The fix (deferred
+// fallback waves, docs/design/post-breakpoint-search.md "The width cap is itself a quality prune")
+// must not hard-code a wider number -- it has to KNOW the list length. That length is only knowable
+// at APPLY time, because the breakpoint state depends on the base plan's own casts, so it is
+// recorded here by the apply that computed it and read back by the decision node afterwards:
+//
+//     g_bp_cands_last = 0;
+//     ApplyPlanDirect(copy, plan, ...);      // wave 0, bp_choice = 0..W-1
+//     const int n = g_bp_cands_last;         // this plan's continuation count (0 = no breakpoint)
+//
+// Exact per-plan attribution with no map and no extra enumeration: at most one breakpoint per apply
+// is eligible (the one at bp_at), so there is at most one write. Thread_local -- the search is
+// single-threaded per game, and the batch runner plays games concurrently.
+//
+// WRITE-ONLY for now: nothing reads it yet, so this instrumentation is byte-identical.
+static thread_local int g_bp_cands_last = 0;
+
 // Lockstep trace arming flag (MTG_BP_TRACE, diagnosis only). ApplyPlanDirect runs millions of times
 // inside rollouts, so an unconditional print is useless; this is set ONLY around the fd-trace's
 // replay of the COMMITTED line, which is the exact apply the executor is supposed to reproduce.
@@ -3887,6 +3907,85 @@ namespace
         if (resolved_by_search)  { g_bp_probe.searched[i].fetch_add(1, std::memory_order_relaxed); }
         if (nested_blocked)      { g_bp_probe.nested[i].fetch_add(1, std::memory_order_relaxed); }
     }
+
+    // MTG_BP_CANDS_PROBE=1: the continuation-count distribution at every SEARCHED breakpoint (see
+    // g_bp_cands_last). This is the measurement that sizes the deferred-wave loop: `unreachable` is
+    // the number of continuations that bp_choice can never index at the current width W, i.e. the
+    // quality the width cap is costing. Compare `reach` (what W buys) against `unreachable` (what it
+    // hides) per site. Buckets are the list LENGTH; `max` is the longest list seen.
+    constexpr int kBpCandsBuckets = 9;   // 1, 2, 3, 4, 5-8, 9-16, 17-32, 33-64, 65+
+    const char* const kBpCandsBucketName[kBpCandsBuckets] = {
+        "1", "2", "3", "4", "5-8", "9-16", "17-32", "33-64", "65+"
+    };
+    inline int BpCandsBucket(int n)
+    {
+        if (n <= 4) { return n - 1; }
+        if (n <= 8) { return 4; }
+        if (n <= 16) { return 5; }
+        if (n <= 32) { return 6; }
+        if (n <= 64) { return 7; }
+        return 8;
+    }
+    struct BpCandsProbe
+    {
+        std::atomic<uint64_t> hist[5][kBpCandsBuckets]{};
+        std::atomic<uint64_t> n[5]{};            // searched breakpoints seen
+        std::atomic<uint64_t> total[5]{};        // Σ cands.size()
+        std::atomic<uint64_t> reach[5]{};        // Σ min(cands.size(), W)   -- indexable today
+        std::atomic<uint64_t> unreachable[5]{};  // Σ max(cands.size()-W, 0) -- rank-gated OUT
+        std::atomic<uint64_t> capped[5]{};       // breakpoints with cands.size() > W
+        std::atomic<int>      maxlen[5]{};
+        ~BpCandsProbe()
+        {
+            if (std::getenv("MTG_BP_CANDS_PROBE") == nullptr) { return; }
+            for (int i = 0; i < 5; ++i)
+            {
+                const uint64_t cnt = n[i].load(std::memory_order_relaxed);
+                if (cnt == 0) { continue; }
+                const uint64_t tot = total[i].load(std::memory_order_relaxed);
+                const uint64_t rch = reach[i].load(std::memory_order_relaxed);
+                const uint64_t unr = unreachable[i].load(std::memory_order_relaxed);
+                const uint64_t cap = capped[i].load(std::memory_order_relaxed);
+                std::fprintf(stderr,
+                             "[bp-cands] %-58s n=%llu mean=%.2f max=%d capped=%llu (%.1f%%)"
+                             " reach=%llu unreachable=%llu (%.1f%% of all continuations)\n",
+                             kBpSiteName[i], static_cast<unsigned long long>(cnt),
+                             static_cast<double>(tot) / static_cast<double>(cnt),
+                             maxlen[i].load(std::memory_order_relaxed),
+                             static_cast<unsigned long long>(cap),
+                             100.0 * static_cast<double>(cap) / static_cast<double>(cnt),
+                             static_cast<unsigned long long>(rch),
+                             static_cast<unsigned long long>(unr),
+                             tot ? (100.0 * static_cast<double>(unr) / static_cast<double>(tot)) : 0.0);
+                std::fprintf(stderr, "[bp-cands]   len:");
+                for (int b = 0; b < kBpCandsBuckets; ++b)
+                {
+                    const uint64_t h = hist[i][b].load(std::memory_order_relaxed);
+                    if (h) { std::fprintf(stderr, " %s=%llu", kBpCandsBucketName[b],
+                                          static_cast<unsigned long long>(h)); }
+                }
+                std::fprintf(stderr, "\n");
+            }
+        }
+    };
+    BpCandsProbe g_bp_cands_probe;
+    inline void BpCands(int site, int len, int width)
+    {
+        static const bool on = std::getenv("MTG_BP_CANDS_PROBE") != nullptr;
+        if (!on || len <= 0) { return; }
+        const int reachable = len < width ? len : width;
+        g_bp_cands_probe.n[site].fetch_add(1, std::memory_order_relaxed);
+        g_bp_cands_probe.total[site].fetch_add(static_cast<uint64_t>(len), std::memory_order_relaxed);
+        g_bp_cands_probe.reach[site].fetch_add(static_cast<uint64_t>(reachable),
+                                               std::memory_order_relaxed);
+        g_bp_cands_probe.unreachable[site].fetch_add(static_cast<uint64_t>(len - reachable),
+                                                     std::memory_order_relaxed);
+        if (len > width) { g_bp_cands_probe.capped[site].fetch_add(1, std::memory_order_relaxed); }
+        g_bp_cands_probe.hist[site][BpCandsBucket(len)].fetch_add(1, std::memory_order_relaxed);
+        std::atomic<int>& m = g_bp_cands_probe.maxlen[site];
+        int prev = m.load(std::memory_order_relaxed);
+        while (len > prev && !m.compare_exchange_weak(prev, len, std::memory_order_relaxed)) {}
+    }
 }
 
 static bool OrderingOpaque(const std::string& name)
@@ -4342,6 +4441,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Shared with the executor (AIEngine::resolve_draw_breakpoint): both index the SAME list.
             std::vector<TurnSolver::Plan> cands =
                 TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+            // How LONG is the ranked list? The caller can only emit bp_choice = 0..W-1 blind, so
+            // report the real length back for the deferred-wave loop (and MTG_BP_CANDS_PROBE).
+            // See g_bp_cands_last -- write-only for now, hence byte-identical.
+            g_bp_cands_last = static_cast<int>(cands.size());
+            // Sample once per distinct breakpoint, not once per variant: the W variants of one base
+            // plan all re-reach the SAME breakpoint state (that is the enum memo's premise), and
+            // bp_choice == 0 is always emitted, so gating on it counts each occurrence exactly once.
+            if (plan.bp_choice == 0) { BpCands(site, g_bp_cands_last, BpSearchWidth()); }
             // Fewer continuations than variants -> fall back to greedy, making this variant a
             // duplicate of its base plan (a wasted node, never a wrong answer).
             if (plan.bp_choice < static_cast<int>(cands.size()))
@@ -4551,6 +4658,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.ponder_keep    = ponder_keep;
             rec.crackle_targets = crackle_targets;
             rec.splice_count   = splice_count;
+            // LOCKSTEP: these two were MISSING, and they are exactly the last two arguments
+            // AIEngine::replay_recorded feeds back into cast_by_name -- so a cast made INSIDE a
+            // breakpoint continuation replayed with an EMPTY float colour and no enchant target.
+            // For Apex of Power that is not a small drift: GameState documents "empty ->
+            // wild / no colour choice", so the rollout floated the searched colour ("add ten mana
+            // of any ONE color", which the card's own contract says must NEVER be wild because
+            // wild could illegally pay a multicolour mix) while the executor floated WILD. The
+            // two then paid different pips and the realised turn fell behind the committed one:
+            // Dragonstorm s6006 gi362 committed a proven T6 and realised T7 ([fd-diverge]
+            // realized_win=7 predicted_win=6). Latent until a continuation ranked high enough to
+            // cast a second Apex became reachable -- it reproduces with MTG_BP_SEARCH=17 and no
+            // waves at all, so the deferred waves EXPOSED it rather than caused it.
+            // See docs/design/rollout-executor-lockstep.md.
+            rec.chosen_float_color = chosen_float_color;
+            rec.enchant_target     = enchant_target;
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -7810,6 +7932,40 @@ static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
     return mask;
 }
 
+// PERFORMANCE PRUNE (MTG_BP_MAXBASE, default 16): how many breakpoint-opening base plans get a
+// wave-0 fan-out at all. On a very wide node the fan-out multiplies an already-huge candidate set:
+// Dragonstorm at the overnight budget (its ritual/storm powersets) ran 5.3x slower for -0.033 avg.
+// The plan list is sorted best-first, so fanning out only the top N keeps the widening where the
+// search actually is while bounding the blowup. 0 lifts the cap (free rein).
+//
+// On its own this is the SAME class of cap as the width W -- a rank gate, hence a QUALITY prune --
+// so the deferred wave phase (BpWaveWalker) covers the plans it drops, starting them at rank 0.
+// That is what demotes it to a cost prune: it decides who waits, not who is reachable.
+static int BpMaxBase()
+{
+    static const int n = []() -> int
+    {
+        const char* v = std::getenv("MTG_BP_MAXBASE");
+        if (v == nullptr || *v == '\0') { return 16; }
+        const int k = std::atoi(v);
+        return k < 0 ? 0 : k;
+    }();
+    return n;
+}
+
+// A cycle/sacrifice dig opens a breakpoint without any cast naming it (the dig loop runs off the
+// board), so on a deck that is about to dig EVERY plan qualifies. Pre-checking ShouldConsiderDig
+// (the same predicate the dig loop uses, here on the pre-apply state) keeps that fan-out off the
+// turns that will not dig at all; a plan that only becomes dig-worthy after its own casts simply
+// keeps the greedy dig continuation. Shared by wave 0 and the deferred waves so both walk the
+// SAME base-plan set.
+static bool BpDigFanoutPending(const GameState& state)
+{
+    if ((BpSiteMask() & (1 << 4)) == 0) { return false; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    return prov.HasAnyDigSource(state) && prov.ShouldConsiderDig(state);
+}
+
 // Append the SEARCHED-BREAKPOINT variants (MTG_BP_SEARCH=W; see Plan::bp_choice). For every plan
 // that opens a breakpoint, add W copies tagged bp_choice = 0..W-1 so the outer rollout scores W
 // distinct post-breakpoint continuations (land drop AND casts) instead of trusting the greedy
@@ -7818,38 +7974,24 @@ static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
 // on a strictly better rolled-out win turn, because the equal-turn tiebreak is `value`, which it
 // shares with its base plan. W=0 (default) or a nested breakpoint enumeration emits nothing, so
 // the whole mechanism is byte-identical off. See docs/design/post-breakpoint-search.md.
+//
+// This is WAVE 0. It reaches ranks 0..W-1 of the continuation list only; the deferred wave phase
+// (BpWaveWalker) walks ranks W.. afterwards, so no rank is unreachable at an unbounded budget.
 static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSolver::Plan>& plans)
 {
     const int w = BpSearchWidth();
     if (w <= 0 || g_bp_enum_depth != 0 || plans.empty()) { return; }
     if (!g_bp_root_enum && !BpSearchInRollouts()) { return; }   // committed decision only
-    // A cycle/sacrifice dig opens a breakpoint without any cast naming it (the dig loop runs off
-    // the board), so on a deck that is about to dig EVERY plan qualifies. Pre-checking
-    // ShouldConsiderDig (the same predicate the dig loop uses, here on the pre-apply state) keeps
-    // that fan-out off the turns that will not dig at all; a plan that only becomes dig-worthy
-    // after its own casts simply keeps the greedy dig continuation.
-    // PERFORMANCE PRUNE (cost only -- every base plan is still searched; this caps only the EXTRA
-    // continuations). On a very wide node the fan-out multiplies an already-huge candidate set:
-    // Dragonstorm at the overnight budget (its ritual/storm powersets) ran 5.3x slower for -0.033
-    // avg. `plans` is sorted best-first, so fanning out only the top N keeps the widening where the
-    // search actually is while bounding the blowup. MTG_BP_MAXBASE=0 lifts the cap (free rein).
-    static const int s_max_base = []() -> int
-    {
-        const char* v = std::getenv("MTG_BP_MAXBASE");
-        if (v == nullptr || *v == '\0') { return 16; }
-        const int n = std::atoi(v);
-        return n < 0 ? 0 : n;
-    }();
+    const int  s_max_base = BpMaxBase();
     const int  sites  = BpSiteMask();
-    const DecisionProvider& prov = ResolveProvider(state);
-    const bool dig_bp = (sites & (1 << 4)) != 0
-                     && prov.HasAnyDigSource(state) && prov.ShouldConsiderDig(state);
+    const bool dig_bp = BpDigFanoutPending(state);
     std::vector<TurnSolver::Plan> variants;
     int fanned = 0;
-    for (const TurnSolver::Plan& p : plans)
+    for (TurnSolver::Plan& p : plans)
     {
         if (!dig_bp && (PlanOpensBreakpoint(p) & sites) == 0) { continue; }
         if (s_max_base > 0 && fanned++ >= s_max_base) { break; }
+        p.bp_wave0 = true;   // covered by wave 0; the wave phase starts this plan at rank W, not 0
         for (int at = 0; at < BpSearchDepth(); ++at)
         {
             for (int k = 0; k < w; ++k)
@@ -7857,6 +7999,7 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
                 TurnSolver::Plan v = p;
                 v.bp_choice = k;
                 v.bp_at     = at;
+                v.bp_wave0  = false;   // the marker belongs to the base plan only
                 variants.push_back(std::move(v));
             }
         }
@@ -7864,6 +8007,218 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
     plans.insert(plans.end(), std::make_move_iterator(variants.begin()),
                               std::make_move_iterator(variants.end()));
 }
+
+// ---- DEFERRED CONTINUATION WAVES --------------------------------------------------------------
+// docs/design/post-breakpoint-search.md, "The width cap is itself a quality prune".
+//
+// THE DEFECT THIS CLOSES. `Plan::bp_choice = k` indexes cands[k] of a HEURISTICALLY RANKED list, so
+// wave 0 (AppendBreakpointVariants, ranks 0..W-1) leaves every continuation ranked >= W unreachable
+// at ANY depth and ANY budget -- an infinite budget does not reach the line. Measured: Hinata seed
+// 4259 gi255 at --budget-ms 0 is T6 at W=2 and T5 at W=16. The lists are long, so this hides a lot:
+// MTG_BP_CANDS_PROBE at W=2 reports TH mean 6.1 / max 19, Hinata mean 6.0 / max 44, Dragonstorm mean
+// 29 / max 90 -- 69-93% of all continuations rank-gated out. A CONSTANT wider W is not the answer
+// either: it pays the fan-out at every breakpoint including the ones where it buys nothing, and the
+// smoke W-sweep degrades past W=8 while the digests never converge even at W=64.
+//
+// THE FIX: defer, don't cap -- turn the rank gate from a QUALITY prune into a COST prune.
+//   * Wave 0 is unchanged, so a node whose budget the search already spent is BYTE-IDENTICAL.
+//   * A wave phase then walks ranks W, W+1, ... breadth-first across that node's breakpoint-opening
+//     base plans, for as long as the budget allows. Unbounded budget => every rank is reached =>
+//     full coverage is structural, which is the user's bar ("under unbounded I absolutely do not
+//     want anything like this").
+//   * No magic number: the real list length is not knowable before the apply (the breakpoint state
+//     depends on the base plan's own casts), so the walker LEARNS it from the apply (g_bp_cands_last)
+//     and retires the slot. Nothing here hard-codes a width.
+//
+// WHERE IT RUNS, AND WHY NOT AT THE ROOT ONLY. The first cut ran the waves once per committed
+// decision, as a phase after the hybrid. MEASURED DEAD END: on Hinata 4259 that phase entered twice
+// in the whole game (commit-the-line searches once per committed line, not once per turn) and found
+// no breakpoint-opening plan at either root, so it changed nothing -- and the control confirms the
+// placement, not the loop, was the problem: `MTG_BP_SEARCH=16 MTG_NO_BP_SEARCH_ROLLOUT=1` (root-only
+// widening, unbounded) still gives T6 where every-ply W=16 gives T5. That matches the earlier
+// finding recorded in the doc ("the win comes from rollouts, not the root"): the greedy continuation
+// hurts by making the LEAF EVALUATOR mis-score lines. So the waves attach to the two loops that
+// actually fan out -- FSLineWin (the commit-the-line search's nodes) and SolveWithLookahead's
+// per-pass candidate loop (every rollout turn).
+//
+// POSITION-KEYING HAZARD, AVOIDED BY APPENDING. The escalation reorders a node's `pre` by the
+// probe's per-plan ranks, INDEXED BY POSITION and keyed by BuildSimKey (g_probe_plan_vals). Changing
+// the plan set while the node key stays the same would land the recorded ranks on the wrong plans --
+// a silent mis-ordering, no crash. Waves run AFTER the node's candidate loop and after its
+// `node_vals` are stored, and never extend `node_vals`, so positions 0..N-1 keep their identity and
+// the probe/escalation pair stays on a stable prefix.
+//
+// ANYTIME-SAFE, so stopping mid-wave cannot hurt: a variant is adopted only on a STRICTLY better
+// rolled-out win turn, exactly as wave 0's tiebreak works. Aborting a wave can only fail to improve.
+//
+// DETERMINISM: every stop decision reads the deterministic VIRTUAL work-unit counter (SearchBudget),
+// never the clock, so runs stay thread-invariant and ground-truth comparisons stay reproducible.
+//
+//   MTG_BP_WAVES=0   off -- byte-identical to the pre-wave engine.
+//   MTG_BP_WAVES=1   DEFAULT: waves run only when the budget is UNLIMITED. Every budgeted run
+//                    (the whole regression suite, all real play) is byte-identical; only an
+//                    unbounded search loses the rank ceiling -- which is exactly the bar, since a
+//                    cap "is defensible under a budget" but not under an unbounded search.
+//   MTG_BP_WAVES=2   ALSO run under a budget, while the node still has budget left. This is the arm
+//                    that measures whether spending nodes on deferred ranks beats spending them on
+//                    the search; it is the A/B knob, not yet a default.
+static int BpWaveMode()
+{
+    static const int m = []() -> int
+    {
+        const char* v = std::getenv("MTG_BP_WAVES");
+        if (v == nullptr || *v == '\0') { return 1; }
+        const int n = std::atoi(v);
+        return n < 0 ? 0 : n;
+    }();
+    return m;
+}
+
+// May this node run a wave phase at all? Mode 1 requires an unlimited budget; mode 2 additionally
+// allows a budgeted node while budget remains (re-checked per candidate inside the loop).
+static bool BpWavesHere(const SearchBudget* budget)
+{
+    const int mode = BpWaveMode();
+    if (mode <= 0 || BpSearchWidth() <= 0) { return false; }
+    if (budget == nullptr || budget->Unlimited()) { return true; }
+    return mode >= 2 && !budget->Exhausted();
+}
+
+// MTG_BP_WAVE_PROBE=1: did a wave phase get to run, how far up the ranks did it reach, and did the
+// search ever PREFER a deferred continuation? `no-slots` counts nodes with no breakpoint-opening
+// plan (the phase is inert there), `budget-stopped` the ones cut short with ranks still unseen.
+namespace
+{
+    struct BpWaveProbe
+    {
+        std::atomic<uint64_t> nodes{0};        // nodes that ran a wave phase
+        std::atomic<uint64_t> no_slots{0};     // nodes with no breakpoint-opening base plan
+        std::atomic<uint64_t> slots{0};        // (base plan x bp_at) slots offered waves
+        std::atomic<uint64_t> scored{0};       // wave candidates applied
+        std::atomic<uint64_t> rolled{0};       // ... that survived dedup and got a rollout
+        std::atomic<uint64_t> improved{0};     // ... that beat the node's incumbent
+        std::atomic<uint64_t> stopped{0};      // wave phases cut short by the budget
+        std::atomic<int>      maxrank{0};      // deepest rank reached
+        ~BpWaveProbe()
+        {
+            if (std::getenv("MTG_BP_WAVE_PROBE") == nullptr) { return; }
+            std::fprintf(stderr,
+                         "[bp-waves] nodes=%llu no-slots=%llu slots=%llu scored=%llu"
+                         " rolled=%llu improved=%llu budget-stopped=%llu max-rank=%d\n",
+                         static_cast<unsigned long long>(nodes.load()),
+                         static_cast<unsigned long long>(no_slots.load()),
+                         static_cast<unsigned long long>(slots.load()),
+                         static_cast<unsigned long long>(scored.load()),
+                         static_cast<unsigned long long>(rolled.load()),
+                         static_cast<unsigned long long>(improved.load()),
+                         static_cast<unsigned long long>(stopped.load()),
+                         maxrank.load());
+        }
+    };
+    BpWaveProbe g_bp_wave_probe;
+    inline bool BpWaveProbeOn()
+    {
+        static const bool on = std::getenv("MTG_BP_WAVE_PROBE") != nullptr;
+        return on;
+    }
+    inline void BpWaveRank(int k)
+    {
+        std::atomic<int>& m = g_bp_wave_probe.maxrank;
+        int prev = m.load(std::memory_order_relaxed);
+        while (k > prev && !m.compare_exchange_weak(prev, k, std::memory_order_relaxed)) {}
+    }
+}
+
+// Hands one node's deferred continuations to its caller, one variant at a time. The caller owns the
+// scoring (the two candidate loops score differently), the walker owns WHICH variant comes next and
+// when a slot is exhausted.
+//
+// Breadth-first over ranks (round-robin across slots), so a budget that runs out part-way has spread
+// across base plans instead of exhausting one of them.
+class BpWaveWalker
+{
+public:
+    // `plans` is the node's candidate list AFTER wave 0 -- base plans and their variants mixed. Only
+    // base plans (bp_choice < 0) that open a breakpoint become slots.
+    //
+    // `limit` is how many leading entries the node's own loop actually SCANNED. It matters when the
+    // escalation beam cut the loop short: the beam dropped those plans (and with them their wave-0
+    // variants) on purpose, and that carve-out is reasoned -- it never applies at the root, so it
+    // cannot drop the committed play. Widening a plan the beam declined would undo it, so the waves
+    // stay inside whatever the loop looked at.
+    BpWaveWalker(const GameState& state, const std::vector<TurnSolver::Plan>& plans,
+                 std::size_t limit)
+    {
+        const int  w0     = BpSearchWidth();
+        const int  sites  = BpSiteMask();
+        const bool dig_bp = BpDigFanoutPending(state);
+        if (limit > plans.size()) { limit = plans.size(); }
+        for (std::size_t i = 0; i < limit; ++i)
+        {
+            const TurnSolver::Plan& p = plans[i];
+            if (p.bp_choice >= 0) { continue; }                                  // a wave-0 variant
+            if (!dig_bp && (PlanOpensBreakpoint(p) & sites) == 0) { continue; }
+            // A plan MTG_BP_MAXBASE dropped got no variants at all, so its ranks start at 0 -- else
+            // that cap would keep a whole plan's continuations unreachable one level up.
+            const int k0 = p.bp_wave0 ? w0 : 0;
+            for (int at = 0; at < BpSearchDepth(); ++at)
+            { m_slots.push_back(Slot{ i, at, k0, -1, false }); }
+        }
+    }
+
+    bool Empty() const { return m_slots.empty(); }
+    std::size_t SlotCount() const { return m_slots.size(); }
+    int LastRank() const { return m_last_k; }
+
+    // Fills `out` with the next variant to score. False once every slot is retired.
+    bool Next(const std::vector<TurnSolver::Plan>& plans, TurnSolver::Plan& out)
+    {
+        const std::size_t n = m_slots.size();
+        for (std::size_t tried = 0; tried < n; ++tried)
+        {
+            const std::size_t here = m_cursor;
+            m_cursor = (m_cursor + 1) % n;
+            Slot& sl = m_slots[here];
+            if (sl.done) { continue; }
+            if (sl.n >= 0 && sl.k_next >= sl.n) { sl.done = true; continue; }
+            m_last     = here;
+            m_last_k   = sl.k_next++;
+            out            = plans[sl.base];
+            out.bp_choice  = m_last_k;
+            out.bp_at      = sl.at;
+            out.bp_wave0   = false;
+            return true;
+        }
+        return false;
+    }
+
+    // Report what the apply of the last handed-out variant observed as the continuation list's REAL
+    // length (g_bp_cands_last; 0 when the apply reached no eligible breakpoint at all). Returns true
+    // when that rank was past the end -- the continuation fell back to greedy, making the variant a
+    // copy of its own base plan, which is also what terminates the walk for this slot.
+    bool Report(int n)
+    {
+        Slot& sl = m_slots[m_last];
+        sl.n = n;
+        const bool past_end = (n <= m_last_k);
+        if (past_end) { sl.done = true; }
+        return past_end;
+    }
+
+private:
+    struct Slot
+    {
+        std::size_t base;    // index into the node's plan list
+        int         at;      // which breakpoint of the apply (Plan::bp_at)
+        int         k_next;  // next rank to hand out
+        int         n;       // the list's real length, -1 until an apply reports it
+        bool        done;
+    };
+    std::vector<Slot> m_slots;
+    std::size_t       m_cursor = 0;
+    std::size_t       m_last   = 0;
+    int               m_last_k = 0;
+};
 
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
@@ -8919,12 +9274,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
     int _beam_i = 0;
+    std::size_t scanned = 0;   // how far the loop actually got (the beam can cut it short) -- the
+                               // deferred wave phase below stays inside it
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
         // near-leaf nodes (beam_here); the top plies keep full exploration so the committed play is never pruned.
         // 0 = unlimited = byte-identical. pre is value-ordered above, so this keeps the best W lines.
         if (beam_here && _beam_i++ >= g_esc_beam_width) { break; }
+        ++scanned;
         if (budget) { budget->Consume(1); }   // one interior node (plan applied)
         if (s_rollout_stats)
         {
@@ -8999,6 +9357,86 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // scored), so the escalation's beam can reorder by them. Win-node early-returns above skip this (they
     // don't need reordering). Overwrites are harmless (depth is folded into the key, so no cross-pass clash).
     if (rec_vals && !node_vals.empty()) { (*g_probe_plan_vals)[key] = std::move(node_vals); }
+
+    // ---- DEFERRED CONTINUATION WAVES (see BpWaveWalker) ------------------------------------------
+    // Wave 0 above reached only ranks 0..W-1 of each breakpoint's RANKED continuation list; walk the
+    // rest here. Deliberately AFTER the loop and AFTER node_vals is stored, and node_vals is never
+    // extended, so the probe's position-keyed ranks keep mapping to the same plans (the documented
+    // silent-mis-ordering hazard). Off under a budget by default => byte-identical there.
+    if (BpWavesHere(budget))
+    {
+        BpWaveWalker walker(state, pre, scanned);
+        if (walker.Empty())
+        {
+            if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
+        }
+        else
+        {
+            if (BpWaveProbeOn())
+            {
+                g_bp_wave_probe.nodes.fetch_add(1);
+                g_bp_wave_probe.slots.fetch_add(walker.SlotCount());
+            }
+            TurnSolver::Plan v;
+            while (walker.Next(pre, v))
+            {
+                // Anytime: a variant only ever wins on a STRICTLY better win turn, so stopping here
+                // keeps `best` exactly as the search left it.
+                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                { if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
+                if (BpWaveProbeOn()) { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
+
+                if (budget) { budget->Consume(1); }   // one interior node (plan applied)
+                if (s_rollout_stats)
+                {
+                    g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
+                    if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
+                }
+                GameState s = state;
+                std::vector<Action> bp;
+                g_bp_cands_last = 0;              // 0 == this apply reached no eligible breakpoint
+                ApplyPlanDirect(s, v, true, &bp);
+                // Past the end of the list: the continuation fell back to greedy, so this variant is
+                // a copy of its own base plan (already scored) and the slot retires.
+                if (walker.Report(g_bp_cands_last)) { continue; }
+                // Same post-apply state as an already-scored candidate -- the loop's own dedup set,
+                // so a wave candidate is also checked against every wave-0 one.
+                if (!bp_seen_states.insert(BuildSimKey(s, 0, 0, false)).second) { continue; }
+                if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
+                if (s.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
+                SimulateAnimateLands(s);
+                SimulateTapTokens(s);
+                SimulateCombat(s);
+                if (s.Opponent().life <= 0)       // wins THIS turn -> the earliest possible from here
+                {
+                    if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
+                    TurnSolver::Plan p_rec = v;
+                    p_rec.breakpoint_actions = std::move(bp);
+                    TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                    if (lc != nullptr) { lc->emplace(key, win); }
+                    return win;
+                }
+                TurnSolver::SearchLine tail =
+                    FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
+                               tt, lc, budget);
+                if (tail.win_turn < best.win_turn)
+                {
+                    if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
+                    best.win_turn = tail.win_turn;
+                    best.phases.clear();
+                    TurnSolver::Plan p_rec = v;
+                    p_rec.breakpoint_actions = std::move(bp);
+                    best.phases.push_back({ true, std::move(p_rec) });
+                    best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+                    if (tail.win_turn <= state.turn_number + depth - 1)   // in-horizon == optimal
+                    {
+                        if (lc != nullptr) { lc->emplace(key, best); }
+                        return best;
+                    }
+                }
+            }
+        }
+    }
 
     // Cache only a genuine win; a no-win (best.win_turn > max_turns) may be a
     // cutoff abort rather than a true dead end, so it is never stored (mirrors
@@ -9464,6 +9902,7 @@ namespace
     };
     EscalationGate g_escalation_gate;
 }
+
 
 TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, int depth,
                                                         int max_turns, bool second_main,
@@ -10784,6 +11223,82 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 pass_has_best = true;
             }
             ++candidates_done;
+        }
+
+        // ---- DEFERRED CONTINUATION WAVES (see BpWaveWalker) --------------------------------------
+        // The second fan-out site. This loop decides EVERY ROLLOUT TURN (SimulateToEndImpl calls
+        // SolveWithLookahead per turn), and the doc's measurement is that the searched-breakpoint
+        // gain comes from the rollouts, not the root -- the greedy continuation's real damage is to
+        // the LEAF EVALUATOR. So the rank ceiling has to lift here too, or an unbounded search still
+        // cannot reach a continuation ranked >= W while scoring a line. Same contract as FSLineWin's:
+        // strictly-better win turn only, so an aborted wave leaves the pass exactly as it was.
+        // An ABORTED pass is discarded wholesale below, so skip the waves for it.
+        if (!pass_aborted && BpWavesHere(budget))
+        {
+            // A pass that was not aborted scanned every candidate, so no limit applies here.
+            BpWaveWalker walker(state, candidates, candidates.size());
+            if (walker.Empty())
+            {
+                if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
+            }
+            else
+            {
+                if (BpWaveProbeOn())
+                {
+                    g_bp_wave_probe.nodes.fetch_add(1);
+                    g_bp_wave_probe.slots.fetch_add(walker.SlotCount());
+                }
+                Plan v;
+                while (walker.Next(candidates, v))
+                {
+                    if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                    { if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
+                    if (BpWaveProbeOn())
+                    { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
+
+                    if (budget) { budget->Consume(1); }
+                    PROF_INC(gamestate_copies);
+                    GameState copy = state;
+                    g_bp_cands_last = 0;
+                    if (is_pre_combat)
+                    {
+                        ApplyPlanDirect(copy, v, true);
+                        if (walker.Report(g_bp_cands_last)) { continue; }
+                        if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
+                        if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
+                        SimulateAnimateLands(copy);
+                        SimulateTapTokens(copy);
+                        SimulateCombat(copy);
+                        if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
+                        if (second_main)
+                        {
+                            Plan post = Solve(copy, false);
+                            ApplyPlanDirect(copy, post, false);
+                            if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
+                        }
+                    }
+                    else
+                    {
+                        ApplyPlanDirect(copy, v, false);
+                        if (walker.Report(g_bp_cands_last)) { continue; }
+                        if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
+                        if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
+                        if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
+                    }
+                    if (!SimulateEndAndStartNextTurn(copy)) { continue; }
+                    const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
+                                                       pass_best_win, second_main, tt);
+                    // STRICTLY better only. Wave 0's variants share their base plan's `value`, so the
+                    // equal-turn value tiebreak the main loop uses would let a deferred rank displace
+                    // an equally-good searched line for no measured reason; requiring a strict
+                    // improvement is what makes stopping mid-wave safe.
+                    if (pass_has_best && win_turn >= pass_best_win) { continue; }
+                    if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
+                    pass_best_win = win_turn;
+                    pass_best     = v;
+                    pass_has_best = true;
+                }
+            }
         }
 
         if (pass_aborted)

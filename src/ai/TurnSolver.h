@@ -277,6 +277,14 @@ public:
         // (see MTG_BP_DEPTH). Ignored when bp_choice < 0.
         int bp_at = 0;
 
+        // Did WAVE 0 (AppendBreakpointVariants) fan this BASE plan out? Set on the base plan, never
+        // on a variant. MTG_BP_MAXBASE caps how many breakpoint-opening plans get variants at all,
+        // and that cap -- like the width W -- is a RANK gate, so on its own it makes a whole plan's
+        // continuations unreachable at any budget. The deferred wave phase reads this to start an
+        // uncovered plan at rank 0 instead of rank W, which demotes MAXBASE to a cost prune: it
+        // decides who waits, not who is reachable. Meaningless once the plan is applied.
+        bool bp_wave0 = false;
+
         bool empty() const { return actions.empty(); }
     };
 
