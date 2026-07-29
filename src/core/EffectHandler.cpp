@@ -42,10 +42,26 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // creatures (AIEngine) and at the start of combat (GameEngine::CombatPhase), so a legendary CAST
     // from hand sat beside its twin for the whole main phase -- and anything that counts permanents
     // or triggers off them saw two. The rollout (TurnSolver::ApplyPlanDirect) always enforced it on
-    // entry, so this was a rollout/executor DIVERGENCE, not just a rules gap: on Auras a second
-    // Light-Paws, Emperor's Voice survived in the real game and its Aura-tutor trigger fired TWICE,
-    // fetching an extra Aura and shuffling the library an extra time -- so the realised draws stopped
-    // matching the line the search had proved (seed 4227: predicted win T4, realised T5).
+    // entry, so this was a rollout/executor DIVERGENCE, not just a rules gap.
+    //
+    // The pre-fix window ran from the duplicate ENTERING to the next begin-combat step -- those were
+    // the only two executor sweep sites. For a duplicate entering in the second main that spans the
+    // opponent's turn AND the whole of the next main phase. It could never ATTACK (the sweep precedes
+    // DeclareAttackers), which is the one outcome the old placement did prevent; everything else --
+    // static abilities, on-enter and on-cast triggers, anything counting permanents -- saw two.
+    //
+    // Measured on Auras seed 4227 gi223 (per-phase battlefield, pre-fix binary): a second
+    // Light-Paws, Emperor's Voice cast on T3 left BOTH copies (#38, #39) on the board for the rest
+    // of that main phase, and combat swept it back to one. Spirit Link therefore resolved with two
+    // Light-Paws out and its Aura-tutor trigger fired TWICE, fetching an extra Aura and shuffling
+    // the library an extra time; the realised draws then stopped matching the line the search had
+    // proved (predicted win T4, realised T5 -- now T4). The same window let two Hinata,
+    // Dawn-Crowned double-count a static cost discount, so the executor cast a Reality Spasm it
+    // could not afford.
+    //
+    // NOTE if a legend-rule-off effect is ever added (Mirror Gallery), or a name-changing legend
+    // (Sakashima): no such card exists in cards.json today, so enforcement is unconditional here.
+    // Adding one means gating EVERY EnforceLegendRule site, not just this one.
     //
     // Placed AFTER the dispatch so it runs after the permanent has entered and its ETB effects have
     // resolved (dig, Dragon cascade), which is exactly the rollout's ordering -- and after, not

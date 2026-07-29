@@ -83,3 +83,38 @@ Every one of these silently caps the search: the engine proves a better line tha
 worth -0.010..-0.033 avg across 8 of 8 held-out Dragonstorm cases with zero regressions; #2 took a
 tracked Auras game from T5 to the T4 the search had already found, and stopped the executor
 double-counting a legendary's cost discount. Neither was reachable by tuning a heuristic.
+
+## A note on #2: how long the duplicate actually lived
+
+The legend rule applies IMMEDIATELY -- a second copy never gets to do anything. Pre-fix the executor
+had exactly two sweep sites: Vial deploys (`AIEngine`) and begin-combat (`GameEngine::CombatPhase`,
+before `DeclareAttackers`). So the window ran **from the duplicate entering to the next begin-combat
+step**:
+
+| duplicate enters in | window |
+|---|---|
+| main 1 (measured) | rest of main 1, incl. every breakpoint re-solve in it |
+| main 2 | through cleanup, the opponent's whole turn, AND all of the next main 1 |
+
+Measured per phase on the pre-fix binary (Auras seed 4227 gi223): T3 MAIN_1 ends holding both
+Light-Paws (#38, #39); T3 COMBAT is back to one. So it is not a permanent extra body -- and it could
+never ATTACK, since the sweep precedes `DeclareAttackers`. That is the one outcome the old placement
+happened to prevent, and it prevented it by accident of placement, not by design.
+
+Everything else was live for the whole window, which is where the damage is: static abilities,
+on-enter and on-cast triggers, and anything counting permanents all saw two. Spirit Link resolved
+with two Light-Paws out and fetched twice; two Hinata, Dawn-Crowned double-counted a static cost
+discount and let the executor cast a Reality Spasm it could not afford.
+
+Two lessons for this bug class:
+
+1. **State the window you measured, not the impression it gave.** An SBA deferred to a later phase
+   looks like a correct engine whenever you inspect the board between turns, which is where most
+   inspection happens. "Rest of the main phase" was itself an understatement here -- nothing in the
+   code bounded it to one phase.
+2. **An SBA that "runs a bit late" is not cosmetic.** Late enough to cover the window in which the
+   game does things is the same as not running.
+
+If a legend-rule-off effect is ever added (Mirror Gallery), or a name-changing legend (Sakashima):
+no such card exists in `cards.json` today, so enforcement is unconditional. Adding one means gating
+EVERY `EnforceLegendRule` site, not just the new one.
