@@ -513,11 +513,31 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
                                    { fetched_num }, { fetched_name }, { fetched_num }, {});
     }
 
-    // Gamble: "then discard a card at random." Deterministic seed (game_seed / turn /
-    // search_count) so the rollout and the real executor pick the IDENTICAL victim -- the
-    // search resolves it clairvoyantly (the engine-wide known-library simplification), but it
-    // can still hit the just-tutored card (the real Gamble risk on a small hand). Only fires
-    // for to-hand tutors that set the flag; off everywhere else.
+    // Gamble: "then discard a card at random." Deterministic so the rollout and the real executor
+    // pick the IDENTICAL victim -- the search resolves it clairvoyantly (the engine-wide
+    // known-library simplification), but it can still hit the just-tutored card (the real Gamble
+    // risk on a small hand). Only fires for to-hand tutors that set the flag; off everywhere else.
+    //
+    // KNOWN-IMPERFECT (measured 2026-07-29, deliberately NOT changed -- read this before "fixing" it).
+    // The seed folds in ap.hand.size() and the victim is then an index into the hand AS STORED, so the
+    // pick depends on the hand's SIZE and ORDER -- neither of which is part of the rollout/executor
+    // lockstep contract (the rollout pushes staged Expressive-Iteration / impulse cards straight into
+    // hand, while the executor merges Player::staged_cards at its own breakpoints). Measured on Hinata
+    // seed 4010: rollout hand [Island, Mountain, Reflecting Pool, Ponder, Reality Spasm, ...] discarded
+    // Ponder; executor hand [Reality Spasm, Distorting Wake, Island, ...] discarded Island -- so the
+    // real game still held a Ponder the search had spent, cast it, and reached Crackle with Power one
+    // mana short of the lethal X the search proved (predicted win T6, realised T7).
+    //
+    // Choosing over a CANONICAL order (ascending m_number) instead was BUILT AND MEASURED: it fixes
+    // that game (T7 -> T6, divergence gone) but Hinata's fd-diverge rate went 2 -> 4 per 500 games,
+    // because order-sensitivity is only the LAST link. The hands already differ in CONTENT by then
+    // (7 cards vs 8 -- the executor still held a Distorting Wake), so any index-based pick lands on a
+    // different card no matter how it is canonicalised. Fixing this without first fixing the hand-
+    // content divergence just reshuffles WHICH games diverge. The upstream suspect is the T5 Soulfire
+    // Eruption dig: SoulfireDig's target count is `1 + (life > 9) + #opp creatures + searched own
+    // targets`, so one differing life total or creature count changes how many cards are exiled into
+    // hand. Fix that first, then canonicalise this, then re-measure. See
+    // docs/design/rollout-executor-lockstep.md.
     if (pp.discard_random_after_tutor && pp.tutor_to_hand && !ap.hand.empty())
     {
         uint64_t mix = state.game_seed * 0x9E3779B97F4A7C15ull
@@ -536,6 +556,17 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         // left the game and never showed up in the graveyard zone. Inert for the search on every
         // current deck (no Gamble deck reads graveyard contents -- no retrace/delve/escape/
         // threshold), so this only restores the correct zone + surfaces the card to the viewer.
+        static const bool dtrace = std::getenv("MTG_DISCARD_TRACE") != nullptr;
+        if (dtrace)
+        {
+            std::string hs;
+            for (const Card& hc : ap.hand) { hs += hc.m_name.str(); hs += ","; }
+            std::fprintf(stderr,
+                         "[discard] T%d seed=%llu search_count=%llu handsize=%zu victim=%d(%s) hand=[%s]\n",
+                         state.turn_number, static_cast<unsigned long long>(state.game_seed),
+                         static_cast<unsigned long long>(state.search_count), ap.hand.size(),
+                         victim, victim_name.c_str(), hs.c_str());
+        }
         ap.graveyard.push_back(ap.hand[victim]);
         ap.hand.erase(ap.hand.begin() + victim);
         if (g_reveal_logger) { g_reveal_logger->LogDiscard(victim_num, victim_name); }
@@ -3132,9 +3163,10 @@ inline void BpTraceCast(const char* side, const GameState& state, const std::str
         untapped += p.card.m_name.str();
     }
     std::fprintf(stderr,
-                 "[bp-pay] %-5s cast=%-24s cost=%d/W%d U%d B%d R%d G%d C%d creature=%d"
+                 "[bp-pay] %-5s T%-2d cast=%-24s cost=%d/W%d U%d B%d R%d G%d C%d creature=%d"
                  " float=W%d U%d B%d R%d G%d C%d wild%d untapped=[%s]\n",
-                 side, name.c_str(), cost.generic, cost.white, cost.blue, cost.black, cost.red,
+                 side, state.turn_number, name.c_str(),
+                 cost.generic, cost.white, cost.blue, cost.black, cost.red,
                  cost.green, cost.colorless, for_creature ? 1 : 0,
                  f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
                  untapped.c_str());
