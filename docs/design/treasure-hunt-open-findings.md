@@ -62,14 +62,18 @@ measured each one in isolation (`MTG_TH_SCRY_OFF=<letters>`, leave-one-out and o
 held-out overnight seeds). The `OFF=abcdef` arm reproduces ground truth exactly, so the gating is
 verified, and only Treasure Hunt moved -- the other 86 suite configs are untouched.
 
-| # | correction | alone (searched) | alone (d0) | verdict |
-|---|-----------|------------------|------------|---------|
-| a | filter lands need a feeder (Cascade Bluffs `{U/R}`, Ferrous Lake `{1}`) | 0.0000, 0 games | 0.0000 | inert |
-| b | count MANA not CARDS (`produces_amount`: Needle taps `{R}{R}`) | 0.0000, 0 games | 0.0000 | inert |
-| c | keep depletion lands as double-spell enablers | **+0.0060, 6 slower / 0 faster** | +0.0010 | **REJECTED** |
-| d | conditional untap via `LandWouldEnterTapped` (Frostboil Snarl's reveal) | 0.0000, 0 games | 0.0000 | inert |
-| e | Land's Edge in play does not end the colour problem | 0.0000, 0 games | -0.0030 | inert (see below) |
-| f | target 2 blue / 4 mana for a two-Treasure-Hunt turn | 0.0000, 0 games | +0.0050 | **REJECTED** |
+Letters below are the SWEEP's lettering -- they are what `MTG_TH_SCRY_OFF` masked, so they are fixed
+by the measurement record. The two rejected clauses were then deleted, which RENUMBERED the surviving
+ones in the code comment; the "ships as" column is the cross-reference.
+
+| # | correction | ships as | alone (searched) | alone (d0) | verdict |
+|---|-----------|----------|------------------|------------|---------|
+| a | filter lands need a feeder (Cascade Bluffs `{U/R}`, Ferrous Lake `{1}`) | `(a)` | 0.0000, 0 games | 0.0000 | inert |
+| b | count MANA not CARDS (`produces_amount`: Needle taps `{R}{R}`) | `(b)` | 0.0000, 0 games | 0.0000 | inert |
+| c | keep depletion lands as double-spell enablers | -- | **+0.0060, 6 slower / 0 faster** | +0.0010 | **REJECTED** |
+| d | conditional untap via `LandWouldEnterTapped` (Frostboil Snarl's reveal) | `(c)` | 0.0000, 0 games | 0.0000 | inert |
+| e | Land's Edge in play does not end the colour problem | `(d)` | 0.0000, 0 games | -0.0030 | inert (see below) |
+| f | target 2 blue / 4 mana for a two-Treasure-Hunt turn | -- | 0.0000, 0 games | +0.0050 | **REJECTED** |
 
 All six together measured **+0.0200 across the 8 searched overnight cases, 14 games slower and 0
 faster** -- every case regressed. Removing (c) alone collapses that to **exactly 0.0000 with no game
@@ -105,7 +109,7 @@ It is still the correct model -- Land's Edge's damage ability costs no mana, so 
 worthless once it is on the battlefield while `{1}{U}` is still needed -- but it is not a measured
 gain, and adopting it costs a 10-case ground-truth rebaseline for score-identical play.
 
-**Adopted: (a), (b), (d) and (e)** -- the four corrections that are not measurably harmful. They ship
+**Adopted: (a), (b), (d) and (e)** -- shipping as code letters (a)-(d) -- the four corrections that are not measurably harmful. They ship
 as accuracy, not as a win: not one searched game's score moves across all 20 Treasure Hunt cases in
 either direction, and d0 nets +0.0010 (3 games out of 9,000, 2 better and 1 worse). The rule now
 models the land base correctly, which matters for the next person tuning it and for the keep-model
