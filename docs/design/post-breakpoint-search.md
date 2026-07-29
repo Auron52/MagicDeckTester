@@ -1,6 +1,10 @@
 # Mid-turn breakpoints are search-free zones (2026-07-28)
 
 **Status: FIXED and ADOPTED.** The fix is `Plan::bp_choice` (below). Defaults `MTG_BP_SEARCH=2`,
+**Follow-up (2026-07-28, second pass): a rollout mana-payment bug this work uncovered is fixed and is
+a standalone win on held-out seeds (see ROOT CAUSE); the nested `bp_at` axis is now defect-free but
+stays default-off.**
+
 `MTG_BP_SITES=23`, `MTG_BP_MAXBASE=16`, fan-out at every ply. Ground truth rebaselined and
 re-verified in all three modes: **smoke 21/21, regression 35/35, overnight 84/84 ALL PASS**
 (makespan 12 s / 58 s / 3m48s). `MTG_BP_SEARCH=0` restores the pre-fix engine exactly.
@@ -353,6 +357,9 @@ class B shared one root cause is CONFIRMED.
 | `MTG_BP_PROBE=1` | off | count greedy re-solves per site (the purge is done when these reach 0) |
 | `MTG_BP_DROP_SEARCHED` | off | diagnosis: omit the static post-dig drop entirely |
 | `MTG_FORCE_LAND="<turn>:<land>"` | off | force a land drop, including the post-dig one |
+| `MTG_BP_DEPTH=<L>` | 1 | how many breakpoints deep the fan-out reaches (`Plan::bp_at`); emits `L*W` per base plan, not `W^L`. 2 = nested, measured NOT adopted (below) |
+| `MTG_BP_TRACE=1` | off | diagnosis: print `[bp-apply]` / `[bp-exec]` breakpoint sequences + a `[bp-pay]` line per cast (cost, float, untapped sources) from BOTH sides. Use with `MTG_FD_TRACE=1` |
+| `MTG_LEGACY_CCO_PAY=1` | off | A/B hatch: restore the pre-fix rollout payment (coloured pips off a `colored_creature_only` land for a non-creature spell) |
 
 Policy this satisfies (user, 2026-07-28):
 
@@ -428,6 +435,11 @@ of making the decision searched. `bp_choice` is the version that makes the decis
 
 ## Nested breakpoints: BUILT, MEASURED, NOT ADOPTED (2026-07-28)
 
+> **Read the CORRECTION and ROOT CAUSE sections below before this one.** The first measurement was
+> confounded by a rollout mana-payment bug; the counter-mismatch suspicion recorded here is refuted.
+> The `bp_at` work is no longer stashed -- it is in the tree, default-off (`MTG_BP_DEPTH=1`).
+
+
 Only the FIRST breakpoint of an apply is searched; a second one in the same turn (a cantrip chain,
 an Apex cast off another Apex's exile, a second Treasure Hunt) still resolves greedily. That is real
 unsearched logic, and on Dragonstorm the nested ones **outnumber** the searched ones (183 vs 145 per
@@ -463,25 +475,92 @@ survive full search). **12 of 14 recover exactly. TWO SURVIVE**, both Dragonstor
 
 | game | at gate budget | depth 9 / unbounded |
 |---|---|---|
-| `dragonstorm_overnight_d3_s4004` gi372 | 7->8 | depth1 = **7** -> depth2 = **LOSS** |
+| `dragonstorm_overnight_d3_s4004` gi372 | 7->8 | depth1 = **7** -> depth2 = 8 |
 | `dragonstorm_overnight_d5_s5005` gi4 | 5->7 | depth1 = **5** -> depth2 = **7** |
 
 A regression that survives unlimited budget and max depth is a DEFECT, not budget dilution. So the
-"nested search is net negative on held-out seeds" conclusion above is **confounded** -- it measured a
-buggy implementation, and the held-out negative may be the bug rather than the idea.
+"nested search is net negative on held-out seeds" conclusion above was **confounded**.
 
-Prime suspect, already flagged when this was stashed: **ApplyPlanDirect and the executor count
-breakpoints differently.** ApplyPlanDirect's `bp_seen` counts only ENABLED-class breakpoints;
-AIEngine::resolve_draw_breakpoint's counter counts every breakpoint regardless of class. When those
-disagree the executor applies the searched continuation at the WRONG breakpoint, so the realised game
-is not the line the rollout scored -- which produces exactly this signature: outcomes arbitrarily
-worse than the scored line, that no amount of budget can fix. Dragonstorm is where nesting is most
-common (183 nested vs 145 searched per 40 games), i.e. exactly where such a bug bites hardest, and
-both survivors are Dragonstorm.
+The suspect recorded here at the time was "ApplyPlanDirect and the executor count breakpoints
+differently". **That hypothesis is REFUTED** -- see below. Both counters were in fact consistent, and
+on the committed line the executor does not use its counter at all (it replays the recorded
+`breakpoint_actions` script, not `resolve_draw_breakpoint`). Anyone resuming should not spend time on
+the counters.
 
-**Next step is therefore to FIX the lockstep, not to abandon the idea:** make both counters use the
-identical rule (enabled-class only), confirm `MTG_BP_DEPTH=1` is byte-identical to the shipped
-engine, verify these two games no longer survive unbounded budget, and only THEN re-run the held-out
-overnight A/B. The earlier train/held-out table should be treated as void until that is done.
+## ROOT CAUSE (2026-07-28, second pass): the rollout could pay coloured pips off a creature-only land
 
-Worth retrying with a better formulation (the underlying gap is real), but not as-is.
+`MTG_BP_TRACE` (added with this work) prints the breakpoint sequence from BOTH sides -- `[bp-apply]`
+from ApplyPlanDirect (armed only for the fd-trace committed-line replay) and `[bp-exec]` from the
+executor -- plus a `[bp-pay]` line per cast giving cost, floating mana and untapped sources. On
+`dragonstorm_overnight_d3_s4004` gi372 it showed the two sides agreeing on the breakpoint indices
+(`idx=0` greedy, `idx=1` searched, `bp_at=1`) and agreeing on the recorded script, then diverging
+**inside a single cast**, from an IDENTICAL state:
+
+```
+[bp-pay] apply cast=Irencrag Feat  cost=0/R3 creature=0 float=R2 untapped=[Unclaimed Territory]   -> paid
+[bp-pay] exec  cast=Irencrag Feat  cost=0/R3 creature=0 float=R2 untapped=[Unclaimed Territory]   -> FAILED
+```
+
+Unclaimed Territory is `colored_creature_only`: its coloured mana may pay only for a creature spell,
+so for a sorcery it yields `{C}` alone and cannot cover a red pip. The executor is right to refuse.
+`TurnSolver::TapForCostDirectOnce`'s **scarcity-first** source selection (default ON) called
+`EffectiveProduces` where its documented mirror `AIEngine::TapForCost` calls `ProducesForPayment` --
+so the ROLLOUT paid `{R}{R}{R}` off two floating red plus Unclaimed Territory. The legacy
+(`MTG_TAP_LEGACY`) path and both AIEngine paths always had it right; only the scarcity path drifted,
+against its own header contract ("MUST stay byte-for-byte identical to AIEngine::TapForCost").
+
+Consequence: the search **scores and commits lines the real game cannot play**. The realised turn
+stops mid-script (gi372 cast 8 of its 10 spells, landing 1 creature where the line predicted 6) and
+no budget or depth can recover it, because there is no search error to find. Nested breakpoint search
+did not cause this -- it *exposed* it, by reaching deeper into a turn where mana is tightest.
+
+Fixed: both call sites now use `ProducesForPayment(state, active, def, for_creature)`, via
+`PayProduces` so `MTG_LEGACY_CCO_PAY=1` restores the pre-fix behaviour for the A/B (smoke 21/21 PASS
+with the hatch on = the hatch is exact). Affects every deck with such a land: Dragonstorm (Unclaimed
+Territory), Knights, slivers_vial, Goblins, Minotaur.
+
+### The payment fix, measured ALONE (`MTG_BP_DEPTH=1`, the shipped nesting)
+
+Ground truth is the pre-fix engine, so every FAIL is the measured delta. **Zero regressions in any
+mode; every changed case improved.**
+
+| mode | cases changed | per-game | range |
+|---|---|---|---|
+| smoke | 2 (Dragonstorm d3/d5) | 2 faster, **0 slower** | −0.020 … −0.040 |
+| regression | 4 (Dragonstorm d3/d5 ×2 seeds) | 8 faster, **0 slower** | −0.004 … −0.020 |
+| **overnight (held out)** | **8 of 8** Dragonstorm d3/d5 | **36 faster, 0 slower** | **−0.010 … −0.033** |
+
+`d0` is byte-identical everywhere. `dragonstorm_smoke_d3/d5_s1001` gi70 goes 7 -> 4.
+
+### Re-measured: nested breakpoints on the FIXED engine -- defect-free, still not adopted
+
+With the payment bug gone, the two surviving regressions are gone too, and one becomes a gain:
+
+| game | before the payment fix | after |
+|---|---|---|
+| `dragonstorm_overnight_d3_s4004` gi372 | depth1 7 -> depth2 **8** | depth1 7 -> depth2 **6** |
+| `dragonstorm_overnight_d5_s5005` gi4 | depth1 5 -> depth2 **7** | depth1 5 -> depth2 **5** |
+
+gi372 now *realises* the turn-6 win the nested search predicted -- prediction and realisation back in
+lockstep. Re-running the full A/B on the fixed engine (`MTG_BP_DEPTH=1` vs `2`, both arms with the
+fix, same tree):
+
+| suite | seeds | outcome |
+|---|---|---|
+| smoke | 1001 (train) | 3 better, 0 worse, 15 byte-identical; mean −0.00254 |
+| regression | 2002 / 3003 (train) | 7 better, **0 worse**, 25 byte-identical; mean −0.00103; and FASTER (59s -> 33s) |
+| **overnight** | 4004-7007 (**held out**) | **3 better, 8 worse**, 62 byte-identical; mean **+0.00020** |
+
+**All 12 held-out slowdowns RECOVER at depth 9 with unbounded budget** (12/12, each arm matching the
+other exactly) -- so they are gate-budget churn, not defects. That is the difference from the first
+attempt: the mechanism is now sound, and what remains is purely the cost of widening the candidate
+set at a fixed per-decision budget. Hinata (the branchiest deck) is the clearest loser, as it was for
+the plain-cantrip site.
+
+**Verdict: NOT ADOPTED, default `MTG_BP_DEPTH=1`** -- but for an honest reason now (budget dilution
+on held-out seeds), not a defect. The train/held-out split reproduces even on the fixed engine, which
+is a second demonstration of why the suite's disjoint seeds exist. `MTG_BP_DEPTH=2` turns it on and
+is legitimate at unbounded budget, where it is a strict gain.
+
+It still does NOT close `Dragonstorm/claude_s1_gi0` (engine 5 vs human 4, both arms, and unchanged by
+the payment fix) -- that reference needs its own investigation.
