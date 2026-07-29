@@ -360,6 +360,10 @@ class B shared one root cause is CONFIRMED.
 | `MTG_BP_DEPTH=<L>` | 1 | how many breakpoints deep the fan-out reaches (`Plan::bp_at`); emits `L*W` per base plan, not `W^L`. 2 = nested, measured NOT adopted (below) |
 | `MTG_BP_TRACE=1` | off | diagnosis: print `[bp-apply]` / `[bp-exec]` breakpoint sequences + a `[bp-pay]` line per cast (cost, float, untapped sources) from BOTH sides. Use with `MTG_FD_TRACE=1` |
 | `MTG_LEGACY_CCO_PAY=1` | off | A/B hatch: restore the pre-fix rollout payment (coloured pips off a `colored_creature_only` land for a non-creature spell) |
+| `MTG_BP_WAVES=<0\|1>` | 1 | deferred continuation waves (see "The width cap is itself a quality prune"). A BUDGET LEVER: a node walks continuation ranks past W while it still has budget, so a bigger budget buys deeper coverage and an unlimited one exhausts every rank. **0** = the pre-wave engine, the exact hatch |
+| `MTG_BP_WAVE_COMPLETE=<0\|1>` | 1 | an in-horizon win BREAKS the candidate loop instead of returning, so the node's waves still run and it answers with the minimum over every affordable rank. Repairs the fully-searched-depth premise the width cap had broken. **0** = the first-in-horizon-win shortcut. Measured free (see COMPLETE NODES) |
+| `MTG_BP_CANDS_PROBE=1` | off | the continuation-count distribution per site: `n`, mean, max, how many breakpoints are capped by W, and how many continuations that leaves unreachable |
+| `MTG_BP_WAVE_PROBE=1` | off | wave activity: nodes that ran a wave phase, slots, candidates scored/rolled out, how many BEAT the node's incumbent, budget stops, and the deepest rank reached |
 
 Policy this satisfies (user, 2026-07-28):
 
@@ -569,7 +573,21 @@ the payment fix) -- that reference needs its own investigation.
 
 # The width cap is itself a quality prune (2026-07-29)
 
-**Status: AGREED DESIGN, not yet built.** `Plan::bp_choice` fixed the greedy continuation by making
+**Status: BUILT, `MTG_BP_WAVES=1` (default) — a BUDGET LEVER.** A node runs waves while it still
+has budget, so raising the budget buys deeper rank coverage continuously and an unlimited budget is
+simply the end of that scale (every rank reached, ceiling gone). The decisive case closes at the
+*default* width: Hinata 4259 gi255 at `--budget-ms 0` goes T6 → **T5** with `MTG_BP_SEARCH=2` and no
+widening at all. See "What was built" below, including the measured refutation of this section's
+original root-only placement.
+
+> **Gating waves on `Unlimited()` alone was built and REJECTED** (user, 2026-07-29): it made a very
+> high but finite budget buy nothing — a cliff, when what was asked for is a lever. "That is
+> precisely the cap that no budget can lift, which is what this mechanism exists to remove."
+
+Ground truth is NOT yet rebaselined — see "What this costs" for the numbers the accept decision
+rests on.
+
+`Plan::bp_choice` fixed the greedy continuation by making
 `W` of them searchable. It did **not** fix the class: `bp_choice = k` indexes `cands[k]` of a
 HEURISTICALLY RANKED list, so a continuation ranked `>= W` is unreachable at **any** depth and **any**
 budget. That is the same defect this document opens by describing, reproduced one rank later.
@@ -655,11 +673,222 @@ inside a wave** — that would reintroduce this exact defect one level down.
    the root, so it "can never drop the heuristic-best PLAY". Left alone for now; noted here so it is
    not mistaken for an oversight.
 
-### Plan
+### Plan (all four steps done — see below)
 
 1. Instrument `cands.size()` per breakpoint (byte-identical).
 2. Wave loop as a post-hybrid phase, gated on the remaining deterministic budget; unbounded => run
-   to exhaustion.
+   to exhaustion. **Amended after measurement: the phase had to move from the committed decision to
+   the two fan-out sites themselves.**
 3. Verify: seed 4259 at `--budget-ms 0` reaches T5; smoke byte-identical at tight budgets.
 4. A/B the two orderings the user asked for — waves-after vs a wider wave 0 (the W-sweep above IS
    the "before" arm) — then measure what the waves earn at suite budgets on held-out seeds.
+
+---
+
+## Step 1: how long ARE the continuation lists? (`MTG_BP_CANDS_PROBE`)
+
+`bp_searched_plan` already computes the full `cands` at apply time, so the length is free to record
+there. `MTG_BP_CANDS_PROBE=1` reports the distribution over SEARCHED breakpoints, sampled once per
+distinct breakpoint (gated on `bp_choice == 0`, since the W variants of one base plan all re-reach
+the same state). 40 games, seed 1001, each deck's own gate budget:
+
+| deck | site | n | mean | max | capped (len > W) | continuations rank-gated OUT |
+|---|---|---|---|---|---|---|
+| TH | `DrawUntilNonland` | 2534 | 6.12 | 19 | 65.0% | **73.1%** |
+| Hinata | stages / EI | 14241 | 6.03 | 44 | 71.5% | **69.3%** |
+| Dragonstorm | `impulse_exile` | 72 | 29.08 | 90 | **100%** | **93.1%** |
+| burn | stages / EI | 1075 | 2.24 | 7 | 45.5% | 28.4% |
+
+So `W=2` reaches 7–31% of the continuations that exist. The cap is not trimming a tail; it is
+hiding most of the list. `g_bp_cands_last` (thread_local, written by the apply that computed the
+list) is the same number in consumable form — the wave loop reads it back and stops when the rank
+passes it, which is why no width constant survives anywhere.
+
+## Step 2 (as designed) was a MEASURED DEAD END: root-only waves reach nothing
+
+The first build followed this section literally: one wave phase per committed decision, run after
+the hybrid returned. On the decisive case it changed **nothing** (4259 stayed T6), and the probe
+says why — `[bp-waves] entered=2 no-slots=2`. Two things are wrong with the placement:
+
+1. **`FullSearchLineHybrid` runs about twice per GAME, not once per turn.** Commit-the-line commits
+   a whole verified line, so the committed decision is a rare event; and at both of 4259's roots no
+   candidate opened a breakpoint at all.
+2. **The gain was never at the root.** Control, unbounded, same game:
+
+   | arm | result |
+   |---|---|
+   | `MTG_BP_SEARCH=16 MTG_NO_BP_SEARCH_ROLLOUT=1` (root-only widening) | T6 |
+   | `MTG_BP_SEARCH=16` (every ply) | **T5** |
+
+   That is this document's own earlier finding ("Where the win comes from: rollouts, not the root")
+   applying to the waves as well: the greedy continuation hurts by making the **leaf evaluator**
+   mis-score lines, so widening only the committed decision fixes nothing.
+
+The loop was fine; the placement was not. **The waves belong at the fan-out sites.**
+
+## What was built: `BpWaveWalker` at both fan-out sites
+
+Two loops emit `bp_choice` variants, and both now get a wave phase appended after their candidate
+loop finishes:
+
+| site | what it decides |
+|---|---|
+| `FSLineWin` | every node of the commit-the-line search (root + lookahead turns) |
+| `SolveWithLookahead` (per iterative-deepening pass) | **every rollout turn** — `SimulateToEndImpl` calls it per turn, i.e. the leaf evaluator |
+
+`BpWaveWalker` owns *which* variant comes next; each site owns its own scoring (the two loops score
+differently — `SearchLine` + `FSLineTail` vs `Plan` + `SimulateToEnd`). It walks ranks
+**breadth-first across slots** (round-robin), so a budget that runs out part-way has spread over base
+plans instead of exhausting one. A slot retires when an apply reports a list shorter than the rank it
+just asked for — the walk is self-terminating and reads no constant.
+
+Design constraints, and how each is met:
+
+1. **Determinism** — the only stop conditions are `SearchBudget::Unlimited()` / `Exhausted()`, the
+   deterministic virtual counter. No wall clock. Runs stay thread-invariant.
+2. **Ordering stability** — waves run strictly *after* the node's candidate loop, so the caller's
+   sort, the win-this-turn shortcut and every non-breakpoint decision are untouched.
+3. **`MTG_BP_MAXBASE` demoted from a quality prune to a cost prune** — `AppendBreakpointVariants`
+   now marks the base plans it fanned out (`Plan::bp_wave0`), and the walker starts an *unmarked*
+   plan at rank **0** instead of rank W. The cap therefore decides who waits, not who is reachable.
+4. **The escalation beam is respected, not undone** — the walker takes the count of plans the node's
+   loop actually SCANNED, so a beam-truncated node does not get its dropped plans widened. The
+   beam's carve-out (never at the root, so it cannot drop the committed play) stands as documented.
+5. **The position-keying hazard is avoided by APPENDING.** The stated risk was injecting variants
+   between the probe and the escalation, which would land `g_probe_plan_vals`' position-indexed
+   ranks on the wrong plans. Waves run after the loop *and* after `node_vals` is stored, and never
+   extend `node_vals`, so positions `0..N-1` keep their identity in both passes.
+6. **Anytime-safe** — a wave candidate is adopted only on a **strictly better** win turn (in
+   `SolveWithLookahead` this deliberately skips the equal-turn `value` tiebreak, since a variant
+   shares its base plan's `value`). Stopping mid-wave can only fail to improve, never regress.
+7. **Pruning is inherited, not rebuilt** — each wave candidate is bounded by the node's own
+   incumbent as the B&B cutoff, and reuses the node's post-apply dedup set, so a wave candidate that
+   lands on an already-scored state costs one apply and no rollout. `g_esc_beam_width` is NOT reused
+   inside a wave (that would reintroduce this very defect one level down).
+
+### Verification
+
+| check | result |
+|---|---|
+| Hinata 4259 gi255, `--budget-ms 0`, **default `MTG_BP_SEARCH=2`** | T6 → **T5** (`MTG_BP_WAVES=0` control: T6) |
+| ... walk depth | `max-rank=75`, `budget-stopped=0`, `improved=1` — one deferred continuation, reached with no widening, is the whole turn |
+| smoke (train) | **21/21 PASS**, 0 configs changed |
+| regression (train) | **35/35 PASS** |
+| overnight (held out) | **84/84 PASS**, makespan 4m20s |
+
+The default mode requires an unlimited budget, so every budgeted run — the whole suite, all real
+play — is byte-identical, and only an unbounded search loses the ceiling. That is exactly the bar:
+a cap is "defensible under a budget", never under an unbounded search.
+
+## COMPLETE NODES: the waves also repair the fully-searched-depth guarantee
+
+Raised by the user, 2026-07-29: *"even if we found a win at turn 5 we wouldn't be entirely sure
+there isn't a turn 4 win available until we do the fallback?"* Correct, and it cuts deeper than it
+first looks.
+
+`FSLineWin` returns the **first** in-horizon win it finds. That is sound only because
+`FullSearchLine` breaks its ladder at the first verified win, so pass L runs only after passes
+1..L-1 found none — hence nothing can win before this pass's horizon edge, and the first in-horizon
+win must BE that edge. The premise is **"pass L-1 was a COMPLETE refutation."**
+
+**The width cap had already broken that premise.** Pass L-1 could not see any continuation ranked
+>= W, so a turn-4 line hiding at rank 5 was invisible and the turn-5 win was returned as optimal.
+The fully-searched-depth guarantee was only ever as strong as W. So the waves do not interfere with
+that design — at an unlimited budget they are what makes it TRUE again, because every pass then
+exhausts every rank and "pass L-1 found no win" is a complete refutation once more.
+
+One gap remained in the implementation: a node that found an in-horizon win **returned before its
+own wave phase ran**, so under a budget it could still answer turn+L-1 while a deferred rank held
+turn+L-2. `MTG_BP_WAVE_COMPLETE` (default ON) closes it — an in-horizon win now BREAKS the candidate
+loop, the waves run, and the node answers with the minimum over every rank it could afford. A
+THIS-TURN win still returns immediately: `turn_number` is the absolute floor, so no rank can beat it
+and the premise never applies.
+
+**Measured cost: none.** The worry was that giving up the shortcut on winning nodes would be
+expensive; it is not, because a found win becomes a tight branch-and-bound cutoff that refutes the
+remaining ranks without rolling them out.
+
+| measurement | `MTG_BP_WAVE_COMPLETE=0` | `=1` (default) |
+|---|---|---|
+| smoke, 21 cases | — | **0 cases differ** |
+| regression, 35 cases | — | 4 differ, **all at the same avg** (Hinata play digests only) |
+| TH 60 g, budget 80 | 287,777 nodes | 311,232 (**+8.1%**), same avg |
+| Dragonstorm 60 g, budget 20 | 94,682 nodes | 94,684 (**+0.002%**), same avg |
+| the 32 held-out slower games at depth 9 / **unbounded** | 403 s | **356 s (0.88x)**, all 32 win turns identical |
+
+Under a budget the guarantee is still only approximate — pass L-1 refutes wave 0 plus whatever
+deferred ranks its budget bought — but that is strictly better than the constant cap it replaces,
+and the pass-level start gate and overrun abort are larger holes in the same premise.
+
+## What this costs: the measured delta the accept decision rests on
+
+The "wider wave 0" arm this section asked to compare against is the W-sweep above (net −0.040 at
+best on smoke, degrading past W=8, digests never converging). The waves arm, measured against the
+pre-wave engine as ground truth so every FAIL is the delta:
+
+| suite | seeds | cases changed | net avg | per-game |
+|---|---|---|---|---|
+| smoke | 1001 (train) | 4 better, **0 worse**, 2 changed-at-equal-score | **−0.00159** | 4 faster, **0 slower** |
+| regression | 2002 / 3003 (train) | 8 better, **1 worse**, 3 changed-at-equal-score | **−0.00184** | 31 faster, 9 slower |
+| **overnight** | 4004–7007 (**held out**) | **21 better, 0 worse**, 3 changed-at-equal-score | **−0.00230** | 164 faster, 31 slower |
+
+Per deck on held-out seeds: TH −0.1040, Dragonstorm −0.0648, Hinata −0.0225 (summed over 12 cases
+each); slivers / Knights / Anti-Lifegain / burn unchanged. Every `d0` case is byte-identical — depth
+0 is the greedy policy, which the mechanism cannot reach.
+
+Two things make this different from the nested-breakpoint attempt, which looked adoptable on train
+and reversed on held-out:
+
+* **Held-out is STRONGER than train** (−0.00228 vs −0.00184) and **no case regressed**. The
+  train/held-out split does not reproduce.
+* **It is FASTER**, not slower: overnight makespan 4m20s → **3m54s**, regression 52s. Earlier wins
+  end rollouts sooner, and most extra ranks are refuted by the inherited B&B bound rather than
+  rolled out. (TH at the gate budget: +51% `interior_nodes` at flat wall clock.)
+
+### The slower held-out games, classified at UNBOUNDED budget
+
+Unbounded is the correct test, not a 4x budget: the bar is that no regression may survive full
+search. Each of the 32 was re-run at `--depth 9 --budget-ms 0 --ignore-play-profile`, both arms.
+
+**31 of 32 recovered exactly** — gate-budget churn, the same shape every earlier widening produced.
+(Two of the three games that had become losses at the gate budget recovered to their old win turn;
+the third, `th_overnight_d5_s7007 gi175`, recovered to T7, one turn BETTER than its old T8.)
+
+**One survived — and it was a real, pre-existing bug that the waves merely REACHED.**
+
+| game | at gate budget | depth 9 / unbounded |
+|---|---|---|
+| `dragonstorm_overnight_d3_s6006` gi362 | 6 → 7 | 6 → **7** (survives) |
+
+`MTG_FD_ORACLE` named it immediately: `[fd-diverge] realized_win=7 predicted_win=6 proven_at_turn=1`
+— the search committed a line the executor could not reproduce, which is the
+`rollout-executor-lockstep.md` class, not a search defect. **It reproduces with `MTG_BP_SEARCH=17`
+and no waves at all**, so the waves exposed it rather than caused it; W=2 had simply never selected
+a continuation that casts a second Apex of Power.
+
+`MTG_BP_TRACE` gave the first difference inside one turn, from an identical state:
+
+```
+[bp-apply] turn=6 site=2 idx=1 bp_at=0 bp_choice=16 searched=0
+apply  cast=Utvara Hellkite  cost=6/R2  float=R14 wild0    <- Apex floated 10 RED
+exec   cast=Utvara Hellkite  cost=6/R2  float=R4  wild10   <- Apex floated 10 WILD
+```
+
+**Root cause (FIXED).** `ApplyPlanDirect`'s breakpoint-cast recorder copied 11 fields into the
+replay script but omitted exactly the last two that `AIEngine::replay_recorded` feeds back into
+`cast_by_name`: `chosen_float_color` and `enchant_target`. `GameState` documents "empty -> wild / no
+colour choice", so an Apex cast INSIDE a breakpoint continuation replayed as a wild float — which
+Apex's own card contract says must never happen ("add ten mana of any ONE color ... NOT wild; wild
+could illegally pay a multicolor mix"). The two sides then paid different pips and the realised turn
+fell a turn behind the committed one. Fix: record both fields.
+
+After the fix, gi362 is T6 in both arms with no divergence, and it drops off the slower list
+entirely (31 games remain). Re-run end to end on the final binary: **31 of 31 recover, 0 survive** —
+no regression outlives full search. The fix is inert at suite budgets (smoke 21/21, regression 35/35, overnight
+84/84 ALL PASS, zero configs changed), because W=2 never reaches such a continuation on a committed
+line there.
+
+
+Ground truth is not yet rebaselined: this changes 6 smoke, 12 regression and 24 overnight
+fingerprints, and `--accept` is a deliberate promotion. `MTG_BP_WAVES=0` is the exact hatch
+(re-verified ALL PASS in every mode).

@@ -49,6 +49,7 @@ hold different physical copies (#4 below was invisible until the trace showed `I
 | 3 | rollout counted STAGED cards toward the 7-card cleanup limit; the executor never does | **FIXED** (below) |
 | 4 | rollout did not stamp a played LAND's per-copy `m_number`; the executor always has | **FIXED** (below) |
 | 5 | Gamble's "discard a card at random" indexes the hand AS STORED | **built, opt-in, NOT default** (below) |
+| 6 | a cast recorded INSIDE a breakpoint continuation lost `chosen_float_color` / `enchant_target` | **FIXED** (below) |
 
 Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
 (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
@@ -107,6 +108,41 @@ metric this workstream exists to drive down is not defensible until 4259 is root
 Enabling #5 alone (hands still differing in CONTENT) took Hinata 2 -> 4 per 500. With #3 it went
 3 -> 1 only after #4 landed too. Any index-based pick lands on a different card when the sets differ,
 however it is canonicalised.
+
+## #6 — a breakpoint continuation's cast lost its searched float colour (2026-07-29)
+
+`ApplyPlanDirect` records the casts made inside a breakpoint continuation into
+`Action::breakpoint_casts` so `AIEngine::replay_recorded` can reproduce them verbatim. The recorder
+copied 11 fields; the replay feeds NINE of them back into `cast_by_name`, and **two of those nine
+were never recorded**: `chosen_float_color` and `enchant_target`.
+
+`GameState` documents the consequence for the first one: "empty -> wild / no colour choice". So for
+Apex of Power ("If this spell was cast from your hand, add ten mana of any one color") the rollout
+floated the SEARCHED colour and the executor floated **wild** — which the card's own contract
+explicitly forbids ("NOT wild; wild could illegally pay a multicolor mix"). The two sides then paid
+different pips from the same float and the realised turn fell behind the committed one.
+
+Repro (`Dragonstorm` seed 6006 gi362, `--depth 9 --budget-ms 0 --ignore-play-profile`):
+`[fd-diverge] realized_win=7 predicted_win=6 proven_at_turn=1`. `MTG_BP_TRACE` shows both sides
+agreeing on the breakpoint indices and the whole cast script, then splitting inside one cast:
+
+```
+[bp-apply] turn=6 site=2 idx=1 bp_at=0 bp_choice=16 searched=0
+apply  cast=Utvara Hellkite  cost=6/R2  float=R14 wild0
+exec   cast=Utvara Hellkite  cost=6/R2  float=R4  wild10
+```
+
+**Latency is the interesting part.** This was unreachable until continuation rank 16 became
+searchable: at the shipped `MTG_BP_SEARCH=2` no continuation that casts a SECOND Apex was ever
+selected, so the recorder's gap never mattered. It reproduces at `MTG_BP_SEARCH=17` with the
+deferred waves off, so the waves EXPOSED it rather than caused it — the same shape as #1, which
+nested breakpoint search exposed by reaching deeper into a turn where mana is tightest.
+
+Fixed by recording both fields. Inert at every suite budget (smoke 21/21, regression 35/35,
+overnight 84/84 ALL PASS, zero configs changed) — W=2 does not reach such a continuation on a
+committed line. `enchant_target` had the same gap and is fixed alongside; no case exercises it today
+(Auras casts its auras from the main plan, not from a breakpoint continuation), so it is a
+latent-bug fix, not a measured one.
 
 ## Both remaining leads: ROOT-CAUSED, and NEITHER is a lockstep bug
 
