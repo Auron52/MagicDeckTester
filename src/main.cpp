@@ -2901,6 +2901,8 @@ int main(int argc, char* argv[])
 {
     // Apply committed heuristic defaults BEFORE anything reads a toggle (env vars still override).
     ApplyHeuristicDefaults();
+    // Arm the colored_creature_only legality audit's exit dump (MTG_CCO_AUDIT); no-op when unset.
+    CcoAuditDumper();
     if (argc < 2)
     {
         PrintUsage(argv[0]);
@@ -3274,8 +3276,18 @@ int main(int argc, char* argv[])
             // standing A/B switches widen exactly those gates (see DecisionUnpruned / the order
             // and Ponder enumeration). setenv before any TurnSolver call so the cached getenv
             // reads pick them up. Anything still narrowed is fixed if it turns out to matter.
-            setenv("MTG_UNPRUNED", "1", 1);
-            setenv("MTG_PONDER_SEARCH", "1", 1);
+            //
+            // DIAGNOSTIC HATCH (MTG_CLAUDE_PLAY_SHIPPED_PRUNING=1, default unset = unchanged):
+            // keep the SHIPPED pruning instead. Needed to ask "what does the real engine actually
+            // enumerate / would it pick here?" -- with the widening above, every emitted plan list
+            // and `ai_choice` is the UNPRUNED engine's, so claude-play cannot answer a question
+            // about a prune gate (e.g. a reference the shipped search loses to the human). Opt-in
+            // only, so the play GUI and every reference replay stay byte-identical.
+            if (std::getenv("MTG_CLAUDE_PLAY_SHIPPED_PRUNING") == nullptr)
+            {
+                setenv("MTG_UNPRUNED", "1", 1);
+                setenv("MTG_PONDER_SEARCH", "1", 1);
+            }
             // Human play executes EXACTLY the committed plan -- no auto re-solve after a draw, no
             // auto-dig, no auto Land's Edge. Instead the chooser re-fires after any draw so the
             // human re-decides with the revealed cards (a draw "breakpoint"). See ApplyPlanDirect
@@ -3329,9 +3341,17 @@ int main(int argc, char* argv[])
         catch (const std::exception& e) { std::cerr << "Error: " << e.what() << "\n"; return 1; }
 
         GoldFishRunner runner;
+        // --trace on the NORMAL goldfish path: print the search's own per-candidate T1 win-turn
+        // estimates. SetTraceSolve is a process-global and the trace interleaves, so it is only
+        // meaningful single-threaded on one game -- which is exactly the repro shape for a
+        // reference shortfall ("why did the search pick THAT plan?"). Previously the flag was
+        // reachable only via --diag-depth, so the shipped runner could not be asked that question.
+        const bool trace_goldfish = trace_t1 && num_games == 1 && num_threads == 1;
+        if (trace_goldfish) { TurnSolver::SetTraceSolve(true); }
         RunResult result = runner.Run(deck, num_games, seed, max_turns, profile, log_dir,
                                        base_game_index, lookahead_depth, timeout_ms, num_threads,
                                        fm_count, std::move(fm_bottom));
+        if (trace_goldfish) { TurnSolver::SetTraceSolve(false); }
 
         // Goldfish metric = avg (mean turn-to-win; an unwon game is scored max_turns+1). Win/loss is
         // not reported here: a goldfishing loss is an arbitrary "no lethal by max_turns" threshold,

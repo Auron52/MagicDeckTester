@@ -3074,6 +3074,73 @@ inline const std::vector<Color>& ProducesForPayment(const GameState& state, int 
     return only_c;
 }
 
+// ---- colored_creature_only legality audit (MTG_CCO_AUDIT; MEASUREMENT ONLY) ------------------
+// "Spend this mana only to cast a creature spell of the chosen type" (Unclaimed Territory / Cavern
+// of Souls / Sliver Hive / Secluded Courtyard). Called at EVERY site that taps a source for a
+// specific colour -- the rollout's and the executor's tap_source, and the shared backtracker -- so a
+// violation cannot hide in one path. A tap of such a source for a NON-colorless colour while paying
+// a NON-creature spell is illegal; the counter must read violations=0. Every affected deck's
+// creatures share ONE creature type (Dragonstorm all Dragon, Knights all Knight, slivers all
+// Sliver), so the engine's "any creature" simplification is exact for them and this check is
+// complete. Off -> two predictable branches, no output. See docs/design/post-breakpoint-search.md.
+inline std::atomic<long long>& CcoAuditTaps()
+{ static std::atomic<long long> n{0}; return n; }
+inline std::atomic<long long>& CcoAuditViolations()
+{ static std::atomic<long long> n{0}; return n; }
+inline bool CcoAuditOn()
+{ static const bool on = std::getenv("MTG_CCO_AUDIT") != nullptr; return on; }
+
+inline void CcoAuditTap(const CardDefinition& def, Color col, bool for_creature)
+{
+    if (!CcoAuditOn() || !def.params.colored_creature_only) { return; }
+    CcoAuditTaps().fetch_add(1, std::memory_order_relaxed);
+    if (col != Color::Colorless && !for_creature)
+    {
+        CcoAuditViolations().fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+// Dumped once at process exit (a static object's destructor), like the affordability audit.
+struct CcoAuditDump
+{
+    ~CcoAuditDump()
+    {
+        if (!CcoAuditOn()) { return; }
+        std::fprintf(stderr, "[cco-audit] colored_creature_only taps=%lld  ILLEGAL(coloured for a "
+                             "non-creature spell)=%lld\n",
+                     CcoAuditTaps().load(), CcoAuditViolations().load());
+    }
+};
+inline CcoAuditDump& CcoAuditDumper() { static CcoAuditDump d; return d; }
+
+// ---- Breakpoint payment trace (MTG_BP_TRACE; DIAGNOSIS ONLY, no behaviour) -------------------
+// Print the mana situation immediately BEFORE a cast pays, from BOTH the rollout (ApplyPlanDirect's
+// apply_one) and the real executor (CastSpellFromHand), so the two can be diffed cast-for-cast.
+// The searched breakpoint continuation is a plan the ROLLOUT proved payable; if the executor's
+// payment strands a source the rollout spent, the realised turn stops mid-script and the game comes
+// in worse than the predicted line with no search defect to find. See post-breakpoint-search.md.
+inline void BpTraceCast(const char* side, const GameState& state, const std::string& name,
+                        const ManaCost& cost, bool for_creature)
+{
+    const ManaPool& f = state.floating_mana;
+    std::string untapped;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->card.IsLand()) { continue; }
+        if (!untapped.empty()) { untapped += ","; }
+        untapped += p.card.m_name.str();
+    }
+    std::fprintf(stderr,
+                 "[bp-pay] %-5s cast=%-24s cost=%d/W%d U%d B%d R%d G%d C%d creature=%d"
+                 " float=W%d U%d B%d R%d G%d C%d wild%d untapped=[%s]\n",
+                 side, name.c_str(), cost.generic, cost.white, cost.blue, cost.black, cost.red,
+                 cost.green, cost.colorless, for_creature ? 1 : 0,
+                 f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
+                 untapped.c_str());
+}
+
 // Hand-context variant for mulligan / bottoming evaluation, where the relevant "other lands" are
 // the ones in the passed-in candidate `hand` (not state's hand). A Reflecting Pool reflects the
 // union of the OTHER non-reflecting lands in this hand -- so an all-Reflecting-Pool hand reads as
@@ -4407,7 +4474,8 @@ inline bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 if (def->params.tap_opponent_lifegain > 0 && !ResolveProvider(state).OpponentLifegainUseful(state, active))
                 { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f, /*drip_ok=*/false, storage_burn)) { return true; } }
                 for (Color c : produces)
-                { ManaPool f = floating; f.Add(c, amt); if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; } }
+                { CcoAuditTap(*def, c, for_creature);   // audit: `produces` is cco-stripped above
+                  ManaPool f = floating; f.Add(c, amt); if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; } }
             }
         }
     }

@@ -253,6 +253,20 @@ public:
     // MECHANISM and the open-drop precondition; only this hold decision is provider-owned.
     virtual bool HoldDeferredDropForLethal(const GameState& s, int controller) const { return false; }
 
+    // Hook 22 -- after a deferred Treasure Hunt (DrawUntilNonland) resolves with the drop still open
+    // and NO flood-keep land revealed (Hook 13 returned ""), HOLD the drop instead of developing it
+    // when ANOTHER dig is affordable this turn. The generic fallback develops the best normal land
+    // immediately (gi=881: an undeveloped drop meant a drawn land was discarded) -- correct for a turn
+    // with ONE dig, wrong for a turn with more digs to come: the drop is the ONLY way to play a
+    // Reliquary Tower, so spending it after dig 1 means a Reliquary revealed by dig 2 cannot be played
+    // and the whole flood is discarded at cleanup (the s2 gi1 T4-vs-T5 shortfall). Holding costs
+    // nothing structural: this same step runs again after the next dig and develops then if no keep
+    // land shows up. Return true only when the hand is ALREADY flooding, no no-max-hand-size land is
+    // in play, and another dig is payable from mana available WITHOUT the held land (so holding cannot
+    // starve the dig it is waiting for). DEFAULT false -> every other deck develops byte-identically.
+    // The engine keeps the open-drop precondition and the land-play mechanism; only the hold is here.
+    virtual bool HoldDeferredDropForFurtherDig(const GameState& s, int controller) const { return false; }
+
     // Hook 22 -- NON-CLAIRVOYANT search tempo bonus (avg win-turns) for MAKING a land drop this turn.
     // The reshuffle-averaged NC search (TurnSolver::ReshuffleAvgChoosePlan) is mana-OPTIMISTIC: it
     // shuffles the true library away, so its mean future has normal land density and it undervalues a

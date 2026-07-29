@@ -31,14 +31,17 @@ import json, os, re, subprocess, sys, glob
 MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
 STRICT = "--strict" in sys.argv[1:]
 
-# references/<dir> -> (deckfile, profile). Mirrors test/regression_cases.sh.
+# references/<dir> -> (deckfile, profile). Mirrors test/regression_cases.sh (per-deck folder
+# layout, docs/design/per-deck-folder-layout.md).
 DECKS = {
-    "Anti-Lifegain": ("decks/Anti-Lifegain.cod", "decks/Anti-Lifegain.profile.json"),
-    "Hinata2":       ("decks/Hinata2.cod",       "decks/Hinata2.profile.json"),
-    "Knights":       ("decks/Knights.cod",       "decks/Knights.profile.json"),
-    "slivers_vial":  ("decks/slivers_vial.txt",  "decks/slivers_vial.profile.json"),
-    "burn":          ("decks/burn.txt",     "decks/burn.profile.json"),
-    "treasure_hunt": ("decks/treasure_hunt.txt", "decks/treasure_hunt.profile.json"),
+    "Anti-Lifegain": ("decks/Anti-Lifegain/Anti-Lifegain.cod", "decks/Anti-Lifegain/Anti-Lifegain.profile.json"),
+    "Hinata2":       ("decks/Hinata2/Hinata2.cod",             "decks/Hinata2/Hinata2.profile.json"),
+    "Knights":       ("decks/Knights/Knights.cod",             "decks/Knights/Knights.profile.json"),
+    "slivers_vial":  ("decks/slivers_vial/slivers_vial.txt",   "decks/slivers_vial/slivers_vial.profile.json"),
+    "burn":          ("decks/burn/burn.txt",                   "decks/burn/burn.profile.json"),
+    "treasure_hunt": ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
+    "Auras":         ("decks/Auras/Auras.cod",                 "decks/Auras/Auras.profile.json"),
+    "Dragonstorm":   ("decks/Dragonstorm/Dragonstorm.cod",     "decks/Dragonstorm/Dragonstorm.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)
@@ -51,13 +54,28 @@ RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>\s*(\{.*?\})\s*<<<END_RESULT>>>", re.S)
 SIDE_CHANNEL_TYPES = {"firebreathe", "storage_hold"}
 
 
-def flatten_choices(decisions):
+# Decision types that --force-mulligan resolves INTERNALLY (keep/mull answers and the bottoming
+# picks both come from the forced spec), so the engine never calls the external chooser for them
+# and they consume no --choices slot under force.
+FORCED_MULLIGAN_TYPES = {"mulligan", "bottom"}
+
+
+def flatten_choices(decisions, drop_mulligan=False):
     """The GUI encodes a multi-pick decision as a list `chosen`; the --choices
     CSV is a flat pick stream, so a list contributes its picks in order. Side-channel
-    decisions (firebreathe / storage_hold) consume NO --choices slot and are skipped here."""
+    decisions (firebreathe / storage_hold) consume NO --choices slot and are skipped here.
+
+    drop_mulligan: under --force-mulligan the engine resolves the mulligan AND the bottoming
+    internally and NEVER calls the external chooser for them, so those recorded picks consume no
+    --choices slot either. Folding them in shifts the whole positional stream (the turn-1 main
+    phase then eats the keep/mull answer) and every downstream pick reads as "enumeration drift".
+    Must mirror force_arg(): drop iff the reference is being forced."""
     out = []
     for d in decisions:
-        if d.get("decision", {}).get("type") in SIDE_CHANNEL_TYPES:
+        t = d.get("decision", {}).get("type")
+        if t in SIDE_CHANNEL_TYPES:
+            continue
+        if drop_mulligan and t in FORCED_MULLIGAN_TYPES:
             continue
         c = d["chosen"]
         out += [int(x) for x in c] if isinstance(c, list) else [int(c)]
@@ -100,13 +118,14 @@ def force_arg(ref):
     return f'{m.get("count", 0)}:' + ",".join(str(n) for n in m.get("bottom", []))
 
 
-def replay(deck, prof, seed, gi, choices, force=None, extra=None):
+def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8):
     """One stateless --claude-play invocation with the GUI's params (depth 0,
     no --reveal). `extra` carries reconstructed keyed side-channel args (--firebreathe /
     --storage-hold / --cast-order); safe for every prefix (keyed, applied only when reached).
-    Returns (exit_code, stdout)."""
+    max_turns must cover the reference's recorded win turn, else a real saved win (e.g. the
+    Hinata2 T9 game) can never replay. Returns (exit_code, stdout)."""
     args = [MTG, deck, "--claude-play", "--seed", str(seed), "--game-index", str(gi),
-            "--max-turns", "8", "--depth", "0", "--profile", prof,
+            "--max-turns", str(max_turns), "--depth", "0", "--profile", prof,
             "--choices", ",".join(str(c) for c in choices)]
     if force is not None:
         args += ["--force-mulligan", force]
@@ -140,20 +159,29 @@ def check_reference(path):
         return True, "ok", f"skip (unknown deck dir {deck_dir})"
     deck, prof = DECKS[deck_dir]
     seed, gi = ref["seed"], ref["game_index"]
-    choices = flatten_choices(ref["decisions"])
     extra = side_channel_args(ref["decisions"])   # --firebreathe / --storage-hold / --cast-order the ref used
     force = force_arg(ref)   # reconstruct the recorded opening hand when the reference carries it
+    choices = flatten_choices(ref["decisions"], drop_mulligan=force is not None)
+    # A reference that won later than the default horizon (Hinata2 s12_gi11 wins T9) needs a
+    # horizon that covers it, else the replay can never reach its recorded terminal.
+    mt = max(8, ref.get("win_turn") or 0)
 
     # Root cause first: does the engine still open the SAME hand? With a recorded mulligan we FORCE
     # it (so the hand is reconstructed and this always matches); without one, a different opening
     # hand means the mulligan heuristic diverged -> classify as mulligan-drift, not play-drift.
     ref_decs = ref.get("decisions", [])
     if ref_decs:
-        rc0, out0 = replay(deck, prof, seed, gi, [], force, extra)
+        rc0, out0 = replay(deck, prof, seed, gi, [], force, extra, mt)
         if "Error:" in out0 or rc0 not in (0, 70):
             return False, "play", f"engine error at step 0 (rc={rc0}): {out0.strip()[-160:]}"
         m0 = DEC_RE.search(out0)
-        ref_hand = hand_names(ref_decs[0].get("decision", {}).get("me", {}).get("hand", []))
+        # Under force the first emitted decision is the turn-1 main phase, so compare against the
+        # ref's first decision that actually carries a me.hand (a mulligan decision keeps its hand
+        # at the top level and would compare as empty = no check at all). WITHOUT force the engine
+        # still emits its own mulligan decision first, so keep comparing decision 0 there.
+        ref0 = ref_decs[0] if force is None else next(
+            (d for d in ref_decs if d.get("decision", {}).get("me", {}).get("hand")), ref_decs[0])
+        ref_hand = hand_names(ref0.get("decision", {}).get("me", {}).get("hand", []))
         if m0 and ref_hand:
             cur_hand = hand_names(json.loads(m0.group(1)).get("me", {}).get("hand", []))
             if cur_hand != ref_hand:
@@ -164,7 +192,7 @@ def check_reference(path):
     # (exit 70) or the terminal result (exit 0), and the next recorded pick must
     # be a valid index into the plans just offered.
     for k in range(len(choices) + 1):
-        rc, out = replay(deck, prof, seed, gi, choices[:k], force, extra)
+        rc, out = replay(deck, prof, seed, gi, choices[:k], force, extra, mt)
         if "Error:" in out or rc not in (0, 70):
             return False, "play", f"engine error at step {k} (rc={rc}): {out.strip()[-160:]}"
         if rc == 0:  # terminal reached before consuming all recorded picks

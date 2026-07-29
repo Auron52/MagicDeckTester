@@ -78,6 +78,12 @@ static const bool s_full_depth = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
 // can be traced. Only meaningful with s_full_depth.
 static const bool s_fd_oracle = std::getenv("MTG_FD_ORACLE") != nullptr;
 
+// Breakpoint lockstep trace (MTG_BP_TRACE, diagnosis only): print the EXECUTOR's breakpoint
+// sequence ([bp-exec]) so it can be diffed against ApplyPlanDirect's ([bp-apply], armed only for
+// the fd-trace committed-line replay). A searched continuation landing at a different index on the
+// two sides is the lockstep defect. See docs/design/post-breakpoint-search.md.
+static const bool s_bp_trace = std::getenv("MTG_BP_TRACE") != nullptr;
+
 // Enumerate-all-earliest-wins rule-miner (MTG_DUMP_EWINS): at each REAL pre-combat main,
 // emit one JSON line ({"ewins":...}) scoring every candidate top-level play by the earliest
 // full-game win it leads to (TurnSolver::EnumerateEarliestWins). Feeds the analyzer's
@@ -2124,6 +2130,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // (each real cast consumes its card), well under the budget, so the cap only stops the phantom spin.
     constexpr long kMaxDrawBreakpointCalls = 4096;
     long rdb_calls = 0;
+    // SEARCHED breakpoint continuation (TurnSolver::Plan::bp_choice / bp_at): consumed at the
+    // breakpoint whose INDEX equals bp_at, mirroring ApplyPlanDirect exactly. Counting here (rather
+    // than a used-flag) is what keeps a nested searched continuation in lockstep -- the rollout
+    // scored bp_at, so the executor must apply it at that same breakpoint, not the first one.
+    int bp_seen_exec = 0;
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
@@ -2137,7 +2148,38 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             sc.card.m_staged_expiry = sc.expiry_turn;
             rp.hand.push_back(sc.card);
         }
-        TurnSolver::Plan extra = TurnSolver::Solve(state, is_pre_combat_main);
+        // Honour the plan's SEARCHED breakpoint continuation. The search ranked this turn assuming
+        // candidate k of the breakpoint's own plan list, so the executor must play candidate k --
+        // re-solving greedily here would realise a turn the search never scored (a rollout/execution
+        // divergence, exactly the class of bug the Hook 21/22 mirrors below exist to prevent).
+        // EnumerateBreakpointPlans is the SHARED list (fan-out suppressed) ApplyPlanDirect indexed.
+        // Inert when bp_choice < 0, i.e. for every plan under MTG_BP_SEARCH=0.
+        TurnSolver::Plan extra;
+        bool bp_searched_here = false;
+        const int bp_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
+        if (bp_idx == plan.bp_at)
+        {
+            const std::vector<TurnSolver::Plan> cands =
+                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+            if (plan.bp_choice < static_cast<int>(cands.size()))
+            {
+                extra            = cands[plan.bp_choice];
+                bp_searched_here = true;
+                // The continuation's land drop is part of the searched decision; play it first so
+                // its mana funds the casts (mirrors bp_play_searched_land in ApplyPlanDirect).
+                if (extra.land_decided && !extra.land_to_play.empty())
+                { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+            }
+        }
+        if (!bp_searched_here) { extra = TurnSolver::Solve(state, is_pre_combat_main); }
+        // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
+        // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
+        if (s_bp_trace)
+        {
+            std::fprintf(stderr, "[bp-exec]  turn=%d idx=%d bp_at=%d bp_choice=%d searched=%d\n",
+                         state.turn_number, bp_idx, plan.bp_at, plan.bp_choice,
+                         bp_searched_here ? 1 : 0);
+        }
         // Lotus Bloom: apply any SacForMana (float the chosen colour) / Suspend this re-solve chose BEFORE
         // the casts, mirroring TakeTurn's top-of-turn pre-pass. Without this a mid-turn Lotus sac was
         // silently dropped in the fallback breakpoint re-solve, so the floated mana never materialised and
@@ -2176,10 +2218,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // non-flood draw turns keep their normal land timing. HOLD the drop when the hand is the
         // marginal Land's Edge ammo for a lethal this turn (Hook 21, mirrors the search's
         // play_drawn_flood_keep_land) so the deferred drop isn't spent out of the ammo pool.
-        if (is_pre_combat_main
+        // Hook 22 is mirrored here for the SAME reason as Hook 21: the rollout applies it in
+        // play_drawn_flood_keep_land, so an executor that developed the drop anyway would play a land
+        // the proved line does not -- a rollout/execution divergence, not a heuristic disagreement.
+        // The keep-land case (Hook 13) still goes through TryPlayLand's own Reliquary pre-pass.
+        // Skipped entirely when the continuation was SEARCHED: the drop is then part of the scored
+        // plan (played above, or deliberately deferred), and a static flood-keep play on top would
+        // be exactly the un-searched land choice this whole mechanism removes.
+        if (!bp_searched_here
+            && is_pre_combat_main
             && static_cast<int>(state.ActivePlayer().hand.size()) > 7
             && !ResolveProvider(state).HoldDeferredDropForLethal(state, state.active_player_index))
-        { TryPlayLand(state); }
+        {
+            const int          apx  = state.active_player_index;
+            const std::string  keep = ResolveProvider(state).PostDrawKeepLandName(state, apx);
+            if (!keep.empty() || !ResolveProvider(state).HoldDeferredDropForFurtherDig(state, apx))
+            { TryPlayLand(state); }
+        }
     };
 
     // Canonical execution order: Vial deployments first (lords live before spell casts),
@@ -2921,6 +2976,7 @@ bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPoo
     // decrement and pain. Mirrors the accounting in BuildAvailableMana (AddSourceToPool).
     auto tap_source = [&](Permanent& p, const CardDefinition& def, Color col)
     {
+        CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
         p.tapped = true;
         DecrementDepletionOnTap(p);
         if (def.params.tap_self_damage > 0) { ap.life -= def.params.tap_self_damage; }
@@ -3561,7 +3617,16 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // (-> that much damage with a Tainted Remedy / Plague Drone in play). Paid at cast.
         OpponentGainsLife(state, state.active_player_index, alt_lifegain);
     }
-    else if (!TapForCost(state, effective, available, def->card.IsCreature())) { return; }
+    else
+    {
+        if (s_bp_trace && !m_in_rollout)
+        { BpTraceCast("exec", state, def->card.m_name.str(), effective, def->card.IsCreature()); }
+        if (!TapForCost(state, effective, available, def->card.IsCreature()))
+        {
+            if (s_bp_trace && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
+            return;
+        }
+    }
 
     if (m_logger)
     {
