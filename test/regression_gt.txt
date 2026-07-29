@@ -1,6 +1,6 @@
-# Regression ground truth -- commit d18ec94  date 2026-07-29
+# Regression ground truth -- commit 76b99d2  date 2026-07-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-29): dragonstorm+antilife rebaselined after merging origin (rollout coloured-pip fix 6bb2791 + mid-turn breakpoint search 0b45f3b) on top of mulligan.discard_protect=hand. Dragonstorm net negative in every mode (smoke searched -0.0222, regression -0.0064, overnight searched -0.0072 / d0 -0.0038) and the previously-recorded residual s7007 gi79 8->unwon is GONE: zero searched to-unwon remain. Antilife is score-identical (play digests moved only).
+# accepted-with-regressions (overnight, 2026-07-29): Treasure Hunt scry/surveil rewritten to the user's play model (2026-07-29). TH searched -0.0607 (overnight d3 and d5), d0 -0.0178; -0.0463 across all 20 TH cases. Per-game overnight: 452 faster + 9 new wins vs 11 slower, ZERO searched to-unwon. The 11 slower keep an identical hand but the scry itself reorders the library, so they are physically different games downstream, not misplays. Legacy rule preserved byte-identically behind MTG_TH_LEGACY_SCRY=1. Only TH moves (TH-only provider).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -11,9 +11,9 @@ slivers_smoke_d5_s1001=4.1867/355a98aea4d15d94
 burn_smoke_d0_s1001=4.5830/bb9efdf465009c20
 burn_smoke_d3_s1001=4.3533/a38dae5c6ea18138
 burn_smoke_d5_s1001=4.3640/7dd163eb237624f1
-th_smoke_d0_s1001=5.4800/dc1d248339d1b8ba
-th_smoke_d3_s1001=4.1667/00c7b3109a59307b
-th_smoke_d5_s1001=4.0933/2dce7ee1c5ee9047
+th_smoke_d0_s1001=5.4620/b74e330a31f72d16
+th_smoke_d3_s1001=4.1200/30234d86f82d55e1
+th_smoke_d5_s1001=4.0133/fc673dd8bb69a8bb
 knights_smoke_d0_s1001=4.5440/f9f1a1dbd111bc44
 knights_smoke_d3_s1001=4.3960/d3d46a3e982ea9bb
 knights_smoke_d5_s1001=4.4000/def7d65ff1283926
@@ -41,11 +41,11 @@ burn_regression_d3_s2002=4.3500/a15e95040dc21b5d
 burn_regression_d3_s3003=4.2500/11661746205ded82
 burn_regression_d5_s2002=4.3500/a15e95040dc21b5d
 burn_regression_d5_s3003=4.2500/698dd7b37ebba01e
-th_regression_d0_s2002=5.4820/9cd6205f57f63736
-th_regression_d3_s2002=4.2500/4d8e810272d1f8a4
-th_regression_d3_s3003=4.0380/6bb3f00bad5627cf
-th_regression_d5_s2002=4.2000/500775b4359fa16f
-th_regression_d5_s3003=4.0400/fd71620f1a560c99
+th_regression_d0_s2002=5.4770/afa3d7d3122ad3ff
+th_regression_d3_s2002=4.1760/01f8d23a0d0dcb11
+th_regression_d3_s3003=4.0060/c4dedc8b4b2e7924
+th_regression_d5_s2002=4.1100/5b8fb5b7e25dda82
+th_regression_d5_s3003=4.0167/32e3c6d15a79ef1d
 knights_regression_d0_s2002=4.5700/8618d79e3409e669
 knights_regression_d3_s2002=4.3133/b41e09aa4c5e8d33
 knights_regression_d3_s3003=4.3667/d73ecc0d875cd3a1
@@ -97,18 +97,18 @@ burn_overnight_d5_s4004=4.3500/e75d2d32cc521adb
 burn_overnight_d5_s5005=4.3350/1422a65ff96c14b0
 burn_overnight_d5_s6006=4.3520/ac1b6b257b3e2de5
 burn_overnight_d5_s7007=4.3740/4ce15e5dbfe118ec
-th_overnight_d0_s4004=5.4705/00167c9ed4f1b6f6
-th_overnight_d0_s5005=5.4460/ae794a0a0d999b2a
-th_overnight_d0_s6006=5.4280/c5e8f932f6d40e30
-th_overnight_d0_s7007=5.4495/5d8024dd878ed1fb
-th_overnight_d3_s4004=4.1610/26b53d49c74a248d
-th_overnight_d3_s5005=4.1200/98bd86ee364a3b4a
-th_overnight_d3_s6006=4.1210/2f5b81d272fbf611
-th_overnight_d3_s7007=4.1490/3058a0977244524e
-th_overnight_d5_s4004=4.1570/df147a84b5960cc9
-th_overnight_d5_s5005=4.1220/708855a01a1a77a3
-th_overnight_d5_s6006=4.1180/9b043b9764b91274
-th_overnight_d5_s7007=4.1460/0ebd10b930003841
+th_overnight_d0_s4004=5.4565/7254bb6a90b0987c
+th_overnight_d0_s5005=5.4325/3bb377bb7272edfe
+th_overnight_d0_s6006=5.4130/9e827b9eb862bcd1
+th_overnight_d0_s7007=5.4210/f3633d9fa98e1d49
+th_overnight_d3_s4004=4.0840/4c0bb130bd0f498c
+th_overnight_d3_s5005=4.0790/6d4aaea2c9d0ef98
+th_overnight_d3_s6006=4.0440/5b01dbbd218c90d5
+th_overnight_d3_s7007=4.1010/1cd01fdb805fe648
+th_overnight_d5_s4004=4.0800/f68fd8de7362990e
+th_overnight_d5_s5005=4.0780/2fcabed07b72ef70
+th_overnight_d5_s6006=4.0450/cc8858ffd95e631f
+th_overnight_d5_s7007=4.0970/31af43972033b862
 knights_overnight_d0_s4004=4.5505/c216d58bc66b476a
 knights_overnight_d0_s5005=4.5675/5e92f25f687d4a0b
 knights_overnight_d0_s6006=4.5560/c41a86df7e749590

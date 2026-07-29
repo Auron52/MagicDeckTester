@@ -1035,26 +1035,211 @@ bool TreasureHuntProvider::DiscardLandsFirst(const GameState& s) const
     return false;
 }
 
+// Treasure Hunt scry/surveil keep (user's play model, 2026-07-29; legacy rule behind
+// MTG_TH_LEGACY_SCRY=1 for a byte-identical A/B).
+//
+// The deck is 53 lands / 7 spells, so the DEFAULT for a land on top is BOTTOM -- digging toward the
+// 4 Treasure Hunt / 2 Land's Edge / 1 Throes is almost always what the scry is for. The legacy rule
+// did the opposite: it kept a land whenever a Treasure Hunt sat in hand ("land fuel") or fewer than
+// two lands were in play, which made the scry a guaranteed no-op in the early turns (with an empty
+// hand on turn 1 both clauses fire) -- so a Temple of Epiphany was, to the engine, a strictly worse
+// Forgotten Cave, and the keep model faithfully learned to prefer the cycler.
+//
+// Lands are kept only for a NAMED reason:
+//   (1) Treasure Hunt is castable THIS turn -> keep. It reveals until a nonland and draws everything
+//       revealed, so lands on top are literally drawn into hand (Land's Edge ammo + land drops)
+//       rather than skipped. This is the one case where stacking lands on top is pure profit.
+//   (2) Land's Edge in hand with >= 10 lands in hand is LETHAL (2 damage a land) -- the only thing
+//       that matters is CASTING it, so keep a land only while {1}{R}{R} is not yet payable.
+//   (3) Treasure Hunt in hand and no Land's Edge in play: keep a land that fills a REAL gap --
+//       a first Reliquary Tower (stops the flood being discarded), a missing colour for Treasure
+//       Hunt ({U}) or Land's Edge ({R}{R}), or an untapped source of a colour we can otherwise only
+//       make off a tapped land next turn. Cards already in HAND count toward all of these, which is
+//       what usually makes the top card unnecessary.
+//   (4) Otherwise bottom.
+static bool THLegacyScry()
+{
+    static const bool on = std::getenv("MTG_TH_LEGACY_SCRY") != nullptr;
+    return on;
+}
+
 bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
 {
-    // Deck-aware keep: keep nonlands always; keep a land while a DrawUntilNonland (Treasure
-    // Hunt) in hand wants land fuel, or fewer than two lands are in play.
     const CardDefinition* tdef = CardDatabase::Instance().LookupCached(top_card);
-    bool is_land = tdef ? tdef->card.IsLand() : top_card.IsLand();
-    if (!is_land) { return true; }
+    const bool is_land = tdef ? tdef->card.IsLand() : top_card.IsLand();
 
-    const Player& ap = s.players[s.active_player_index];
+    const int      me = s.active_player_index;
+    const Player&  ap = s.players[me];
+
+    if (THLegacyScry())
+    {
+        if (!is_land) { return true; }
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+            if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { return true; }
+        }
+        int lip = 0;
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && p.card.IsLand()) { ++lip; } }
+        return lip < 2;
+    }
+
+    // --- what we hold -------------------------------------------------------------------------
+    const CardDefinition* th_def = nullptr;   // Treasure Hunt in hand (the draw engine)
+    const CardDefinition* le_def = nullptr;   // Land's Edge in hand (the wincon)
+    int lands_in_hand = 0;
     for (const Card& c : ap.hand)
     {
-        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { return true; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->tmpl == CardTemplate::DrawUntilNonland)      { th_def = d; }
+        if (d->params.discard_land_damage > 0)              { le_def = d; }
+        if (d->card.IsLand())                               { ++lands_in_hand; }
     }
-    int lands_in_play = 0;
+
+    // Untapped mana available right now (mirrors TurnSolver::BuildPool / ShouldCastDrawEngine).
+    ManaPool pool;
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index == s.active_player_index && p.card.IsLand()) { ++lands_in_play; }
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool is_l = (d->tmpl == CardTemplate::BasicLand);
+        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
+        if (!is_l && !is_dork) { continue; }
+        AddSourceToPool(pool, s, *d);
     }
-    return lands_in_play < 2;
+
+    // Outlets already online: Land's Edge (lands become damage) or Reliquary Tower (the flood is
+    // never discarded). Their presence is exactly what lets ShouldCastDrawEngine cast the engine
+    // with the land drop already SPENT -- i.e. the land was played BEFORE Treasure Hunt.
+    bool le_in_play = false, rt_in_play = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.discard_land_damage > 0)                 { le_in_play = true; }
+        if (d->params.no_max_hand_size && d->card.IsLand())     { rt_in_play = true; }
+    }
+
+    // (1) Treasure Hunt castable THIS turn, with this land played BEFORE it -> the revealed lands
+    // get DRAWN into hand, so stacking them on top is pure profit. Gated on an outlet being in
+    // play, because that is the only state where the land-then-engine ordering is legal: with no
+    // outlet, strict flood (THStrictFlood) forces the DEFER, so a land entering play has already
+    // followed the Treasure Hunt and its scry cannot feed it.
+    const bool casting_th_now =
+        th_def && (le_in_play || rt_in_play) && pool.CanPay(th_def->card.m_mana_cost);
+
+    // --- NONLAND on top ------------------------------------------------------------------------
+    // A spell is normally exactly what we are digging for, with two exceptions:
+    //   * a DUPLICATE Land's Edge is dead weight -- one outlet discards every land we own, so a
+    //     second copy adds nothing;
+    //   * a Treasure Hunt on top while we are about to cast one is actively harmful: Treasure Hunt
+    //     reveals until it hits a NONLAND, so a Treasure Hunt sitting on top truncates the reveal
+    //     to a single card. Bottoming it puts a land there instead (53 of 60 cards), which is both
+    //     a bigger draw and a card we actually want.
+    // The FIRST Land's Edge is deliberately NOT handled here: whether to scry it away before a
+    // Treasure Hunt depends on land count and spare copies, it comes up rarely, and it is a real
+    // trade-off the search is better placed to make than a fixed rule.
+    if (!is_land)
+    {
+        if (tdef && tdef->params.discard_land_damage > 0 && (le_in_play || le_def != nullptr))
+        { return false; }
+        if (tdef && tdef->tmpl == CardTemplate::DrawUntilNonland && casting_th_now)
+        { return false; }
+        return true;
+    }
+
+    if (casting_th_now) { return true; }
+
+    // Colour sources we can reach, counting the battlefield AND the hand (a land in hand is a drop
+    // away from being a source -- this is what usually makes the top card redundant).
+    auto count_sources = [&](Color want)
+    {
+        int n = 0;
+        auto has = [&](const std::vector<Color>& prod)
+        { return std::find(prod.begin(), prod.end(), want) != prod.end(); };
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->card.IsLand() && has(d->params.produces)) { ++n; }
+        }
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || !d->card.IsLand()) { continue; }
+            if (has(d->params.produces) || has(d->params.mdfc_back_produces)) { ++n; }
+        }
+        return n;
+    };
+    auto top_makes = [&](Color want)
+    {
+        if (!tdef) { return false; }
+        auto has = [&](const std::vector<Color>& prod)
+        { return std::find(prod.begin(), prod.end(), want) != prod.end(); };
+        return has(tdef->params.produces) || has(tdef->params.mdfc_back_produces);
+    };
+
+    // (2) Land's Edge + 10 lands in hand = lethal. Nothing matters but casting {1}{R}{R}.
+    if (le_def && lands_in_hand >= 10)
+    {
+        if (pool.CanPay(le_def->card.m_mana_cost)) { return false; }   // already lethal -> dig
+        const int reds = count_sources(Color::Red);
+        return top_makes(Color::Red) && reds < le_def->card.m_mana_cost.red;
+    }
+
+    // (3) Draw engine in hand and no Land's Edge online yet -> keep only a land that fills a gap.
+    if (th_def && !le_in_play)
+    {
+        // A first Reliquary Tower: without one the flood Treasure Hunt draws is discarded at cleanup.
+        if (tdef->params.no_max_hand_size)
+        {
+            bool have_rt = rt_in_play;
+            for (const Card& c : ap.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.no_max_hand_size && d->card.IsLand()) { have_rt = true; break; }
+            }
+            if (!have_rt) { return true; }
+        }
+        // A colour we are actually short of, for Treasure Hunt ({U}) or Land's Edge ({R}{R}).
+        if (top_makes(Color::Blue) && count_sources(Color::Blue) < th_def->card.m_mana_cost.blue)
+        { return true; }
+        const int red_need = le_def ? le_def->card.m_mana_cost.red : 2;   // LE is {1}{R}{R}
+        if (top_makes(Color::Red) && count_sources(Color::Red) < red_need) { return true; }
+        // An UNTAPPED source of a needed colour, when everything we hold enters tapped -- that is
+        // the difference between casting the engine next turn and durdling another turn.
+        if (!tdef->params.enters_tapped)
+        {
+            auto untapped_source_of = [&](Color want)
+            {
+                auto has = [&](const std::vector<Color>& prod)
+                { return std::find(prod.begin(), prod.end(), want) != prod.end(); };
+                for (const Permanent& p : s.battlefield)
+                {
+                    if (p.controller_index != me) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (d && d->card.IsLand() && has(d->params.produces)) { return true; }
+                }
+                for (const Card& c : ap.hand)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (!d || !d->card.IsLand() || d->params.enters_tapped) { continue; }
+                    if (has(d->params.produces) || has(d->params.mdfc_back_produces)) { return true; }
+                }
+                return false;
+            };
+            if (top_makes(Color::Blue) && !untapped_source_of(Color::Blue)) { return true; }
+            if (top_makes(Color::Red)  && !untapped_source_of(Color::Red))  { return true; }
+        }
+        return false;
+    }
+
+    // (4) No engine, no lethal -> a land on top is just another land in a 53-land deck.
+    return false;
 }
 
 bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,
