@@ -158,7 +158,25 @@ really was Debug; the orphans really are referenced by nothing but this document
   batches, each built and byte-diffed against the baseline: **all four byte-identical.** Then
   `mtg-test` 156/156, smoke 27/27, regression 45/45, viewer protocol 138 ok / 0 drift.
 
-Still open: Tier B1/B4, remaining C1 units.
+- **B4 item 2 DONE, and it RESIZES the rest of B4.** The 7 largest **cold** helpers (819 LOC:
+  `TapForCostBacktrack`, `PerformTutor`, `PerformLightPawsAttach`, `PerformMuxusReveal`,
+  `PerformEtbDig`, `ResolveExpressiveIteration`, `BounceKarooLand`) moved to a new
+  `src/core/SpellEffects.cpp`; the header keeps the declarations plus a note stating the rule.
+  Measured on a quiet machine at `-O3`: TurnSolver 17.67→16.93 s (−4.2 %), AIEngine 7.05→6.68 s
+  (−5.2 %), GameEngine 4.11→3.56 s (−13 %), new TU +3.25 s (parallel, off the critical path).
+  Runtime **neutral**: deterministic callgrind Ir on burn / slivers / TH / Auras moved
+  +0.0003 %…+0.0010 % (~1,200 instructions total). Suite 27/27 + 45/45, digests unchanged.
+  **The honest correction to this doc's own framing:** a probe that stripped 1429 LOC (27 % of the
+  header) promised −2.2 s on TurnSolver, but that probe included the per-cast / per-death /
+  per-combat helpers, which must NOT move — there is no LTO anywhere in `CMakeLists.txt`, so an
+  out-of-line body is un-inlinable across TUs and those fire on every rollout node. Restricted to
+  provably cold bodies the win is −0.74 s, not −2.2 s. So **the remaining compile-time win is
+  locked behind either enabling LTO or item 1 (splitting `TurnSolver.cpp`)** — moving more header
+  bodies is now a small and increasingly risky lever. Note also that these helpers are fully
+  inlined today and therefore **do not appear in a profile by name at all**; only total Ir moves,
+  which is why the adopt/reject test has to be a deterministic Ir A/B rather than intuition.
+
+Still open: Tier B1 (incl. B4 item 1, the TurnSolver split), remaining C1 units.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are

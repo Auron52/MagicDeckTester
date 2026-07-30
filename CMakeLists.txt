@@ -107,6 +107,7 @@ add_custom_target(mtg_flag_registry
 # Shared game engine library — linked by both the runner and the analyzer
 add_library(mtg-core STATIC
     src/core/GameEngine.cpp
+    src/core/SpellEffects.cpp
     src/core/GameLogger.cpp
     src/core/EffectHandler.cpp
     src/deck/DeckLoader.cpp
