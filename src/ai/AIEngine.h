@@ -1,4 +1,5 @@
 #pragma once
+#include "../core/EnvFlags.h"
 #include "../core/GameState.h"
 #include "../core/GameLogger.h"
 #include "../core/ManaPool.h"
@@ -240,7 +241,7 @@ private:
     // work rose) -- the MTG_LEAF_VERIFY harness recomputes each hit to find/confirm the
     // key-completeness bug. See docs/design/escalation-interior-reuse.md.
     TranspositionTable       m_leaf_cache;
-    const bool               m_leaf_cache_enabled  = std::getenv("MTG_LEAF_CACHE") != nullptr;
+    const bool               m_leaf_cache_enabled  = EnvOn("MTG_LEAF_CACHE");
 
     // --- Full-depth commit-the-line (env-gated by MTG_FULL_DEPTH) ---
     // The remaining phases of the optimal line found by the last FullSearchLine, in

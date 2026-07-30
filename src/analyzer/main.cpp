@@ -1,3 +1,4 @@
+#include "../core/EnvFlags.h"
 #include <iostream>
 #include <filesystem>
 #include <stdexcept>
@@ -107,7 +108,7 @@ int main(int argc, char* argv[])
         // review. Read-only -- writes no profile. Uses the deck's committed profile for rollout
         // fidelity (vial target / play style), matching how the keep-model labels are measured.
         //   MTG_EQUIV_PROBES (default 200), MTG_EQUIV_DEPTH (5), MTG_EQUIV_BUDGET (20).
-        if (const char* e = std::getenv("MTG_EQUIV_DISCOVER"); e && *e && std::string(e) != "0")
+        if (EnvOn("MTG_EQUIV_DISCOVER"))
         {
             auto env_int = [](const char* k, int dflt, int lo)
             { const char* s = std::getenv(k); return (s && *s) ? std::max(lo, std::atoi(s)) : dflt; };
@@ -138,7 +139,7 @@ int main(int argc, char* argv[])
         // MTG_MERGE_INPUTS (comma/space/newline-separated paths). Writes the same
         // <stem>.keepmodel.exhaustive.profile.json + .raw.json (override via MTG_MERGE_OUT_PROFILE /
         // MTG_MERGE_OUT_RAW; MTG_KEEP_NO_WRITE suppresses). No rollouts -- fast.
-        if (const char* e = std::getenv("MTG_KEEP_MERGE"); e && *e && std::string(e) != "0")
+        if (EnvOn("MTG_KEEP_MERGE"))
         {
             std::filesystem::path in_path =
                 deck_path.parent_path() / (deck_path.stem().string() + ".profile.json");
@@ -161,7 +162,7 @@ int main(int argc, char* argv[])
             std::string out_raw     = stem + ".keepmodel.exhaustive.raw.json";
             if (const char* p = std::getenv("MTG_MERGE_OUT_PROFILE")) { out_profile = p; }
             if (const char* r = std::getenv("MTG_MERGE_OUT_RAW"))     { out_raw = r; }
-            if (std::getenv("MTG_KEEP_NO_WRITE") != nullptr) { out_profile.clear(); out_raw.clear(); }
+            if (EnvOn("MTG_KEEP_NO_WRITE")) { out_profile.clear(); out_raw.clear(); }
             // Bottoming is ALWAYS baked ON. Blind exhaustive bottoming is the theoretically-correct policy
             // when blind to the shuffle (a real player can't peek at the library the way clairvoyant
             // lookahead bottoming does), and the confounded in-game A/B (MTG_CONFOUND_BOTTOM) has
@@ -181,6 +182,8 @@ int main(int argc, char* argv[])
         // that win on MTG_LOG_TURN (default 3) as replay JSON under MTG_LOG_DIR (default logs/hand_lines).
         // MTG_LOG_MAXTOP2LANDS (default 1) skips games whose first two draws are BOTH lands (the "clean"
         // path), so the saved lines are the harder wins. MTG_LOG_N games, MTG_LOG_PLAY=1 for on-the-play.
+        // Value-carrying flag: the value IS the hand composition (comma list), "0" = off. Keep the
+        // raw read (EnvOn would drop access to the value); already value-aware, so =0 disables.
         if (const char* e = std::getenv("MTG_LOG_HAND"); e && *e && std::string(e) != "0")
         {
             std::filesystem::path in_path =
@@ -203,7 +206,7 @@ int main(int argc, char* argv[])
                                    return (s && *s) ? std::max(1, std::atoi(s)) : 3; }();
             const int max2   = []{ const char* s = std::getenv("MTG_LOG_MAXTOP2LANDS");
                                    return (s && *s) ? std::atoi(s) : 1; }();
-            const bool on_play = std::getenv("MTG_LOG_PLAY") != nullptr;
+            const bool on_play = EnvOn("MTG_LOG_PLAY");
             std::filesystem::path log_dir = std::getenv("MTG_LOG_DIR") ? std::getenv("MTG_LOG_DIR")
                                                                        : "logs/hand_lines";
             std::filesystem::create_directories(log_dir);
@@ -269,7 +272,7 @@ int main(int argc, char* argv[])
         // at m+1 (value of mulliganing again). Draws a natural top-7 per fresh shuffle, bottoms m via the
         // deck's bottoming policy, plays out; averages over MTG_SCORE_R shuffles. MTG_SCORE_HIST adds the
         // per-(m,pd) win-turn histogram. Read-only diagnostic.
-        if (const char* e = std::getenv("MTG_MULL_EV"); e && *e && std::string(e) != "0")
+        if (EnvOn("MTG_MULL_EV"))
         {
             std::filesystem::path in_path =
                 deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
@@ -281,7 +284,7 @@ int main(int argc, char* argv[])
                                   return (s && *s) ? std::max(0, std::atoi(s)) : 5; }();
             const int MAXM = []{ const char* s = std::getenv("MTG_MULL_EV_MAXM");
                                  return (s && *s) ? std::max(0, std::atoi(s)) : 2; }();
-            const bool hist_on = std::getenv("MTG_SCORE_HIST") != nullptr;
+            const bool hist_on = EnvOn("MTG_SCORE_HIST");
             MulliganProfile rp = profile; rp.keep_model = KeepModel{};
             const bool second_main = GoldFishRunner::DeckUsesSecondMain(deck);
             std::vector<std::array<double, 2>> sum(MAXM + 1, { 0, 0 }), sumsq(MAXM + 1, { 0, 0 });
@@ -353,7 +356,7 @@ int main(int argc, char* argv[])
         // MTG_SCORE_FILE lines "H:c0,c1,...,cK-1" (hand size + per-bucket counts, bucket order = the
         // profile's exhaustive_keep.buckets); prints "H:comp  draw_mean draw_se  play_mean play_se".
         // Uses the deck's committed exhaustive profile for the bucket map. MTG_SCORE_R (default 400).
-        if (const char* e = std::getenv("MTG_SCORE_COMPS"); e && *e && std::string(e) != "0")
+        if (EnvOn("MTG_SCORE_COMPS"))
         {
             std::filesystem::path in_path =
                 deck_path.parent_path() / (deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
@@ -391,14 +394,14 @@ int main(int argc, char* argv[])
             std::vector<std::array<double, 4>> out(items.size(), { 0, 0, 0, 0 });  // dmean,dse,pmean,pse
             // Optional per-comp win-turn histogram (MTG_SCORE_HIST): [item][pd][win_turn 0..11], last
             // buckets catch max_turns+1 (no win). Per-item ownership => race-free like `out`.
-            const bool score_hist = std::getenv("MTG_SCORE_HIST") != nullptr;
+            const bool score_hist = EnvOn("MTG_SCORE_HIST");
             std::vector<std::array<std::array<long long, 12>, 2>> hist(items.size());
 
             // Optional detail mode (MTG_SCORE_DETAIL): for each win-turn bucket, the lands-in-play split
             // (player-0 lands controlled at the win) and how many of those wins cast Light Up the Stage
             // (via the execution-trace touch index). Answers "how many turn-3 wins ran on 1 vs 2 lands,
             // and did the spectacle dig participate?".
-            const bool detail_on = std::getenv("MTG_SCORE_DETAIL") != nullptr;
+            const bool detail_on = EnvOn("MTG_SCORE_DETAIL");
             struct Detail { std::array<std::array<long long, 10>, 12> lands{};   // [winturn][lands 0..9]
                             std::array<long long, 12> lightup{};                 // [winturn] wins that cast LUS
                             std::array<std::array<long long, 3>, 12> top2{}; };  // [winturn][lands in first 2 draws]
@@ -589,7 +592,7 @@ int main(int argc, char* argv[])
             if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
             if (const char* fm = std::getenv("MTG_EQUIV_FORCE_MERGE")) { cfg.force_merge = fm; }
             // Write the serialized keep policy + poolable raw sidecar next to the deck unless suppressed.
-            if (std::getenv("MTG_KEEP_NO_WRITE") == nullptr)
+            if (!EnvOn("MTG_KEEP_NO_WRITE"))
             {
                 const std::string stem = (deck_path.parent_path() / deck_path.stem().string()).string();
                 cfg.out_profile = stem + ".keepmodel.exhaustive.profile.json";
@@ -699,7 +702,7 @@ int main(int argc, char* argv[])
         // writing <deck>.keepmodel.profile.json. This is the fast Phase-3 A/B path -- the output is
         // byte-identical to the committed profile except for the added keep_model, so a suite A/B
         // isolates exactly the keep-decision change without re-running the (slow) grid.
-        if (const char* e = std::getenv("MTG_KEEP_MODEL_ONLY"); e && *e && std::string(e) != "0")
+        if (EnvOn("MTG_KEEP_MODEL_ONLY"))
         {
             std::filesystem::path in_path =
                 deck_path.parent_path() / (deck_path.stem().string() + ".profile.json");

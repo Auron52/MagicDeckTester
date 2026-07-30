@@ -1,3 +1,4 @@
+#include "core/EnvFlags.h"
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -3283,7 +3284,7 @@ int main(int argc, char* argv[])
             // and `ai_choice` is the UNPRUNED engine's, so claude-play cannot answer a question
             // about a prune gate (e.g. a reference the shipped search loses to the human). Opt-in
             // only, so the play GUI and every reference replay stay byte-identical.
-            if (std::getenv("MTG_CLAUDE_PLAY_SHIPPED_PRUNING") == nullptr)
+            if (!EnvOn("MTG_CLAUDE_PLAY_SHIPPED_PRUNING"))
             {
                 setenv("MTG_UNPRUNED", "1", 1);
                 setenv("MTG_PONDER_SEARCH", "1", 1);

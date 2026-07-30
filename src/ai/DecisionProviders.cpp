@@ -1,3 +1,4 @@
+#include "../core/EnvFlags.h"
 #include <cstdlib>
 #include <cctype>
 #include <utility>
@@ -33,7 +34,7 @@
 // human-play) is unaffected.
 static bool UnpruneHumanSuppressed()
 {
-    static const bool hp = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    static const bool hp = EnvSet("MTG_HUMAN_PLAY");
     return hp && g_human_play_suppressed;
 }
 
@@ -103,7 +104,7 @@ static uint32_t UnpruneMask()
 
 bool DecisionUnpruned()
 {
-    static const bool v = std::getenv("MTG_UNPRUNED") != nullptr;
+    static const bool v = EnvOn("MTG_UNPRUNED");
     if (!v) { return false; }
     if (UnpruneHumanSuppressed()) { return false; }
     return true;
@@ -122,7 +123,7 @@ bool DecisionUnpruned(UnprunedGate g)
 
 bool UseLearnedEval()
 {
-    static const bool v = std::getenv("MTG_EVAL_MODEL") != nullptr;
+    static const bool v = EnvOn("MTG_EVAL_MODEL");
     return v;
 }
 
@@ -909,7 +910,7 @@ bool AntiLifegainProvider::ShouldAttackWith(const GameState& s, const Permanent&
     // draws differently. Among 462 games with IDENTICAL draw sequences, ON never wins later (0
     // regressions); every turn-later game has a divergent post-fetch draw. See the reservation design
     // doc's exalted section.
-    static const bool enabled = std::getenv("MTG_NO_EXALTED_ATTACK") == nullptr;
+    static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
     if (!enabled) { return true; }
 
     if (AttackPowerOf(s, p) > 0)        { return true; }   // deals damage (incl. an Invigorate-pumped dork)
@@ -1094,7 +1095,7 @@ bool TreasureHuntProvider::DiscardLandsFirst(const GameState& s) const
 //   (4) Otherwise bottom.
 static bool THLegacyScry()
 {
-    static const bool on = std::getenv("MTG_TH_LEGACY_SCRY") != nullptr;
+    static const bool on = EnvOn("MTG_TH_LEGACY_SCRY");
     return on;
 }
 
@@ -1482,7 +1483,7 @@ bool TreasureHuntProvider::HoldDeferredDropForLethal(const GameState& s, int con
     // the marginal case (developing would cost the kill) holds; a hand with strictly MORE than
     // lethal ammo still develops (playing one leaves it lethal, so the win turn is unchanged and we
     // keep the extra land in play). MTG_NO_LE_HOLD_LETHAL disables -> legacy develop-always (A/B).
-    static const bool s_off = std::getenv("MTG_NO_LE_HOLD_LETHAL") != nullptr;
+    static const bool s_off = EnvOn("MTG_NO_LE_HOLD_LETHAL");
     if (s_off) { return false; }
 
     // Land's Edge damage-per-land currently on the battlefield.
@@ -1520,7 +1521,7 @@ bool TreasureHuntProvider::HoldDeferredDropForFurtherDig(const GameState& s, int
     // ON; MTG_NO_TH_HOLD_FOR_DIG restores eager-develop for A/Bs (presence-tested, so =0 also
     // disables). Preconditions guaranteed by the caller: pre-combat, drop open, Hook 21 declined,
     // Hook 13 found no keep land.
-    static const bool s_off = std::getenv("MTG_NO_TH_HOLD_FOR_DIG") != nullptr;
+    static const bool s_off = EnvOn("MTG_NO_TH_HOLD_FOR_DIG");
     if (s_off) { return false; }
 
     const Player& ap = s.players[controller];
@@ -1622,7 +1623,7 @@ int TreasureHuntProvider::ExtraLethalDamage(const GameState& s,
         // (else it is already counted in base_lands_edge_dmg). Simulation remains the win arbiter,
         // so this optimistic projection only steers the search toward the line (it does not commit
         // a phantom win). See docs/design/th-reliquary-defer-gi627.md.
-        static const bool s_cascade_lethal = std::getenv("MTG_NO_CASCADE_LETHAL") == nullptr;
+        static const bool s_cascade_lethal = !EnvOn("MTG_NO_CASCADE_LETHAL");
         if (s_cascade_lethal && lands_edge_rate == 0 && c->params.cascade_max_mv > 0)
         {
             for (const Card& lc : s.players[active].library)
@@ -2157,7 +2158,7 @@ bool HinataProvider::KeepReorderTop(const GameState& s, const std::vector<Card>&
 // rollout, AND real declaration in lockstep (all call ShouldAttackWith), so no search/executor desync.
 bool HinataProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
 {
-    static const bool enabled = std::getenv("MTG_NO_HINATA_HOLD_DORK") == nullptr;
+    static const bool enabled = !EnvOn("MTG_NO_HINATA_HOLD_DORK");
     if (!enabled) { return true; }
     if (AttackPowerOf(s, p) > 0)      { return true; }   // deals damage (a real attacker, incl. Hinata)
     if (AttackHasNonPowerValue(s, p)) { return true; }   // attack-trigger value (none in this deck today)
@@ -2173,7 +2174,7 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
                                              int max_affordable) const
 {
     std::vector<int> generic = GenericProvider::XCandidates(s, def, max_affordable);
-    static const bool enabled = std::getenv("MTG_NO_HINATA_HOLD_CRACKLE") == nullptr;
+    static const bool enabled = !EnvOn("MTG_NO_HINATA_HOLD_CRACKLE");
     if (!enabled || generic.empty() || !IsCrackleCountSpell(def.params)) { return generic; }
     // HUMAN play (the viewer): never hide a castable Crackle -- the hold-as-a-combo-piece prior is
     // an AUTONOMOUS search heuristic, not a restriction on the player. Offer the full affordable X
@@ -2245,7 +2246,7 @@ HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def
     // emitted minimum -- Crackle first, Magma the sub-chunk remainder. (There is no separate allocation
     // prune; an earlier comment referencing "SubsetMisallocatesScalingMana in TurnSolver" was describing a
     // function that was never written -- FillScaledCastFace already does the job.)
-    static const bool legacy = std::getenv("MTG_LEGACY_MAGMA") != nullptr;
+    static const bool legacy = EnvOn("MTG_LEGACY_MAGMA");
     if (legacy) { return {}; }
     if (!def.params.damage_divided || !def.params.discount_targets_permanents) { return {}; }
     if (!HinataInPlay(s)) { return {}; }
@@ -2516,7 +2517,7 @@ namespace
     // ADOPTED default ON: the go-off win-now model. MTG_NO_DRAGONSTORM_GOFF restores the pre-fix behavior
     // (byte-identical -- the engine skips building `casting` when HasExtraLethalModel is false) for A/B.
     // Measured (train seeds 4004/5005): d0 -0.33, d3/d5 -0.05..-0.10, no regressions, no other deck moves.
-    const bool s_goff_lethal = std::getenv("MTG_NO_DRAGONSTORM_GOFF") == nullptr;
+    const bool s_goff_lethal = !EnvOn("MTG_NO_DRAGONSTORM_GOFF");
 }  // namespace
 
 bool DragonstormProvider::HasExtraLethalModel() const

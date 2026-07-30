@@ -4,6 +4,7 @@
 // files -- two chances to update one and not the other, which is the executor/rollout lockstep
 // failure mode in miniature. One reader per flag; the function-local static means the
 // environment is read once per process, same as before.
+#include "../core/EnvFlags.h"
 #include <cstdlib>
 #include <string>
 
@@ -13,7 +14,7 @@
 // and must stay in lockstep.
 inline bool LegacyStaticTapped()
 {
-    static const bool v = std::getenv("MTG_LEGACY_STATIC_TAPPED") != nullptr;
+    static const bool v = EnvOn("MTG_LEGACY_STATIC_TAPPED");
     return v;
 }
 
@@ -21,8 +22,7 @@ inline bool LegacyStaticTapped()
 // land, since only the fastland's window closes. DEFAULT ON; =0 disables (value-aware hatch).
 inline bool LandClosingWindowEnabled()
 {
-    static const bool v = []{ const char* e = std::getenv("MTG_LAND_CLOSING_WINDOW");
-                              return !(e && std::string(e) == "0"); }();
+    static const bool v = EnvOn("MTG_LAND_CLOSING_WINDOW", true);
     return v;
 }
 
@@ -32,6 +32,6 @@ inline bool LandClosingWindowEnabled()
 // lockstep defect. See docs/design/post-breakpoint-search.md.
 inline bool BpTraceEnabled()
 {
-    static const bool v = std::getenv("MTG_BP_TRACE") != nullptr;
+    static const bool v = EnvOn("MTG_BP_TRACE");
     return v;
 }

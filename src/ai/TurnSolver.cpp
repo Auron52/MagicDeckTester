@@ -1,3 +1,4 @@
+#include "../core/EnvFlags.h"
 #include "TurnSolver.h"
 #include "EngineFlags.h"
 #include "TranspositionTable.h"
@@ -65,7 +66,7 @@ static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_le
 // turn-steps this process. A CONTENTION-PROOF measure of rollout work (wall-clock is not, under shared
 // machine load), so truncated-rollout (MTG_ROLLOUT_HORIZON) speedups can be read as a step-count ratio.
 // Flag-gated so the shared counters never touch the rollout hot loop (cross-thread atomic contention) when off.
-static const bool             s_rollout_stats = std::getenv("MTG_ROLLOUT_STATS") != nullptr;
+static const bool             s_rollout_stats = EnvOn("MTG_ROLLOUT_STATS");
 static std::atomic<long long> g_rollout_calls{0};
 static std::atomic<long long> g_rollout_steps{0};
 // Interior-node telemetry (same MTG_ROLLOUT_STATS gate): the number of full-depth search
@@ -78,13 +79,13 @@ static std::atomic<long long> g_interior_nodes_esc{0};   // interior nodes done 
 // Matched-depth escalation measurement (MTG_ESC_MEASURE): per escalation, the ladder's work units
 // (budget->Used() delta) vs a COLD single pass at the ladder's ACTUAL committed depth (fresh caches).
 // This is the apples-to-apples "skip earlier depths" test -- same target depth, ladder vs single-pass.
-static const bool             s_esc_measure = std::getenv("MTG_ESC_MEASURE") != nullptr;
+static const bool             s_esc_measure = EnvOn("MTG_ESC_MEASURE");
 static std::atomic<long long> g_esc_ladder_units{0};
 static std::atomic<long long> g_esc_single_units{0};
 static std::atomic<long long> g_esc_measure_n{0};
 // K-predictor telemetry (MTG_ESC_PREDICT_STATS): predictions, fallbacks (K aborted -> shallower), and the
 // predicted-K vs committed-depth histograms. A high fallback rate => the estimate is poor (wasted abort work).
-static const bool             s_esc_predict_stats = std::getenv("MTG_ESC_PREDICT_STATS") != nullptr;
+static const bool             s_esc_predict_stats = EnvOn("MTG_ESC_PREDICT_STATS");
 static std::atomic<long long> g_pred_n{0};
 static std::atomic<long long> g_pred_fallback{0};
 static std::array<std::atomic<long long>, 16> g_pred_K{};
@@ -92,7 +93,7 @@ static std::array<std::atomic<long long>, 16> g_pred_committed{};
 // LOSSLESS audit (MTG_ESC_PREDICT_AUDIT): per escalation, shadow-run the ladder and compare its committed
 // depth to the predictor's -- count LOSSY (predict shallower = quality risk) vs deeper vs exact, and dump the
 // first few lossy cases so we can see WHY the estimate under-shot. Doubles escalation work (audit only).
-static const bool             s_esc_predict_audit = std::getenv("MTG_ESC_PREDICT_AUDIT") != nullptr;
+static const bool             s_esc_predict_audit = EnvOn("MTG_ESC_PREDICT_AUDIT");
 static std::atomic<long long> g_pred_audit_n{0}, g_pred_lossy{0}, g_pred_deeper{0}, g_pred_lossy_dumped{0};
 // Amortized-R telemetry (MTG_ESC_PREDICT_STATS): accumulate every measured heuristic-cost-per-probe-leaf sample
 // (roll/lv) so we can report the deck's converged R -- the value to FREEZE into value_play.escalation_r for the
@@ -204,7 +205,7 @@ static thread_local bool g_search_candidate_enum = true;
 // committed-line churn (a different tied line could realise differently only under
 // commit-the-line non-convergence; verified against GT). Default ON; MTG_NO_MOVE_ORDER opts
 // out for the with/without A/B. Cheap: one O(n log n) sort per interior node.
-static const bool s_move_order = std::getenv("MTG_NO_MOVE_ORDER") == nullptr;
+static const bool s_move_order = !EnvOn("MTG_NO_MOVE_ORDER");
 
 static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
 {
@@ -941,7 +942,7 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
 // regression -- the storm-in-hand gate is what makes an option-prune safe for the search). Applied to
 // the greedy/rollout POLICY only; the search's root branch list is untouched (see the 2nd call site).
 // See docs/design/dragonstorm-d0-divergence-digest.md.
-static const bool s_storm_hold = std::getenv("MTG_NO_STORM_HOLD") == nullptr;
+static const bool s_storm_hold = !EnvOn("MTG_NO_STORM_HOLD");
 
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
                                    bool storm_in_hand)
@@ -1097,7 +1098,7 @@ static bool SubsetHasIllegalSplice(const GameState& state,
 // MTG_NO_MAGMA_RESERVE keeps the emitted (min) face -- the A/B baseline. Inert for every non-scaled cast.
 static int FillScaledCastFace(const GameState& state, Action& a, int surplus_generic)
 {
-    static const bool fill_enabled = std::getenv("MTG_NO_MAGMA_RESERVE") == nullptr;
+    static const bool fill_enabled = !EnvOn("MTG_NO_MAGMA_RESERVE");
     if (!fill_enabled) { return 0; }
     const CardDefinition* d = a.def;
     if (!d || a.kind != Action::Kind::CastFromHand) { return 0; }
@@ -1539,7 +1540,7 @@ static thread_local bool g_bp_trace_arm = false;
 static thread_local bool g_bp_root_enum = false;
 static bool BpSearchInRollouts()
 {
-    static const bool on = std::getenv("MTG_NO_BP_SEARCH_ROLLOUT") == nullptr;
+    static const bool on = !EnvOn("MTG_NO_BP_SEARCH_ROLLOUT");
     return on;
 }
 // Commit-the-line recursion depth. The committed decision is the OUTERMOST FSLineWin node of a
@@ -1556,12 +1557,12 @@ struct FsLineNestGuard
 // MTG_NO_GOFF_SHORTCIRCUIT: isolation toggle for the Dragonstorm storm go-off short-circuit (below);
 // default on, disables ONLY that cut for a clean perf/GT A/B (the full search still finds the same win
 // via the go-off lethal model, just after paying for the ritual/Lotus powerset).
-static const bool s_no_goff_shortcircuit = std::getenv("MTG_NO_GOFF_SHORTCIRCUIT") != nullptr;
+static const bool s_no_goff_shortcircuit = EnvOn("MTG_NO_GOFF_SHORTCIRCUIT");
 // Lotus-independent accel-prefix collapse is OPT-IN (default OFF, enable with MTG_LOTUS_PREFIX). The Lotus
 // sacs are fungible in mana, but the plan signature keys on sac_source_id, so collapsing their branches
 // churns the budget-limited search (measured a few searched slowdowns) -- so it is held behind a flag
 // pending a tractability-vs-GT decision, while the byte-identical go-off short-circuit ships by default.
-static const bool s_lotus_prefix         = std::getenv("MTG_LOTUS_PREFIX")         != nullptr;
+static const bool s_lotus_prefix         = EnvOn("MTG_LOTUS_PREFIX");
 
 // Independent-accelerant (Lotus Bloom SacForMana) prefix collapse -- the fungible sibling of
 // NonPrefixAccelViolated for the odometer's 2^num_ind independent mask. The identical Lotus sacs
@@ -2288,7 +2289,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         // which for Hinata is the situational-rank threshold) -- one variant, no branch. MTG_UNPRUNED
         // restores the searched 2-way branch for the standing A/B. The provider still supplies the
         // kept-card ORDER (by situational rank) either way.
-        static const bool s_ponder_search = std::getenv("MTG_PONDER_SEARCH") != nullptr;
+        static const bool s_ponder_search = EnvOn("MTG_PONDER_SEARCH");
         if (def.params.cast_reorder > 0 && (s_ponder_search || DecisionUnpruned(UnprunedGate::Ponder)))
         {
             Action keep_a = a;            keep_a.ponder_keep    = 1;
@@ -2502,7 +2503,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
 // provider-owned policy (DecisionProvider::EnumGroupCap, audit A1); MTG_SOLVE_GROUP_CAP still tunes K.
 bool GroupCapDisabled()
 {
-    static const bool v = std::getenv("MTG_NO_GROUP_CAP") != nullptr;
+    static const bool v = EnvOn("MTG_NO_GROUP_CAP");
     return v;
 }
 
@@ -2579,7 +2580,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
 // turn as their enabler, or a same-turn-cast Hinata crediting later spells) MUST be added to this bail-out
 // too, exactly like affinity -- otherwise it silently breaks byte-identity. A reducer already in play that
 // bakes into a.cost needs nothing. MTG_MANA_PRUNE=0 also disables (the byte-identical A/B toggle).
-static const bool s_legacy_mana_bound = std::getenv("MTG_LEGACY_MANA_BOUND") != nullptr;
+static const bool s_legacy_mana_bound = EnvOn("MTG_LEGACY_MANA_BOUND");
 
 // MEASURED DEAD END (2026-07-30) -- do NOT re-add: gating the mana-gate BUILD on a predicted odometer
 // width (prod(1+|group|) * 2^|independent|), i.e. "only bother on complex turns", is strictly WORSE than
@@ -2721,7 +2722,7 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
 
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands)
 {
-    static const bool on = []{ const char* e = std::getenv("MTG_MANA_PRUNE"); return !(e && std::string(e) == "0"); }();
+    static const bool on = EnvOn("MTG_MANA_PRUNE", true);   // DEFAULT ON; =0 disables
     if (!on) { return std::numeric_limits<int>::max(); }
     // Affinity applies a per-subset generic discount consider() sees but this scalar bound cannot ->
     // sum(cost.ManaValue()) overstates the true cost -> disable the prune to stay byte-identical.
@@ -2901,7 +2902,7 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
 // this runs inside Solve -- the rollout leaf. Measurement builds only; delete once the design lands.
 namespace enumstats
 {
-    inline bool Enabled() { static const bool v = std::getenv("MTG_ENUM_STATS") != nullptr; return v; }
+    inline bool Enabled() { static const bool v = EnvOn("MTG_ENUM_STATS"); return v; }
     inline std::atomic<std::uint64_t> g_calls{0}, g_positions{0}, g_m_raw{0}, g_m_kept{0},
                                       g_m_exact{0}, g_m_bucket{0}, g_m_manastorm{0}, g_m_manaonly{0},
                                       g_calls_with_mana{0},
@@ -3409,7 +3410,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
 // Provider-gated (PrunesAcceleratorWithoutPayoff = Dragonstorm only) + the same MTG_UNPRUNED(payoffprune)
 // toggle as the late prune, plus an independent MTG_NO_RITUAL_EARLY_DROP opt-out for the speedup A/B.
 // Inert for every other deck and whenever a payoff is reachable -> byte-identical.
-static const bool s_ritual_early_drop = std::getenv("MTG_NO_RITUAL_EARLY_DROP") == nullptr;
+static const bool s_ritual_early_drop = !EnvOn("MTG_NO_RITUAL_EARLY_DROP");
 
 static void DropRitualGroupsIfNoPayoff(const GameState& state, const ManaPool& pool,
                                        const std::vector<Action>& cands,
@@ -3668,7 +3669,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // touch EnumeratePlans (the search's branch list): a ritual is still OFFERED as a branch and kept in
     // hand for a future turn. Gated on any_ritual -> byte-identical for non-ritual decks. Measured:
     // Dragonstorm d0 ~0.9 turns faster / search ~0.05-0.08; Hinata +0.05; burn byte-identical; work down.
-    static const bool s_ritual_payoff_guard = std::getenv("MTG_NO_RITUAL_PAYOFF_GUARD") == nullptr;
+    static const bool s_ritual_payoff_guard = !EnvOn("MTG_NO_RITUAL_PAYOFF_GUARD");
 
     // Evaluate one selected combination of candidate indices and, if it is the new optimum,
     // record it. The optimum is ordered by (wins, value, SMALLEST action mask): a winning plan
@@ -4011,7 +4012,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // non-ritual deck is byte-identical; MTG_UNPRUNED also disables it, leaving the full search as the
     // standing A/B that proves the cut wins the same games. MTG_NO_COMBO_LINE is a dedicated isolation
     // toggle (disables ONLY this cut, keeping every other heuristic) for a clean perf A/B.
-    static const bool s_no_combo_line = std::getenv("MTG_NO_COMBO_LINE") != nullptr;
+    static const bool s_no_combo_line = EnvOn("MTG_NO_COMBO_LINE");
     if (any_ritual && !s_no_combo_line && !DecisionUnpruned(UnprunedGate::ComboLine))
     {
         int finisher = -1, finisher_dmg = -1;
@@ -4097,7 +4098,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // subsets -- the same invariant EnumeratePlans relies on -- in O(prod(1+choices)*2^independent)
     // instead of O(2^m), which is the wide-board (slivers/knights) hot path. MTG_LEGACY_SOLVE keeps
     // the reference powerset for A/B (the two must produce byte-identical game results).
-    static const bool s_legacy_solve = std::getenv("MTG_LEGACY_SOLVE") != nullptr;
+    static const bool s_legacy_solve = EnvOn("MTG_LEGACY_SOLVE");
     if (s_legacy_solve)
     {
         // Reference path: full 2^m powerset with precomputed mutual-exclusion conflict masks. Two
@@ -4378,7 +4379,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 static const std::vector<Color>& PayProduces(const GameState& state, int controller,
                                              const CardDefinition& def, bool for_creature)
 {
-    static const bool legacy = std::getenv("MTG_LEGACY_CCO_PAY") != nullptr;
+    static const bool legacy = EnvOn("MTG_LEGACY_CCO_PAY");
     if (legacy) { return EffectiveProduces(state, controller, def); }
     return ProducesForPayment(state, controller, def, for_creature);
 }
@@ -4888,7 +4889,7 @@ namespace
         std::atomic<uint64_t> nested[5]{};    // NESTED (2nd+ breakpoint of an apply) -> still greedy
         ~BpProbe()
         {
-            if (std::getenv("MTG_BP_PROBE") == nullptr) { return; }
+            if (!EnvOn("MTG_BP_PROBE")) { return; }
             for (int i = 0; i < 5; ++i)
             {
                 const uint64_t n = hit[i].load(std::memory_order_relaxed);
@@ -4914,7 +4915,7 @@ namespace
     // applied. See docs/design/post-breakpoint-search.md.
     inline void BpHit(int i, bool on_committed_line, bool resolved_by_search, bool nested_blocked)
     {
-        static const bool on = std::getenv("MTG_BP_PROBE") != nullptr;
+        static const bool on = EnvOn("MTG_BP_PROBE");
         if (!on) { return; }
         g_bp_probe.hit[i].fetch_add(1, std::memory_order_relaxed);
         if (on_committed_line)   { g_bp_probe.committed[i].fetch_add(1, std::memory_order_relaxed); }
@@ -4951,7 +4952,7 @@ namespace
         std::atomic<int>      maxlen[5]{};
         ~BpCandsProbe()
         {
-            if (std::getenv("MTG_BP_CANDS_PROBE") == nullptr) { return; }
+            if (!EnvOn("MTG_BP_CANDS_PROBE")) { return; }
             for (int i = 0; i < 5; ++i)
             {
                 const uint64_t cnt = n[i].load(std::memory_order_relaxed);
@@ -4985,7 +4986,7 @@ namespace
     BpCandsProbe g_bp_cands_probe;
     inline void BpCands(int site, int len, int width)
     {
-        static const bool on = std::getenv("MTG_BP_CANDS_PROBE") != nullptr;
+        static const bool on = EnvOn("MTG_BP_CANDS_PROBE");
         if (!on || len <= 0) { return; }
         const int reachable = len < width ? len : width;
         g_bp_cands_probe.n[site].fetch_add(1, std::memory_order_relaxed);
@@ -5017,7 +5018,7 @@ static bool OrderingOpaque(const std::string& name)
 
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts)
 {
-    static const bool s_enabled = std::getenv("MTG_NO_BATCH_PAY") == nullptr;
+    static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
     if (!s_enabled) { return false; }
     // DRAW-SAFE: decline the whole-turn prepay on a FLOOD-ENGINE turn. The prepay assumes `acts` IS
     // the turn's cast set. That is FALSE after a dig: Treasure Hunt DRAWS the cards cast later the
@@ -5038,7 +5039,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     //
     // The SOURCE-level fix, if this is ever revisited: fold the recorded breakpoint_casts into the
     // combined cost below, so the joint solve pays for them instead of declining the prepay.
-    static const bool s_drawsafe = std::getenv("MTG_NO_BATCH_PAY_DRAWSAFE") == nullptr;
+    static const bool s_drawsafe = !EnvOn("MTG_NO_BATCH_PAY_DRAWSAFE");
     if (s_drawsafe)
     {
         for (const Action& a : acts)
@@ -5215,7 +5216,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // re-solve, and a plain cantrip cast INSIDE a re-solve (sink_stack non-empty) also stays
     // inline so its nested breakpoint records correctly. MTG_NO_DEFER_CANTRIP opts out
     // (the old inline behaviour) for the A/B. Inert for decks without plain cantrips.
-    static const bool s_defer_cantrip = std::getenv("MTG_NO_DEFER_CANTRIP") == nullptr;
+    static const bool s_defer_cantrip = !EnvOn("MTG_NO_DEFER_CANTRIP");
     bool deferred_cantrip_resolve = false;
 
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
@@ -5228,7 +5229,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // revealed land as the drop (guarded in play_breakpoint_land / play_drawn_flood_keep_land).
     // Lockstep: AIEngine::TakeTurn defers its fold_land the same way. MTG_NO_KAROO_DEFER opts
     // out (old land-first behaviour) for the A/B. Inert for decks without a Karoo.
-    static const bool s_karoo_defer = std::getenv("MTG_NO_KAROO_DEFER") == nullptr;
+    static const bool s_karoo_defer = !EnvOn("MTG_NO_KAROO_DEFER");
     bool        karoo_deferred = false;
     std::string karoo_land_name;
     std::string karoo_fetch;
@@ -5355,7 +5356,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         // Default engine behavior (mirrors s_fd_opp_spawns); MTG_LEGACY_SEARCH opts
         // back into the held-out baseline (byte-frozen old ground truth) for A/Bs.
-        static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+        static const bool s_fd = !EnvOn("MTG_LEGACY_SEARCH");
         if (!s_fd || !is_pre_combat) { return; }
         if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
         // MTG_FORCE_LAND diagnostic (see EnumeratePlansWithLand): the POST-DRAW drop is picked by
@@ -5385,7 +5386,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // commit-the-line replay. Legacy keeps the frozen behavior (no land here).
     auto play_drawn_flood_keep_land = [&](std::vector<Action>* sink)
     {
-        static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+        static const bool s_fd = !EnvOn("MTG_LEGACY_SEARCH");
         if (!s_fd || !is_pre_combat) { return; }
         if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
         Player& lp = state.ActivePlayer();
@@ -5424,7 +5425,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // reach a different drop. MTG_BP_DROP_SEARCHED omits the static pick -- but until the
         // breakpoint is a real search node that is strictly worse (no land is played at all), so it
         // is opt-in for diagnosis only, NOT a fix.
-        static const bool s_searched = std::getenv("MTG_BP_DROP_SEARCHED") != nullptr;
+        static const bool s_searched = EnvOn("MTG_BP_DROP_SEARCHED");
         if (!s_searched) { play_breakpoint_land(sink); }
     };
 
@@ -6951,7 +6952,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // only for lethal / cleanup excess), slipping the win to T10. The legacy
             // baseline (MTG_LEGACY_SEARCH) fires ALL lands -- its rollouts are frozen as
             // the held-out ground truth.
-            static const bool s_fd = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+            static const bool s_fd = !EnvOn("MTG_LEGACY_SEARCH");
             int fire_count = s_fd ? ResolveProvider(state).LandsEdgeFireCount(state, rate)
                                   : std::numeric_limits<int>::max();
 
@@ -7158,7 +7159,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // (MTG_LEGACY_SEARCH) keeps the highest-MV-only rule (frozen as the held-out ground
     // truth). Without this the search kept every drawn land as Land's Edge ammo while
     // the real game discards lands here, over-counting Land's Edge damage (gi=947).
-    static const bool s_fd_discard = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+    static const bool s_fd_discard = !EnvOn("MTG_LEGACY_SEARCH");
 
     // STAGED cards do NOT count toward maximum hand size (CR 514.1 counts the HAND; a card exiled
     // with "you may play it until ..." -- Soulfire Eruption, Light Up the Stage, Expressive
@@ -7172,7 +7173,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // planned turn 6 a card short, so the realised turn missed the lethal Crackle X by one mana:
     // predicted T6, realised T7). Count and shed only NON-staged cards -> exact parity with
     // CleanupStep. Hatch: MTG_LEGACY_STAGED_HANDLIMIT restores the old counting.
-    static const bool s_staged_exempt = std::getenv("MTG_LEGACY_STAGED_HANDLIMIT") == nullptr;
+    static const bool s_staged_exempt = !EnvOn("MTG_LEGACY_STAGED_HANDLIMIT");
     auto hand_count = [&]() {
         if (!s_staged_exempt) { return ap.hand.size(); }
         size_t n = 0;
@@ -7273,7 +7274,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // games via rollout/bottoming noise (burn gi=278 5->6; th d3 s2002 gi=72 4->5, gi=97
     // 5->6), all slightly worse, 0 better. Only commit-the-line, which REPLAYS the
     // search's line and cannot re-decide, actually needs the rollout's board accurate.
-    static const bool s_fd_opp_spawns = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+    static const bool s_fd_opp_spawns = !EnvOn("MTG_LEGACY_SEARCH");
     if (s_fd_opp_spawns && state.opponent_spawns)
     {
         int opp_index = 1 - state.active_player_index;
@@ -7458,7 +7459,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
         // gated like the turn-start spawn so MTG_LEGACY_SEARCH keeps the old model.
         if (IsForbiddenOrchard(def))
         {
-            static const bool s_orchard_onplay = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+            static const bool s_orchard_onplay = !EnvOn("MTG_LEGACY_SEARCH");
             if (s_orchard_onplay) { SpawnOpponentSpirit(state); }
         }
         return true;
@@ -7516,7 +7517,7 @@ static std::string SimulateLandPlay(GameState& state)
 static bool OrderingSearchEnabled(const GameState& state)
 {
     // Global A/B knob (env / MTG_UNPRUNED), cached once.
-    static const bool global = (std::getenv("MTG_SEARCH_ORDER") != nullptr) || DecisionUnpruned(UnprunedGate::SearchOrder);
+    static const bool global = (EnvOn("MTG_SEARCH_ORDER")) || DecisionUnpruned(UnprunedGate::SearchOrder);
     // Archetype opt-in (Hook 28): Dragonstorm searches its combo cast order by default. Provider-scoped
     // so every other deck stays byte-identical (base hook returns false). Cheap per-call vtable check --
     // the real cost is the k! applies below, gated behind this.
@@ -7659,7 +7660,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 // table at exit. Run single-threaded for clean numbers (MTG_BRANCH_STATS=1 ... --threads 1).
 namespace branchstats
 {
-    inline bool Enabled() { static const bool v = std::getenv("MTG_BRANCH_STATS") != nullptr; return v; }
+    inline bool Enabled() { static const bool v = EnvOn("MTG_BRANCH_STATS"); return v; }
     struct Bucket { uint64_t calls = 0; double odo = 0, final_plans = 0, raw_plans = 0; uint64_t max_odo = 0; };
     inline std::mutex                          g_mtx;
     inline std::map<std::string, Bucket>       g_by_driver;   // keyed by biggest-group card name
@@ -7719,7 +7720,7 @@ namespace branchstats
 // so a legacy autonomous run is byte-identical to pre-port AND the viewer keeps the feature.
 inline bool SeqAuraOrderingEnabled()
 {
-    static const bool s_legacy = std::getenv("MTG_LEGACY_NO_SEQ_AURA") != nullptr;
+    static const bool s_legacy = EnvOn("MTG_LEGACY_NO_SEQ_AURA");
     if (s_legacy) { return HumanPlayActive(); }
     return true;
 }
@@ -7829,7 +7830,7 @@ static bool IsConditionalRestrictedAura(const GameState& state, const Action& a)
 // satisfies those only via other same-turn casts, which the aura-aura sequencing already models.
 inline bool AuraOnNewCreatureEnabled()
 {
-    static const bool s_off = std::getenv("MTG_LEGACY_NO_AURA_NEW_CREATURE") != nullptr;
+    static const bool s_off = EnvOn("MTG_LEGACY_NO_AURA_NEW_CREATURE");
     return !s_off;
 }
 
@@ -9261,7 +9262,7 @@ namespace
         std::atomic<int>      maxrank{0};      // deepest rank reached
         ~BpWaveProbe()
         {
-            if (std::getenv("MTG_BP_WAVE_PROBE") == nullptr) { return; }
+            if (!EnvOn("MTG_BP_WAVE_PROBE")) { return; }
             std::fprintf(stderr,
                          "[bp-waves] nodes=%llu no-slots=%llu slots=%llu scored=%llu"
                          " rolled=%llu improved=%llu budget-stopped=%llu max-rank=%d\n",
@@ -9278,7 +9279,7 @@ namespace
     BpWaveProbe g_bp_wave_probe;
     inline bool BpWaveProbeOn()
     {
-        static const bool on = std::getenv("MTG_BP_WAVE_PROBE") != nullptr;
+        static const bool on = EnvOn("MTG_BP_WAVE_PROBE");
         return on;
     }
     inline void BpWaveRank(int k)
@@ -9385,7 +9386,7 @@ private:
 // user's call (2026-07-29): lands with different names are mostly mechanically different, so widening
 // this dedupe key buys little while any grouping of distinct cards stays risky. Kept in-tree because
 // the underlying finding is real -- see docs/design/land-signature-completeness.md.
-static const bool s_complete_land_sig = std::getenv("MTG_LAND_SIG_COMPLETE") != nullptr;
+static const bool s_complete_land_sig = EnvOn("MTG_LAND_SIG_COMPLETE");
 static const bool s_legacy_land_sig    = !s_complete_land_sig;
 // Land-priority knobs: shared readers in EngineFlags.h -- greedy_land_name below reimplements
 // TryPlayLand's passes as the search's last-resort tiebreak, and the two must stay in lockstep.
@@ -9753,7 +9754,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     //     T1 field empty, Treasure Hunt needs U, Sandstone Needle makes only R -> demote; play a
     //     U source instead.) This is the "somewhere in between colour-blind and strict-colour-need"
     //     rule. MTG_COLOR_BLIND_TIEBREAK restores the old colour-blind rule for A/B.
-    static const bool s_color_blind_tiebreak = std::getenv("MTG_COLOR_BLIND_TIEBREAK") != nullptr;
+    static const bool s_color_blind_tiebreak = EnvOn("MTG_COLOR_BLIND_TIEBREAK");
     bool needed[6] = { false, false, false, false, false, false };
     for (const Card& c : ap.hand)
     {
@@ -9800,7 +9801,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         }
         return false;   // off-colour: wastes the drop while a needed colour stays uncovered
     };
-    static const bool s_develop_tiebreak = std::getenv("MTG_NO_DEVELOP_TIEBREAK") == nullptr;
+    static const bool s_develop_tiebreak = !EnvOn("MTG_NO_DEVELOP_TIEBREAK");
 
     // Winning plans first, then by value — matches EnumeratePlans' ordering so the
     // win-this-turn shortcut in SolveWithLookahead still returns the best winning plan.
@@ -10225,7 +10226,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             // SOUNDNESS HARNESS (MTG_LEAF_VERIFY): recompute this hit fresh (loose cutoff, no tt/budget so it
             // fully resolves) and compare. A mismatch means two states shared a BuildSimKey but roll out
             // differently => the key omits some rollout-determining state. Counts mismatches + dumps the first.
-            static const bool s_leaf_verify = std::getenv("MTG_LEAF_VERIFY") != nullptr;
+            static const bool s_leaf_verify = EnvOn("MTG_LEAF_VERIFY");
             if (s_leaf_verify)
             {
                 GameState copy = state;
@@ -10848,7 +10849,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // So after two completed passes give a growth ratio, extrapolate the start-gate to the deepest AFFORDABLE
     // depth K and jump straight there, skipping d(pass+1)..d(K-1). The jumped pass still runs under the
     // overrun guard. Byte-identical when off; gated to the escalation so the probe's ladder is untouched.
-    static const bool s_esc_jump_env = std::getenv("MTG_ESC_JUMP") != nullptr;
+    static const bool s_esc_jump_env = EnvOn("MTG_ESC_JUMP");
     const bool s_esc_jump = s_esc_jump_env && g_force_heuristic_leaf;
 
     for (int pass_depth = (depth >= 1 ? 1 : depth); pass_depth <= depth; ++pass_depth)
@@ -10951,7 +10952,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     }
     if (out_committed_depth != nullptr) { *out_committed_depth = committed_depth; }
 
-    static const bool fd_trace   = std::getenv("MTG_FD_TRACE") != nullptr;
+    static const bool fd_trace   = EnvOn("MTG_FD_TRACE");
     if (fd_trace)
     {
         std::cerr << "[fd] T" << state.turn_number << " LINE win=" << line.win_turn;
@@ -11054,7 +11055,7 @@ namespace
 {
     struct HybridStats
     {
-        bool enabled = std::getenv("MTG_HYBRID_STATS") != nullptr;
+        bool enabled = EnvOn("MTG_HYBRID_STATS");
         std::atomic<long long> decisions{0};
         std::atomic<long long> redos{0};
         std::atomic<long long> verified{0};
@@ -11260,9 +11261,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // its own affordable depth from this MEASURED structure. Cleared before the probe; recorded during it.
     // The single-depth predict path (MTG_ESC_SINGLE_PREDICT) uses the SAME free probe structure, so arm the
     // recording for it too (else g_probe_leaves stays 0 and the affordability walk sees an empty tree).
-    static const bool s_esc_predict = std::getenv("MTG_ESC_PREDICT") != nullptr;
-    static const bool s_esc_single_predict = std::getenv("MTG_ESC_SINGLE_PREDICT") != nullptr;
-    static const bool s_esc_single_env     = std::getenv("MTG_ESC_SINGLE") != nullptr;
+    static const bool s_esc_predict = EnvOn("MTG_ESC_PREDICT");
+    static const bool s_esc_single_predict = EnvOn("MTG_ESC_SINGLE_PREDICT");
+    static const bool s_esc_single_env     = EnvOn("MTG_ESC_SINGLE");
     // Effective single-depth escalation. Precedence mirrors the beam/fresh_frac: an explicitly-set MTG_ESC_SINGLE
     // env is the RESEARCH override (its own _PREDICT/_ABS/_FALLBACK knobs apply, byte-identical A/B path). Else a
     // per-deck escalation_cap>0 (the ADOPTED policy) drives the single-pass predicted-affordable path. The deck
@@ -11278,14 +11279,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // VALUE-RANKED BEAM (MTG_ESC_BEAM=W): capture the probe's per-node value ranking so the escalation reorders
     // its beam by the lines the value pass rated best (see g_probe_plan_vals). Off (W=0) => map stays null =>
     // recording is a no-op => byte-identical. The map lives for this whole decision (probe + escalation).
-    static const bool s_esc_beam_env_set = std::getenv("MTG_ESC_BEAM") != nullptr;
+    static const bool s_esc_beam_env_set = EnvSet("MTG_ESC_BEAM");
     static const int s_esc_beam = []{ const char* e = std::getenv("MTG_ESC_BEAM");
                                       return (e && *e) ? std::atoi(e) : 0; }();
     // MTG_ESC_BEAM_LEAFDEPTH=D: apply the beam only to nodes within D plies of the leaf (the top plies keep full
     // exploration so the committed PLAY is never beamed out). Unset => INT_MAX => uniform beam (original).
     static const int s_esc_beam_leafdepth = []{ const char* e = std::getenv("MTG_ESC_BEAM_LEAFDEPTH");
                                                 return (e && *e) ? std::atoi(e) : 2147483647; }();
-    static const bool s_esc_beam_static = std::getenv("MTG_ESC_BEAM_STATIC") != nullptr;  // prune by static order
+    static const bool s_esc_beam_static = EnvOn("MTG_ESC_BEAM_STATIC");  // prune by static order
     // DEPTH-ADAPTIVE BEAM (per-deck path). Precedence (mirrors escalation_fresh_frac): an EXPLICITLY-SET
     // MTG_ESC_BEAM env wins (keeps env A/B working + its literal uniform-beam semantics -- a research tool, no
     // depth adaptation). Else the per-deck value_play beam (beam_width >= 0 whenever an enabled block drives,
@@ -11404,7 +11405,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         //   MTG_ESC_SPLIT set              -> reserve: cap probe, dedicated ((1-split)+restore)*budget_ms
         //   MTG_ESCALATION_FRESH_FRAC=f>=0 -> fresh f*budget_ms (f=1.0 == full fresh budget, the candidate)
         //   MTG_ESCALATION_FRESH_FRAC=-1   -> LEGACY shared REMAINING budget (DEFAULT; == committed GT)
-        static const bool   s_fresh_frac_env_set = std::getenv("MTG_ESCALATION_FRESH_FRAC") != nullptr;
+        static const bool   s_fresh_frac_env_set = EnvSet("MTG_ESCALATION_FRESH_FRAC");
         static const double s_fresh_frac = []{ const char* e = std::getenv("MTG_ESCALATION_FRESH_FRAC");
                                                return (e && *e) ? std::atof(e) : -1.0; }();  // default OFF (legacy)
         // Precedence: an EXPLICITLY-SET env (MTG_ESCALATION_FRESH_FRAC, the experiment/A-B override) wins over
@@ -11441,7 +11442,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             esc_budget = &esc_alloc_budget;
         }
         SearchLine hline;
-        static const bool s_esc_predict_warm = std::getenv("MTG_ESC_PREDICT_WARM") != nullptr;
+        static const bool s_esc_predict_warm = EnvOn("MTG_ESC_PREDICT_WARM");
         if (s_esc_predict && (tt == nullptr || s_esc_predict_warm))
         {
             // K-PREDICTOR (MTG_ESC_PREDICT): reproduce the ladder's committed depth D by running the REAL ladder
@@ -11748,7 +11749,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             //   3 = ROLLOUT bound: a greedy playout win turn from the CURRENT state (real + achievable, cheapest
             //       to obtain; looser than (2) since the greedy policy is suboptimal).
             // Back-compat: MTG_ESC_SINGLE_WARM (with BOUND unset) selects mode 1.
-            static const bool s_esc_single_warm  = std::getenv("MTG_ESC_SINGLE_WARM") != nullptr;
+            static const bool s_esc_single_warm  = EnvOn("MTG_ESC_SINGLE_WARM");
             static const int  s_esc_single_bound = []{ const char* e = std::getenv("MTG_ESC_SINGLE_BOUND");
                                                        return (e && *e) ? std::atoi(e) : -1; }();
             static const int  s_esc_single_seed  = []{ const char* e = std::getenv("MTG_ESC_SINGLE_SEED");
@@ -11788,7 +11789,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // legacy single behaviour (one attempt at target; abort => keep value-leaf).
             // Depth-fallback defaults ON for the adopted per-deck path (it IS the budget-limited fallback); the env
             // research path keeps it opt-in (MTG_ESC_SINGLE_FALLBACK) for back-compat A/B.
-            static const bool s_esc_single_fallback = std::getenv("MTG_ESC_SINGLE_FALLBACK") != nullptr;
+            static const bool s_esc_single_fallback = EnvOn("MTG_ESC_SINGLE_FALLBACK");
             const bool eff_fallback = eff_single_deck || s_esc_single_fallback;
             // UP-CLIMB (adopted path default ON; env research: MTG_ESC_SINGLE_CLIMB; off-switch MTG_ESC_SINGLE_NOCLIMB).
             // The frozen-R hint picks the START depth cheaply (no d1/d2 tax). After that pass, use its LIVE measured
@@ -11798,8 +11799,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // headroom, so the common case (hint ~right => little budget left => estimate exceeds remaining) stays a
             // single pass. Combined with the existing overrun fallback (corrects a too-DEEP hint), the hint need only
             // be roughly right: R is a hint, the live estimate makes the final depth reliable.
-            static const bool s_esc_single_climb   = std::getenv("MTG_ESC_SINGLE_CLIMB") != nullptr;
-            static const bool s_esc_single_noclimb = std::getenv("MTG_ESC_SINGLE_NOCLIMB") != nullptr;
+            static const bool s_esc_single_climb   = EnvOn("MTG_ESC_SINGLE_CLIMB");
+            static const bool s_esc_single_noclimb = EnvOn("MTG_ESC_SINGLE_NOCLIMB");
             const bool eff_climb = eff_single_deck ? !s_esc_single_noclimb : s_esc_single_climb;
             int  td = target;
             bool aborted = true;
@@ -12234,7 +12235,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
     // default, AntiLifegain = aggressive/ungated, land-pitch decks protected by the mana-base gate +
     // PreferHoldLandDrop. MTG_NC_TEMPO(/_LANDS), when set, OVERRIDE the provider with a flat gated bonus
     // (the A/B sweep controls). Provider default 0 for unknown decks + env unset => byte-identical.
-    static const bool   s_tempo_env_set = std::getenv("MTG_NC_TEMPO") != nullptr;
+    static const bool   s_tempo_env_set = EnvSet("MTG_NC_TEMPO");
     static const double s_env_tempo     = []{ const char* e = std::getenv("MTG_NC_TEMPO");
                                               return (e && *e) ? std::atof(e) : 0.0; }();
     static const int    s_env_lands     = []{ const char* e = std::getenv("MTG_NC_TEMPO_LANDS");
@@ -12269,7 +12270,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         best = bt;
     }
 
-    static const bool s_nc_debug = std::getenv("MTG_NC_DEBUG") != nullptr;
+    static const bool s_nc_debug = EnvOn("MTG_NC_DEBUG");
     if (s_nc_debug && is_pre_combat)
     {
         int n_ties = 0, n_land_ties = 0;
@@ -12723,7 +12724,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
     // Capped so a long game cannot grow it without bound, and thread_local because the batch runner
     // plays games concurrently. MTG_NO_BP_ENUM_CACHE disables it -- results must be identical either
     // way, and the smoke digests are the check. See docs/design/post-breakpoint-search.md.
-    static const bool s_cache = std::getenv("MTG_NO_BP_ENUM_CACHE") == nullptr;
+    static const bool s_cache = !EnvOn("MTG_NO_BP_ENUM_CACHE");
     using BpEnumMap = std::unordered_map<TranspositionTable::Key, std::vector<Plan>,
                                          TranspositionTable::KeyHash>;
     static thread_local BpEnumMap cache;
@@ -13085,7 +13086,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // splice_count whose trial-apply pays (plan_pays); if NONE pays (a chooser/combo line the nulled-
     // chooser sim under-reports -- see the plan_pays caveat above), fall back to the highest total and let
     // the executor + server-truth dropped_casts surface any real shortfall. CheckLine is viewer-only -> GT-neutral.
-    static const bool s_splice_prompt = std::getenv("MTG_SPLICE_PROMPT") != nullptr;
+    static const bool s_splice_prompt = EnvOn("MTG_SPLICE_PROMPT");
     if (out.variants.size() > 1 && !s_splice_prompt)
     {
         auto nonSpliceSig = [](const std::vector<SubChoice>& subs) -> std::string {

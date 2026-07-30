@@ -1,4 +1,5 @@
 #pragma once
+#include "../core/EnvFlags.h"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -73,7 +74,7 @@ public:
     // default => the two counter bumps are skipped, so the hot Lookup is unchanged.
     static bool StatsOn()
     {
-        static const bool on = std::getenv("MTG_TT_STATS") != nullptr;
+        static const bool on = EnvOn("MTG_TT_STATS");
         return on;
     }
     static std::atomic<unsigned long long>& Lookups() { static std::atomic<unsigned long long> v{0}; return v; }

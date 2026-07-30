@@ -1,3 +1,4 @@
+#include "../core/EnvFlags.h"
 #include "AIEngine.h"
 #include "EngineFlags.h"
 #include "TurnSolver.h"
@@ -24,7 +25,7 @@
 // Non-convergence detector gate, read once. When set (MTG_FLAG_NONCONV in the
 // environment), TakeTurn checks each committed decision and prints a [nonconv]
 // record whenever a later turn's verified win turn exceeds one proved earlier.
-static const bool s_flag_nonconv = std::getenv("MTG_FLAG_NONCONV") != nullptr;
+static const bool s_flag_nonconv = EnvOn("MTG_FLAG_NONCONV");
 
 // #10 cast-order side-channel: reorder a committed plan's non-sacrifice hand casts to the
 // human's pinned name order and flag searched_order so ApplyPlanDirect executes them in vector
@@ -71,13 +72,13 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
 // to opt back into the old SolveWithLookahead baseline -- the held-out reference kept
 // reproducible for future A/Bs. (The old MTG_FULL_DEPTH opt-in is gone; setting it is
 // harmless as full depth is the default now.)
-static const bool s_full_depth = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+static const bool s_full_depth = !EnvOn("MTG_LEGACY_SEARCH");
 
 // Commit-the-line fidelity oracle (MTG_FD_ORACLE): when a recomputed line's searched
 // win exceeds an earlier line's, the committed line we just replayed did NOT realise
 // its predicted win — a rollout/real-execution divergence. Flag the seed + turn so it
 // can be traced. Only meaningful with s_full_depth.
-static const bool s_fd_oracle = std::getenv("MTG_FD_ORACLE") != nullptr;
+static const bool s_fd_oracle = EnvOn("MTG_FD_ORACLE");
 
 // Breakpoint lockstep trace: BpTraceEnabled() in EngineFlags.h (shared with TurnSolver).
 
@@ -88,7 +89,7 @@ static const bool s_fd_oracle = std::getenv("MTG_FD_ORACLE") != nullptr;
 // single-threaded on a few games. MTG_DUMP_EWINS_TURN limits it to one decision turn (default
 // 1 = opening only, to bound cost; 0 = every turn). Set MTG_SEARCH_ORDER=1 to also expand
 // cast orderings. Inert (zero overhead) unless MTG_DUMP_EWINS is set.
-static const bool s_dump_ewins = std::getenv("MTG_DUMP_EWINS") != nullptr;
+static const bool s_dump_ewins = EnvOn("MTG_DUMP_EWINS");
 static const int  s_dump_ewins_turn = []{
     const char* e = std::getenv("MTG_DUMP_EWINS_TURN"); return e ? std::atoi(e) : 1;
 }();
@@ -116,7 +117,7 @@ static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_
 // clairvoyant earliest-win search (stops the oracle over-crediting durdle lines a real d0 can't
 // realise). Affects the label from EnumerateEarliestWins -> use for EVAL-row dumps only, NOT value
 // dumps (the value model wants the searched label). See learned-d0-policy.md (antilife d0).
-static const bool  s_eval_rows_rollout = std::getenv("MTG_EVAL_ROWS_ROLLOUT") != nullptr;
+static const bool  s_eval_rows_rollout = EnvOn("MTG_EVAL_ROWS_ROLLOUT");
 // MTG_EVAL_ROLLOUT_DEPTH: per-turn lookahead of the rollout policy (default 0 = greedy d0 = imitate
 // baseline; >0 distils a stronger policy, for weak-baseline decks like hinata). See learned-d0-policy.md.
 static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_EVAL_ROLLOUT_DEPTH");
@@ -125,7 +126,7 @@ static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_E
 // NON-clairvoyant teacher -- its per-turn lookahead plans against a reshuffled unseen library and
 // resolves against the true order (see g_honest_teacher). Without this, rollout_depth>0 is a
 // clairvoyant deep search (reads the real future) and is WORSE than greedy. See learned-d0-policy.md.
-static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != nullptr;
+static const bool  s_eval_rows_honest = EnvOn("MTG_EVAL_ROWS_HONEST");
 // MTG_SEARCHED_DISCARD: make the REAL cleanup discard a lookahead search (roll out each candidate
 // discard, keep the one that preserves the earliest clairvoyant win; heuristic breaks ties) instead
 // of the highest-MV heuristic. DEFAULT OFF (heuristic) => byte-identical. Measured (smoke 1001):
@@ -133,7 +134,7 @@ static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != n
 // a train/serve mismatch (rollouts assume heuristic discards later, the real game searches them) plus
 // clairvoyance, at real compute cost -- so it ships OFF pending a reproduced combo-discard win (the
 // Dragonstorm "don't pitch Apex/Dragonstorm" case is absent from seed 1001). See ChooseDiscard.
-static const bool  s_searched_discard = std::getenv("MTG_SEARCHED_DISCARD") != nullptr;
+static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD");
 // MTG_DIVERGENCE_LOG=<file>: DIAGNOSTIC (diagnosis only, no play change). On the search-driven path,
 // at each real pre-combat main decision, ALSO compute the greedy d0 plan (TurnSolver::Solve) for the
 // SAME untouched state and append one JSONL record {seed,turn,diverge,search_land,search,greedy,feat[]}.
@@ -426,8 +427,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // distribution) is unaffected; a clairvoyant pick becomes miscalibrated. Reshuffling the whole
     // remaining library mirrors how the exhaustive V labels were built (fresh continuations). OFF (unset
     // or "0") => no reshuffle => byte-identical to the normal path. Only meaningful when mulligan>0.
-    static const bool confound_bottom = []
-    { const char* e = std::getenv("MTG_CONFOUND_BOTTOM"); return e && *e && std::string(e) != "0"; }();
+    static const bool confound_bottom = EnvOn("MTG_CONFOUND_BOTTOM");
     if (confound_bottom && mulligan_count > 0)
     {
         ap.library.Shuffle(state.game_seed + 0x9E3779B97F4A7C15ULL);
@@ -1083,7 +1083,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             // is executor-order-INDEPENDENT) and averaged over K samples, matching the NC turn policy's
             // reshuffle-averaged evaluation. The removal is then judged on EXPECTED win turn over unknown
             // draws, not the one true draw sequence. See ReshuffleAvgChoosePlan / learned-d0-policy.md.
-            static const bool s_blind_bottom = std::getenv("MTG_NC_BLIND_BOTTOM") != nullptr;
+            static const bool s_blind_bottom = EnvOn("MTG_NC_BLIND_BOTTOM");
             static const int  s_blind_k      = []{ const char* e = std::getenv("MTG_NC_BLIND_BOTTOM_K");
                                                    return (e && *e) ? std::max(1, std::atoi(e)) : 4; }();
             std::vector<int> win_turn(hand_size, 0);
@@ -1438,7 +1438,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // bounce land (etb_bounce_land, enters tapped) is NOT played at the fold_land step; it is
     // deferred to AFTER the main cast loop so BounceKarooLand returns a spent (tapped) land
     // rather than an untapped one we still need. MTG_NO_KAROO_DEFER restores the old land-first.
-    static const bool s_karoo_defer = std::getenv("MTG_NO_KAROO_DEFER") == nullptr;
+    static const bool s_karoo_defer = !EnvOn("MTG_NO_KAROO_DEFER");
     bool        karoo_deferred = false;
     std::string karoo_land_name;
     std::string karoo_fetch;
@@ -1505,7 +1505,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // keeps the executor in lockstep with the committed line. Opt-out restores
                 // the old greedy behaviour for A/B (MTG_LEGACY_2ND_MAIN_LAND).
                 static const bool s_legacy_2nd_main_land =
-                    std::getenv("MTG_LEGACY_2ND_MAIN_LAND") != nullptr;
+                    EnvOn("MTG_LEGACY_2ND_MAIN_LAND");
                 if (m_lookahead_depth == 0 || s_legacy_2nd_main_land) { TryPlayLand(state); }
             }
         }
@@ -1528,7 +1528,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // resolves against the true order (see g_honest_teacher). A cheap 1-sample proxy for
             // the reshuffle-averaged NON-clairvoyant policy (the untested goal-#1 lever). Byte-
             // identical when unset. Kept as an instrument, not a shipped play mode.
-            static const bool s_honest_play = std::getenv("MTG_HONEST_PLAY") != nullptr;
+            static const bool s_honest_play = EnvOn("MTG_HONEST_PLAY");
             HonestTeacherGuard _htp(s_honest_play);
             // EXPERIMENTAL (MTG_NC_SEARCH, default off): the non-clairvoyant CEILING policy --
             // reshuffle-averaged search (each real decision ranks plans by K-reshuffle-averaged
@@ -1536,7 +1536,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // turn, no committed line). MTG_NC_K / MTG_NC_DEPTH tune the averaging / lookahead
             // (depth 0 = greedy non-clairvoyant). Byte-identical when unset. See
             // TurnSolver::ReshuffleAvgChoosePlan and learned-d0-policy.md.
-            static const bool s_nc_search = std::getenv("MTG_NC_SEARCH") != nullptr;
+            static const bool s_nc_search = EnvOn("MTG_NC_SEARCH");
             static const int  s_nc_k     = []{ const char* e = std::getenv("MTG_NC_K");
                                                return (e && *e) ? std::atoi(e) : 8; }();
             static const int  s_nc_depth = []{ const char* e = std::getenv("MTG_NC_DEPTH");
@@ -1663,7 +1663,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // gi252-class lines commit-the-line locks a turn slower. Perf cost = a
                     // FullSearchLine every turn instead of once per committed line.
                     static const bool s_fd_always_research =
-                        std::getenv("MTG_FD_ALWAYS_RESEARCH") != nullptr;
+                        EnvOn("MTG_FD_ALWAYS_RESEARCH");
                     const bool verified_win =
                         !s_fd_always_research
                         && line.win_turn <= state.turn_number + searched_depth - 1;
@@ -2074,7 +2074,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::function<void(const std::vector<Action>&)> replay_recorded =
         [&](const std::vector<Action>& recs)
     {
-        if (std::getenv("MTG_FD_TRACE") != nullptr)
+        if (EnvOn("MTG_FD_TRACE"))
         {
             std::fprintf(stderr, "[replay-bp] turn=%d recs=%d:", state.turn_number, (int)recs.size());
             for (const Action& a : recs) { std::fprintf(stderr, " %s", a.card_name.c_str()); }
@@ -2262,7 +2262,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // (MTG_SEARCH_ORDER) A/B can see WHICH reorder the search chose. The skill's
     // heuristic-accuracy process uses this to author a provider ordering heuristic that
     // reproduces the search's pick. Single-thread + --game-index N for a clean per-game read.
-    static const bool s_order_trace = std::getenv("MTG_ORDER_TRACE") != nullptr;
+    static const bool s_order_trace = EnvOn("MTG_ORDER_TRACE");
     if (s_order_trace && is_pre_combat_main && !m_in_rollout)
     {
         // Print the ACTUAL executed order of non-sacrifice hand casts: rank-sorted for a
