@@ -260,7 +260,7 @@ drop), the `play_land_iter` lambda inside `AIEngine::TryPlayLand` (the executor'
 one. Each caller keeps exactly its old behaviour, so the unification is byte-identical; what follows
 is what the unification *found*.
 
-### 1. The executor's GREEDY drop does not fire Forbidden Orchard's on-play Spirit — CONFIRMED LIVE
+### 1. The executor's GREEDY drop did not fire Forbidden Orchard's on-play Spirit — FIXED
 
 `SpawnOpponentSpirit` was called from `TryPlaySpecificLand` (ungated) and from `PlayLandByName`
 (gated on `!MTG_LEGACY_SEARCH`), but **not** from `TryPlayLand`. So when a Forbidden Orchard comes
@@ -269,16 +269,29 @@ scored the line does. The turn-start spawn covers copies already in play, so the
 one-turn delay of the first Spirit — but it lands squarely on the turn the land is played.
 
 Reachability, measured rather than argued: setting `spawn_orchard_spirit = true` on the greedy path
-and re-running the smoke suite changes play in `hinata_smoke_d0_s1001 gi10`, and nowhere else. That
-matches the code: Hinata2 is the only suite deck running Forbidden Orchard, and the greedy drop is
-reached only at depth 0 (`fold_land = m_lookahead_depth > 0 && is_pre_combat_main`) or via
-`MTG_LEGACY_2ND_MAIN_LAND`. For Hinata the Spirits are not incidental — they are opponent creatures,
-so they are first-class Soulfire-dig / Crackle-discount / removal targets, which is exactly the
-quantity a rollout/executor mismatch distorts.
+and re-running the smoke suite changes play in `hinata_smoke_d0_s1001 gi10`, and nowhere else.
+Hinata2 is the only suite deck running Forbidden Orchard. Two of the three greedy call sites are
+depth-0-only (`fold_land = m_lookahead_depth > 0 && is_pre_combat_main`, and the second main); the
+third — the post-draw **flood-keep fallback** — is *not* depth-gated, so the path is reachable at
+searched depths on a flood turn even though no d3/d5 case exercised it here. For Hinata the Spirits
+are not incidental: they are opponent creatures, hence first-class Soulfire-dig / Crackle-discount /
+removal targets, which is exactly the quantity a rollout/executor mismatch distorts.
 
-This is left AS-IS pending a decision: converging it is a one-field change
-(`o.spawn_orchard_spirit = true` in `TryPlayLand`) but it changes d0 play and needs a ground-truth
-rebaseline, so it is a measured adoption, not a refactor.
+**Fixed** by firing the on-play Spirit on the greedy path too, matching the executor's searched
+drop, the rollout's drop, and the ungated turn-start spawn. Measured on both train seed sets, with
+the searched depths byte-identical (which is itself the proof the gap was greedy-only):
+
+| mode | case | before | after | delta | per-game |
+|---|---|---|---|---|---|
+| smoke | `hinata_smoke_d0_s1001` | 7.1050 | 7.0790 | **−0.026** | 31 faster / 6 slower |
+| regression | `hinata_regression_d0_s2002` | 7.1830 | 7.1500 | **−0.033** | 31 faster / 7 slower |
+
+The direction follows from the mechanism: more opponent Spirits means more legal targets, so
+Hinata's per-target discount and Crackle with Power's target count both improve (`gi257` 7→5 casts a
+lethal Crackle a full two turns earlier). The slower games are d0 variance — the draws diverge from
+the first target-count change, so they are physically different games, not like-for-like slowdowns.
+Note this is a **correctness** fix, so the metric is informational; the justification is that four
+sites modelled the same trigger and one of them silently didn't.
 
 ### 2. `greedy_land_name` has drifted from the ranker it documents itself as mirroring
 

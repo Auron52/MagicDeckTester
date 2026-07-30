@@ -1,5 +1,6 @@
-# Regression ground truth -- commit 47fd83a  date 2026-07-30
+# Regression ground truth -- commit 776f045  date 2026-07-30
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (smoke, 2026-07-30): gi721:6->loss and 5 other d0 turn-later games are variance from the target-count change (physically different games from the first Soulfire/Crackle divergence). Net d0 -0.026 with 31 faster vs 6 slower. Cause: executor greedy land drop now fires Forbidden Orchard's on-play Spirit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -19,7 +20,7 @@ knights_smoke_d5_s1001=4.4000/def7d65ff1283926
 antilife_smoke_d0_s1001=5.5820/fcddbc3ccb346733
 antilife_smoke_d3_s1001=4.2200/142a40e97cc48f60
 antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
-hinata_smoke_d0_s1001=7.1050/76011dcaa8ab048a
+hinata_smoke_d0_s1001=7.0790/a4e4cb40e5d85841
 hinata_smoke_d3_s1001=5.9200/e1584534db84a64e
 hinata_smoke_d5_s1001=6.0533/b1c691a33a759c7a
 dragonstorm_smoke_d0_s1001=5.4300/16986eaeb61de74e
@@ -55,7 +56,7 @@ antilife_regression_d3_s2002=4.2900/a6d6b9720b6728d4
 antilife_regression_d3_s3003=4.2733/fae8f7672be975ba
 antilife_regression_d5_s2002=4.3160/813eb57410e13781
 antilife_regression_d5_s3003=4.2560/54b6ba9626291185
-hinata_regression_d0_s2002=7.1830/1bb0872fd709ee19
+hinata_regression_d0_s2002=7.1500/001f525039d5cf55
 hinata_regression_d3_s2002=5.9150/24d77e962fbe6652
 hinata_regression_d3_s3003=5.8650/bdd98341801ede40
 hinata_regression_d5_s2002=5.8900/1a14bf1cb2a00383

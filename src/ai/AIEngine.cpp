@@ -2567,10 +2567,13 @@ bool AIEngine::TryPlayLand(GameState& state)
     {
         LandPlayOptions o;
         o.label_look_source = true;
-        // NOTE (backlog C1 unit 6): the greedy drop does NOT fire Forbidden Orchard's on-play
-        // Spirit, while the executor's searched drop and the rollout both do. Preserved as-is
-        // here (byte-identical); it is a live divergence, see rollout-executor-lockstep.md.
-        o.spawn_orchard_spirit = false;
+        // Forbidden Orchard's on-play Spirit. The GREEDY drop used to omit it while the executor's
+        // searched drop, the rollout's drop, and the turn-start spawn all fire it -- so an Orchard
+        // played on this path silently skipped the opponent's Spirit for that turn, and the rollout
+        // scored lines against a board the executor would not produce. Fires here too, per the
+        // card's modelled approximation (the active player is assumed to tap each Orchard for mana
+        // every turn it is in play; a freshly-played untapped copy is tapped THIS turn).
+        o.spawn_orchard_spirit = true;
         o.record_touch      = true;
         o.logger            = m_logger;
         return PlayLandFromHand(state, static_cast<std::size_t>(it - ap.hand.begin()), def, o);

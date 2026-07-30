@@ -73,15 +73,19 @@ really was Debug; the orphans really are referenced by nothing but this document
 - **C1 unit 6 DONE** — the land drop existed **three** times (`TryPlaySpecificLand`, the
   `play_land_iter` lambda in `TryPlayLand`, and the rollout's `PlayLandByName`); the placement
   core is now `PlayLandFromHand` in the new `src/ai/LandPlay.{h,cpp}`, with every difference an
-  explicit `LandPlayOptions` field. Byte-identical. **Finding (CONFIRMED LIVE): the executor's
-  GREEDY land drop never fires Forbidden Orchard's on-play Spirit**, while its searched drop and
-  the rollout both do — flipping the flag changes play in `hinata_smoke_d0_s1001 gi10`. Left
-  as-is (converging it needs a GT rebaseline). Three more divergences documented in
+  explicit `LandPlayOptions` field. Byte-identical. **Finding (now FIXED, see below): the
+  executor's GREEDY land drop never fired Forbidden Orchard's on-play Spirit**, while its searched
+  drop and the rollout both did. Three more divergences documented in
   `docs/design/rollout-executor-lockstep.md`: `greedy_land_name`'s pre-pass has drifted from
   `TryPlayLand`'s, the claude-play land-entry chooser never reaches the real drop, and the
   scry/surveil source labels differ. Land SELECTION heuristics deliberately not unified (the
   executor's four-pass ranker and the rollout's two-pass fallback are different policies, not
   twins). Next unit per the safety order: combat.
+- **Orchard bug FIXED + GT rebaselined** — the greedy drop now fires the on-play Spirit like the
+  other three sites. Smoke `hinata_smoke_d0_s1001` 7.1050→7.0790 (−0.026, 31 faster / 6 slower),
+  regression `hinata_regression_d0_s2002` 7.1830→7.1500 (−0.033, 31 faster / 7 slower); every
+  searched-depth case byte-identical, all other decks byte-identical, references clean. Smoke +
+  regression ground truth accepted; overnight (held-out) rebaselined separately.
 - **D1/D2 PARTIAL (user-approved)** — deleted with sign-off: 9 spent diagnostics
   (`MTG_ESC_PREDICT_{STATS,COSTCURVE,RALPHA}`, `MTG_HYBRID_LEAFDIAG`, `MTG_KEEP_{DETECT_Z,DUMP,SLOW_LOG}`,
   `MTG_TRACE_PLAYOUT_{SEED,TURN}`), 8 rejected-experiment knobs (`MTG_ESC_SINGLE_{ABS,FALLBACK,NOCLIMB,ROLLDEPTH,SEED}`,
