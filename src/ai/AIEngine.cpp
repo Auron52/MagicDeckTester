@@ -239,44 +239,6 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
     s_out.flush();
 }
 
-// Mirror of TurnSolver::CastOrderLess (lockstep): provider rank, then cheapest-first by the action's
-// ACTUAL cost so a dearer accelerant is never attempted before a cheaper one and silently dropped.
-// Keys on Action::cost so a SPLICED Desperate Ritual sorts by its real {2}{R}{R}, not its printed
-// {1}{R}. See the TurnSolver comment for the Dragonstorm repro.
-static bool CastOrderLessAI(const GameState& state, const Action& a, const Action& b)
-{
-    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
-    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
-    const int ra = da ? ResolveProvider(state).CastOrderRank(state, *da) : 20;
-    const int rb = db ? ResolveProvider(state).CastOrderRank(state, *db) : 20;
-    if (ra != rb) { return ra < rb; }
-    if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
-    if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
-    // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
-    // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
-    // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
-    // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
-    if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
-    return a.cost.ManaValue() < b.cost.ManaValue();
-}
-
-// Mirror of TurnSolver::OrderingOpaque: a cast with a mid-turn re-solve breakpoint
-// (draw / staging / cascade / retrace). The CastOrderRank reordering is skipped for any
-// set containing one (its ordering is search-owned); such a set keeps its canonical
-// plan/breakpoint order. MUST match TurnSolver::OrderingOpaque (lockstep).
-static bool OrderingOpaqueAI(const std::string& name)
-{
-    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
-    if (!d) { return false; }
-    return d->tmpl == CardTemplate::DrawUntilNonland
-        || d->params.stages_cards
-        || d->params.cascade_max_mv > 0
-        || d->params.retrace
-        || d->params.expressive_iteration
-        || d->params.impulse_exile > 0   // Apex of Power: staged exile -> search-owned breakpoint order
-        || d->params.draw > 0;
-}
-
 // Trajectory probe: when MTG_NONCONV_TRACE_SEED matches a game's seed, dump every
 // real pre-combat decision (turn, committed_win, opp life/creatures, hand, plan).
 static const char*     s_trace_seed_env = std::getenv("MTG_NONCONV_TRACE_SEED");
@@ -2275,12 +2237,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const Action& a = plan.actions[i];
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             ns.push_back(i);
-            if (OrderingOpaqueAI(a.card_name)) { opaque = true; }
+            if (OrderingOpaque(a.card_name)) { opaque = true; }
         }
         if (!opaque && !plan.searched_order)
         {
             std::stable_sort(ns.begin(), ns.end(), [&](int x, int y)
-            { return CastOrderLessAI(state, plan.actions[x], plan.actions[y]); });
+            { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
         }
         std::string seq;
         for (int i : ns)
@@ -2348,7 +2310,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
-            && OrderingOpaqueAI(a.card_name)) { opaque = true; break; }
+            && OrderingOpaque(a.card_name)) { opaque = true; break; }
     }
     if (opaque)
     {
@@ -2411,7 +2373,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Clean set: stable-sort the non-sacrifice hand casts by DecisionProvider::CastOrderRank
     // (enabler-first, prowess creatures before noncreature spells, on-cast self-damage
     // sources last). Stable => plan order breaks ties. Mirrors ApplyPlanDirect's canonical
-    // branch (CastOrderLessAI == TurnSolver::CastOrderLess) so the executor realises the same line
+    // branch (the shared CastOrderLess in ManaPayment.cpp) so the executor realises the same line
     // the rollout scored. No draw engine here, so no breakpoint handling is needed.
     std::vector<int> order;
     for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
@@ -2420,7 +2382,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { order.push_back(i); }
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-    { return CastOrderLessAI(state, plan.actions[x], plan.actions[y]); });
+    { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];

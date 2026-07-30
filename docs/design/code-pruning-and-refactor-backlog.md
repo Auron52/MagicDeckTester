@@ -47,8 +47,13 @@ really was Debug; the orphans really are referenced by nothing but this document
 - **C1 step 2 DONE** (`c33986c`) — the mana-payment twins unified into `TapForCostSharedOnce`
   (`src/ai/ManaPayment.cpp`), byte-identical (unit + smoke + full regression). Finding: under
   `MTG_TAP_LEGACY` the executor was the unfixed twin of the `6bb2791` coloured-pip fix
-  (resolved toward `ProducesForPayment`). Next units per the safety order: `EffectiveCost` →
-  `CastOrderLess`/`OrderingOpaque` → `BuildPool`/`BuildAvailableMana` → …
+  (resolved toward `ProducesForPayment`).
+- **C1 unit 2 DONE** (`227af4a`) — `EffectiveCost` twins → `EffectiveSpellCost`
+  (`src/ai/ManaPayment.cpp`), byte-identical.
+- **C1 unit 3 DONE** — `CastOrderLess`/`OrderingOpaque` twins (TurnSolver statics +
+  AIEngine's `CastOrderLessAI`/`OrderingOpaqueAI`) → shared definitions in
+  `src/ai/ManaPayment.cpp`, byte-identical (unit + smoke + full regression). Next units per
+  the safety order: `BuildPool`/`BuildAvailableMana` → …
 - **D1/D2 PARTIAL (user-approved)** — deleted with sign-off: 9 spent diagnostics
   (`MTG_ESC_PREDICT_{STATS,COSTCURVE,RALPHA}`, `MTG_HYBRID_LEAFDIAG`, `MTG_KEEP_{DETECT_Z,DUMP,SLOW_LOG}`,
   `MTG_TRACE_PLAYOUT_{SEED,TURN}`), 8 rejected-experiment knobs (`MTG_ESC_SINGLE_{ABS,FALLBACK,NOCLIMB,ROLLDEPTH,SEED}`,

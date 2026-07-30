@@ -495,3 +495,52 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
     }
     return cost;
 }
+
+// THE cast-order comparator (C1 unit 3): provider RANK first, then CHEAPEST-FIRST by the action's
+// ACTUAL cost. The rank alone is not enough -- every mana ritual shares one rank, so their relative
+// order was arbitrary, and the DEAREST could be attempted first, fail to be paid, and be silently
+// dropped (CastSpellFromHand returns void). That strands the mana it would have produced and can
+// leave the payoff short: Dragonstorm d0 seed 8585 led with Seething Song ({2}{R}) on two lands,
+// skipped it, floated 7 off the cheap rituals and then could not pay Dragonstorm ({8}{R} = 9) -- the
+// whole chain burned. A ritual chain funds itself cheapest-first (the principle BuildAccelPrefixOrder
+// already uses for the ENUMERATION); this applies it to EXECUTION.
+// It must key on Action::cost, NOT the card's printed cost: CastOrderRank only sees the
+// CardDefinition, so it cannot see that a SPLICED Desperate Ritual really costs {2}{R}{R} rather
+// than {1}{R}. Ranking by the printed cost put the spliced copy early and dropped it exactly like
+// Seething Song. Was a byte-identical twin pair (TurnSolver's CastOrderLess / AIEngine's
+// CastOrderLessAI); executor and rollout now share this definition.
+bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
+{
+    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
+    const int ra = da ? ResolveProvider(state).CastOrderRank(state, *da) : 20;
+    const int rb = db ? ResolveProvider(state).CastOrderRank(state, *db) : 20;
+    if (ra != rb) { return ra < rb; }
+    if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
+    if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
+    // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
+    // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
+    // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
+    // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
+    if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
+    return a.cost.ManaValue() < b.cost.ManaValue();
+}
+
+// A cast whose resolution triggers a mid-turn re-solve breakpoint (draw / staging / cascade
+// / retrace): the rest of the turn re-solves from the post-draw state, so the optimal cast
+// ORDER around it is situation-dependent (mana left, what is revealed) -- a static rank
+// can't capture it. The CastOrderLess reordering is therefore SKIPPED for any set that
+// contains such a card; that set keeps its canonical plan/breakpoint order (the search owns
+// the ambiguous ordering).
+bool OrderingOpaque(const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    if (!d) { return false; }
+    return d->tmpl == CardTemplate::DrawUntilNonland
+        || d->params.stages_cards
+        || d->params.cascade_max_mv > 0
+        || d->params.retrace
+        || d->params.expressive_iteration
+        || d->params.impulse_exile > 0   // Apex of Power: staged exile -> search-owned breakpoint order
+        || d->params.draw > 0;
+}

@@ -21,7 +21,9 @@
 // reachable only under that opt-in hatch. Unified on ProducesForPayment (default config
 // byte-identical: the path never runs with MTG_TAP_LEGACY unset).
 #include "../core/GameState.h"
+#include "TurnSolver.h"   // Action
 #include <cstdint>
+#include <string>
 
 bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_creature,
                           std::uint64_t reserved_mask, ManaPool* available,
@@ -32,3 +34,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
 // {X} spells apply the discount where the chosen X is known). Was a byte-identical twin pair
 // (AIEngine::EffectiveCost / TurnSolver's file-static EffectiveCost); both now delegate here.
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
+
+// THE cast-order comparator and its opaque-set guard (C1 unit 3): provider RANK first, then
+// cheapest-first among mana accelerants by the action's ACTUAL cost; the reorder is skipped
+// entirely for sets containing a mid-turn re-solve breakpoint (OrderingOpaque -- the search owns
+// that ordering). Was a byte-identical twin pair (TurnSolver statics / AIEngine's CastOrderLessAI
+// and OrderingOpaqueAI kept in lockstep by comment); both now share these definitions.
+bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
+bool OrderingOpaque(const std::string& name);
