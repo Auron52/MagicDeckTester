@@ -3,6 +3,15 @@
 Per-deck durable state for the `analyze-deck` workflow (survives compaction / handoff).
 Deck: `decks/Goblins/Goblins.cod`. Branch: `phase-1-2-deck-analyzer`.
 
+## ✅ REBASE-THEN-PUSH — DONE — 2026-07-30
+**Goblins work is rebased onto `origin/phase-1-2-deck-analyzer` (tip `eb29a90`) and verified.** No merge commit (linear rebase, per user).
+- **Rebase:** 20 commits replayed cleanly onto `eb29a90` (0 behind after). Conflicts resolved with `rerere`:
+  - **EffectiveCost (structural):** the remote unified both `EffectiveCost` twins into one shared `EffectiveSpellCost` (ManaPayment.cpp). Kept HEAD's delegation in AIEngine.cpp + TurnSolver.cpp and **moved my Goblin Warchief `reduces_spell_subtype` reduction into `EffectiveSpellCost`** (single home, still gated → non-Goblin decks byte-identical).
+  - **Suite (additive):** the remote added deck **`auras`** in the same slots where I added **`goblins`** — kept BOTH in regression_cases.sh (DECK_FILE/DECK_PROF/SMOKE/REGRESSION/OVERNIGHT). In regression_gt.txt kept the remote's **post-Orchard-fix** values for the shared decks (hinata/dragonstorm/antilife/auras) and appended my goblins entries.
+- **Build break fixed:** the remote renamed `AIEngine::BuildAvailableMana` → free fn `AvailableManaPool(state)`; updated my 3 echo/upkeep call sites.
+- **Verified:** full `--smoke` = **27/27 PASS byte-identical** (all decks incl. goblins d0=4.81/d3=4.29/d5=4.27; per-game audit 0 play-changed; viewer protocol 138 ok / 0 drift). Goblins GT held on the rebased binary (Orchard/land-drop refactor did NOT shift Goblins play → no re-accept needed). fd-oracle+nonconv spot-check (seeds 1001/2011/4004/6006 @ d5) = **0 diverge / 0 nonconv** (the old benign seed-2011 off-by-one no longer reproduces — plausibly closed by the remote land-drop fix).
+- **Safety backup** `goblins-work-backup` @ pre-rebase `ce0979f` retained until push confirmed.
+
 ## ✅ ANALYSIS COMPLETE — 2026-07-30 (Stage 6)
 **Goblins deck analysis is DONE through Stage 6.** Engine complete; profile committed; all verification passed; both viewer choosers wired+proven; multi-sac refinement in; deck added to the regression suite with accepted baseline GT.
 - **Win-rate:** ~98% (avg **4.36** turns / 300 games at default policy). Smoke GT: d0=4.81, d3=4.29, d5=4.27.
