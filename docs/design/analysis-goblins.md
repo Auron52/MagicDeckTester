@@ -3,6 +3,17 @@
 Per-deck durable state for the `analyze-deck` workflow (survives compaction / handoff).
 Deck: `decks/Goblins/Goblins.cod`. Branch: `phase-1-2-deck-analyzer`.
 
+## ✅ ANALYSIS COMPLETE — 2026-07-30 (Stage 6)
+**Goblins deck analysis is DONE through Stage 6.** Engine complete; profile committed; all verification passed; both viewer choosers wired+proven; multi-sac refinement in; deck added to the regression suite with accepted baseline GT.
+- **Win-rate:** ~98% (avg **4.36** turns / 300 games at default policy). Smoke GT: d0=4.81, d3=4.29, d5=4.27.
+- **Stage 5a** — nonconv 7/7 seeds CLEAN; fd-diverge = ONE (seed 2011, off-by-one) root-caused as a benign clairvoyant-rollout-vs-greedy search-optimality gap in CORE search (combat math lockstep-shared via `ApplyAttackSelfPumps`; executor play verified correct; controls Burn/Slivers/Knights/Dragons 0/200) — NOT a Goblin bug.
+- **Stage 5d** — 26 claude-play games CLEAN (0 flags, 0 misplays; search==Claude on win turn). Sweep capped ≤20 on Sonnet (skills updated).
+- **Stage 5h** — both viewer choosers wired + PROVEN firing: `lackey_put` (Goblin Lackey put-from-hand; seed 9201 → candidates [Twinshot,Muxus,Matron], default Muxus) and `echo` (Mogg/Stingscourger pay-or-sac; seed 2011 → Mogg {1}{R} default decline). GT byte-identical (choosers null unless `--claude-play`). All 44 new params classified in `audit_viewer_decisions.py`. Residual auditor HARD MISS on lackey_put/target = forcing limitation (conditional triggers unreached under AI-optimal play), disproven as dead-chooser by the engineered repros.
+- **Multi-sac refinement** — bounded burst action (`sac_count=k`, Siege-Gang swarm-sac lethal); lockstep-clean (fd-diverge only the pre-existing 2011; nonconv 0), gated (dragonstorm smoke_d3 = 4.6467 unchanged), no hang.
+- **Field audit** — `audit_card_fields.py` fixed (echo/channel strip; MDFC front-face); Piledriver protection-from-blue allowlisted (goldfish-inert); snapshot re-fetched (Scryfall 429s cleared).
+- **Regression suite** — Goblins added to all 3 modes; smoke baseline GT accepted; regression-mode baseline running; **overnight baseline is the one remaining long follow-up (8h)**.
+**Commits (branch `phase-1-2-deck-analyzer`):** skills 1254ab4; 5a/5d ledger 913d1ee; choosers 8ef3627; multi-sac 6c118be; suite+GT be1cb8a (+ snapshot commit pending).
+
 ## ⇩ RESUME HERE (post-compaction) — updated 2026-07-30
 **State:** Goblin engine FUNCTIONALLY COMPLETE + Stage-4 baseline profile done. All work COMMITTED (branch `phase-1-2-deck-analyzer`, head `5772733`, ~8 goblins commits on top of `2b32beb`). Build is current: `bash build.sh` (NOT raw cmake; NO timeouts — repo rule). Binary `build/Release/mtg`; profile `decks/Goblins/Goblins.profile.json`.
 **Done:** Stages 1–3 (coverage `missing:[]`); all 17 cards.json entries (costs Scryfall-verified — audit "All match", only Twinshot/Stingscourger 429-skipped but match research); every engine subsystem (params+parser, Warchief `reduces_spell_subtype`, ETB cascade `OnGoblinEnters`/Muxus reveal, death-watcher `OnCreatureDies`, echo, combat pumps Piledriver/Muxus, Goblin Lackey combat-cheat + `DeckUsesSecondMain`, Three Tree scaled mana, provider routing guard, Krenko `TapForTokens` lockstep, costed outlets Siege-Gang/Pashalik/Channel, Skirk mana via SacForMana-reuse). Stage-4 profile + Stage-5b multi-depth sanity PASS (d0=5.10, d3=4.85, d5=4.85 @seed6006 ×20; fd-diverge=0, nonconv=0 on samples). All params gated → other decks byte-identical (Lotus/Dragonstorm `ApplySacForMana` victim_id=0 path unchanged).
