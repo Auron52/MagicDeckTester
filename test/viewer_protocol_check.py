@@ -32,9 +32,14 @@ default). What the walk can then still surface, as information:
   mull-drift    the engine opens a different hand; the recorded game no longer
                 occurs (references without a recorded mulligan only).
 
-Usage:  python3 test/viewer_protocol_check.py            # all references
-        python3 test/viewer_protocol_check.py --strict   # also FAIL on drift
-        MTG_BIN=path python3 test/viewer_protocol_check.py
+Usage:  python3 test/viewer_protocol_check.py                 # all references, serial
+        python3 test/viewer_protocol_check.py --threads 12    # full sweep in seconds
+        python3 test/viewer_protocol_check.py --strict        # FAIL on play-drift / enum-gap
+        python3 test/viewer_protocol_check.py --sample        # one ref per deck (quick sanity)
+        MTG_BIN=path python3 test/viewer_protocol_check.py    # against a specific binary
+
+test/regression.sh runs the full sweep --strict (threaded) after every batch, so reference
+reproducibility is a standing regression gate.
 """
 import json, os, re, subprocess, sys, glob
 
@@ -467,11 +472,10 @@ def main():
     if not refs:
         print("no reference games found under references/")
         return 0
-    # SAMPLE mode (--sample / VIEWER_PROTOCOL_SAMPLE): one reference per deck dir. The full per-step
-    # replay is multi-minute (an engine spawn per decision x every ref), too heavy for the <45min
-    # regression budget, so regression runs a quick one-per-archetype CONTRACT sanity and overnight
-    # runs the full sweep (the contract doesn't vary by seed set; sampling still hits every deck's
-    # decision shapes). Picks the first ref per deck for determinism.
+    # SAMPLE mode (--sample / VIEWER_PROTOCOL_SAMPLE): one reference per deck dir. Historical: the
+    # serial per-step replay was multi-minute, so regression sampled. With --threads the FULL sweep
+    # is seconds and test/regression.sh runs it strict after every batch; sample mode remains for
+    # the quickest possible ad-hoc sanity. Picks the first ref per deck for determinism.
     if "--sample" in sys.argv[1:] or os.environ.get("VIEWER_PROTOCOL_SAMPLE"):
         # The sample = one ref per deck (archetype coverage) + every PINNED ref. PROMOTE-ON-CATCH:
         # if the OVERNIGHT full sweep ever flags a contract-fail on a ref the sample missed, add that
@@ -486,13 +490,28 @@ def main():
         refs = sampled
         print(f"[sample mode: {len(refs)} refs (one per deck + {len(PINNED)} pinned) "
               f"-- full sweep runs in overnight]")
+    # --threads N: references are independent (each is its own chain of engine spawns), so the
+    # sweep parallelises trivially. Results are collected and printed in ref order, so output and
+    # exit code are identical at any thread count. Default 1 preserves the historical behaviour;
+    # the regression harness passes its own thread count to fit the full sweep in its budget.
+    threads = 1
+    for i, a in enumerate(sys.argv[1:]):
+        if a == "--threads" and i + 2 <= len(sys.argv[1:]):
+            threads = max(1, int(sys.argv[1:][i + 1]))
+        elif a.startswith("--threads="):
+            threads = max(1, int(a.split("=", 1)[1]))
     counts = {k: 0 for k in ("ok", "repaired", "play", "shuffle-dead", "unresolvable",
                              "mulligan", "contract")}
     LABEL = {"ok": "ok            ", "repaired": "repaired      ", "play": "play-drift    ",
              "shuffle-dead": "shuffle-dead  ", "unresolvable": "ENUM-GAP      ",
              "mulligan": "mull-drift    "}
-    for path in refs:
-        c_ok, kind, detail = check_reference(path)
+    if threads > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=threads) as ex:
+            results = list(ex.map(check_reference, refs))
+    else:
+        results = [check_reference(p) for p in refs]
+    for path, (c_ok, kind, detail) in zip(refs, results):
         rel = path[len("references/"):]
         if not c_ok:
             print(f"  CONTRACT-FAIL {rel}: {detail}"); counts["contract"] += 1

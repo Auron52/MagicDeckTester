@@ -223,16 +223,14 @@ if [ -f "$SCEN" ]; then
   fi
 fi
 
-# Viewer sanity checks (play-GUI line-build + engine<->GUI protocol contract) are NO LONGER part
-# of the regression flow. They are deck-agnostic, change infrequently, and the protocol layer is
-# multi-minute (it re-invokes the binary per replayed step) -- a poor fit for the per-commit gate,
-# where it dominated the budget and its binary-driven replay could HANG the suite before the deck
-# batch even ran. They now live in a standalone, on-demand script -- run it after touching
-# tools/play/, the decision-JSON emitter, or a saved reference:
-#     bash test/viewer_checks.sh            # full (line-build + protocol, all refs, ~35 min)
-#     bash test/viewer_checks.sh --sample   # fast contract sanity (one ref per deck)
-# See test/viewer_checks.sh. (The cheap scenario-sanity gate above stays -- it is seconds, deck-
-# agnostic, and guards hand-built interaction fixtures.)
+# Viewer LINE-BUILD checks (play-GUI frontend) remain standalone/on-demand -- run
+# `bash test/viewer_checks.sh` after touching tools/play/. The engine<->GUI PROTOCOL layer,
+# however, is now ALSO a regression gate (see "reference reproducibility" after the batch below):
+# since the switch to threaded intent replay (docs/design/reference-intent-replay.md) the full
+# 138-ref sweep costs seconds, and its --strict verdict is real signal -- play-drift/ENUM-GAP mean
+# the engine moved under a recorded human game. It runs AFTER the deck batch so the GT
+# fingerprints always land first (the historical hang concern), and it uses the same snapshot
+# binary as the batch.
 
 # Emit the whole case matrix as one batch manifest. `mtg.exe --batch` pools every
 # game of every case into a single atomic work queue, so the suite pays ONE
@@ -343,6 +341,28 @@ for spec in "${CASES[@]}"; do
     log "      >> no ground-truth log yet ($GTLOGS/${key}.wins) -- will be created on --accept"
   fi
 done
+
+# ---- reference reproducibility (engine<->GUI protocol layer) ------------------------------
+# Replays every saved references/<deck>/claude_*.json by INTENT (content-anchored picks, engine
+# defaults for predated decision points -- docs/design/reference-intent-replay.md) against the
+# SAME snapshot binary as the batch. --strict fails on play-drift (a recorded human line now ends
+# differently) and ENUM-GAP (a previously-offered plan vanished for an identical state); the
+# accepted classes (shuffle-dead, mull-drift) never gate. Threaded: the full sweep is seconds.
+VPC="$HERE/viewer_protocol_check.py"
+if [ -f "$VPC" ] && command -v python3 >/dev/null 2>&1; then
+  log ""
+  log "--- reference reproducibility (viewer protocol, --strict) ---"
+  VPC_THREADS=$THREADS; [ "$VPC_THREADS" -le 0 ] && VPC_THREADS=$(nproc 2>/dev/null || echo 8)
+  vpc_out=$(MTG_BIN="$BIN" python3 "$VPC" --strict --threads "$VPC_THREADS" 2>&1); vpc_rc=$?
+  printf '%s\n' "$vpc_out" >> "$OUT"
+  # Console gets the tally + any gating lines; the full per-ref detail lives in $OUT.
+  printf '%s\n' "$vpc_out" | grep -E '^(Viewer protocol:|  (CONTRACT-FAIL|play-drift|ENUM-GAP))' \
+    | while IFS= read -r vl; do echo "$vl"; done
+  if [ $vpc_rc -ne 0 ]; then
+    log "FAIL: reference reproducibility (--strict) -- a recorded human game no longer replays; see $OUT"
+    FAIL=$((FAIL+1))
+  fi
+fi
 
 # ---- per-game audit (split by depth) -- makes the pre-accept analysis unmissable ----------
 # The fingerprint compare above governs PASS/FAIL; this appends the per-game breakdown the aggregate
