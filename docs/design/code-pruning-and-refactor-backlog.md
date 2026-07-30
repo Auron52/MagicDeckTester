@@ -15,14 +15,19 @@ really was Debug; the orphans really are referenced by nothing but this document
   `compile_commands.json` now Release/-O3.
 - **A2 DONE** (`a3d5fdd`) — `heuristic_defaults.env` resolved by walking up from
   `/proc/self/exe` (CWD fallback); applied set logged to stderr. Verified from `/tmp`.
-- **A4 DONE except step 2** (`b57749f`) — 12 orphans deleted, the 8 untracked `test/*.sh`
-  committed. The ~40 docs-only scripts are NOT yet moved to `scripts/attic/` (needs a
-  40-doc citation sweep and a user call on move-vs-delete).
+- **A4 DONE** (`b57749f` + follow-up) — 12 orphans deleted, the 8 untracked `test/*.sh`
+  committed. Step 2 done with user approval: the retired scripts moved to `scripts/attic/`
+  (with a README noting docs cite the old `scripts/<name>` path), leaving 13 live tools in
+  `scripts/`. The live set was re-derived transitively (skills/src/harness roots plus
+  script-to-script references), not taken from this doc's approximate ~11.
 - **A7 DONE** (`15b151e`) — `src/ai/EngineFlags.h`, one reader per lockstep flag.
   Smoke 24/24, all digests byte-identical, per-game audit 0 changed configs.
-- **A8 PARTIAL** — `build-prof/` deleted (superseded by `./build.sh profile`); the stale
-  CMakeLists build-prof comment fixed in `e3bfb01`. `build-asan`/`build-tsan` (880 MB) kept:
-  whether to replace them with `build.sh asan|tsan` modes is the user's call.
+- **A8 DONE** — `build-prof/` deleted (superseded by `./build.sh profile`); the stale
+  CMakeLists build-prof comment fixed in `e3bfb01`. `build-asan`/`build-tsan` deleted with
+  user approval (binaries were a month stale; the one-line recreate recipe:
+  `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"`,
+  tsan analogously with `-fsanitize=thread -O1`). No `build.sh` sanitizer modes added —
+  sanitizer use is too rare to earn a permanent mode.
 
 Still open: A3 (env truthiness unification — behaviour change on 88 presence-only flags),
 A5 (docs/design index), A6 (hook renumbering), all of Tier B, C, D.
