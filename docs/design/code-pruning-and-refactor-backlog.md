@@ -126,7 +126,22 @@ really was Debug; the orphans really are referenced by nothing but this document
   Verified comments-only mechanically (every changed line is a `//` line), then byte-identical:
   `mtg-test` 156/156, smoke 27/27, regression 45/45, 0 configs changed, 138 references clean.
 
-Still open: Tier B, remaining C1 units.
+- **B3 DONE** — `test/lib/harness.sh` (binary + deck-path resolution, manifest/batch, metric
+  parsing, per-game diff, repro-command printer) + `test/lib/README.md` + a standing
+  `test/lib/check_paths.sh` audit. `regression.sh` sources it for binary resolution and keeps its
+  own manifest emitter (the `value_play` depth rules and the Hinata LPT weight are suite policy,
+  and those manifest bytes are load-bearing for the GT). Suite re-verified 27/27 + 45/45.
+  **Found while extracting:** `fd_quick_ab.sh` and `fd_overnight_ab.sh` hard-coded
+  `build/Release/mtg.exe` with no fallback *and* pre-folder-move deck paths — neither could run on
+  Linux at all; both fixed. 11 more scripts still name moved decklists (52 dead paths); they are
+  unverified one-off A/Bs, so `check_paths.sh` **reports** them rather than blind-editing.
+  Three latent bugs in the primitives themselves were caught by testing them before shipping —
+  a dropped final manifest job, a `paste`-based diff that read the play digest as a win turn and
+  mis-paired out-of-order files, and a numeric win-turn compare that ranked a loss (`-1`) as the
+  fastest possible win. Every one of those yields a plausible number instead of an error, which is
+  the whole argument for the library.
+
+Still open: Tier B1/B2/B4, remaining C1 units.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are

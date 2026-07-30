@@ -40,10 +40,15 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Shared harness primitives (binary resolution, manifest/batch/metric helpers) -- see
+# test/lib/harness.sh. This suite is the reference implementation those helpers were extracted
+# from; it deliberately keeps its own manifest emitter (the value_play depth rules and the Hinata
+# LPT scheduling weight are suite policy, and the manifest bytes are load-bearing for the GT).
+# shellcheck source=lib/harness.sh
+. "$HERE/lib/harness.sh"
 # Multi-config build layout: build/Release/mtg.exe on Windows (MSVC),
 # build/Release/mtg in the Linux dev container (Ninja Multi-Config).
-BIN=./build/Release/mtg.exe
-[ -f "$BIN" ] || BIN=./build/Release/mtg
+BIN=$(harness_bin) || exit 1
 GT=test/regression_gt.txt
 THREADS=${THREADS:-0}
 

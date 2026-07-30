@@ -6,17 +6,22 @@
 # a game is "worse" if full-depth wins LATER than baseline (a residual search bug).
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
-BIN=./build/Release/mtg.exe
+. test/lib/harness.sh
+BIN=$(harness_bin) || exit 1
 OUT=logs/fd_overnight
 rm -rf "$OUT" && mkdir -p "$OUT/fd" "$OUT/base"
 
 SEEDS="4004 5005 6006 7007"
 # deck=file=profile
+# Resolved through the harness so the per-deck folder layout lives in one place; these were
+# hard-coded to the pre-move FLAT layout (a decklist directly under decks/) and had been dead
+# ever since; the binary path was likewise Windows-only. Neither script could run here.
 DECKS=(
-  "slivers=decks/slivers_vial.txt=decks/slivers_vial.profile.json"
-  "burn=decks/burn.txt=decks/burn.profile.json"
-  "th=decks/treasure_hunt.txt=decks/treasure_hunt.profile.json"
+  "slivers=$(h_deck slivers_vial)=$(h_profile slivers_vial)"
+  "burn=$(h_deck burn)=$(h_profile burn)"
+  "th=$(h_deck treasure_hunt)=$(h_profile treasure_hunt)"
 )
+for _d in "${DECKS[@]}"; do _r=${_d#*=}; h_require "${_r%%=*}" "${_r#*=}" || exit 1; done
 # depth=games=budget  (d0 omitted: full-depth==baseline at depth 0)
 CFGS=( "3=1000=100" "5=600=200" )
 

@@ -8,16 +8,21 @@
 # separate fd_overnight_ab.sh, to be run tonight.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
-BIN=./build/Release/mtg.exe
+. test/lib/harness.sh
+BIN=$(harness_bin) || exit 1
 OUT=logs/fd_quick
 rm -rf "$OUT" && mkdir -p "$OUT/fd" "$OUT/base"
 
 SEEDS="5005 6006"
+# Resolved through the harness so the per-deck folder layout lives in one place; these were
+# hard-coded to the pre-move FLAT layout (a decklist directly under decks/) and had been dead
+# ever since; the binary path was likewise Windows-only. Neither script could run here.
 DECKS=(
-  "slivers=decks/slivers_vial.txt=decks/slivers_vial.profile.json"
-  "burn=decks/burn.txt=decks/burn.profile.json"
-  "th=decks/treasure_hunt.txt=decks/treasure_hunt.profile.json"
+  "slivers=$(h_deck slivers_vial)=$(h_profile slivers_vial)"
+  "burn=$(h_deck burn)=$(h_profile burn)"
+  "th=$(h_deck treasure_hunt)=$(h_profile treasure_hunt)"
 )
+for _d in "${DECKS[@]}"; do _r=${_d#*=}; h_require "${_r%%=*}" "${_r#*=}" || exit 1; done
 # depth=games=budget
 CFGS=( "3=600=100" "5=400=200" )
 
