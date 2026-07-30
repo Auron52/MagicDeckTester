@@ -30,28 +30,9 @@ _spec.loader.exec_module(vpc)
 DECKS, DEC_RE, RES_RE = vpc.DECKS, vpc.DEC_RE, vpc.RES_RE
 SIDE_CHANNEL_TYPES, FORCED_MULLIGAN_TYPES, side_channel_args, force_arg, replay = (
     vpc.SIDE_CHANNEL_TYPES, vpc.FORCED_MULLIGAN_TYPES, vpc.side_channel_args, vpc.force_arg, vpc.replay)
-
-
-def plan_key(p):
-    """Content identity of a plan, independent of its index: the land played plus the multiset of
-    casts. `summary` is tried first (exact, and it also distinguishes cast ORDER, which the viewer
-    treats as a separate plan); this is the order-insensitive fallback."""
-    return (p.get("land"), tuple(sorted(p.get("casts") or [])))
-
-
-def find_plan(recorded, plans):
-    """Index of `recorded` in the current `plans`, or None. Exact summary first (keeps cast-order
-    variants distinct), then land+casts (tolerates a summary-format change or a dropped order variant)."""
-    if recorded is None:
-        return None
-    for i, p in enumerate(plans):
-        if p.get("summary") == recorded.get("summary"):
-            return i
-    want = plan_key(recorded)
-    for i, p in enumerate(plans):
-        if plan_key(p) == want:
-            return i
-    return None
+# The content matcher is shared with the protocol check (it now re-anchors by content too);
+# one definition, one behaviour.
+plan_key, find_plan = vpc.plan_key, vpc.find_plan
 
 
 def ref_steps(ref, drop_mulligan):

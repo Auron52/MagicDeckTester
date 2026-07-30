@@ -127,10 +127,13 @@ python3 test/viewer_protocol_check.py     # engine↔protocol contract layer
 node    test/viewer_linebuild_check.js     # browser line-building layer
 ```
 
-- **`viewer_protocol_check.py`** — feeds each reference's chosen plan **indices** into the binary
-  and asserts the engine emits well-formed decisions, the recorded index is a valid plan, and the
-  game reaches a clean terminal. Guards the `decide(deck,seed,gi,choices)→json` contract. Reports
-  behaviour drift (won/win_turn changed) as information; `--strict` also fails on play-drift.
+- **`viewer_protocol_check.py`** — replays each reference by **intent**: recorded picks are
+  re-anchored by plan content (recorded index breaks ties between visibly-identical plans, e.g.
+  MDFC faces), and decision points a reference predates are answered from the frame's own
+  `heuristic_default`/`ai_choice`. Asserts the engine emits well-formed decisions and reaches a
+  clean terminal (the `decide(deck,seed,gi,choices)→json` contract). Reports `repaired` /
+  `play-drift` / `shuffle-dead` / `ENUM-GAP` as information; `--strict` also fails on play-drift
+  and enum-gap. See docs/design/reference-intent-replay.md.
 - **`viewer_linebuild_check.js`** — drives the **actual** GUI line-building code (`linebuild.js`,
   the same module `index.html` loads) headlessly: for every main-phase decision the user played, it
   rebuilds the chosen plan's land + hand casts via `LineBuild.queueCard()` and asserts the line
