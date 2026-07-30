@@ -14,6 +14,7 @@
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
 #include "core/HeuristicDefaults.h"
+#include "core/FlagRegistry.h"
 #include "runner/GoldFishRunner.h"
 #include "runner/BatchRunner.h"
 #include "ai/AIEngine.h"
@@ -49,7 +50,9 @@ static void PrintUsage(const char* prog)
               << "  --exhaustive-keep  Load the exhaustive keep sidecar under --claude-play too\n"
               << "                  (claude-play skips it by default; it costs ~68s/launch to parse\n"
               << "                  and mulligan optimality is irrelevant to play verification)\n"
-              << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n";
+              << "  --cards-json P  Path to card definitions JSON (default: src/cards/data/cards.json)\n"
+              << "  --list-flags    Print every MTG_* env flag this build reads (the registry the\n"
+                 "                  startup unknown-flag warning checks against) and exit\n";
 }
 
 static std::vector<std::string> SortedHandNames(GameState& state)
@@ -2902,6 +2905,9 @@ int main(int argc, char* argv[])
 {
     // Apply committed heuristic defaults BEFORE anything reads a toggle (env vars still override).
     ApplyHeuristicDefaults();
+    // Warn on MTG_* env vars this binary does not read (typo / deleted flag = silent no-op).
+    WarnUnknownMtgFlags();
+    if (argc >= 2 && std::string(argv[1]) == "--list-flags") { PrintFlagRegistry(std::cout); return 0; }
     // Arm the colored_creature_only legality audit's exit dump (MTG_CCO_AUDIT); no-op when unset.
     CcoAuditDumper();
     if (argc < 2)

@@ -92,6 +92,18 @@ add_custom_target(mtg_engine_fp
     COMMENT "Computing engine fingerprint (MTG_ENGINE_FP)"
     VERBATIM)
 
+# Build-time MTG_* flag registry (same pattern): scanned from the source literals so the startup
+# typo validator (src/core/FlagRegistry.cpp) and --list-flags can never drift from the code.
+set(MTG_FLAG_REGISTRY_HEADER "${MTG_GENERATED_DIR}/flag_registry.h")
+add_custom_target(mtg_flag_registry
+    BYPRODUCTS "${MTG_FLAG_REGISTRY_HEADER}"
+    COMMAND ${CMAKE_COMMAND}
+            -DSRC_DIR=${CMAKE_SOURCE_DIR}/src
+            -DOUT_FILE=${MTG_FLAG_REGISTRY_HEADER}
+            -P ${CMAKE_SOURCE_DIR}/cmake/FlagRegistry.cmake
+    COMMENT "Generating MTG_* flag registry"
+    VERBATIM)
+
 # Shared game engine library — linked by both the runner and the analyzer
 add_library(mtg-core STATIC
     src/core/GameEngine.cpp
@@ -108,10 +120,11 @@ add_library(mtg-core STATIC
     src/cards/CardDatabase.cpp
     src/core/NameRegistry.cpp
     src/core/PoolAllocator.cpp
+    src/core/FlagRegistry.cpp
 )
 target_include_directories(mtg-core PUBLIC src "${MTG_GENERATED_DIR}")
 target_link_libraries(mtg-core PUBLIC pugixml::pugixml nlohmann_json::nlohmann_json)
-add_dependencies(mtg-core mtg_engine_fp)
+add_dependencies(mtg-core mtg_engine_fp mtg_flag_registry)
 
 # Optional: zlib, so the runtime can read gzipped deck profiles (.json.gz). Committed exhaustive
 # keep/bottom profiles ship gzipped (the raw bottom_keep table is ~13 MB; gzip -> ~1-2 MB). Linked

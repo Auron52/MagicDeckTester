@@ -7,6 +7,7 @@
 #include "AnalyzerEngine.h"
 #include "KeepModelTrainer.h"
 #include "../core/HeuristicDefaults.h"
+#include "../core/FlagRegistry.h"
 #include "EquivalenceDiscovery.h"
 #include "ExhaustiveKeep.h"
 #include "../ai/AIEngine.h"
@@ -41,6 +42,8 @@ int main(int argc, char* argv[])
 {
     // Apply committed heuristic defaults BEFORE anything reads a toggle (env vars still override).
     ApplyHeuristicDefaults();
+    // Warn on MTG_* env vars this binary does not read (typo / deleted flag = silent no-op).
+    WarnUnknownMtgFlags();
     if (argc < 2)
     {
         PrintUsage(argv[0]);

@@ -38,8 +38,12 @@ really was Debug; the orphans really are referenced by nothing but this document
   clean-env smoke 24/24 byte-identical; `MTG_LEGACY_SEARCH=0` smoke ALSO 24/24 (the flip
   working — under presence-only semantics that run would have failed); `=1` diverges
   (lever intact). Convention documented in `.claude/skills/coding-conventions.md` +
-  CLAUDE.md pointer. **Step 4 (startup `MTG_*` typo validator) still open** — needs the
-  flag registry / `--list-flags` from D1.
+  CLAUDE.md pointer.
+- **A3 step 4 DONE** — flag registry generated at build time from the source literals
+  (`cmake/FlagRegistry.cmake` → `generated/flag_registry.h`, engine-fingerprint pattern, so it
+  cannot drift); `mtg --list-flags` dumps it; both binaries warn at startup on any `MTG_*` env
+  var not in the registry (typo / deleted flag = no longer a silent no-op; deliberately
+  non-fatal so old scripts keep running). `MTG_BIN` + `heuristic_defaults.env` keys whitelisted.
 
 - **C2 DONE** (`ca0cb96`) — `mtg-test` doctest target; twin-equivalence + golden mana-payment
   tests (6 cases / 156 assertions). Test seams: `TapForCostDirect` external linkage,
@@ -64,8 +68,7 @@ really was Debug; the orphans really are referenced by nothing but this document
   diagnostics). NOT deleted: the `MTG_LEGACY_*` hatches (user chose keep), all `MTG_NO_*`
   hatches, capacity knobs, and keep-model gen knobs.
 
-Still open: A3 step 4 (flag validator + `--list-flags`, pairs with the D1 registry),
-A5 (docs/design index), A6 (hook renumbering), Tier B, remaining C1 units.
+Still open: A5 (docs/design index), A6 (hook renumbering), Tier B, remaining C1 units.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
