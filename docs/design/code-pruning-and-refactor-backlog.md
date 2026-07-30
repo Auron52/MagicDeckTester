@@ -141,7 +141,24 @@ really was Debug; the orphans really are referenced by nothing but this document
   fastest possible win. Every one of those yields a plausible number instead of an error, which is
   the whole argument for the library.
 
-Still open: Tier B1/B2/B4, remaining C1 units.
+- **B2 DONE** — all **20** decision-JSON emitters (the doc said 18; the real count is 20) now build
+  their frame through one `DecisionJson` writer in `src/main.cpp`. `grep 'os << "{\n"'` over the
+  file returns exactly **1** hit, inside the helper. Kept hand-emitted rather than switched to
+  `nlohmann::json`, as this doc specified — the bytes are a wire protocol. The helper is an ordered
+  writer, not a schema: each emitter still picks its own key order, because several legitimately
+  interleave their own keys into the prologue (`main_phase` puts `main_ordinal` before `type`;
+  `vial`/`echo`/`target` deliberately pack keys onto one line). Three emitters keep a raw `os <<`
+  line for exactly those historic layouts, commented as such.
+  **Verification** is `test/lib/capture_decisions.py`, written for this: it replays every reference
+  at every prefix (forced *and* unforced, the latter to reach the mulligan/bottom emitters) plus
+  self-driving sweeps that take the engine's own default — including `--firebreathe-prompt` /
+  `--storage-hold-prompt` sweeps, without which those two side-channel emitters are never reached
+  at all. That is **11,511 frames covering all 23 wire types**, and the capture is itself verified
+  deterministic (two runs byte-identical) before being trusted as a baseline. Converted in four
+  batches, each built and byte-diffed against the baseline: **all four byte-identical.** Then
+  `mtg-test` 156/156, smoke 27/27, regression 45/45, viewer protocol 138 ok / 0 drift.
+
+Still open: Tier B1/B4, remaining C1 units.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
