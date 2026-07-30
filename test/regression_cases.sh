@@ -26,6 +26,7 @@ declare -A DECK_FILE=(
   [hinata]=decks/Hinata2/Hinata2.cod
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.cod
   [auras]=decks/Auras/Auras.cod
+  [goblins]=decks/Goblins/Goblins.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -36,6 +37,7 @@ declare -A DECK_PROF=(
   [hinata]=decks/Hinata2/Hinata2.profile.json
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.profile.json
   [auras]=decks/Auras/Auras.profile.json
+  [goblins]=decks/Goblins/Goblins.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -84,6 +86,11 @@ SMOKE_CASES=(
   "auras   0 1001 1000 0"
   "auras   3 1001  300 10"
   "auras   5 1001  250 20"
+  # goblins: cheap fast aggro (wins ~turn 4-5, short games). d0 full + small d3/d5 gate,
+  # sized like dragonstorm/th; deeper coverage lives in regression/overnight.
+  "goblins 0 1001 1000 0"
+  "goblins 3 1001  150 10"
+  "goblins 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -137,6 +144,12 @@ REGRESSION_CASES=(
   "auras   3 3003  500 10"
   "auras   5 2002  500 20"
   "auras   5 3003  500 20"
+  # goblins: two seeds at d3/d5 + d0 (cheap fast aggro; ~4 min added, well under budget).
+  "goblins 0 2002 1000 0"
+  "goblins 3 2002  300 10"
+  "goblins 3 3003  300 10"
+  "goblins 5 2002  250 20"
+  "goblins 5 3003  250 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -261,4 +274,17 @@ OVERNIGHT_CASES=(
   "auras   5 5005 1000 20"
   "auras   5 6006 1000 20"
   "auras   5 7007 1000 20"
+  # goblins: wide 4-seed sweep (cheap fast aggro; d3/d5 sized like knights/dragonstorm).
+  "goblins 0 4004 2000 0"
+  "goblins 0 5005 2000 0"
+  "goblins 0 6006 2000 0"
+  "goblins 0 7007 2000 0"
+  "goblins 3 4004 1000 20"
+  "goblins 3 5005 1000 20"
+  "goblins 3 6006 1000 20"
+  "goblins 3 7007 1000 20"
+  "goblins 5 4004 1000 40"
+  "goblins 5 5005 1000 40"
+  "goblins 5 6006 1000 40"
+  "goblins 5 7007 1000 40"
 )

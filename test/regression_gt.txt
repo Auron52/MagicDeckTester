@@ -29,6 +29,9 @@ dragonstorm_smoke_d5_s1001=4.4933/dafd9a5af2d05ba1
 auras_smoke_d0_s1001=4.4560/083d95ae3a2a9c0f
 auras_smoke_d3_s1001=4.1533/d1d5be0464ab5754
 auras_smoke_d5_s1001=4.1480/3f0c22061ad83dc3
+goblins_smoke_d0_s1001=4.8100/3e626f67293f5d07
+goblins_smoke_d3_s1001=4.2933/9a3593ccb4c8b6b9
+goblins_smoke_d5_s1001=4.2667/966cbbf416c49981
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/7b06530f1cd2f10f
