@@ -80,7 +80,15 @@ really was Debug; the orphans really are referenced by nothing but this document
   `TryPlayLand`'s, the claude-play land-entry chooser never reaches the real drop, and the
   scry/surveil source labels differ. Land SELECTION heuristics deliberately not unified (the
   executor's four-pass ranker and the rollout's two-pass fallback are different policies, not
-  twins). Next unit per the safety order: combat.
+  twins).
+- **C1 unit 7 DONE** (`5a29c00`) — the combat twins (`GameEngine::CombatPhase` /
+  `TurnSolver::SimulateCombat`) → `DeclareAttackerIndices` + `ResolveCombatDamage` in the new
+  `src/ai/Combat.{h,cpp}`. Byte-identical. NOT shared, deliberately: the combat steps, stack
+  resolution, state-based actions, the game log and play-viewer events (executor-only), and each
+  caller's own attack-token / self-pump / firebreathing / exalted sequence, because the two order
+  those differently (values identical today; passing the exalted bonus in preserves both orders
+  rather than picking one). That leaves `TakeTurn`/`ApplyPlanDirect` as the only unconverted C1
+  pair, which the safety order says to attempt last, if ever.
 - **Orchard bug FIXED + GT rebaselined** — the greedy drop now fires the on-play Spirit like the
   other three sites. Smoke `hinata_smoke_d0_s1001` 7.1050→7.0790 (−0.026, 31 faster / 6 slower),
   regression `hinata_regression_d0_s2002` 7.1830→7.1500 (−0.033, 31 faster / 7 slower); every
