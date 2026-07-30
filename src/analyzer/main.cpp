@@ -270,8 +270,7 @@ int main(int argc, char* argv[])
         // to (7-m) cards and playing out, for m=0..MAXM. This is the KEEP THRESHOLD the exhaustive policy
         // compares a specific hand against: keep iff V[hand] <= Dopt[m+1], and Dopt[m+1] ~ the mean here
         // at m+1 (value of mulliganing again). Draws a natural top-7 per fresh shuffle, bottoms m via the
-        // deck's bottoming policy, plays out; averages over MTG_SCORE_R shuffles. MTG_SCORE_HIST adds the
-        // per-(m,pd) win-turn histogram. Read-only diagnostic.
+        // deck's bottoming policy, plays out; averages over MTG_SCORE_R shuffles. Read-only diagnostic.
         if (EnvOn("MTG_MULL_EV"))
         {
             std::filesystem::path in_path =
@@ -284,18 +283,15 @@ int main(int argc, char* argv[])
                                   return (s && *s) ? std::max(0, std::atoi(s)) : 5; }();
             const int MAXM = []{ const char* s = std::getenv("MTG_MULL_EV_MAXM");
                                  return (s && *s) ? std::max(0, std::atoi(s)) : 2; }();
-            const bool hist_on = EnvOn("MTG_SCORE_HIST");
             MulliganProfile rp = profile; rp.keep_model = KeepModel{};
             const bool second_main = GoldFishRunner::DeckUsesSecondMain(deck);
             std::vector<std::array<double, 2>> sum(MAXM + 1, { 0, 0 }), sumsq(MAXM + 1, { 0, 0 });
-            std::vector<std::array<std::array<long long, 12>, 2>> hist(MAXM + 1);
             std::mutex mtx;
             std::atomic<int> next{ 0 };
             auto worker = [&]()
             {
                 AIEngine ai(rp, depth, 20); ai.SetSearchPostCombat(second_main);
                 std::vector<std::array<double, 2>> ls(MAXM + 1, { 0, 0 }), lsq(MAXM + 1, { 0, 0 });
-                std::vector<std::array<std::array<long long, 12>, 2>> lh(MAXM + 1);
                 for (;;)
                 {
                     int r = next.fetch_add(1);
@@ -317,16 +313,13 @@ int main(int argc, char* argv[])
                             GameState s = base;
                             double wt = ai.RolloutKeepWinTurn(s, m, max_turns);
                             ls[m][pd] += wt; lsq[m][pd] += wt * wt;
-                            int wb = static_cast<int>(wt); if (wb < 0) { wb = 0; } if (wb > 11) { wb = 11; }
-                            ++lh[m][pd][wb];
                         }
                     }
                 }
                 std::lock_guard<std::mutex> g(mtx);
                 for (int m = 0; m <= MAXM; ++m)
                     for (int pd = 0; pd < 2; ++pd)
-                    { sum[m][pd] += ls[m][pd]; sumsq[m][pd] += lsq[m][pd];
-                      for (int t = 0; t < 12; ++t) { hist[m][pd][t] += lh[m][pd][t]; } }
+                    { sum[m][pd] += ls[m][pd]; sumsq[m][pd] += lsq[m][pd]; }
             };
             int nthreads = std::max(1, concurrency_util::AffinityCpuCount());
             std::vector<std::thread> pool;
@@ -341,11 +334,7 @@ int main(int argc, char* argv[])
                     double mean = sum[m][pd] / R;
                     double var  = std::max(0.0, sumsq[m][pd] / R - mean * mean);
                     std::cout << "m" << m << " keep" << (7 - m) << " " << (pd ? "PLAY" : "DRAW")
-                              << "  mean=" << mean << "  se=" << std::sqrt(var / R);
-                    if (hist_on)
-                    { std::cout << "  hist:";
-                      for (int t = 0; t < 12; ++t) { if (hist[m][pd][t]) { std::cout << " t" << t << "=" << hist[m][pd][t]; } } }
-                    std::cout << "\n";
+                              << "  mean=" << mean << "  se=" << std::sqrt(var / R) << "\n";
                 }
             std::cout << std::flush;
             return 0;
@@ -392,38 +381,11 @@ int main(int argc, char* argv[])
                 items.push_back({ line, std::move(comp) });
             }
             std::vector<std::array<double, 4>> out(items.size(), { 0, 0, 0, 0 });  // dmean,dse,pmean,pse
-            // Optional per-comp win-turn histogram (MTG_SCORE_HIST): [item][pd][win_turn 0..11], last
-            // buckets catch max_turns+1 (no win). Per-item ownership => race-free like `out`.
-            const bool score_hist = EnvOn("MTG_SCORE_HIST");
-            std::vector<std::array<std::array<long long, 12>, 2>> hist(items.size());
-
-            // Optional detail mode (MTG_SCORE_DETAIL): for each win-turn bucket, the lands-in-play split
-            // (player-0 lands controlled at the win) and how many of those wins cast Light Up the Stage
-            // (via the execution-trace touch index). Answers "how many turn-3 wins ran on 1 vs 2 lands,
-            // and did the spectacle dig participate?".
-            const bool detail_on = EnvOn("MTG_SCORE_DETAIL");
-            struct Detail { std::array<std::array<long long, 10>, 12> lands{};   // [winturn][lands 0..9]
-                            std::array<long long, 12> lightup{};                 // [winturn] wins that cast LUS
-                            std::array<std::array<long long, 3>, 12> top2{}; };  // [winturn][lands in first 2 draws]
-            std::vector<std::array<Detail, 2>> detail(detail_on ? items.size() : 0);
-            std::map<std::string, int> touch_index; std::vector<std::string> touch_names;
-            int lightup_idx = -1;
-            if (detail_on)
-            {
-                for (const Card& c : deck.mainboard)
-                    if (touch_index.emplace(c.m_name.str(), static_cast<int>(touch_names.size())).second)
-                    { touch_names.push_back(c.m_name.str()); }
-                auto it = touch_index.find("Light Up the Stage");
-                if (it != touch_index.end()) { lightup_idx = it->second; }
-            }
-
             std::atomic<int> next{0};
             const std::map<std::string, int>& bofref = bof;   // const ref -> concurrent-safe find()
             auto worker = [&]()
             {
                 AIEngine ai(rp, depth, 20); ai.SetSearchPostCombat(second_main);
-                std::vector<char> hit;
-                if (detail_on) { ai.SetTouchIndex(&touch_index); hit.assign(touch_names.size(), 0); }
                 for (;;)
                 {
                     int w = next.fetch_add(1);
@@ -448,24 +410,8 @@ int main(int argc, char* argv[])
                                     { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin()+k); --need; }
                                     else { ++k; } } }
                             ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));   // unbias continuation (see ExhaustiveKeep)
-                            int top2lands = 0;
-                            if (detail_on)
-                                for (int q = 0; q < 2 && q < static_cast<int>(ap.library.size()); ++q)
-                                { const CardDefinition* dd = CardDatabase::Instance().Lookup(ap.library[q].m_name.str());
-                                  if (dd && dd->card.IsLand()) { ++top2lands; } }
-                            double wt; int lands = -1;
-                            if (detail_on)
-                            { std::fill(hit.begin(), hit.end(), 0);
-                              wt = ai.RolloutKeepWinTurn(s, 0, max_turns, &hit, &lands); }
-                            else { wt = ai.RolloutKeepWinTurn(s, 0, max_turns); }
+                            double wt = ai.RolloutKeepWinTurn(s, 0, max_turns);
                             sum += wt; sumsq += wt*wt;
-                            int wb = static_cast<int>(wt); if (wb < 0) wb = 0; if (wb > 11) wb = 11;
-                            ++hist[w][pd][wb];
-                            if (detail_on)
-                            { int lb = lands < 0 ? 0 : (lands > 9 ? 9 : lands);
-                              ++detail[w][pd].lands[wb][lb];
-                              ++detail[w][pd].top2[wb][top2lands < 0 ? 0 : (top2lands > 2 ? 2 : top2lands)];
-                              if (lightup_idx >= 0 && hit[lightup_idx]) { ++detail[w][pd].lightup[wb]; } }
                         }
                         double mean = sum / R;
                         double var  = R > 1 ? std::max(0.0, sumsq/R - mean*mean) : 0.0;
@@ -484,38 +430,6 @@ int main(int argc, char* argv[])
             {
                 std::cout << items[i].line << "\t" << out[i][0] << " " << out[i][1] << "\t"
                           << out[i][2] << " " << out[i][3] << "\n";
-            }
-            if (score_hist)
-            {
-                std::cout << "\n# win-turn histogram (tN=count; the last populated bucket = no win by "
-                             "max_turns, scored max_turns+1)\n";
-                for (std::size_t i = 0; i < items.size(); ++i)
-                    for (int pd = 0; pd < 2; ++pd)
-                    {
-                        std::cout << items[i].line << (pd ? "  PLAY " : "  DRAW ");
-                        for (int t = 0; t < 12; ++t)
-                        { if (hist[i][pd][t]) { std::cout << "t" << t << "=" << hist[i][pd][t] << " "; } }
-                        std::cout << "\n";
-                    }
-            }
-            if (detail_on)
-            {
-                std::cout << "\n# per-win-turn lands-in-play split (L<n>=count of wins with n player-0 "
-                             "lands) + LightUp=wins that cast Light Up the Stage\n";
-                for (std::size_t i = 0; i < items.size(); ++i)
-                    for (int pd = 0; pd < 2; ++pd)
-                        for (int t = 0; t < 12; ++t)
-                        {
-                            long long tot = 0; for (int l = 0; l < 10; ++l) { tot += detail[i][pd].lands[t][l]; }
-                            if (!tot) { continue; }
-                            std::cout << items[i].line << (pd ? "  PLAY t" : "  DRAW t") << t << " n=" << tot << "  ";
-                            for (int l = 0; l < 10; ++l)
-                            { if (detail[i][pd].lands[t][l]) { std::cout << "L" << l << "=" << detail[i][pd].lands[t][l] << " "; } }
-                            std::cout << " LightUp=" << detail[i][pd].lightup[t]
-                                      << "  top2draws[0L=" << detail[i][pd].top2[t][0]
-                                      << " 1L=" << detail[i][pd].top2[t][1]
-                                      << " 2L=" << detail[i][pd].top2[t][2] << "]\n";
-                        }
             }
             std::cout << std::flush;
             return 0;
