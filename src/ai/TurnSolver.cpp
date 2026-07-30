@@ -700,7 +700,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
     }
 
     // Archetype-specific card value (Treasure Hunt / Land's Edge combo): provider-owned
-    // (Hook 15), so the clairvoyant + combo assumptions live in the per-deck file. A deck
+    // (ArchetypeCardValue), so the clairvoyant + combo assumptions live in the per-deck file. A deck
     // without such a model returns false here and falls through to the generic estimates.
     {
         int archetype_value = 0;
@@ -801,25 +801,24 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
     return !has_enabler;   // removal present, no enabler live and none cast this turn -> unbacked
 }
 
-// Payoff-prune (DecisionProvider Hook 29 -- the ritual-guard's search-side analog; the user's spec).
-// A mana ritual is a ONE-TURN accelerant: its float empties at end of turn (identical to Reality Spasm's
-// untap) and storm count does not carry across turns, so a subset that casts a ritual (ritual_float > 0)
-// but no PAYOFF -- a Dragon (creature), Dragonstorm (tutor_to_battlefield), or Apex of Power
-// (impulse_exile) -- burns the ritual for nothing (no same-turn sink). Callers gate this on
-// ResolveProvider(state).PrunesAcceleratorWithoutPayoff() so ONLY Dragonstorm prunes; Hinata (whose
-// ritual is a useful cantrip/dig accelerant) is untouched. A ritual-only subset deals no damage, so it
-// can never be a winning line -> pruning it never drops a lethal plan. Inert (no ritual) -> unchanged.
-// Storm-hold rule (ADOPTED 2026-07-23; default ON, off-switch MTG_NO_STORM_HOLD). REFINES the
-// UNCONDITIONAL slow-dragon rule that was REJECTED (making a fair Dragon never a payoff improved BLIND
-// d0 ~-0.73 but WORSENED the shipped d5 search ~+0.37: a blind leaf that always holds its ritual
-// durdles, never reaching the storm it can't foresee). The fix, per the deck's human pilot: only hold
-// when a storm payoff (Dragonstorm/Apex) is ALREADY IN HAND -- then the leaf CAN see the payoff it is
-// saving the ritual for, so it doesn't durdle. A subset that spends a ritual on a FAIR Dragon is pruned
-// ONLY when a storm is in hand (the Dragon can still be cast off lands -- a ritual-free subset never
-// trips this). Measured (train 4004/5005): blind d0 -0.60, shipped d5 -0.005 (NEUTRAL, no search
-// regression -- the storm-in-hand gate is what makes an option-prune safe for the search). Applied to
-// the greedy/rollout POLICY only; the search's root branch list is untouched (see the 2nd call site).
-// See docs/design/dragonstorm-d0-divergence-digest.md.
+// Payoff-prune (DecisionProvider::PrunesAcceleratorWithoutPayoff -- the ritual-guard's search-side analog;
+// the user's spec). A mana ritual is a ONE-TURN accelerant: its float empties at end of turn (identical to
+// Reality Spasm's untap) and storm count does not carry across turns, so a subset that casts a ritual
+// (ritual_float > 0) but no PAYOFF -- a Dragon (creature), Dragonstorm (tutor_to_battlefield), or Apex of
+// Power (impulse_exile) -- burns the ritual for nothing (no same-turn sink). Callers gate this on
+// ResolveProvider(state).PrunesAcceleratorWithoutPayoff() so ONLY Dragonstorm prunes; Hinata (whose ritual is
+// a useful cantrip/dig accelerant) is untouched. A ritual-only subset deals no damage, so it can never be a
+// winning line -> pruning it never drops a lethal plan. Inert (no ritual) -> unchanged. Storm-hold rule
+// (ADOPTED 2026-07-23; default ON, off-switch MTG_NO_STORM_HOLD). REFINES the UNCONDITIONAL slow-dragon rule
+// that was REJECTED (making a fair Dragon never a payoff improved BLIND d0 ~-0.73 but WORSENED the shipped d5
+// search ~+0.37: a blind leaf that always holds its ritual durdles, never reaching the storm it can't
+// foresee). The fix, per the deck's human pilot: only hold when a storm payoff (Dragonstorm/Apex) is ALREADY
+// IN HAND -- then the leaf CAN see the payoff it is saving the ritual for, so it doesn't durdle. A subset
+// that spends a ritual on a FAIR Dragon is pruned ONLY when a storm is in hand (the Dragon can still be cast
+// off lands -- a ritual-free subset never trips this). Measured (train 4004/5005): blind d0 -0.60, shipped d5
+// -0.005 (NEUTRAL, no search regression -- the storm-in-hand gate is what makes an option-prune safe for the
+// search). Applied to the greedy/rollout POLICY only; the search's root branch list is untouched (see the 2nd
+// call site). See docs/design/dragonstorm-d0-divergence-digest.md.
 static const bool s_storm_hold = !EnvOn("MTG_NO_STORM_HOLD");
 
 static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::vector<int>& sel,
@@ -3339,38 +3338,38 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
 }
 
 // Feasible-aware EARLY ritual-drop -- the group-level, before-the-odometer analog of the late
-// SubsetWastesAccelerant payoff-prune (Hook 29; the user's spec). SubsetWastesAccelerant drops a
-// ritual-bearing SUBSET with no same-turn payoff LATE, inside consider()/eval_and_push(), only AFTER the
-// odometer has already enumerated the entire 2^k ritual x splice powerset -- the confirmed durdle on
-// Dragonstorm's no-land combo hands (e.g. "Dragonstorm x2; Desperate Ritual x4", ~7.6s single-thread).
-// When the hand cannot reach ANY payoff this turn even at its bootstrap-feasible mana MAX, every
-// ritual-bearing subset is already doomed: it either casts no payoff (SubsetWastesAccelerant drops it) or
-// casts a payoff the mana can never afford (consider()'s CanPay drops it). So we drop the ritual GROUPS
-// from the odometer up front and skip the whole enumeration, BYTE-IDENTICALLY.
+// SubsetWastesAccelerant payoff-prune (PrunesAcceleratorWithoutPayoff; the user's spec).
+// SubsetWastesAccelerant drops a ritual-bearing SUBSET with no same-turn payoff LATE, inside
+// consider()/eval_and_push(), only AFTER the odometer has already enumerated the entire 2^k ritual x splice
+// powerset -- the confirmed durdle on Dragonstorm's no-land combo hands (e.g. "Dragonstorm x2; Desperate
+// Ritual x4", ~7.6s single-thread). When the hand cannot reach ANY payoff this turn even at its
+// bootstrap-feasible mana MAX, every ritual-bearing subset is already doomed: it either casts no payoff
+// (SubsetWastesAccelerant drops it) or casts a payoff the mana can never afford (consider()'s CanPay drops
+// it). So we drop the ritual GROUPS from the odometer up front and skip the whole enumeration,
+// BYTE-IDENTICALLY.
 //
-// The payoff set counts Dragons (creatures) ALWAYS -- the most permissive set -> smallest min-cost payoff
-// -> the STRICTEST condition to fire -> we drop ONLY when even a fair Dragon is out of reach, never
-// dropping a line either late-prune callsite would keep (Solve's uses the real storm_in_hand, which makes
-// a fair Dragon a NON-payoff when a storm is in hand -> even MORE aggressive; EnumeratePlans' uses
-// storm_in_hand=false -> creatures pay -> exactly our set). So our removals are a subset of both, in
-// every storm state.
+// The payoff set counts Dragons (creatures) ALWAYS -- the most permissive set -> smallest min-cost payoff ->
+// the STRICTEST condition to fire -> we drop ONLY when even a fair Dragon is out of reach, never dropping a
+// line either late-prune callsite would keep (Solve's uses the real storm_in_hand, which makes a fair Dragon
+// a NON-payoff when a storm is in hand -> even MORE aggressive; EnumeratePlans' uses storm_in_hand=false ->
+// creatures pay -> exactly our set). So our removals are a subset of both, in every storm state.
 //
 // SOUNDNESS -- the feasibility bound MUST match the engine's own affordability model exactly, or it drops
-// lines the search keeps. consider()/eval_and_push credit a ritual's GROSS float UNCONDITIONALLY
-// (eff.wild += Σ ritual_float [+ the Rite-of-Flame gy_self triangular escalation]) while the ritual's own
-// cost sits in the combined cost -> affordability is the SIMULTANEOUS total pool + Σgross >= Σcost, with
-// NO check that each ritual is castable in SEQUENCE. So the exact max mana any subset can leave for a
-// payoff is feasible_net = pool + Σ(gross - cost) over net-positive ramps (+ the same gy_self bonus) --
-// NON-sequenced. (A "bootstrap ideal cast-order" that only credits rituals affordable from a running
-// total is STRICTLY TIGHTER, so at 0-1 lands it drops ritual+payoff plans the engine still keeps -- this
-// is NOT byte-identical and cost a Dragonstorm regression; do NOT reintroduce it as a byte-identical
-// change.) If feasible_net < cheapest_payoff, eff.CanPay fails for every ritual+payoff subset -> dropping
-// the rituals is byte-identical. feasible_net is color-blind (totals) => an UPPER bound on the color-aware
-// CanPay (and filters only convert colour, never add total) => still sound. A same-turn cost reducer (Ruby
-// Medallion) / affinity makes the scalar bound unsound (mirrors ManaPruneBound's bail) -> we do NOT drop.
-// Provider-gated (PrunesAcceleratorWithoutPayoff = Dragonstorm only) + the same MTG_UNPRUNED(payoffprune)
-// toggle as the late prune, plus an independent MTG_NO_RITUAL_EARLY_DROP opt-out for the speedup A/B.
-// Inert for every other deck and whenever a payoff is reachable -> byte-identical.
+// lines the search keeps. consider()/eval_and_push credit a ritual's GROSS float UNCONDITIONALLY (eff.wild +=
+// Σ ritual_float [+ the Rite-of-Flame gy_self triangular escalation]) while the ritual's own cost sits in the
+// combined cost -> affordability is the SIMULTANEOUS total pool + Σgross >= Σcost, with NO check that each
+// ritual is castable in SEQUENCE. So the exact max mana any subset can leave for a payoff is feasible_net =
+// pool + Σ(gross - cost) over net-positive ramps (+ the same gy_self bonus) -- NON-sequenced. (A "bootstrap
+// ideal cast-order" that only credits rituals affordable from a running total is STRICTLY TIGHTER, so at 0-1
+// lands it drops ritual+payoff plans the engine still keeps -- this is NOT byte-identical and cost a
+// Dragonstorm regression; do NOT reintroduce it as a byte-identical change.) If feasible_net <
+// cheapest_payoff, eff.CanPay fails for every ritual+payoff subset -> dropping the rituals is byte-identical.
+// feasible_net is color-blind (totals) => an UPPER bound on the color-aware CanPay (and filters only convert
+// colour, never add total) => still sound. A same-turn cost reducer (Ruby Medallion) / affinity makes the
+// scalar bound unsound (mirrors ManaPruneBound's bail) -> we do NOT drop. Provider-gated
+// (PrunesAcceleratorWithoutPayoff = Dragonstorm only) + the same MTG_UNPRUNED(payoffprune) toggle as the late
+// prune, plus an independent MTG_NO_RITUAL_EARLY_DROP opt-out for the speedup A/B. Inert for every other deck
+// and whenever a payoff is reachable -> byte-identical.
 static const bool s_ritual_early_drop = !EnvOn("MTG_NO_RITUAL_EARLY_DROP");
 
 static void DropRitualGroupsIfNoPayoff(const GameState& state, const ManaPool& pool,
@@ -3566,10 +3565,10 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         if (def && def->card.IsLand()) { ++lands_in_hand; }
     }
 
-    // Deck-specific reach toward THIS turn's lethal beyond combat + direct damage (the Treasure
-    // Hunt / Land's Edge ammunition model) is provider-owned (Hook 14). HasExtraLethalModel()
-    // gates the whole thing: a deck without such a model skips building the per-plan cast list
-    // entirely, staying byte-identical to the old "all addends 0" path.
+    // Deck-specific reach toward THIS turn's lethal beyond combat + direct damage (the Treasure Hunt / Land's
+    // Edge ammunition model) is provider-owned (HasExtraLethalModel / ExtraLethalDamage).
+    // HasExtraLethalModel() gates the whole thing: a deck without such a model skips building the per-plan
+    // cast list entirely, staying byte-identical to the old "all addends 0" path.
     const DecisionProvider& provider = ResolveProvider(state);
     const bool has_extra_lethal = provider.HasExtraLethalModel();
     std::vector<const CardDefinition*> casting;   // reused per subset (only when has_extra_lethal)
@@ -3644,7 +3643,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
-        // Payoff-prune (Hook 29): drop a ritual-accelerant subset that casts no payoff
+        // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
         // gated; inert for every other deck -> byte-identical. storm_in_hand feeds the storm-hold rule
         // (a fair Dragon stops justifying a ritual when a storm is in hand); off by default.
@@ -4886,13 +4885,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         Player& lp = state.ActivePlayer();
         if (lp.lands_played_this_turn >= lp.LandDropsAvailable()) { return; }   // drop already used
 
-        // Hold the drop entirely when the lands in hand are the marginal Land's Edge ammo for a
-        // lethal this turn: playing one would push the count below lethal and the fire-count
-        // heuristic (below, in this same ApplyPlanDirect) would then hold the rest, slipping the
-        // win a turn (s1 gi0 T4-vs-T3). Provider-owned (Hook 21); default off for every other deck.
+        // Hold the drop entirely when the lands in hand are the marginal Land's Edge ammo for a lethal this
+        // turn: playing one would push the count below lethal and the fire-count heuristic (below, in this
+        // same ApplyPlanDirect) would then hold the rest, slipping the win a turn (s1 gi0 T4-vs-T3).
+        // Provider-owned (HoldDeferredDropForLethal); default off for every other deck.
         if (ResolveProvider(state).HoldDeferredDropForLethal(state, state.active_player_index)) { return; }
 
-        // The keep-ammo land CHOICE is deck logic -> ask the provider (Hook 13); the engine
+        // The keep-ammo land CHOICE is deck logic -> ask the provider (PostDrawKeepLandName); the engine
         // keeps the open-drop precondition above and the land-play mechanism below.
         std::string reliquary =
             ResolveProvider(state).PostDrawKeepLandName(state, state.active_player_index);
@@ -4907,10 +4906,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             return;
         }
-        // No flood-keep land YET, but another dig is affordable this turn -> HOLD the drop (Hook 22).
-        // Developing here spends the only way to play a Reliquary Tower one dig too early, so a Tower
-        // revealed by the NEXT dig is unplayable and the flood is discarded at cleanup (s2 gi1). This
-        // step runs again after that dig, so a whiff still develops -- just one dig later.
+        // No flood-keep land YET, but another dig is affordable this turn -> HOLD the drop
+        // (HoldDeferredDropForFurtherDig). Developing here spends the only way to play a Reliquary Tower one
+        // dig too early, so a Tower revealed by the NEXT dig is unplayable and the flood is discarded at
+        // cleanup (s2 gi1). This step runs again after that dig, so a whiff still develops -- just one dig
+        // later.
         if (ResolveProvider(state).HoldDeferredDropForFurtherDig(state, state.active_player_index)) { return; }
         // NO RULE FIRED -> the static ranker picks the drop (SimulateLandPlay: first multi-colour
         // land in HAND ORDER, blind to yield). This is the SEARCH RESTRICTION documented in
@@ -6909,33 +6909,32 @@ static bool OrderingSearchEnabled(const GameState& state)
 {
     // Global A/B knob (env / MTG_UNPRUNED), cached once.
     static const bool global = (EnvOn("MTG_SEARCH_ORDER")) || DecisionUnpruned(UnprunedGate::SearchOrder);
-    // Archetype opt-in (Hook 28): Dragonstorm searches its combo cast order by default. Provider-scoped
-    // so every other deck stays byte-identical (base hook returns false). Cheap per-call vtable check --
-    // the real cost is the k! applies below, gated behind this.
+    // Archetype opt-in (WantsCastOrderingSearch): Dragonstorm searches its combo cast order by default.
+    // Provider-scoped so every other deck stays byte-identical (base hook returns false). Cheap per-call
+    // vtable check -- the real cost is the k! applies below, gated behind this.
     return global || ResolveProvider(state).WantsCastOrderingSearch();
 }
 
-// Targeted cast-ORDERING candidates for Dragonstorm (Hook 28; see docs/design/dragonstorm-cast-order-search.md).
-// The combo is a CHEAPEST-FIRST self-funding ritual chain with only a few real degrees of freedom, so we
-// enumerate a handful of principled orderings instead of all k! permutations (which the caller caps at 120,
-// SKIPPING the biggest go-off hands). The rules (user-specified):
-//   * mana rituals -> cheapest-first (each funds the next); never searched among themselves;
-//   * Irencrag Feat ("cast only one more spell") -> immediately before the finisher;
-//   * finisher (Dragonstorm / Apex / a closing Dragon) -> last;
-//   * multiple Desperate Ritual vs Seething Song -> two variants: splice-AFTER (preferred, splice the
-//     Desperates once Seething's mana is up) and interleaved-by-cost (fallback, cast individually);
-//   * Ruby Medallion -> the one genuinely SEARCHED position: tried at every slot so the rollout keeps the
-//     earliest that still goes off (earlier discounts more red rituals).
-// The identity (given) order is always included so the search can never do worse than the canonical line.
-// Returns index-orderings over `reorder`; the caller applies + dedups-by-end-state + scores each.
+// Targeted cast-ORDERING candidates for Dragonstorm (WantsCastOrderingSearch; see
+// docs/design/dragonstorm-cast-order-search.md). The combo is a CHEAPEST-FIRST self-funding ritual chain with
+// only a few real degrees of freedom, so we enumerate a handful of principled orderings instead of all k!
+// permutations (which the caller caps at 120, SKIPPING the biggest go-off hands). The rules (user-specified):
+// * mana rituals -> cheapest-first (each funds the next); never searched among themselves; * Irencrag Feat
+// ("cast only one more spell") -> immediately before the finisher; * finisher (Dragonstorm / Apex / a closing
+// Dragon) -> last; * multiple Desperate Ritual vs Seething Song -> two variants: splice-AFTER (preferred,
+// splice the Desperates once Seething's mana is up) and interleaved-by-cost (fallback, cast individually); *
+// Ruby Medallion -> the one genuinely SEARCHED position: tried at every slot so the rollout keeps the
+// earliest that still goes off (earlier discounts more red rituals). The identity (given) order is always
+// included so the search can never do worse than the canonical line. Returns index-orderings over `reorder`;
+// the caller applies + dedups-by-end-state + scores each.
 //
 // NOTE (2026-07-23): the >=2-Medallion block insertion below is a theoretical hole -- it never generates a
 // STAGGERED line ("one Medallion early to discount the red rituals, the next once the cheaper chain funds
 // it"), and the full-permutation oracle's k!<=120 cap skips exactly those k>=6 hands. Tried behind
-// MTG_MEDALLION_SPLIT (non-decreasing per-Medallion slot placement) and MEASURED uniformly ~+0.005t WORSE
-// on Dragonstorm d5 (s700001/2/3): the extra orderings cost search budget with no realized upside -- the
-// subset enumerator already offers single-/no-Medallion lines, so "just play one" (usually best) is
-// handled by plan selection, and "M1 -> ritual -> M2" is rarely optimal. NOT adopted; block insertion kept.
+// MTG_MEDALLION_SPLIT (non-decreasing per-Medallion slot placement) and MEASURED uniformly ~+0.005t WORSE on
+// Dragonstorm d5 (s700001/2/3): the extra orderings cost search budget with no realized upside -- the subset
+// enumerator already offers single-/no-Medallion lines, so "just play one" (usually best) is handled by plan
+// selection, and "M1 -> ritual -> M2" is rarely optimal. NOT adopted; block insertion kept.
 static std::vector<std::vector<int>>
 DragonstormCastOrderings(const std::vector<Action>& reorder)
 {
@@ -7538,7 +7537,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
-        // Payoff-prune (Hook 29): drop a ritual-accelerant subset that casts no payoff
+        // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex) from the SEARCH branch list -- this is where the freed budget
         // comes from. Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-gated; inert
         // for every other deck -> byte-identical. storm_in_hand=false here on purpose: the storm-hold
@@ -8243,10 +8242,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         if (reorder.size() < 2) { ordered.push_back(std::move(p)); continue; }
 
-        // Candidate orderings to try. Dragonstorm (Hook 28) uses the TARGETED generator (cheapest-first
-        // chain + Irencrag-before-finisher + Medallion-position + Desperate/Seething splice variants) --
-        // O(k) principled orderings, and it covers the big go-off hands the k! cap below would skip. The
-        // global A/B knob (MTG_SEARCH_ORDER on a non-Dragonstorm deck) keeps the full-permutation search.
+        // Candidate orderings to try. Dragonstorm (WantsCastOrderingSearch) uses the TARGETED generator
+        // (cheapest-first chain + Irencrag-before-finisher + Medallion-position + Desperate/Seething splice
+        // variants) -- O(k) principled orderings, and it covers the big go-off hands the k! cap below would
+        // skip. The global A/B knob (MTG_SEARCH_ORDER on a non-Dragonstorm deck) keeps the full-permutation
+        // search.
         std::vector<std::vector<int>> orderings;
         if (ResolveProvider(state).WantsCastOrderingSearch())
         {
@@ -11481,16 +11481,16 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
     auto makes_land = [](const TurnSolver::Plan& p)
     { return p.land_decided && !p.land_to_play.empty(); };
 
-    // Tempo bonus: the reshuffle averaging shuffles the TRUE library away, so its mean future has
-    // NORMAL land density -- it is optimistic about mana and undervalues a land drop as screw-insurance.
-    // In a truly land-light game (invisible to the averaging) skipping the drop is a permanent tempo
-    // loss (gi11: defer scores 0.5t "better" yet durdles to T8; the land drop wins T5). Reward
-    // developing mana: subtract round(bonus*K) from any land-drop plan before picking the min -- breaks
-    // decisions the objective considers close without overriding a real win-turn difference > bonus.
-    // The bonus (avg-turns) is the ARCHETYPE PROVIDER's call (Hook 22): GenericProvider = safe gated
-    // default, AntiLifegain = aggressive/ungated, land-pitch decks protected by the mana-base gate +
-    // PreferHoldLandDrop. MTG_NC_TEMPO(/_LANDS), when set, OVERRIDE the provider with a flat gated bonus
-    // (the A/B sweep controls). Provider default 0 for unknown decks + env unset => byte-identical.
+    // Tempo bonus: the reshuffle averaging shuffles the TRUE library away, so its mean future has NORMAL land
+    // density -- it is optimistic about mana and undervalues a land drop as screw-insurance. In a truly
+    // land-light game (invisible to the averaging) skipping the drop is a permanent tempo loss (gi11: defer
+    // scores 0.5t "better" yet durdles to T8; the land drop wins T5). Reward developing mana: subtract
+    // round(bonus*K) from any land-drop plan before picking the min -- breaks decisions the objective
+    // considers close without overriding a real win-turn difference > bonus. The bonus (avg-turns) is the
+    // ARCHETYPE PROVIDER's call (NcLandDropTempoBonus): GenericProvider = safe gated default, AntiLifegain =
+    // aggressive/ungated, land-pitch decks protected by the mana-base gate + PreferHoldLandDrop.
+    // MTG_NC_TEMPO(/_LANDS), when set, OVERRIDE the provider with a flat gated bonus (the A/B sweep
+    // controls). Provider default 0 for unknown decks + env unset => byte-identical.
     static const bool   s_tempo_env_set = EnvSet("MTG_NC_TEMPO");
     static const double s_env_tempo     = []{ const char* e = std::getenv("MTG_NC_TEMPO");
                                               return (e && *e) ? std::atof(e) : 0.0; }();

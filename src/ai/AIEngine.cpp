@@ -2176,7 +2176,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Honour the plan's SEARCHED breakpoint continuation. The search ranked this turn assuming
         // candidate k of the breakpoint's own plan list, so the executor must play candidate k --
         // re-solving greedily here would realise a turn the search never scored (a rollout/execution
-        // divergence, exactly the class of bug the Hook 21/22 mirrors below exist to prevent).
+        // divergence, exactly the class of bug the HoldDeferredDrop* mirrors below exist to prevent).
         // EnumerateBreakpointPlans is the SHARED list (fan-out suppressed) ApplyPlanDirect indexed.
         // Inert when bp_choice < 0, i.e. for every plan under MTG_BP_SEARCH=0.
         TurnSolver::Plan extra;
@@ -2241,12 +2241,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // drawn Reliquary Tower when flooding (see its pre-pass), keeping the whole draw as
         // Land's Edge ammo instead of discarding it at cleanup (gi=65). Only when flooding, so
         // non-flood draw turns keep their normal land timing. HOLD the drop when the hand is the
-        // marginal Land's Edge ammo for a lethal this turn (Hook 21, mirrors the search's
+        // marginal Land's Edge ammo for a lethal this turn (HoldDeferredDropForLethal, mirrors
+        // the search's
         // play_drawn_flood_keep_land) so the deferred drop isn't spent out of the ammo pool.
-        // Hook 22 is mirrored here for the SAME reason as Hook 21: the rollout applies it in
+        // HoldDeferredDropForFurtherDig is mirrored here for the SAME reason as
+        // HoldDeferredDropForLethal: the rollout applies it in
         // play_drawn_flood_keep_land, so an executor that developed the drop anyway would play a land
         // the proved line does not -- a rollout/execution divergence, not a heuristic disagreement.
-        // The keep-land case (Hook 13) still goes through TryPlayLand's own Reliquary pre-pass.
+        // The keep-land case (PostDrawKeepLandName) still goes through TryPlayLand's own Reliquary pre-pass.
         // Skipped entirely when the continuation was SEARCHED: the drop is then part of the scored
         // plan (played above, or deliberately deferred), and a static flood-keep play on top would
         // be exactly the un-searched land choice this whole mechanism removes.

@@ -294,7 +294,7 @@ bool GenericProvider::ShouldAttackWith(const GameState&, const Permanent&) const
 
 int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) const
 {
-    // See DecisionProvider.h Hook 17. Reliable deck-agnostic order so the canonical line
+    // See DecisionProvider::CastOrderRank. Reliable deck-agnostic order so the canonical line
     // realises what EnumeratePlans projects (prowess), at no search cost. Tiers (lower =
     // earlier):
     //   10 creatures: before noncreature spells, so a haste prowess creature catches the
@@ -352,7 +352,7 @@ int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) 
 std::vector<int> GenericProvider::XCandidates(const GameState&, const CardDefinition&,
                                               int max_affordable) const
 {
-    // See DecisionProvider.h Hook 18. In a goldfish, an {X} spell (X burn, X draw, X pump)
+    // See DecisionProvider::XCandidates. In a goldfish, an {X} spell (X burn, X draw, X pump)
     // wants all available mana: a larger X is never worse for closing the game. So the prune
     // proposes the single max-affordable value -- no branching. MTG_UNPRUNED opens the full
     // 1..max range so the unpruned-vs-pruned A/B can confirm the prune leaves nothing behind
@@ -370,7 +370,7 @@ std::vector<int> GenericProvider::XCandidates(const GameState&, const CardDefini
 
 int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
 {
-    // See DecisionProvider.h Hook 24. Flexibility rank for the scarcity-first tap order (LOWER =
+    // See DecisionProvider::ManaSourceRank. Flexibility rank for the scarcity-first tap order (LOWER =
     // tap earlier). SPEND the least flexible first so the flexible sources stay available.
     const int active = s.active_player_index;
     // A COLOURLESS-only manland (Mutavault) has marginal mana (pays only generic) but real attack
@@ -1517,14 +1517,14 @@ bool TreasureHuntProvider::HoldDeferredDropForLethal(const GameState& s, int con
 
 bool TreasureHuntProvider::HoldDeferredDropForFurtherDig(const GameState& s, int controller) const
 {
-    // HOLD the still-open deferred drop when the hand is flooding, nothing keeps it yet, and another
-    // Treasure Hunt is castable THIS TURN. Developing now (the generic fallback) spends the only way
-    // to play a Reliquary Tower one dig too early: dig 2 then reveals the Tower with no drop left and
-    // the flood is discarded at cleanup instead of becoming Land's Edge ammo (s2 gi1: engine T5, human
-    // T4 -- the human held the drop through BOTH digs and played the revealed Tower). ADOPTED default
-    // ON; MTG_NO_TH_HOLD_FOR_DIG restores eager-develop for A/Bs (presence-tested, so =0 also
-    // disables). Preconditions guaranteed by the caller: pre-combat, drop open, Hook 21 declined,
-    // Hook 13 found no keep land.
+    // HOLD the still-open deferred drop when the hand is flooding, nothing keeps it yet, and another Treasure
+    // Hunt is castable THIS TURN. Developing now (the generic fallback) spends the only way to play a
+    // Reliquary Tower one dig too early: dig 2 then reveals the Tower with no drop left and the flood is
+    // discarded at cleanup instead of becoming Land's Edge ammo (s2 gi1: engine T5, human T4 -- the human
+    // held the drop through BOTH digs and played the revealed Tower). ADOPTED default ON;
+    // MTG_NO_TH_HOLD_FOR_DIG restores eager-develop for A/Bs (presence-tested, so =0 also disables).
+    // Preconditions guaranteed by the caller: pre-combat, drop open, HoldDeferredDropForLethal declined,
+    // PostDrawKeepLandName found no keep land.
     static const bool s_off = EnvOn("MTG_NO_TH_HOLD_FOR_DIG");
     if (s_off) { return false; }
 
@@ -1741,7 +1741,7 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
     return lands >= kBankThreshold;
 }
 
-// ---- NC tempo bonus (Hook 22) -----------------------------------------------
+// ---- NC tempo bonus (NcLandDropTempoBonus) -----------------------------------------------
 
 static int CountLandsInPlay(const GameState& s, int controller)
 {
@@ -1805,13 +1805,13 @@ HinataProvider::TutorCandidates(const GameState& s, int controller, const CardPa
         // Hinata not in library (all copies drawn/played but none counted above is rare) -> fall through.
     }
 
-    // Hinata is online: return the full legal set (search-primary -- still branches over everything),
-    // but ORDER it by situational need (Hook 19). The plan tie-break is win-turn then plan.value, and
-    // every tutor candidate shares the tutor spell's eval, so win-turn-equal fetches tie on value and
-    // the FIRST listed wins. Ordering by SituationalCardRank therefore makes an indifferent
-    // (clairvoyant-tie) search fetch the most-wanted MISSING piece -- e.g. Reality Spasm (rank 750)
-    // over a third Crackle when two are already in hand (rank 150, duplicate) -- instead of an
-    // arbitrary library-order card. Pure tie-break: a fetch that wins strictly sooner still wins.
+    // Hinata is online: return the full legal set (search-primary -- still branches over everything), but
+    // ORDER it by situational need (SituationalCardRank). The plan tie-break is win-turn then plan.value, and
+    // every tutor candidate shares the tutor spell's eval, so win-turn-equal fetches tie on value and the
+    // FIRST listed wins. Ordering by SituationalCardRank therefore makes an indifferent (clairvoyant-tie)
+    // search fetch the most-wanted MISSING piece -- e.g. Reality Spasm (rank 750) over a third Crackle when
+    // two are already in hand (rank 150, duplicate) -- instead of an arbitrary library-order card. Pure
+    // tie-break: a fetch that wins strictly sooner still wins.
     std::vector<std::string> cands = GenericProvider::TutorCandidates(s, controller, pp);
     auto rank_of = [&](const std::string& name) -> int
     {
@@ -1842,7 +1842,7 @@ bool HinataProvider::ShouldEmitUntapRitual(const GameState& s) const
 }
 bool HinataProvider::BranchSoulfireOwnTargets(const GameState& s) const  { return HinataInPlay(s); }
 
-// Situational "what do I need THIS turn" ranking (Hook 19). HIGHER = more wanted. The decisive
+// Situational "what do I need THIS turn" ranking (SituationalCardRank). HIGHER = more wanted. The decisive
 // idea is that situational NEED overrides static card power: a land tops the list on a turn we need
 // the land drop (even though a land is a generically weak card), and once mana is covered the
 // MISSING combo pieces outrank the digging cantrips, which outrank the dead/duplicate payoffs.
@@ -2190,7 +2190,7 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
     return {};   // lone, non-lethal -> HOLD the combo piece
 }
 
-// Magma Opus scaled-cast (face-damage) variants (Hook 28) -- the DECK-SPECIFIC cost model.
+// Magma Opus scaled-cast (face-damage) variants (ScaledCastVariants) -- the DECK-SPECIFIC cost model.
 //
 // Magma Opus: "deal 4 damage divided among any number of targets. Tap two target permanents." Hinata
 // reduces the cost {1} per DISTINCT target, so the cheapest cast SPREADS the 4 one-per-target across

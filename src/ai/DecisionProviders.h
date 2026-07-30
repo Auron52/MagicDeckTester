@@ -53,10 +53,11 @@ enum class UnprunedGate
     AccelPrefix,  // Dragonstorm acceleration-prefix collapse disabled: enumerate the full 2^K ritual-
                   // accelerant powerset instead of only the K+1 cheapest-first prefixes (DragonstormProvider)
     PayoffPrune,  // Dragonstorm payoff-prune disabled: keep the ritual-accelerant subsets that cast no
-                  // payoff (Dragon/Dragonstorm/Apex) instead of dropping them (DragonstormProvider, Hook 29)
+                  // payoff (Dragon/Dragonstorm/Apex) instead of dropping them
+                  // (DragonstormProvider::PrunesAcceleratorWithoutPayoff)
     SpliceCollapse, // Dragonstorm Desperate Ritual splice-count collapse disabled: enumerate the full
                   // k=0..N-1 splice fan-out per copy instead of only the bare + max-chain families
-                  // (DragonstormProvider, Hook 30)
+                  // (DragonstormProvider::UseSpliceCollapse)
     _Count
 };
 
@@ -193,13 +194,13 @@ public:
     // price), so while no Hinata is in play or hand the dig HUNTS her -- keep Hinata, keep only
     // the lands/ramp/cantrips that cast or continue finding her, and bottom the dead payoffs.
     bool ScryKeepOnTop(const GameState&, const Card&) const override;
-    // Ponder reorder keep-vs-shuffle (Hook 9b): Hinata is in a class of her own -- while she is not
+    // Ponder reorder keep-vs-shuffle (KeepReorderTop): Hinata is in a class of her own -- while she is not
     // in play or hand the combo (and even an affordable Soulfire) is out of reach, so a top set is
     // only worth keeping if it advances toward her: it contains Hinata, OR a dig/tutor toward her
     // plus at least one other useful card. Otherwise shuffle and dig fresh. Once she is online, keep
     // iff any card is wanted (the generic rank-threshold behaviour).
     bool KeepReorderTop(const GameState&, const std::vector<Card>&) const override;
-    // Situational "what do I need THIS turn" ranking (Hook 19): drives EI / Ponder / Preordain
+    // Situational "what do I need THIS turn" ranking (SituationalCardRank): drives EI / Ponder / Preordain
     // card selection deterministically. ScryKeepOnTop above is re-expressed as a threshold on this
     // rank, so the keep/bottom gate and the ordering share one source of truth.
     int  SituationalCardRank(const GameState&, const Card&) const override;
@@ -215,14 +216,14 @@ public:
     // second-main) Crackle wants. In a goldfish there are no blockers and Hinata has no Exalted, so
     // such a dork has ZERO reason to attack. Keep it untapped to fund the post-combat payoff.
     bool ShouldAttackWith(const GameState&, const Permanent&) const override;
-    // Hold a LONE Crackle with Power as a combo piece (Hook 18 / XCandidates): casting a single
+    // Hold a LONE Crackle with Power as a combo piece (XCandidates): casting a single
     // non-lethal Crackle for chip damage throws away the Reality-Spasm -> big-Crackle lethal the
     // shallow search cannot see past its horizon (the combo pays off several turns later). Default:
     // HOLD the lone Crackle unless casting it wins THIS turn (5X + optimistic attack >= opp life) or
     // a second copy is already in hand. Off-switch MTG_NO_HINATA_HOLD_CRACKLE. Deterministic on the
     // GameState, so lockstep across the search enumeration, the rollout, and the executor.
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
-    // Magma Opus scaled-cast (face-damage) variants (Hook 28): the deck-specific cost model. More
+    // Magma Opus scaled-cast (face-damage) variants (ScaledCastVariants): the deck-specific cost model. More
     // face damage = fewer distinct spread/tap targets = less Hinata discount = more mana. ADOPTED
     // default-ON (2026-07-21); MTG_LEGACY_MAGMA -> {} -> byte-identical over-count path. See the .cpp.
     std::vector<ScaledCastVariant>
@@ -246,32 +247,33 @@ public:
     // it" is now the GENERIC card-parameter tiering -- it was written out identically here and in
     // HinataProvider, and any future ritual deck now inherits it from its card data.
 
-    // Opt in to the acceleration-prefix collapse (Hook 27): the go-off hand's ritual accelerants are
-    // enumerated cheapest-first prefix-only rather than powerset. HEURISTIC, MTG_UNPRUNED(AccelPrefix)-
-    // openable. See docs/design/dragonstorm-search-pruning.md (Step 2).
+    // Opt in to the acceleration-prefix collapse (UseAccelPrefixCollapse): the go-off hand's ritual
+    // accelerants are enumerated cheapest-first prefix-only rather than powerset. HEURISTIC,
+    // MTG_UNPRUNED(AccelPrefix)- openable. See docs/design/dragonstorm-search-pruning.md (Step 2).
     bool UseAccelPrefixCollapse() const override { return true; }
 
-    // Opt in to the Desperate Ritual splice-count collapse (Hook 30): emit only the bare + max-chain
-    // splice families per copy and keep prefix selections, taming the splice-count powerset that
+    // Opt in to the Desperate Ritual splice-count collapse (UseSpliceCollapse): emit only the bare +
+    // max-chain splice families per copy and keep prefix selections, taming the splice-count powerset that
     // dominates the go-off rollout after the accel/Lotus prefix collapses. HEURISTIC,
     // MTG_UNPRUNED(SpliceCollapse)-openable. See docs/design/dragonstorm-search-pruning.md.
     bool UseSpliceCollapse() const override { return true; }
 
-    // Opt in to the cast-ORDERING search (Hook 28): let the search FIND the best cast order for a combo
-    // turn instead of the fixed CastOrderRank bucket. The fixed order is needed for search/executor
-    // lockstep + human play, but it reorders ~12 combos into worse lines AND leaves broad value on the
-    // table; searching the order recovers it (regression d3 5.56->4.95, d5 5.36->4.82). See
+    // Opt in to the cast-ORDERING search (WantsCastOrderingSearch): let the search FIND the best cast order
+    // for a combo turn instead of the fixed CastOrderRank bucket. The fixed order is needed for
+    // search/executor lockstep + human play, but it reorders ~12 combos into worse lines AND leaves broad
+    // value on the table; searching the order recovers it (regression d3 5.56->4.95, d5 5.36->4.82). See
     // docs/design/dragonstorm-cast-order-search.md.
     bool WantsCastOrderingSearch() const override { return true; }
 
-    // Payoff-prune (Hook 29): allow plans that cast a Dragon / Dragonstorm / Apex; prune the other
-    // one-turn ritual-accelerant lines (their float has no same-turn sink here). Default ON for
-    // Dragonstorm; the callsites gate it with !DecisionUnpruned(UnprunedGate::PayoffPrune), so the
+    // Payoff-prune (PrunesAcceleratorWithoutPayoff): allow plans that cast a Dragon / Dragonstorm / Apex;
+    // prune the other one-turn ritual-accelerant lines (their float has no same-turn sink here). Default ON
+    // for Dragonstorm; the callsites gate it with !DecisionUnpruned(UnprunedGate::PayoffPrune), so the
     // standing MTG_UNPRUNED / MTG_UNPRUNE=payoffprune audit reverts to the full (unpruned) branch set.
-    // Measured (train+held-out): ~-0.055 turns, -42% rollout calls. See docs/design/dragonstorm-payoff-prune.md.
+    // Measured (train+held-out): ~-0.055 turns, -42% rollout calls. See
+    // docs/design/dragonstorm-payoff-prune.md.
     bool PrunesAcceleratorWithoutPayoff() const override { return true; }
     // CastCheapestFirstWithinTier: NOT overridden -- cheapest-first among same-tier accelerants is now
-    // the ROOT default (DecisionProvider Hook 30), shared with every ritual deck.
+    // the ROOT default (DecisionProvider::CastCheapestFirstWithinTier), shared with every ritual deck.
 
     // Float-colour collapse (Hook: ImpulseFloatColorRedOnly / RestrictSacColorsToHasteAndRed). Apex of
     // Power floats RED only; Lotus Bloom floats RED unless a HASTE Dragon (Karrthus {4}{B}{R}{G} /
@@ -281,13 +283,13 @@ public:
     bool ImpulseFloatColorRedOnly()       const override { return true; }
     bool RestrictSacColorsToHasteAndRed() const override { return true; }
 
-    // Go-off lethal model (Hook 14). The Dragonstorm storm go-off (rituals -> Dragonstorm -> N Dragons
-    // -> Scourge ETB pings) IS this turn's lethal, but Dragonstorm the spell has direct_damage 0 and its
-    // dragons resolve later, so the engine's generic win-check (attack + direct) never sees it. Without
-    // this the greedy/rollout `wins` check misses every go-off, so each leaf casts Dragonstorm late by
-    // board-dev and the search can't tell a T3 kill from a T5 durdle (flat win-turn signal). This projects
-    // the storm-put Dragons' ETB burst so `wins` fires for real go-offs; execution stays the arbiter (an
-    // over-projection only STEERS the pick, never fabricates a win). See
+    // Go-off lethal model (HasExtraLethalModel / ExtraLethalDamage). The Dragonstorm storm go-off (rituals ->
+    // Dragonstorm -> N Dragons -> Scourge ETB pings) IS this turn's lethal, but Dragonstorm the spell has
+    // direct_damage 0 and its dragons resolve later, so the engine's generic win-check (attack + direct)
+    // never sees it. Without this the greedy/rollout `wins` check misses every go-off, so each leaf casts
+    // Dragonstorm late by board-dev and the search can't tell a T3 kill from a T5 durdle (flat win-turn
+    // signal). This projects the storm-put Dragons' ETB burst so `wins` fires for real go-offs; execution
+    // stays the arbiter (an over-projection only STEERS the pick, never fabricates a win). See
     // docs/design/dragonstorm-goff-lethal-recognition.md.
     bool HasExtraLethalModel() const override;   // default ON; off-switch MTG_NO_DRAGONSTORM_GOFF
     int  ExtraLethalDamage(const GameState&,

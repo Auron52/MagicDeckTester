@@ -34,11 +34,11 @@ inline bool RockRampEnumEnabled()
     return on;
 }
 
-// A/B hatch (default OFF): restore the legacy canonical cast order, i.e. provider RANK only, with
-// plan order breaking every tie. Set MTG_LEGACY_CAST_TIER_ORDER=1 to disable the cheapest-first
-// ordering of same-tier mana accelerants (DecisionProvider Hook 30) globally -> byte-identical to
-// the pre-2026-07-30 engine. Read once by the shared CastOrderLess (ManaPayment.cpp), which both
-// the rollout and the executor sort with, so the two can never disagree.
+// A/B hatch (default OFF): restore the legacy canonical cast order, i.e. provider RANK only, with plan order
+// breaking every tie. Set MTG_LEGACY_CAST_TIER_ORDER=1 to disable the cheapest-first ordering of same-tier
+// mana accelerants (DecisionProvider::CastCheapestFirstWithinTier) globally -> byte-identical to the
+// pre-2026-07-30 engine. Read once by the shared CastOrderLess (ManaPayment.cpp), which both the rollout and
+// the executor sort with, so the two can never disagree.
 inline bool LegacyCastTierOrder()
 {
     static const bool on = EnvOn("MTG_LEGACY_CAST_TIER_ORDER");

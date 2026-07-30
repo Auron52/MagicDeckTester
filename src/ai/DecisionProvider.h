@@ -21,6 +21,43 @@
 // The interface grows one hook at a time as decisions migrate out of the engine (see
 // the staged plan). Some signatures are deliberately card-specific for now and may be
 // generalized once the cross-archetype patterns settle.
+//
+// ---------------------------------------------------------------------------------------------
+// LEGACY "Hook N" DECODER -- do NOT add new numbers.
+//
+// Hooks used to be identified by number ("Hook 26 force-keep", "Hook 30 splice collapse") in code
+// comments, commit messages, and docs/design/. The numbers COLLIDED -- 30, 22 and 16 each named
+// two or three unrelated hooks -- which made the historical record ambiguous and had already
+// produced a wrong cross-reference (ScaledCastVariants was labelled "Hook 28", which is really
+// WantsCastOrderingSearch). Numbering is therefore retired: hooks are referred to by METHOD NAME,
+// which is unique and greppable. This table decodes every legacy number so old commits and design
+// docs stay readable. Where a number is listed twice, BOTH readings existed -- disambiguate by the
+// surrounding text.
+//
+//    1  TutorCandidates                 16  ShouldAttackWith  |  OpponentPlaysLands
+//   1b  TutorToBattlefieldPutOrder      17  CastOrderRank
+//    2  FetchCandidates                 18  XCandidates
+//    3  ShouldEmitRiskyAltPayload       19  SituationalCardRank
+//    4  CanAutoFireAltPayload           20  PreferHoldLandDrop  |  ShouldEmitUntapRitual
+//    5  CastEnablerFirst                21  HoldDeferredDropForLethal  |  BranchSoulfireOwnTargets
+//    6  HasAnyDigSource /               22  HoldDeferredDropForFurtherDig  |  NcLandDropTempoBonus
+//       ShouldConsiderDig /                 |  EnumGroupCap
+//       SelectDigSource                23  FetchSearchCap
+//    7  LandsEdgeFireCount              24  ManaSourceRank
+//    8  WantVialCharge                  25  OpponentLifegainUseful
+//    9  ScryKeepOnTop                   26  KeepFloor
+//   9b  KeepReorderTop                  27  UseAccelPrefixCollapse
+//   10  DiscardLandsFirst               28  WantsCastOrderingSearch
+//   11  ShouldStageSpectacleDraw        29  PrunesAcceleratorWithoutPayoff
+//   12  ShouldCastDrawEngine            30  UseSpliceCollapse  |  CastCheapestFirstWithinTier
+//   13  PostDrawKeepLandName                |  ScaledCastVariants
+//   14  HasExtraLethalModel /
+//       ExtraLethalDamage
+//   15  ArchetypeCardValue
+//
+// Never assigned: no hook was ever numbered above 30. ImpulseFloatColorRedOnly /
+// RestrictSacColorsToHasteAndRed were added unnumbered.
+// ---------------------------------------------------------------------------------------------
 
 #include "../core/GameState.h"
 #include "../core/ManaPool.h"
@@ -45,56 +82,57 @@ class DecisionProvider
 public:
     virtual ~DecisionProvider() = default;
 
-    // Hook 1 -- tutor priority: ordered library card-name candidates for a tutor
+    // TutorCandidates -- tutor priority: ordered library card-name candidates for a tutor
     // (Idyllic / Enlightened). 1 = decided, >1 = search picks, {} = whiff.
     virtual std::vector<std::string>
     TutorCandidates(const GameState& s, int controller, const CardParams& pp) const = 0;
 
-    // Hook 1b -- tutor-TO-BATTLEFIELD put ORDER + SELECTION (Dragonstorm). Returns the ordered
-    // list of card NAMES to put onto the battlefield for a `tutor_to_battlefield` resolution that
-    // puts up to `max_puts` (= the storm total, already capped at library Dragons by the caller).
-    // Names may REPEAT to honour multiplicity (two "Scourge of Valkas" entries == put 2 Scourges);
-    // the returned length is <= max_puts. Unlike Hook 1 (which the engine expands to every library
-    // copy of each listed name in library order), this is an EXACT max_puts-aware SUBSET selection
-    // PLUS a single deterministic put-order -- so when N is small the provider can reserve a slot
-    // for a same-turn-relevant Dragon (the haste-Dragon) instead of letting a run of Scourges crowd
-    // it out. The engine keeps the PUT mechanism (find/remove/enter + OnDragonEnters cascade +
-    // reshuffle); only the which-and-in-what-order decision is provider-owned. Default {} (empty) ->
-    // the engine falls back to Hook 1's library-order enumeration exactly as before, so every
-    // non-Dragonstorm deck (and Dragonstorm under MTG_UNPRUNED) stays byte-identical. Only
-    // DragonstormProvider overrides it. See PerformTutorToBattlefield + analyze-Dragonstorm.md.
+    // TutorToBattlefieldPutOrder -- tutor-TO-BATTLEFIELD put ORDER + SELECTION (Dragonstorm). Returns the
+    // ordered list of card NAMES to put onto the battlefield for a `tutor_to_battlefield` resolution that
+    // puts up to `max_puts` (= the storm total, already capped at library Dragons by the caller). Names may
+    // REPEAT to honour multiplicity (two "Scourge of Valkas" entries == put 2 Scourges); the returned length
+    // is <= max_puts. Unlike TutorCandidates (which the engine expands to every library copy of each listed
+    // name in library order), this is an EXACT max_puts-aware SUBSET selection PLUS a single deterministic
+    // put-order -- so when N is small the provider can reserve a slot for a same-turn-relevant Dragon (the
+    // haste-Dragon) instead of letting a run of Scourges crowd it out. The engine keeps the PUT mechanism
+    // (find/remove/enter + OnDragonEnters cascade + reshuffle); only the which-and-in-what-order decision is
+    // provider-owned. Default {} (empty) -> the engine falls back to TutorCandidates' library-order
+    // enumeration exactly as before, so every non-Dragonstorm deck (and Dragonstorm under MTG_UNPRUNED) stays
+    // byte-identical. Only DragonstormProvider overrides it. See PerformTutorToBattlefield +
+    // analyze-Dragonstorm.md.
     virtual std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState& /*s*/, int /*controller*/,
                                const CardParams& /*pp*/, int /*max_puts*/) const { return {}; }
 
-    // Hook 2 -- fetch priority: ordered land-name candidates for a fetchland.
+    // FetchCandidates -- fetch priority: ordered land-name candidates for a fetchland.
     virtual std::vector<std::string>
     FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const = 0;
 
-    // Hook 4 -- auto-fire safe alt payload: per-card predicate (the engine keeps the
+    // CanAutoFireAltPayload -- auto-fire safe alt payload: per-card predicate (the engine keeps the
     // deterministic re-scan loop; only the "is this free payload safe to fire" decision
     // is provider-owned).
     virtual bool CanAutoFireAltPayload(const GameState& s, int controller,
                                        const CardDefinition& def) const = 0;
 
-    // Hook 6 -- dig gate + source (Treasure Hunt / Land's Edge cycling/sac-draw).
+    // HasAnyDigSource / ShouldConsiderDig / SelectDigSource -- dig gate + source
+    // (Treasure Hunt / Land's Edge cycling/sac-draw).
     virtual bool        HasAnyDigSource (const GameState& s) const = 0;
     virtual bool        ShouldConsiderDig(const GameState& s) const = 0;
     virtual std::string SelectDigSource (const GameState& s, const ManaPool& pool,
                                          bool& out_is_sac) const = 0;
 
-    // Hook 7 -- how many lands to discard to a Land's Edge this activation.
+    // LandsEdgeFireCount -- how many lands to discard to a Land's Edge this activation.
     virtual int LandsEdgeFireCount(const GameState& s, int rate) const = 0;
 
-    // Hook 8 -- whether to add an Aether Vial charge counter this upkeep.
+    // WantVialCharge -- whether to add an Aether Vial charge counter this upkeep.
     virtual bool WantVialCharge(const GameState& s, const Permanent& vial) const = 0;
 
-    // Hook 9 -- scry/surveil per-card keep decision: keep `top_card` on top (true) or
+    // ScryKeepOnTop -- scry/surveil per-card keep decision: keep `top_card` on top (true) or
     // bottom/bin it (false). The engine keeps the reorder/bin MECHANISM (ScryTop/
     // SurveilTop); only the keep DECISION is provider-owned.
     virtual bool ScryKeepOnTop(const GameState& s, const Card& top_card) const = 0;
 
-    // Hook 9b -- Ponder-style reorder keep-vs-shuffle: a SET decision over the cards looked at
+    // KeepReorderTop -- Ponder-style reorder keep-vs-shuffle: a SET decision over the cards looked at
     // (top N). Return true to KEEP them on top (SituationalCardRank then ORDERS them), false to
     // SHUFFLE them all away. Unlike the per-card ScryKeepOnTop gate, this judges the WHOLE set --
     // e.g. the Hinata deck must shuffle a top set that contains no way to advance toward Hinata,
@@ -106,17 +144,17 @@ public:
         return false;
     }
 
-    // Hook 5 -- cast-sequencing: should this hand cast go in the ENABLER-FIRST pass (cast
+    // CastEnablerFirst -- cast-sequencing: should this hand cast go in the ENABLER-FIRST pass (cast
     // + resolve before other spells, so a same-turn payload sees the enabler active)?
     // The engine keeps the multi-pass apply MECHANISM; only the partition is provider-owned.
     virtual bool CastEnablerFirst(const GameState& s, const std::string& card_name) const = 0;
 
-    // Hook 10 -- discard-to-7 policy: when shedding to hand size, prefer discarding a LAND
+    // DiscardLandsFirst -- discard-to-7 policy: when shedding to hand size, prefer discarding a LAND
     // first (true) over the highest-MV card (false). Used when a Land's Edge land outlet
     // makes lands ammunition. Required-piece protection stays engine-side.
     virtual bool DiscardLandsFirst(const GameState& s) const = 0;
 
-    // Hook 3 -- whether to EMIT a risky alt-cost payload (Reverent Silence: free, but its
+    // ShouldEmitRiskyAltPayload -- whether to EMIT a risky alt-cost payload (Reverent Silence: free, but its
     // destroy-all-enchantments wipes the caster's own Aria/Remedy) as a searched action.
     // The engine keeps the alt-cost preconditions (alt_lifegain_cost>0 + Forest control)
     // and builds the Action; this is the wipe-vs-value gate. (The forthcoming antilife
@@ -125,13 +163,13 @@ public:
     virtual bool ShouldEmitRiskyAltPayload(const GameState& s, int controller,
                                            const CardDefinition& def) const = 0;
 
-    // Hook 11 -- whether to enumerate spectacle-staging plan variants for a draw spell
+    // ShouldStageSpectacleDraw -- whether to enumerate spectacle-staging plan variants for a draw spell
     // (cast a cheap damage spell first to unlock its cheaper Spectacle cost). The engine
     // keeps the variant-building mechanism; this is the archetype gate.
     virtual bool ShouldStageSpectacleDraw(const GameState& s, int controller,
                                           const CardDefinition& draw_def) const = 0;
 
-    // Hook 12 -- whether to CAST a "flood engine" card (Treasure Hunt's DrawUntilNonland,
+    // ShouldCastDrawEngine -- whether to CAST a "flood engine" card (Treasure Hunt's DrawUntilNonland,
     // and cascade/retrace cards like Throes of Chaos that can cascade into Treasure Hunt).
     // Firing the engine when the drawn lands cannot be used wastes them: they hit cleanup
     // discard with no Land's Edge to throw them. The engine asks this BEFORE emitting the
@@ -142,21 +180,20 @@ public:
     virtual bool ShouldCastDrawEngine(const GameState& s, int controller,
                                       const CardDefinition& def) const = 0;
 
-    // Hook 14 -- deck-specific extra damage toward THIS turn's lethal, BEYOND the generic
-    // combat + direct-damage total the engine already sums. This is the Treasure Hunt /
-    // Land's Edge model: lands in hand are Land's Edge ammunition, and a clairvoyant Treasure
-    // Hunt cast this turn adds the run of lands on top of the library as further ammo. `casting`
-    // lists the CardDefinitions this plan casts this turn, so the provider counts a Land's Edge
-    // or Treasure Hunt being cast NOW (not only one already on the battlefield). The engine keeps
-    // the generic win-check (projected attackers + direct damage + THIS addend >= opp life); only
-    // the deck-specific addend is provider-owned. HasExtraLethalModel() is the cheap gate: when
-    // false the engine skips building `casting` entirely (byte-identical fast path), so a deck
-    // with no such model pays nothing. Generic = false / 0.
+    // HasExtraLethalModel / ExtraLethalDamage -- deck-specific extra damage toward THIS turn's lethal, BEYOND
+    // the generic combat + direct-damage total the engine already sums. This is the Treasure Hunt / Land's
+    // Edge model: lands in hand are Land's Edge ammunition, and a clairvoyant Treasure Hunt cast this turn
+    // adds the run of lands on top of the library as further ammo. `casting` lists the CardDefinitions this
+    // plan casts this turn, so the provider counts a Land's Edge or Treasure Hunt being cast NOW (not only
+    // one already on the battlefield). The engine keeps the generic win-check (projected attackers + direct
+    // damage + THIS addend >= opp life); only the deck-specific addend is provider-owned.
+    // HasExtraLethalModel() is the cheap gate: when false the engine skips building `casting` entirely
+    // (byte-identical fast path), so a deck with no such model pays nothing. Generic = false / 0.
     virtual bool HasExtraLethalModel() const = 0;
     virtual int  ExtraLethalDamage(const GameState& s,
                                    const std::vector<const CardDefinition*>& casting) const = 0;
 
-    // Hook 15 -- archetype-specific per-card VALUE for the candidate-ordering heuristic
+    // ArchetypeCardValue -- archetype-specific per-card VALUE for the candidate-ordering heuristic
     // (TurnSolver's EvalCard), for cards whose worth is a combo / clairvoyant assumption rather
     // than a generic single-card estimate. The Treasure Hunt provider values a Treasure Hunt
     // (clairvoyant count of lands on top of the library x Land's Edge rate) and a Land's Edge
@@ -166,7 +203,7 @@ public:
     virtual bool ArchetypeCardValue(const GameState& s, const CardDefinition& def,
                                     int dmg_unit, int& out) const = 0;
 
-    // Hook 17 -- cast-order rank for a non-sacrifice hand cast (LOWER = cast earlier). The
+    // CastOrderRank -- cast-order rank for a non-sacrifice hand cast (LOWER = cast earlier). The
     // engine stable-sorts the turn's hand casts by this rank, so the RELIABLE ordering rules
     // live here as a heuristic instead of in an expensive (and budget-diluting) permutation
     // search. The point is to make the canonical line REALISE what EnumeratePlans already
@@ -180,7 +217,7 @@ public:
     // Archetypes override (antilife: enablers rank 0 so a same-turn payload sees the flip).
     virtual int CastOrderRank(const GameState& s, const CardDefinition& def) const = 0;
 
-    // Hook 18 -- candidate X values for an {X} spell (a branching-PRUNE heuristic). The engine
+    // XCandidates -- candidate X values for an {X} spell (a branching-PRUNE heuristic). The engine
     // asks BEFORE emitting cast variants and emits one cast per returned value (the variants
     // share hand_index, so they are mutually exclusive in the plan), letting the search pick
     // among the narrowed set. `max_affordable` is the largest X the current mana can pay (spare
@@ -190,7 +227,7 @@ public:
     virtual std::vector<int> XCandidates(const GameState& s, const CardDefinition& def,
                                          int max_affordable) const = 0;
 
-    // Hook 16 -- combat: should this eligible creature be DECLARED as an attacker this turn?
+    // ShouldAttackWith -- combat: should this eligible creature be DECLARED as an attacker this turn?
     // The engine keeps combat eligibility (CanAttackFull: summoning sickness, tap state,
     // haste) and the damage MECHANISM; this is only the attack/hold DECISION over an
     // already-eligible attacker. Generic = true (attack with everything that can attack --
@@ -201,7 +238,7 @@ public:
     // override never makes the search predict an attack the executor won't make.
     virtual bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const = 0;
 
-    // Hook 13 -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
+    // PostDrawKeepLandName -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
     // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
     // the Treasure-Hunt provider returns a drawn no-max-hand-size land (Reliquary Tower) when the
     // hand is flooding and no such land is already in play, so the whole draw is KEPT as Land's
@@ -210,7 +247,7 @@ public:
     // the open-land-drop precondition; only this card-choice is provider-owned. Generic = "".
     virtual std::string PostDrawKeepLandName(const GameState& s, int controller) const = 0;
 
-    // Hook 19 -- SITUATIONAL card rank: "how much do I want THIS card on THIS turn" (HIGHER =
+    // SituationalCardRank -- SITUATIONAL card rank: "how much do I want THIS card on THIS turn" (HIGHER =
     // more wanted). Unlike ScryKeepOnTop (a binary keep-on-top / bottom gate) this is a continuous
     // priority that lets the dig spells (Expressive Iteration, Ponder, Preordain) ORDER their
     // looked-at cards DETERMINISTICALLY -- most-wanted to hand/top, least-wanted to bottom -- instead
@@ -229,59 +266,59 @@ public:
         return ScryKeepOnTop(s, card) ? 1 : 0;
     }
 
-    // Hook 20 -- land-banking: among EQUAL-VALUE plans, prefer HOLDING the land drop (play no land)
-    // over developing it. Burn banks spare lands once it has enough mana (its curve tops at MV 2) so
-    // a future topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1).
-    // This only INVERTS the develop tiebreak in EnumeratePlansWithLand -- it never reorders plans of
-    // DIFFERENT value, so on a turn that actually casts Blaze the land drop (which raises the plan's
-    // value via landfall) still wins on value, not the tiebreak. Honoured identically in the search
-    // and the rollout (both call EnumeratePlansWithLand). DEFAULT false -> every other deck always
-    // develops (byte-identical); only BurnProvider opts in, gated on lands-in-play.
+    // PreferHoldLandDrop -- land-banking: among EQUAL-VALUE plans, prefer HOLDING the land drop (play no
+    // land) over developing it. Burn banks spare lands once it has enough mana (its curve tops at MV 2) so a
+    // future topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1). This only
+    // INVERTS the develop tiebreak in EnumeratePlansWithLand -- it never reorders plans of DIFFERENT value,
+    // so on a turn that actually casts Blaze the land drop (which raises the plan's value via landfall) still
+    // wins on value, not the tiebreak. Honoured identically in the search and the rollout (both call
+    // EnumeratePlansWithLand). DEFAULT false -> every other deck always develops (byte-identical); only
+    // BurnProvider opts in, gated on lands-in-play.
     virtual bool PreferHoldLandDrop(const GameState& s, int controller) const { return false; }
 
-    // Hook 21 -- after a deferred Treasure Hunt (DrawUntilNonland) resolves, HOLD the still-open
-    // land drop entirely rather than developing it, because the lands now in hand are the marginal
+    // HoldDeferredDropForLethal -- after a deferred Treasure Hunt (DrawUntilNonland) resolves, HOLD the
+    // still-open land drop entirely rather than developing it, because the lands now in hand are the marginal
     // Land's Edge ammunition for a lethal THIS turn. Generically the engine plays the deferred drop
-    // (play_drawn_flood_keep_land), but with Land's Edge in play a land in HAND is worth `rate`
-    // damage this turn; playing it as the drop removes it from the ammo pool and can drop the count
-    // below lethal -- and the fire-count heuristic (LandsEdgeHeuristicFireCount) then HOLDS the rest,
-    // slipping the kill a full turn (the s1 gi0 T4-vs-T3 shortfall: 10 lands in hand -> play one ->
-    // 9 -> no-longer-lethal -> hold -> win T4 instead of T3). Return true only when the hand is
-    // ALREADY lethal ammo and developing the drop would push it BELOW lethal (the marginal case), so
-    // the subsequent auto-fire discards them all for the kill. DEFAULT false -> every other deck (and
-    // every non-marginal TH turn) develops the drop byte-identically. The engine keeps the land-play
-    // MECHANISM and the open-drop precondition; only this hold decision is provider-owned.
+    // (play_drawn_flood_keep_land), but with Land's Edge in play a land in HAND is worth `rate` damage this
+    // turn; playing it as the drop removes it from the ammo pool and can drop the count below lethal -- and
+    // the fire-count heuristic (LandsEdgeHeuristicFireCount) then HOLDS the rest, slipping the kill a full
+    // turn (the s1 gi0 T4-vs-T3 shortfall: 10 lands in hand -> play one -> 9 -> no-longer-lethal -> hold ->
+    // win T4 instead of T3). Return true only when the hand is ALREADY lethal ammo and developing the drop
+    // would push it BELOW lethal (the marginal case), so the subsequent auto-fire discards them all for the
+    // kill. DEFAULT false -> every other deck (and every non-marginal TH turn) develops the drop
+    // byte-identically. The engine keeps the land-play MECHANISM and the open-drop precondition; only this
+    // hold decision is provider-owned.
     virtual bool HoldDeferredDropForLethal(const GameState& s, int controller) const { return false; }
 
-    // Hook 22 -- after a deferred Treasure Hunt (DrawUntilNonland) resolves with the drop still open
-    // and NO flood-keep land revealed (Hook 13 returned ""), HOLD the drop instead of developing it
-    // when ANOTHER dig is affordable this turn. The generic fallback develops the best normal land
-    // immediately (gi=881: an undeveloped drop meant a drawn land was discarded) -- correct for a turn
-    // with ONE dig, wrong for a turn with more digs to come: the drop is the ONLY way to play a
-    // Reliquary Tower, so spending it after dig 1 means a Reliquary revealed by dig 2 cannot be played
-    // and the whole flood is discarded at cleanup (the s2 gi1 T4-vs-T5 shortfall). Holding costs
-    // nothing structural: this same step runs again after the next dig and develops then if no keep
-    // land shows up. Return true only when the hand is ALREADY flooding, no no-max-hand-size land is
-    // in play, and another dig is payable from mana available WITHOUT the held land (so holding cannot
-    // starve the dig it is waiting for). DEFAULT false -> every other deck develops byte-identically.
-    // The engine keeps the open-drop precondition and the land-play mechanism; only the hold is here.
+    // HoldDeferredDropForFurtherDig -- after a deferred Treasure Hunt (DrawUntilNonland) resolves with the
+    // drop still open and NO flood-keep land revealed (PostDrawKeepLandName returned ""), HOLD the drop
+    // instead of developing it when ANOTHER dig is affordable this turn. The generic fallback develops the
+    // best normal land immediately (gi=881: an undeveloped drop meant a drawn land was discarded) -- correct
+    // for a turn with ONE dig, wrong for a turn with more digs to come: the drop is the ONLY way to play a
+    // Reliquary Tower, so spending it after dig 1 means a Reliquary revealed by dig 2 cannot be played and
+    // the whole flood is discarded at cleanup (the s2 gi1 T4-vs-T5 shortfall). Holding costs nothing
+    // structural: this same step runs again after the next dig and develops then if no keep land shows up.
+    // Return true only when the hand is ALREADY flooding, no no-max-hand-size land is in play, and another
+    // dig is payable from mana available WITHOUT the held land (so holding cannot starve the dig it is
+    // waiting for). DEFAULT false -> every other deck develops byte-identically. The engine keeps the
+    // open-drop precondition and the land-play mechanism; only the hold is here.
     virtual bool HoldDeferredDropForFurtherDig(const GameState& s, int controller) const { return false; }
 
-    // Hook 22 -- NON-CLAIRVOYANT search tempo bonus (avg win-turns) for MAKING a land drop this turn.
-    // The reshuffle-averaged NC search (TurnSolver::ReshuffleAvgChoosePlan) is mana-OPTIMISTIC: it
-    // shuffles the true library away, so its mean future has normal land density and it undervalues a
-    // land drop as screw-insurance -- it will DEFER the drop (a fetch-crack costs 1 life) and durdle in
-    // a genuinely land-light game. This bonus prices developing mana back: it is subtracted from the
-    // averaged win-turn of any land-drop plan before the min is taken, so it breaks decisions the
-    // objective considers close WITHOUT overriding a real win-turn difference larger than the bonus.
-    // DEFAULT 0.0 -> inert (only used inside the experimental MTG_NC_SEARCH path anyway). GenericProvider
-    // supplies the SAFE conservative rule (small bonus, only while still building the mana base, and
-    // never when PreferHoldLandDrop wants to bank/hold); archetypes that specifically benefit (mana-
-    // hungry, no land-as-resource mechanic) override to be more aggressive. Land-pitch decks (Land's
-    // Edge / Seismic Assault) are protected by the mana-base gate + PreferHoldLandDrop.
+    // NcLandDropTempoBonus -- NON-CLAIRVOYANT search tempo bonus (avg win-turns) for MAKING a land drop this
+    // turn. The reshuffle-averaged NC search (TurnSolver::ReshuffleAvgChoosePlan) is mana-OPTIMISTIC: it
+    // shuffles the true library away, so its mean future has normal land density and it undervalues a land
+    // drop as screw-insurance -- it will DEFER the drop (a fetch-crack costs 1 life) and durdle in a
+    // genuinely land-light game. This bonus prices developing mana back: it is subtracted from the averaged
+    // win-turn of any land-drop plan before the min is taken, so it breaks decisions the objective considers
+    // close WITHOUT overriding a real win-turn difference larger than the bonus. DEFAULT 0.0 -> inert (only
+    // used inside the experimental MTG_NC_SEARCH path anyway). GenericProvider supplies the SAFE conservative
+    // rule (small bonus, only while still building the mana base, and never when PreferHoldLandDrop wants to
+    // bank/hold); archetypes that specifically benefit (mana- hungry, no land-as-resource mechanic) override
+    // to be more aggressive. Land-pitch decks (Land's Edge / Seismic Assault) are protected by the mana-base
+    // gate + PreferHoldLandDrop.
     virtual double NcLandDropTempoBonus(const GameState& s, int controller) const { (void)s; (void)controller; return 0.0; }
 
-    // Hook 16 -- does this deck's goldfish opponent play lands? Decks whose spells target the
+    // OpponentPlaysLands -- does this deck's goldfish opponent play lands? Decks whose spells target the
     // OPPONENT'S permanents for value (Hinata: Magma Opus taps them, the spread-damage / cost-
     // reduction targeting points at them) need a realistic opponent board. When true the engine
     // gives the passive opponent one land on each of the first three turns (a realistic floor:
@@ -291,7 +328,7 @@ public:
     // needs to implement it.
     virtual bool OpponentPlaysLands() const { return false; }
 
-    // Hook 20 -- emit the untap-RITUAL cast variant for an {X} untap spell (Reality Spasm)?
+    // ShouldEmitUntapRitual -- emit the untap-RITUAL cast variant for an {X} untap spell (Reality Spasm)?
     // The variant floats mana for a same-turn payoff and only earns its keep with Hinata's
     // discount making the {X} free, so the solver must NOT branch on it otherwise. This is the
     // archetype GATE only -- the cost math and the ManaSourceCount stay engine-side. Was an inline
@@ -299,15 +336,15 @@ public:
     // non-Hinata deck, HinataProvider returns HinataInPlay(s).
     virtual bool ShouldEmitUntapRitual(const GameState& s) const { (void)s; return false; }
 
-    // Hook 21 -- branch on Soulfire Eruption's OWN-creature target count (0..K)? Own-targeting only
-    // pays off with Hinata's per-target discount (which can enable an otherwise-unaffordable cast)
-    // plus a deeper dig; without it the K+1 variants are dead weight every non-combo turn. The
-    // count itself (SoulfireOwnCreatureCount) stays an engine mechanic -- this is the archetype gate
-    // only. Was an inline `HinataInPlay(state)` check in TurnSolver (audit B1); default false =
-    // byte-identical (K collapses to 0), HinataProvider returns HinataInPlay(s).
+    // BranchSoulfireOwnTargets -- branch on Soulfire Eruption's OWN-creature target count (0..K)?
+    // Own-targeting only pays off with Hinata's per-target discount (which can enable an
+    // otherwise-unaffordable cast) plus a deeper dig; without it the K+1 variants are dead weight every
+    // non-combo turn. The count itself (SoulfireOwnCreatureCount) stays an engine mechanic -- this is the
+    // archetype gate only. Was an inline `HinataInPlay(state)` check in TurnSolver (audit B1); default false
+    // = byte-identical (K collapses to 0), HinataProvider returns HinataInPlay(s).
     virtual bool BranchSoulfireOwnTargets(const GameState& s) const { (void)s; return false; }
 
-    // Hook 22 -- enumeration BREADTH policy: the max number of card GROUPS the plan enumerator
+    // EnumGroupCap -- enumeration BREADTH policy: the max number of card GROUPS the plan enumerator
     // keeps for a turn (groups beyond this, lowest by SituationalCardRank, drop out). A tractability
     // cap -- a deep dig can leave ~20 distinct nonland casts whose powerset dominates the whole
     // search -- so it is provider-OWNED policy now rather than a hardcoded solver constant (audit
@@ -316,13 +353,13 @@ public:
     // MTG_NO_GROUP_CAP / MTG_UNPRUNED still override engine-side for A/B.
     virtual int EnumGroupCap() const { return 12; }
 
-    // Hook 23 -- fetch BREADTH policy: how many of FetchCandidates' ordered targets the search
+    // FetchSearchCap -- fetch BREADTH policy: how many of FetchCandidates' ordered targets the search
     // branches on (the list is best-first; lower ranks are strictly worse colour, a basic ranks
     // last). Provider-OWNED (audit A2) instead of a hardcoded solver constant. Default 2 = the prior
     // generic value (byte-identical). MTG_UNPRUNED still opens the full list engine-side.
     virtual int FetchSearchCap() const { return 2; }
 
-    // Hook 24 -- mana-source TAP ORDER: flexibility rank of a mana source (LOWER = tap earlier).
+    // ManaSourceRank -- mana-source TAP ORDER: flexibility rank of a mana source (LOWER = tap earlier).
     // The greedy mana solver (AIEngine::TapForCost / TurnSolver::TapForCostDirect, scarcity path)
     // pays each pip from the lowest-ranked qualifying source, so the flexible sources stay up and the
     // exponential TapForCostBacktrack fallback is rarely entered. This is a QUALITY heuristic for a
@@ -335,18 +372,18 @@ public:
     // header; GenericProvider implements it and every archetype inherits that.
     virtual int ManaSourceRank(const GameState& s, const CardDefinition& def) const = 0;
 
-    // Hook 25 -- is making the OPPONENT gain life USEFUL to us right now? A Grove-of-the-Burnwillows-
-    // style drip land (tap_opponent_lifegain) normally GIFTS the opponent life -- a downside -- so the
-    // engine dodges the drip: a generic pip uses Grove's painless {C} mode and leftover drip lands are
-    // NOT swept at end of main. A deck whose combo turns that gift into value flips this true, and the
-    // two drip rules invert: Grove taps COLOURED (drips) even for a generic pip, and the sweep fires.
-    // Anti-Lifegain returns true when a Tainted Remedy / Plague Drone is active (the gain is reversed
-    // into 1 damage); a Grove + Punishing Fire deck would return true too (the gain buys the Fire back).
-    // Default false. NOTE: the rules-level lifegain->loss reversal in OpponentGainsLife stays keyed on
-    // RemedyActive -- that is a FACT about the board, not a decision, so it is not routed through here.
+    // OpponentLifegainUseful -- is making the OPPONENT gain life USEFUL to us right now? A
+    // Grove-of-the-Burnwillows- style drip land (tap_opponent_lifegain) normally GIFTS the opponent life -- a
+    // downside -- so the engine dodges the drip: a generic pip uses Grove's painless {C} mode and leftover
+    // drip lands are NOT swept at end of main. A deck whose combo turns that gift into value flips this true,
+    // and the two drip rules invert: Grove taps COLOURED (drips) even for a generic pip, and the sweep fires.
+    // Anti-Lifegain returns true when a Tainted Remedy / Plague Drone is active (the gain is reversed into 1
+    // damage); a Grove + Punishing Fire deck would return true too (the gain buys the Fire back). Default
+    // false. NOTE: the rules-level lifegain->loss reversal in OpponentGainsLife stays keyed on RemedyActive
+    // -- that is a FACT about the board, not a decision, so it is not routed through here.
     virtual bool OpponentLifegainUseful(const GameState& /*s*/, int /*controller*/) const { return false; }
 
-    // Hook 26 -- keep-floor: an archetype override that can FORCE the mulligan keep decision for a
+    // KeepFloor -- keep-floor: an archetype override that can FORCE the mulligan keep decision for a
     // hand the exhaustive keep table (or static rule) would otherwise misjudge. Consulted in the play
     // path (AIEngine::HandleMulligan) BEFORE the table, so ForceKeep overrides a table mulligan and
     // ForceMulligan overrides a table keep; Undecided (the default) falls through unchanged. This is a
@@ -357,74 +394,73 @@ public:
     virtual KeepGuard KeepFloor(const std::vector<Card>& /*hand*/, int /*mulligan_count*/,
                                 bool /*on_the_play*/) const { return KeepGuard::Undecided; }
 
-    // Hook 27 -- Dragonstorm acceleration-prefix collapse gate. When true, TurnSolver's Solve /
-    // EnumeratePlans odometer enumerates only the K+1 CHEAPEST-FIRST PREFIXES of the ritual accelerants
+    // UseAccelPrefixCollapse -- Dragonstorm acceleration-prefix collapse gate. When true, TurnSolver's Solve
+    // / EnumeratePlans odometer enumerates only the K+1 CHEAPEST-FIRST PREFIXES of the ritual accelerants
     // (actions with ritual_floating_mana > 0: Rite of Flame, Pyretic/Desperate Ritual, Seething Song,
     // Irencrag Feat) instead of their full 2^K powerset (see GroupChoiceNonPrefixAccel). A self-funding
     // ritual chain is cheapest-first-optimal -- for any storm count j the cheapest j accelerants dominate
     // every other size-j subset (same storm count, >= mana) -- so the reachable (storm, mana) frontier is
-    // preserved while the go-off hand's combinatorial straggler collapses to linear. This is a HEURISTIC
-    // (it changes which action masks are enumerated -> NOT byte-identical), so it lives in the archetype
-    // provider and is opened by MTG_UNPRUNED (UnprunedGate::AccelPrefix) for the standing pruned-vs-unpruned
-    // A/B, exactly like EnumGroupCap / SituationalCardRank. Base returns false -> every non-Dragonstorm deck
-    // (and Dragonstorm under MTG_UNPRUNED) stays byte-identical; only DragonstormProvider opts in. See
+    // preserved while the go-off hand's combinatorial straggler collapses to linear. This is a HEURISTIC (it
+    // changes which action masks are enumerated -> NOT byte-identical), so it lives in the archetype provider
+    // and is opened by MTG_UNPRUNED (UnprunedGate::AccelPrefix) for the standing pruned-vs-unpruned A/B,
+    // exactly like EnumGroupCap / SituationalCardRank. Base returns false -> every non-Dragonstorm deck (and
+    // Dragonstorm under MTG_UNPRUNED) stays byte-identical; only DragonstormProvider opts in. See
     // docs/design/dragonstorm-search-pruning.md (Step 2).
     virtual bool UseAccelPrefixCollapse() const { return false; }
 
-    // Hook 30 -- Desperate Ritual SPLICE-count collapse gate. When true, TurnSolver's CollectActions
-    // emits only TWO splice variants per same-named splice_onto_arcane copy -- the BARE cast (k=0) and
-    // the position's MAX-CHAIN cast (k = N-1-pos, N = copies in hand) -- instead of the full k=0..N-1
-    // fan-out, and the odometer keeps only PREFIX selections of one family (bare-prefix OR max-chain
-    // prefix) via SpliceCollapseViolated. Splicing keeps the revealed copies in hand and adds no storm,
-    // so splice-then-cast is net-positive mana at the SAME eventual storm count -- the maximal splice
-    // chain {N-1,...,N-m} dominates every other size-m assignment on mana (user's directive: "if you can
-    // afford to splice you should; only search the bare line as a fallback when the spliced line can't be
-    // cast"). Collapses the go-off hand's ~N^N splice-count powerset (the residual atom after the accel /
-    // Lotus prefix collapses) to the 2 dominant families. HEURISTIC (it drops the intermediate splice
-    // assignments -> NOT byte-identical), so it lives in the archetype provider and is opened by
-    // MTG_UNPRUNED (UnprunedGate::SpliceCollapse) for the standing A/B, exactly like AccelPrefix. Base
-    // returns false -> every non-Dragonstorm deck (and Dragonstorm under MTG_UNPRUNED) enumerates the
-    // full splice fan-out unchanged; only DragonstormProvider opts in.
+    // UseSpliceCollapse -- Desperate Ritual SPLICE-count collapse gate. When true, TurnSolver's
+    // CollectActions emits only TWO splice variants per same-named splice_onto_arcane copy -- the BARE cast
+    // (k=0) and the position's MAX-CHAIN cast (k = N-1-pos, N = copies in hand) -- instead of the full
+    // k=0..N-1 fan-out, and the odometer keeps only PREFIX selections of one family (bare-prefix OR max-chain
+    // prefix) via SpliceCollapseViolated. Splicing keeps the revealed copies in hand and adds no storm, so
+    // splice-then-cast is net-positive mana at the SAME eventual storm count -- the maximal splice chain
+    // {N-1,...,N-m} dominates every other size-m assignment on mana (user's directive: "if you can afford to
+    // splice you should; only search the bare line as a fallback when the spliced line can't be cast").
+    // Collapses the go-off hand's ~N^N splice-count powerset (the residual atom after the accel / Lotus
+    // prefix collapses) to the 2 dominant families. HEURISTIC (it drops the intermediate splice assignments
+    // -> NOT byte-identical), so it lives in the archetype provider and is opened by MTG_UNPRUNED
+    // (UnprunedGate::SpliceCollapse) for the standing A/B, exactly like AccelPrefix. Base returns false ->
+    // every non-Dragonstorm deck (and Dragonstorm under MTG_UNPRUNED) enumerates the full splice fan-out
+    // unchanged; only DragonstormProvider opts in.
     virtual bool UseSpliceCollapse() const { return false; }
 
-    // Hook 28 -- cast-ORDERING search gate. When true, EnumeratePlansWithLand expands each action set
-    // into the DISTINCT orderings of its non-sacrifice hand casts (deduped by end-of-phase state) and
-    // the search scores each, committing the best via Plan::searched_order (the executor replays that
+    // WantsCastOrderingSearch -- cast-ORDERING search gate. When true, EnumeratePlansWithLand expands each
+    // action set into the DISTINCT orderings of its non-sacrifice hand casts (deduped by end-of-phase state)
+    // and the search scores each, committing the best via Plan::searched_order (the executor replays that
     // vector order -> lockstep). The archetype opt-in for the global MTG_SEARCH_ORDER knob. Dragonstorm's
     // combo turns leave a lot on the table under the fixed CastOrderRank (rituals@15/Irencrag@18/payoff@20)
     // -- a specific interleave (fund -> reducer -> discounted rest, or a Dragon hard-cast between rituals)
     // routinely beats the canonical bucket -- so letting the search FIND the order recovers it. Measured
     // (regression): d3 5.56->4.95, d5 5.36->4.82 (~0.55 turns) at ~+47% makespan. EXPENSIVE (applies each
-    // tried ordering on a copy, k! capped at 120), so it lives in the archetype provider; base returns
-    // false -> every non-Dragonstorm deck stays byte-identical. Also openable globally via MTG_SEARCH_ORDER
-    // / MTG_UNPRUNED (UnprunedGate::SearchOrder) for the standing A/B.
+    // tried ordering on a copy, k! capped at 120), so it lives in the archetype provider; base returns false
+    // -> every non-Dragonstorm deck stays byte-identical. Also openable globally via MTG_SEARCH_ORDER /
+    // MTG_UNPRUNED (UnprunedGate::SearchOrder) for the standing A/B.
     virtual bool WantsCastOrderingSearch() const { return false; }
 
-    // Hook 29 -- payoff-prune gate (the ritual-guard's search-side analog; the user's spec). A mana
-    // ritual is a ONE-TURN accelerant: its float empties at end of turn (identical to Hinata's Reality
-    // Spasm untap). So a plan that casts a ritual but no PAYOFF -- a Dragon (creature), Dragonstorm
-    // (tutor_to_battlefield), or Apex of Power (impulse_exile) -- burns the ritual for nothing (the mana
-    // has no same-turn sink; storm count doesn't carry across turns). When true, both Solve::consider
-    // (leaf) and EnumeratePlans (search branch list) DROP those accelerant-only subsets, focusing the
-    // search budget on payoff lines. Deliberately NOT enabled for Hinata: there the ritual IS a useful
-    // mid-combo accelerant (it powers a bigger cantrip/dig turn), so the same prune measured -0.05 tempo
-    // (see docs/design/hinata-spasm-gate-rootcause.md). Dragonstorm has no such mana sink, so the prune
-    // should net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
+    // PrunesAcceleratorWithoutPayoff -- payoff-prune gate (the ritual-guard's search-side analog; the user's
+    // spec). A mana ritual is a ONE-TURN accelerant: its float empties at end of turn (identical to Hinata's
+    // Reality Spasm untap). So a plan that casts a ritual but no PAYOFF -- a Dragon (creature), Dragonstorm
+    // (tutor_to_battlefield), or Apex of Power (impulse_exile) -- burns the ritual for nothing (the mana has
+    // no same-turn sink; storm count doesn't carry across turns). When true, both Solve::consider (leaf) and
+    // EnumeratePlans (search branch list) DROP those accelerant-only subsets, focusing the search budget on
+    // payoff lines. Deliberately NOT enabled for Hinata: there the ritual IS a useful mid-combo accelerant
+    // (it powers a bigger cantrip/dig turn), so the same prune measured -0.05 tempo (see
+    // docs/design/hinata-spasm-gate-rootcause.md). Dragonstorm has no such mana sink, so the prune should
+    // net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
     virtual bool PrunesAcceleratorWithoutPayoff() const { return false; }
 
-    // Hook 30: within one CastOrderRank tier, cast same-tier MANA ACCELERANTS cheapest-first by the
-    // action's ACTUAL cost. A ritual chain funds itself cheapest-first, so a dearer accelerant
-    // attempted before a cheaper one may be unpayable and is then SILENTLY DROPPED
-    // (CastSpellFromHand returns void) -- stranding the mana it would have produced and leaving the
-    // payoff short (Dragonstorm d0 seed 8585 gi1578: led with Seething Song, floated 7, could not pay
-    // Dragonstorm's 9, whole chain burned).
-    // Default ON (root). An earlier measurement had this default OFF "because at the ROOT it regressed
-    // slivers/Hinata/Anti-Lifegain/Knights and cost 2 searched slowdowns" -- that measurement predates
-    // the IsManaRitual restriction in CastOrderLess and was really measuring the tie-break reordering
-    // CREATURES (Scourge/Lathliss ETB order), which cost is the wrong key for. Restricted to
-    // accelerants it is inert for every deck that never holds two of them at once, so it is a generic
-    // rule, not archetype tuning. A provider may still override to false; MTG_LEGACY_CAST_TIER_ORDER=1
-    // is the global hatch for a byte-identical A/B.
+    // CastCheapestFirstWithinTier -- within one CastOrderRank tier, cast same-tier MANA ACCELERANTS
+    // cheapest-first by the action's ACTUAL cost. A ritual chain funds itself cheapest-first, so a dearer
+    // accelerant attempted before a cheaper one may be unpayable and is then SILENTLY DROPPED
+    // (CastSpellFromHand returns void) -- stranding the mana it would have produced and leaving the payoff
+    // short (Dragonstorm d0 seed 8585 gi1578: led with Seething Song, floated 7, could not pay Dragonstorm's
+    // 9, whole chain burned). Default ON (root). An earlier measurement had this default OFF "because at the
+    // ROOT it regressed slivers/Hinata/Anti-Lifegain/Knights and cost 2 searched slowdowns" -- that
+    // measurement predates the IsManaRitual restriction in CastOrderLess and was really measuring the
+    // tie-break reordering CREATURES (Scourge/Lathliss ETB order), which cost is the wrong key for.
+    // Restricted to accelerants it is inert for every deck that never holds two of them at once, so it is a
+    // generic rule, not archetype tuning. A provider may still override to false;
+    // MTG_LEGACY_CAST_TIER_ORDER=1 is the global hatch for a byte-identical A/B.
     virtual bool CastCheapestFirstWithinTier() const { return true; }
 
     // Float-colour collapse for "add N mana of ANY ONE colour" effects (HEURISTIC, provider-owned; NOT
@@ -441,21 +477,21 @@ public:
     virtual bool ImpulseFloatColorRedOnly()       const { return false; }
     virtual bool RestrictSacColorsToHasteAndRed() const { return false; }
 
-    // Hook 30 -- SCALED-CAST variants: for a spell whose cost depends on how much output it commits,
-    // the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage
-    // analogue of XCandidates (Hook 18): Magma Opus deals 4 damage divided among any number of
-    // targets, and committing more of it to the opponent's FACE leaves fewer distinct spread/tap
-    // targets for Hinata's per-target discount -- so more face costs more mana, exactly like paying
-    // more for a bigger {X}. The engine emits one mutually-exclusive cast per returned variant and the
-    // plan enumerator picks per affordability + value, so with several scaling spells in hand (a
-    // Crackle {X} + a Magma face) the SEARCH allocates the spare mana across them (Crackle's X moves
-    // in 3-mana steps, Magma's face in 1-mana steps, so the fine-grained face soaks up mana the coarse
-    // X cannot). The archetype owns the WHOLE model -- which levels, and what each costs; every
-    // card-specific number lives in the provider -- while the engine keeps only the emit/thread/resolve
-    // MECHANISM (the committed face rides to resolution and is dealt to the opponent). Base returns {}
-    // -> the spell's normal single-line cast (byte-identical for every other deck/card); only an
-    // archetype with a scaling card returns variants, and only when its model is enabled. The search
-    // still picks by default; a provider may narrow the set as a heuristic (like XCandidates does).
+    // ScaledCastVariants -- SCALED-CAST variants: for a spell whose cost depends on how much output it
+    // commits, the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage
+    // analogue of XCandidates: Magma Opus deals 4 damage divided among any number of targets, and committing
+    // more of it to the opponent's FACE leaves fewer distinct spread/tap targets for Hinata's per-target
+    // discount -- so more face costs more mana, exactly like paying more for a bigger {X}. The engine emits
+    // one mutually-exclusive cast per returned variant and the plan enumerator picks per affordability +
+    // value, so with several scaling spells in hand (a Crackle {X} + a Magma face) the SEARCH allocates the
+    // spare mana across them (Crackle's X moves in 3-mana steps, Magma's face in 1-mana steps, so the
+    // fine-grained face soaks up mana the coarse X cannot). The archetype owns the WHOLE model -- which
+    // levels, and what each costs; every card-specific number lives in the provider -- while the engine keeps
+    // only the emit/thread/resolve MECHANISM (the committed face rides to resolution and is dealt to the
+    // opponent). Base returns {} -> the spell's normal single-line cast (byte-identical for every other
+    // deck/card); only an archetype with a scaling card returns variants, and only when its model is enabled.
+    // The search still picks by default; a provider may narrow the set as a heuristic (like XCandidates
+    // does).
     virtual std::vector<ScaledCastVariant>
     ScaledCastVariants(const GameState& /*s*/, const CardDefinition& /*def*/) const { return {}; }
 };

@@ -116,7 +116,17 @@ really was Debug; the orphans really are referenced by nothing but this document
   rather than edited: `per-deck-folder-layout.md` still says "deferred / not started" although
   the move shipped, and `land-signature-completeness.md` says GT-rebaseline pending.
 
-Still open: A6 (hook renumbering), Tier B, remaining C1 units.
+- **A6 DONE** — hook numbering retired. All 43 `Hook N` mentions across the four provider/solver
+  files (plus one in `SpellEffects.h`) now name the METHOD, and `DecisionProvider.h` carries a
+  legacy `Hook N` decoder table so old commits and design docs stay readable. The design docs were
+  deliberately left alone — decoding them is what the table is for. **The collision had already
+  produced a wrong cross-reference:** `ScaledCastVariants` was labelled "Hook 28" in both
+  `DecisionProviders.h` and `DecisionProviders.cpp`, but Hook 28 is `WantsCastOrderingSearch`;
+  both now name the right method. Comment blocks whose lines grew past ~110 columns were reflowed.
+  Verified comments-only mechanically (every changed line is a `//` line), then byte-identical:
+  `mtg-test` 156/156, smoke 27/27, regression 45/45, 0 configs changed, 138 references clean.
+
+Still open: Tier B, remaining C1 units.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
