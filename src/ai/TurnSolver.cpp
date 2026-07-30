@@ -1,4 +1,5 @@
 #include "TurnSolver.h"
+#include "EngineFlags.h"
 #include "TranspositionTable.h"
 #include "KeepModel.h"              // MidGameEvaluator / ExtractMidGameFeatures (learned d0 eval)
 #include "Profiler.h"
@@ -9386,11 +9387,8 @@ private:
 // the underlying finding is real -- see docs/design/land-signature-completeness.md.
 static const bool s_complete_land_sig = std::getenv("MTG_LAND_SIG_COMPLETE") != nullptr;
 static const bool s_legacy_land_sig    = !s_complete_land_sig;
-// Mirrors of AIEngine.cpp's land-priority knobs -- greedy_land_name below reimplements TryPlayLand's
-// passes as the search's last-resort tiebreak, and the two must stay in lockstep.
-static const bool s_legacy_static_tapped = std::getenv("MTG_LEGACY_STATIC_TAPPED") != nullptr;
-static const bool s_land_closing_window  = []{ const char* e = std::getenv("MTG_LAND_CLOSING_WINDOW");
-                                               return !(e && std::string(e) == "0"); }();   // DEFAULT ON
+// Land-priority knobs: shared readers in EngineFlags.h -- greedy_land_name below reimplements
+// TryPlayLand's passes as the search's last-resort tiebreak, and the two must stay in lockstep.
 
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
@@ -9625,13 +9623,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             // construction here.
             for (int sub = 0; sub < 2; ++sub)
             {
-            if (sub == 0 && !s_land_closing_window) { continue; }
+            if (sub == 0 && !LandClosingWindowEnabled()) { continue; }
             for (const Card& c : ap.hand)
             {
                 if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: never played
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (!d || !d->card.IsLand()) { continue; }
-                if (s_land_closing_window)
+                if (LandClosingWindowEnabled())
                 {
                     const bool closing = d->params.fastland_max_other_lands >= 0
                                       && !LandWouldEnterTapped(state, *d);
@@ -9641,8 +9639,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 // false for a fastland/shock/reveal land that actually comes down tapped. This lambda
                 // is the search's last-resort land tiebreak, so a wrong classification here quietly
                 // defaults the search to the wrong land whenever it is indifferent.
-                bool is_tapped = s_legacy_static_tapped ? d->params.enters_tapped
-                                                        : LandWouldEnterTapped(state, *d);
+                bool is_tapped = LegacyStaticTapped() ? d->params.enters_tapped
+                                                      : LandWouldEnterTapped(state, *d);
                 bool is_multi  = d->params.produces.size() > 1;
                 if (want_untapped == is_tapped) { continue; }
                 if (want_multi && !is_multi)    { continue; }
@@ -10954,7 +10952,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     if (out_committed_depth != nullptr) { *out_committed_depth = committed_depth; }
 
     static const bool fd_trace   = std::getenv("MTG_FD_TRACE") != nullptr;
-    static const bool s_bp_trace = std::getenv("MTG_BP_TRACE") != nullptr;
     if (fd_trace)
     {
         std::cerr << "[fd] T" << state.turn_number << " LINE win=" << line.win_turn;
@@ -11006,7 +11003,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     { std::cerr << lib[li].m_name << "; "; }
                     std::cerr << " (libsize=" << lib.size() << ")\n";
                 }
-                g_bp_trace_arm = s_bp_trace;
+                g_bp_trace_arm = BpTraceEnabled();
                 ApplyPlanDirect(copy, pp.plan, true);
                 g_bp_trace_arm = false;
                 SimulateAnimateLands(copy);
@@ -11015,7 +11012,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             }
             else
             {
-                g_bp_trace_arm = s_bp_trace;
+                g_bp_trace_arm = BpTraceEnabled();
                 ApplyPlanDirect(copy, pp.plan, false);
                 g_bp_trace_arm = false;
             }

@@ -1,4 +1,5 @@
 #include "AIEngine.h"
+#include "EngineFlags.h"
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
 #include "SearchBudget.h"
@@ -78,11 +79,7 @@ static const bool s_full_depth = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
 // can be traced. Only meaningful with s_full_depth.
 static const bool s_fd_oracle = std::getenv("MTG_FD_ORACLE") != nullptr;
 
-// Breakpoint lockstep trace (MTG_BP_TRACE, diagnosis only): print the EXECUTOR's breakpoint
-// sequence ([bp-exec]) so it can be diffed against ApplyPlanDirect's ([bp-apply], armed only for
-// the fd-trace committed-line replay). A searched continuation landing at a different index on the
-// two sides is the lockstep defect. See docs/design/post-breakpoint-search.md.
-static const bool s_bp_trace = std::getenv("MTG_BP_TRACE") != nullptr;
+// Breakpoint lockstep trace: BpTraceEnabled() in EngineFlags.h (shared with TurnSolver).
 
 // Enumerate-all-earliest-wins rule-miner (MTG_DUMP_EWINS): at each REAL pre-combat main,
 // emit one JSON line ({"ewins":...}) scoring every candidate top-level play by the earliest
@@ -2186,7 +2183,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!bp_searched_here) { extra = TurnSolver::Solve(state, is_pre_combat_main); }
         // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
         // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
-        if (s_bp_trace)
+        if (BpTraceEnabled())
         {
             std::fprintf(stderr, "[bp-exec]  turn=%d idx=%d bp_at=%d bp_choice=%d searched=%d\n",
                          state.turn_number, bp_idx, plan.bp_at, plan.bp_choice,
@@ -2637,13 +2634,8 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
     return false;
 }
 
-// MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
-// land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See TryPlayLand.
-// MTG_LAND_CLOSING_WINDOW=1: opt-in heuristic variant -- drop a still-untapped fastland ahead of an
-// unconditionally-untapped land, since only the fastland's window closes. Measurement scaffolding.
-static const bool s_legacy_static_tapped = std::getenv("MTG_LEGACY_STATIC_TAPPED") != nullptr;
-static const bool s_land_closing_window  = []{ const char* e = std::getenv("MTG_LAND_CLOSING_WINDOW");
-                                               return !(e && std::string(e) == "0"); }();   // DEFAULT ON
+// Land-priority knobs (MTG_LEGACY_STATIC_TAPPED / MTG_LAND_CLOSING_WINDOW): shared readers in
+// EngineFlags.h -- TurnSolver's greedy_land_name mirrors these passes and must read the same flags.
 
 bool AIEngine::TryPlayLand(GameState& state)
 {
@@ -2750,14 +2742,14 @@ bool AIEngine::TryPlayLand(GameState& state)
         // 2026-07-29). sub 0 = still-open closing windows, sub 1 = everything else.
         for (int sub = 0; sub < 2; ++sub)
         {
-        if (sub == 0 && !s_land_closing_window) { continue; }   // rule off -> single unfiltered scan
+        if (sub == 0 && !LandClosingWindowEnabled()) { continue; }   // rule off -> single unfiltered scan
         for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
         {
             if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: never played
             auto def = CardDatabase::Instance().Lookup(it->m_name);
             if (!def || !def->card.IsLand()) { continue; }
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
-            if (s_land_closing_window)
+            if (LandClosingWindowEnabled())
             {
                 const bool closing = def->params.fastland_max_other_lands >= 0
                                   && !LandWouldEnterTapped(state, *def);   // window still open
@@ -2770,8 +2762,8 @@ bool AIEngine::TryPlayLand(GameState& state)
             // preference these passes exist to express. LandWouldEnterTapped is the pure predicate;
             // LandEntersTapped must NOT be used here, it PAYS the shock life as a side effect.
             // MTG_LEGACY_STATIC_TAPPED=1 restores the old static read for a byte-identical A/B.
-            bool is_tapped = s_legacy_static_tapped ? def->params.enters_tapped
-                                                   : LandWouldEnterTapped(state, *def);
+            bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
+                                                  : LandWouldEnterTapped(state, *def);
             bool is_multi  = def->params.produces.size() > 1;
             if (want_untapped && is_tapped)  { continue; }
             if (!want_untapped && !is_tapped) { continue; }
@@ -3665,7 +3657,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     }
     else
     {
-        if (s_bp_trace && !m_in_rollout)
+        if (BpTraceEnabled() && !m_in_rollout)
         { BpTraceCast("exec", state, def->card.m_name.str(), effective, def->card.IsCreature()); }
         // Audit-only: the untapped-board total BEFORE the attempt, to split a colour shortfall from a
         // real total-mana shortfall at the drop below. Not computed in a normal run.
@@ -3674,7 +3666,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
         if (!TapForCost(state, effective, available, def->card.IsCreature()))
         {
-            if (s_bp_trace && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
+            if (BpTraceEnabled() && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
             // SERVER-TRUTH RESOLUTION: a declared cast that cannot be paid is dropped (left in hand).
             // Mirrors ApplyPlanDirect::apply_one's drop in the rollout. Audit-only bookkeeping; see the
             // stranded-accelerant detector in GameLogger.h for why the ACCELERANT drops are the ones
