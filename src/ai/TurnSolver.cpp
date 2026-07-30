@@ -32,20 +32,6 @@
 // for top-level T1 pre-combat decisions.  Set via TurnSolver::SetTraceSolve().
 static bool s_trace_solve = false;
 
-// Diagnostic (env-gated, inert by default): MTG_TRACE_PLAYOUT_SEED/_TURN replay the
-// committed plan from one real decision and trace the rollout's believed winning
-// line (per-turn opponent life). The companion of the non-convergence detector
-// (AIEngine MTG_FLAG_NONCONV): when the detector flags a turn whose earlier-proven
-// win the later search can't reproduce, this prints exactly what line the rollout
-// thought would win, so the rollout-vs-reality divergence can be pinpointed.
-// g_trace_arm makes only the OUTERMOST SimulateToEndImpl print (nested rollout
-// sub-searches disarm it).
-static const char*     s_tp_seed_env = std::getenv("MTG_TRACE_PLAYOUT_SEED");
-static const long long s_tp_seed     = s_tp_seed_env ? std::atoll(s_tp_seed_env) : -1;
-static const char*     s_tp_turn_env = std::getenv("MTG_TRACE_PLAYOUT_TURN");
-static const int       s_tp_turn     = s_tp_turn_env ? std::atoi(s_tp_turn_env) : -1;
-static thread_local bool g_trace_arm = false;
-
 // Fidelity of the full-depth search's BEYOND-HORIZON leaf estimate (FSLineWin's
 // `depth<=0` tail). This is the policy that ranks plans whose payoff lies past the
 // searched horizon -- e.g. a combo deck (Treasure Hunt) whose lethal turn is several
@@ -84,23 +70,11 @@ static const bool             s_esc_measure = EnvOn("MTG_ESC_MEASURE");
 static std::atomic<long long> g_esc_ladder_units{0};
 static std::atomic<long long> g_esc_single_units{0};
 static std::atomic<long long> g_esc_measure_n{0};
-// K-predictor telemetry (MTG_ESC_PREDICT_STATS): predictions, fallbacks (K aborted -> shallower), and the
-// predicted-K vs committed-depth histograms. A high fallback rate => the estimate is poor (wasted abort work).
-static const bool             s_esc_predict_stats = EnvOn("MTG_ESC_PREDICT_STATS");
-static std::atomic<long long> g_pred_n{0};
-static std::atomic<long long> g_pred_fallback{0};
-static std::array<std::atomic<long long>, 16> g_pred_K{};
-static std::array<std::atomic<long long>, 16> g_pred_committed{};
 // LOSSLESS audit (MTG_ESC_PREDICT_AUDIT): per escalation, shadow-run the ladder and compare its committed
 // depth to the predictor's -- count LOSSY (predict shallower = quality risk) vs deeper vs exact, and dump the
 // first few lossy cases so we can see WHY the estimate under-shot. Doubles escalation work (audit only).
 static const bool             s_esc_predict_audit = EnvOn("MTG_ESC_PREDICT_AUDIT");
 static std::atomic<long long> g_pred_audit_n{0}, g_pred_lossy{0}, g_pred_deeper{0}, g_pred_lossy_dumped{0};
-// Amortized-R telemetry (MTG_ESC_PREDICT_STATS): accumulate every measured heuristic-cost-per-probe-leaf sample
-// (roll/lv) so we can report the deck's converged R -- the value to FREEZE into value_play.escalation_r for the
-// deterministic adopted path. Sum is scaled x1000 to keep it in a long long (R is O(100)).
-static std::atomic<long long> g_esc_R_sum_milli{0};
-static std::atomic<long long> g_esc_R_n{0};
 namespace
 {
     struct RolloutStatsReporter
@@ -127,33 +101,13 @@ namespace
     {
         ~EscPredictReporter()
         {
-            if (!s_esc_predict_stats) { return; }
-            // R telemetry is independent of the K-predictor path (the single-depth eff_single path records R but
-            // does not touch g_pred_n), so report it whenever samples exist.
-            if (g_esc_R_n.load() > 0)
-            {
-                const double meanR = (g_esc_R_sum_milli.load() / 1000.0) / g_esc_R_n.load();
-                std::cerr << "[esc-predict] converged R (heuristic cost / probe leaf): mean=" << meanR
-                          << " over n=" << g_esc_R_n.load() << " samples"
-                          << "  -> freeze as value_play.escalation_r\n";
-            }
-            if (g_pred_n.load() == 0) { return; }
-            std::cerr << "[esc-predict] predictions=" << g_pred_n.load()
-                      << " fallbacks=" << g_pred_fallback.load()
-                      << " (" << (100.0 * g_pred_fallback.load() / g_pred_n.load()) << "% aborted K)\n";
+            if (!s_esc_predict_audit) { return; }
             if (g_pred_audit_n.load() > 0)
             {
                 const long long an = g_pred_audit_n.load(), lo = g_pred_lossy.load(), dp = g_pred_deeper.load();
                 std::cerr << "[esc-predict] AUDIT vs ladder: n=" << an
                           << " lossy(shallower)=" << lo << " (" << (100.0 * lo / an) << "%)"
                           << " deeper=" << dp << " exact=" << (an - lo - dp) << "\n";
-            }
-            std::cerr << "[esc-predict] predicted-K / committed-depth:\n";
-            for (int d = 0; d < 16; ++d)
-            {
-                long long pk = g_pred_K[d].load(), pc = g_pred_committed[d].load();
-                if (pk == 0 && pc == 0) { continue; }
-                std::cerr << "    d" << d << ": predictedK=" << pk << " committed=" << pc << "\n";
             }
         }
     };
@@ -982,62 +936,6 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         }
     }
     return false;
-}
-
-// Reject a plan that casts a mana ramp RITUAL (Reality Spasm untap / Irencrag Feat burst -- IsManaRitual)
-// without also casting Crackle with Power in the SAME plan. In this deck a ritual's only worthwhile sink
-// is Crackle (Hinata already discounts the other payoffs, so spending a ritual on e.g. Magma Opus is a
-// wasted card); a ritual with no Crackle in-plan is that waste. Same pattern the user names for
-// Dragonstorm (rituals only when casting Dragonstorm/Apex). Also a search PRUNE: it drops the
-// ritual-without-Crackle subsets that dominate combo-hand enumeration EVEN WHEN Crackle is in hand
-// (which the emission gate ShouldEmitUntapRitual cannot -- that only suppresses Reality Spasm when
-// Crackle is ABSENT from hand). The "dig into Crackle then cast it" line survives via action
-// re-collection: a plan that digs and then casts the drawn Crackle DOES contain Crackle. Gated on
-// MTG_HINATA_SPASM_GATE (default off => returns false for every subset => byte-identical).
-// Spasm-gate mode from MTG_HINATA_SPASM_GATE: 0=off (unset, byte-identical); 1=STRICT (a ritual always
-// requires same-turn Crackle in the plan); 2=SOFT (only prune when Crackle is IN HAND but the plan does
-// not cast it -- the user's literal "prune Crackle-present hands that do not cast Crackle"; a ritual with
-// Crackle ABSENT is allowed as a mana-accelerant, which measurement showed is net-positive tempo).
-static int HinataSpasmGateMode()
-{
-    static const int mode = []{
-        const char* e = std::getenv("MTG_HINATA_SPASM_GATE");
-        if (!e || !*e) { return 0; }
-        const std::string v(e);
-        return (v == "2" || v == "soft") ? 2 : 1;
-    }();
-    return mode;
-}
-
-// True iff the active player holds Crackle with Power (the ritual's mana SINK) in hand right now.
-static bool HinataCrackleInHand(const GameState& s)
-{
-    for (const Card& c : s.players[s.active_player_index].hand)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d && d->params.x_damage_multiplier > 1) { return true; }
-    }
-    return false;
-}
-
-static bool SubsetWastesRampRitual(const GameState& state,
-                                   const std::vector<Action>& cands, const std::vector<int>& sel)
-{
-    const int mode = HinataSpasmGateMode();
-    if (mode == 0) { return false; }
-    bool has_ritual = false, has_crackle = false;
-    for (int j : sel)
-    {
-        const CardDefinition* d = cands[j].def;
-        if (!d) { continue; }
-        if (IsManaRitual(*d))                  { has_ritual  = true; }
-        if (d->params.x_damage_multiplier > 1) { has_crackle = true; }   // Crackle with Power (the sink)
-    }
-    if (!(has_ritual && !has_crackle)) { return false; }
-    // SOFT: keep the ritual when Crackle is ABSENT (it may be a legit accelerant for a cantrip/dig turn);
-    // only prune the wasteful case where Crackle IS in hand but this plan casts the ritual without it.
-    if (mode == 2 && !HinataCrackleInHand(state)) { return false; }
-    return true;
 }
 
 // Reject a subset that over-splices Desperate Ritual (splice_onto_arcane). Splicing k copies onto a
@@ -3694,9 +3592,6 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
-        // Reject a ramp ritual (Reality Spasm / Irencrag Feat) not spent into Crackle this plan. Inert
-        // unless MTG_HINATA_SPASM_GATE -> byte-identical off.
-        if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
@@ -7779,9 +7674,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
-        // Reject a ramp ritual (Reality Spasm / Irencrag Feat) not spent into Crackle this plan. Inert
-        // unless MTG_HINATA_SPASM_GATE -> byte-identical off.
-        if (SubsetWastesRampRitual(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
@@ -9656,8 +9548,6 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt)
 {
-    const bool trace_pl = g_trace_arm;   // only the outermost diagnostic playout prints
-    g_trace_arm = false;
     // TRUNCATED ROLLOUT (MTG_ROLLOUT_HORIZON=K, default -1 = unlimited/off): after K simulated turns with
     // no win yet, cap the tail with the O(1) value-leaf estimate instead of playing greedily to game end.
     // Bridges the pure value leaf (K=0) and the full rollout (K=inf), cutting the dominant per-leaf cost --
@@ -9714,16 +9604,6 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                 }), rp.hand.end());
         }
 
-        if (trace_pl)
-        {
-            std::cerr << "  [pl] >>> turn=" << state.turn_number << " hand_before=[";
-            for (const Card& c : state.ActivePlayer().hand)
-            { std::cerr << c.m_name << (c.m_is_staged ? "*" : "") << "; "; }
-            std::cerr << "] lib_top=";
-            const Player& tp = state.ActivePlayer();
-            std::cerr << (tp.library.empty() ? std::string("(none)") : tp.library.front().m_name.str()) << "\n";
-        }
-
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens.
         TurnSolver::Plan pre_plan;
         if (g_honest_teacher && depth > 0)
@@ -9759,18 +9639,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
 
         // Combat
         SimulateCombat(state);
-        if (trace_pl)
-        {
-            std::cerr << "  [pl] turn=" << state.turn_number
-                      << " opp " << life_before_pl << "->" << state.Opponent().life
-                      << "  " << PlanDesc(pre_plan) << "  hand_after=[";
-            for (const Card& c : state.ActivePlayer().hand)
-            { std::cerr << c.m_name << (c.m_is_staged ? "*" : "") << "; "; }
-            std::cerr << "]\n";
-        }
         if (state.Opponent().life <= 0)
         {
-            if (trace_pl) { std::cerr << "  [pl] WIN at turn " << state.turn_number << "\n"; }
             return state.turn_number;
         }
 
@@ -10779,13 +10649,6 @@ namespace
         std::vector<double> mean, sd, w;      // w[0]=bias, w[1..]=standardized-feature coefs
         double threshold = 0.5;
         bool   enabled   = false;
-        // Budget-ADAPTIVE threshold (MTG_ESCALATION_GATE_T_LOW + _BUDGET_CUT, opt-in): use the base (higher,
-        // conservative) `threshold` when the escalation still has budget headroom, and t_low (lower, more
-        // aggressive skip) when the probe already spent most of it. Enabled only when T_LOW is set; otherwise
-        // EffectiveThreshold == threshold (fixed, unchanged). See hinata-escalation-budget-restore memory.
-        double t_low      = -1.0;
-        double budget_cut = 0.5;
-        bool   adaptive   = false;
         std::atomic<long long> seen{0}, skipped{0};
         EscalationGate()
         {
@@ -10801,19 +10664,7 @@ namespace
             if (mean.empty() || sd.size() != mean.size() || w.size() != mean.size() + 1) { return; }
             const char* t = std::getenv("MTG_ESCALATION_GATE_T");
             if (t && *t) { try { threshold = std::stod(t); } catch (...) {} }
-            const char* tl = std::getenv("MTG_ESCALATION_GATE_T_LOW");
-            if (tl && *tl) { try { t_low = std::stod(tl); adaptive = true; } catch (...) {} }
-            const char* bc = std::getenv("MTG_ESCALATION_GATE_BUDGET_CUT");
-            if (bc && *bc) { try { budget_cut = std::stod(bc); } catch (...) {} }
             enabled = true;
-        }
-        // Effective skip threshold for THIS escalation: adaptive lowers it (skip more) once the remaining
-        // decision budget falls below budget_cut of its limit. Fixed == threshold when not adaptive.
-        double EffectiveThreshold(const SearchBudget* b) const
-        {
-            if (!adaptive || b == nullptr || b->Unlimited()) { return threshold; }
-            const double rf = static_cast<double>(b->Remaining()) / static_cast<double>(b->Limit());
-            return (rf >= budget_cut) ? threshold : t_low;
         }
         // raw feature order MUST match the trainer: [committed, gap, turn, est_wt] + 46 midgame feats.
         double PNoOp(const std::vector<double>& raw) const
@@ -10855,8 +10706,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // MTG_ESC_SPLIT=c   : CAP the value-leaf probe to c*budget_ms so the probe cannot eat the whole decision
     //                     budget; the remaining (1-c) is RESERVED for the heuristic escalation. No total
     //                     budget increase -- pure reservation (the user's "don't let the value-leaf eat it all").
-    // MTG_ESC_RESTORE=f : ADD a fresh f*budget_ms to the escalation on top of the reserve (a partial restore;
-    //                     THIS is the part that costs extra time -- keep it small).
     // MTG_ESC_SINGLE    : the escalation runs ONE heuristic pass at a single target depth (committed-offset),
     //                     not FullSearchLine's 1..depth ladder -- "only do one depth", concentrating the
     //                     reserved budget and skipping the shallow-pass rework. MTG_ESC_SINGLE_OFFSET=k picks
@@ -10867,8 +10716,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // See docs/design/escalation-and-rollout-cost.md + hinata-escalation-budget-restore memory.
     static const double s_esc_split   = []{ const char* e = std::getenv("MTG_ESC_SPLIT");
                                             return (e && *e) ? std::atof(e) : -1.0; }();
-    static const double s_esc_restore = []{ const char* e = std::getenv("MTG_ESC_RESTORE");
-                                            return (e && *e) ? std::atof(e) : 0.0; }();
     SearchBudget  probe_cap_budget;
     SearchBudget* probe_budget = budget;
     if (s_esc_split >= 0.0 && budget_ms > 0)
@@ -11004,7 +10851,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             raw.push_back(state.turn_number);
             raw.push_back(old_wt);                          // est_wt
             for (int f : ExtractMidGameFeatures(state, MidGamePlanSummary{})) { raw.push_back(f); }
-            if (g_escalation_gate.PNoOp(raw) > g_escalation_gate.EffectiveThreshold(budget))
+            if (g_escalation_gate.PNoOp(raw) > g_escalation_gate.threshold)
             {
                 g_escalation_gate.skipped.fetch_add(1);
                 if (out_committed_depth) { *out_committed_depth = committed; }
@@ -11050,7 +10897,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         SearchBudget* esc_budget = budget;   // legacy shared REMAINING budget (only when fresh_frac < 0)
         if (s_esc_split >= 0.0 && budget_ms > 0)
         {
-            const double frac = std::max(0.0, 1.0 - s_esc_split) + std::max(0.0, s_esc_restore);
+            const double frac = std::max(0.0, 1.0 - s_esc_split);
             esc_alloc_budget = SearchBudget::FromVirtualMs(
                 std::max(1, static_cast<int>(std::lround(frac * budget_ms))));
             esc_budget = &esc_alloc_budget;
@@ -11084,9 +10931,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             static const double s_pred_mult = []{ const char* e = std::getenv("MTG_ESC_PREDICT_MULT");
                                                   return (e && *e) ? std::atof(e) : 1.0; }();
             const double gate_alpha = kStartGateAlpha * s_pred_mult;
-            // EMA weight for the amortized R update (MTG_ESC_PREDICT_RALPHA, default 0.4).
-            static const double s_r_alpha = []{ const char* e = std::getenv("MTG_ESC_PREDICT_RALPHA");
-                                                return (e && *e) ? std::atof(e) : 0.4; }();
+            // EMA weight for the amortized R update.
+            constexpr double s_r_alpha = 0.4;
             // 1) Rough GUESS D0 of the committed depth from the free probe structure + amortized R. This only
             //    picks WHERE to start the real ladder (efficiency); correctness comes from the MEASURED costs
             //    below, not this estimate. No separate d1 seed pass (it polluted the climb's memo -> cmeas[1]=0);
@@ -11196,13 +11042,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     cum += cmeas[std::clamp(t, 0, 15)];
                 }
             }
-            if (s_esc_predict_stats)
-            {
-                g_pred_n.fetch_add(1, std::memory_order_relaxed);
-                g_pred_K[std::clamp(K, 0, 15)].fetch_add(1, std::memory_order_relaxed);
-                g_pred_committed[std::clamp(hcommitted, 0, 15)].fetch_add(1, std::memory_order_relaxed);
-                if (aborts > 0) { g_pred_fallback.fetch_add(1, std::memory_order_relaxed); }
-            }
             if (s_esc_predict_audit)
             {
                 // Shadow-run the true ladder (from d1) and compare its committed depth to the predictor's.
@@ -11237,31 +11076,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                         std::cerr << "    [climb] start=" << g_climb_start << " measured cmeas d1.." << depth << "=";
                         for (int d = 1; d <= depth; ++d) { std::cerr << g_climb_cmeas[d] << (d<depth?"/":""); }
                         std::cerr << " (mine; compare to hladder incremental)\n";
-                        // COST-CURVE probe (MTG_ESC_PREDICT_COSTCURVE): run a COLD single heuristic pass at
-                        // each depth 1..committed and dump the actual cost so we can see the real per-depth
-                        // cost vs the leaf-count model and the rollout-length-decay model. Expensive; only on
-                        // the first few lossy cases. H = horizon turns from now (rollout-length scale).
-                        if (std::getenv("MTG_ESC_PREDICT_COSTCURVE"))
-                        {
-                            const int H = max_turns - state.turn_number;
-                            std::cerr << "    [costcurve] H=" << H << " (max_turns=" << max_turns
-                                      << " turn=" << state.turn_number << ")\n";
-                            for (int d = 1; d <= committed; ++d)
-                            {
-                                TranspositionTable cc_tt;
-                                FSLineCache        cc_cache;
-                                SearchBudget       cc_budget;   // unlimited: just count Used()
-                                (void)FSLineWin(state, d, max_turns, max_turns + 1, second_main,
-                                                &cc_tt, &cc_cache, &cc_budget);
-                                long long cumL_d = 0;
-                                for (int k = 1; k <= d; ++k) { cumL_d += std::max<long long>(0, g_probe_leaves[k]); }
-                                std::cerr << "      d" << d << " cold_cost=" << cc_budget.Used()
-                                          << " leaves(d)=" << g_probe_leaves[d]
-                                          << " cumL=" << cumL_d
-                                          << " probe_cost=" << g_probe_cost[d]
-                                          << " H-d=" << (H - d) << "\n";
-                            }
-                        }
                     }
                 }
                 else if (delta > 0) { g_pred_deeper.fetch_add(1, std::memory_order_relaxed); }
@@ -11273,19 +11087,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // path (per-deck value_play.escalation_cap>0 => eff_single_deck) predicts the budget-AFFORDABLE depth
             // and runs one pass there, capped at the deck's convergence depth -- see the PREDICTED-AFFORDABILITY
             // block below (this tracks the ladder's own depth, so it is quality-neutral and cheaper fleet-wide;
-            // measured antilife 4-seed dLP=0.0000 at ~45% work, light decks dLP=0.0000 + faster). The env research
-            // path (MTG_ESC_SINGLE) keeps the fixed-depth knobs for A/B: MTG_ESC_SINGLE_ABS=D pins an ABSOLUTE
-            // target D; else committed-offset. Overrun-guarded with depth fallback (below): a pass that cannot
-            // complete falls back a depth; if none fit, the value-leaf line is kept (hcommitted=0).
-            static const int s_esc_single_abs = []{ const char* e = std::getenv("MTG_ESC_SINGLE_ABS");
-                                                    return (e && *e) ? std::atoi(e) : 0; }();
+            // measured antilife 4-seed dLP=0.0000 at ~45% work, light decks dLP=0.0000 + faster). The env
+            // research path (MTG_ESC_SINGLE) targets committed-offset. Overrun-guarded with depth fallback
+            // (below): a pass that cannot complete falls back a depth; if none fit, the value-leaf line is
+            // kept (hcommitted=0).
             // `cap` = the CONVERGENCE cap (heuristic gains ~0 past it). Per-deck path (adopted): the profile's
-            // escalation_cap. Env research path: MTG_ESC_SINGLE_ABS, else committed-offset. Never search deeper.
+            // escalation_cap. Env research path: committed-offset. Never search deeper.
             const int cap = eff_single_deck
                           ? std::clamp(escalation_cap, 1, depth)
-                          : (s_esc_single_abs > 0
-                              ? std::clamp(s_esc_single_abs, 1, depth)
-                              : std::clamp(committed - s_esc_single_off, 1, depth));
+                          : std::clamp(committed - s_esc_single_off, 1, depth);
             // DETERMINISM: the adopted per-deck path (eff_single_deck) must use a FIXED cost-per-leaf R and NEVER
             // mutate the thread_local g_esc_R. g_esc_R's EMA trajectory depends on the game->thread schedule (each
             // worker converges R over the games it happens to run), so an adaptive R makes PLAY non-reproducible
@@ -11362,7 +11172,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             //   1 = value-leaf committed win turn (== legacy MTG_ESC_SINGLE_WARM). OPTIMISTIC and often
             //       UNACHIEVABLE -> the search can't find a line beating it, so it never establishes an
             //       incumbent and prunes nothing (measured WORSE, not better). A diagnostic, not a fix.
-            //   2 = SPARSE-LADDER seed: a cheap shallow FSLineWin at MTG_ESC_SINGLE_SEED (default 2), reusing
+            //   2 = SPARSE-LADDER seed: a cheap shallow FSLineWin at depth 2, reusing
             //       the SAME tt+cache (both keyed by (state, remaining-depth), so cross-depth reuse is sound).
             //       Its win turn is a REAL achievable bound (a genuine line at that depth). Tighter bound, but
             //       costs a shallow search. (Conceptually the same family as MTG_ESC_JUMP.)
@@ -11372,14 +11182,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             static const bool s_esc_single_warm  = EnvOn("MTG_ESC_SINGLE_WARM");
             static const int  s_esc_single_bound = []{ const char* e = std::getenv("MTG_ESC_SINGLE_BOUND");
                                                        return (e && *e) ? std::atoi(e) : -1; }();
-            static const int  s_esc_single_seed  = []{ const char* e = std::getenv("MTG_ESC_SINGLE_SEED");
-                                                       return (e && *e) ? std::atoi(e) : 2; }();
             const int bound_mode = (s_esc_single_bound >= 0) ? s_esc_single_bound : (s_esc_single_warm ? 1 : 0);
             int single_cut = max_turns + 1;                                     // 0: loose (cold)
             if (bound_mode == 1) { single_cut = old_wt; }                       // 1: value-leaf (optimistic)
             else if (bound_mode == 2)                                           // 2: sparse-ladder seed
             {
-                const int sd = std::clamp(s_esc_single_seed, 1, std::max(1, target - 1));
+                const int sd = std::clamp(2, 1, std::max(1, target - 1));   // sparse-ladder seed depth
                 if (sd < target)
                 {
                     SearchLine seed = FSLineWin(state, sd, max_turns, max_turns + 1, second_main,
@@ -11389,29 +11197,24 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             }
             else if (bound_mode == 3)                                           // 3: ONE deep rollout bound
             {
-                // ONE heuristic rollout from the current state with STRUCTURED lookahead to
-                // MTG_ESC_SINGLE_ROLLDEPTH (default = search depth => a deep, value-leaf-depth-ish playout that
-                // follows good play rather than greedy). Its win turn is a REAL achievable bound at depth -- the
-                // cheap incumbent a lone deep pass otherwise lacks, WITHOUT the ladder's shallow rework. This is
-                // the user's "one rollout at the value-leaf's max depth" made concrete.
-                static const int s_esc_single_rolldepth = []{ const char* e = std::getenv("MTG_ESC_SINGLE_ROLLDEPTH");
-                                                              return (e && *e) ? std::atoi(e) : -1; }();
-                const int rd = std::clamp(s_esc_single_rolldepth < 0 ? depth : s_esc_single_rolldepth, 0, depth);
+                // ONE heuristic rollout from the current state with STRUCTURED lookahead to the search
+                // depth (a deep, value-leaf-depth-ish playout that follows good play rather than greedy).
+                // Its win turn is a REAL achievable bound at depth -- the cheap incumbent a lone deep pass
+                // otherwise lacks, WITHOUT the ladder's shallow rework. This is the user's "one rollout at
+                // the value-leaf's max depth" made concrete.
+                const int rd = depth;
                 GameState rs = state;
                 const int rwt = SimulateToEnd(std::move(rs), rd, max_turns, esc_budget,
                                               max_turns + 1, second_main, single_tt);
                 if (rwt <= max_turns) { single_cut = rwt; }
             }
-            // BUDGET-LIMITED single pass with DEPTH FALLBACK (MTG_ESC_SINGLE_FALLBACK): try `target`; if it
-            // OVERRUNS the budget, retry one depth SHALLOWER (reusing the warmed tt/cache, so the d3 attempt's
-            // exploration primes the d2 retry) -- the user's "single pass, budget-limited: fall back to d2 if d3
-            // doesn't fit," down to d1. A depth that never fits keeps the value-leaf line (hcommitted=0). Off =>
-            // legacy single behaviour (one attempt at target; abort => keep value-leaf).
-            // Depth-fallback defaults ON for the adopted per-deck path (it IS the budget-limited fallback); the env
-            // research path keeps it opt-in (MTG_ESC_SINGLE_FALLBACK) for back-compat A/B.
-            static const bool s_esc_single_fallback = EnvOn("MTG_ESC_SINGLE_FALLBACK");
-            const bool eff_fallback = eff_single_deck || s_esc_single_fallback;
-            // UP-CLIMB (adopted path default ON; env research: MTG_ESC_SINGLE_CLIMB; off-switch MTG_ESC_SINGLE_NOCLIMB).
+            // BUDGET-LIMITED single pass with DEPTH FALLBACK: try `target`; if it OVERRUNS the budget,
+            // retry one depth SHALLOWER (reusing the warmed tt/cache, so the d3 attempt's exploration
+            // primes the d2 retry) -- down to d1. A depth that never fits keeps the value-leaf line
+            // (hcommitted=0). ON for the adopted per-deck path (it IS the budget-limited fallback);
+            // the env research path runs one attempt at target (abort => keep value-leaf).
+            const bool eff_fallback = eff_single_deck;
+            // UP-CLIMB (adopted path always ON; env research path: MTG_ESC_SINGLE_CLIMB).
             // The frozen-R hint picks the START depth cheaply (no d1/d2 tax). After that pass, use its LIVE measured
             // cost x the probe's leaf-expansion ratio to test whether ONE deeper still fits the remaining budget; if
             // so, climb (capped at `cap`). This corrects a too-shallow (pessimistic-hint) target from THIS decision's
@@ -11419,9 +11222,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // headroom, so the common case (hint ~right => little budget left => estimate exceeds remaining) stays a
             // single pass. Combined with the existing overrun fallback (corrects a too-DEEP hint), the hint need only
             // be roughly right: R is a hint, the live estimate makes the final depth reliable.
-            static const bool s_esc_single_climb   = EnvOn("MTG_ESC_SINGLE_CLIMB");
-            static const bool s_esc_single_noclimb = EnvOn("MTG_ESC_SINGLE_NOCLIMB");
-            const bool eff_climb = eff_single_deck ? !s_esc_single_noclimb : s_esc_single_climb;
+            static const bool s_esc_single_climb = EnvOn("MTG_ESC_SINGLE_CLIMB");
+            const bool eff_climb = eff_single_deck || s_esc_single_climb;
             int  td = target;
             bool aborted = true;
             bool first = true;
@@ -11464,14 +11266,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                         // Adaptive EMA ONLY on the env research path -- the adopted per-deck path (frozen_R) holds
                         // R fixed for determinism (see the frozen_R note above).
                         if (!frozen_R) { g_esc_R = 0.6 * g_esc_R + 0.4 * Rsample; }
-                        // Telemetry (behind MTG_ESC_PREDICT_STATS): accumulate the measured cost-per-leaf so we can
-                        // report the converged R to freeze into value_play.escalation_r.
-                        if (s_esc_predict_stats)
-                        {
-                            g_esc_R_sum_milli.fetch_add(static_cast<long long>(Rsample * 1000.0),
-                                                        std::memory_order_relaxed);
-                            g_esc_R_n.fetch_add(1, std::memory_order_relaxed);
-                        }
                     }
                 }
                 first = false;
@@ -12265,34 +12059,6 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             have_prev2 = have_prev;
             c_prev     = budget->Used() - used_before;
             have_prev  = true;
-        }
-    }
-
-    // Diagnostic (MTG_TRACE_PLAYOUT_*): replay the committed plan and trace the
-    // rollout's believed winning line. Inert unless the env seed/turn match.
-    if (enforce_budget && s_tp_seed >= 0
-        && static_cast<long long>(state.game_seed) == s_tp_seed
-        && state.turn_number == s_tp_turn)
-    {
-        std::cerr << "[playout] seed=" << state.game_seed << " turn=" << state.turn_number
-                  << " committed_win=" << committed_win
-                  << " sub_depth=" << committed_sub_depth
-                  << "  best_plan=" << PlanDesc(best_plan) << "\n";
-        GameState dbg = state;
-        int life0 = dbg.Opponent().life;
-        ApplyPlanDirect(dbg, best_plan, is_pre_combat);
-        SimulateAnimateLands(dbg);
-        SimulateTapTokens(dbg);
-        SimulateCombat(dbg);
-        std::cerr << "  [pl] turn=" << dbg.turn_number << " opp " << life0 << "->"
-                  << dbg.Opponent().life << " (committed turn)\n";
-        if (dbg.Opponent().life > 0 && SimulateEndAndStartNextTurn(dbg))
-        {
-            g_trace_arm = true;
-            int w = SimulateToEndImpl(dbg, committed_sub_depth, max_turns,
-                                      nullptr, max_turns + 1, second_main, nullptr);
-            g_trace_arm = false;
-            std::cerr << "  [pl] rollout returned win=" << w << "\n";
         }
     }
 

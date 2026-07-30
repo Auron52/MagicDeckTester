@@ -689,23 +689,6 @@ KeepModel BuildKeepModel(const Decklist& deck,
         std::cerr << "  keep-model" << tag << ": " << rows.size() << " labeled hands ("
                   << keep_rows << " keep / " << (rows.size() - keep_rows) << " mull).\n";
 
-        // DIAGNOSTIC (MTG_KEEP_DUMP=path): dump every labeled training row so we can inspect what
-        // signal the labels actually carry (keep-rate / kv vs features). Off by default; env-gated.
-        if (dump_rows)
-        if (const char* dp = std::getenv("MTG_KEEP_DUMP"); dp && *dp)
-        {
-            std::ofstream out(dp);
-            // Generic over the full feature vector (base + constructed) so the dump never goes stale.
-            for (int k = 0; k < g_nf; ++k) { out << FeatureNameAt(feat_model, k) << ','; }
-            out << "kv,thr,y\n";
-            for (const Row& r : rows)
-            {
-                for (int k = 0; k < g_nf; ++k) { out << r.x[k] << ','; }
-                out << r.kv << ',' << r.thr << ',' << r.y << '\n';
-            }
-            std::cerr << "  keep-model: dumped " << rows.size() << " rows to " << dp << "\n";
-        }
-
         // Deterministic 80/20 train/test split by game index (every row of a game stays together).
         std::vector<int> train, test;
         for (int i = 0; i < static_cast<int>(rows.size()); ++i)
@@ -976,44 +959,6 @@ KeepModel BuildKeepModel(const Decklist& deck,
                 if (it != leaf_index.end()) { keep = KeepModel::KeepByScoreOf(leaves[it->second], rows[i].x); }
                 else { keep = nodes[lf].keep != 0; }
                 sum += (keep ? rows[i].kv : rows[i].thr) - std::min(rows[i].kv, rows[i].thr); ++cnt;
-            }
-            // DIAGNOSTIC (MTG_HYBRID_LEAFDIAG): per-leaf, compare the fitted SCORE's held-out regret to the
-            // leaf's CONSTANT decision (the regret-tree leaf), plus kv loss-mass -- to see WHY a linear leaf
-            // score fails on a bimodal deck (TH) but helps a graded one (slivers). Only on the final build.
-            if (nodes_out)
-            if (const char* dg = std::getenv("MTG_HYBRID_LEAFDIAG"); dg && *dg && *dg != '0')
-            {
-                const double loss = static_cast<double>(cfg.max_turns + 1);
-                for (auto& kv : by_leaf)
-                {
-                    const int lf = kv.first; const std::vector<int>& ri = kv.second;
-                    std::vector<int> tr, te;
-                    for (int i : ri) { (rows[i].game % 5 == 0 ? te : tr).push_back(i); }
-                    if (tr.empty() || te.empty()) { continue; }
-                    // constant decision fit on tr (keep-all vs mull-all, lower aggregate regret), eval on te
-                    double rk = 0, rm = 0;
-                    for (int i : tr) { const double o = std::min(rows[i].kv, rows[i].thr);
-                                       rk += rows[i].kv - o; rm += rows[i].thr - o; }
-                    const bool keep_const = rk <= rm;
-                    double creg = 0, sreg = 0, floss = 0;
-                    auto sit = leaf_index.find(lf);
-                    for (int i : te)
-                    {
-                        const double o = std::min(rows[i].kv, rows[i].thr);
-                        creg += (keep_const ? rows[i].kv : rows[i].thr) - o;
-                        bool ks = (sit != leaf_index.end())
-                                  ? KeepModel::KeepByScoreOf(leaves[sit->second], rows[i].x)
-                                  : keep_const;
-                        sreg += (ks ? rows[i].kv : rows[i].thr) - o;
-                        floss += (rows[i].kv >= loss - 0.5) ? 1.0 : 0.0;
-                    }
-                    std::cerr << "    LEAFDIAG node=" << lf << " n=" << ri.size()
-                              << " frac_loss=" << floss / te.size()
-                              << " const_rg=" << creg / te.size()
-                              << " score_rg=" << sreg / te.size()
-                              << " score_minus_const=" << (sreg - creg) / te.size()
-                              << (sit != leaf_index.end() ? "" : " [no-score]") << "\n";
-                }
             }
             if (nodes_out) { *nodes_out = nodes; *leaves_out = leaves; }
             return cnt ? sum / cnt : 1e18;

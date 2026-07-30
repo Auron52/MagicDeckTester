@@ -631,8 +631,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     bool   change_detect = false;
     double detect_delta  = []{ const char* s = std::getenv("MTG_KEEP_DETECT_DELTA");
         return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();   // decision-relevant win-turn shift
-    double detect_z      = []{ const char* s = std::getenv("MTG_KEEP_DETECT_Z");
-        return (s && *s) ? std::max(0.0, std::atof(s)) : 1.64; }();   // CI band for the "unmoved" call
+    double detect_z      = 1.64;   // CI band for the "unmoved" call
     // EXECUTION-TRACE reuse (MTG_KEEP_CHANGED_CARDS): the set of cards a change touched. A prior cell
     // whose recorded touched-set is DISJOINT from this set is byte-identical on the new commit -> reuse
     // its prior value EXACTLY (0 samples of refine), including near-threshold + bottoming cells that the
@@ -820,8 +819,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Slow-rollout capture (diagnostic, off by default): time each rollout; if it exceeds
     // MTG_KEEP_SLOW_MS, log the exact degenerate game -- hand (bucket composition), side, rollout index
     // and the seed that fully reproduces it -- so the pathological combo game can be replayed/profiled.
-    // Threshold <= 0 disables it (a single steady_clock read per rollout is the only overhead). Appends
-    // to MTG_KEEP_SLOW_LOG if set (dedup/inspection), else stderr only.
+    // Threshold <= 0 disables it (a single steady_clock read per rollout is the only overhead).
+    // Logged to stderr.
     const long long slow_ms = []{ const char* s = std::getenv("MTG_KEEP_SLOW_MS");
         return (s && *s) ? std::atoll(s) : 0LL; }();
     std::mutex slow_mtx;
@@ -864,8 +863,6 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 + "ms  size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
                 + " seed=" + std::to_string(rs) + "  hand: " + hand;
             std::cerr << line << "\n" << std::flush;
-            if (const char* sl = std::getenv("MTG_KEEP_SLOW_LOG"); sl && *sl)
-            { std::ofstream f(sl, std::ios::app); f << line << "\n"; }
         }
     };
 

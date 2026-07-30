@@ -56,8 +56,9 @@ struct ValuePlay
     // ladder's depth so light decks that only afford d1/d2 are not forced deeper. 0 => off (legacy ladder,
     // byte-identical). Set to the deck's heuristic convergence depth from the value_leaf_table (heuristic_lp).
     int    escalation_cap = 0;             // 0 => off; >0 => single-pass predicted-affordable escalation, capped
-    // FROZEN heuristic cost-per-probe-leaf for the predicted-affordable walk (calibrated offline via
-    // MTG_ESC_PREDICT_STATS). A fixed value keeps the single pass DETERMINISTIC (an adaptive thread_local R has a
+    // FROZEN heuristic cost-per-probe-leaf for the predicted-affordable walk (calibrated offline; the
+    // MTG_ESC_PREDICT_STATS telemetry that reported it was retired 2026-07-30 -- git has it if a
+    // recalibration is ever needed). A fixed value keeps the single pass DETERMINISTIC (an adaptive thread_local R has a
     // thread-schedule-dependent trajectory => non-reproducible play). 0/unset => 120 prior. Only read when
     // escalation_cap>0.
     double escalation_r = 0.0;

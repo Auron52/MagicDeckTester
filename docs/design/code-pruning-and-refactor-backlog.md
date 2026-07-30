@@ -41,8 +41,27 @@ really was Debug; the orphans really are referenced by nothing but this document
   CLAUDE.md pointer. **Step 4 (startup `MTG_*` typo validator) still open** — needs the
   flag registry / `--list-flags` from D1.
 
-Still open: A3 step 4 (flag validator), A5 (docs/design index), A6 (hook renumbering),
-all of Tier B, C, D.
+- **C2 DONE** (`ca0cb96`) — `mtg-test` doctest target; twin-equivalence + golden mana-payment
+  tests (6 cases / 156 assertions). Test seams: `TapForCostDirect` external linkage,
+  `MtgTestSeam` friend.
+- **C1 step 2 DONE** (`c33986c`) — the mana-payment twins unified into `TapForCostSharedOnce`
+  (`src/ai/ManaPayment.cpp`), byte-identical (unit + smoke + full regression). Finding: under
+  `MTG_TAP_LEGACY` the executor was the unfixed twin of the `6bb2791` coloured-pip fix
+  (resolved toward `ProducesForPayment`). Next units per the safety order: `EffectiveCost` →
+  `CastOrderLess`/`OrderingOpaque` → `BuildPool`/`BuildAvailableMana` → …
+- **D1/D2 PARTIAL (user-approved)** — deleted with sign-off: 9 spent diagnostics
+  (`MTG_ESC_PREDICT_{STATS,COSTCURVE,RALPHA}`, `MTG_HYBRID_LEAFDIAG`, `MTG_KEEP_{DETECT_Z,DUMP,SLOW_LOG}`,
+  `MTG_TRACE_PLAYOUT_{SEED,TURN}`), 8 rejected-experiment knobs (`MTG_ESC_SINGLE_{ABS,FALLBACK,NOCLIMB,ROLLDEPTH,SEED}`,
+  `MTG_ESCALATION_GATE_{T_LOW,BUDGET_CUT}`, `MTG_ESC_RESTORE`), and the `MTG_HINATA_SPASM_GATE`
+  three-mode branch (redesign preserved on `recovered/hinata-spasm-gate-redesign`). All
+  verified byte-identical (unit + smoke + regression). NOT deleted: `MTG_SCORE_HIST` +
+  `MTG_SCORE_DETAIL` (approved but woven through ~15 sites of the scorer loop — left for a
+  focused pass), the `MTG_LEGACY_*` hatches (user chose keep), all `MTG_NO_*` hatches,
+  capacity knobs, and keep-model gen knobs.
+
+Still open: A3 step 4 (flag validator + `--list-flags`, pairs with the D1 registry),
+A5 (docs/design index), A6 (hook renumbering), Tier B, remaining C1 units,
+`MTG_SCORE_HIST`/`MTG_SCORE_DETAIL` removal.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
