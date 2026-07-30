@@ -104,7 +104,19 @@ really was Debug; the orphans really are referenced by nothing but this document
   diagnostics). NOT deleted: the `MTG_LEGACY_*` hatches (user chose keep), all `MTG_NO_*`
   hatches, capacity knobs, and keep-model gen knobs.
 
-Still open: A5 (docs/design index), A6 (hook renumbering), Tier B, remaining C1 units.
+- **A5 DONE** — [docs/design/README.md](README.md) indexes all 108 docs (verified: every file
+  linked exactly once, no broken links). Tags are the five this doc asked for plus `OPEN`, which
+  earns its place because "a known live defect awaiting a fix" and "a parked idea nobody is
+  working on" are materially different reads for an agent picking a task. The **dead-ends table
+  is the point of the file**: 21 measured losses, each with its one-line reason, several of which
+  are recorded *only* inside a long doc (the leaf-apply gate's "nothing slow may live in the
+  rollout"; the nested-breakpoint result that smoke+regression alone would have adopted; the d0
+  divergence-digest lesson that the rollout benefits from anti-WASTE rules, not from
+  good-judgment rules the search already makes). Two stale headers found and flagged in place
+  rather than edited: `per-deck-folder-layout.md` still says "deferred / not started" although
+  the move shipped, and `land-signature-completeness.md` says GT-rebaseline pending.
+
+Still open: A6 (hook renumbering), Tier B, remaining C1 units.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
