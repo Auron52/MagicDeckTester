@@ -348,11 +348,27 @@ path alone will mislead you. Verify by following the actual call chain for the m
 (`RunClaudePlay` → `GameEngine::RunGame` → `AIEngine::TakeTurn` → the external branch), not by
 assuming the executor is always the executor.
 
-### 4. The look SOURCE label differs
+### 4. The look SOURCE label differs — ATTEMPTED, REVERTED (do not retry blind)
 
-The executor passes the land's own name to `ScryTop` / `SurveilTop`; the rollout leaves the default
-`"Scry"` / `"Surveil"`. The autonomous heuristic ignores the source, so this only affects the reveal
-log and the claude-play prompt label.
+The executor passes the land's own name to `ScryTop` / `SurveilTop`; `PlayLandByName` leaves the
+defaults `"Scry"` / `"Surveil"`. The source never reaches `HeuristicTopDisposition`, so autonomous
+play cannot see it — but it *is* read by a person: it labels the claude-play prompt and the reveal
+log, and `PlayLandByName` is the realised land drop under `--claude-play` (see #3). Real recorded
+games show the inconsistency: the references contain 4 bare `"Scry"` and 2 `"Surveil"` sources
+alongside properly-named ones.
+
+Setting `label_look_source = true` on the rollout's drop was tried and **reverted**. The
+reference intent-replay anchors each recorded decision on `(kind, index, source)`, so renaming the
+source orphans every answer recorded against the old label: the replay falls back to engine
+defaults and `treasure_hunt/claude_s5_gi4.json` degrades from a recorded **win on turn 8 to a
+loss**, 16 of its 17 recorded decisions unused. `viewer_protocol_check.py --strict` goes from
+138 ok / 0 play-drift to 1 play-drift, which is a hard suite failure.
+
+So the label is not free: it costs a recorded human line. Fixing it properly needs one of two
+things first, and both are the user's call — re-saving the affected Treasure Hunt references
+through the play viewer, or making the replay treat `source` as non-anchoring for scry/surveil.
+Not worth a cosmetic label on its own; worth folding in if either of those happens for other
+reasons.
 
 ### Not unified, deliberately
 
