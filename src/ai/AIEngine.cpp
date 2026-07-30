@@ -2625,6 +2625,14 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
     return false;
 }
 
+// MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
+// land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See TryPlayLand.
+// MTG_LAND_CLOSING_WINDOW=1: opt-in heuristic variant -- drop a still-untapped fastland ahead of an
+// unconditionally-untapped land, since only the fastland's window closes. Measurement scaffolding.
+static const bool s_legacy_static_tapped = std::getenv("MTG_LEGACY_STATIC_TAPPED") != nullptr;
+static const bool s_land_closing_window  = []{ const char* e = std::getenv("MTG_LAND_CLOSING_WINDOW");
+                                               return !(e && std::string(e) == "0"); }();   // DEFAULT ON
+
 bool AIEngine::TryPlayLand(GameState& state)
 {
     Player& ap = state.ActivePlayer();
@@ -2720,18 +2728,44 @@ bool AIEngine::TryPlayLand(GameState& state)
     {
         bool want_untapped = (pass < 2);
         bool want_multi    = (pass == 0 || pass == 2);
+        // Closing-window sub-order (MTG_LAND_CLOSING_WINDOW): a fastland (Razorverge Thicket) enters
+        // untapped ONLY while few other lands are out, so its untapped drop is use-it-or-lose-it,
+        // while a land that always enters untapped (Brushland, a basic) is just as good later. Human
+        // play therefore drops the fastland FIRST -- same mana now, strictly better options later.
+        // This lives INSIDE the pass on purpose: every candidate in a pass is already equally
+        // preferred by the pass's own criteria, so the rule only ever breaks a tie among OTHERWISE
+        // EQUAL options and can never outrank an untapped drop or the multi-colour preference (user,
+        // 2026-07-29). sub 0 = still-open closing windows, sub 1 = everything else.
+        for (int sub = 0; sub < 2; ++sub)
+        {
+        if (sub == 0 && !s_land_closing_window) { continue; }   // rule off -> single unfiltered scan
         for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
         {
             if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: never played
             auto def = CardDatabase::Instance().Lookup(it->m_name);
             if (!def || !def->card.IsLand()) { continue; }
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
-            bool is_tapped = def->params.enters_tapped;
+            if (s_land_closing_window)
+            {
+                const bool closing = def->params.fastland_max_other_lands >= 0
+                                  && !LandWouldEnterTapped(state, *def);   // window still open
+                if ((sub == 0) != closing) { continue; }
+            }
+            // Tapped-ness must be the DYNAMIC answer, not the static flag: a fastland
+            // (fastland_max_other_lands) and a shock/reveal land all carry enters_tapped == false
+            // yet enter TAPPED depending on board/life/hand, so the static read put them in the
+            // "untapped" passes while they actually came down tapped -- defeating the very
+            // preference these passes exist to express. LandWouldEnterTapped is the pure predicate;
+            // LandEntersTapped must NOT be used here, it PAYS the shock life as a side effect.
+            // MTG_LEGACY_STATIC_TAPPED=1 restores the old static read for a byte-identical A/B.
+            bool is_tapped = s_legacy_static_tapped ? def->params.enters_tapped
+                                                   : LandWouldEnterTapped(state, *def);
             bool is_multi  = def->params.produces.size() > 1;
             if (want_untapped && is_tapped)  { continue; }
             if (!want_untapped && !is_tapped) { continue; }
             if (want_multi && !is_multi)     { continue; }
             return play_land_iter(it, *def);
+        }
         }
     }
     return false;

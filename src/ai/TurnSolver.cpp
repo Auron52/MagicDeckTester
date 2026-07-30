@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -1121,6 +1122,118 @@ static int FillScaledCastFace(const GameState& state, Action& a, int surplus_gen
     return extra;
 }
 
+// Choice-INDEPENDENT precompute shared by the two splice predicates below (sibling of
+// BuildAccelPrefixOrder; built ONCE per plan enumeration, right before the odometer).
+//
+// Both predicates used to redo three things at EVERY odometer position: group the selected splice
+// bases by card NAME via std::string compares, rescan the active player's hand to count that name's
+// copies (N), and rescan it again to find each base's copy POSITION. None of that depends on the
+// odometer's `choice` -- it is fixed for the whole enumeration -- yet it dominated the Dragonstorm
+// combo search (GroupChoiceOverSplices 12.2% + SpliceCollapseViolated 10.8% of total runtime,
+// plus ~4% of libc memcmp from the name compares; perf, d5 seed 1001). Hoisting it here turns both
+// predicates into a walk over dense int arrays.
+//
+// Name identity is keyed on Action::def rather than card_name: CardDatabase::LookupCached returns
+// ONE stable CardDefinition* per name and CollectActions resolves `def` from `card_name`, so
+// def-pointer equality == name equality for every candidate these predicates look at (a candidate
+// with a null def is skipped by the splice_onto_arcane test either way). The hand scans below still
+// compare by name -- they run once, so the string compare is free there.
+struct SpliceOdometerIndex
+{
+    std::vector<int> cand_name_id;    // per cand: dense splice-base name id, or -1 (not a splice base)
+    std::vector<int> cand_pos;        // per cand: # same-named copies in hand BEFORE its hand_index
+    std::vector<int> cand_k;          // per cand: splice_count (hoisted out of the fat Action struct)
+    std::vector<int> name_hand_count; // per name id: copies of that name in hand (the old N)
+    std::vector<int> splice_groups;   // group indices holding a splice-base option -- the ONLY digits
+                                      // the predicate reads, so it walks this instead of every group.
+                                      // SORTED by (name id, copy pos), which is what lets the canonical
+                                      // -form check run with NO sort at all: groups are keyed by
+                                      // hand_index, so every option in a group is the SAME hand card and
+                                      // its name/pos are group CONSTANTS.
+    std::vector<int> group_name_id;   // per group: dense splice-base name id, or -1
+    std::vector<int> group_pos;       // per group: that hand card's copy position among same-named copies
+    int              num_names = 0;   // 0 == no splice base among the candidates (predicate inert)
+};
+
+static void BuildSpliceOdometerIndex(const GameState& state, const std::vector<Action>& cands,
+                                     const std::vector<std::vector<int>>& groups,
+                                     SpliceOdometerIndex& out)
+{
+    const int m = static_cast<int>(cands.size());
+    out.cand_name_id.assign(m, -1);
+    out.cand_pos.assign(m, 0);
+    out.cand_k.assign(m, 0);
+    out.name_hand_count.clear();
+    out.splice_groups.clear();
+    out.group_name_id.assign(groups.size(), -1);
+    out.group_pos.assign(groups.size(), 0);
+    out.num_names = 0;
+
+    static thread_local std::vector<int> reps;   // name id -> representative candidate index
+    reps.clear();
+    for (int j = 0; j < m; ++j)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (!d || !d->params.splice_onto_arcane || cands[j].kind != Action::Kind::CastFromHand)
+        { continue; }
+        int id = -1;
+        for (size_t k = 0; k < reps.size(); ++k)
+        { if (cands[reps[k]].def == d) { id = static_cast<int>(k); break; } }
+        if (id < 0) { id = static_cast<int>(reps.size()); reps.push_back(j); }
+        out.cand_name_id[j] = id;
+        out.cand_k[j]       = cands[j].splice_count;
+    }
+    out.num_names = static_cast<int>(reps.size());
+    if (out.num_names == 0) { return; }
+
+    const Player& ap = state.ActivePlayer();
+    const int     hs = static_cast<int>(ap.hand.size());
+    out.name_hand_count.assign(out.num_names, 0);
+    for (int h = 0; h < hs; ++h)
+    {
+        for (int id = 0; id < out.num_names; ++id)
+        { if (ap.hand[h].m_name == cands[reps[id]].card_name) { ++out.name_hand_count[id]; break; } }
+    }
+    for (int j = 0; j < m; ++j)
+    {
+        const int id = out.cand_name_id[j];
+        if (id < 0) { continue; }
+        const std::string& nm = cands[reps[id]].card_name;
+        int pos = 0;
+        for (int h = 0; h < cands[j].hand_index && h < hs; ++h)
+        { if (ap.hand[h].m_name == nm) { ++pos; } }
+        out.cand_pos[j] = pos;
+    }
+    // The digits the predicate actually reads. Every other group is a payoff/land card whose choice it
+    // ignores, so walking only these turns the per-position cost from O(groups) into O(splice groups)
+    // -- on a Dragonstorm go-off hand a handful instead of the whole hand. Name and pos are group
+    // constants (one hand card per group), so we cache them and pre-sort by (name, pos): the walk then
+    // visits each name's copies in ascending position order, which IS the order the canonical-form
+    // check needs -- so it needs no sort of its own.
+    for (size_t g = 0; g < groups.size(); ++g)
+    {
+        for (int j : groups[g])
+        {
+            if (out.cand_name_id[j] < 0) { continue; }
+            out.group_name_id[g] = out.cand_name_id[j];
+            out.group_pos[g]     = out.cand_pos[j];
+            out.splice_groups.push_back(static_cast<int>(g));
+            break;
+        }
+    }
+    std::sort(out.splice_groups.begin(), out.splice_groups.end(),
+              [&out](int a, int b) {
+                  if (out.group_name_id[a] != out.group_name_id[b])
+                  { return out.group_name_id[a] < out.group_name_id[b]; }
+                  return out.group_pos[a] < out.group_pos[b];
+              });
+}
+
+// Shared read-only stand-in for a deck with no splice cards. Namespace scope, NOT a function-local
+// static: `Solve` is the rollout leaf (one call per search node), and a function-local static costs a
+// thread-safe-init guard check on every one of those calls.
+static const SpliceOdometerIndex g_no_splice_index{};
+
 // Generate-time, BYTE-IDENTICAL analogue of SubsetHasIllegalSplice applied to the odometer's GROUP
 // selection (Solve's default enumeration). Splice bases are CastFromHand actions (hand_index >= 0), so
 // they always live in a group -- never in the independent 2^num_ind set -- which means the group choice
@@ -1131,120 +1244,85 @@ static int FillScaledCastFace(const GameState& state, Action& a, int surplus_gen
 // of Desperate Ritual -> N groups x (N options) -> most k-assignments violate the triangular N-1-j
 // bound) before paying the per-subset cost. Mirrors SubsetHasIllegalSplice exactly; gate the call on a
 // one-time any_splice flag so every non-splice deck skips it entirely (byte-identical, zero overhead).
-static bool GroupChoiceOverSplices(const GameState& state,
-                                   const std::vector<Action>& cands,
-                                   const std::vector<std::vector<int>>& groups,
-                                   const std::vector<int>& choice)
+//
+// MERGED with the Desperate Ritual SPLICE-COUNT COLLAPSE into ONE pass; `check_collapse` selects
+// whether that half runs (HEURISTIC -- DragonstormProvider::UseSpliceCollapse() +
+// MTG_UNPRUNED(SpliceCollapse)). With the collapse on, CollectActions emits only two splice variants
+// per copy -- BARE (k=0) and ONE-SPLICE (k=1) -- so the splice count is CAPPED at 1 (the user's "one
+// splice per" model: the front-loaded max chain needs ~8 mana up front and overshoots this deck's
+// typical lines; a k=1 splice needs only 4 mana and each self-funds the next). Because same-named
+// copies are identical, a selection is fully described by (m = bases cast, s = how many splice one
+// other), so only the canonical form is kept: the cast bases occupy positions {0,1,...,m-1} AND the k
+// values, read in position order, are non-increasing. That collapses every symmetric/duplicate {0,1}
+// mix -- e.g. {0,1,1,0} -> canonical {1,1,0,0} -- to one representative per (m,s), while still letting
+// the SEARCH pick the affordable (m,s) by ROLLING each out (a splice the mana can't front simply fails
+// in the rollout) -- i.e. mana-derived within the k<=1 bound, no deterministic mana fill needed. The
+// triangular legality (s <= N-1: the last cast copy has no other to splice) is the OTHER half of this
+// function, which still runs alongside.
+//
+// Both halves used to do their own gather + std::sort over the same projection of `choice`; both now
+// read the precomputed SpliceOdometerIndex instead of re-deriving names, hand counts and copy
+// positions from strings at every odometer position. Byte-identical: each half tests exactly the same
+// conditions, and the result is an OR over them, so evaluating them interleaved per name (rather than
+// one predicate fully, then the other) cannot change the boolean.
+static bool SpliceGroupChoiceRejected(const SpliceOdometerIndex& idx,
+                                      const std::vector<std::vector<int>>& groups,
+                                      const std::vector<int>& choice,
+                                      bool check_collapse)
 {
-    auto sel_base = [&](size_t g, int* out_j) -> bool {
-        if (choice[g] <= 0) { return false; }
-        int j = groups[g][choice[g] - 1];
-        const CardDefinition* d = cands[j].def;
-        bool is_base = d && d->params.splice_onto_arcane && cands[j].kind == Action::Kind::CastFromHand;
-        if (is_base) { *out_j = j; }
-        return is_base;
-    };
-    // Reuse per-thread buffers + dedup by candidate INDEX (not a string copy). This splice-prune is called
-    // per choice in the plan-enumeration inner loop; the old per-call vector<string> names (+ string copies)
-    // and per-name vector<int> ks were heap-allocated every call (profiled hot -- ~9% + string churn). Store
-    // one representative candidate index per unique card name and compare names by reference. Byte-identical:
-    // the outer loop is an OR over names, so representative order can't change the result. Non-re-entrant
-    // leaf -> one buffer per thread is safe; thread_local keeps the batch/gen worker pool race-free.
-    static thread_local std::vector<int> name_reps;   // representative cand index per unique splice-base name
-    name_reps.clear();
-    for (size_t g = 0; g < groups.size(); ++g)
-    {
-        int j;
-        if (!sel_base(g, &j)) { continue; }
-        bool seen = false;
-        for (int r : name_reps) { if (cands[r].card_name == cands[j].card_name) { seen = true; break; } }
-        if (!seen) { name_reps.push_back(j); }
-    }
-    if (name_reps.empty()) { return false; }
-    const Player& ap = state.ActivePlayer();
-    static thread_local std::vector<int> ks;
-    for (int rep : name_reps)
-    {
-        const std::string& nm = cands[rep].card_name;
-        ks.clear();
-        for (size_t g = 0; g < groups.size(); ++g)
-        {
-            int j;
-            if (sel_base(g, &j) && cands[j].card_name == nm) { ks.push_back(cands[j].splice_count); }
-        }
-        int N = 0;
-        for (const Card& c : ap.hand) { if (c.m_name == nm) { ++N; } }
-        std::sort(ks.begin(), ks.end(), std::greater<int>());
-        for (size_t j = 0; j < ks.size(); ++j)
-        {
-            if (ks[j] > N - 1 - static_cast<int>(j)) { return true; }
-        }
-    }
-    return false;
-}
+    if (idx.num_names <= 0) { return false; }
+    // One walk of the (name, pos)-sorted splice groups serves BOTH checks. Because the walk already
+    // visits a name's copies in ascending position order, the canonical-form test is a running
+    // comparison (no sort), and only the triangular test needs the run's k values ordered -- a tiny
+    // descending insertion sort over at most (copies in hand) ints. thread_local scratch keeps the
+    // batch/gen worker pool race-free (non-re-entrant leaf -> one buffer per thread is safe).
+    static thread_local std::vector<int> ks;   // current name run's selected splice_counts
 
-// Desperate Ritual SPLICE-count collapse (HEURISTIC; DragonstormProvider::UseSpliceCollapse() +
-// MTG_UNPRUNED(SpliceCollapse)). With the collapse on, CollectActions emits only two splice variants per
-// copy -- BARE (k=0) and ONE-SPLICE (k=1) -- so the splice count is CAPPED at 1 (the user's "one splice
-// per" model: the front-loaded max chain needs ~8 mana up front and overshoots this deck's typical lines;
-// a k=1 splice needs only 4 mana and each self-funds the next). Because same-named copies are identical, a
-// selection is fully described by (m = bases cast, s = how many splice one other), so we keep only the
-// canonical form: the cast bases occupy positions {0,1,...,m-1} AND the k values, read in position order,
-// are non-increasing (the s single-splices are the FIRST s of the cast prefix). That collapses every
-// symmetric/duplicate {0,1} mix -- e.g. {0,1,1,0} -> canonical {1,1,0,0} -- to one representative per
-// (m,s), while still letting the SEARCH pick the affordable (m,s) by ROLLING each out (a splice the mana
-// can't front simply fails in the rollout) -- i.e. mana-derived within the k<=1 bound, no deterministic
-// mana fill needed. The triangular legality (s <= N-1: the last cast copy has no other to splice) is
-// enforced by GroupChoiceOverSplices, which still runs alongside this. pos = # same-named copies in hand
-// BEFORE this base's hand_index. Called only when splice_collapse_on (implies any_splice). Returns true
-// (skip) for a non-prefix or non-canonical selection. thread_local scratch -> batch/gen worker pool safe.
-static bool SpliceCollapseViolated(const GameState& state,
-                                   const std::vector<Action>& cands,
-                                   const std::vector<std::vector<int>>& groups,
-                                   const std::vector<int>& choice)
-{
-    auto sel_base = [&](size_t g, int* out_j) -> bool {
-        if (choice[g] <= 0) { return false; }
-        int j = groups[g][choice[g] - 1];
-        const CardDefinition* d = cands[j].def;
-        bool is_base = d && d->params.splice_onto_arcane && cands[j].kind == Action::Kind::CastFromHand;
-        if (is_base) { *out_j = j; }
-        return is_base;
-    };
-    static thread_local std::vector<int> name_reps;   // representative cand index per unique splice-base name
-    name_reps.clear();
-    for (size_t g = 0; g < groups.size(); ++g)
+    // Triangular legality for one name's run: casting m bases with splice counts k (DESCENDING) is
+    // physically possible iff the j-th splices at most N-1-j others, N = copies of that name in hand.
+    auto run_violates = [&](int name_id) -> bool
     {
-        int j;
-        if (!sel_base(g, &j)) { continue; }
-        bool seen = false;
-        for (int r : name_reps) { if (cands[r].card_name == cands[j].card_name) { seen = true; break; } }
-        if (!seen) { name_reps.push_back(j); }
-    }
-    if (name_reps.empty()) { return false; }
-    const Player& ap = state.ActivePlayer();
-    static thread_local std::vector<std::pair<int, int>> pk;   // (pos, k) of this name's cast bases
-    for (int rep : name_reps)
-    {
-        const std::string& nm = cands[rep].card_name;
-        pk.clear();
-        for (size_t g = 0; g < groups.size(); ++g)
+        const int n = static_cast<int>(ks.size());
+        if (n == 0) { return false; }
+        for (int i = 1; i < n; ++i)          // insertion sort, DESCENDING
         {
-            int j;
-            if (!sel_base(g, &j) || cands[j].card_name != nm) { continue; }
-            int pos = 0;
-            for (int h = 0; h < cands[j].hand_index && h < static_cast<int>(ap.hand.size()); ++h)
-            { if (ap.hand[h].m_name == nm) { ++pos; } }
-            pk.emplace_back(pos, cands[j].splice_count);
+            const int v = ks[i];
+            int q = i - 1;
+            while (q >= 0 && ks[q] < v) { ks[q + 1] = ks[q]; --q; }
+            ks[q + 1] = v;
         }
-        std::sort(pk.begin(), pk.end());
-        // Cast bases must occupy positions {0,1,...,m-1} (a prefix; dedup of identical copies).
-        for (size_t t = 0; t < pk.size(); ++t) { if (pk[t].first != static_cast<int>(t)) { return true; } }
-        // Canonical (m,s): the splicers (k=1) are the FIRST s of the cast prefix -> k non-increasing in
-        // position order. Rejects e.g. {0,1} (== canonical {1,0}) so each (m,s) is enumerated once.
-        for (size_t t = 1; t < pk.size(); ++t) { if (pk[t].second > pk[t - 1].second) { return true; } }
+        const int N = idx.name_hand_count[name_id];
+        for (int t = 0; t < n; ++t) { if (ks[t] > N - 1 - t) { return true; } }
+        return false;
+    };
+
+    int cur_name = -1;      // name id of the run being walked
+    int cast_cnt = 0;       // cast bases seen so far in this run (== the expected copy position)
+    int last_k   = 0;       // previous cast base's k, for the non-increasing canonical form
+    ks.clear();
+    for (int g : idx.splice_groups)
+    {
+        const int name = idx.group_name_id[g];
+        if (name != cur_name)
+        {
+            if (cur_name >= 0 && run_violates(cur_name)) { return true; }
+            cur_name = name; cast_cnt = 0; last_k = 0; ks.clear();
+        }
+        if (choice[g] <= 0) { continue; }
+        const int j = groups[g][choice[g] - 1];
+        if (idx.cand_name_id[j] < 0) { continue; }   // selected option is not a splice base
+        const int k = idx.cand_k[j];
+        if (check_collapse)
+        {
+            // Cast bases must occupy positions {0,1,...,m-1} (a prefix; dedup of identical copies)...
+            if (idx.group_pos[g] != cast_cnt) { return true; }
+            // ...and the splicers must be the FIRST s of that prefix -> k non-increasing in position
+            // order, so each (m,s) is enumerated once (rejects e.g. {0,1} == canonical {1,0}).
+            if (cast_cnt > 0 && k > last_k) { return true; }
+        }
+        last_k = k; ks.push_back(k); ++cast_cnt;
     }
-    return false;
+    return cur_name >= 0 && run_violates(cur_name);
 }
 
 // Dragonstorm acceleration-prefix collapse (HEURISTIC -- unlike GroupChoiceOverSplices this changes WHICH
@@ -1301,6 +1379,23 @@ static void BuildAccelPrefixOrder(const std::vector<Action>& cands,
         return a.hand_index < b.hand_index;
     });
     for (const AccelG& a : accel) { order_out.push_back(a.group); }
+}
+
+// Lowest odometer DIGIT (group index) whose selection can change any of the three group predicates:
+// a group holding a splice base, or an accelerant group in accel_order. All three read choice[] ONLY
+// for splice-base / accelerant groups, so when the odometer's carry stops BELOW this digit the
+// predicate projection is unchanged and the previous result can be reused -- which is what turns the
+// per-plan-position predicate cost into a per-accelerant-position one (the payoff groups sitting
+// below the lowest ritual group stop multiplying it). Returns groups.size() when nothing is relevant
+// (compute once, never again); 0 reproduces the old recompute-every-position behaviour.
+static int MinPredicateDigit(const std::vector<std::vector<int>>& groups,
+                             const SpliceOdometerIndex& sidx,
+                             const std::vector<int>& accel_order)
+{
+    int lo = static_cast<int>(groups.size());
+    for (int g : sidx.splice_groups) { if (g < lo) { lo = g; } }
+    for (int g : accel_order)        { if (g < lo) { lo = g; } }
+    return lo;
 }
 
 // Per-CHOICE check (cheap -- just a walk of the precomputed order): the CAST accelerant groups are NOT a
@@ -2483,6 +2578,22 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
 // turn as their enabler, or a same-turn-cast Hinata crediting later spells) MUST be added to this bail-out
 // too, exactly like affinity -- otherwise it silently breaks byte-identity. A reducer already in play that
 // bakes into a.cost needs nothing. MTG_MANA_PRUNE=0 also disables (the byte-identical A/B toggle).
+static const bool s_legacy_mana_bound = std::getenv("MTG_LEGACY_MANA_BOUND") != nullptr;
+
+// MEASURED DEAD END (2026-07-30) -- do NOT re-add: gating the mana-gate BUILD on a predicted odometer
+// width (prod(1+|group|) * 2^|independent|), i.e. "only bother on complex turns", is strictly WORSE than
+// always building. Sweeping the threshold on the three gate-relevant decks (callgrind Ir vs gate-off):
+//   Dragonstorm  T=0 -13.42%   T=256 -11.73%   T=4096 -0.55%
+//   Hinata2      T=0  -0.34%   T=256  -0.14%   T=4096 +0.05%
+//   slivers      T=0  -0.14%   T=256  +0.04%   T=4096 +0.04%
+// The gate's setup is one term per candidate with no allocation, so it repays itself even on a narrow
+// odometer; thresholding only forfeits wins. The residual cost on decks that never build it is the
+// RELEVANCE SCAN, not the build -- so that scan was folded into the group-building loop instead.
+
+// Rite-of-Flame graveyard escalation credit: the Nth same-turn copy floats +(N-1) beyond its base
+// ritual_float, which consider() credits as this triangular term. Used by BOTH total-mana bounds.
+static inline int ManaGateTriangular(int gy) { return gy > 1 ? gy * (gy - 1) / 2 : 0; }
+
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands)
 {
     static const bool on = []{ const char* e = std::getenv("MTG_MANA_PRUNE"); return !(e && std::string(e) == "0"); }();
@@ -2496,8 +2607,648 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     for (const Action& a : cands)
     { if (a.def && !a.def->params.reduces_spell_color.empty()) { return std::numeric_limits<int>::max(); } }
     long long b = pool.Total();
-    for (const Action& a : cands) { b += a.ritual_float; b += a.rock_mana.Total(); }
+    int gy = 0;
+    for (const Action& a : cands)
+    {
+        b += a.ritual_float;
+        b += a.rock_mana.Total();
+        if (a.def && a.def->params.ritual_float_gy_self_bonus) { ++gy; }
+    }
+    // SOUNDNESS FIX (2026-07-30): this bound credited every candidate's base ritual_float but NOT the
+    // Rite-of-Flame graveyard escalation that consider() credits, so it was too TIGHT -- i.e. UNSOUND,
+    // pruning genuinely payable ritual chains. That was the real cause of the 3 Dragonstorm cases the
+    // selection-exact gate appeared to "change": the gate was right and this bound was wrong. Crediting
+    // the triangular term here can only LOOSEN the bound (prune less), never drop a plan.
+    // MTG_LEGACY_MANA_BOUND=1 restores the old unsound bound for an A/B.
+    if (!s_legacy_mana_bound) { b += ManaGateTriangular(gy); }
     return (b >= std::numeric_limits<int>::max()) ? std::numeric_limits<int>::max() : static_cast<int>(b);
+}
+
+// ---- SELECTION-EXACT total-mana gate (supersedes the ManaPruneBound scalar) --------------------
+//
+// ManaPruneBound above is a single scalar computed from the WHOLE candidate list, which makes it
+// far too loose to prune the combo cross-product it was meant for:
+//   * it credits EVERY ritual_float / rock in hand to every odometer position, even positions that
+//     cast none of them (a four-ritual Dragonstorm go-off hand gets a budget inflated by 12+ mana);
+//   * it bails out entirely (INT_MAX) when ANY candidate carries a same-turn cost reducer or
+//     affinity, because those discounts are applied per-SUBSET after the cost sum -- so Dragonstorm,
+//     which runs 3x Ruby Medallion, loses the gate completely on any turn with one in hand.
+// The result was that the odometer walked essentially its entire product space and paid the
+// (expensive) splice/accel predicates at every position.
+//
+// This index makes the same test per-SELECTION instead: budget credits only the float/ramp the
+// position actually casts, and the reducer/affinity bail-out applies only to positions that
+// actually select such a card.
+//
+// It is SOUND -- a necessary condition that never prunes a subset consider()/eval_and_push() would
+// have kept -- but it is deliberately NOT byte-identical against the legacy bound, because the
+// LEGACY bound is the unsound one (see SelectionExactManaGateEnabled for the Rite-of-Flame case it
+// wrongly drops). Soundness argument:
+//   * they build the credited pool as exactly pool + SUM(selected ritual_float) + the Rite-of-Flame
+//     triangular gy term + (conditionally) SUM(selected rock_mana), then require CanPay(combined);
+//   * ManaPool::CanPay can only succeed when the pool's TOTAL covers the cost's total, so
+//     need > budget implies CanPay false -- the subset was rejected anyway;
+//   * the rock credit is applied here unconditionally where consider() gates it on
+//     pool.CanPay(rock_costs), which only LOOSENS this bound (never prunes more);
+//   * reducer/affinity discounts shrink the real cost below sum(ManaValue), so a selection holding
+//     one is exempted from the gate rather than measured against it.
+// The SubsetPayableWithFilters fallback cannot rescue a total-mana shortfall either: filters convert
+// colour, they do not add total mana -- the same assumption ManaPruneBound already documents and
+// relies on. (A ramp_filter producing 3+ colours would break it; none exists today -- Ferrous Lake
+// and Izzet Signet are 2-colour, net +1, which is what AddSourceToPool credits.)
+//
+// >>> MAINTENANCE BREADCRUMB: the same rule as ManaPruneBound's -- any FUTURE cost reducer credited
+// per-subset inside consider()/eval_and_push() (rather than baked into a.cost) MUST set `block` here
+// too, or it silently breaks byte-identity.
+struct ManaGateTerm
+{
+    int cost  = 0;   // this action's cost.ManaValue()  (the old gcost/icost term)
+    int gain  = 0;   // ritual_float + rock_mana.Total() this action ADDS to the turn's mana
+    int gy    = 0;   // 1 if it is a Rite-of-Flame-style graveyard self-scaling ritual (triangular)
+    int block = 0;   // 1 if selecting it disables the gate (same-turn reducer / affinity discount)
+};
+
+struct ManaGateIndex
+{
+    std::vector<ManaGateTerm> term;          // per candidate index
+    int  pool_total   = 0;                   // BuildPool(state).Total()
+    int  ind_gain_all = 0;                   // SUM gain over the `independent` actions (outer headroom)
+    int  ind_gy_all   = 0;                   // SUM gy   over the `independent` actions
+    bool ind_block    = false;               // any independent action would disable the gate
+};
+
+// Rite-of-Flame graveyard escalation: k copies cast this turn float +0,+1,...,+k-1 extra as each
+// prior copy hits the graveyard. Mirrors the triangular term consider()/eval_and_push() credit.
+
+// MTG_SEL_MANA_GATE=1 opts IN to the selection-exact gate. DEFAULT OFF -> every deck falls back to
+// the legacy whole-list ManaPruneBound scalar and is byte-identical.
+//
+// It is default-off because it is NOT byte-identical, and the reason is worth recording: the legacy
+// bound credits `Sum over ALL candidates of ritual_float` but NOT the Rite-of-Flame graveyard
+// escalation (Tri()), while consider()/eval_and_push() DO credit it. On a hand where the whole-list
+// slack is smaller than that triangular term -- e.g. four Rite of Flame, all selected, Tri(4) = +6 --
+// the legacy bound therefore DROPS A PAYABLE PLAN. So the legacy bound is unsound in that corner and
+// this gate cannot reproduce it without reproducing the bug. Measured on the Dragonstorm smoke cases
+// the correction is a strict improvement (searched: 10 faster, 0 slower, 0 play-changed), but it is
+// GT-affecting, so shipping it default-on is a separate, user-approved decision.
+// MTG_MANA_PRUNE=0 still disables total-mana pruning outright (both paths).
+// Namespace scope (not a function-local static) for the same reason as g_no_splice_index: this is
+// read once per enumeration call, and a magic static would add a guard check to each.
+// DEFAULT ON since 2026-07-30 (user-approved). Byte-identical to the legacy scalar path now that
+// ManaPruneBound is sound, so enabling it needs no rebaseline -- it is purely faster. NOTE the flag
+// polarity: `MTG_SEL_MANA_GATE=0` genuinely DISABLES (a bare `getenv() != nullptr` test would have
+// made `=0` enable it -- the trap the MTG_MAGMA_FAITHFUL flag once fell into).
+static const bool g_sel_mana_gate = []{
+    const char* sel = std::getenv("MTG_SEL_MANA_GATE");
+    if (sel && std::string(sel) == "0") { return false; }
+    const char* prune = std::getenv("MTG_MANA_PRUNE");
+    return !(prune && std::string(prune) == "0");
+}();
+static bool SelectionExactManaGateEnabled() { return g_sel_mana_gate; }
+
+// Returns false when the gate would be EXACTLY the legacy bound, so the caller can skip it entirely
+// and stay on the (free) legacy path: with no candidate carrying float/ramp or a per-subset discount,
+// legacy's `pool.Total() + SUM_all(0)` and this gate's `pool.Total() + SUM_selected(0) + Tri(0)` are
+// the same number and legacy never bails. That keeps every non-combo deck at zero cost -- filling a
+// per-candidate term vector on every enumeration call otherwise showed up as +0.2..+1.0% on
+// burn/knights/antilife/TH (callgrind, 2026-07-29).
+// Allocation-free precheck for BuildManaGateIndex: would the selection-exact gate differ AT ALL from
+// the legacy bound on this candidate list? Split out of the builder so a caller can skip even the
+// ManaGateIndex allocation. Solve is the rollout leaf (once per node), so an unconditional
+// make_unique cost +0.3..0.65pp on the decks that never use the gate -- burn/treasure_hunt paid a
+// malloc+free per node for a gate that always declined (callgrind, 2026-07-29).
+static inline bool ManaGateWouldHelp(const std::vector<Action>& cands)
+{
+    for (const Action& a : cands)
+    {
+        if (a.ritual_float > 0 || a.rock_mana.Total() > 0
+            || (a.def && (a.def->params.affinity_for_subtype
+                          || !a.def->params.reduces_spell_color.empty())))
+        { return true; }
+    }
+    return false;
+}
+
+static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& cands,
+                               const std::vector<int>& independent, ManaGateIndex& out)
+{
+    if (!ManaGateWouldHelp(cands)) { return false; }
+
+    const int m = static_cast<int>(cands.size());
+    out.term.assign(m, ManaGateTerm{});
+    for (int j = 0; j < m; ++j)
+    {
+        const Action& a = cands[j];
+        ManaGateTerm& t = out.term[j];
+        t.cost = a.cost.ManaValue();
+        t.gain = a.ritual_float + a.rock_mana.Total();
+        t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
+        t.block = (a.def && (a.def->params.affinity_for_subtype
+                             || !a.def->params.reduces_spell_color.empty())) ? 1 : 0;
+    }
+    out.pool_total   = pool.Total();
+    out.ind_gain_all = 0;
+    out.ind_gy_all   = 0;
+    out.ind_block    = false;
+    for (int b : independent)
+    {
+        out.ind_gain_all += out.term[b].gain;
+        out.ind_gy_all   += out.term[b].gy;
+        if (out.term[b].block) { out.ind_block = true; }
+    }
+    return true;
+}
+
+// ---- TEMPORARY DIAGNOSTIC: mana-side collapse potential (MTG_ENUM_STATS=1) ----------------------
+//
+// Measures the CEILING of the two-stage "enumerate mana separately, then look up per plan" design
+// before committing to it. Per enumeration call it reports:
+//   positions  -- odometer positions the current flat enumeration walks
+//   m_raw      -- distinct MANA-SIDE digit combinations inside those positions
+//   m_exact    -- how many of those m_raw are actually DISTINCT in what they hand the payoff side
+//                 (mana added, storm count, cards consumed, Lotus colour, Irencrag restriction)
+//   m_bucket   -- same, after capping each colour at the amount the hand could actually DEMAND
+//                 (the "don't make a bucket for white in Hinata" reduction)
+// Two-stage cost is then roughly m_raw + m_bucket * (positions / m_raw) against today's `positions`,
+// so m_raw/m_bucket is the collapse ratio available AFTER the existing symmetry prunes have run.
+//
+// Deliberately expensive (it enumerates the mana side separately) and env-gated to zero cost, because
+// this runs inside Solve -- the rollout leaf. Measurement builds only; delete once the design lands.
+namespace enumstats
+{
+    inline bool Enabled() { static const bool v = std::getenv("MTG_ENUM_STATS") != nullptr; return v; }
+    inline std::atomic<std::uint64_t> g_calls{0}, g_positions{0}, g_m_raw{0}, g_m_kept{0},
+                                      g_m_exact{0}, g_m_bucket{0}, g_m_manastorm{0}, g_m_manaonly{0},
+                                      g_calls_with_mana{0},
+                                      g_p_lines{0}, g_p_rowskip{0}, g_pairs_live{0}, g_pairs_total{0};
+    struct Dumper {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            const double kept = (double)g_m_kept.load();
+            auto ratio = [&](std::uint64_t d) { return d > 0 ? kept / (double)d : 0.0; };
+            std::fprintf(stderr,
+                "\n=== ENUM STATS ===\n"
+                "enumeration calls          : %llu   (with a mana side: %llu)\n"
+                "odometer positions         : %llu\n"
+                "mana-side combos raw       : %llu\n"
+                "mana-side combos KEPT      : %llu   (after the existing symmetry prunes)\n"
+                "  distinct exact           : %llu   (collapse %.2fx)  [mana+storm+cards+colour]\n"
+                "  distinct demand-bucketed : %llu   (collapse %.2fx)  [+ colours capped at demand]\n"
+                "  distinct mana+storm      : %llu   (collapse %.2fx)  [cards-spent identity DROPPED]\n"
+                "  distinct mana only       : %llu   (collapse %.2fx)  [storm DROPPED too]\n"
+                "==================\n",
+                (unsigned long long)g_calls.load(), (unsigned long long)g_calls_with_mana.load(),
+                (unsigned long long)g_positions.load(), (unsigned long long)g_m_raw.load(),
+                (unsigned long long)g_m_kept.load(),
+                (unsigned long long)g_m_exact.load(),     ratio(g_m_exact.load()),
+                (unsigned long long)g_m_bucket.load(),    ratio(g_m_bucket.load()),
+                (unsigned long long)g_m_manastorm.load(), ratio(g_m_manastorm.load()),
+                (unsigned long long)g_m_manaonly.load(),  ratio(g_m_manaonly.load()));
+            const double pt = (double)g_pairs_total.load();
+            std::fprintf(stderr,
+                "--- two-stage gating potential ---\n"
+                "payoff-side lines          : %llu   (unaffordable under EVERY mana line: %llu = %.1f%%)\n"
+                "(mana x payoff) pairs      : %llu\n"
+                "  pairs that are payable   : %llu   (%.1f%%)\n"
+                "  => two-stage visits      : %llu   vs flat %llu   (%.2fx fewer)\n"
+                "==================\n",
+                (unsigned long long)g_p_lines.load(), (unsigned long long)g_p_rowskip.load(),
+                g_p_lines.load() ? 100.0 * g_p_rowskip.load() / g_p_lines.load() : 0.0,
+                (unsigned long long)g_pairs_total.load(),
+                (unsigned long long)g_pairs_live.load(),
+                pt > 0 ? 100.0 * g_pairs_live.load() / pt : 0.0,
+                (unsigned long long)(g_m_kept.load() + g_p_lines.load() + g_pairs_live.load()),
+                (unsigned long long)g_pairs_total.load(),
+                (g_m_kept.load() + g_p_lines.load() + g_pairs_live.load())
+                    ? pt / (double)(g_m_kept.load() + g_p_lines.load() + g_pairs_live.load()) : 0.0);
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+static inline void EnumStatsHash(std::uint64_t& h, std::uint64_t v)
+{ h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); }
+
+// True if this action's contribution to a plan is MANA (a ritual's float, a rock's ramp, a Lotus sac).
+static inline bool IsManaSideAction(const Action& a)
+{ return a.ritual_float > 0 || a.rock_mana.Total() > 0; }
+
+static void MeasureManaSideCollapse(const std::vector<Action>& cands,
+                                    const std::vector<std::vector<int>>& groups,
+                                    const std::vector<int>& independent,
+                                    std::uint64_t positions, int pool_total,
+                                    const std::function<bool(const std::vector<int>&)>& skip)
+{
+    enumstats::g_calls.fetch_add(1, std::memory_order_relaxed);
+    enumstats::g_positions.fetch_add(positions, std::memory_order_relaxed);
+
+    // Partition: which odometer digits are mana-side, and which independents.
+    std::vector<int> m_groups, m_ind;
+    for (size_t g = 0; g < groups.size(); ++g)
+    {
+        for (int j : groups[g]) { if (IsManaSideAction(cands[j])) { m_groups.push_back((int)g); break; } }
+    }
+    for (int b : independent) { if (IsManaSideAction(cands[b])) { m_ind.push_back(b); } }
+    if (m_groups.empty() && m_ind.empty()) { return; }
+    enumstats::g_calls_with_mana.fetch_add(1, std::memory_order_relaxed);
+
+    // Per-colour DEMAND cap: the most of each colour any plan out of this candidate list could need.
+    // A colour with cap 0 (white in Hinata) collapses away entirely instead of getting its own bucket.
+    int cap[6] = {0,0,0,0,0,0}; int cap_total = 0;
+    for (const Action& a : cands)
+    {
+        cap[0] += a.cost.white; cap[1] += a.cost.blue;  cap[2] += a.cost.black;
+        cap[3] += a.cost.red;   cap[4] += a.cost.green; cap[5] += a.cost.colorless;
+        cap_total += a.cost.ManaValue();
+    }
+
+    std::unordered_set<std::uint64_t> exact, bucket, manastorm, manaonly;
+    std::vector<int> m_avail;   // per surviving mana line: total mana it makes available
+    const int ng = (int)m_groups.size(), ni = (int)m_ind.size();
+    std::vector<int> choice(ng, 0);
+    std::vector<int> full(groups.size(), 0);   // mana-side digits only; the prunes read just these
+    std::uint64_t combos = 0, kept = 0;
+    bool done = false;
+    while (!done)
+    {
+        // Honour the prunes the real odometer already applies, so the denominator is what the
+        // enumeration actually walks -- not a raw product it never visits.
+        std::fill(full.begin(), full.end(), 0);
+        for (int t = 0; t < ng; ++t) { full[m_groups[t]] = choice[t]; }
+        const bool pruned = skip(full);
+        for (int imask = 0; imask < (1 << ni); ++imask)
+        {
+            ++combos;
+            if (pruned) { continue; }
+            ++kept;
+            // Everything the mana side hands the payoff side.
+            int mv = 0, flt = 0, gy = 0, storm = 0, restrict_after = -1;
+            int rock[6] = {0,0,0,0,0,0};
+            std::uint64_t consumed = 1469598103934665603ull;  // order-insensitive: XOR-free sum of hashes
+            std::uint64_t colour_choice = 0;
+            auto fold = [&](int j) {
+                const Action& a = cands[j];
+                mv  += a.cost.ManaValue();
+                flt += a.ritual_float;
+                if (a.def && a.def->params.ritual_float_gy_self_bonus) { ++gy; }
+                if (a.kind == Action::Kind::CastFromHand) { ++storm; }
+                if (a.max_casts_after >= 0)
+                { restrict_after = restrict_after < 0 ? a.max_casts_after
+                                                      : std::min(restrict_after, a.max_casts_after); }
+                rock[0] += a.rock_mana.white; rock[1] += a.rock_mana.blue;  rock[2] += a.rock_mana.black;
+                rock[3] += a.rock_mana.red;   rock[4] += a.rock_mana.green; rock[5] += a.rock_mana.colorless;
+                // Consumed-card identity must be in the signature: two lines with the same mana are NOT
+                // interchangeable if they spent different cards (that changes later turns).
+                consumed += (std::uint64_t)(std::uintptr_t)a.def * 1099511628211ull;
+                if (!a.chosen_float_color.empty()) { colour_choice += (std::uint64_t)a.chosen_float_color[0]; }
+            };
+            for (int t = 0; t < ng; ++t)
+            { if (choice[t] > 0) { fold(groups[m_groups[t]][choice[t] - 1]); } }
+            for (int b = 0; b < ni; ++b) { if (imask & (1 << b)) { fold(m_ind[b]); } }
+
+            std::uint64_t he = 0;
+            for (std::uint64_t v : { (std::uint64_t)mv, (std::uint64_t)flt, (std::uint64_t)gy,
+                                     (std::uint64_t)storm, (std::uint64_t)(restrict_after + 1),
+                                     consumed, colour_choice })
+            { EnumStatsHash(he, v); }
+            std::uint64_t hb = 0;
+            for (std::uint64_t v : { (std::uint64_t)std::min(mv, cap_total), (std::uint64_t)std::min(flt, cap_total),
+                                     (std::uint64_t)gy, (std::uint64_t)storm,
+                                     (std::uint64_t)(restrict_after + 1), consumed, colour_choice })
+            { EnumStatsHash(hb, v); }
+            for (int c = 0; c < 6; ++c)
+            {
+                EnumStatsHash(he, (std::uint64_t)rock[c]);
+                EnumStatsHash(hb, (std::uint64_t)std::min(rock[c], cap[c]));   // cap 0 -> no bucket at all
+            }
+            std::uint64_t hs = 0, ho = 0;   // looser: drop cards-spent identity (and then storm too)
+            for (std::uint64_t v : { (std::uint64_t)std::min(mv, cap_total), (std::uint64_t)std::min(flt, cap_total),
+                                     (std::uint64_t)gy, (std::uint64_t)storm, (std::uint64_t)(restrict_after + 1) })
+            { EnumStatsHash(hs, v); }
+            for (std::uint64_t v : { (std::uint64_t)std::min(mv, cap_total), (std::uint64_t)std::min(flt, cap_total),
+                                     (std::uint64_t)gy, (std::uint64_t)(restrict_after + 1) })
+            { EnumStatsHash(ho, v); }
+            for (int c = 0; c < 6; ++c)
+            {
+                EnumStatsHash(hs, (std::uint64_t)std::min(rock[c], cap[c]));
+                EnumStatsHash(ho, (std::uint64_t)std::min(rock[c], cap[c]));
+            }
+            exact.insert(he);
+            bucket.insert(hb);
+            manastorm.insert(hs);
+            manaonly.insert(ho);
+            m_avail.push_back(pool_total + flt + ManaGateTriangular(gy)
+                              + rock[0] + rock[1] + rock[2] + rock[3] + rock[4] + rock[5] - mv);
+        }
+        int t = 0;
+        for (; t < ng; ++t)
+        {
+            ++choice[t];
+            if (choice[t] <= (int)groups[m_groups[t]].size()) { break; }
+            choice[t] = 0;
+        }
+        if (t == ng) { done = true; }
+    }
+    // ---- second mechanism: PER-SIDE gating -------------------------------------------------------
+    // Even with zero signature collapse, splitting lets one test reject a whole ROW: if a payoff line
+    // costs more than the BEST mana line can supply, all of its (mana x payoff) pairs die at once,
+    // instead of being visited and rejected one by one as the flat odometer does today.
+    int max_avail = pool_total;
+    for (int a : m_avail) { max_avail = std::max(max_avail, a); }
+
+    std::vector<int> p_groups, p_ind;
+    for (size_t g = 0; g < groups.size(); ++g)
+    {
+        bool is_m = false;
+        for (int mg : m_groups) { if (mg == (int)g) { is_m = true; break; } }
+        if (!is_m) { p_groups.push_back((int)g); }
+    }
+    for (int b : independent) { if (!IsManaSideAction(cands[b])) { p_ind.push_back(b); } }
+
+    const int png = (int)p_groups.size(), pni = (int)p_ind.size();
+    std::vector<int> pchoice(png, 0);
+    std::uint64_t p_lines = 0, p_rowskip = 0, pairs_live = 0;
+    bool pdone = false;
+    while (!pdone)
+    {
+        for (int imask = 0; imask < (1 << pni); ++imask)
+        {
+            ++p_lines;
+            int need = 0;
+            for (int t = 0; t < png; ++t)
+            { if (pchoice[t] > 0) { need += cands[groups[p_groups[t]][pchoice[t] - 1]].cost.ManaValue(); } }
+            for (int b = 0; b < pni; ++b)
+            { if (imask & (1 << b)) { need += cands[p_ind[b]].cost.ManaValue(); } }
+            if (need > max_avail) { ++p_rowskip; continue; }         // whole row dies in ONE test
+            for (int a : m_avail) { if (need <= a) { ++pairs_live; } }
+        }
+        int t = 0;
+        for (; t < png; ++t)
+        {
+            ++pchoice[t];
+            if (pchoice[t] <= (int)groups[p_groups[t]].size()) { break; }
+            pchoice[t] = 0;
+        }
+        if (t == png) { pdone = true; }
+    }
+    enumstats::g_p_lines.fetch_add(p_lines, std::memory_order_relaxed);
+    enumstats::g_p_rowskip.fetch_add(p_rowskip, std::memory_order_relaxed);
+    enumstats::g_pairs_live.fetch_add(pairs_live, std::memory_order_relaxed);
+    enumstats::g_pairs_total.fetch_add(p_lines * (kept ? kept : 1), std::memory_order_relaxed);
+
+    enumstats::g_m_raw.fetch_add(combos, std::memory_order_relaxed);
+    enumstats::g_m_kept.fetch_add(kept, std::memory_order_relaxed);
+    enumstats::g_m_exact.fetch_add(exact.size(), std::memory_order_relaxed);
+    enumstats::g_m_bucket.fetch_add(bucket.size(), std::memory_order_relaxed);
+    enumstats::g_m_manastorm.fetch_add(manastorm.size(), std::memory_order_relaxed);
+    enumstats::g_m_manaonly.fetch_add(manaonly.size(), std::memory_order_relaxed);
+}
+
+// ---- Two-stage plan-position enumeration: mana side x payoff side ------------------------------
+//
+// The flat odometer walks ONE mixed-radix counter over every candidate group, so a hand holding k
+// ritual/ramp cards and n payoff cards visits the whole product -- re-testing each payoff line against
+// every ritual line, one position at a time, and re-running the group predicates at each. This splits
+// the walk in two:
+//
+//   Stage A (mana side)   -- groups whose selectable option ADDS mana: a ritual's float, a rock's ramp,
+//                            a Lotus sac (IsManaSideAction). Every group predicate -- over-splice
+//                            legality, the splice canonical form, the accelerant cheapest-first prefix,
+//                            the Lotus independent-prefix collapse -- reads ONLY these digits (a splice
+//                            base and an accelerant both carry ritual_floating_mana > 0 by
+//                            construction), so the entire predicate layer runs here: once per mana
+//                            line instead of once per (mana x payoff) pair.
+//   Stage B (payoff side) -- everything else. Its cost is summed once per payoff line, and a line no
+//                            mana line can fund dies on ONE test instead of being re-rejected against
+//                            each of them. Measured: 38.5% of Dragonstorm payoff lines and 69.0% of
+//                            Hinata's are unaffordable under every mana line.
+//
+// BYTE-IDENTICAL, which is why no ground truth moves. A (mana line, payoff line) pair fully determines
+// the `choice`/`imask` the flat odometer would have held, so its flat position index is computable;
+// surviving pairs are sorted by that index before being handed to the caller. Both the emitted plan SET
+// and its ORDER therefore match the flat walk exactly -- load-bearing, because Solve's best-plan
+// tie-break and EnumeratePlans' returned candidate order are order-sensitive.
+//
+// A hand with NO mana side takes the original flat loop verbatim (and skips the predicate bookkeeping
+// entirely, since no mana side implies every group predicate is inert). That is the common case --
+// burn, Knights, Anti-Lifegain, Auras, treasure_hunt and slivers have no rituals or rocks at all, and
+// even on Dragonstorm only ~24% of enumeration calls hold one -- so those pay nothing for any of this.
+//
+// `emit` receives each surviving selection (the caller's consider() / eval_and_push()); `extra_ok` is
+// the caller's remaining per-selection filter (Solve's Vial-capacity check). Both are template
+// parameters, not std::function: this runs once per rollout node, where a per-call closure allocation
+// is measurable.
+template <class ExtraOk, class Emit>
+static void EnumeratePlanPositions(const std::vector<Action>& cands,
+                                   const std::vector<std::vector<int>>& groups,
+                                   const std::vector<int>& independent,
+                                   const ManaGateIndex* gate, int mana_bound,
+                                   const SpliceOdometerIndex& sidx,
+                                   const std::vector<int>& accel_order,
+                                   bool any_splice, bool splice_collapse_on,
+                                   bool accel_pred_on, bool has_ind_accel,
+                                   // By const reference, NOT by value: Solve's `consider` closure
+                                   // captures a dozen locals, and this is called once per rollout
+                                   // node -- copying it per call is measurable.
+                                   const ExtraOk& extra_ok, const Emit& emit)
+{
+    const int  num_groups = static_cast<int>(groups.size());
+    const int  num_ind    = static_cast<int>(independent.size());
+    const bool gate_on    = (gate != nullptr);
+
+    // Aggregate of one side's selection: what it costs and what it contributes to the budget.
+    struct Agg { int cost = 0, gain = 0, gy = 0, block = 0; };
+    auto fold = [&](Agg& a, int j)
+    {
+        if (gate_on)
+        {
+            const ManaGateTerm& t = gate->term[j];
+            a.cost += t.cost; a.gain += t.gain; a.gy += t.gy; a.block += t.block;
+        }
+        else { a.cost += cands[j].cost.ManaValue(); }
+    };
+    // The exact per-selection gate -- identical to the flat odometer's inner test.
+    auto payable = [&](const Agg& m, const Agg& p) -> bool
+    {
+        if (!gate_on) { return m.cost + p.cost <= mana_bound; }
+        if (m.block + p.block > 0) { return true; }              // per-subset discount -> not measurable
+        return m.cost + p.cost <= gate->pool_total + m.gain + p.gain
+                                  + ManaGateTriangular(m.gy + p.gy);
+    };
+
+    std::vector<int> sel;
+
+    // Partition the odometer's digits. `mi`/`pi` hold SLOTS into `independent` so each side can
+    // rebuild its bits at their original positions (the flat imask must be reproduced exactly).
+    std::vector<int> mg, pg, mi, pi;
+    for (int g = 0; g < num_groups; ++g)
+    {
+        bool ms = false;
+        for (int j : groups[g]) { if (IsManaSideAction(cands[j])) { ms = true; break; } }
+        (ms ? mg : pg).push_back(g);
+    }
+    for (int b = 0; b < num_ind; ++b)
+    { (IsManaSideAction(cands[independent[b]]) ? mi : pi).push_back(b); }
+
+    // Flat position weights: the mixed-radix stride of each group digit (digit 0 is fastest, matching
+    // the flat odometer's carry order), so a side's position contribution is just a weighted sum.
+    std::vector<std::uint64_t> stride(num_groups, 1);
+    std::uint64_t acc = 1;
+    for (int g = 0; g < num_groups; ++g) { stride[g] = acc; acc *= static_cast<std::uint64_t>(groups[g].size()) + 1; }
+
+    struct Line { Agg agg; std::uint64_t pos = 0; unsigned imask = 0; int digits = 0; };
+    std::vector<Line> mlines, plines;
+    std::vector<int>  mdig, pdig;      // flat digit storage, |side groups| ints per line
+
+    // ---- Stage A: the mana side (predicates run HERE, once per line) ----------------------------
+    {
+        const int ng = static_cast<int>(mg.size()), ni = static_cast<int>(mi.size());
+        std::vector<int> choice(ng, 0);
+        std::vector<int> full(num_groups, 0);   // the predicates read only mana-side digits
+        bool done = false;
+        while (!done)
+        {
+            for (int t = 0; t < ng; ++t) { full[mg[t]] = choice[t]; }
+            const bool rejected =
+                   (any_splice && SpliceGroupChoiceRejected(sidx, groups, full, splice_collapse_on))
+                || (accel_pred_on && NonPrefixAccelViolated(accel_order, full));
+            if (!rejected)
+            {
+                for (int imask = 0; imask < (1 << ni); ++imask)
+                {
+                    unsigned full_imask = 0;
+                    for (int b = 0; b < ni; ++b) { if (imask & (1 << b)) { full_imask |= 1u << mi[b]; } }
+                    if (has_ind_accel
+                        && IndependentAccelPrefixViolated(cands, independent, static_cast<int>(full_imask)))
+                    { continue; }
+                    Line L;
+                    L.imask  = full_imask;
+                    L.digits = static_cast<int>(mdig.size());
+                    for (int t = 0; t < ng; ++t)
+                    {
+                        mdig.push_back(choice[t]);
+                        if (choice[t] > 0)
+                        {
+                            L.pos += static_cast<std::uint64_t>(choice[t]) * stride[mg[t]];
+                            fold(L.agg, groups[mg[t]][choice[t] - 1]);
+                        }
+                    }
+                    for (int b = 0; b < ni; ++b)
+                    { if (imask & (1 << b)) { fold(L.agg, independent[mi[b]]); } }
+                    mlines.push_back(L);
+                }
+            }
+            int t = 0;
+            for (; t < ng; ++t)
+            {
+                ++choice[t];
+                if (choice[t] <= static_cast<int>(groups[mg[t]].size())) { break; }
+                choice[t] = 0;
+            }
+            if (t == ng) { done = true; }
+        }
+    }
+    if (mlines.empty()) { return; }   // every mana line is illegal -> no plan can be built
+
+    // Best-case mana line, so a payoff line no mana line can fund is dropped without pairing at all.
+    // `best_head` is the most spare mana any single line leaves after paying for itself; `min_mcost`
+    // is the cheapest line, which is the same bound for the legacy scalar arm.
+    int  best_head = std::numeric_limits<int>::min();
+    int  min_mcost = std::numeric_limits<int>::max();
+    bool any_block = false;
+    for (const Line& L : mlines)
+    {
+        if (L.agg.block > 0) { any_block = true; }
+        best_head = std::max(best_head, L.agg.gain + ManaGateTriangular(L.agg.gy) - L.agg.cost);
+        min_mcost = std::min(min_mcost, L.agg.cost);
+    }
+
+    // ---- Stage B: the payoff side --------------------------------------------------------------
+    {
+        const int ng = static_cast<int>(pg.size()), ni = static_cast<int>(pi.size());
+        std::vector<int> choice(ng, 0);
+        bool done = false;
+        while (!done)
+        {
+            for (int imask = 0; imask < (1 << ni); ++imask)
+            {
+                Line L;
+                L.digits = static_cast<int>(pdig.size());
+                for (int t = 0; t < ng; ++t)
+                {
+                    pdig.push_back(choice[t]);
+                    if (choice[t] > 0)
+                    {
+                        L.pos += static_cast<std::uint64_t>(choice[t]) * stride[pg[t]];
+                        fold(L.agg, groups[pg[t]][choice[t] - 1]);
+                    }
+                }
+                for (int b = 0; b < ni; ++b)
+                {
+                    if (!(imask & (1 << b))) { continue; }
+                    L.imask |= 1u << pi[b];
+                    fold(L.agg, independent[pi[b]]);
+                }
+                // Whole-row skip: if the most generous mana line cannot fund this payoff line, no
+                // pair can, so drop it here instead of re-rejecting it against every mana line.
+                // The gain/gy guards are structural (a payoff-side action adds no mana by definition)
+                // but cheap, and they keep the skip sound if that classification ever widens.
+                if (L.agg.block == 0 && L.agg.gain == 0 && L.agg.gy == 0)
+                {
+                    if (gate_on)
+                    {
+                        if (!any_block && L.agg.cost > gate->pool_total + best_head) { continue; }
+                    }
+                    else if (min_mcost != std::numeric_limits<int>::max()
+                             && L.agg.cost > mana_bound - min_mcost) { continue; }
+                }
+                plines.push_back(L);
+            }
+            int t = 0;
+            for (; t < ng; ++t)
+            {
+                ++choice[t];
+                if (choice[t] <= static_cast<int>(groups[pg[t]].size())) { break; }
+                choice[t] = 0;
+            }
+            if (t == ng) { done = true; }
+        }
+    }
+
+    // ---- Pair, then replay in flat-odometer order ----------------------------------------------
+    struct Pair { std::uint64_t key; int m, p; };
+    std::vector<Pair> pairs;
+    const std::uint64_t imask_span = 1ull << num_ind;
+    for (int pi_idx = 0; pi_idx < static_cast<int>(plines.size()); ++pi_idx)
+    {
+        const Line& P = plines[pi_idx];
+        for (int mi_idx = 0; mi_idx < static_cast<int>(mlines.size()); ++mi_idx)
+        {
+            const Line& M = mlines[mi_idx];
+            if (!payable(M.agg, P.agg)) { continue; }
+            const std::uint64_t key = (M.pos + P.pos) * imask_span + (M.imask | P.imask);
+            pairs.push_back(Pair{ key, mi_idx, pi_idx });
+        }
+    }
+    std::sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) { return a.key < b.key; });
+
+    const int mng = static_cast<int>(mg.size()), png = static_cast<int>(pg.size());
+    std::vector<int> choice(num_groups, 0);
+    for (const Pair& pr : pairs)
+    {
+        const Line& M = mlines[pr.m];
+        const Line& P = plines[pr.p];
+        for (int t = 0; t < mng; ++t) { choice[mg[t]] = mdig[M.digits + t]; }
+        for (int t = 0; t < png; ++t) { choice[pg[t]] = pdig[P.digits + t]; }
+        const unsigned imask = M.imask | P.imask;
+        sel.clear();
+        for (int g = 0; g < num_groups; ++g)
+        { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
+        for (int b = 0; b < num_ind; ++b)
+        { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
+        if (!sel.empty() && extra_ok(sel)) { emit(sel); }
+    }
 }
 
 // Feasible-aware EARLY ritual-drop -- the group-level, before-the-odometer analog of the late
@@ -3254,8 +4005,18 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     std::vector<std::vector<int>> groups;            // per hand card: option cand indices
     std::vector<int>              group_hand_index;  // parallel: the card's hand_index
     std::vector<int>              independent;
+    // Folded into this existing pass rather than a dedicated ManaGateWouldHelp scan: this loop already
+    // visits every candidate, and a separate pass cost +0.03..+0.15% on the decks that never build the
+    // gate (burn/TH/Knights/Anti-Lifegain hold no ritual, rock or reducer at all, so the scan always
+    // answered "no"). Set BEFORE the independent-action continue so a Lotus SacForMana still counts.
+    bool gate_relevant = false;
     for (int j = 0; j < m; ++j)
     {
+        if (!gate_relevant
+            && (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0
+                || (cands[j].def && (cands[j].def->params.affinity_for_subtype
+                                     || !cands[j].def->params.reduces_spell_color.empty()))))
+        { gate_relevant = true; }
         if (cands[j].hand_index < 0) { independent.push_back(j); continue; }
 
         int gi = -1;
@@ -3311,60 +4072,129 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         return true;
     };
 
-    const int mana_bound = ManaPruneBound(pool, cands);   // total-mana prune (byte-identical); see helper
+    const int mana_bound = ManaPruneBound(pool, cands);   // legacy scalar bound (MTG_LEGACY_MANA_BOUND)
+    // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
+    // called once per node -- so even default-constructing their (empty) vectors on every call cost a
+    // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
+    // branch is the price now; the allocation happens on the rare call that needs it.
+    std::unique_ptr<ManaGateIndex> gate_owned;            // selection-exact bound; see BuildManaGateIndex
+    if (SelectionExactManaGateEnabled() && gate_relevant)
+    {
+        auto idx = std::make_unique<ManaGateIndex>();
+        if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
+    }
+    const ManaGateIndex* gate    = gate_owned.get();      // null -> legacy scalar path
+    const bool           gate_on = (gate != nullptr);
     // Precompute the accelerant-prefix order ONCE (choice-independent); the per-choice check is then a cheap
     // walk. Empty when the collapse is off / < 2 accelerant groups. See BuildAccelPrefixOrder.
     std::vector<int> accel_order;
     if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
-    std::vector<int> choice(num_groups, 0);
-    bool done = false;
-    while (!done)
+    // Choice-independent inputs to the two splice predicates (name ids, copy positions, hand counts),
+    // plus the lowest odometer digit that can change any predicate. See BuildSpliceOdometerIndex.
+    std::unique_ptr<SpliceOdometerIndex> sidx_owned;
+    const SpliceOdometerIndex* sidx = &g_no_splice_index;
+    if (any_splice)
     {
-        // Group-selection total mana cost (once per odometer position). If it already exceeds the
-        // ramp-credited bound, every extension (independent actions only add cost) is unpayable, so
-        // skip the whole inner loop -- the combos skipped are exactly those consider()'s CanPay rejects.
-        int gcost = 0;
-        for (int g = 0; g < num_groups; ++g)
-        { if (choice[g] > 0) { gcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
-        // Likewise skip an over-splicing group choice (byte-identical: consider()'s SubsetHasIllegalSplice
-        // would reject every extension anyway; splice legality is fixed by the group selection). any_splice
-        // gates it off for every non-splice deck. Kills the Dragonstorm illegal-over-splice majority.
-        const bool splice_ok = (!any_splice || !GroupChoiceOverSplices(state, cands, groups, choice))
-                            // Splice-count collapse (HEURISTIC): keep only bare-prefix / max-chain-prefix
-                            // selections of each splice name. Off/absent -> true. See SpliceCollapseViolated.
-                            && (!splice_collapse_on || !SpliceCollapseViolated(state, cands, groups, choice));
-        // Dragonstorm acceleration-prefix collapse (HEURISTIC, gated by accel_prefix_on/any_accel above):
-        // reject a group choice whose cast accelerants are not a cheapest-first prefix. Off/absent -> true.
-        const bool accel_ok = !(accel_prefix_on && any_accel)
-                           || !NonPrefixAccelViolated(accel_order, choice);
-        if (gcost <= mana_bound && splice_ok && accel_ok)
+        sidx_owned = std::make_unique<SpliceOdometerIndex>();
+        BuildSpliceOdometerIndex(state, cands, groups, *sidx_owned);
+        sidx = sidx_owned.get();
+    }
+    const int min_pred_digit = MinPredicateDigit(groups, *sidx, accel_order);
+    if (enumstats::Enabled())
+    {
+        std::uint64_t pos = 1ull << num_ind;
+        for (int g = 0; g < num_groups; ++g) { pos *= (std::uint64_t)groups[g].size() + 1; }
+        MeasureManaSideCollapse(cands, groups, independent, pos, pool.Total(),
+            [&](const std::vector<int>& c) {
+                return (any_splice && SpliceGroupChoiceRejected(*sidx, groups, c, splice_collapse_on))
+                    || ((accel_prefix_on && any_accel) && NonPrefixAccelViolated(accel_order, c));
+            });
+    }
+    if (!(any_ritual || any_rock))
+    {
+        // No mana side => no splice base, no accelerant, no Lotus sac => every group predicate is
+        // inert, so this walk needs none of the predicate bookkeeping. Kept INLINE here rather than
+        // behind the two-stage driver's function boundary: measured, routing it through the driver
+        // cost ~1.7-2.7%% on the decks that gain nothing from the split (burn/Knights, callgrind
+        // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
+        std::vector<int> choice(num_groups, 0);
+        std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        bool done = false;
+        while (!done)
         {
-            for (int imask = 0; imask < (1 << num_ind); ++imask)
+            int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
+            if (gate_on)
             {
-                if (has_ind_accel && IndependentAccelPrefixViolated(cands, independent, imask)) { continue; }
-                sel.clear();
-                int icost = 0;
                 for (int g = 0; g < num_groups; ++g)
                 {
-                    if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); }
+                    if (choice[g] <= 0) { continue; }
+                    const ManaGateTerm& t = gate->term[groups[g][choice[g] - 1]];
+                    mcost += t.cost; mgain += t.gain; mgy += t.gy; mblock += t.block;
                 }
-                for (int b = 0; b < num_ind; ++b)
-                {
-                    if (imask & (1 << b)) { sel.push_back(independent[b]);
-                                            icost += cands[independent[b]].cost.ManaValue(); }
-                }
-                if (!sel.empty() && gcost + icost <= mana_bound && vial_ok(sel)) { consider(sel); }
             }
+            else
+            {
+                for (int g = 0; g < num_groups; ++g)
+                { if (choice[g] > 0) { mcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
+            }
+            // Group-level early-out FIRST: if this selection is unpayable even with every independent
+            // action's float credited, no imask extension of it can be paid, so skip the whole inner
+            // loop rather than building `sel` for each of 2^num_ind doomed positions. (Dropping this
+            // cost ~2.4pp on burn/Knights, callgrind 2026-07-29.)
+            const bool outer_ok = gate_on
+                ? (mblock > 0 || gate->ind_block
+                   || mcost <= gate->pool_total + mgain + gate->ind_gain_all
+                               + ManaGateTriangular(mgy + gate->ind_gy_all))
+                : (mcost <= mana_bound);
+            for (int imask = 0; outer_ok && imask < (1 << num_ind); ++imask)
+            {
+                int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
+                sel.clear();
+                for (int g = 0; g < num_groups; ++g)
+                { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
+                if (gate_on)
+                {
+                    for (int b = 0; b < num_ind; ++b)
+                    {
+                        if (!(imask & (1 << b))) { continue; }
+                        sel.push_back(independent[b]);
+                        const ManaGateTerm& t = gate->term[independent[b]];
+                        pcost += t.cost; pgain += t.gain; pgy += t.gy; pblock += t.block;
+                    }
+                }
+                else
+                {
+                    for (int b = 0; b < num_ind; ++b)
+                    {
+                        if (!(imask & (1 << b))) { continue; }
+                        sel.push_back(independent[b]);
+                        pcost += cands[independent[b]].cost.ManaValue();
+                    }
+                }
+                if (sel.empty()) { continue; }
+                const bool ok = gate_on
+                    ? (mblock + pblock > 0
+                       || mcost + pcost <= gate->pool_total + mgain + pgain
+                                           + ManaGateTriangular(mgy + pgy))
+                    : (mcost + pcost <= mana_bound);
+                if (!ok) { continue; }
+                if (vial_ok(sel)) { consider(sel); }
+            }
+            int g = 0;
+            for (; g < num_groups; ++g)
+            {
+                ++choice[g];
+                if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
+                choice[g] = 0;
+            }
+            if (g == num_groups) { done = true; }
         }
-
-        int g = 0;
-        for (; g < num_groups; ++g)
-        {
-            ++choice[g];
-            if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
-            choice[g] = 0;
-        }
-        if (g == num_groups) { done = true; }
+    }
+    else
+    {
+        EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
+                               any_splice, splice_collapse_on, accel_prefix_on && any_accel,
+                               has_ind_accel, vial_ok, consider);
     }
 
     return best;
@@ -7072,8 +7902,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     std::vector<std::vector<int>> groups;            // per hand card: option cand indices
     std::vector<int>              group_hand_index;  // parallel: the card's hand_index
     std::vector<int>              independent;
+    // Folded into this existing pass rather than a dedicated ManaGateWouldHelp scan: this loop already
+    // visits every candidate, and a separate pass cost +0.03..+0.15% on the decks that never build the
+    // gate (burn/TH/Knights/Anti-Lifegain hold no ritual, rock or reducer at all, so the scan always
+    // answered "no"). Set BEFORE the independent-action continue so a Lotus SacForMana still counts.
+    bool gate_relevant = false;
     for (int j = 0; j < m; ++j)
     {
+        if (!gate_relevant
+            && (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0
+                || (cands[j].def && (cands[j].def->params.affinity_for_subtype
+                                     || !cands[j].def->params.reduces_spell_color.empty()))))
+        { gate_relevant = true; }
         if (cands[j].hand_index < 0) { independent.push_back(j); continue; }
 
         int gi = -1;
@@ -7371,10 +8211,33 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Odometer over per-card choices (0 = skip the card, v >= 1 selects
     // groups[g][v-1]), crossed with the 2^num_ind powerset of independent actions.
     // The empty combination (skip everything) is not a plan and is dropped.
-    const int mana_bound = ManaPruneBound(pool, cands);   // total-mana prune (byte-identical); see helper
+    const int mana_bound = ManaPruneBound(pool, cands);   // legacy scalar bound (MTG_LEGACY_MANA_BOUND)
+    // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
+    // called once per node -- so even default-constructing their (empty) vectors on every call cost a
+    // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
+    // branch is the price now; the allocation happens on the rare call that needs it.
+    std::unique_ptr<ManaGateIndex> gate_owned;            // selection-exact bound; see BuildManaGateIndex
+    if (SelectionExactManaGateEnabled() && gate_relevant)
+    {
+        auto idx = std::make_unique<ManaGateIndex>();
+        if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
+    }
+    const ManaGateIndex* gate    = gate_owned.get();      // null -> legacy scalar path
+    const bool           gate_on = (gate != nullptr);
     // Precompute the accelerant-prefix order ONCE (choice-independent); per-choice check is a cheap walk.
     std::vector<int> accel_order;
     if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
+    // Choice-independent inputs to the two splice predicates + the lowest predicate-relevant odometer
+    // digit (mirrors Solve). See BuildSpliceOdometerIndex / MinPredicateDigit.
+    std::unique_ptr<SpliceOdometerIndex> sidx_owned;
+    const SpliceOdometerIndex* sidx = &g_no_splice_index;
+    if (any_splice)
+    {
+        sidx_owned = std::make_unique<SpliceOdometerIndex>();
+        BuildSpliceOdometerIndex(state, cands, groups, *sidx_owned);
+        sidx = sidx_owned.get();
+    }
+    const int min_pred_digit = MinPredicateDigit(groups, *sidx, accel_order);
     // Dragonstorm storm go-off short-circuit (mirrors Solve): the search also enumerates the ritual/Lotus
     // powerset at every node, so when the maximal go-off line WINS this turn, emit JUST that plan and skip
     // the odometer -- a turn-winning branch dominates, so the search commits it and needs no others. When it
@@ -7409,54 +8272,102 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
     }
 
-    std::vector<int> choice(num_groups, 0);
-    std::vector<int> sel;   // reused across subset iterations (clear keeps capacity, avoids per-combo alloc)
-    bool done = false;
-    while (!done)
+    if (enumstats::Enabled())
     {
-        // Group-selection total mana cost (once per odometer position). If it already exceeds the
-        // ramp-credited bound, every extension is unpayable, so skip the inner loop -- the combos
-        // skipped are exactly those eval_and_push()'s CanPay would reject. Byte-identical, same order.
-        int gcost = 0;
-        for (int g = 0; g < num_groups; ++g)
-        { if (choice[g] > 0) { gcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
-        // Over-splice group choices are likewise skipped (byte-identical: eval_and_push()'s
-        // SubsetHasIllegalSplice rejects every extension; splice legality is fixed by the group choice).
-        const bool splice_ok = (!any_splice || !GroupChoiceOverSplices(state, cands, groups, choice))
-                            // Splice-count collapse (HEURISTIC, mirrors Solve). See SpliceCollapseViolated.
-                            && (!splice_collapse_on || !SpliceCollapseViolated(state, cands, groups, choice));
-        // Dragonstorm acceleration-prefix collapse (HEURISTIC, gated by accel_prefix_on/any_accel above;
-        // mirrors Solve): reject a group choice whose cast accelerants are not a cheapest-first prefix.
-        const bool accel_ok = !(accel_prefix_on && any_accel)
-                           || !NonPrefixAccelViolated(accel_order, choice);
-        if (gcost <= mana_bound && splice_ok && accel_ok)
+        std::uint64_t pos = 1ull << num_ind;
+        for (int g = 0; g < num_groups; ++g) { pos *= (std::uint64_t)groups[g].size() + 1; }
+        MeasureManaSideCollapse(cands, groups, independent, pos, pool.Total(),
+            [&](const std::vector<int>& c) {
+                return (any_splice && SpliceGroupChoiceRejected(*sidx, groups, c, splice_collapse_on))
+                    || ((accel_prefix_on && any_accel) && NonPrefixAccelViolated(accel_order, c));
+            });
+    }
+    if (!(any_ritual || any_rock))
+    {
+        // No mana side => no splice base, no accelerant, no Lotus sac => every group predicate is
+        // inert, so this walk needs none of the predicate bookkeeping. Kept INLINE here rather than
+        // behind the two-stage driver's function boundary: measured, routing it through the driver
+        // cost ~1.7-2.7%% on the decks that gain nothing from the split (burn/Knights, callgrind
+        // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
+        std::vector<int> choice(num_groups, 0);
+        std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        bool done = false;
+        while (!done)
         {
-            for (int imask = 0; imask < (1 << num_ind); ++imask)
+            int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
+            if (gate_on)
             {
-                if (has_ind_accel && IndependentAccelPrefixViolated(cands, independent, imask)) { continue; }
-                sel.clear();
-                int icost = 0;
                 for (int g = 0; g < num_groups; ++g)
                 {
-                    if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); }
+                    if (choice[g] <= 0) { continue; }
+                    const ManaGateTerm& t = gate->term[groups[g][choice[g] - 1]];
+                    mcost += t.cost; mgain += t.gain; mgy += t.gy; mblock += t.block;
                 }
-                for (int b = 0; b < num_ind; ++b)
-                {
-                    if (imask & (1 << b)) { sel.push_back(independent[b]);
-                                            icost += cands[independent[b]].cost.ManaValue(); }
-                }
-                if (!sel.empty() && gcost + icost <= mana_bound) { eval_and_push(sel); }
             }
+            else
+            {
+                for (int g = 0; g < num_groups; ++g)
+                { if (choice[g] > 0) { mcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
+            }
+            // Group-level early-out FIRST: if this selection is unpayable even with every independent
+            // action's float credited, no imask extension of it can be paid, so skip the whole inner
+            // loop rather than building `sel` for each of 2^num_ind doomed positions. (Dropping this
+            // cost ~2.4pp on burn/Knights, callgrind 2026-07-29.)
+            const bool outer_ok = gate_on
+                ? (mblock > 0 || gate->ind_block
+                   || mcost <= gate->pool_total + mgain + gate->ind_gain_all
+                               + ManaGateTriangular(mgy + gate->ind_gy_all))
+                : (mcost <= mana_bound);
+            for (int imask = 0; outer_ok && imask < (1 << num_ind); ++imask)
+            {
+                int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
+                sel.clear();
+                for (int g = 0; g < num_groups; ++g)
+                { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
+                if (gate_on)
+                {
+                    for (int b = 0; b < num_ind; ++b)
+                    {
+                        if (!(imask & (1 << b))) { continue; }
+                        sel.push_back(independent[b]);
+                        const ManaGateTerm& t = gate->term[independent[b]];
+                        pcost += t.cost; pgain += t.gain; pgy += t.gy; pblock += t.block;
+                    }
+                }
+                else
+                {
+                    for (int b = 0; b < num_ind; ++b)
+                    {
+                        if (!(imask & (1 << b))) { continue; }
+                        sel.push_back(independent[b]);
+                        pcost += cands[independent[b]].cost.ManaValue();
+                    }
+                }
+                if (sel.empty()) { continue; }
+                const bool ok = gate_on
+                    ? (mblock + pblock > 0
+                       || mcost + pcost <= gate->pool_total + mgain + pgain
+                                           + ManaGateTriangular(mgy + pgy))
+                    : (mcost + pcost <= mana_bound);
+                if (!ok) { continue; }
+                eval_and_push(sel);
+            }
+            int g = 0;
+            for (; g < num_groups; ++g)
+            {
+                ++choice[g];
+                if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
+                choice[g] = 0;
+            }
+            if (g == num_groups) { done = true; }
         }
-
-        int g = 0;
-        for (; g < num_groups; ++g)
-        {
-            ++choice[g];
-            if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
-            choice[g] = 0;
-        }
-        if (g == num_groups) { done = true; }
+    }
+    else
+    {
+        EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
+                               any_splice, splice_collapse_on, accel_prefix_on && any_accel,
+                               has_ind_accel, [](const std::vector<int>&) { return true; },
+                               eval_and_push);
     }
 
     // --- Plan B: draw-early variants for Spectacle draw spells ---
@@ -8255,6 +9166,19 @@ private:
     int               m_last_k = 0;
 };
 
+// MTG_LAND_SIG_COMPLETE=1 OPTS IN to the completed land signature (every behaviour-affecting land
+// param discriminated, plus dominance-promotion for strictly-optional abilities). DEFAULT OFF per the
+// user's call (2026-07-29): lands with different names are mostly mechanically different, so widening
+// this dedupe key buys little while any grouping of distinct cards stays risky. Kept in-tree because
+// the underlying finding is real -- see docs/design/land-signature-completeness.md.
+static const bool s_complete_land_sig = std::getenv("MTG_LAND_SIG_COMPLETE") != nullptr;
+static const bool s_legacy_land_sig    = !s_complete_land_sig;
+// Mirrors of AIEngine.cpp's land-priority knobs -- greedy_land_name below reimplements TryPlayLand's
+// passes as the search's last-resort tiebreak, and the two must stay in lockstep.
+static const bool s_legacy_static_tapped = std::getenv("MTG_LEGACY_STATIC_TAPPED") != nullptr;
+static const bool s_land_closing_window  = []{ const char* e = std::getenv("MTG_LAND_CLOSING_WINDOW");
+                                               return !(e && std::string(e) == "0"); }();   // DEFAULT ON
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
 {
@@ -8319,7 +9243,72 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             std::sort(bprod.begin(), bprod.end());
             for (int c : bprod) { s += "b" + std::to_string(c); }
         }
+        if (s_legacy_land_sig) { return s; }
+
+        // ---- ability / drawback discriminators ------------------------------------------------
+        // Everything below appends ONLY when the param is non-default, so a land carrying none of
+        // them yields the byte-identical signature it did before -- a deck whose lands differ on
+        // none of these is unaffected. Each is a real behavioural difference that makes two
+        // same-mana lands NON-interchangeable; omitting one let the dedupe drop the strictly
+        // richer land, and since only the surviving representative is enumerated as a land play,
+        // the dropped land's ability became UNREACHABLE for the search. Found by auditing every
+        // land param in cards.json against this signature -- three suite decks had a LIVE
+        // collision: Auras (Brushland vs Razorverge Thicket), Dragonstorm (Dwarven Hold vs
+        // Mercadian Bazaar) and slivers_vial (Sliver Hive vs Cavern of Souls). MTG_LEGACY_LAND_SIG=1
+        // restores the old signature for a byte-identical A/B.
+        // Restricted-colour mana (Cavern of Souls / Unclaimed Territory / Secluded Courtyard):
+        // coloured mana for CREATURE spells only -- same reasoning as creature_mana_only above.
+        if (pp.colored_creature_only)         { s += "cco"; }
+        // Reflecting Pool: colours are the runtime UNION of the other lands, not this static list.
+        if (pp.reflecting)                    { s += "rp"; }
+        // Forbidden Orchard: every tap hands the opponent a 1/1 Spirit -- a real cost.
+        if (pp.taps_spawn_opp_token)          { s += "spw"; }
+        // Pain land (Brushland / Horizon Canopy): tapping costs life.
+        if (pp.tap_self_damage > 0)           { s += "pd" + std::to_string(pp.tap_self_damage); }
+        // Grove of the Burnwillows: tapping gives the OPPONENT life.
+        if (pp.tap_opponent_lifegain > 0)     { s += "og" + std::to_string(pp.tap_opponent_lifegain); }
+        // Fastland: enters untapped only while few other lands are out -- a turn-dependent ETB the
+        // static enters_tapped flag cannot express, so not interchangeable with a plain dual.
+        if (pp.fastland_max_other_lands >= 0) { s += "fl" + std::to_string(pp.fastland_max_other_lands); }
+        // Karoo (Izzet Boilerworks): ETB bounces a land back to hand.
+        if (pp.etb_bounce_land)               { s += "kb"; }
+        // Thundering Falls: ETB surveil.
+        if (pp.etb_surveil > 0)               { s += "sv" + std::to_string(pp.etb_surveil); }
+        // Ferrous Lake: ramp filter (feed 1 -> one of each colour) -- different net mana to is_filter.
+        if (pp.ramp_filter)                   { s += "rf"; }
+        // Storage land: Dwarven Hold and Mercadian Bazaar differ only in their CHARGE MODE.
+        if (pp.storage_land)                  { s += "st" + pp.storage_charge_mode; }
+        // NOTE: strictly-OPTIONAL extra activated abilities (Mutavault's animate, Sliver Hive's
+        // token) are deliberately NOT discriminated here -- see land_bonus below. Splitting on them
+        // doubles the land branch for no new line and measured +61% instructions on slivers_vial.
         return s;
+    };
+
+    // Strictly-OPTIONAL extra activated abilities on an otherwise signature-identical land. A land
+    // carrying one DOMINATES a land without it: same mana, same ETB, and every line the plainer land
+    // allows the richer one also allows (the ability may simply be ignored). So rather than splitting
+    // the signature -- which doubles the enumerated land branch without adding a single reachable
+    // line -- the richer land is PROMOTED to be the group's representative, keeping the old
+    // enumeration width while making the ability reachable. Returns "" for a plain land, so a deck
+    // with none of these is unaffected. Anything NOT strictly optional (an ETB, a tap drawback, a
+    // restricted colour) is a real behavioural difference and belongs in land_sig above.
+    auto land_bonus = [](const CardParams& pp) -> std::string
+    {
+        std::string b;
+        if (pp.can_animate)                     // Mutavault: {1}: becomes a 2/2 creature
+        {
+            b += "an" + std::to_string(pp.animate_power) + "/" + std::to_string(pp.animate_toughness);
+            if (pp.animate_cost) { b += pp.animate_cost->ToString(); }
+        }
+        if (pp.tap_token_cost || pp.tap_token_power > 0 || pp.tap_token_toughness > 0)
+        {                                       // Sliver Hive: {5}, {T}: create a 1/1 Sliver
+            b += "tk";
+            if (pp.tap_token_cost) { b += pp.tap_token_cost->ToString(); }
+            b += std::to_string(pp.tap_token_power) + "/" + std::to_string(pp.tap_token_toughness);
+            for (const std::string& sub : pp.tap_token_subtypes)          { b += "u" + sub; }
+            for (const std::string& sub : pp.tap_token_requires_subtypes) { b += "q" + sub; }
+        }
+        return b;
     };
 
     // Human play (the play GUI) enumerates one plan per distinct land NAME rather than per static
@@ -8330,13 +9319,63 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     const bool s_human_play_lands = HumanPlayActive();
     std::vector<std::string>        land_names;   // representatives, in hand order
     std::unordered_set<std::string> seen_key;
-    for (const Card& c : ap.hand)
+    if (s_human_play_lands || s_legacy_land_sig)
     {
-        if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: castable as a SPELL only, not enumerable as a land play
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-        if (!def || !def->card.IsLand()) { continue; }
-        const std::string key = s_human_play_lands ? c.m_name : land_sig(def->params);
-        if (seen_key.insert(key).second) { land_names.push_back(c.m_name); }
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: castable as a SPELL only, not enumerable as a land play
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (!def || !def->card.IsLand()) { continue; }
+            const std::string key = s_human_play_lands ? c.m_name : land_sig(def->params);
+            if (seen_key.insert(key).second) { land_names.push_back(c.m_name); }
+        }
+    }
+    else
+    {
+        // Dominance-aware representative choice. Group by static signature as before, then within a
+        // group prefer a copy carrying a strictly-optional extra activated ability (land_bonus): it
+        // dominates the plain copy, so promoting it makes the ability reachable at the OLD
+        // enumeration width. Splitting instead would double the land branch without adding a
+        // reachable line (+61% instructions on slivers_vial, measured).
+        struct SigGroup { std::vector<std::pair<std::string, std::string>> members; };   // (name, bonus)
+        std::vector<SigGroup>                        order;
+        std::unordered_map<std::string, std::size_t> slot;
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_impulse_no_land) { continue; }
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (!def || !def->card.IsLand()) { continue; }
+            const std::string sg = land_sig(def->params);
+            auto it = slot.find(sg);
+            if (it == slot.end())
+            {
+                it = slot.emplace(sg, order.size()).first;
+                order.emplace_back();
+            }
+            order[it->second].members.emplace_back(c.m_name, land_bonus(def->params));
+        }
+        for (const SigGroup& g : order)
+        {
+            std::vector<std::string> bonuses;   // distinct NON-EMPTY ability sets, in hand order
+            for (const auto& m : g.members)
+            {
+                if (m.second.empty()) { continue; }
+                if (std::find(bonuses.begin(), bonuses.end(), m.second) == bonuses.end())
+                { bonuses.push_back(m.second); }
+            }
+            if (bonuses.empty()) { land_names.push_back(g.members.front().first); continue; }
+            // One representative per DISTINCT optional-ability set. A plain copy is dominated by
+            // every one of them, so it is never enumerated separately. Two DIFFERENT optional
+            // abilities are mutually incomparable, so each keeps its own representative -- no deck
+            // has that shape today, and it must not silently collapse if one is added.
+            for (const std::string& b : bonuses)
+            {
+                for (const auto& m : g.members)
+                {
+                    if (m.second == b) { land_names.push_back(m.first); break; }
+                }
+            }
+        }
     }
 
     // Greedy land the heuristic (AIEngine::TryPlayLand) would play from this hand.
@@ -8367,16 +9406,35 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         {
             bool want_untapped = (pass < 2);
             bool want_multi    = (pass == 0 || pass == 2);
+            // Closing-window sub-order INSIDE the pass -- mirrors TryPlayLand's (see there for why it
+            // must not pre-empt the pass ordering). This lambda is only the search's last-resort
+            // tiebreak, reached when the search is already indifferent, so "otherwise equal" holds by
+            // construction here.
+            for (int sub = 0; sub < 2; ++sub)
+            {
+            if (sub == 0 && !s_land_closing_window) { continue; }
             for (const Card& c : ap.hand)
             {
                 if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: never played
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (!d || !d->card.IsLand()) { continue; }
-                bool is_tapped = d->params.enters_tapped;
+                if (s_land_closing_window)
+                {
+                    const bool closing = d->params.fastland_max_other_lands >= 0
+                                      && !LandWouldEnterTapped(state, *d);
+                    if ((sub == 0) != closing) { continue; }
+                }
+                // DYNAMIC tapped-ness, mirroring TryPlayLand -- the static enters_tapped flag reads
+                // false for a fastland/shock/reveal land that actually comes down tapped. This lambda
+                // is the search's last-resort land tiebreak, so a wrong classification here quietly
+                // defaults the search to the wrong land whenever it is indifferent.
+                bool is_tapped = s_legacy_static_tapped ? d->params.enters_tapped
+                                                        : LandWouldEnterTapped(state, *d);
                 bool is_multi  = d->params.produces.size() > 1;
                 if (want_untapped == is_tapped) { continue; }
                 if (want_multi && !is_multi)    { continue; }
                 return c.m_name;
+            }
             }
         }
         return std::string();
