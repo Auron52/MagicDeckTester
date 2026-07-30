@@ -51,7 +51,7 @@ an unmapped choice-param was found (hard fail), 2 = usage / build error.
 """
 import subprocess, sys, json, re, collections, os
 
-BIN = "./build/Release/mtg"
+BIN = os.environ.get("MTG_BIN", "./build/Release/mtg")   # override to audit a non-Release build
 
 # ---------------------------------------------------------------------------
 # MANIFEST: cards.json parameter (+ how to read it) -> decision `type` it MUST produce
@@ -104,6 +104,16 @@ MANIFEST = {
     # (WriteLightPawsDecisionJson / lightPawsPanelHtml), a resolution-time chooser (g_play_lightpaws_chooser).
     # Was a heuristic-picked known gap while the fetch was engine-only.
     "aura_cast_tutor_attach": ("lightpaws",            truthy),
+    # Goblin Lackey: on combat damage to a player, MAY put a Goblin permanent card from HAND onto
+    # the battlefield -- WHICH card (or decline) is a real human choice -> its own `lackey_put` type
+    # (WriteLackeyDecisionJson / lackeyPanelHtml), a resolution-time chooser (g_play_lackey_chooser in
+    # FireCombatDamageCheatIntoPlay). Heuristic default = highest-MV matching hand card.
+    "combat_damage_puts_subtype_from_hand": ("lackey_put", truthy),
+    # Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): at upkeep, pay the echo cost OR sacrifice --
+    # a real human choice -> its own `echo` type (WriteEchoDecisionJson / echoPanelHtml), an upkeep
+    # chooser (g_play_echo_chooser in AIEngine echo resolution, mirroring vial_charge). Default = pay
+    # if affordable (the heuristic). Binary: 1 = pay, 0 = let it die.
+    "echo_cost":              ("echo",                 truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -220,6 +230,47 @@ INERT_PARAMS = {
     "aura_self_buff_power": "Kor static per-aura self-buff, computed P/T", "aura_self_buff_tough": "Kor static per-aura self-buff, computed P/T",
     "draw_on_aura_cast": "Kor may-draw auto-resolved as always-draw (strictly good in goldfish), no meaningful choice",
     "fastland_max_other_lands": "static land property (conditional enters-tapped, Razorverge)",
+    # --- Goblins: automatic triggers / static effects / computed detail (NO player choice) -----
+    # Combat/attack triggers -- automatic, applied at declare-attackers, no choice:
+    "attack_pump_power_per_other_matching": "automatic attack trigger (Piledriver +2/+0 per other attacking Goblin)",
+    "attack_self_pump_per_other_subtype": "automatic attack trigger (Muxus +1/+1 per other Goblin)",
+    "attack_self_pump_power": "attack-trigger pump amount detail", "attack_self_pump_tough": "attack-trigger pump amount detail",
+    # ETB triggers -- automatic, no choice (damage targets face in goldfish; reveal puts ALL matching):
+    "etb_self_creates_tokens": "automatic ETB token creation (Mogg 1, Siege-Gang 3), no choice",
+    "etb_damage_any": "automatic ETB damage, no target in goldfish (face)",
+    "etb_damage_each_opponent": "automatic ETB AoE (each opponent + their creatures), no choice",
+    "etb_reveal_count": "automatic ETB reveal (Muxus reveal-6, put ALL matching Goblins MV<=5), no choice",
+    "etb_reveal_put_creatures_only": "Muxus reveal gating detail (rides etb_reveal_count)",
+    "etb_reveal_put_max_mv": "Muxus reveal MV cap detail (rides etb_reveal_count)",
+    "etb_reveal_put_subtypes": "Muxus reveal subtype filter detail (rides etb_reveal_count)",
+    # Death-watch triggers -- automatic on a Goblin dying, no choice (damage to face; impulse auto):
+    "dies_watch_subtype": "death-watch subtype gating detail", "dies_watch_includes_self": "death-watch self-inclusion detail",
+    "dies_trigger_damage": "automatic death trigger, no target in goldfish (Pashalik ping -> face)",
+    "dies_trigger_creates_tokens": "automatic death trigger (Mogg death token), no choice",
+    "dies_token_power": "death token P/T detail", "dies_token_toughness": "death token P/T detail", "dies_token_subtypes": "death token subtypes",
+    "dies_trigger_impulse_exile": "automatic death trigger (Rundvelt impulse-exile top card); which exiled card to CAST rides main_phase",
+    "dies_impulse_requires_subtype": "death-impulse castability gating detail (rides dies_trigger_impulse_exile)",
+    "dies_impulse_expiry_next_turn": "death-impulse expiry-window detail (rides dies_trigger_impulse_exile)",
+    # Sac-outlet EFFECT detail -- the ACTIVATION rides main_phase (sac_creature_outlet); these are its payload/cost:
+    "sac_creature_cost": "sac-outlet activation cost detail (rides sac_creature_outlet main_phase)",
+    "sac_creature_requires_subtype": "sac-outlet victim gating detail (which subtype; rides sac_creature_outlet)",
+    "sac_outlet_add_mana_color": "sac-outlet mana output color (Skirk {R}); auto-resolved (left to engine)",
+    "sac_outlet_add_mana_amount": "sac-outlet mana output amount; auto-resolved (left to engine)",
+    "sac_outlet_damage": "automatic sac-outlet damage, no target in goldfish (Siege-Gang -> face)",
+    "sac_outlet_creates_tokens": "automatic sac-outlet token creation (Pashalik 2), no choice",
+    "sac_outlet_token_power": "sac-outlet token P/T detail", "sac_outlet_token_toughness": "sac-outlet token P/T detail",
+    "sac_outlet_token_subtypes": "sac-outlet token subtypes detail",
+    # Krenko token detail -- the {T} activation rides main_phase (tap_creates_tokens_per_controlled_subtype):
+    "tap_created_token_power": "Krenko token P/T detail", "tap_created_token_toughness": "Krenko token P/T detail",
+    "tap_created_token_subtypes": "Krenko token subtypes detail",
+    # Channel damage payload -- the {1}{R}-discard ACTIVATION rides main_phase (channel_cost); damage is to face:
+    "channel_damage": "automatic Channel damage payload, no target in goldfish (Twinshot -> face)",
+    # Three Tree City board-scaled mana -- a mana SOURCE; color/amount auto-resolved by the payment engine:
+    "mana_per_creature_subtype": "Three Tree {2},{T} board-scaled mana source; color/amount auto-resolved (left to engine)",
+    "mana_per_creature_feeder_generic": "Three Tree scaled-mana activation feeder cost detail (rides mana_per_creature_subtype)",
+    # Static cost reducer / mana restriction -- no choice:
+    "reduces_spell_subtype": "static Goblin-spell cost reducer (Warchief, {1} less), no choice",
+    "colored_creature_only": "Cavern of Souls mana restriction (spend only on creature spells), no choice",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -239,6 +290,10 @@ MAINPHASE_PARAMS = {
     "splice_onto_arcane":  "Desperate Ritual splice count = a main_phase plan variant (emitted in main.cpp)",
     "suspend_time_counters": "Lotus Bloom suspend = a {0} main_phase action; when-to-suspend is a plan variant",
     "is_aura":             "Aura enchant-target = a main_phase plan variant (one per legal creature, offered unpruned; SummarizePlan labels it, main.cpp emits enchant_target)",
+    # --- Goblins: activated abilities the search enumerates as top-level plan actions ---------
+    "sac_creature_outlet": "sac-a-Goblin outlet activation (Skirk {R}/Siege-Gang {1}{R}/Pashalik {3}{R}) = a main_phase plan action (SacForMana / SacCreatureOutlet / Channel actions); which victim is a heuristic sub-choice (disclosed 6a)",
+    "channel_cost":        "Twinshot Sniper Channel = a from-HAND {1}{R}-discard activation = a main_phase plan action (Channel action)",
+    "tap_creates_tokens_per_controlled_subtype": "Krenko {T}: make X Goblins = a main_phase tap activation (TapForTokens action)",
 }
 
 # DEFAULT after onboarding = SURFACE every decision (user 2026-07-17). "Let the AI decide" is a

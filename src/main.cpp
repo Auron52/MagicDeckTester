@@ -595,6 +595,31 @@ static void WriteVialDecisionJson(std::ostream& os, const GameState& s,
     os << "}\n";
 }
 
+// Echo pay-or-sacrifice decision (claude-play): at upkeep, an echo creature is sacrificed unless its
+// echo cost is paid. Emitted only when paying is affordable (else it is a forced sacrifice, no choice).
+// Reply 1 = pay the echo cost (keep the creature), 0 = let it be sacrificed. `heuristic` is the AI's
+// default (a self-replacing body like Mogg War Marshal declines; others pay).
+static void WriteEchoDecisionJson(std::ostream& os, const GameState& s,
+                                  const Permanent& creature, const std::string& echo_cost,
+                                  int decision_index, bool heuristic)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"echo\",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    os << "  \"creature\": "; JsonStr(os, creature.card.m_name);
+    os << ", \"echo_cost\": "; JsonStr(os, echo_cost); os << ",\n";
+    {
+        int ci = -1;
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i) { if (&s.battlefield[i] == &creature) { ci = i; break; } }
+        os << "  \"perm_index\": " << ci << ",\n";
+    }
+    os << "  \"heuristic_default\": " << (heuristic ? 1 : 0) << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"note\": \"reply 1 to pay the echo cost and keep this creature, 0 to let it be sacrificed.\"\n";
+    os << "}\n";
+}
+
 // Mulligan keep/mulligan decision (claude-play). One per London-mulligan attempt, emitted BEFORE the
 // first main-phase decision. The reply is 1 (keep this hand) or 0 (mulligan again). `ai_keep` is what
 // the engine's KeepHand would do -- surfaced as the "AI would X" hint. `mulligan_count` is how many
@@ -1071,6 +1096,32 @@ static void WriteLightPawsDecisionJson(std::ostream& os, const GameState& s, con
     }
     os << "],\n";
     os << "  \"note\": \"reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick.\"\n";
+    os << "}\n";
+}
+
+// Goblin Lackey combat-cheat decision: on combat damage to a player, the player MAY put a Goblin
+// permanent card from hand onto the battlefield. Emits the matching hand cards as image options; the
+// reply is a candidate index to put that card, or -1 to decline (it is a "may"). `heuristic_default`
+// = the engine's highest-MV pick (pre-selected in the viewer).
+static void WriteLackeyDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                    const std::vector<Card>& candidates, int heuristic_default,
+                                    int decision_index)
+{
+    os << "{\n";
+    os << "  \"decision_index\": " << decision_index << ",\n";
+    os << "  \"type\": \"lackey_put\",\n";
+    os << "  \"source\": "; JsonStr(os, source); os << ",\n";
+    os << "  \"turn\": " << s.turn_number << ",\n";
+    WriteBoardContext(os, s, 0);
+    os << "  \"heuristic_default\": " << heuristic_default << ",\n";
+    os << "  \"candidates\": [";
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+        if (i) os << ", ";
+        os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+    }
+    os << "],\n";
+    os << "  \"note\": \"reply a candidate index to put that Goblin permanent from hand onto the battlefield, or -1 to decline. Default = the AI's pick.\"\n";
     os << "}\n";
 }
 
@@ -1574,6 +1625,38 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         });
 
+    // Echo pay-or-sacrifice (claude-play): the human decides whether to pay each echo creature's upkeep
+    // cost. Shares the single --choices stream + cursor with the main chooser (consulted at upkeep,
+    // before the main phase). Reply 1 = pay (keep), 0 = sacrifice. AIEngine only calls this when paying
+    // is affordable, so every emission is a genuine choice.
+    ai.SetExternalEchoChooser(
+        [&](const GameState& s, const Permanent& creature, bool heuristic) -> bool
+        {
+            std::string echo_cost;
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(creature.card);
+            if (d && d->params.echo_cost) { echo_cost = d->params.echo_cost->ToString(); }
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteEchoDecisionJson(ss, s, creature, echo_cost, di, heuristic);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen != 0;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteEchoDecisionJson(std::cout, s, creature, echo_cost, di, heuristic);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        });
+
     // Mulligan keep/mulligan (claude-play): the human drives each London-mulligan attempt, sharing
     // the one --choices stream (these fire FIRST, before any turn decision). Reply 1 keep / 0 mulligan.
     // Skipped entirely under --force-mulligan (that reconstructs an exact recorded hand on the engine).
@@ -1933,6 +2016,41 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         };
     g_play_lightpaws_chooser = &lightpaws_chooser;
+
+    // Goblin Lackey combat-cheat: on combat damage, the player picks WHICH Goblin permanent to put from
+    // hand (or -1 to decline). Shares the --choices stream; the reply is a candidate index, or -1.
+    // Default = the engine's heuristic pick (highest-MV matching hand card). Human-play only (nulled for
+    // search/rollout), so batch ground truth is unaffected.
+    LackeyChooser lackey_chooser =
+        [&](const GameState& s, int controller, const std::string& source,
+            const std::vector<Card>& candidates, int heuristic_index) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                bool ok = (chosen == -1)
+                       || (chosen >= 0 && chosen < static_cast<int>(candidates.size()));
+                if (!ok) { chosen = heuristic_index; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteLackeyDecisionJson(ss, s, source, candidates, heuristic_index, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteLackeyDecisionJson(std::cout, s, source, candidates, heuristic_index, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_lackey_chooser = &lackey_chooser;
 
     // Dragonstorm put override (the Dragon dialog): the player picks WHICH library Dragons enter (up to
     // max_puts); the engine keeps the rule's play order. Reply = one int per candidate (1 = put this
@@ -2373,6 +2491,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     g_play_replicate_chooser = nullptr;
     g_play_land_entry_chooser = nullptr;
     g_play_dragon_chooser = nullptr;
+    g_play_lackey_chooser = nullptr;
     g_play_lightpaws_chooser = nullptr;
     g_play_firebreathe_chooser = nullptr;
     g_play_cast_order_chooser = nullptr;

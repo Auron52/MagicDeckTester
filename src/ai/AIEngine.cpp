@@ -1208,12 +1208,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
             const CardParams& ep = edef->params;
             const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
+            // Affordability decided up front so the human-play chooser is offered only a REAL choice
+            // (paying is possible); if unaffordable the creature is simply sacrificed (no decision).
+            // BuildAvailableMana is a read-only snapshot (taps nothing), so computing it unconditionally
+            // is behaviourally identical to the old non-self_token-only path.
+            ManaPool avail = BuildAvailableMana(state);
+            const bool affordable = avail.CanPay(*ep.echo_cost);
+            bool pay = affordable && !self_token;   // heuristic: self-replacing body declines, else pays
+            // Human play (--claude-play/viewer): let the player decide pay-vs-sacrifice when affordable.
+            // Guarded to the REAL executor (never a clairvoyant rollout, which must play autonomously so
+            // the kept hand reproduces the search) -> autonomous play + ground truth are byte-identical.
+            if (m_external_echo_chooser && !m_in_rollout && affordable)
+            { pay = m_external_echo_chooser(state, p, pay); }
             bool kept = false;
-            if (!self_token)
-            {
-                ManaPool avail = BuildAvailableMana(state);
-                kept = TapForCost(state, *ep.echo_cost, avail, /*for_creature=*/false);
-            }
+            if (pay) { kept = TapForCost(state, *ep.echo_cost, avail, /*for_creature=*/false); }
             if (kept) { ++i; continue; }
             // Declined or unaffordable -> sacrifice; fire OnCreatureDies (Mogg's death token, etc.).
             const Card dead = p.card;

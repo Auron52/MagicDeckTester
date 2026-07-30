@@ -1431,7 +1431,8 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'
-                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold'; // centered card-image modals
+                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold'
+                || dec==='lackey_put' || dec==='echo'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1444,6 +1445,8 @@ function renderDecisionPanel(d, dec){
                   : dec==='mulligan' ? mulliganPanelHtml(d)
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : dec==='dragon' ? dragonPanelHtml(d)
+                  : dec==='lackey_put' ? lackeyPanelHtml(d)
+                  : dec==='echo' ? echoPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
                   : dec==='firebreathe' ? firebreathePanelHtml(d)
                   : dec==='storage_hold' ? storageHoldPanelHtml(d)
@@ -1506,6 +1509,39 @@ function digPanelHtml(d){
   });
   h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
      `<button class="ghost" data-opt="-1">Take nothing</button></div>`;
+  return h;
+}
+// Goblin Lackey combat-cheat panel: IMAGE-based central modal, SINGLE-SELECT. Lackey dealt combat
+// damage -> you MAY put a Goblin permanent card from HAND onto the battlefield. The matching hand cards
+// are shown as art; click one to put it (it enters and fires its own ETB), or decline. The AI's pick
+// (highest-MV) is tagged.
+function lackeyPanelHtml(d){
+  const cands=d.candidates||[];
+  const defName=(cands.find(c=>c.index===d.heuristic_default)||{}).name;
+  let h=`<h3>Goblin Lackey — put a Goblin into play</h3>`;
+  h+=`<div class="sub"><b>${esc(d.source||'Goblin Lackey')}</b> dealt combat damage — you may put a Goblin permanent card from your hand onto the battlefield. Click one, or decline.</div>`;
+  h+=`<div class="tutgrid">`;
+  if(!cands.length) h+=`<span class="hint">No Goblin permanent in hand.</span>`;
+  cands.forEach(c=>{
+    const def=c.index===d.heuristic_default && c.name===defName;
+    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+     `<button class="ghost" data-opt="-1">Decline</button></div>`;
+  return h;
+}
+// Echo pay-or-sacrifice panel: central modal, BINARY. At upkeep an echo creature is sacrificed unless
+// its echo cost is paid. Two buttons: pay (keep) or let it die. The AI default is badged.
+function echoPanelHtml(d){
+  const pay=d.heuristic_default?1:0;
+  let h=`<h3>Echo — ${esc(d.creature||'')}</h3>`;
+  h+=`<div class="sub">This creature has echo: pay <b>${esc(d.echo_cost||'')}</b> to keep it, or let it be sacrificed (its death triggers still happen).</div>`;
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.creature||'')}</div>`;
+  h+=`<div class="pbtns"><span class="spacer"></span>`+
+     `<button class="primary" data-echo="1">Pay ${esc(d.echo_cost||'')} — keep${pay===1?'  ·  AI':''}</button>`+
+     `<button class="ghost" data-echo="0">Let it die${pay===0?'  ·  AI':''}</button></div>`;
   return h;
 }
 // Light-Paws tutor-attach panel (Light-Paws, Emperor's Voice): IMAGE-based central modal, SINGLE-SELECT.
@@ -1861,6 +1897,10 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDig(d, +b.dataset.opt));
   else if (dec==='lightpaws')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLightPaws(d, +b.dataset.opt));
+  else if (dec==='lackey_put')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLackey(d, +b.dataset.opt));
+  else if (dec==='echo')
+    panel.querySelectorAll('button[data-echo]').forEach(b=>b.onclick=()=>commitEcho(d, +b.dataset.echo));
   else if (dec==='discard'){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleDiscard(d, +b.dataset.opt));
     const ai=panel.querySelector('#discardai'); if (ai) ai.onclick=()=>{ S.discardSel=new Set(aiDiscardSet(d)); renderDecisionPanel(d,'discard'); };
@@ -1921,6 +1961,11 @@ function commitLightPaws(d, oi){
   const c=(d.pool||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source}: ${oi<0||!c?'fetch nothing':'fetch '+c.name}`);
 }
+function commitLackey(d, oi){
+  const c=(d.candidates||[]).find(x=>x.index===oi);
+  pushChoice(d, oi, `${d.source||'Goblin Lackey'}: ${oi<0||!c?'decline':'put '+c.name}`);
+}
+function commitEcho(d, v){ pushChoice(d, v, `Echo ${d.creature||''}: ${v?'pay':'sacrifice'}`); }
 // Multi-select cleanup discard: toggle a card in/out of the discard set (capped at over_by), then
 // commit all at once. The engine still reads one hand-index per discard decision, so we submit the
 // picks in DESCENDING hand-index order -- removing a higher index never shifts a lower one, so each

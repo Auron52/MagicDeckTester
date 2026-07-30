@@ -450,6 +450,18 @@ using DragonChooser = std::function<std::vector<int>(const GameState& state, int
                                                      const std::vector<int>& heuristic_subset)>;
 extern thread_local DragonChooser* g_play_dragon_chooser;
 
+// Goblin Lackey combat-cheat chooser (--claude-play / viewer). "Whenever Goblin Lackey deals combat
+// damage to a player, you MAY put a Goblin permanent card from your hand onto the battlefield." WHICH
+// card (or decline -- it is a "may") is a real human choice. `candidates` = the matching Goblin
+// permanent cards in hand (one Card per hand slot), `heuristic_index` = the index (into candidates) the
+// engine's heuristic (highest-MV) would put. The chooser returns the chosen index into `candidates`, or
+// -1 to decline. Nulled by RevealLogPause for every search/rollout/enumeration scope, so it fires only
+// on the REAL combat-damage resolution and autonomous/search play is byte-identical (chooser null ->
+// the heuristic path is untouched). Inert unless set.
+using LackeyChooser = std::function<int(const GameState& state, int controller, const std::string& source,
+                                        const std::vector<Card>& candidates, int heuristic_index)>;
+extern thread_local LackeyChooser* g_play_lackey_chooser;
+
 // ---- Human-play draw sink (accurate per-draw reporting for the viewer history) -------------
 // Under --claude-play the viewer wants to show exactly what was drawn and on which turn, rather
 // than guessing from a hand diff (which can't tell duplicate copies apart or split a cantrip
@@ -509,6 +521,7 @@ struct RevealLogPause
     ReplicateChooser* saved_repchooser;
     LandEntryChooser* saved_lechooser;
     DragonChooser* saved_dragchooser;
+    LackeyChooser* saved_lackeychooser;
     LightPawsChooser* saved_lpchooser;
     FirebreatheChooser* saved_fbchooser;
     CastOrderChooser* saved_cochooser;
@@ -521,7 +534,8 @@ struct RevealLogPause
                        saved_evsink(g_play_event_sink), saved_dropsink(g_play_dropped_cast_sink),
                        saved_sacchooser(g_play_sacrifice_chooser),
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
-                       saved_dragchooser(g_play_dragon_chooser), saved_lpchooser(g_play_lightpaws_chooser),
+                       saved_dragchooser(g_play_dragon_chooser), saved_lackeychooser(g_play_lackey_chooser),
+                       saved_lpchooser(g_play_lightpaws_chooser),
                        saved_fbchooser(g_play_firebreathe_chooser),
                        saved_cochooser(g_play_cast_order_chooser),
                        saved_shchooser(g_play_storage_hold_chooser)
@@ -531,6 +545,7 @@ struct RevealLogPause
       g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
       g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
+      g_play_lackey_chooser = nullptr;
       g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
       g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr; }
     ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
@@ -541,7 +556,8 @@ struct RevealLogPause
                         g_play_event_sink = saved_evsink; g_play_dropped_cast_sink = saved_dropsink;
                         g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
-                        g_play_dragon_chooser = saved_dragchooser; g_play_lightpaws_chooser = saved_lpchooser;
+                        g_play_dragon_chooser = saved_dragchooser; g_play_lackey_chooser = saved_lackeychooser;
+                        g_play_lightpaws_chooser = saved_lpchooser;
                         g_play_firebreathe_chooser = saved_fbchooser;
                         g_play_cast_order_chooser = saved_cochooser;
                         g_play_storage_hold_chooser = saved_shchooser; }

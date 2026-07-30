@@ -142,6 +142,14 @@ public:
         std::function<bool(const GameState&, const Permanent&, bool)>;
     void SetExternalVialChooser(ExternalVialChooser c) { m_external_vial_chooser = std::move(c); }
 
+    // Echo pay-or-sacrifice decision (claude-play / human-play). At upkeep, an echo creature is
+    // sacrificed unless its echo cost is paid. The DEFAULT is the engine's heuristic (so autonomous
+    // play + ground truth are unchanged); when set (and paying is affordable) the external controller
+    // decides. The bool arg is the heuristic default; return true to PAY (keep), false to SACRIFICE.
+    using ExternalEchoChooser =
+        std::function<bool(const GameState&, const Permanent&, bool)>;
+    void SetExternalEchoChooser(ExternalEchoChooser c) { m_external_echo_chooser = std::move(c); }
+
     // Mulligan keep/mulligan decision (claude-play / human-play). The DEFAULT is the engine's own
     // KeepHand (so autonomous play and its ground truth are unchanged). When set, the external
     // controller decides instead, per London-mulligan attempt. Args: (current 7-card hand,
@@ -219,6 +227,7 @@ private:
                                                           // ordinal for the cast-order side-channel
                                                           // (increments once per external-chooser call)
     ExternalVialChooser      m_external_vial_chooser;     // unset => heuristic charge
+    ExternalEchoChooser      m_external_echo_chooser;     // unset => heuristic pay-or-sacrifice
     ExternalMulliganChooser  m_external_mulligan_chooser; // unset => engine KeepHand
     ExternalBottomChooser    m_external_bottom_chooser;   // unset => engine bottom pick
 

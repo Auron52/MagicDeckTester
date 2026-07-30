@@ -22,6 +22,7 @@ thread_local ReplicateChooser* g_play_replicate_chooser = nullptr;
 thread_local LandEntryChooser* g_play_land_entry_chooser = nullptr;
 thread_local SoulfireTargetChooser* g_play_soulfire_chooser = nullptr;
 thread_local DragonChooser*  g_play_dragon_chooser = nullptr;
+thread_local LackeyChooser*  g_play_lackey_chooser = nullptr;
 thread_local LightPawsChooser* g_play_lightpaws_chooser = nullptr;
 thread_local FirebreatheChooser* g_play_firebreathe_chooser = nullptr;
 thread_local CastOrderChooser* g_play_cast_order_chooser = nullptr;

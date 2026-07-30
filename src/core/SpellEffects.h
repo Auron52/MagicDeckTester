@@ -2179,12 +2179,14 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
             return false;
         };
 
+        std::vector<int> cand_hand;   // hand indices of matching Goblin-permanent cards (chooser pool)
         int best = -1;
         for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
         {
             const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[h]);
             const Card& hc = hd ? hd->card : ap.hand[h];
             if (!is_match(hc)) { continue; }
+            cand_hand.push_back(h);
             if (best < 0) { best = h; continue; }
             const CardDefinition* bd = CardDatabase::Instance().LookupCached(ap.hand[best]);
             const Card& bc = bd ? bd->card : ap.hand[best];
@@ -2196,6 +2198,26 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
             { best = h; }
         }
         if (best < 0) { continue; }   // "may": nothing matching to put -> decline
+
+        // Human play (--claude-play/viewer): let the player pick WHICH Goblin permanent to put, or
+        // decline (it is a "may"). Nulled by RevealLogPause for every search/rollout scope, so this
+        // fires only on the REAL combat-damage resolution and autonomous play is byte-identical (chooser
+        // null -> the heuristic `best` stands, no allocation). Default = the highest-MV heuristic pick.
+        if (g_play_lackey_chooser)
+        {
+            std::vector<Card> candidates;
+            int heur_ci = -1;
+            for (int ci = 0; ci < static_cast<int>(cand_hand.size()); ++ci)
+            {
+                candidates.push_back(ap.hand[cand_hand[ci]]);
+                if (cand_hand[ci] == best) { heur_ci = ci; }
+            }
+            int picked = (*g_play_lackey_chooser)(state, controller, src.card.m_name.str(),
+                                                  candidates, heur_ci);
+            if (picked == -1) { continue; }                                   // human declined the put
+            if (picked >= 0 && picked < static_cast<int>(cand_hand.size()))
+            { best = cand_hand[picked]; }                                     // else out-of-range -> heuristic
+        }
 
         Card raw = ap.hand[best];
         ap.hand.erase(ap.hand.begin() + best);
