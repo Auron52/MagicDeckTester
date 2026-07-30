@@ -1,6 +1,6 @@
-# Regression ground truth -- commit 776f045  date 2026-07-30
+# Regression ground truth -- commit 5b15620  date 2026-07-30
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-07-30): gi721:6->loss and 5 other d0 turn-later games are variance from the target-count change (physically different games from the first Soulfire/Crackle divergence). Net d0 -0.026 with 31 faster vs 6 slower. Cause: executor greedy land drop now fires Forbidden Orchard's on-play Spirit.
+# accepted-with-regressions (overnight, 2026-07-30): Held-out validation of the Forbidden Orchard greedy-drop fix: all 4 d0 seeds improve (4004 -0.0240, 5005 -0.0230, 6006 -0.0305, 7007 -0.0265), 264 faster vs 74 slower, every searched-depth case byte-identical. Slower games are d0 variance (draws diverge at the first target-count change; e.g. s4004 gi57 diverges at T8).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -133,10 +133,10 @@ antilife_overnight_d5_s4004=4.2420/34946e21367e7e00
 antilife_overnight_d5_s5005=4.2730/cabd58e5b7625343
 antilife_overnight_d5_s6006=4.2310/ae4b6b4e4c7658ae
 antilife_overnight_d5_s7007=4.2120/b1a6f34e537eab80
-hinata_overnight_d0_s4004=7.1650/43bd07450d9dcc73
-hinata_overnight_d0_s5005=7.1050/5d373303142c393b
-hinata_overnight_d0_s6006=7.1220/cc955942006548fc
-hinata_overnight_d0_s7007=7.1835/4a1f630896c7338a
+hinata_overnight_d0_s4004=7.1410/f033900b0f987ba8
+hinata_overnight_d0_s5005=7.0820/25c4e0666a27019d
+hinata_overnight_d0_s6006=7.0915/83e33be15e923d58
+hinata_overnight_d0_s7007=7.1570/cbf9372c9b0e17aa
 hinata_overnight_d3_s4004=5.9650/4475f5242257fac4
 hinata_overnight_d3_s5005=5.9175/f097494023efafbf
 hinata_overnight_d3_s6006=5.9850/19dcb5e3725865f7

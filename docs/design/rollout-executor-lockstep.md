@@ -285,6 +285,12 @@ the searched depths byte-identical (which is itself the proof the gap was greedy
 |---|---|---|---|---|---|
 | smoke | `hinata_smoke_d0_s1001` | 7.1050 | 7.0790 | **−0.026** | 31 faster / 6 slower |
 | regression | `hinata_regression_d0_s2002` | 7.1830 | 7.1500 | **−0.033** | 31 faster / 7 slower |
+| overnight (held-out) | `hinata_overnight_d0_s4004` | 7.1650 | 7.1410 | **−0.024** | 264 faster / 74 slower |
+| overnight (held-out) | `hinata_overnight_d0_s5005` | 7.1050 | 7.0820 | **−0.023** | " (all 4 seeds) |
+| overnight (held-out) | `hinata_overnight_d0_s6006` | 7.1220 | 7.0915 | **−0.031** | " |
+| overnight (held-out) | `hinata_overnight_d0_s7007` | 7.1835 | 7.1570 | **−0.027** | " |
+
+Held-out is **4 seeds improved / 0 worse**, at the same magnitude as the train seeds.
 
 The direction follows from the mechanism: more opponent Spirits means more legal targets, so
 Hinata's per-target discount and Crackle with Power's target count both improve (`gi257` 7→5 casts a
