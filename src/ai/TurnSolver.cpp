@@ -2332,23 +2332,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             if (!sd || !sd->params.sac_creature_outlet) { continue; }
             if (!sd->params.sac_outlet_add_mana_color.empty()) { continue; }   // Skirk mana outlet -> later
             const std::string& need_sub = sd->params.sac_creature_requires_subtype;
+            // BOUNDED victim selection (heuristic narrowing -- NOT one action per victim, which makes
+            // the O(2^candidates) subset search explode on a wide Goblin board / Krenko tokens and
+            // hangs). The victims are fungible for a sac outlet, so pick ONE canonical victim: prefer a
+            // TOKEN (most expendable), else the lowest-power matching Goblin that is NOT the outlet
+            // source, else the source itself. This emits ONE action per outlet -- linear, not
+            // exponential. (Multi-sac-for-lethal as a searched COUNT is a documented refinement.)
+            int victim_id = -1; int victim_rank = std::numeric_limits<int>::max();   // lower = expendable
             for (const Permanent& v : state.battlefield)
             {
                 if (v.controller_index != state.active_player_index || !v.card.IsCreature()) { continue; }
                 if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
-                Action a;
-                a.kind           = Action::Kind::SacCreatureOutlet;
-                a.card_name      = src.card.m_name;
-                a.hand_index     = -1;
-                a.cost           = sd->params.sac_creature_cost.value_or(ManaCost{});
-                a.sac_source_id  = src.card.m_number;      // the outlet permanent
-                a.sac_victim_id  = v.card.m_number;        // the sacrificed Goblin
-                a.direct_damage  = sd->params.sac_outlet_damage;
-                a.eval           = (sd->params.sac_outlet_damage
-                                    + sd->params.sac_outlet_creates_tokens) * DMG;
-                a.is_noncreature = true;
-                actions.push_back(std::move(a));
+                int rank = v.is_token ? 0 : (1 + v.card.m_power.value_or(0));   // token first, then weakest
+                if (v.card.m_number == src.card.m_number) { rank += 1000; }     // sac the source last
+                if (rank < victim_rank) { victim_rank = rank; victim_id = v.card.m_number; }
             }
+            if (victim_id < 0) { continue; }   // no legal Goblin to sacrifice
+            Action a;
+            a.kind           = Action::Kind::SacCreatureOutlet;
+            a.card_name      = src.card.m_name;
+            a.hand_index     = -1;
+            a.cost           = sd->params.sac_creature_cost.value_or(ManaCost{});
+            a.sac_source_id  = src.card.m_number;      // the outlet permanent
+            a.sac_victim_id  = victim_id;              // the heuristically-chosen sacrificed Goblin
+            a.direct_damage  = sd->params.sac_outlet_damage;
+            a.eval           = (sd->params.sac_outlet_damage
+                                + sd->params.sac_outlet_creates_tokens) * DMG;
+            a.is_noncreature = true;
+            actions.push_back(std::move(a));
         }
 
         // Twinshot Sniper channel: a from-hand ability (pay channel_cost + discard -> 2 face damage).
