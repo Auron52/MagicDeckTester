@@ -3,6 +3,18 @@
 Per-deck durable state for the `analyze-deck` workflow (survives compaction / handoff).
 Deck: `decks/Goblins/Goblins.cod`. Branch: `phase-1-2-deck-analyzer`.
 
+## ⇩ RESUME HERE (post-compaction) — updated 2026-07-30
+**State:** Goblin engine FUNCTIONALLY COMPLETE + Stage-4 baseline profile done. All work COMMITTED (branch `phase-1-2-deck-analyzer`, head `5772733`, ~8 goblins commits on top of `2b32beb`). Build is current: `bash build.sh` (NOT raw cmake; NO timeouts — repo rule). Binary `build/Release/mtg`; profile `decks/Goblins/Goblins.profile.json`.
+**Done:** Stages 1–3 (coverage `missing:[]`); all 17 cards.json entries (costs Scryfall-verified — audit "All match", only Twinshot/Stingscourger 429-skipped but match research); every engine subsystem (params+parser, Warchief `reduces_spell_subtype`, ETB cascade `OnGoblinEnters`/Muxus reveal, death-watcher `OnCreatureDies`, echo, combat pumps Piledriver/Muxus, Goblin Lackey combat-cheat + `DeckUsesSecondMain`, Three Tree scaled mana, provider routing guard, Krenko `TapForTokens` lockstep, costed outlets Siege-Gang/Pashalik/Channel, Skirk mana via SacForMana-reuse). Stage-4 profile + Stage-5b multi-depth sanity PASS (d0=5.10, d3=4.85, d5=4.85 @seed6006 ×20; fd-diverge=0, nonconv=0 on samples). All params gated → other decks byte-identical (Lotus/Dragonstorm `ApplySacForMana` victim_id=0 path unchanged).
+**NEXT STEPS (in order):**
+1. **Stage 5a** broad mismatch harness — run across suite seeds (smoke 1001 / regression 2002,3003 / overnight 4004-7007), capture stderr: `MTG_FLAG_NONCONV=1 ... --depth 3` and `MTG_FULL_DEPTH=1 MTG_FD_ORACLE=1 ... --depth 5 --lookahead-bottoming`; root-cause any flagged line.
+2. **Stage 5d** 100-game claude-play sweep (read `.claude/skills/claude-play.md` Rule 0 first; base seed disjoint from suite; fan out one agent/game via Workflow — user already opted into orchestration).
+3. **Stage 5h + viewer bucket-B** — Goblin Lackey's "which Goblin permanent to put from hand" chooser is NOT wired (combat agent deliberately left it); build per tools/play/DECISIONS.md 4-site pattern; then `python scripts/audit_viewer_decisions.py decks/Goblins ...`.
+4. **Refinement (documented, non-blocking):** multi-sac-for-lethal as a searched COUNT (Siege-Gang saccing the whole swarm — currently ONE victim/activation via the hang-fix bound); field-audit snapshot `audit_card_fields.py --update` (was 429-throttled).
+5. **Stage 6 report** to user: cards+tiers, profile, suite win-rate (run regression suite), Stage-5 outcomes, **Stage-6a heuristics/assumptions disclosure** (inert collapses: mountainwalk/protection-from-blue/first-strike/reach/Stingscourger-bounce/red-token-color; bounded sac-victim heuristic; single-activation sac cap; Three-Tree any-creature simplification).
+**Patches from the parallel workflow archived at** `logs/goblins_patches/*.patch` (already applied+committed). User decisions: full faithful build / model echo / implement Three Tree scaled mana / inert collapses approved.
+
+
 ## Deck list (25 distinct)
 Muxus Goblin Grandee ×3, Rundvelt Hordemaster ×3, Twinshot Sniper ×1, Siege-Gang Commander ×4,
 Goblin Lackey ×4, Goblin Piledriver ×4, Goblin Matron ×2, Goblin King ×2, Goblin Chieftain ×2,
