@@ -2,6 +2,7 @@
 #include "EffectHandler.h"
 #include "SpellEffects.h"
 #include "../ai/AIEngine.h"
+#include "../ai/Combat.h"
 #include "../cards/CardDatabase.h"
 #include <algorithm>
 
@@ -392,71 +393,15 @@ void GameEngine::CombatPhase(GameState& state)
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, state.active_player_index) : 0;
 
-    int total_combat_dmg = 0;
-    const int opp_life_before = opp.life;                 // play-viewer event: "(before→after)"
-    std::vector<std::string> atk_desc;                    // "<name> (<power>)" per attacker, real play only
-    std::vector<int> damaging_idx;                        // attackers that dealt >0 damage (Goblin Lackey)
-    for (int idx : atk_idx)
-    {
-        Permanent* attacker = &state.battlefield[idx];
-        bool animated = attacker->is_animated;
-        auto [lord_pb, lord_tb] = ComputeLordBonus(
-            attacker->card, state.battlefield, state.active_player_index, animated, attacker);
-        bool ds = animated
-            ? HasDoubleStrikeFromLords(attacker->card, state.battlefield, state.active_player_index, true)
-            : (attacker->card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(attacker->card, state.battlefield, state.active_player_index));
-        int animate_pw = 0;
-        int dynamic_pw = 0;
-        const CardDefinition* adef = CardDatabase::Instance().LookupCached(attacker->card);
-        if (adef)
-        {
-            if (animated) { animate_pw = adef->params.animate_power; }
-            dynamic_pw = DynamicBasePower(*adef, state, state.active_player_index);
-        }
-        int base_power = animate_pw + dynamic_pw + attacker->EffectivePower() + lord_pb + exalted_bonus;
-        base_power += AuraBonusFor(*attacker, state).first;   // Bogles: attached auras + Kor self-buff
-        int power = base_power * (ds ? 2 : 1);
-        opp.life -= power;
-        total_combat_dmg += power;
-        if (power > 0)
-        {
-            state.opponent_lost_life_this_turn = true;
-            damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
-            // Lifelink (modeled): combat damage also gains the controller that much life.
-            if (CreatureHasLifelink(*attacker, state))
-            { state.players[state.active_player_index].life += power; }
-        }
-        if (g_play_event_sink && power > 0)
-        { atk_desc.push_back(attacker->card.m_name.str() + " (" + std::to_string(power) + ")"); }
-        if (!attacker->card.HasKeyword(Keyword::Vigilance)) { attacker->tapped = true; }
-    }
+    const int opp_life_before = opp.life;                  // play-viewer event: "(before->after)"
 
-    // Attack triggers (e.g. Leeching Sliver: each attacking Sliver costs the opponent 1 life).
-    std::vector<const Permanent*> attacker_ptrs;
-    attacker_ptrs.reserve(atk_idx.size());
-    for (int idx : atk_idx) { attacker_ptrs.push_back(&state.battlefield[idx]); }
-    int trigger_life_loss = CountAttackTriggerLifeLoss(
-        state.battlefield, state.active_player_index, attacker_ptrs);
-    if (trigger_life_loss > 0)
-    {
-        // Life loss, not combat damage: reduce life directly and mark the lost-life flag
-        // (drives spectacle). Folded into total_combat_dmg only for the attack log total.
-        opp.life -= trigger_life_loss;
-        total_combat_dmg += trigger_life_loss;
-        state.opponent_lost_life_this_turn = true;
-    }
-
-    // Utvara Hellkite: per attacking Dragon, create a 6/6 Dragon token (untapped, summoning-sick;
-    // NOT added to this combat). Each token entering fires OnDragonEnters (Scourge ping / Lathliss
-    // token) via CreateToken. Mirrors TurnSolver::SimulateCombat (rollout). attacker_ptrs still
-    // holds the pre-token attacker pointers (read before any CreateToken).
-    FireUtvaraAttackTokens(state, state.active_player_index, attacker_ptrs);
-
-    // Goblin Lackey: each attacker that dealt combat damage to the player may put a matching Goblin
-    // permanent from hand onto the battlefield (shared enter cascade). Fired AFTER Utvara so the
-    // pre-token attacker pointers above are already consumed. Mirrors TurnSolver::SimulateCombat.
-    FireCombatDamageCheatIntoPlay(state, state.active_player_index, damaging_idx);
+    // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
+    // rollout (ResolveCombatDamage, Combat.cpp) so the two can never disagree on what an attack
+    // does. Only the real game collects the per-attacker descriptions for the play viewer.
+    const CombatDamageResult combat =
+        ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/g_play_event_sink != nullptr);
+    const int total_combat_dmg = combat.total_damage;
+    const int trigger_life_loss = combat.trigger_life_loss;
 
     if (m_logger && total_combat_dmg > 0)
     {
@@ -466,7 +411,8 @@ void GameEngine::CombatPhase(GameState& state)
     if (g_play_event_sink && total_combat_dmg > 0)
     {
         std::string names;
-        for (size_t i = 0; i < atk_desc.size(); ++i) { names += (i ? ", " : "") + atk_desc[i]; }
+        for (size_t i = 0; i < combat.attacker_descs.size(); ++i)
+        { names += (i ? ", " : "") + combat.attacker_descs[i]; }
         if (trigger_life_loss > 0)
         { names += (names.empty() ? "" : " + ") + std::to_string(trigger_life_loss) + " (attack triggers)"; }
         EmitPlayEvent(state.turn_number, "combat",

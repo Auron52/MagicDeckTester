@@ -115,6 +115,7 @@ add_library(mtg-core STATIC
     src/ai/TurnSolver.cpp
     src/ai/ManaPayment.cpp
     src/ai/LandPlay.cpp
+    src/ai/Combat.cpp
     src/ai/KeepModel.cpp
     src/runner/GoldFishRunner.cpp
     src/runner/BatchRunner.cpp

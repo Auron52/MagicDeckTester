@@ -2,6 +2,7 @@
 #include "AIEngine.h"
 #include "ManaPayment.h"
 #include "LandPlay.h"
+#include "Combat.h"
 #include "EngineFlags.h"
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
@@ -3160,17 +3161,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
 
 std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
 {
+    // Selection is shared with the rollout (DeclareAttackerIndices, Combat.cpp); this wrapper only
+    // maps the indices back to the pointer list GameEngine's signature expects.
     std::vector<Permanent*> attackers;
-    const DecisionProvider& provider = ResolveProvider(state);
-    for (Permanent& p : state.battlefield)
-    {
-        if (p.controller_index == state.active_player_index
-            && CanAttackFull(p, state.battlefield, state.active_player_index)
-            && provider.ShouldAttackWith(state, p))
-        {
-            attackers.push_back(&p);
-        }
-    }
+    for (int idx : DeclareAttackerIndices(state))
+    { attackers.push_back(&state.battlefield[idx]); }
     return attackers;
 }
 
