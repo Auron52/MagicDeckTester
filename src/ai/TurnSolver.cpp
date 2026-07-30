@@ -8793,59 +8793,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // clairvoyant rollout often rates two land choices identically at the horizon,
     // and letting an arbitrary order decide picks a land that plays out marginally
     // worse than greedy in the realized game (the small fold-vs-greedy regressions).
-    // Mirrors TryPlayLand's TH pre-pass + four-pass (untapped/tapped x multi/any).
-    auto greedy_land_name = [&]() -> std::string
+    // Shares TryPlayLand's ranker outright (GreedyLandChoiceIndex, LandPlay.cpp) rather than
+    // re-implementing it: the hand-rolled mirror this replaces had drifted three ways -- no
+    // hand-flooding clause in the Reliquary pre-pass, no Apex-exiled skip in that pre-pass, and no
+    // Karoo self-bounce skip in the four-pass -- so the tiebreak named a land the executor would
+    // not have played, which is the one thing this lambda exists to avoid.
+    const std::string greedy_land_name = [&]() -> std::string
     {
-        bool has_draw_until_nonland = false;
-        for (const Card& c : ap.hand)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && d->tmpl == CardTemplate::DrawUntilNonland) { has_draw_until_nonland = true; break; }
-        }
-        if (has_draw_until_nonland)
-        {
-            for (const Card& c : ap.hand)
-            {
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                if (d && d->card.IsLand() && d->params.no_max_hand_size) { return c.m_name; }
-            }
-        }
-        for (int pass = 0; pass < 4; ++pass)
-        {
-            bool want_untapped = (pass < 2);
-            bool want_multi    = (pass == 0 || pass == 2);
-            // Closing-window sub-order INSIDE the pass -- mirrors TryPlayLand's (see there for why it
-            // must not pre-empt the pass ordering). This lambda is only the search's last-resort
-            // tiebreak, reached when the search is already indifferent, so "otherwise equal" holds by
-            // construction here.
-            for (int sub = 0; sub < 2; ++sub)
-            {
-            if (sub == 0 && !LandClosingWindowEnabled()) { continue; }
-            for (const Card& c : ap.hand)
-            {
-                if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: never played
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                if (!d || !d->card.IsLand()) { continue; }
-                if (LandClosingWindowEnabled())
-                {
-                    const bool closing = d->params.fastland_max_other_lands >= 0
-                                      && !LandWouldEnterTapped(state, *d);
-                    if ((sub == 0) != closing) { continue; }
-                }
-                // DYNAMIC tapped-ness, mirroring TryPlayLand -- the static enters_tapped flag reads
-                // false for a fastland/shock/reveal land that actually comes down tapped. This lambda
-                // is the search's last-resort land tiebreak, so a wrong classification here quietly
-                // defaults the search to the wrong land whenever it is indifferent.
-                bool is_tapped = LegacyStaticTapped() ? d->params.enters_tapped
-                                                      : LandWouldEnterTapped(state, *d);
-                bool is_multi  = d->params.produces.size() > 1;
-                if (want_untapped == is_tapped) { continue; }
-                if (want_multi && !is_multi)    { continue; }
-                return c.m_name;
-            }
-            }
-        }
-        return std::string();
+        const int i = GreedyLandChoiceIndex(state);
+        return i < 0 ? std::string() : std::string(ap.hand[i].m_name);
     }();
 
     std::vector<TurnSolver::Plan> all;

@@ -299,23 +299,54 @@ the first target-count change, so they are physically different games, not like-
 Note this is a **correctness** fix, so the metric is informational; the justification is that four
 sites modelled the same trigger and one of them silently didn't.
 
-### 2. `greedy_land_name` has drifted from the ranker it documents itself as mirroring
+### 2. `greedy_land_name` had drifted from the ranker it documents itself as mirroring — FIXED
 
-`TurnSolver`'s `greedy_land_name` lambda says it "Mirrors TryPlayLand's TH pre-pass + four-pass".
-The four-pass matches; the pre-pass does not. `TryPlayLand` prioritises a `no_max_hand_size` land
-when `has_draw_until_nonland || hand_flooding` (hand size > 7); `greedy_land_name` only checks
-`has_draw_until_nonland`. `greedy_land_name` is only the search's last-resort ordering tiebreak, so
-this is a tiebreak mismatch rather than a play divergence — but it is a mirror that has silently
-drifted, which is how the bugs in this file start.
+`TurnSolver`'s `greedy_land_name` lambda said it "Mirrors TryPlayLand's TH pre-pass + four-pass".
+It had drifted in **three** ways, all in the direction of naming a land the executor would not play:
 
-### 3. Under `--claude-play` the human's land-entry choice never reaches the real drop
+1. the Reliquary pre-pass fired only on `has_draw_until_nonland`, missing `TryPlayLand`'s
+   `|| hand_flooding` (hand size > 7) clause;
+2. that pre-pass did not skip `m_impulse_no_land` (Apex-exiled) lands;
+3. the four-pass did not skip a Karoo bounce land with no other land in play, which the executor
+   skips because its mandatory bounce would return itself for a net-zero land drop.
 
-`g_play_land_entry_chooser` (pay the shock life / reveal to enter untapped?) is consulted **only**
-in `PlayLandByName`, i.e. in the rollout. The real game's land drop always goes through the
-executor's `TryPlaySpecificLand` / `TryPlayLand`, neither of which asks. The same asymmetry applies
-to `allow_shock_pay`: `ApplyPlanDirect` declines the shock payment on a mana-free human turn, while
-the executor always allows it. Both are claude-play-only (autonomous play nulls the chooser via
-`RevealLogPause` and always passes `allow_shock_pay = true`), so autonomous results are unaffected.
+`greedy_land_name` is the **last** tiebreak in the plan comparator, reached only after win-turn,
+value and the develop tiebreak have all tied — so a wrong answer silently defaults the search to the
+wrong land exactly when it is indifferent, which is the one job this lambda has.
+
+**Fixed** by deleting the hand-rolled mirror and sharing `TryPlayLand`'s ranker outright
+(`GreedyLandChoiceIndex`, `src/ai/LandPlay.cpp`). Done in two commits so the risk is separable: the
+extraction alone is byte-identical (40/40), which proves it reproduces the executor; pointing the
+tiebreak at it is the behaviour change.
+
+The change is **score-neutral by construction and in measurement** — it only moves a tie. Every
+changed case kept its exact average (7 configs in regression, 4 in smoke, all `exp == got` on the
+avg), with `slower=0 faster=0` and depth 0 untouched (d0 uses the ranker directly, so it never saw
+the drift). The line changes are uniform and legible: on a flooded Treasure Hunt turn the drop
+becomes Reliquary Tower (`th_regression_d3_s2002` gi83/gi96/gi102, identical hands and draws, same
+win turn), and Hinata stops opening on a self-bouncing Izzet Boilerworks. Ground truth was
+rebaselined for the digest change only.
+
+### 3. `--claude-play` land-entry choice — NOT a divergence (corrected)
+
+This was reported as a divergence and was **wrong**; recording the correction because the reasoning
+error is the reusable part.
+
+The claim was that `g_play_land_entry_chooser` (pay the shock life / reveal to enter untapped?) and
+the conservative human `allow_shock_pay` policy are consulted only in `PlayLandByName` — the
+rollout — while the realised land comes from the executor's `TryPlaySpecificLand` / `TryPlayLand`,
+which never ask. The first half is true. The second half is not: under `--claude-play`
+`AIEngine::TakeTurn` takes an **external-chooser branch** (`use_external = m_external_chooser &&
+!m_in_rollout`) that applies the human's chosen plan through `TurnSolver::ApplyPlan` →
+`ApplyPlanDirect` → `PlayLandByName`, and returns without ever reaching the executor's own land
+drop. So in the only mode where a chooser exists, the code that plays the real land *is* the code
+that consults it. Eleven saved Anti-Lifegain references contain recorded `land_entry` decisions,
+which is the direct evidence.
+
+The lesson: "which function plays the real land" is mode-dependent here, and reading the autonomous
+path alone will mislead you. Verify by following the actual call chain for the mode in question
+(`RunClaudePlay` → `GameEngine::RunGame` → `AIEngine::TakeTurn` → the external branch), not by
+assuming the executor is always the executor.
 
 ### 4. The look SOURCE label differs
 
