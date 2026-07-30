@@ -54,3 +54,19 @@ struct LandPlayOptions
 // the hand is invalidated.
 bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefinition& def,
                       const LandPlayOptions& opts);
+
+// THE greedy land ranker: the hand index of the land the greedy heuristic plays this turn, or -1
+// for none. Reliquary-Tower pre-pass (a no_max_hand_size land first when a Treasure Hunt is in hand
+// OR the hand is already flooding past max size), then the four-pass priority -- untapped before
+// tapped, multi-colour before single-colour within each -- with the closing-window sub-order
+// (MTG_LAND_CLOSING_WINDOW) inside each pass and DYNAMIC tapped-ness (a fastland / shock / reveal
+// land carries enters_tapped == false yet may come down tapped). Skips Apex-exiled lands and a Karoo
+// bounce land with no other land in play (its bounce would return itself).
+//
+// Extracted because it existed twice: AIEngine::TryPlayLand (which PLAYS the land) and TurnSolver's
+// `greedy_land_name` lambda (which PREDICTS it, as the search's last-resort plan-ordering tiebreak,
+// and documents itself as mirroring TryPlayLand). The mirror had silently drifted in three ways --
+// no flooding clause in the pre-pass, no Apex-exiled skip in the pre-pass, and no Karoo self-bounce
+// skip in the four-pass -- so the search's tiebreak defaulted to a land the executor would not play.
+// Returns an INDEX, not a name, so the caller plays exactly the copy the ranker chose.
+int GreedyLandChoiceIndex(const GameState& state);

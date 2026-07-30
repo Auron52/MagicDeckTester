@@ -2579,95 +2579,14 @@ bool AIEngine::TryPlayLand(GameState& state)
         return PlayLandFromHand(state, static_cast<std::size_t>(it - ap.hand.begin()), def, o);
     };
 
-    // Pre-pass: prioritize a no_max_hand_size land (Reliquary Tower) when either a
-    // DrawUntilNonland spell (Treasure Hunt) is in hand (play it BEFORE the draw) OR the hand
-    // is already flooding past max size (play it AFTER a draw to KEEP the cards). The latter
-    // is the gi=65/gi=881 case: Treasure Hunt resolved and drew a Reliquary, but with TH no
-    // longer in hand the old TH-in-hand-only check missed it, so the drawn Reliquary (and the
-    // whole flood) was discarded at cleanup instead of kept as Land's Edge ammo.
-    bool has_draw_until_nonland = false;
-    for (const Card& c : ap.hand)
-    {
-        auto cdef = CardDatabase::Instance().LookupCached(c);
-        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland)
-        {
-            has_draw_until_nonland = true;
-            break;
-        }
-    }
-    bool hand_flooding = static_cast<int>(ap.hand.size()) > 7;
-    if (has_draw_until_nonland || hand_flooding)
-    {
-        for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
-        {
-            if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: never played
-            auto def = CardDatabase::Instance().Lookup(it->m_name);
-            if (!def || !def->card.IsLand() || !def->params.no_max_hand_size) { continue; }
-            return play_land_iter(it, *def);
-        }
-    }
-
-    // A Karoo bounce land with no other land in play must return ITSELF (the bounce is mandatory)
-    // -- net no land in play and a wasted drop, never the right play. Skip it below until another
-    // land is down (matches SimulateLandPlay and the searched land drop).
-    bool has_other_land = false;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index == state.active_player_index && p.card.IsLand())
-        { has_other_land = true; break; }
-    }
-
-    // Four-pass priority: prefer untapped-entering over tapped-entering, and
-    // multi-color (wild mana) over single-color within each group.
-    //   Pass 0: untapped + multi-color
-    //   Pass 1: untapped + any
-    //   Pass 2: tapped   + multi-color
-    //   Pass 3: tapped   + any
-    for (int pass = 0; pass < 4; ++pass)
-    {
-        bool want_untapped = (pass < 2);
-        bool want_multi    = (pass == 0 || pass == 2);
-        // Closing-window sub-order (MTG_LAND_CLOSING_WINDOW): a fastland (Razorverge Thicket) enters
-        // untapped ONLY while few other lands are out, so its untapped drop is use-it-or-lose-it,
-        // while a land that always enters untapped (Brushland, a basic) is just as good later. Human
-        // play therefore drops the fastland FIRST -- same mana now, strictly better options later.
-        // This lives INSIDE the pass on purpose: every candidate in a pass is already equally
-        // preferred by the pass's own criteria, so the rule only ever breaks a tie among OTHERWISE
-        // EQUAL options and can never outrank an untapped drop or the multi-colour preference (user,
-        // 2026-07-29). sub 0 = still-open closing windows, sub 1 = everything else.
-        for (int sub = 0; sub < 2; ++sub)
-        {
-        if (sub == 0 && !LandClosingWindowEnabled()) { continue; }   // rule off -> single unfiltered scan
-        for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
-        {
-            if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: never played
-            auto def = CardDatabase::Instance().Lookup(it->m_name);
-            if (!def || !def->card.IsLand()) { continue; }
-            if (def->params.etb_bounce_land && !has_other_land) { continue; }
-            if (LandClosingWindowEnabled())
-            {
-                const bool closing = def->params.fastland_max_other_lands >= 0
-                                  && !LandWouldEnterTapped(state, *def);   // window still open
-                if ((sub == 0) != closing) { continue; }
-            }
-            // Tapped-ness must be the DYNAMIC answer, not the static flag: a fastland
-            // (fastland_max_other_lands) and a shock/reveal land all carry enters_tapped == false
-            // yet enter TAPPED depending on board/life/hand, so the static read put them in the
-            // "untapped" passes while they actually came down tapped -- defeating the very
-            // preference these passes exist to express. LandWouldEnterTapped is the pure predicate;
-            // LandEntersTapped must NOT be used here, it PAYS the shock life as a side effect.
-            // MTG_LEGACY_STATIC_TAPPED=1 restores the old static read for a byte-identical A/B.
-            bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
-                                                  : LandWouldEnterTapped(state, *def);
-            bool is_multi  = def->params.produces.size() > 1;
-            if (want_untapped && is_tapped)  { continue; }
-            if (!want_untapped && !is_tapped) { continue; }
-            if (want_multi && !is_multi)     { continue; }
-            return play_land_iter(it, *def);
-        }
-        }
-    }
-    return false;
+    // The RANKER lives in LandPlay.cpp (GreedyLandChoiceIndex) so the search's plan-ordering
+    // tiebreak predicts exactly what this plays -- the two had silently drifted apart.
+    const int pick = GreedyLandChoiceIndex(state);
+    if (pick < 0) { return false; }
+    auto it = ap.hand.begin() + pick;
+    const CardDefinition* def = CardDatabase::Instance().Lookup(it->m_name);
+    if (!def) { return false; }
+    return play_land_iter(it, *def);
 }
 
 

@@ -5,6 +5,7 @@
 #include "../core/GameLogger.h"
 #include "../core/RolloutTouch.h"
 #include "../core/SpellEffects.h"
+#include "EngineFlags.h"
 
 bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefinition& def,
                       const LandPlayOptions& opts)
@@ -99,4 +100,84 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     // opponent's Spirit now (the turn-start spawn only covers copies already in play).
     if (opts.spawn_orchard_spirit && IsForbiddenOrchard(&def)) { SpawnOpponentSpirit(state); }
     return true;
+}
+
+int GreedyLandChoiceIndex(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    const int n = static_cast<int>(ap.hand.size());
+
+    // Pre-pass: prioritize a no_max_hand_size land (Reliquary Tower) when either a DrawUntilNonland
+    // spell (Treasure Hunt) is in hand (play it BEFORE the draw) OR the hand is already flooding past
+    // max size (play it AFTER a draw to KEEP the cards). The latter is the gi=65/gi=881 case:
+    // Treasure Hunt resolved and drew a Reliquary, but with TH no longer in hand the old
+    // TH-in-hand-only check missed it, so the drawn Reliquary (and the whole flood) was discarded at
+    // cleanup instead of kept as Land's Edge ammo.
+    bool has_draw_until_nonland = false;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+        if (cdef && cdef->tmpl == CardTemplate::DrawUntilNonland) { has_draw_until_nonland = true; break; }
+    }
+    const bool hand_flooding = n > 7;
+    if (has_draw_until_nonland || hand_flooding)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (ap.hand[i].m_impulse_no_land) { continue; }   // Apex-exiled land: never played
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            if (!def || !def->card.IsLand() || !def->params.no_max_hand_size) { continue; }
+            return i;
+        }
+    }
+
+    // A Karoo bounce land with no other land in play must return ITSELF (the bounce is mandatory) --
+    // net no land in play and a wasted drop, never the right play. Skip it below until another land
+    // is down (matches SimulateLandPlay and the searched land drop).
+    bool has_other_land = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.IsLand())
+        { has_other_land = true; break; }
+    }
+
+    // Four-pass priority: 0 = untapped+multi, 1 = untapped+any, 2 = tapped+multi, 3 = tapped+any.
+    for (int pass = 0; pass < 4; ++pass)
+    {
+        const bool want_untapped = (pass < 2);
+        const bool want_multi    = (pass == 0 || pass == 2);
+        // Closing-window sub-order: a fastland enters untapped ONLY while few other lands are out, so
+        // its untapped drop is use-it-or-lose-it while an always-untapped land is as good later. It
+        // lives INSIDE the pass on purpose, so it only ever breaks a tie among otherwise-equal
+        // options and can never outrank an untapped drop or the multi-colour preference.
+        for (int sub = 0; sub < 2; ++sub)
+        {
+        if (sub == 0 && !LandClosingWindowEnabled()) { continue; }   // rule off -> single unfiltered scan
+        for (int i = 0; i < n; ++i)
+        {
+            if (ap.hand[i].m_impulse_no_land) { continue; }
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            if (!def || !def->card.IsLand()) { continue; }
+            if (def->params.etb_bounce_land && !has_other_land) { continue; }
+            if (LandClosingWindowEnabled())
+            {
+                const bool closing = def->params.fastland_max_other_lands >= 0
+                                  && !LandWouldEnterTapped(state, *def);   // window still open
+                if ((sub == 0) != closing) { continue; }
+            }
+            // Tapped-ness must be the DYNAMIC answer, not the static flag: a fastland and a
+            // shock/reveal land all carry enters_tapped == false yet enter TAPPED depending on
+            // board/life/hand. LandWouldEnterTapped is the pure predicate; LandEntersTapped must NOT
+            // be used here, it PAYS the shock life as a side effect.
+            const bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
+                                                        : LandWouldEnterTapped(state, *def);
+            const bool is_multi  = def->params.produces.size() > 1;
+            if (want_untapped && is_tapped)   { continue; }
+            if (!want_untapped && !is_tapped) { continue; }
+            if (want_multi && !is_multi)      { continue; }
+            return i;
+        }
+        }
+    }
+    return -1;
 }
