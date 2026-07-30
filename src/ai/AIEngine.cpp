@@ -1,6 +1,7 @@
 #include "../core/EnvFlags.h"
 #include "AIEngine.h"
 #include "ManaPayment.h"
+#include "LandPlay.h"
 #include "EngineFlags.h"
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
@@ -2541,58 +2542,15 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
     }
     if (pick != ap.hand.end())
     {
-        auto it = pick;
-        auto def = CardDatabase::Instance().Lookup(it->m_name);
-
-        rollout_touch::Record(it->m_name.str());   // execution-trace: land played on the rollout path
-        if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
-        // Fetchland: sacrifice it to search out a real land (same heuristic as the rollout
-        // so the committed line replays identically).
-        if (!def->params.fetch_land_types.empty())
-        {
-            Card fetchland = *it;
-            ap.hand.erase(it);
-            ++ap.lands_played_this_turn;
-            ap.graveyard.push_back(fetchland);
-            PerformFetch(state, state.active_player_index, def->params, fetch_target);
-            return true;
-        }
-        // Modal double-faced land (Pathway): enter the chosen FACE's identity (locks its colour),
-        // mirroring the rollout's PlayLandByName EXACTLY so the committed line replays identically
-        // (a face mismatch between executor and rollout would desync = fd-diverge). face_def == def
-        // for "" / "front" and every non-MDFC land -> byte-identical for all existing decks.
-        const CardDefinition* face_def = def;
-        if (land_face == "back" && !def->params.mdfc_back_name.empty())
-        {
-            const CardDefinition* bd = CardDatabase::Instance().Lookup(def->params.mdfc_back_name);
-            if (bd) { face_def = bd; }
-        }
-        bool tapped = LandEntersTapped(state, *def);
-        Permanent perm;
-        perm.card              = face_def->card;   // chosen face -> locks colour
-        perm.card.m_number     = it->m_number;
-        perm.controller_index  = state.active_player_index;
-        perm.owner_index       = state.active_player_index;
-        perm.entered_this_turn = true;
-        perm.tapped            = tapped;
-        if (def->params.enters_tapped_with_depletion > 0)
-        {
-            Counter dep;
-            dep.type  = Counter::Type::Depletion;
-            dep.count = def->params.enters_tapped_with_depletion;
-            perm.counters.push_back(dep);
-        }
-        state.battlefield.push_back(perm);
-        ap.hand.erase(it);
-        ++ap.lands_played_this_turn;
-        if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry, def->card.m_name); }
-        if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil, def->card.m_name); }
-        if (def->params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
-        // Forbidden Orchard played this turn: it is tapped for mana this turn too, so spawn the
-        // opponent's Spirit now (the turn-start spawn only covers copies already in play). Lockstep
-        // with the rollout's PlayLandByName.
-        if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }
-        return true;
+        const CardDefinition* def = CardDatabase::Instance().Lookup(pick->m_name);
+        LandPlayOptions o;
+        o.fetch_target       = fetch_target;
+        o.land_face          = land_face;
+        o.label_look_source  = true;    // executor labels the reveal log with the land's name
+        o.spawn_orchard_spirit = true;  // searched drop: the on-play Spirit fires
+        o.record_touch       = true;
+        o.logger             = m_logger;
+        return PlayLandFromHand(state, static_cast<std::size_t>(pick - ap.hand.begin()), *def, o);
     }
     return false;
 }
@@ -2607,44 +2565,15 @@ bool AIEngine::TryPlayLand(GameState& state)
 
     auto play_land_iter = [&](std::vector<Card>::iterator it, const CardDefinition& def) -> bool
     {
-        rollout_touch::Record(it->m_name.str());   // execution-trace: this land is played (bypasses the stack)
-        if (m_logger) { m_logger->LogPlayLand(it->m_number, it->m_name); }
-        // Fetchland: sacrifice it to search out a real land (PerformFetch heuristic).
-        if (!def.params.fetch_land_types.empty())
-        {
-            Card fetchland = *it;
-            ap.hand.erase(it);
-            ++ap.lands_played_this_turn;
-            ap.graveyard.push_back(fetchland);
-            PerformFetch(state, state.active_player_index, def.params);
-            return true;
-        }
-        // Resolve "as this land enters" choices (shock life payment, reveal-untap)
-        // while the card is still in hand; this also tells us if it enters tapped.
-        bool tapped = LandEntersTapped(state, def);
-        Permanent perm;
-        perm.card              = def.card;
-        perm.card.m_number     = it->m_number;
-        perm.controller_index  = state.active_player_index;
-        perm.owner_index       = state.active_player_index;
-        perm.entered_this_turn = true;
-        perm.tapped            = tapped;
-        if (def.params.enters_tapped_with_depletion > 0)
-        {
-            Counter dep;
-            dep.type  = Counter::Type::Depletion;
-            dep.count = def.params.enters_tapped_with_depletion;
-            perm.counters.push_back(dep);
-        }
-        state.battlefield.push_back(perm);
-        ap.hand.erase(it);
-        ++ap.lands_played_this_turn;
-        // ETB scry/surveil (e.g. Temple of Epiphany scry; Thundering Falls surveil),
-        // after the land is on the battlefield.
-        if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry, def.card.m_name); }
-        if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil, def.card.m_name); }
-        if (def.params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
-        return true;
+        LandPlayOptions o;
+        o.label_look_source = true;
+        // NOTE (backlog C1 unit 6): the greedy drop does NOT fire Forbidden Orchard's on-play
+        // Spirit, while the executor's searched drop and the rollout both do. Preserved as-is
+        // here (byte-identical); it is a live divergence, see rollout-executor-lockstep.md.
+        o.spawn_orchard_spirit = false;
+        o.record_touch      = true;
+        o.logger            = m_logger;
+        return PlayLandFromHand(state, static_cast<std::size_t>(it - ap.hand.begin()), def, o);
     };
 
     // Pre-pass: prioritize a no_max_hand_size land (Reliquary Tower) when either a

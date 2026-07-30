@@ -248,3 +248,65 @@ Two lessons for this bug class:
 If a legend-rule-off effect is ever added (Mirror Gallery), or a name-changing legend (Sakashima):
 no such card exists in `cards.json` today, so enforcement is unconditional. Adding one means gating
 EVERY `EnforceLegendRule` site, not just the new one.
+
+---
+
+## The land drop: three copies, four divergences (2026-07-30)
+
+The land drop existed **three** times: `AIEngine::TryPlaySpecificLand` (the executor's SEARCHED
+drop), the `play_land_iter` lambda inside `AIEngine::TryPlayLand` (the executor's GREEDY drop), and
+`TurnSolver::PlayLandByName` (the rollout). Unifying the placement core (`src/ai/LandPlay.cpp`,
+`PlayLandFromHand`) turned each difference into a named `LandPlayOptions` field instead of a silent
+one. Each caller keeps exactly its old behaviour, so the unification is byte-identical; what follows
+is what the unification *found*.
+
+### 1. The executor's GREEDY drop does not fire Forbidden Orchard's on-play Spirit — CONFIRMED LIVE
+
+`SpawnOpponentSpirit` was called from `TryPlaySpecificLand` (ungated) and from `PlayLandByName`
+(gated on `!MTG_LEGACY_SEARCH`), but **not** from `TryPlayLand`. So when a Forbidden Orchard comes
+down on the greedy path, the executor gives the opponent no Spirit that turn while the rollout that
+scored the line does. The turn-start spawn covers copies already in play, so the effect is a
+one-turn delay of the first Spirit — but it lands squarely on the turn the land is played.
+
+Reachability, measured rather than argued: setting `spawn_orchard_spirit = true` on the greedy path
+and re-running the smoke suite changes play in `hinata_smoke_d0_s1001 gi10`, and nowhere else. That
+matches the code: Hinata2 is the only suite deck running Forbidden Orchard, and the greedy drop is
+reached only at depth 0 (`fold_land = m_lookahead_depth > 0 && is_pre_combat_main`) or via
+`MTG_LEGACY_2ND_MAIN_LAND`. For Hinata the Spirits are not incidental — they are opponent creatures,
+so they are first-class Soulfire-dig / Crackle-discount / removal targets, which is exactly the
+quantity a rollout/executor mismatch distorts.
+
+This is left AS-IS pending a decision: converging it is a one-field change
+(`o.spawn_orchard_spirit = true` in `TryPlayLand`) but it changes d0 play and needs a ground-truth
+rebaseline, so it is a measured adoption, not a refactor.
+
+### 2. `greedy_land_name` has drifted from the ranker it documents itself as mirroring
+
+`TurnSolver`'s `greedy_land_name` lambda says it "Mirrors TryPlayLand's TH pre-pass + four-pass".
+The four-pass matches; the pre-pass does not. `TryPlayLand` prioritises a `no_max_hand_size` land
+when `has_draw_until_nonland || hand_flooding` (hand size > 7); `greedy_land_name` only checks
+`has_draw_until_nonland`. `greedy_land_name` is only the search's last-resort ordering tiebreak, so
+this is a tiebreak mismatch rather than a play divergence — but it is a mirror that has silently
+drifted, which is how the bugs in this file start.
+
+### 3. Under `--claude-play` the human's land-entry choice never reaches the real drop
+
+`g_play_land_entry_chooser` (pay the shock life / reveal to enter untapped?) is consulted **only**
+in `PlayLandByName`, i.e. in the rollout. The real game's land drop always goes through the
+executor's `TryPlaySpecificLand` / `TryPlayLand`, neither of which asks. The same asymmetry applies
+to `allow_shock_pay`: `ApplyPlanDirect` declines the shock payment on a mana-free human turn, while
+the executor always allows it. Both are claude-play-only (autonomous play nulls the chooser via
+`RevealLogPause` and always passes `allow_shock_pay = true`), so autonomous results are unaffected.
+
+### 4. The look SOURCE label differs
+
+The executor passes the land's own name to `ScryTop` / `SurveilTop`; the rollout leaves the default
+`"Scry"` / `"Surveil"`. The autonomous heuristic ignores the source, so this only affects the reveal
+log and the claude-play prompt label.
+
+### Not unified, deliberately
+
+The land **selection** heuristics are not twins and were left alone: the executor's four-pass ranker
+(untapped/tapped x multi/any, with a Reliquary pre-pass and the closing-window sub-order) and the
+rollout's `SimulateLandPlay` two-pass fallback (multi-colour, then any) are genuinely different
+policies. Unifying those is a behaviour change to be measured, not a refactor.

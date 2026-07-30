@@ -1,6 +1,7 @@
 #include "../core/EnvFlags.h"
 #include "TurnSolver.h"
 #include "ManaPayment.h"
+#include "LandPlay.h"
 #include "EngineFlags.h"
 #include "TranspositionTable.h"
 #include "KeepModel.h"              // MidGameEvaluator / ExtractMidGameFeatures (learned d0 eval)
@@ -6647,96 +6648,22 @@ static bool PlayLandByName(GameState& state, const std::string& name,
         if (it->m_is_staged) { pick = it; break; }                 // prefer the expiring staged copy
     }
 
-    for (auto it = pick; it != ap.hand.end(); ++it)
-    {
-        if (it->m_name != name) { continue; }
-        if (it->m_impulse_no_land) { continue; }                   // Apex-exiled land: never played
-        auto def = CardDatabase::Instance().LookupCached(*it);
-        if (!def || !def->card.IsLand()) { continue; }
+    if (pick == ap.hand.end()) { return false; }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(*pick);
 
-        // Fetchland: the land drop sacrifices the fetchland to search out a real land.
-        // fetch_target names the searched choice (Pass 2); empty -> PerformFetch falls back
-        // to FetchCandidates' top heuristic pick (Pass 1 / single-candidate).
-        if (!def->params.fetch_land_types.empty())
-        {
-            Card fetchland = *it;
-            ap.hand.erase(it);
-            ++ap.lands_played_this_turn;
-            ap.graveyard.push_back(fetchland);
-            PerformFetch(state, state.active_player_index, def->params, fetch_target);
-            return true;
-        }
-
-        // Modal double-faced land (Pathway): play the chosen FACE. The back face is a distinct
-        // single-colour land identity synthesized in the DB (mdfc_back_*); entering the permanent AS
-        // that identity locks its colour, which every mana site reads live off the permanent's name.
-        // Pathway faces share all OTHER characteristics (untapped, no ETB), so only the identity
-        // differs and the tapped/ETB logic below reads the front `def` unchanged. Face "" / "front"
-        // (and every non-MDFC land) keeps face_def == def -> byte-identical for all existing decks.
-        const CardDefinition* face_def = def;
-        if (land_face == "back" && !def->params.mdfc_back_name.empty())
-        {
-            const CardDefinition* bd = CardDatabase::Instance().Lookup(def->params.mdfc_back_name);
-            if (bd) { face_def = bd; }
-        }
-
-        // Resolve "as this land enters" choices while the card is still in hand. Human play
-        // (g_play_land_entry_chooser set, and a real choice present) lets the user pick whether to
-        // pay the shock life / reveal to enter untapped; otherwise the autonomous heuristic stands
-        // (byte-identical for the search, which nulls the chooser via RevealLogPause).
-        bool tapped;
-        if (g_play_land_entry_chooser && LandEntryHasChoice(state, *def))
-        {
-            bool heur_untapped = !LandWouldEnterTapped(state, *def, allow_shock_pay);
-            bool untapped = (*g_play_land_entry_chooser)(
-                state, state.active_player_index, def->card.m_name.str(),
-                def->params.etb_pay_life_to_untap,
-                def->params.etb_untap_reveal_subtypes, heur_untapped);
-            if (untapped) { ApplyLandUntapPayment(state, *def); }
-            tapped = !untapped;
-        }
-        else
-        {
-            tapped = LandEntersTapped(state, *def, allow_shock_pay);
-        }
-        Permanent perm;
-        perm.card              = face_def->card;   // chosen face's identity -> locks its colour
-        // Preserve the per-copy ID from the hand card. The executor's mirror
-        // (AIEngine::TryPlaySpecificLand) has always done this; the rollout did not, so every land
-        // the rollout played became permanent #0. Invisible until something reads a LAND permanent's
-        // number -- BounceKarooLand returns `battlefield[pick].card` to hand, so an Izzet Boilerworks
-        // bounce handed the rollout an unnumbered Island while the real game got the numbered one
-        // (Hinata seed 4153 T3). Any hand decision keyed on card identity then diverges.
-        perm.card.m_number     = it->m_number;
-        perm.controller_index  = state.active_player_index;
-        perm.owner_index       = state.active_player_index;
-        perm.entered_this_turn = true;
-        perm.tapped            = tapped;
-        if (def->params.enters_tapped_with_depletion > 0)
-        {
-            Counter dep;
-            dep.type  = Counter::Type::Depletion;
-            dep.count = def->params.enters_tapped_with_depletion;
-            perm.counters.push_back(dep);
-        }
-        state.battlefield.push_back(perm);
-
-        ap.hand.erase(it);
-        ++ap.lands_played_this_turn;
-        if (def->params.etb_scry > 0)    { ScryTop(state, def->params.etb_scry); }
-        if (def->params.etb_surveil > 0) { SurveilTop(state, def->params.etb_surveil); }
-        if (def->params.etb_bounce_land) { BounceKarooLand(state, state.active_player_index, static_cast<int>(state.battlefield.size()) - 1); }
-        // Forbidden Orchard played this turn -> tapped this turn -> opponent Spirit now (the
-        // turn-start spawn only covers copies already in play). Mirrors AIEngine::TryPlaySpecificLand;
-        // gated like the turn-start spawn so MTG_LEGACY_SEARCH keeps the old model.
-        if (IsForbiddenOrchard(def))
-        {
-            static const bool s_orchard_onplay = !EnvOn("MTG_LEGACY_SEARCH");
-            if (s_orchard_onplay) { SpawnOpponentSpirit(state); }
-        }
-        return true;
-    }
-    return false;
+    LandPlayOptions o;
+    o.fetch_target         = fetch_target;
+    o.land_face            = land_face;
+    o.allow_shock_pay      = allow_shock_pay;
+    // Human play (g_play_land_entry_chooser set, and a real choice present) picks whether to pay
+    // the shock life / reveal to enter untapped; otherwise the autonomous heuristic stands
+    // (byte-identical for the search, which nulls the chooser via RevealLogPause).
+    o.honor_entry_chooser  = true;
+    // Forbidden Orchard's on-play Spirit, gated like the turn-start spawn so MTG_LEGACY_SEARCH
+    // keeps the old model.
+    static const bool s_orchard_onplay = !EnvOn("MTG_LEGACY_SEARCH");
+    o.spawn_orchard_spirit = s_orchard_onplay;
+    return PlayLandFromHand(state, static_cast<std::size_t>(pick - ap.hand.begin()), *def, o);
 }
 
 // Greedy land play: one land drop per turn, preferring multi-color lands over
