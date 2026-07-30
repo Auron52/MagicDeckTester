@@ -26,6 +26,24 @@ if(CMAKE_CONFIGURATION_TYPES AND NOT "Profile" IN_LIST CMAKE_CONFIGURATION_TYPES
   list(APPEND CMAKE_CONFIGURATION_TYPES Profile)
   set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING "" FORCE)
 endif()
+
+# Multi-config side of the -O0 guard above (the `if(NOT CMAKE_BUILD_TYPE ...)` branch never runs
+# when CMAKE_CONFIGURATION_TYPES is set). Ninja Multi-Config builds the FIRST listed config when
+# `cmake --build build` is given no --config, and the generator's stock list starts with Debug --
+# so a bare build silently produced -O0 objects, and compile_commands.json was emitted with the
+# Debug (-O0) flags. Drop Debug from the offered configs (CLAUDE.md: there is deliberately no -O0
+# mode; a debug build must be a separate single-config tree, e.g.
+# `cmake -DCMAKE_BUILD_TYPE=Debug -B build/Debug`) and pin the default config to Release as a
+# backstop in case Debug is ever re-added.
+if(CMAKE_CONFIGURATION_TYPES AND "Debug" IN_LIST CMAKE_CONFIGURATION_TYPES)
+  list(REMOVE_ITEM CMAKE_CONFIGURATION_TYPES Debug)
+  set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING "" FORCE)
+  message(STATUS "mtg: removed Debug (-O0) from CMAKE_CONFIGURATION_TYPES -- use ./build.sh")
+endif()
+if(CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_DEFAULT_BUILD_TYPE)
+  set(CMAKE_DEFAULT_BUILD_TYPE Release CACHE STRING
+      "Config built by a bare `cmake --build build` (no --config)" FORCE)
+endif()
 set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
 set(CMAKE_C_FLAGS_PROFILE   "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
 set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "" CACHE STRING "")
@@ -35,8 +53,10 @@ mark_as_advanced(CMAKE_CXX_FLAGS_PROFILE CMAKE_C_FLAGS_PROFILE
   CMAKE_EXE_LINKER_FLAGS_PROFILE CMAKE_SHARED_LINKER_FLAGS_PROFILE CMAKE_STATIC_LINKER_FLAGS_PROFILE)
 
 # Opt-in deterministic hot-path profiling (see src/ai/Profiler.h). OFF by default
-# so normal builds carry zero instrumentation overhead. Enable a separate build
-# tree with:  cmake -S . -B build-prof -DMTG_PROFILE=ON
+# so normal builds carry zero instrumentation overhead. NOTE: this is the COUNTER
+# instrumentation, distinct from the Profile config above (-O3 -g, uninstrumented,
+# via `./build.sh profile`). If counters are needed, configure a separate tree:
+#   cmake -S . -B build-instr -DMTG_PROFILE=ON -DCMAKE_BUILD_TYPE=Release
 option(MTG_PROFILE "Enable deterministic search profiling counters" OFF)
 
 include(FetchContent)
@@ -81,6 +101,7 @@ add_library(mtg-core STATIC
     src/ai/AIEngine.cpp
     src/ai/DecisionProviders.cpp
     src/ai/TurnSolver.cpp
+    src/ai/ManaPayment.cpp
     src/ai/KeepModel.cpp
     src/runner/GoldFishRunner.cpp
     src/runner/BatchRunner.cpp
@@ -162,3 +183,20 @@ add_executable(mtg-analyze
     src/analyzer/ExhaustiveKeep.cpp
 )
 target_link_libraries(mtg-analyze PRIVATE mtg-core)
+
+# Unit tests (backlog C2): a SECONDS-long faithfulness check for the units the executor/rollout
+# unification (Tier C) touches -- the cheap seam the 15-minute smoke run cannot provide. Scope is
+# deliberately tiny: golden-value tests for twin units only, not a general test suite.
+#   ctest --test-dir build -C Release        (or just run build/Release/mtg-test)
+FetchContent_Declare(
+    doctest
+    GIT_REPOSITORY https://github.com/doctest/doctest.git
+    GIT_TAG        v2.4.11
+)
+FetchContent_MakeAvailable(doctest)
+enable_testing()
+add_executable(mtg-test
+    test/unit/test_mana_payment.cpp
+)
+target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
+add_test(NAME unit COMMAND mtg-test)

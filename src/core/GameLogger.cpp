@@ -1,3 +1,4 @@
+#include "EnvFlags.h"
 #include "GameLogger.h"
 #include <fstream>
 #include <cstdio>
@@ -35,7 +36,7 @@ std::atomic<long> g_afford_rollout_fails{0};
 std::atomic<long> g_afford_rollout_attempts{0};
 std::atomic<long> g_afford_real_fails{0};
 std::atomic<long> g_afford_real_attempts{0};
-bool AffordAuditOn() { static const bool on = std::getenv("MTG_AFFORD_AUDIT") != nullptr; return on; }
+bool AffordAuditOn() { static const bool on = EnvOn("MTG_AFFORD_AUDIT"); return on; }
 namespace {
 // Dropped-cast breakdown for the stranded-accelerant detector. Guarded by AffordAuditOn() at every
 // call site, so the lock is never taken (and the map never grows) in a normal run.

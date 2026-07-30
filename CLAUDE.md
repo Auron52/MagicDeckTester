@@ -103,6 +103,15 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   new session (personal working prefs, resume hooks), never for parking deferred
   project state.
 
+## Coding Conventions Skill
+
+Before **adding or changing an env flag (`MTG_*`), a debug toggle, or an A/B lever**, read
+`.claude/skills/coding-conventions.md`. The one-line version: every boolean flag is read via
+`EnvOn("MTG_X")` / `EnvOn("MTG_X", true)` from `src/core/EnvFlags.h` — `=0` always means off,
+`=1` always means on; never write a presence-only `getenv(...) != nullptr` truthiness read
+(that convention once made `MTG_X=0` mean ON and silently corrupted an A/B arm). Flags read
+by both executor and rollout get one shared reader in `src/ai/EngineFlags.h`.
+
 ## MTG Rules Skill
 
 This project has a custom skill at `.claude/skills/mtg-rules.md` that **all agents working in this repository must use**. It is the authoritative reference for both MTG rules correctness and implementation patterns.

@@ -1,4 +1,5 @@
 #pragma once
+#include "EnvFlags.h"
 #include "GameState.h"
 #include "ManaPool.h"
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
@@ -19,7 +20,7 @@
 // whole change -> byte-identical to the legacy "waste the leftover" behaviour. Read once.
 inline bool FloatLeftoverManaEnabled()
 {
-    static const bool on = std::getenv("MTG_NO_FLOAT_LEFTOVER") == nullptr;
+    static const bool on = !EnvOn("MTG_NO_FLOAT_LEFTOVER");
     return on;
 }
 
@@ -29,7 +30,7 @@ inline bool FloatLeftoverManaEnabled()
 // disables it -> byte-identical to the legacy board-only enumeration. Read once.
 inline bool RockRampEnumEnabled()
 {
-    static const bool on = std::getenv("MTG_NO_ROCK_RAMP") == nullptr;
+    static const bool on = !EnvOn("MTG_NO_ROCK_RAMP");
     return on;
 }
 
@@ -40,7 +41,7 @@ inline bool RockRampEnumEnabled()
 // executor (AIEngine::CastOrderLessAI) so the two can never disagree.
 inline bool LegacyCastTierOrder()
 {
-    static const bool on = std::getenv("MTG_LEGACY_CAST_TIER_ORDER") != nullptr;
+    static const bool on = EnvOn("MTG_LEGACY_CAST_TIER_ORDER");
     return on;
 }
 
@@ -450,7 +451,7 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
 // search-quality-first-roadmap.
 inline bool SearchShuffleEnabled()
 {
-    static const bool on = std::getenv("MTG_NO_SEARCH_SHUFFLE") == nullptr;
+    static const bool on = !EnvOn("MTG_NO_SEARCH_SHUFFLE");
     return on;
 }
 
@@ -486,7 +487,7 @@ inline uint64_t SearchShuffleSeed(uint64_t game_seed, uint64_t search_index)
 //   that set it explicitly.
 inline bool StableShuffleEnabled()
 {
-    static const bool legacy = std::getenv("MTG_LEGACY_SHUFFLE") != nullptr;
+    static const bool legacy = EnvOn("MTG_LEGACY_SHUFFLE");
     return !legacy;
 }
 
@@ -604,7 +605,7 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         mix = SaltSeed(mix, g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt);   // shuffle-variance: a mid-game random event
         // Canonical draw order: hand indices sorted by m_number (stable on ties, so two copies that
         // somehow share a number still resolve deterministically). Opt-in only.
-        static const bool s_canon_discard = std::getenv("MTG_CANON_TUTOR_DISCARD") != nullptr;
+        static const bool s_canon_discard = EnvOn("MTG_CANON_TUTOR_DISCARD");
         int victim = static_cast<int>(mix % ap.hand.size());
         if (s_canon_discard)
         {
@@ -621,7 +622,7 @@ inline void PerformTutor(GameState& state, int controller_index, const CardParam
         // left the game and never showed up in the graveyard zone. Inert for the search on every
         // current deck (no Gamble deck reads graveyard contents -- no retrace/delve/escape/
         // threshold), so this only restores the correct zone + surfaces the card to the viewer.
-        static const bool dtrace = std::getenv("MTG_DISCARD_TRACE") != nullptr;
+        static const bool dtrace = EnvOn("MTG_DISCARD_TRACE");
         if (dtrace)
         {
             std::string hs;
@@ -1175,7 +1176,7 @@ inline void PerformLightPawsAttach(GameState& state, int controller, int cast_au
     // rollout's committed-line replay (APPLY) from the real executor (EXEC) so the two fetch
     // sequences can be diffed -- how the legend-rule divergence below was found. Static: one getenv
     // for the process, so the off case is a predictable branch in this hot path.
-    static const bool lp_trace = std::getenv("MTG_LP_TRACE") != nullptr;
+    static const bool lp_trace = EnvOn("MTG_LP_TRACE");
     if (lp_trace)
     {
         int nlp = 0; std::string lpnums;
@@ -1239,7 +1240,7 @@ inline void PerformLightPawsAttach(GameState& state, int controller, int cast_au
             // "other_enchantments" kind excludes itself, but CountAuraScaleUnits' built-in -1 assumes the
             // Aura is already on the battlefield -- not yet true here -- so +1 corrects all three kinds).
             // MTG_LEGACY_LIGHTPAWS_STATIC reverts to the old static coefficient rank (byte-identical A/B).
-            static const bool lp_static = std::getenv("MTG_LEGACY_LIGHTPAWS_STATIC") != nullptr;
+            static const bool lp_static = EnvOn("MTG_LEGACY_LIGHTPAWS_STATIC");
             int contrib;
             if (lp_static) { contrib = d->params.aura_power_bonus + d->params.aura_scale_power; }
             else
@@ -2673,7 +2674,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     // the searched own_targets -- so a one-off in any of those makes the rollout and executor hold a
     // different NUMBER of cards from here on. Printed from both sides so they can be diffed.
     {
-        static const bool sf_trace = std::getenv("MTG_SOULFIRE_TRACE") != nullptr;
+        static const bool sf_trace = EnvOn("MTG_SOULFIRE_TRACE");
         if (sf_trace)
         {
             std::string tgts;
@@ -3222,7 +3223,7 @@ inline std::atomic<long long>& CcoAuditTaps()
 inline std::atomic<long long>& CcoAuditViolations()
 { static std::atomic<long long> n{0}; return n; }
 inline bool CcoAuditOn()
-{ static const bool on = std::getenv("MTG_CCO_AUDIT") != nullptr; return on; }
+{ static const bool on = EnvOn("MTG_CCO_AUDIT"); return on; }
 
 inline void CcoAuditTap(const CardDefinition& def, Color col, bool for_creature)
 {
@@ -3340,7 +3341,7 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
 // tied to MTG_UNPRUNED, since tapping was never in the branch space UNPRUNED opens).
 inline bool TapScarcityEnabled()
 {
-    static const bool v = std::getenv("MTG_TAP_LEGACY") == nullptr;
+    static const bool v = !EnvOn("MTG_TAP_LEGACY");
     return v;
 }
 
@@ -3366,7 +3367,7 @@ inline bool TapScarcityEnabled()
 // with MTG_RESERVE only for isolated A/B of the old per-payment scheme.
 inline bool ReserveEnabled()
 {
-    static const bool v = std::getenv("MTG_RESERVE") != nullptr;
+    static const bool v = EnvOn("MTG_RESERVE");
     return v;
 }
 
@@ -3378,7 +3379,7 @@ inline bool ReserveEnabled()
 // MTG_NO_DEPLETION_RESERVE for A/B. Distinct from the superseded per-payment ReserveEnabled scheme.
 inline bool DepletionReserveEnabled()
 {
-    static const bool v = std::getenv("MTG_NO_DEPLETION_RESERVE") == nullptr;
+    static const bool v = !EnvOn("MTG_NO_DEPLETION_RESERVE");
     return v;
 }
 
@@ -3390,7 +3391,7 @@ inline bool DepletionReserveEnabled()
 // off-switch MTG_NO_ATTACKER_RESERVE for A/B. Same "leave out if you can" soundness as depletion.
 inline bool AttackerReserveEnabled()
 {
-    static const bool v = std::getenv("MTG_NO_ATTACKER_RESERVE") == nullptr;
+    static const bool v = !EnvOn("MTG_NO_ATTACKER_RESERVE");
     return v;
 }
 
@@ -4253,7 +4254,7 @@ using TapBacktrackMemo =
 // single-threaded and compare. Prints one line at exit.
 namespace tapstats
 {
-    inline bool Enabled() { static const bool v = std::getenv("MTG_TAP_STATS") != nullptr; return v; }
+    inline bool Enabled() { static const bool v = EnvOn("MTG_TAP_STATS"); return v; }
     inline std::atomic<std::uint64_t> g_backtrack_entries{0};
     struct Dumper {
         ~Dumper()
@@ -4269,7 +4270,7 @@ namespace tapstats
 // Branch-and-bound gate for the backtracker (MTG_NO_MAXMANA_GATE disables it; A/B perf lever).
 // Default ON: it is LOSSLESS (an upper bound only ever short-circuits provably-unpayable costs).
 inline bool MaxManaGateEnabled()
-{ static const bool v = std::getenv("MTG_NO_MAXMANA_GATE") == nullptr; return v; }
+{ static const bool v = !EnvOn("MTG_NO_MAXMANA_GATE"); return v; }
 
 // UPPER bound on the net mana one tap of `def` can add to the floating pool -- used to bound the
 // total mana still extractable from a set of untapped sources. Deliberately over- (never under-)

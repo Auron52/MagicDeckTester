@@ -588,3 +588,11 @@ public:
     // plan_baseline_eval feature (lockstep, non-clairvoyant). See docs/design/learned-d0-policy.md.
     static int PlanBaselineEval(const GameState& state, const std::vector<std::string>& cast_names);
 };
+
+// ---- Unit-test seam (backlog C2) ----
+// The rollout's mana-payment entry point (defined in TurnSolver.cpp; previously file-static).
+// External linkage exists ONLY so test/unit can drive it against AIEngine::TapForCost on
+// identical fixed boards -- the executor/rollout twin-equivalence tests that guard the Tier C
+// unification. Not part of the solver's interface: src/ code outside TurnSolver.cpp must keep
+// paying costs through AIEngine::TapForCost (executor) or plan application (rollout).
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);

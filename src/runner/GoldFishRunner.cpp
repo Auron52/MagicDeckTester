@@ -1,3 +1,4 @@
+#include "../core/EnvFlags.h"
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
@@ -352,7 +353,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // mid-game shuffles. Defaults EQUAL to shuffle_salt (unset -> same value) so normal play is
     // byte-identical/lockstep; set it DIFFERENT to make the search plan against a reshuffle the real
     // executor will not deal (strips shuffle-decision clairvoyance). See GameState::shuffle_salt_search.
-    static const bool     s_have_salt_search = std::getenv("MTG_SHUFFLE_SALT_SEARCH") != nullptr;
+    static const bool     s_have_salt_search = EnvSet("MTG_SHUFFLE_SALT_SEARCH");
     static const uint64_t s_shuffle_salt_search = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT_SEARCH"); return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
     state.shuffle_salt         = s_shuffle_salt;
     state.shuffle_salt_opening = s_shuffle_salt_opening;
@@ -371,7 +372,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // logging path) and independent of the opening Fisher-Yates shuffle, so opening hands are
     // unchanged; only decks that mid-game reshuffle (Hinata Ponder, antilife fetch) move.
     // Escape hatch MTG_LEGACY_UNNUMBERED restores the old number-only-when-logging behavior for A/B.
-    static const bool s_legacy_unnumbered = std::getenv("MTG_LEGACY_UNNUMBERED") != nullptr;
+    static const bool s_legacy_unnumbered = EnvOn("MTG_LEGACY_UNNUMBERED");
     if (!s_legacy_unnumbered)
     {
         AssignCardNumbers(state, BuildCardNumbering(deck));

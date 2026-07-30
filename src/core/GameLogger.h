@@ -1,4 +1,5 @@
 #pragma once
+#include "EnvFlags.h"
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -565,7 +566,7 @@ extern thread_local bool g_human_play_suppressed;
 
 inline bool HumanPlayActive()
 {
-    static const bool s_env = std::getenv("MTG_HUMAN_PLAY") != nullptr;
+    static const bool s_env = EnvSet("MTG_HUMAN_PLAY");
     return s_env && !g_human_play_suppressed;
 }
 

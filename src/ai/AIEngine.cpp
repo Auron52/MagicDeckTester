@@ -1,4 +1,7 @@
+#include "../core/EnvFlags.h"
 #include "AIEngine.h"
+#include "ManaPayment.h"
+#include "EngineFlags.h"
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
 #include "SearchBudget.h"
@@ -23,7 +26,7 @@
 // Non-convergence detector gate, read once. When set (MTG_FLAG_NONCONV in the
 // environment), TakeTurn checks each committed decision and prints a [nonconv]
 // record whenever a later turn's verified win turn exceeds one proved earlier.
-static const bool s_flag_nonconv = std::getenv("MTG_FLAG_NONCONV") != nullptr;
+static const bool s_flag_nonconv = EnvOn("MTG_FLAG_NONCONV");
 
 // #10 cast-order side-channel: reorder a committed plan's non-sacrifice hand casts to the
 // human's pinned name order and flag searched_order so ApplyPlanDirect executes them in vector
@@ -70,19 +73,15 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
 // to opt back into the old SolveWithLookahead baseline -- the held-out reference kept
 // reproducible for future A/Bs. (The old MTG_FULL_DEPTH opt-in is gone; setting it is
 // harmless as full depth is the default now.)
-static const bool s_full_depth = std::getenv("MTG_LEGACY_SEARCH") == nullptr;
+static const bool s_full_depth = !EnvOn("MTG_LEGACY_SEARCH");
 
 // Commit-the-line fidelity oracle (MTG_FD_ORACLE): when a recomputed line's searched
 // win exceeds an earlier line's, the committed line we just replayed did NOT realise
 // its predicted win — a rollout/real-execution divergence. Flag the seed + turn so it
 // can be traced. Only meaningful with s_full_depth.
-static const bool s_fd_oracle = std::getenv("MTG_FD_ORACLE") != nullptr;
+static const bool s_fd_oracle = EnvOn("MTG_FD_ORACLE");
 
-// Breakpoint lockstep trace (MTG_BP_TRACE, diagnosis only): print the EXECUTOR's breakpoint
-// sequence ([bp-exec]) so it can be diffed against ApplyPlanDirect's ([bp-apply], armed only for
-// the fd-trace committed-line replay). A searched continuation landing at a different index on the
-// two sides is the lockstep defect. See docs/design/post-breakpoint-search.md.
-static const bool s_bp_trace = std::getenv("MTG_BP_TRACE") != nullptr;
+// Breakpoint lockstep trace: BpTraceEnabled() in EngineFlags.h (shared with TurnSolver).
 
 // Enumerate-all-earliest-wins rule-miner (MTG_DUMP_EWINS): at each REAL pre-combat main,
 // emit one JSON line ({"ewins":...}) scoring every candidate top-level play by the earliest
@@ -91,7 +90,7 @@ static const bool s_bp_trace = std::getenv("MTG_BP_TRACE") != nullptr;
 // single-threaded on a few games. MTG_DUMP_EWINS_TURN limits it to one decision turn (default
 // 1 = opening only, to bound cost; 0 = every turn). Set MTG_SEARCH_ORDER=1 to also expand
 // cast orderings. Inert (zero overhead) unless MTG_DUMP_EWINS is set.
-static const bool s_dump_ewins = std::getenv("MTG_DUMP_EWINS") != nullptr;
+static const bool s_dump_ewins = EnvOn("MTG_DUMP_EWINS");
 static const int  s_dump_ewins_turn = []{
     const char* e = std::getenv("MTG_DUMP_EWINS_TURN"); return e ? std::atoi(e) : 1;
 }();
@@ -119,7 +118,7 @@ static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_
 // clairvoyant earliest-win search (stops the oracle over-crediting durdle lines a real d0 can't
 // realise). Affects the label from EnumerateEarliestWins -> use for EVAL-row dumps only, NOT value
 // dumps (the value model wants the searched label). See learned-d0-policy.md (antilife d0).
-static const bool  s_eval_rows_rollout = std::getenv("MTG_EVAL_ROWS_ROLLOUT") != nullptr;
+static const bool  s_eval_rows_rollout = EnvOn("MTG_EVAL_ROWS_ROLLOUT");
 // MTG_EVAL_ROLLOUT_DEPTH: per-turn lookahead of the rollout policy (default 0 = greedy d0 = imitate
 // baseline; >0 distils a stronger policy, for weak-baseline decks like hinata). See learned-d0-policy.md.
 static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_EVAL_ROLLOUT_DEPTH");
@@ -128,7 +127,7 @@ static const int   s_eval_rollout_depth = []{ const char* e = std::getenv("MTG_E
 // NON-clairvoyant teacher -- its per-turn lookahead plans against a reshuffled unseen library and
 // resolves against the true order (see g_honest_teacher). Without this, rollout_depth>0 is a
 // clairvoyant deep search (reads the real future) and is WORSE than greedy. See learned-d0-policy.md.
-static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != nullptr;
+static const bool  s_eval_rows_honest = EnvOn("MTG_EVAL_ROWS_HONEST");
 // MTG_SEARCHED_DISCARD: make the REAL cleanup discard a lookahead search (roll out each candidate
 // discard, keep the one that preserves the earliest clairvoyant win; heuristic breaks ties) instead
 // of the highest-MV heuristic. DEFAULT OFF (heuristic) => byte-identical. Measured (smoke 1001):
@@ -136,7 +135,7 @@ static const bool  s_eval_rows_honest = std::getenv("MTG_EVAL_ROWS_HONEST") != n
 // a train/serve mismatch (rollouts assume heuristic discards later, the real game searches them) plus
 // clairvoyance, at real compute cost -- so it ships OFF pending a reproduced combo-discard win (the
 // Dragonstorm "don't pitch Apex/Dragonstorm" case is absent from seed 1001). See ChooseDiscard.
-static const bool  s_searched_discard = std::getenv("MTG_SEARCHED_DISCARD") != nullptr;
+static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD");
 // MTG_DIVERGENCE_LOG=<file>: DIAGNOSTIC (diagnosis only, no play change). On the search-driven path,
 // at each real pre-combat main decision, ALSO compute the greedy d0 plan (TurnSolver::Solve) for the
 // SAME untouched state and append one JSONL record {seed,turn,diverge,search_land,search,greedy,feat[]}.
@@ -429,8 +428,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // distribution) is unaffected; a clairvoyant pick becomes miscalibrated. Reshuffling the whole
     // remaining library mirrors how the exhaustive V labels were built (fresh continuations). OFF (unset
     // or "0") => no reshuffle => byte-identical to the normal path. Only meaningful when mulligan>0.
-    static const bool confound_bottom = []
-    { const char* e = std::getenv("MTG_CONFOUND_BOTTOM"); return e && *e && std::string(e) != "0"; }();
+    static const bool confound_bottom = EnvOn("MTG_CONFOUND_BOTTOM");
     if (confound_bottom && mulligan_count > 0)
     {
         ap.library.Shuffle(state.game_seed + 0x9E3779B97F4A7C15ULL);
@@ -1086,7 +1084,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             // is executor-order-INDEPENDENT) and averaged over K samples, matching the NC turn policy's
             // reshuffle-averaged evaluation. The removal is then judged on EXPECTED win turn over unknown
             // draws, not the one true draw sequence. See ReshuffleAvgChoosePlan / learned-d0-policy.md.
-            static const bool s_blind_bottom = std::getenv("MTG_NC_BLIND_BOTTOM") != nullptr;
+            static const bool s_blind_bottom = EnvOn("MTG_NC_BLIND_BOTTOM");
             static const int  s_blind_k      = []{ const char* e = std::getenv("MTG_NC_BLIND_BOTTOM_K");
                                                    return (e && *e) ? std::max(1, std::atoi(e)) : 4; }();
             std::vector<int> win_turn(hand_size, 0);
@@ -1441,7 +1439,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // bounce land (etb_bounce_land, enters tapped) is NOT played at the fold_land step; it is
     // deferred to AFTER the main cast loop so BounceKarooLand returns a spent (tapped) land
     // rather than an untapped one we still need. MTG_NO_KAROO_DEFER restores the old land-first.
-    static const bool s_karoo_defer = std::getenv("MTG_NO_KAROO_DEFER") == nullptr;
+    static const bool s_karoo_defer = !EnvOn("MTG_NO_KAROO_DEFER");
     bool        karoo_deferred = false;
     std::string karoo_land_name;
     std::string karoo_fetch;
@@ -1508,7 +1506,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // keeps the executor in lockstep with the committed line. Opt-out restores
                 // the old greedy behaviour for A/B (MTG_LEGACY_2ND_MAIN_LAND).
                 static const bool s_legacy_2nd_main_land =
-                    std::getenv("MTG_LEGACY_2ND_MAIN_LAND") != nullptr;
+                    EnvOn("MTG_LEGACY_2ND_MAIN_LAND");
                 if (m_lookahead_depth == 0 || s_legacy_2nd_main_land) { TryPlayLand(state); }
             }
         }
@@ -1531,7 +1529,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // resolves against the true order (see g_honest_teacher). A cheap 1-sample proxy for
             // the reshuffle-averaged NON-clairvoyant policy (the untested goal-#1 lever). Byte-
             // identical when unset. Kept as an instrument, not a shipped play mode.
-            static const bool s_honest_play = std::getenv("MTG_HONEST_PLAY") != nullptr;
+            static const bool s_honest_play = EnvOn("MTG_HONEST_PLAY");
             HonestTeacherGuard _htp(s_honest_play);
             // EXPERIMENTAL (MTG_NC_SEARCH, default off): the non-clairvoyant CEILING policy --
             // reshuffle-averaged search (each real decision ranks plans by K-reshuffle-averaged
@@ -1539,7 +1537,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // turn, no committed line). MTG_NC_K / MTG_NC_DEPTH tune the averaging / lookahead
             // (depth 0 = greedy non-clairvoyant). Byte-identical when unset. See
             // TurnSolver::ReshuffleAvgChoosePlan and learned-d0-policy.md.
-            static const bool s_nc_search = std::getenv("MTG_NC_SEARCH") != nullptr;
+            static const bool s_nc_search = EnvOn("MTG_NC_SEARCH");
             static const int  s_nc_k     = []{ const char* e = std::getenv("MTG_NC_K");
                                                return (e && *e) ? std::atoi(e) : 8; }();
             static const int  s_nc_depth = []{ const char* e = std::getenv("MTG_NC_DEPTH");
@@ -1666,7 +1664,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // gi252-class lines commit-the-line locks a turn slower. Perf cost = a
                     // FullSearchLine every turn instead of once per committed line.
                     static const bool s_fd_always_research =
-                        std::getenv("MTG_FD_ALWAYS_RESEARCH") != nullptr;
+                        EnvOn("MTG_FD_ALWAYS_RESEARCH");
                     const bool verified_win =
                         !s_fd_always_research
                         && line.win_turn <= state.turn_number + searched_depth - 1;
@@ -2077,7 +2075,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::function<void(const std::vector<Action>&)> replay_recorded =
         [&](const std::vector<Action>& recs)
     {
-        if (std::getenv("MTG_FD_TRACE") != nullptr)
+        if (EnvOn("MTG_FD_TRACE"))
         {
             std::fprintf(stderr, "[replay-bp] turn=%d recs=%d:", state.turn_number, (int)recs.size());
             for (const Action& a : recs) { std::fprintf(stderr, " %s", a.card_name.c_str()); }
@@ -2186,7 +2184,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!bp_searched_here) { extra = TurnSolver::Solve(state, is_pre_combat_main); }
         // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
         // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
-        if (s_bp_trace)
+        if (BpTraceEnabled())
         {
             std::fprintf(stderr, "[bp-exec]  turn=%d idx=%d bp_at=%d bp_choice=%d searched=%d\n",
                          state.turn_number, bp_idx, plan.bp_at, plan.bp_choice,
@@ -2265,7 +2263,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // (MTG_SEARCH_ORDER) A/B can see WHICH reorder the search chose. The skill's
     // heuristic-accuracy process uses this to author a provider ordering heuristic that
     // reproduces the search's pick. Single-thread + --game-index N for a clean per-game read.
-    static const bool s_order_trace = std::getenv("MTG_ORDER_TRACE") != nullptr;
+    static const bool s_order_trace = EnvOn("MTG_ORDER_TRACE");
     if (s_order_trace && is_pre_combat_main && !m_in_rollout)
     {
         // Print the ACTUAL executed order of non-sacrifice hand casts: rank-sorted for a
@@ -2637,13 +2635,8 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
     return false;
 }
 
-// MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
-// land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See TryPlayLand.
-// MTG_LAND_CLOSING_WINDOW=1: opt-in heuristic variant -- drop a still-untapped fastland ahead of an
-// unconditionally-untapped land, since only the fastland's window closes. Measurement scaffolding.
-static const bool s_legacy_static_tapped = std::getenv("MTG_LEGACY_STATIC_TAPPED") != nullptr;
-static const bool s_land_closing_window  = []{ const char* e = std::getenv("MTG_LAND_CLOSING_WINDOW");
-                                               return !(e && std::string(e) == "0"); }();   // DEFAULT ON
+// Land-priority knobs (MTG_LEGACY_STATIC_TAPPED / MTG_LAND_CLOSING_WINDOW): shared readers in
+// EngineFlags.h -- TurnSolver's greedy_land_name mirrors these passes and must read the same flags.
 
 bool AIEngine::TryPlayLand(GameState& state)
 {
@@ -2750,14 +2743,14 @@ bool AIEngine::TryPlayLand(GameState& state)
         // 2026-07-29). sub 0 = still-open closing windows, sub 1 = everything else.
         for (int sub = 0; sub < 2; ++sub)
         {
-        if (sub == 0 && !s_land_closing_window) { continue; }   // rule off -> single unfiltered scan
+        if (sub == 0 && !LandClosingWindowEnabled()) { continue; }   // rule off -> single unfiltered scan
         for (auto it = ap.hand.begin(); it != ap.hand.end(); ++it)
         {
             if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: never played
             auto def = CardDatabase::Instance().Lookup(it->m_name);
             if (!def || !def->card.IsLand()) { continue; }
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
-            if (s_land_closing_window)
+            if (LandClosingWindowEnabled())
             {
                 const bool closing = def->params.fastland_max_other_lands >= 0
                                   && !LandWouldEnterTapped(state, *def);   // window still open
@@ -2770,8 +2763,8 @@ bool AIEngine::TryPlayLand(GameState& state)
             // preference these passes exist to express. LandWouldEnterTapped is the pure predicate;
             // LandEntersTapped must NOT be used here, it PAYS the shock life as a side effect.
             // MTG_LEGACY_STATIC_TAPPED=1 restores the old static read for a byte-identical A/B.
-            bool is_tapped = s_legacy_static_tapped ? def->params.enters_tapped
-                                                   : LandWouldEnterTapped(state, *def);
+            bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
+                                                  : LandWouldEnterTapped(state, *def);
             bool is_multi  = def->params.produces.size() > 1;
             if (want_untapped && is_tapped)  { continue; }
             if (!want_untapped && !is_tapped) { continue; }
@@ -2987,382 +2980,15 @@ ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
 
 // Single payment attempt honouring `reserved_mask` (active-player battlefield indices HELD, never
 // tapped here). The public TapForCost wrapper runs this first with the reserved specials held, then
-// again with reserved_mask=0 on a miss. reserved_mask=0 is byte-identical to the pre-reservation
-// code. Mirrors TurnSolver::TapForCostDirectOnce byte-for-byte (lockstep).
+// again with reserved_mask=0 on a miss. Delegates to the UNIFIED TapForCostSharedOnce
+// (ManaPayment.cpp) -- formerly a ~380-line twin of TurnSolver's TapForCostDirectOnce kept in
+// lockstep by comment discipline. The executor threads its `available` accounting pool through and
+// has no MTG_LEGACY_CCO_PAY hatch (see ManaPayment.h).
 bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPool& available,
                              bool for_creature, std::uint64_t reserved_mask)
 {
-    Player&  ap     = state.ActivePlayer();
-    int      active = state.active_player_index;
-    ManaPool floating;  // mana produced this payment but not yet consumed (held locally)
-
-    // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
-    // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
-    const ManaPool reserve_pre = state.floating_mana;
-    ManaCost cost = cost_in;
-    SpendFloatingTowardCost(state.floating_mana, cost);
-
-    auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
-    {
-        if (reserved_mask)   // reservation audit: a held source is not tappable this attempt
-        {
-            const std::size_t idx = static_cast<std::size_t>(&p - state.battlefield.data());
-            if (idx < 64 && (reserved_mask & (1ull << idx))) { return false; }
-        }
-        bool is_src = (def.tmpl == CardTemplate::BasicLand)
-                   || (def.tmpl == CardTemplate::ManaDork && p.CanTap())
-                   || def.params.mana_rock;
-        if (!is_src) { return false; }
-        if (def.params.creature_mana_only && !for_creature) { return false; }
-        if (!StorageSourceLive(p, def)) { return false; }   // uncharged storage land makes no mana
-        return true;
-    };
-
-    // Tap one non-filter source, producing `amt` of colour `col`, applying depletion
-    // decrement and pain. Mirrors the accounting in BuildAvailableMana (AddSourceToPool).
-    auto tap_source = [&](Permanent& p, const CardDefinition& def, Color col)
-    {
-        CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
-        p.tapped = true;
-        DecrementDepletionOnTap(p);
-        if (def.params.tap_self_damage > 0) { ap.life -= def.params.tap_self_damage; }
-        // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
-        // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
-        // no drip (see DripLandAnyPipColor). Mirrors TurnSolver's tap_source.
-        if (def.params.tap_opponent_lifegain > 0 && col != Color::Colorless)
-        { OpponentGainsLife(state, state.active_player_index, def.params.tap_opponent_lifegain, def.card.m_name.str()); }
-        // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
-        // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
-        // promised. AddSourceToPool credited it as `amt` wild, so decrement `available.wild`.
-        // Single-colour sources keep `amt` of the matched colour (byte-identical). Mirrored in
-        // TurnSolver::tap_source -- keep the two in lockstep.
-        //
-        // `amt` = mana produced into floating; `consumed` = mana removed from this-turn's `available`
-        // pool. For a STORAGE-COUNTER land (Dwarven Hold / Mercadian Bazaar) a single tap now BURSTS
-        // ALL live counters (amt == consumed == had): the land is committed for the turn, and the
-        // planner already credits it its full PermanentManaYield (= counters) and marks the whole count
-        // consumed on tap. The old per-spell PARTIAL burst (amt = min(had, cost - produced_total)) set
-        // consumed = had but floated LESS, so the executor delivered fewer red than the planner
-        // promised -- silently dropping a legal cast on a tight multi-spell plan when an earlier spell
-        // under-burst and stranded a counter (burst amount shifted with irrelevant cast order). See
-        // docs/design/dragonstorm-plan-execution-fidelity-bug.md. Bank-the-rest is via the RESERVE (an
-        // unneeded storage land is held untapped), not a partial burst. ManaSourceRank taps storage
-        // LAST. Non-storage sources keep amt == consumed == the static per-tap yield -> byte-identical
-        // for every non-storage deck. Mirrored in TurnSolver::tap_source (lockstep).
-        int amt, consumed;
-        if (def.params.storage_land)
-        {
-            amt = consumed = p.storage_counters;   // burst ALL counters on tap
-            p.storage_counters = 0;
-        }
-        else { amt = consumed = ManaProducedPerTap(def); }
-        const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
-        if (amt > 1 && prod.size() > 1)
-        { for (Color c : prod) { floating.Add(c, 1); } available.wild -= consumed; }
-        else
-        { floating.Add(col, amt); available.Add(col, -consumed); }
-    };
-
-    // Ensure floating can satisfy one pip: `any` = generic, else specific colour
-    // `needed`. Taps at most one producing source (a filter may also tap one feeder).
-    // allow_ramp: may a ramp filter (Ferrous Lake) be used? false when called to FEED a
-    // ramp filter's {1}, so ramp filters never feed each other (avoids recursion; the
-    // unmodelled ramp->ramp chain is inert unless 2+ ramp filters are the ONLY sources).
-    std::function<bool(Color,bool,bool)> produce = [&](Color needed, bool any, bool allow_ramp) -> bool
-    {
-        { ManaPool probe = floating;
-          if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed)) { return true; } }
-
-        // Scarcity-first source selection (default ON; MTG_TAP_LEGACY opts OUT to the battlefield-order
-        // 4-step path below, a byte-identical A/B baseline): pick the LEAST-flexible qualifying source
-        // for this pip (via ManaSourceRank, lower = earlier) so rainbow sources stay up; filters rank
-        // between duals and tri and are candidates only when feedable now. Ramp filters (rare) are left
-        // to the legacy path / backtracker, the complete fallback either way. Mirror in
-        // TurnSolver::TapForCostDirect.
-        if (TapScarcityEnabled())
-        {
-            const int bn = static_cast<int>(state.battlefield.size());
-            int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
-            for (int i = 0; i < bn; ++i)
-            {
-                Permanent& p = state.battlefield[i];
-                if (p.controller_index != active || p.tapped) { continue; }
-                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-                if (!def || !usable(p, *def)) { continue; }
-                int kind = 0;
-                if (def->params.is_filter)
-                {
-                    if (any || needed == Color::Colorless) { kind = 3; }   // {C} mode covers generic/{C}
-                    else
-                    {
-                        bool makes = false;
-                        for (Color c : def->params.produces) { if (c == needed) { makes = true; break; } }
-                        bool feedable = false;
-                        if (makes)
-                        {
-                            for (Color c : def->params.produces)
-                            { ManaPool pr = floating; if (ConsumeFloating(pr, c)) { feedable = true; break; } }
-                            if (!feedable) { feedable = HasUntappedNonFilterSourceProducing(state, def->params.produces); }
-                        }
-                        if (makes && feedable) { kind = 2; } else { continue; }
-                    }
-                }
-                else if (def->params.ramp_filter) { continue; }
-                else
-                {
-                    // ProducesForPayment: a colored_creature_only land makes only {C} for a non-creature
-                    // spell, so it is NOT selected for a coloured pip there (but still pays a generic pip).
-                    const std::vector<Color>& prod = ProducesForPayment(state, active, *def, for_creature);
-                    bool makes = false;
-                    if (any) { makes = !prod.empty(); }
-                    else { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
-                    if (!makes) { continue; }
-                    kind = 1;
-                }
-                const int rank = ResolveProvider(state).ManaSourceRank(state, *def);
-                if (rank < best_rank) { best_rank = rank; best_i = i; best_kind = kind; }
-            }
-            if (best_i < 0) { return false; }
-            Permanent& bp = state.battlefield[best_i];
-            const CardDefinition* bdef = CardDatabase::Instance().LookupCached(bp.card);
-            if (best_kind == 1)
-            {
-                // {C}-only for a non-creature colored_creature_only land -> the generic tap uses {C}
-                // (prod[0]) rather than a colour that could leak to pay a coloured pip.
-                const std::vector<Color>& prod = ProducesForPayment(state, active, *bdef, for_creature);
-                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, prod[0]) : needed);
-                return true;
-            }
-            if (best_kind == 3)
-            {
-                bp.tapped = true;
-                floating.Add(Color::Colorless, 1);
-                if (available.colorless > 0)  { --available.colorless; }
-                else if (available.wild > 0)  { --available.wild; }
-                return true;
-            }
-            // kind 2: filter coloured mode -- feed one of its colours (least-flexible feeder), yield 2.
-            const Color out = needed;
-            bool have_input = false;
-            for (Color c : bdef->params.produces)
-            { ManaPool pr = floating; if (ConsumeFloating(pr, c)) { have_input = true; break; } }
-            if (!have_input)
-            {
-                int fi = -1, frank = 1 << 30; Color fcol = Color::Colorless;
-                for (int i = 0; i < bn; ++i)
-                {
-                    Permanent& s = state.battlefield[i];
-                    if (s.controller_index != active || s.tapped) { continue; }
-                    const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
-                    if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
-                    bool m = false; Color match = Color::Colorless;
-                    for (Color pc : EffectiveProduces(state, active, *sd))
-                    { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
-                    if (!m) { continue; }
-                    const int r = ResolveProvider(state).ManaSourceRank(state, *sd);
-                    if (r < frank) { frank = r; fi = i; fcol = match; }
-                }
-                if (fi < 0) { return false; }
-                Permanent& fs = state.battlefield[fi];
-                tap_source(fs, *CardDatabase::Instance().LookupCached(fs.card), fcol);
-            }
-            for (Color c : bdef->params.produces) { if (ConsumeFloating(floating, c)) { break; } }
-            bp.tapped = true;
-            floating.Add(out, 2);
-            if (available.wild > 0) { --available.wild; }
-            return true;
-        }
-
-        // 1) Direct non-filter source.
-        for (Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != active || p.tapped) { continue; }
-            const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-            if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
-            const std::vector<Color>& prod = EffectiveProduces(state, active, *def);  // RP-aware
-            Color col;
-            if (any)
-            {
-                if (prod.empty()) { continue; }
-                col = DripLandAnyPipColor(state, active, *def, prod[0]);  // Grove {C} mode for generic
-            }
-            else
-            {
-                bool match = false;
-                for (Color c : prod) { if (c == needed) { match = true; break; } }
-                if (!match) { continue; }
-                col = needed;
-            }
-            tap_source(p, *def, col);
-            return true;
-        }
-
-        // 2) Filter land colourless mode ({T}: Add {C}) — for a generic or {C} pip.
-        if (any || needed == Color::Colorless)
-        {
-            for (Permanent& p : state.battlefield)
-            {
-                if (p.controller_index != active || p.tapped) { continue; }
-                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-                if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
-                p.tapped = true;
-                floating.Add(Color::Colorless, 1);
-                if (available.colorless > 0)  { --available.colorless; }
-                else if (available.wild > 0)  { --available.wild; }
-                return true;
-            }
-        }
-
-        // 3) Filter mode for a coloured pip: feed one of the filter's colours, yield 2.
-        for (Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != active || p.tapped) { continue; }
-            const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-            if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
-            Color out;
-            if (any)
-            {
-                if (def->params.produces.empty()) { continue; }
-                out = def->params.produces[0];
-            }
-            else
-            {
-                bool match = false;
-                for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
-                if (!match) { continue; }
-                out = needed;
-            }
-            // Need one of the filter's colours floating; feed it from a non-filter source.
-            bool have_input = false;
-            for (Color c : def->params.produces)
-            {
-                ManaPool probe = floating;
-                if (ConsumeFloating(probe, c)) { have_input = true; break; }
-            }
-            if (!have_input)
-            {
-                bool fed = false;
-                for (Color ic : def->params.produces)
-                {
-                    for (Permanent& s : state.battlefield)
-                    {
-                        if (s.controller_index != active || s.tapped) { continue; }
-                        const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
-                        if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
-                        bool m = false;
-                        for (Color c : EffectiveProduces(state, active, *sd)) { if (c == ic) { m = true; break; } }  // RP feeder
-                        if (!m) { continue; }
-                        tap_source(s, *sd, ic);
-                        fed = true; break;
-                    }
-                    if (fed) { break; }
-                }
-                if (!fed) { continue; }  // can't feed this filter; try the next one
-            }
-            for (Color c : def->params.produces) { if (ConsumeFloating(floating, c)) { break; } }
-            p.tapped = true;
-            floating.Add(out, 2);
-            if (available.wild > 0) { --available.wild; }  // filter counted as 1 wild in the pool
-            return true;
-        }
-
-        // 4) Ramp filter (e.g. Ferrous Lake: {1},{T}: Add {U}{R}). Pay {1} generic from any
-        //    other untapped source (incl. a filter's {C}), then yield one of each produces
-        //    colour. No free mode; allow_ramp=false in the feed call prevents ramp chains.
-        if (allow_ramp)
-        {
-            for (Permanent& p : state.battlefield)
-            {
-                if (p.controller_index != active || p.tapped) { continue; }
-                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-                if (!def || !def->params.ramp_filter || !usable(p, *def)) { continue; }
-                if (!any)
-                {
-                    bool match = false;
-                    for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
-                    if (!match) { continue; }
-                }
-                else if (def->params.produces.empty()) { continue; }
-                // Pay the {1}: use floating if any, else feed one mana from a non-ramp source.
-                if (floating.Total() == 0 && !produce(Color::Colorless, true, false)) { continue; }
-                Color took;
-                if (!ConsumeFloatingAny(floating, took)) { continue; }
-                p.tapped = true;
-                for (Color c : def->params.produces) { floating.Add(c, 1); }
-                if (available.wild > 0) { --available.wild; }  // ramp filter counted as 1 wild
-                return true;
-            }
-        }
-        return false;
-    };
-
-    auto pay = [&](Color needed, bool any) -> bool
-    {
-        if (!produce(needed, any, true)) { return false; }
-        if (any) { Color took; return ConsumeFloatingAny(floating, took); }
-        return ConsumeFloating(floating, needed);
-    };
-
-    // Greedy-first, then a backtracking fallback for filter chains the greedy strands
-    // (mirrors TurnSolver::TapForCostDirect, so the rollout and the real game stay in
-    // sync). Snapshot so the greedy success path is byte-identical (no GT churn) and only
-    // previously-FAILING casts gain the chain solution. See TapForCostBacktrack.
-    const std::vector<Permanent> bf_pre = state.battlefield;
-    const int life_pre = state.players[active].life;
-    const int opp_pre = state.players[1 - active].life;
-    const bool oll_pre = state.opponent_lost_life_this_turn;
-    // Retain over-produced mana into the turn-scoped reserve (CR 500.4) -- mirrors
-    // TurnSolver::TapForCostDirect byte-for-byte so the rollout and the real game realise
-    // identical leftover mana (lockstep). Off (MTG_NO_FLOAT_LEFTOVER) -> no-op.
-    auto commit_leftover = [&](const ManaPool& lo)
-    { if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); } };
-    auto greedy = [&]() -> bool
-    {
-        // Pay coloured requirements first (most restrictive), then generic.
-        for (int i = 0; i < cost.white;     ++i) { if (!pay(Color::White,     false)) return false; }
-        for (int i = 0; i < cost.blue;      ++i) { if (!pay(Color::Blue,      false)) return false; }
-        for (int i = 0; i < cost.black;     ++i) { if (!pay(Color::Black,     false)) return false; }
-        for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) return false; }
-        for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) return false; }
-        for (int i = 0; i < cost.colorless; ++i) { if (!pay(Color::Colorless, false)) return false; }
-        for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) return false; }
-        return true;
-    };
-    if (greedy()) { commit_leftover(floating); return true; }
-    state.battlefield        = bf_pre;
-    state.players[active].life = life_pre;
-    ManaPool bt_leftover;
-    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
-                            /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
-    { commit_leftover(bt_leftover); return true; }
-    // Floating-fed filter retry (mirrors TurnSolver::TapForCostDirectOnce byte-for-byte so the rollout
-    // and the real game stay in lockstep): a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R})
-    // can be FED by turn-scoped floating that SpendFloatingTowardCost above spent on the cost directly,
-    // stranding the filter -- so the first backtracker, on the REDUCED cost with an empty float pool,
-    // could not chain it. Retry with the ORIGINAL cost + ORIGINAL reserve as feed. Guarded by a non-empty
-    // reserve AND an untapped filter/ramp source, so a non-floating or filter-less board never enters it.
-    if (reserve_pre.Total() > 0 && AnyUntappedFilterSource(state))
-    {
-        state.battlefield          = bf_pre;
-        state.players[active].life  = life_pre;
-        ManaPool bt2_leftover;
-        if (TapForCostBacktrack(state, cost_in, for_creature, reserve_pre, nullptr, nullptr,
-                                &bt2_leftover, /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
-        {
-            state.floating_mana = ManaPool{};   // the whole reserve was re-allocated by the backtracker
-            commit_leftover(bt2_leftover);
-            return true;
-        }
-    }
-    // Total failure: atomic rollback -- restore the full pre-payment snapshot, not the greedy's
-    // partial-tap end-state (mirrors TurnSolver::TapForCostDirectOnce). A failed cast leaves no
-    // side effects; callers rely on this.
-    state.battlefield                  = bf_pre;
-    state.players[active].life         = life_pre;
-    state.players[1 - active].life     = opp_pre;
-    state.opponent_lost_life_this_turn = oll_pre;
-    state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
-    return false;
+    return TapForCostSharedOnce(state, cost_in, for_creature, reserved_mask, &available,
+                                /*honor_legacy_cco=*/false);
 }
 
 // Public payment entry (mirrors TurnSolver::TapForCostDirect). Mana-source RESERVATION: FIRST try to
@@ -3399,82 +3025,9 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
 
 ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& state, int copies) const
 {
-    if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
-    {
-        return def.params.spectacle_cost.value();
-    }
-    ManaCost cost = def.card.m_mana_cost;
-    // Splice onto Arcane (splice_count+1 copies): add each spliced copy's SPLICE cost (params.splice_cost;
-    // unset -> the card's own printed cost) to the base's RAW cost FIRST, so the reductions below floor
-    // ONCE on the combined total (lockstep with TurnSolver::EffectiveCost). splice_cost defaulting to the
-    // printed cost makes this an exact (k+1)x multiply -> byte-identical for Desperate Ritual; a differing
-    // splice cost is now priced right. copies==1 = adds nothing -> byte-identical for every non-spliced cast.
-    if (copies != 1)
-    {
-        const ManaCost& sc = def.params.splice_cost.has_value()
-                           ? def.params.splice_cost.value()
-                           : def.card.m_mana_cost;
-        const int k = copies - 1;
-        cost.generic   += k * sc.generic;
-        cost.white     += k * sc.white;
-        cost.blue      += k * sc.blue;
-        cost.black     += k * sc.black;
-        cost.red       += k * sc.red;
-        cost.green     += k * sc.green;
-        cost.colorless += k * sc.colorless;
-    }
-    if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
-    {
-        int reduction = 0;
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            for (const std::string& sub : def.params.subtypes_affected)
-            {
-                bool matches = p.is_animated;
-                if (!matches)
-                {
-                    for (const std::string& cs : p.card.m_subtypes)
-                    {
-                        if (cs == sub) { matches = true; break; }
-                    }
-                }
-                if (matches) { ++reduction; break; }
-            }
-        }
-        cost.generic = std::max(0, cost.generic - reduction);
-    }
-    // Ruby Medallion-style colour cost reduction (LOCKSTEP with TurnSolver::EffectiveCost lines
-    // ~619-639): each permanent you control whose reduces_spell_color matches a colour in THIS
-    // spell's printed cost reduces its GENERIC by 1 (floored at 0, stacks per copy). Without this,
-    // the EXECUTOR over-paid red spells relative to the planner/rollout (which DOES apply it), so a
-    // committed Medallion-funded combo line (e.g. T3 Dragonstorm) was unpayable at execution ->
-    // fd-diverge. Gated on a reducer being in play (only Ruby Medallion sets reduces_spell_color, and
-    // only the Dragonstorm deck runs it), so every non-Medallion deck is byte-identical (reduction 0).
-    {
-        int color_reduction = 0;
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
-            if (!pd || pd->params.reduces_spell_color.empty()) { continue; }
-            const std::string& rc = pd->params.reduces_spell_color;
-            const ManaCost&    mc = def.card.m_mana_cost;   // printed pips (colour unchanged by discounts)
-            const bool spell_has_color =
-                  (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
-                || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
-                || (rc == "G" && mc.green > 0);
-            if (spell_has_color) { ++color_reduction; }
-        }
-        cost.generic = std::max(0, cost.generic - color_reduction);
-    }
-    // Hinata per-target reduction for fixed-cost spells (mirrors TurnSolver::EffectiveCost;
-    // {X} spells apply it where the chosen X is added to generic, in CastSpellFromHand).
-    if (!def.card.m_mana_cost.has_x)
-    {
-        cost.generic = std::max(0, cost.generic - HinataGenericDiscount(def, state, 0));
-    }
-    return cost;
+    // Delegates to the UNIFIED EffectiveSpellCost (ManaPayment.cpp) -- formerly a byte-identical
+    // twin of TurnSolver's file-static EffectiveCost kept in lockstep by comment discipline.
+    return EffectiveSpellCost(def, state, copies);
 }
 
 int AIEngine::FindOpponentCreature(const GameState& state) const
@@ -3665,7 +3218,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     }
     else
     {
-        if (s_bp_trace && !m_in_rollout)
+        if (BpTraceEnabled() && !m_in_rollout)
         { BpTraceCast("exec", state, def->card.m_name.str(), effective, def->card.IsCreature()); }
         // Audit-only: the untapped-board total BEFORE the attempt, to split a colour shortfall from a
         // real total-mana shortfall at the drop below. Not computed in a normal run.
@@ -3674,7 +3227,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
         if (!TapForCost(state, effective, available, def->card.IsCreature()))
         {
-            if (s_bp_trace && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
+            if (BpTraceEnabled() && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
             // SERVER-TRUTH RESOLUTION: a declared cast that cannot be paid is dropped (left in hand).
             // Mirrors ApplyPlanDirect::apply_one's drop in the rollout. Audit-only bookkeeping; see the
             // stranded-accelerant detector in GameLogger.h for why the ACCELERANT drops are the ones

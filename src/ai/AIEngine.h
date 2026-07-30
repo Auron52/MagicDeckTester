@@ -1,4 +1,5 @@
 #pragma once
+#include "../core/EnvFlags.h"
 #include "../core/GameState.h"
 #include "../core/GameLogger.h"
 #include "../core/ManaPool.h"
@@ -194,6 +195,10 @@ public:
     { return KeepHand(hand, mulligan_count, on_the_play); }
 
 private:
+    // Unit-test seam (backlog C2): test/unit drives the private payment path (TapForCost /
+    // BuildAvailableMana) directly against the rollout's TapForCostDirect in the twin-equivalence
+    // tests. Friend keeps the members private for all src/ callers.
+    friend struct MtgTestSeam;
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
     int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
@@ -240,7 +245,7 @@ private:
     // work rose) -- the MTG_LEAF_VERIFY harness recomputes each hit to find/confirm the
     // key-completeness bug. See docs/design/escalation-interior-reuse.md.
     TranspositionTable       m_leaf_cache;
-    const bool               m_leaf_cache_enabled  = std::getenv("MTG_LEAF_CACHE") != nullptr;
+    const bool               m_leaf_cache_enabled  = EnvOn("MTG_LEAF_CACHE");
 
     // --- Full-depth commit-the-line (env-gated by MTG_FULL_DEPTH) ---
     // The remaining phases of the optimal line found by the last FullSearchLine, in

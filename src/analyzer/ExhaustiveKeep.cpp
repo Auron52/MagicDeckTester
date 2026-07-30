@@ -1,3 +1,4 @@
+#include "../core/EnvFlags.h"
 #include "ExhaustiveKeep.h"
 
 #include <algorithm>
@@ -409,7 +410,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     // Execution-trace (MTG_KEEP_TRACE): compact index of every distinct card NAME in the deck, and the
     // per-rollout "touched" recording it enables. Off => no out_hit passed => engine byte-identical.
-    const bool trace_on = []{ const char* s = std::getenv("MTG_KEEP_TRACE"); return s && *s && std::string(s) != "0"; }();
+    const bool trace_on = EnvOn("MTG_KEEP_TRACE");
     std::map<std::string, int> touch_index;
     std::vector<std::string>   touch_names;
     if (trace_on)
@@ -630,8 +631,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     bool   change_detect = false;
     double detect_delta  = []{ const char* s = std::getenv("MTG_KEEP_DETECT_DELTA");
         return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();   // decision-relevant win-turn shift
-    double detect_z      = []{ const char* s = std::getenv("MTG_KEEP_DETECT_Z");
-        return (s && *s) ? std::max(0.0, std::atof(s)) : 1.64; }();   // CI band for the "unmoved" call
+    double detect_z      = 1.64;   // CI band for the "unmoved" call
     // EXECUTION-TRACE reuse (MTG_KEEP_CHANGED_CARDS): the set of cards a change touched. A prior cell
     // whose recorded touched-set is DISJOINT from this set is byte-identical on the new commit -> reuse
     // its prior value EXACTLY (0 samples of refine), including near-threshold + bottoming cells that the
@@ -819,8 +819,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Slow-rollout capture (diagnostic, off by default): time each rollout; if it exceeds
     // MTG_KEEP_SLOW_MS, log the exact degenerate game -- hand (bucket composition), side, rollout index
     // and the seed that fully reproduces it -- so the pathological combo game can be replayed/profiled.
-    // Threshold <= 0 disables it (a single steady_clock read per rollout is the only overhead). Appends
-    // to MTG_KEEP_SLOW_LOG if set (dedup/inspection), else stderr only.
+    // Threshold <= 0 disables it (a single steady_clock read per rollout is the only overhead).
+    // Logged to stderr.
     const long long slow_ms = []{ const char* s = std::getenv("MTG_KEEP_SLOW_MS");
         return (s && *s) ? std::atoll(s) : 0LL; }();
     std::mutex slow_mtx;
@@ -863,8 +863,6 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 + "ms  size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
                 + " seed=" + std::to_string(rs) + "  hand: " + hand;
             std::cerr << line << "\n" << std::flush;
-            if (const char* sl = std::getenv("MTG_KEEP_SLOW_LOG"); sl && *sl)
-            { std::ofstream f(sl, std::ios::app); f << line << "\n"; }
         }
     };
 
@@ -1298,7 +1296,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // instead of at wave barriers -> cores stay full to the last live cell. Default OFF -> the wave path
     // below is byte-identical. MTG_KEEP_CONTINUOUS_LOOKAHEAD bounds refine speculation past a cell's
     // committed prefix; MTG_KEEP_SWEEP_SEC throttles the (whole-table) Dopt/freeze sweep.
-    const bool continuous = adaptive && std::getenv("MTG_KEEP_CONTINUOUS") != nullptr;
+    const bool continuous = adaptive && EnvOn("MTG_KEEP_CONTINUOUS");
     const long long cont_lookahead = []{ const char* s = std::getenv("MTG_KEEP_CONTINUOUS_LOOKAHEAD");
         return (s && *s) ? std::max<long long>(1, std::strtoll(s, nullptr, 10)) : 4LL; }();
     const double sweep_sec = []{ const char* s = std::getenv("MTG_KEEP_SWEEP_SEC");
@@ -1306,8 +1304,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Per-cell journal is the continuous path's persistence (replaces the fold-blocking periodic full-raw
     // snapshot). MTG_KEEP_JOURNAL=0 reverts to that snapshot (A/B + fallback). journal_on is captured by
     // reference in run_batch/journal_append (defined earlier), so setting it here takes effect for Pass A.
-    journal_on = continuous && !cfg.out_raw.empty()
-              && !(std::getenv("MTG_KEEP_JOURNAL") && std::string(std::getenv("MTG_KEEP_JOURNAL")) == "0");
+    journal_on = continuous && !cfg.out_raw.empty() && EnvOn("MTG_KEEP_JOURNAL", true);
     if (journal_on) { journal_path = cfg.out_raw + ".journal"; }
     auto write_raw_atomic = [&](const std::string& path, bool as_probe = false) -> bool
     {
@@ -1518,7 +1515,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // silently ignored (fresh run). Skipped if a journal/out_raw resume already loaded state (same run
     // continuing), and opt-out-able via MTG_KEEP_NO_PROBE_CARRY for an A/B.
     if (cfg.use_probe_carry && !cfg.recommend_only && resume_loaded == 0 && !cfg.out_raw.empty()
-        && std::getenv("MTG_KEEP_NO_PROBE_CARRY") == nullptr)
+        && !EnvOn("MTG_KEEP_NO_PROBE_CARRY"))
     {
         const std::string probe_path = cfg.out_raw + ".probe";
         std::ifstream pf(probe_path);
@@ -1622,7 +1619,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // adaptive_bottom, no change-detect); those still Pass-A-floor the sub-tables then refine-wave them.
     // Opt-out MTG_KEEP_NO_SUB_FUSE=1 restores the separate Pass A (A/B; byte-identical). run_batch's
     // whole-batch one-thread accumulation is scheduling-independent, so fusing is byte-identical.
-    const bool fuse_sub = continuous && !sub_floor && std::getenv("MTG_KEEP_NO_SUB_FUSE") == nullptr;
+    const bool fuse_sub = continuous && !sub_floor && !EnvOn("MTG_KEEP_NO_SUB_FUSE");
     std::vector<Task> fused_sub_tasks;                 // sub-cap tasks handed to the continuous pool
     {   // Pass A: size-7 to the floor; sub-tables to the floor (keep-only) or straight to the cap.
         std::vector<Task> tasks;
@@ -1891,7 +1888,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // Speculation is provably harmless to the raw: rollouts below the freeze level are real refine work,
         // rollouts above it are truncated -> final cnt/sum per cell is scheduling-independent (byte-identical
         // run-to-run and vs the barrier path). Opt-out MTG_KEEP_NO_FLOOR_SPEC=1 restores the old barrier.
-        const bool floor_spec = std::getenv("MTG_KEEP_NO_FLOOR_SPEC") == nullptr;
+        const bool floor_spec = !EnvOn("MTG_KEEP_NO_FLOOR_SPEC");
         const long long spec_budget = cont_lookahead;   // max speculative rollouts past r0 per cell
 
         const std::size_t SL = static_cast<std::size_t>(NC) * 2 * static_cast<std::size_t>(r_max);
@@ -2822,7 +2819,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     // bottom floor), MTG_KEEP_SIM_TRIALS (Monte-Carlo floor-noise realizations, default 128),
     // MTG_KEEP_SIM_FLIP_EPS (refine stop gate, default 0.02 = cfg.flip_eps), MTG_KEEP_SIM_SEED. Reads the
     // pooled true means+variances directly; writes nothing (a measurement) -> returns without a profile.
-    if (const char* sab = std::getenv("MTG_KEEP_SIM_ADAPTIVE_BOTTOM"); sab && *sab && std::string(sab) != "0")
+    if (EnvOn("MTG_KEEP_SIM_ADAPTIVE_BOTTOM"))
     {
         if (!have_sumsq)
         { os << "SIM-ADAPT-BOTTOM: pooled sidecars lack per-cell sumsq (need it to model floor-R noise) "
@@ -3150,7 +3147,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     // (full R). This is the FAITHFUL "full bottoming at lower keep-R" -- resampling the sub-tables to a
     // lower R (the default) corrupts the bottoming argmin with the uniform-downsample winner's curse, which
     // over-penalizes full bottoming (see the SYNTH_BOTTOM_R note). Use with SYNTH_R for a full@Rk recipe.
-    const bool     synth_keep_only = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_KEEP_ONLY"); return s&&*s&&std::string(s)!="0"; }();
+    const bool     synth_keep_only = EnvOn("MTG_KEEP_SYNTH_KEEP_ONLY");
     const uint64_t synth_seed     = []{ const char* s=std::getenv("MTG_KEEP_SYNTH_SEED");     return (s&&*s)?std::strtoull(s,nullptr,10):0x5eed1234ULL; }();
     const bool     synth_req = (synth_r > 0 || synth_bottom_r > 0);
     if (synth_req && !have_sumsq)
@@ -3255,7 +3252,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     //   floor = MTG_KEEP_SYNTH_ABOT_FLOOR (default 2); cap for refined cells = SYNTH_R if set else raw R;
     //   flip_eps = MTG_KEEP_SYNTH_ABOT_FLIP_EPS (default 0.02); one deterministic realization (ABOT_SEED).
     long long recon_bottom_floor = -1;
-    if (const char* sab = std::getenv("MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM"); sab && *sab && std::string(sab) != "0")
+    if (EnvOn("MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM"))
     {
         if (!have_sumsq) { os << "SYNTH-ABOT: pooled sidecars lack per-cell sumsq -- IGNORING (no profile change)\n"; }
         else
