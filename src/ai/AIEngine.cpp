@@ -3025,82 +3025,9 @@ bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& a
 
 ManaCost AIEngine::EffectiveCost(const CardDefinition& def, const GameState& state, int copies) const
 {
-    if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
-    {
-        return def.params.spectacle_cost.value();
-    }
-    ManaCost cost = def.card.m_mana_cost;
-    // Splice onto Arcane (splice_count+1 copies): add each spliced copy's SPLICE cost (params.splice_cost;
-    // unset -> the card's own printed cost) to the base's RAW cost FIRST, so the reductions below floor
-    // ONCE on the combined total (lockstep with TurnSolver::EffectiveCost). splice_cost defaulting to the
-    // printed cost makes this an exact (k+1)x multiply -> byte-identical for Desperate Ritual; a differing
-    // splice cost is now priced right. copies==1 = adds nothing -> byte-identical for every non-spliced cast.
-    if (copies != 1)
-    {
-        const ManaCost& sc = def.params.splice_cost.has_value()
-                           ? def.params.splice_cost.value()
-                           : def.card.m_mana_cost;
-        const int k = copies - 1;
-        cost.generic   += k * sc.generic;
-        cost.white     += k * sc.white;
-        cost.blue      += k * sc.blue;
-        cost.black     += k * sc.black;
-        cost.red       += k * sc.red;
-        cost.green     += k * sc.green;
-        cost.colorless += k * sc.colorless;
-    }
-    if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
-    {
-        int reduction = 0;
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            for (const std::string& sub : def.params.subtypes_affected)
-            {
-                bool matches = p.is_animated;
-                if (!matches)
-                {
-                    for (const std::string& cs : p.card.m_subtypes)
-                    {
-                        if (cs == sub) { matches = true; break; }
-                    }
-                }
-                if (matches) { ++reduction; break; }
-            }
-        }
-        cost.generic = std::max(0, cost.generic - reduction);
-    }
-    // Ruby Medallion-style colour cost reduction (LOCKSTEP with TurnSolver::EffectiveCost lines
-    // ~619-639): each permanent you control whose reduces_spell_color matches a colour in THIS
-    // spell's printed cost reduces its GENERIC by 1 (floored at 0, stacks per copy). Without this,
-    // the EXECUTOR over-paid red spells relative to the planner/rollout (which DOES apply it), so a
-    // committed Medallion-funded combo line (e.g. T3 Dragonstorm) was unpayable at execution ->
-    // fd-diverge. Gated on a reducer being in play (only Ruby Medallion sets reduces_spell_color, and
-    // only the Dragonstorm deck runs it), so every non-Medallion deck is byte-identical (reduction 0).
-    {
-        int color_reduction = 0;
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
-            if (!pd || pd->params.reduces_spell_color.empty()) { continue; }
-            const std::string& rc = pd->params.reduces_spell_color;
-            const ManaCost&    mc = def.card.m_mana_cost;   // printed pips (colour unchanged by discounts)
-            const bool spell_has_color =
-                  (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
-                || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
-                || (rc == "G" && mc.green > 0);
-            if (spell_has_color) { ++color_reduction; }
-        }
-        cost.generic = std::max(0, cost.generic - color_reduction);
-    }
-    // Hinata per-target reduction for fixed-cost spells (mirrors TurnSolver::EffectiveCost;
-    // {X} spells apply it where the chosen X is added to generic, in CastSpellFromHand).
-    if (!def.card.m_mana_cost.has_x)
-    {
-        cost.generic = std::max(0, cost.generic - HinataGenericDiscount(def, state, 0));
-    }
-    return cost;
+    // Delegates to the UNIFIED EffectiveSpellCost (ManaPayment.cpp) -- formerly a byte-identical
+    // twin of TurnSolver's file-static EffectiveCost kept in lockstep by comment discipline.
+    return EffectiveSpellCost(def, state, copies);
 }
 
 int AIEngine::FindOpponentCreature(const GameState& state) const

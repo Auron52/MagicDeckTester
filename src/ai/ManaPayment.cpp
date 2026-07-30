@@ -414,3 +414,84 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
     return false;
 }
+
+ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies)
+{
+    if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
+    {
+        return def.params.spectacle_cost.value();
+    }
+    ManaCost cost = def.card.m_mana_cost;
+    // Splice onto Arcane: casting ONE base while splicing k = copies-1 OTHER copies adds each spliced
+    // copy's SPLICE cost (params.splice_cost; unset -> the card's own printed cost) to the base's RAW
+    // cost FIRST, so the Medallion/affinity/Hinata reductions below apply ONCE to the combined total
+    // (a single floor at 0) -- NOT once per copy (which would over-subtract the reduction). With
+    // splice_cost defaulting to the printed cost this is an exact (k+1)x multiply (byte-identical for
+    // Desperate Ritual, splice {1}{R} == cast {1}{R}); a splice cost that differs is now priced right.
+    // copies==1 (every non-spliced cast) adds nothing -> byte-identical for all other decks.
+    if (copies != 1)
+    {
+        const ManaCost& sc = def.params.splice_cost.has_value()
+                           ? def.params.splice_cost.value()
+                           : def.card.m_mana_cost;
+        const int k = copies - 1;
+        cost.generic   += k * sc.generic;
+        cost.white     += k * sc.white;
+        cost.blue      += k * sc.blue;
+        cost.black     += k * sc.black;
+        cost.red       += k * sc.red;
+        cost.green     += k * sc.green;
+        cost.colorless += k * sc.colorless;
+    }
+    if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
+    {
+        int reduction = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            for (const std::string& sub : def.params.subtypes_affected)
+            {
+                bool matches = p.is_animated;
+                if (!matches)
+                {
+                    for (const std::string& cs : p.card.m_subtypes)
+                    {
+                        if (cs == sub) { matches = true; break; }
+                    }
+                }
+                if (matches) { ++reduction; break; }
+            }
+        }
+        cost.generic = std::max(0, cost.generic - reduction);
+    }
+    // Ruby Medallion-style colour cost reduction: each permanent you control whose
+    // reduces_spell_color matches a colour in THIS spell's printed cost reduces its GENERIC by 1
+    // (floored at 0, stacks per copy). Gated on a reducer being in play, so decks without one are
+    // byte-identical. Without this on the EXECUTOR side it over-paid red spells relative to the
+    // planner/rollout, so a committed Medallion-funded combo line (T3 Dragonstorm) was unpayable
+    // at execution -> fd-diverge. (Same-turn-cast Medallions are handled by ManaPruneBound's bail.)
+    {
+        int color_reduction = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || pd->params.reduces_spell_color.empty()) { continue; }
+            const std::string& rc = pd->params.reduces_spell_color;
+            const ManaCost&    mc = def.card.m_mana_cost;   // printed pips (colour unchanged by discounts)
+            const bool spell_has_color =
+                  (rc == "W" && mc.white > 0) || (rc == "U" && mc.blue  > 0)
+                || (rc == "B" && mc.black > 0) || (rc == "R" && mc.red   > 0)
+                || (rc == "G" && mc.green > 0);
+            if (spell_has_color) { ++color_reduction; }
+        }
+        cost.generic = std::max(0, cost.generic - color_reduction);
+    }
+    // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
+    // sites where the whole generic, incl. X, is known -- CastSpellFromHand / apply_one).
+    if (!def.card.m_mana_cost.has_x)
+    {
+        cost.generic = std::max(0, cost.generic - HinataGenericDiscount(def, state, 0));
+    }
+    return cost;
+}

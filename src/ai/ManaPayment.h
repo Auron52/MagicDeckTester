@@ -26,3 +26,9 @@
 bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_creature,
                           std::uint64_t reserved_mask, ManaPool* available,
                           bool honor_legacy_cco);
+
+// THE effective spell cost (C1 unit 2): spectacle, splice-onto-Arcane combining, affinity,
+// Medallion-style colour reduction, and Hinata's per-target discount (fixed-cost spells only --
+// {X} spells apply the discount where the chosen X is known). Was a byte-identical twin pair
+// (AIEngine::EffectiveCost / TurnSolver's file-static EffectiveCost); both now delegate here.
+ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
