@@ -73,8 +73,8 @@ public:
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend the
     // active player's LEFTOVER combat mana on attacker pumps, converting mana into face damage.
     // Called from GameEngine::CombatPhase after attackers are finalized and before combat damage.
-    // Builds the leftover pool via BuildAvailableMana (byte-identical to the rollout's BuildPool)
-    // and applies the shared ApplyFirebreathing so the executor and rollout pump identically.
+    // Builds the leftover pool via the shared AvailableManaPool (ManaPayment.cpp -- the same pool
+    // the rollout uses) and applies the shared ApplyFirebreathing so both pump identically.
     // Inert (no attacker carries a firebreathing param) for every non-Dragonstorm deck.
     void Firebreathe(GameState& state, const std::vector<int>& attacker_indices);
 
@@ -195,9 +195,9 @@ public:
     { return KeepHand(hand, mulligan_count, on_the_play); }
 
 private:
-    // Unit-test seam (backlog C2): test/unit drives the private payment path (TapForCost /
-    // BuildAvailableMana) directly against the rollout's TapForCostDirect in the twin-equivalence
-    // tests. Friend keeps the members private for all src/ callers.
+    // Unit-test seam (backlog C2): test/unit drives the private payment path (TapForCost)
+    // directly against the rollout's TapForCostDirect in the twin-equivalence tests. Friend
+    // keeps the members private for all src/ callers.
     friend struct MtgTestSeam;
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
@@ -348,7 +348,6 @@ private:
     void ActivateTapTokens(GameState& state, ManaPool& available);
 
     // Build a ManaPool from all currently untapped mana sources the active player controls.
-    ManaPool BuildAvailableMana(const GameState& state) const;
 
     // Tap permanents to pay the cost, updating the available pool in place.
     // for_creature: if false, skip creature-only mana sources (e.g. Ancient Ziggurat).

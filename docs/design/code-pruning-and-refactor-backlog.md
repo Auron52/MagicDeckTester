@@ -56,8 +56,11 @@ really was Debug; the orphans really are referenced by nothing but this document
   (`src/ai/ManaPayment.cpp`), byte-identical.
 - **C1 unit 3 DONE** — `CastOrderLess`/`OrderingOpaque` twins (TurnSolver statics +
   AIEngine's `CastOrderLessAI`/`OrderingOpaqueAI`) → shared definitions in
-  `src/ai/ManaPayment.cpp`, byte-identical (unit + smoke + full regression). Next units per
-  the safety order: `BuildPool`/`BuildAvailableMana` → …
+  `src/ai/ManaPayment.cpp`, byte-identical (unit + smoke + full regression).
+- **C1 unit 4 DONE** — `BuildPool`/`AIEngine::BuildAvailableMana` twins → the shared
+  `AvailableManaPool` (`src/ai/ManaPayment.cpp`), byte-identical. All call sites renamed to
+  the one name; the test seam's pool helper dropped (the shared function is public). Next
+  units per the safety order: `AnimateLands`/`ActivateTapTokens` → land play → combat.
 - **D1/D2 PARTIAL (user-approved)** — deleted with sign-off: 9 spent diagnostics
   (`MTG_ESC_PREDICT_{STATS,COSTCURVE,RALPHA}`, `MTG_HYBRID_LEAFDIAG`, `MTG_KEEP_{DETECT_Z,DUMP,SLOW_LOG}`,
   `MTG_TRACE_PLAYOUT_{SEED,TURN}`), 8 rejected-experiment knobs (`MTG_ESC_SINGLE_{ABS,FALLBACK,NOCLIMB,ROLLDEPTH,SEED}`,

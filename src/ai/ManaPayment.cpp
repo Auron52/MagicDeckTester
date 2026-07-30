@@ -544,3 +544,30 @@ bool OrderingOpaque(const std::string& name)
         || d->params.impulse_exile > 0   // Apex of Power: staged exile -> search-owned breakpoint order
         || d->params.draw > 0;
 }
+
+// THE accounting mana pool (C1 unit 4). Depletion lands contribute 2, multi-color lands 1 wild,
+// filter lands (Cascade Bluffs) 1 wild when fed else 1 {C} -- see AddSourceToPool. Storage lands
+// (Dwarven Hold / Mercadian Bazaar) yield their LIVE storage_counters via PermanentManaYield (0
+// when uncharged): a dead sc=0 storage land must add nothing, not its static per-tap 1 (the
+// rollout once over-credited dead storage lands vs the executor's Firebreathe, projecting the
+// Dragonstorm combo kill a turn early -- fd-diverge). For non-storage sources PermanentManaYield
+// == ManaProducedPerTap. The turn-scoped reserve (ritual float + retained over-production) is
+// spendable on later same-phase casts, so it counts toward affordability; empty for non-floating
+// decks, and MTG_NO_FLOAT_LEFTOVER restores the legacy board-only pool. Was a byte-identical twin
+// pair (TurnSolver's BuildPool / AIEngine::BuildAvailableMana).
+ManaPool AvailableManaPool(const GameState& state)
+{
+    ManaPool pool;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        auto def = CardDatabase::Instance().LookupCached(p.card);
+        if (!def) { continue; }
+        bool is_land = (def->tmpl == CardTemplate::BasicLand);
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
+        if (!is_land && !is_dork) { continue; }
+        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
+    }
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
+    return pool;
+}

@@ -202,36 +202,6 @@ static std::string PlanDesc(const TurnSolver::Plan& p)
 
 // ---- Local helpers -------------------------------------------------------
 
-// Build the active player's accounting mana pool from untapped sources. Depletion
-// lands contribute 2, multi-color lands 1 wild, filter lands (Cascade Bluffs) 1 wild
-// when fed else 1 {C} — see AddSourceToPool, shared with AIEngine::BuildAvailableMana.
-// Storage lands (Dwarven Hold / Mercadian Bazaar) yield their LIVE storage_counters via
-// PermanentManaYield (0 when uncharged), exactly as BuildAvailableMana does -- passing it here
-// keeps the rollout's pool byte-identical to the executor's (a dead sc=0 storage land must add
-// nothing, not its static per-tap 1). For non-storage sources PermanentManaYield ==
-// ManaProducedPerTap, so every non-storage deck is byte-identical. WITHOUT this the rollout's
-// firebreathing pool (SimulateCombat) over-credited dead/low storage lands vs the executor's
-// AIEngine::Firebreathe, projecting the combo kill a turn early (Dragonstorm fd-diverge).
-static ManaPool BuildPool(const GameState& state)
-{
-    ManaPool pool;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-        auto def = CardDatabase::Instance().LookupCached(p.card);
-        if (!def) { continue; }
-        bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
-        if (!is_land && !is_dork) { continue; }
-        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
-    }
-    // Turn-scoped reserve (ritual float + retained over-production) is spendable on later
-    // same-phase casts, so it counts toward affordability. Empty for non-floating decks ->
-    // byte-identical; off (MTG_NO_FLOAT_LEFTOVER) -> not added (legacy board-only pool).
-    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
-    return pool;
-}
-
 // Pool excluding creature-only mana sources (e.g. Ancient Ziggurat).
 // Used to verify that non-creature spells are payable without those sources.
 static ManaPool BuildNonCreaturePool(const GameState& state)
@@ -247,7 +217,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         if (!is_land && !is_dork) { continue; }
         AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
     }
-    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see BuildPool
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see AvailableManaPool
     return pool;
 }
 
@@ -306,7 +276,7 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
         }
     }
     // Floating mana (turn-scoped reserve) also satisfies colored pips: a floated {U} pays a {U}
-    // pip even when no untapped land produces blue. BuildPool already credits floating into the
+    // pip even when no untapped land produces blue. AvailableManaPool already credits floating into the
     // count pool, so without this the per-color gate would false-reject an otherwise-payable cast
     // (e.g. a second Treasure Hunt {1}{U} off a floating {U} plus a colorless land). A wild
     // floating mana (multi-color ritual float) can pay any single pip. Empty floating ->
@@ -458,7 +428,7 @@ static int SameTurnReducerGenericCredit(const GameState& state, const std::vecto
 // affordability fallback so enumeration can recognize filter/depletion/ramp-land lines.
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
 
-// Real-payment affordability fallback for filter / ramp lands. BuildPool models a filter land
+// Real-payment affordability fallback for filter / ramp lands. AvailableManaPool models a filter land
 // (Cascade Bluffs) as a single wild, which cannot express its color conversion (feed {U} -> {R}{R}),
 // so a filter-payable subset (Land's Edge {1}{R}{R} off Saprazzan Skerry + Cascade Bluffs) fails the
 // flat CanPay even though the executor's TapForCostDirect can pay it. When the flat check fails and a
@@ -498,7 +468,7 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
 }
 
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color
-// conversion the flat BuildPool cannot model (so the affordability fallback above is needed).
+// conversion the flat AvailableManaPool cannot model (so the affordability fallback above is needed).
 static bool HasUntappedFilterSource(const GameState& state)
 {
     for (const Permanent& p : state.battlefield)
@@ -1672,7 +1642,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             }
             if (def.tmpl != CardTemplate::DirectDamage) { continue; }
             ManaCost base  = EffectiveCost(def, state);   // fixed part; ManaValue() ignores X
-            ManaPool xpool = BuildPool(state);
+            ManaPool xpool = AvailableManaPool(state);
             // Hinata combo: a ritual in hand (Reality Spasm) funds a bigger X this turn. Credit
             // its NET mana so this payoff's max X reaches the combo's lethal value. Over-generates
             // candidates affordable ONLY with the ritual; Solve::consider rejects any subset that
@@ -2624,7 +2594,7 @@ struct ManaGateTerm
 struct ManaGateIndex
 {
     std::vector<ManaGateTerm> term;          // per candidate index
-    int  pool_total   = 0;                   // BuildPool(state).Total()
+    int  pool_total   = 0;                   // AvailableManaPool(state).Total()
     int  ind_gain_all = 0;                   // SUM gain over the `independent` actions (outer headroom)
     int  ind_gy_all   = 0;                   // SUM gy   over the `independent` actions
     bool ind_block    = false;               // any independent action would disable the gate
@@ -3366,7 +3336,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     const Player& ap = state.ActivePlayer();
-    ManaPool pool             = BuildPool(state);
+    ManaPool pool             = AvailableManaPool(state);
     ManaPool pool_noncreature = BuildNonCreaturePool(state);
     int total_lands  = CountLands(state);
     int pending_atk  = PendingAttackDamage(state);
@@ -5453,22 +5423,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     int max_count = 0;
                     GameState scratch = state;
-                    ManaPool rem = BuildPool(scratch);
+                    ManaPool rem = AvailableManaPool(scratch);
                     while (rem.CanPay(rep_cost) && TapForCostDirect(scratch, rep_cost, true))
-                    { ++max_count; rem = BuildPool(scratch); }
+                    { ++max_count; rem = AvailableManaPool(scratch); }
                     int k = (*g_play_replicate_chooser)(state, state.active_player_index,
                                                         def.card.m_name.str(), max_count);
                     cap = k < 0 ? 0 : (k > max_count ? max_count : k);
                 }
                 int made = 0;
-                ManaPool remaining = BuildPool(state);
+                ManaPool remaining = AvailableManaPool(state);
                 while ((cap < 0 || made < cap) && remaining.CanPay(rep_cost))
                 {
                     if (!TapForCostDirect(state, rep_cost, true)) { break; }
                     Permanent token = perm;
                     token.card.m_number = 0;
                     state.battlefield.push_back(token);
-                    remaining = BuildPool(state);
+                    remaining = AvailableManaPool(state);
                     ++made;
                 }
             }
@@ -6249,7 +6219,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         int dig_guard = 0;
         while (dig_guard++ < 16 && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
         {
-            ManaPool pool = BuildPool(state);
+            ManaPool pool = AvailableManaPool(state);
             bool is_sac = false;
             std::string src = ResolveProvider(state).SelectDigSource(state, pool, is_sac);
             if (src.empty()) { break; }
@@ -6422,10 +6392,10 @@ static void SimulateCombat(GameState& state)
 
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Shared with the
-    // executor (AIEngine::Firebreathe) on the byte-identical BuildAvailableMana pool -> lockstep.
+    // executor (AIEngine::Firebreathe) on the byte-identical AvailableManaPool pool -> lockstep.
     // Inert unless a firebreathing param is present -> other decks byte-identical.
     if (!atk_idx.empty() && ControlsFirebreathingSource(state, active))
-    { ApplyFirebreathing(state, active, atk_idx, BuildPool(state)); }
+    { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state)); }
 
     std::vector<const Permanent*> attackers;
     attackers.reserve(atk_idx.size());
@@ -6503,7 +6473,7 @@ static void SimulateTapTokens(GameState& state)
 
         const ManaCost& add_cost = def->params.tap_token_cost.value();
         state.battlefield[i].tapped = true;  // {T} cost; tap before building pool
-        ManaPool remaining = BuildPool(state);
+        ManaPool remaining = AvailableManaPool(state);
         if (!remaining.CanPay(add_cost)) { state.battlefield[i].tapped = false; continue; }
         TapForCostDirect(state, add_cost, true);
 
@@ -7343,7 +7313,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     RevealLogPause _rlp_enum;
     PROF_INC(enumerate_calls);
     const Player& ap              = state.ActivePlayer();
-    ManaPool      pool            = BuildPool(state);
+    ManaPool      pool            = AvailableManaPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
     int           total_lands     = CountLands(state);
     int           pending_atk     = PendingAttackDamage(state);
@@ -12061,7 +12031,7 @@ static void DeductPayable(ManaPool& p, const ManaCost& cost)
 // Restricted-color line gate (viewer line-check only). Reuses the enumerator's conservative
 // ComputeAvailableColors necessary-condition so CheckLine grades a genuinely-unpayable COLORED line
 // (e.g. Marshal of Zhalfir {W}{U} off W/R/B Tournament Grounds with no blue source) as Illegal rather
-// than LegalNotEnumerated -- the flat BuildPool/CanPay stores every dual as one any-color "wild".
+// than LegalNotEnumerated -- the flat AvailableManaPool/CanPay stores every dual as one any-color "wild".
 // Default ON; MTG_LINE_COLOR_GATE=0 restores the pre-gate wild behavior. CheckLine is viewer-only, so
 // this never affects the search / executor / ground truth.
 static bool LineColorGateEnabled()
@@ -12487,7 +12457,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     }
 
     // Credit in-play untapped SAC-FOR-MANA sources (Lotus Bloom: "{T}, Sacrifice: add three mana of
-    // ANY one color"). BuildPool / ComputeAvailableColors omit them -- they're modelled as a sac ACTION
+    // ANY one color"). AvailableManaPool / ComputeAvailableColors omit them -- they're modelled as a sac ACTION
     // (ritual_float credited as wild), not a standing source -- so the affordability sim below would
     // FALSE-REJECT a line they pay for: Dragonlord Kolaghan {4}{B}{R} off a Lotus Bloom's black + five
     // Mountains was reported "illegal: no source of black" (Dragonstorm s21 viewer artifact, issue #9).
@@ -12550,9 +12520,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
 
     // Greedy affordability fixpoint: repeatedly cast any affordable not-yet-cast spell,
     // mana producers FIRST so a freshly-cast rock's mana is online for the rest of the
-    // line (the same-turn ramp the enumerator's BuildPool does not credit). Order-
+    // line (the same-turn ramp the enumerator's AvailableManaPool does not credit). Order-
     // independent, so it doesn't penalise the human's click order.
-    ManaPool avail = BuildPool(s);
+    ManaPool avail = AvailableManaPool(s);
     avail.wild += sac_wild;                                // Lotus Bloom & co. (see sac_wild above)
     bool spectacle_on = s.opponent_lost_life_this_turn;   // set as damage spells cast in this line
     // The mana cost to pay for pending[k] RIGHT NOW: free for an available alt cost; the spectacle
@@ -12594,7 +12564,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // If the declared order does NOT pay, fall through to the greedy (order-tolerant). CheckLine is
     // viewer-only (sole caller --validate-line), so this is GT-neutral and only ever ACCEPTS more.
     {
-        ManaPool p = BuildPool(s);
+        ManaPool p = AvailableManaPool(s);
         p.wild += sac_wild;                  // Lotus Bloom & co. (see sac_wild above)
         bool spec = s.opponent_lost_life_this_turn;
         std::vector<std::string> reducers;   // reduces_spell_color of Medallions cast so far in-line
@@ -12669,7 +12639,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     }
 
     // Filter / ramp-filter lands (Ferrous Lake fed by floating: {1},{T}: Add {U}{R}) are not
-    // expressible in the flat BuildPool above, so a legal filter-fed line can leave casts "undone".
+    // expressible in the flat AvailableManaPool above, so a legal filter-fed line can leave casts "undone".
     // Before rejecting, retry the WHOLE set with the real payment engine on a copy (mirrors the
     // enumerator's SubsetPayableWithFilters): tap actual sources per cast, persisting taps and freshly-
     // cast rocks across the set, honouring the same rock-first + spectacle ordering. Only runs when the

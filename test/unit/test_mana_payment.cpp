@@ -12,6 +12,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
+#include "ai/ManaPayment.h"   // AvailableManaPool: the unified accounting pool (C1 unit 4)
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -24,8 +25,6 @@
 // executor's private payment path.
 struct MtgTestSeam
 {
-    static ManaPool BuildAvailableMana(const AIEngine& e, const GameState& s)
-    { return e.BuildAvailableMana(s); }
     static bool TapForCost(AIEngine& e, GameState& s, const ManaCost& c, ManaPool& avail,
                            bool for_creature)
     { return e.TapForCost(s, c, avail, for_creature); }
@@ -108,7 +107,7 @@ PayEnd RunExecutor(const GameState& board, const ManaCost& cost, bool for_creatu
 {
     GameState s = board;
     AIEngine  eng;
-    ManaPool  avail = MtgTestSeam::BuildAvailableMana(eng, s);
+    ManaPool  avail = AvailableManaPool(s);
     const bool ok = MtgTestSeam::TapForCost(eng, s, cost, avail, for_creature);
     return Snapshot(s, ok);
 }

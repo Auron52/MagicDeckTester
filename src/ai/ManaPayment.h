@@ -42,3 +42,8 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 // and OrderingOpaqueAI kept in lockstep by comment); both now share these definitions.
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
 bool OrderingOpaque(const std::string& name);
+
+// THE accounting mana pool (C1 unit 4): everything the active player's untapped sources could
+// produce this phase, plus the turn-scoped floating reserve. Was a byte-identical twin pair
+// (TurnSolver's file-static BuildPool / AIEngine::BuildAvailableMana); both sides now call this.
+ManaPool AvailableManaPool(const GameState& state);

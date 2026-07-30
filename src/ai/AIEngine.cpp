@@ -1435,7 +1435,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 if (!has_enabler)
                 {
-                    ManaPool avail = BuildAvailableMana(state);
+                    ManaPool avail = AvailableManaPool(state);
                     ManaCost th_cost;
                     th_cost.generic = 1;
                     th_cost.blue    = 1;
@@ -1896,7 +1896,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
         }
         if (it == ap.hand.end()) { return; }
-        ManaPool available = BuildAvailableMana(state);
+        ManaPool available = AvailableManaPool(state);
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target);
     };
@@ -1919,7 +1919,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             return;
         }
-        ManaPool available = BuildAvailableMana(state);
+        ManaPool available = AvailableManaPool(state);
         CastSpellFromHand(state, *it, available, alt_lifegain);
     };
 
@@ -1937,7 +1937,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!def) { return; }
 
         // Pay the mana cost first; abort cleanly (graveyard untouched) if unpayable.
-        ManaPool available = BuildAvailableMana(state);
+        ManaPool available = AvailableManaPool(state);
         ManaCost effective = EffectiveCost(*def, state);
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
         if (!available.CanPay(effective))
@@ -2469,7 +2469,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // fallback that carries no recorded script); committed turns already replayed their
         // recorded digs above, so running it again would dig a second, off-line time.
         if (!fd_plan_committed) { UseSurplusLandAbilities(state); }
-        ManaPool remaining = BuildAvailableMana(state);
+        ManaPool remaining = AvailableManaPool(state);
         AnimateLands(state, remaining);
         ActivateTapTokens(state, remaining);
     }
@@ -2758,7 +2758,7 @@ void AIEngine::UseSurplusLandAbilities(GameState& state)
     int guard = 0;
     while (guard++ < 16 && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
     {
-        ManaPool avail = BuildAvailableMana(state);
+        ManaPool avail = AvailableManaPool(state);
         bool is_sac = false;
         std::string src = ResolveProvider(state).SelectDigSource(state, avail, is_sac);
         if (src.empty()) { break; }
@@ -2785,7 +2785,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
                 && !p.tapped && p.card.m_name == source) { idx = i; break; }
         }
         if (idx < 0) { return false; }
-        ManaPool avail = BuildAvailableMana(state);
+        ManaPool avail = AvailableManaPool(state);
         state.battlefield[idx].tapped = true;  // {T}; tap before paying so it isn't its own source
         if (!TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false))
         {
@@ -2799,7 +2799,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     else
     {
         if (!sd->params.cycling_cost.has_value()) { return false; }
-        ManaPool avail = BuildAvailableMana(state);
+        ManaPool avail = AvailableManaPool(state);
         if (!avail.CanPay(sd->params.cycling_cost.value())) { return false; }
         std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&source](const Card& c) { return c.m_name == source; });
@@ -2837,15 +2837,15 @@ void AIEngine::AnimateLands(GameState& state, ManaPool& available)
 }
 
 // ---- Firebreathing (Scourge / Lathliss) ----
-// Build the leftover-combat-mana pool (byte-identical to TurnSolver::BuildPool used by the
-// rollout's SimulateCombat) and hand it to the shared ApplyFirebreathing so the executor pumps
+// Build the leftover-combat-mana pool (the shared AvailableManaPool, the same pool the rollout's
+// SimulateCombat reads) and hand it to the shared ApplyFirebreathing so the executor pumps
 // exactly as the rollout projected. The pool is only READ (real sources are not tapped -- goldfish
 // combat is the last mana use for firebreathing decks), so both worlds see the same leftover mana.
 void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_indices)
 {
     if (attacker_indices.empty()) { return; }
     if (!ControlsFirebreathingSource(state, state.active_player_index)) { return; }
-    ManaPool pool = BuildAvailableMana(state);
+    ManaPool pool = AvailableManaPool(state);
     // Human play (#4): let the player cap the pump. Probe the greedy-max activation count on a COPY
     // (ApplyFirebreathing takes the pool by value, so the probe does not consume it), ask the chooser
     // for k in [0, max], then apply exactly k. The chooser is nulled in every search/rollout
@@ -2911,34 +2911,6 @@ void AIEngine::ActivateTapTokens(GameState& state, ManaPool& available)
 }
 
 // ---- Mana ----
-
-ManaPool AIEngine::BuildAvailableMana(const GameState& state) const
-{
-    ManaPool pool;
-
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-
-        auto def = CardDatabase::Instance().LookupCached(p.card);
-        if (!def) { continue; }
-
-        bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
-        if (!is_land && !is_dork) { continue; }
-
-        // Depletion lands contribute 2; multi-color lands contribute 1 wild; filter
-        // lands (Cascade Bluffs) contribute wild iff fed, else {C}. Storage lands burst their
-        // live counter count (PermanentManaYield). See AddSourceToPool.
-        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
-    }
-    // Turn-scoped reserve (ritual float + retained over-production) is spendable on later
-    // same-phase casts -- mirror TurnSolver::BuildPool so the executor's planner and the
-    // rollout's planner agree on affordability (commit-the-line lockstep). Empty for non-
-    // floating decks -> byte-identical; off (MTG_NO_FLOAT_LEFTOVER) -> not added.
-    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
-    return pool;
-}
 
 // Single payment attempt honouring `reserved_mask` (active-player battlefield indices HELD, never
 // tapped here). The public TapForCost wrapper runs this first with the reserved specials held, then
@@ -3185,7 +3157,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // Audit-only: the untapped-board total BEFORE the attempt, to split a colour shortfall from a
         // real total-mana shortfall at the drop below. Not computed in a normal run.
         const int audit_have = AffordAuditOn()
-                             ? BuildAvailableMana(state).Total() + state.floating_mana.Total() : 0;
+                             ? AvailableManaPool(state).Total() + state.floating_mana.Total() : 0;
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
         if (!TapForCost(state, effective, available, def->card.IsCreature()))
         {
@@ -3290,11 +3262,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     {
         // Replicate cost = printed mana cost (CR 702.56a), not the effective cast cost.
         ManaCost rep_cost = def->card.m_mana_cost;
-        ManaPool remaining = BuildAvailableMana(state);
+        ManaPool remaining = AvailableManaPool(state);
         while (remaining.CanPay(rep_cost))
         {
             if (!TapForCost(state, rep_cost, available, true)) { break; }
-            remaining = BuildAvailableMana(state);
+            remaining = AvailableManaPool(state);
             replicate_tokens.push_back(def->card);
         }
         if (m_logger && !replicate_tokens.empty())
