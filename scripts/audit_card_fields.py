@@ -53,6 +53,12 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # Keyword abilities this engine models via params / oracle logic, not a tag:
     "cycling", "scry", "surveil", "cascade", "retrace", "replicate",
     "affinity", "treasure",
+    # Echo (echo_cost param, upkeep pay-or-sac decision) and Channel (channel_cost/
+    # channel_damage, a from-hand discard-activated ability) are modeled STRUCTURALLY
+    # via params, not as a keyword tag -- neither is a combat/evasion keyword, so
+    # stripping them is safe (mirrors cycling/cascade). Goblins: Mogg War Marshal &
+    # Stingscourger (echo), Twinshot Sniper (channel).
+    "echo", "channel",
 }
 # Supertypes the engine does NOT model because they are inert in goldfishing:
 # Basic-ness is derived from the card name; the World rule never fires (one
@@ -78,8 +84,13 @@ def norm_oracle(text, name):
 
 
 def parse_type_line(type_line):
-    """'Legendary Creature — Human Monk' -> (supertypes, types, subtypes) as sorted lists."""
-    left, _, right = (type_line or "").partition("—")
+    """'Legendary Creature — Human Monk' -> (supertypes, types, subtypes) as sorted lists.
+
+    For modal double-faced cards Scryfall reports a combined 'Front // Back' type line;
+    cards.json models the FRONT face (the DB synthesizes the back via mdfc_back_name), so
+    compare only the front face (e.g. Branchloft Pathway 'Land // Land' -> 'Land')."""
+    type_line = (type_line or "").split("//")[0].strip()
+    left, _, right = type_line.partition("—")
     if "—" not in (type_line or "") and "-" in (type_line or "") and " - " in type_line:
         left, _, right = type_line.partition(" - ")
     lwords = left.split()
