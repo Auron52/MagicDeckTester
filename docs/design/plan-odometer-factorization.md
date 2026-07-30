@@ -1,10 +1,11 @@
 # Factoring the mana side out of the main-phase plan odometer
 
 **Status:** BUILT + MEASURED (2026-07-29). Three byte-identical increments shipped default-on; a
-fourth (the selection-exact mana gate) is built and, since the 2026-07-30 re-decomposition, is a
-**byte-identical pure-performance** option behind `MTG_SEL_MANA_GATE`
-because it is not byte-identical — and the reason it cannot be is itself a finding (see
-[The legacy bound is unsound](#the-legacy-bound-is-unsound-for-rite-of-flame-chains)).
+fourth (the selection-exact mana gate) is built and, since the 2026-07-30 re-decomposition, is
+**byte-identical pure performance**, default-on behind `MTG_SEL_MANA_GATE`. It was previously
+default-off "because it cannot be byte-identical" — that turned out to be the wrong conclusion, and
+the reason why is itself the main finding (see
+[The legacy bound is unsound](#the-legacy-bound-is-unsound-for-rite-of-flame-chains--fixed-directly-2026-07-30)).
 
 ## The question that started it
 
@@ -86,6 +87,9 @@ guard check on the rollout leaf's hot path.
 Instruction counts (callgrind `Ir`) against a worktree build of `HEAD`. Wall clock on this box drifts
 ~3 % between runs, which is the same order as the non-target deltas, so instruction counts are the
 instrument; wall clock is quoted only for the target deck where the effect is far above the noise.
+
+(Historical — measured before the two-stage split and the 2026-07-30 re-decomposition; the current
+numbers are in the sections below.)
 
 | deck | cfg | base Ir | new Ir | default | + `MTG_SEL_MANA_GATE=1` |
 |---|---|---:|---:|---:|---:|
