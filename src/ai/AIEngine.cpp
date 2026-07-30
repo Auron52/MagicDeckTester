@@ -1210,9 +1210,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
             // Affordability decided up front so the human-play chooser is offered only a REAL choice
             // (paying is possible); if unaffordable the creature is simply sacrificed (no decision).
-            // BuildAvailableMana is a read-only snapshot (taps nothing), so computing it unconditionally
+            // AvailableManaPool is a read-only snapshot (taps nothing), so computing it unconditionally
             // is behaviourally identical to the old non-self_token-only path.
-            ManaPool avail = BuildAvailableMana(state);
+            ManaPool avail = AvailableManaPool(state);
             const bool affordable = avail.CanPay(*ep.echo_cost);
             bool pay = affordable && !self_token;   // heuristic: self-replacing body declines, else pays
             // Human play (--claude-play/viewer): let the player decide pay-vs-sacrifice when affordable.
@@ -2498,7 +2498,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
         {
-            ManaPool avail = BuildAvailableMana(state);
+            ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
                 if (a.sac_count > 1)
@@ -2509,7 +2509,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else if (a.kind == Action::Kind::Channel)
         {
-            ManaPool avail = BuildAvailableMana(state);
+            ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
         }
