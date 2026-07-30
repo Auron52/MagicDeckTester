@@ -32,9 +32,9 @@ Research fans out; integration is serial.
 
 **Stage 5 — verification sub-stages as agents returning verdicts.** 5a (nonconv/fd-diverge),
 5b (multi-depth), 5e/5g (heuristic mining) each read many logs but conclude in a sentence —
-one agent each, returning `{clean, outliers:[{gi, explanation}]}`. **5d is already a 100-agent
-fan-out** — copy that model. The orchestrator sees only verdicts and decides whether to loop
-back to Stage 2. The heavy log-reading never touches the main thread.
+one agent each, returning `{clean, outliers:[{gi, explanation}]}`. **5d is a small (~15-20
+agent) Sonnet fan-out** — copy that model. The orchestrator sees only verdicts and decides
+whether to loop back to Stage 2. The heavy log-reading never touches the main thread.
 
 **The per-deck ledger — durable state across compaction AND handoffs.** Write a git-tracked
 `docs/design/analysis-<deck>.md` (per the CLAUDE.md "deferred/shared state goes in git, not
@@ -383,23 +383,25 @@ Run the deck at depth 0, 3, and 5 and judge whether the numbers make sense — d
 
 If 5b shows a deck winning much slower than its line should, confirm the cause before blaming the AI: re-run the slow game at a much larger `--budget-ms`. If a bigger budget recovers the good line (monotonically), the suite budget is **starving** this deck — note the threshold for the suite's time-budget sizing; it is not a logic bug. (Seen on Treasure Hunt: the Land's Edge combo needs ~b2000 at d5; b200 starves it.)
 
-### 5d. Claude-play validation sweep (100 games)
+### 5d. Claude-play validation sweep (~15-20 games)
 
-As the final verification step, run a **100-game claude-play sweep** — an independent
-correctness sweep where a Claude agent (not the encoded AI) drives each game's
+As the final verification step, run a **small (~15-20 game) claude-play sweep** — an
+independent correctness sweep where a Claude agent (not the encoded AI) drives each game's
 main-phase decisions and flags illegal/missing plans, wrong state transitions, or games
 it wins earlier than the search. Read `.claude/skills/claude-play.md` first (especially
 **Rule 0** — read the deck's cards from `src/cards/data/cards.json` before judging
-anything).
+anything, and **"Running a sweep"** — keep the sweep SMALL and run the agents on Sonnet;
+this is the most expensive step in the chain).
 
 **How to run it.** Pick a base seed disjoint from the regression suite's seeds (so the
-sample is fresh, not games the suite already covered) and sweep game-indices `0..99`
-(each game replays deterministically from `base_seed + game_index`). Fan the games out
-with the **Workflow engine — one agent per game** — each agent reads the deck's
-cards.json entries once, benchmarks the search for its game, plays the stateless-replay
-protocol to completion, and returns `{ai_win, claude_win, choices, flags[], summary}`
-(see "Running a sweep" in the claude-play skill). 100 agents exceed the concurrency cap
-and queue; that is expected. Aggregate the returned objects, do not re-derive them.
+sample is fresh, not games the suite already covered) and sweep ~15-20 game-indices
+starting at 0 (each game replays deterministically from `base_seed + game_index`). Fan the
+games out with the **Workflow engine — one `model: 'sonnet'` agent per game** — each agent
+reads the deck's cards.json entries once, benchmarks the search for its game, plays the
+stateless-replay protocol to completion, and returns `{ai_win, claude_win, choices,
+flags[], summary}` (see "Running a sweep" in the claude-play skill). Keep it small: a clean
+~15-20 game sample establishes the bug-finding signal without risking the session cap; only
+expand if a flag needs more repros. Aggregate the returned objects, do not re-derive them.
 
 **What it gates.** This is a **backstop, not a hard gate on win-turn deltas**: a guided
 Claude rarely beats the strong, clairvoyant search, so treat `claude_win < ai_win` as a
@@ -660,7 +662,7 @@ Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
 1. Coverage clean (Stage 3) and costs audit clean (2d-bis).
 2. **Zero `[nonconv]` and zero `[fd-diverge]` lines** across the tested seeds.
 3. Multi-depth results are monotonic and plausible, with **every outlier game explained** (legitimate line, budget starvation, or a fixed bug — not an unexplained slowdown).
-4. The 100-game claude-play sweep (5d) ran, and **every legality/invariant flag is resolved** — fixed (engine/card/data bug) or dismissed with a reason (verified false positive). Win-turn deltas are noted but do not block.
+4. The (~15-20 game) claude-play sweep (5d) ran, and **every legality/invariant flag is resolved** — fixed (engine/card/data bug) or dismissed with a reason (verified false positive). Win-turn deltas are noted but do not block.
 5. Any narrowing heuristic introduced/relied on for this deck (cast ordering, dig, targeting, tutor/fetch) passed the **5e oracle diff + with/without A/B** — its proposals match the full search where it matters, with every per-game regression explained.
 6. **Play-viewer decision surface (5h) is clean**: `scripts/audit_viewer_decisions.py` reports no HARD MISS, no SELF-GUARD FAILURE, and no DRIVER FAILURE, and every UNVERIFIED row was confirmed by a targeted repro — every interactive choice the deck's cards create is surfaced in the human-play path, with no card's choice silently heuristic-resolved except a Stage 6a-disclosed, provably-inert known gap the user signed off on.
 
@@ -674,7 +676,7 @@ Present a concise summary:
 1. **Cards implemented this run**: list any new/updated implementations, noting the tier used for each
 2. **Mulligan profile**: the optimised settings (and notable card scores / required-piece flags)
 3. **Win rate / average win turn**: from a regression-suite run on the new profile (the analyzer no longer reports these)
-4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, any budget-starvation threshold noted, the 100-game claude-play sweep result (games played, flags raised and their resolution, win-turn comparison vs the search), and the **play-viewer decision surface (5h)**: any new decision types wired this run for the deck's cards, and confirmation that no card choice is left silently auto-resolved (or the disclosed known gaps that are)
+4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, any budget-starvation threshold noted, the (~15-20 game) claude-play sweep result (games played, flags raised and their resolution, win-turn comparison vs the search), and the **play-viewer decision surface (5h)**: any new decision types wired this run for the deck's cards, and confirmation that no card choice is left silently auto-resolved (or the disclosed known gaps that are)
 5. **Encoded heuristics & assumptions disclosure** (mandatory — see Stage 6a): the full reviewable list of every assumption and heuristic that shapes this deck's results, so the user can catch anything unexpected and decide whether it should be full-searched instead.
 6. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
 7. **Suggested next steps**: any Tier 4 deferrals worth revisiting, or interesting profile observations

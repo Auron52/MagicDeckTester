@@ -177,35 +177,46 @@ enumeration↔execution / rollout-vs-real divergences in `ApplyPlanDirect`.
 
 ---
 
-## Running a sweep (many games)
+## Running a sweep (~15-20 games)
 
 To sweep across games/decks, run one player per game and compare each to the search
 benchmark for the SAME game:
 
 ```bash
-# benchmark (the current search) for one game:
+# benchmark (the current search) for one game (bottoming is on iff depth>0 — no flag):
 ./build/Release/mtg <deck>.txt --profile <deck>.profile.json --games 1 \
-  --seed <S> --game-index <GI> --depth 5 --budget-ms 200 --lookahead-bottoming
-# -> "Avg win turn : N" (single game => N is the win turn; "No wins recorded." => no win)
+  --seed <S> --game-index <GI> --depth 5 --budget-ms 200
+# -> "avg (turns) : N" (single game => N is the win turn; "No wins recorded." => no win)
 ```
 
 A player agent: reads cards.json for its deck, benchmarks the AI, plays via the
 protocol, and returns `{ai_win, claude_win, choices, flags[], summary}`. Aggregate:
 `claude_win < ai_win` ⇒ AI-misplay candidate (inspect the search); any `flags` ⇒
-engine-bug candidate (verify, then fix via the analyze-deck convergence loop). For a
-large sweep, fan the players out with the Workflow engine (one agent per game).
+engine-bug candidate (verify, then fix via the analyze-deck convergence loop). Fan the
+players out with the Workflow engine (one agent per game).
 
-This is the mechanism behind **analyze-deck Stage 5d**, the final 100-game validation
-sweep: pick a base seed disjoint from the regression suite's seeds, fan game-indices
-`0..99` out with the Workflow engine (one agent per game; 100 exceed the concurrency cap
-and queue — expected), and feed the aggregated flags back into that skill's convergence
-loop. Legality/invariant flags are the gating signal; win-turn deltas are weak. Any real
-issue found gets investigated and fixed, not averaged away.
+**SWEEP SIZE — keep it SMALL (~15-20 games, never near 100).** This claude-play sweep is
+the single most expensive step in the whole analyze-deck chain (each game is a full agent
+driving ~10-17 subprocess replays + reasoning), so a large fan-out burns session/token
+limits and can hit the session cap mid-sweep. ~15-20 games is plenty: Stage 5d's value is
+bug-finding, and a clean small sample already establishes that; win-turn deltas are a weak
+signal not worth more games. Only expand if a flag surfaces and needs more repros.
+
+**RUN THE SWEEP AGENTS ON SONNET.** Cost-control for the chain's most expensive step: pass
+`model: 'sonnet'` to the Workflow `agent()` calls (the sweep only needs competent
+protocol-following + card-data checking, not the top model). The orchestration/verification
+stays on the main model; only the per-game player agents drop to Sonnet.
+
+This is the mechanism behind **analyze-deck Stage 5d**, the final validation sweep: pick a
+base seed disjoint from the regression suite's seeds, fan ~15-20 game-indices out with the
+Workflow engine (one Sonnet agent per game), and feed the aggregated flags back into that
+skill's convergence loop. Legality/invariant flags are the gating signal; win-turn deltas
+are weak. Any real issue found gets investigated and fixed, not averaged away.
 
 **Expectation-setting:** against the strong, clairvoyant search a guided Claude is
-competitive but rarely faster (the first 30-game sweep found 0 misplay candidates).
-The oracle's proven worth is **bug-finding**, not beating the AI. Treat win-turn
-comparisons as a weak signal and the invariant/legality flags as the strong one.
+competitive but rarely faster (early sweeps found 0 misplay candidates). The oracle's
+proven worth is **bug-finding**, not beating the AI. Treat win-turn comparisons as a weak
+signal and the invariant/legality flags as the strong one.
 
 ### Recording a sweep for the `claude_sweep` gate
 
