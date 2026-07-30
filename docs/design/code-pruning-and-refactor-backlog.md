@@ -29,8 +29,20 @@ really was Debug; the orphans really are referenced by nothing but this document
   tsan analogously with `-fsanitize=thread -O1`). No `build.sh` sanitizer modes added —
   sanitizer use is too rare to earn a permanent mode.
 
-Still open: A3 (env truthiness unification — behaviour change on 88 presence-only flags),
-A5 (docs/design index), A6 (hook renumbering), all of Tier B, C, D.
+- **A3 DONE except step 4** (user-approved) — `src/core/EnvFlags.h` (`EnvOn(key, dflt)` /
+  `EnvSet` / `EnvInt`); all 126 nullptr-compared truthiness sites and the value-aware
+  lambdas migrated. The 5 variables using presence to mean "user pinned a value"
+  (`MTG_ESC_BEAM`, `MTG_ESCALATION_FRESH_FRAC`, `MTG_NC_TEMPO`, `MTG_HUMAN_PLAY`,
+  `MTG_SHUFFLE_SALT_SEARCH`) use `EnvSet`; `MTG_LOG_HAND` keeps its raw value-carrying
+  read. No script in the tree set any `MTG_*=0`, so nothing needed updating. Verified:
+  clean-env smoke 24/24 byte-identical; `MTG_LEGACY_SEARCH=0` smoke ALSO 24/24 (the flip
+  working — under presence-only semantics that run would have failed); `=1` diverges
+  (lever intact). Convention documented in `.claude/skills/coding-conventions.md` +
+  CLAUDE.md pointer. **Step 4 (startup `MTG_*` typo validator) still open** — needs the
+  flag registry / `--list-flags` from D1.
+
+Still open: A3 step 4 (flag validator), A5 (docs/design index), A6 (hook renumbering),
+all of Tier B, C, D.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
