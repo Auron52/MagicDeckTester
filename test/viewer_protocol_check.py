@@ -197,6 +197,45 @@ def find_plan(recorded, plans, recorded_index=None):
     return hits[0]
 
 
+def option_key(o):
+    """STABLE content identity of an auxiliary-decision option, or None when the option has no
+    order-independent identity. Two shapes are stable across engine evolution:
+      * library placements (scry / reorder / surveil): what goes on top, what goes away, shuffle --
+        pure card names, deterministic;
+      * card picks (discard): the card name.
+    Everything else (notably `target` options, whose content embeds battlefield indexes that
+    legitimately shift with board composition) has NO stable content key -- those replay by
+    verbatim index, which is exactly the recorded intent for a positional target list."""
+    if not isinstance(o, dict):
+        return None
+    if "top" in o or "away" in o or "shuffle" in o:
+        return ("placement", tuple(o.get("top") or []), tuple(o.get("away") or []),
+                bool(o.get("shuffle")))
+    if "name" in o:
+        return ("name", o.get("name"))
+    return None
+
+
+def find_option(recorded, options, recorded_index=None):
+    """Index of the recorded option in the CURRENT options list, matched by stable CONTENT -- the
+    enumeration order of scry/reorder/discard options is not part of the contract, so a verbatim
+    index silently performs a different placement when the order changes. Prefers the recorded
+    index among equal matches (duplicate contents, e.g. two identical discard names). Returns the
+    verbatim index when the option shape has no stable key (see option_key)."""
+    if recorded is None:
+        return None
+    want = option_key(recorded)
+    if want is None:
+        return recorded_index if (recorded_index is not None
+                                  and 0 <= recorded_index < len(options)) else None
+    hits = [i for i, o in enumerate(options) if option_key(o) == want]
+    if not hits:
+        return None
+    if recorded_index is not None and recorded_index in hits:
+        return recorded_index
+    return hits[0]
+
+
 def engine_default(d):
     """The answer the engine itself would give for a frame the reference never recorded.
     Every emitted frame carries `heuristic_default` (= the AI's pick); the mulligan/bottom
@@ -384,7 +423,36 @@ def check_reference(path):
                     shifted.append(f"{frame_ident(dec)} {p}->{q}")
                 resolved.append(q)
         else:
-            resolved += [int(x) for x in rec_list]
+            # Auxiliary decision (scry / reorder / discard / target / ...). These carry an
+            # `options` list whose ENUMERATION ORDER is not part of the contract -- a reference
+            # stores each option's full content, so re-anchor by content exactly like plans
+            # (verbatim index only when either side lacks options). Hinata2 s12_gi11's T5
+            # Preordain scry died on exactly this: pick 1 verbatim placed a different card on top
+            # after the option order changed, and the drawn card diverged with NO shuffle involved.
+            cur_opts = dec.get("options")
+            ref_opts = rd.get("options")
+            if isinstance(cur_opts, list) and isinstance(ref_opts, list) and cur_opts and ref_opts:
+                for x in rec_list:
+                    x = int(x)
+                    rec_opt = ref_opts[x] if 0 <= x < len(ref_opts) else None
+                    q = find_option(rec_opt, cur_opts, recorded_index=x)
+                    if q is None:
+                        cur_hand = hand_names(dec.get("me", {}).get("hand", []))
+                        ref_hand = hand_names(rd.get("me", {}).get("hand", []))
+                        where = (f"recorded option {option_key(rec_opt)!r} no longer offered at "
+                                 f"{frame_ident(rd)} (noptions {len(ref_opts)}->{len(cur_opts)})")
+                        if ref_hand and cur_hand != ref_hand:
+                            return True, "shuffle-dead", (
+                                f"{where}; hand differs -> a mid-game reshuffle moved the draws; "
+                                f"only re-playing can restore this game")
+                        return True, "unresolvable", (
+                            f"{where}; the option content (looked cards / targets) is no longer "
+                            f"available -> upstream hidden state diverged")
+                    if q != x:
+                        shifted.append(f"{frame_ident(dec)} {x}->{q}")
+                    resolved.append(q)
+            else:
+                resolved += [int(x) for x in rec_list]
         ri += 1
     return True, "unresolvable", f"replay did not terminate within 400 decisions ({len(resolved)} picks sent)"
 
