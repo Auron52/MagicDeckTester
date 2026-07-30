@@ -2113,7 +2113,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::SacForMana)
-            { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float); }
+            { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float, a.sac_victim_id); }
             else if (a.kind == Action::Kind::Suspend)
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
@@ -2203,7 +2203,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::SacForMana)
-            { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float); }
+            { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float, a.sac_victim_id); }
             else if (a.kind == Action::Kind::Suspend)
             { ApplySuspend(state, state.active_player_index, a.card_name); }
         }
@@ -2310,7 +2310,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::SacForMana)
-        { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float); }
+        { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float, a.sac_victim_id); }
         else if (a.kind == Action::Kind::Suspend)
         { ApplySuspend(state, state.active_player_index, a.card_name); }
     }

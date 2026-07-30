@@ -2330,7 +2330,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             if (src.controller_index != state.active_player_index) { continue; }
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
             if (!sd || !sd->params.sac_creature_outlet) { continue; }
-            if (!sd->params.sac_outlet_add_mana_color.empty()) { continue; }   // Skirk mana outlet -> later
+            const bool is_mana_outlet = !sd->params.sac_outlet_add_mana_color.empty();
             const std::string& need_sub = sd->params.sac_creature_requires_subtype;
             // BOUNDED victim selection (heuristic narrowing -- NOT one action per victim, which makes
             // the O(2^candidates) subset search explode on a wide Goblin board / Krenko tokens and
@@ -2349,16 +2349,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             }
             if (victim_id < 0) { continue; }   // no legal Goblin to sacrifice
             Action a;
-            a.kind           = Action::Kind::SacCreatureOutlet;
             a.card_name      = src.card.m_name;
             a.hand_index     = -1;
-            a.cost           = sd->params.sac_creature_cost.value_or(ManaCost{});
             a.sac_source_id  = src.card.m_number;      // the outlet permanent
             a.sac_victim_id  = victim_id;              // the heuristically-chosen sacrificed Goblin
-            a.direct_damage  = sd->params.sac_outlet_damage;
-            a.eval           = (sd->params.sac_outlet_damage
-                                + sd->params.sac_outlet_creates_tokens) * DMG;
             a.is_noncreature = true;
+            if (is_mana_outlet)
+            {
+                // Skirk Prospector: "Sacrifice a Goblin: Add {R}." A free MANA ability -- emit it as a
+                // SacForMana action (kind reused) so it inherits the full mana-solver coupling (subset
+                // ritual_float credit, BatchPrepay decline, pre-cast float, plan signature). The source
+                // stays; ApplySacForMana sacs the victim when sac_victim_id != 0.
+                a.kind               = Action::Kind::SacForMana;
+                a.cost               = ManaCost{};                              // no mana cost (no tap)
+                a.ritual_float       = sd->params.sac_outlet_add_mana_amount;   // credited by Solve
+                a.chosen_float_color = sd->params.sac_outlet_add_mana_color;    // "R"
+                a.eval               = 0;
+            }
+            else
+            {
+                a.kind           = Action::Kind::SacCreatureOutlet;
+                a.cost           = sd->params.sac_creature_cost.value_or(ManaCost{});
+                a.direct_damage  = sd->params.sac_outlet_damage;
+                a.eval           = (sd->params.sac_outlet_damage
+                                    + sd->params.sac_outlet_creates_tokens) * DMG;
+            }
             actions.push_back(std::move(a));
         }
 
@@ -5842,7 +5857,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::SacForMana)
                     {
                         ApplySacForMana(state, state.active_player_index, a.sac_source_id,
-                                        a.chosen_float_color, a.ritual_float);
+                                        a.chosen_float_color, a.ritual_float, a.sac_victim_id);
                         if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
                     }
                     else if (a.kind == Action::Kind::Suspend)
@@ -6240,7 +6255,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::SacForMana)
-        { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float); }
+        { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float, a.sac_victim_id); }
         else if (a.kind == Action::Kind::Suspend)
         { ApplySuspend(state, state.active_player_index, a.card_name); }
     }

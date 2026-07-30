@@ -2417,24 +2417,46 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
 // Apply a SacForMana ability: find the untapped source in play by its per-instance id, float `amount`
 // mana of `color` into the turn-scoped reserve (AddChosenColorFloat), then SACRIFICE the source (to the
 // graveyard). Shared by the rollout and the executor (lockstep). No-op if the source is gone/tapped.
+// `victim_id` == 0 (default): Lotus Bloom -- tap + sacrifice the SOURCE for the float.
+// `victim_id` != 0: Skirk Prospector -- the source STAYS; sacrifice the chosen victim Goblin (which
+// fires its death-watchers) and float the colour. Reuses the entire SacForMana solver coupling.
 inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
-                            const std::string& color, int amount)
+                            const std::string& color, int amount, int victim_id = 0)
 {
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         Permanent& p = state.battlefield[i];
-        if (p.controller_index != controller || p.tapped) { continue; }
+        if (p.controller_index != controller) { continue; }
         if (p.card.m_number != sac_source_id) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || d->params.sac_for_mana_amount <= 0) { continue; }
+        if (!d) { return; }
+        const bool lotus = d->params.sac_for_mana_amount > 0;
+        const bool skirk = d->params.sac_creature_outlet && !d->params.sac_outlet_add_mana_color.empty();
+        if (!lotus && !skirk) { return; }
+        if (lotus && p.tapped)  { return; }   // Lotus taps as part of the cost; a tapped one can't
         AddChosenColorFloat(state, color, amount);   // float the chosen colour into state.floating_mana
         if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
         {
             EmitPlayEvent(state.turn_number, "mana",
-                          "\xF0\x9F\xAA\xB7 " + p.card.m_name.str() + " -- tap, sacrifice: add "
+                          "\xF0\x9F\xAA\xB7 " + p.card.m_name.str() + " -- sacrifice: add "
                           + std::to_string(amount) + " " + (color.empty() ? "wild" : color));
         }
-        state.players[controller].graveyard.push_back(p.card);   // sacrifice -> graveyard
+        if (victim_id != 0 && skirk)
+        {
+            // Skirk: the source stays; sacrifice the chosen victim Goblin.
+            for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+            {
+                Permanent& q = state.battlefield[j];
+                if (q.controller_index != controller || q.card.m_number != victim_id) { continue; }
+                const Card dead = q.card;
+                state.players[controller].graveyard.push_back(dead);
+                state.battlefield.erase(state.battlefield.begin() + j);
+                OnCreatureDies(state, controller, dead);   // fires Pashalik ping / death token etc.
+                return;
+            }
+            return;
+        }
+        state.players[controller].graveyard.push_back(p.card);   // Lotus: sacrifice the source
         state.battlefield.erase(state.battlefield.begin() + i);
         return;
     }
