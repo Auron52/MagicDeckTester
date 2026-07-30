@@ -2375,6 +2375,45 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
                                     + sd->params.sac_outlet_creates_tokens) * DMG;
             }
             actions.push_back(std::move(a));
+
+            // Multi-sac BURST (searched COUNT, bounded to ONE extra action so no O(2^victims) blowup):
+            // for a DAMAGE outlet (Siege-Gang) also offer saccing MULTIPLE Goblins in one activation for
+            // k*damage -- the swarm-sac burst finish the single-victim action can't reach. k = the fewest
+            // sacs that could be lethal (ceil(opp_life / damage)), capped at the number of victims; emitted
+            // only when k >= 2 (else the single action already covers it). cost/damage are pre-scaled by
+            // k; the trailing apply pass pays k*cost (a stranded burst is a no-op, both worlds).
+            if (!is_mana_outlet && sd->params.sac_outlet_damage > 0)
+            {
+                const int D = sd->params.sac_outlet_damage;
+                int V = 0;
+                for (const Permanent& v : state.battlefield)
+                {
+                    if (v.controller_index != state.active_player_index || !v.card.IsCreature()) { continue; }
+                    if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+                    ++V;
+                }
+                const int opp_life = state.players[1 - state.active_player_index].life;
+                int k = (opp_life + D - 1) / D;   // ceil(opp_life / D): fewest sacs that could be lethal
+                if (k > V) { k = V; }             // cap at available victims (sac-all for max reach)
+                if (k >= 2)
+                {
+                    Action b;
+                    b.kind           = Action::Kind::SacCreatureOutlet;
+                    b.card_name      = src.card.m_name;
+                    b.hand_index     = -1;
+                    b.sac_source_id  = src.card.m_number;
+                    b.sac_victim_id  = 0;    // unused for a burst -- victims are chosen canonically at apply
+                    b.sac_count      = k;
+                    b.is_noncreature = true;
+                    ManaCost c = sd->params.sac_creature_cost.value_or(ManaCost{});
+                    c.generic *= k; c.white *= k; c.blue *= k; c.black *= k;
+                    c.red *= k; c.green *= k; c.colorless *= k;
+                    b.cost           = c;
+                    b.direct_damage  = D * k;
+                    b.eval           = D * k * DMG;
+                    actions.push_back(std::move(b));
+                }
+            }
         }
 
         // Twinshot Sniper channel: a from-hand ability (pay channel_cost + discard -> 2 face damage).
@@ -6285,7 +6324,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (a.kind == Action::Kind::SacCreatureOutlet)
         {
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
-            { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+            {
+                if (a.sac_count > 1)
+                { ApplySacCreatureOutletBurst(state, state.active_player_index, a.sac_source_id, a.sac_count); }
+                else
+                { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+            }
         }
         else if (a.kind == Action::Kind::Channel)
         {
@@ -8146,7 +8190,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Costed outlets (not yet emitted -- see the enumeration note); future signature keys.
                 case Action::Kind::SacCreatureOutlet:
                     msf.push_back("SAC#" + std::to_string(act.sac_source_id)
-                                  + ">" + std::to_string(act.sac_victim_id)); break;
+                                  + ">" + std::to_string(act.sac_victim_id)
+                                  + "x" + std::to_string(act.sac_count)); break;
                 case Action::Kind::Channel:
                     s.push_back("CHANNEL#" + act.card_name); break;
             }

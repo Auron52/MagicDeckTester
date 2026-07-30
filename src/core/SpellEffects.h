@@ -1980,6 +1980,26 @@ inline void ApplyTapForTokens(GameState& state, int controller, int source_id)
 // Sacrifice-a-creature outlet (Skirk Prospector -> {R}; Siege-Gang -> 2 face damage; Pashalik -> two
 // tokens). The mana cost is paid by the caller (subset math); here we SACRIFICE the chosen victim,
 // apply the outlet payload from the source's params, and fire the victim's death-watchers.
+// Canonical (most-expendable) sacrifice victim for a creature-sac outlet: prefer a TOKEN, else the
+// lowest-power matching creature that is NOT the outlet source, else the source itself. Returns the
+// victim's card.m_number, or -1 if none. MIRRORS the enumeration's bounded victim pick in
+// TurnSolver::CollectActions -> the single-victim GT is unchanged and the multi-sac burst apply picks
+// the same order in both worlds (executor + rollout), so it is lockstep. `need_sub` empty = any creature.
+inline int CanonicalSacVictim(const GameState& state, int controller, int source_id,
+                              const std::string& need_sub)
+{
+    int victim_id = -1; int victim_rank = std::numeric_limits<int>::max();   // lower = more expendable
+    for (const Permanent& v : state.battlefield)
+    {
+        if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
+        if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+        int rank = v.is_token ? 0 : (1 + v.card.m_power.value_or(0));   // token first, then weakest
+        if (v.card.m_number == source_id) { rank += 1000; }            // sac the source last
+        if (rank < victim_rank) { victim_rank = rank; victim_id = v.card.m_number; }
+    }
+    return victim_id;
+}
+
 inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id)
 {
     const CardParams* op = nullptr;
@@ -2018,6 +2038,33 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
     for (int k = 0; k < ntok; ++k) { CreateToken(state, controller, tp, tt, tsub); }
     OnCreatureDies(state, controller, victim);   // Pashalik ping / Rundvelt impulse / Mogg death token
+}
+
+// Multi-sac BURST: sacrifice up to `count` canonical victims to a damage sac-outlet in ONE activation
+// (Siege-Gang saccing the swarm for count*damage burst lethal). Loops the single-victim apply, picking
+// the most-expendable matching victim each time (the board shrinks, so no victim is picked twice). The
+// activation MANA cost (count * per-sac cost) is paid by the caller's TapForCost, exactly like the
+// single action -- if unaffordable the caller does not call this, so a stranded burst is a no-op. Shared
+// by the executor (AIEngine) and the rollout (TurnSolver) -> lockstep. Inert unless a burst action is
+// emitted (only damage outlets with >=2 victims), so every other deck is byte-identical.
+inline void ApplySacCreatureOutletBurst(GameState& state, int controller, int source_id, int count)
+{
+    std::string need_sub;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == source_id)
+        {
+            const CardDefinition* od = CardDatabase::Instance().LookupCached(p.card);
+            if (od) { need_sub = od->params.sac_creature_requires_subtype; }
+            break;
+        }
+    }
+    for (int n = 0; n < count; ++n)
+    {
+        int victim_id = CanonicalSacVictim(state, controller, source_id, need_sub);
+        if (victim_id < 0) { break; }   // ran out of victims
+        ApplySacCreatureOutlet(state, controller, source_id, victim_id);
+    }
 }
 
 // Twinshot Sniper "Channel -- {1}{R}, Discard this card: 2 damage to any target." From HAND: discard

@@ -2500,7 +2500,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             ManaPool avail = BuildAvailableMana(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
-            { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+            {
+                if (a.sac_count > 1)
+                { ApplySacCreatureOutletBurst(state, state.active_player_index, a.sac_source_id, a.sac_count); }
+                else
+                { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+            }
         }
         else if (a.kind == Action::Kind::Channel)
         {

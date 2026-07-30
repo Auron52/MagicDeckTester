@@ -120,6 +120,11 @@ struct Action
                                        // (Krenko / Skirk / Siege-Gang / Pashalik).
     int         sac_victim_id  = 0;    // SacCreatureOutlet: the sacrificed creature's card.m_number
                                        // (the chosen Goblin fed to the outlet). 0 for every other kind.
+    int         sac_count      = 1;    // SacCreatureOutlet: how many creatures this activation sacs.
+                                       // 1 (default) = the single-victim action (uses sac_victim_id).
+                                       // >1 = the multi-sac BURST (Siege-Gang saccing the swarm for
+                                       // sac_count*damage lethal): the apply loops the canonical victim
+                                       // pick sac_count times; cost/direct_damage are pre-scaled by k.
     int         soulfire_own_targets = 0;
                                        // Soulfire Eruption: searched COUNT of own creatures to add
                                        // as extra targets (0..#own creatures). CollectActions emits
