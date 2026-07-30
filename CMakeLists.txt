@@ -182,3 +182,20 @@ add_executable(mtg-analyze
     src/analyzer/ExhaustiveKeep.cpp
 )
 target_link_libraries(mtg-analyze PRIVATE mtg-core)
+
+# Unit tests (backlog C2): a SECONDS-long faithfulness check for the units the executor/rollout
+# unification (Tier C) touches -- the cheap seam the 15-minute smoke run cannot provide. Scope is
+# deliberately tiny: golden-value tests for twin units only, not a general test suite.
+#   ctest --test-dir build -C Release        (or just run build/Release/mtg-test)
+FetchContent_Declare(
+    doctest
+    GIT_REPOSITORY https://github.com/doctest/doctest.git
+    GIT_TAG        v2.4.11
+)
+FetchContent_MakeAvailable(doctest)
+enable_testing()
+add_executable(mtg-test
+    test/unit/test_mana_payment.cpp
+)
+target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
+add_test(NAME unit COMMAND mtg-test)

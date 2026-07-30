@@ -501,7 +501,7 @@ static int SameTurnReducerGenericCredit(const GameState& state, const std::vecto
 
 // Forward decl of the real backtracking mana payment (defined below); used by the filter
 // affordability fallback so enumeration can recognize filter/depletion/ramp-land lines.
-static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
 
 // Real-payment affordability fallback for filter / ramp lands. BuildPool models a filter land
 // (Cascade Bluffs) as a single wild, which cannot express its color conversion (feed {U} -> {R}{R}),
@@ -4775,7 +4775,7 @@ static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool
 // weakly dominant (a held source you did not need never hurts and keeps its attack / animate /
 // depletion-counter value). Default ON; MTG_NO_RESERVE -> mask 0 -> a single normal attempt, byte-
 // identical to the pre-reservation code. Mirrored byte-for-byte in AIEngine::TapForCost (lockstep).
-static bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature)
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature)
 {
     const std::uint64_t rmask = ReservableSpecialMask(state);
     if (rmask != 0)
