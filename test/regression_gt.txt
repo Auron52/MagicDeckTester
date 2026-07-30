@@ -74,6 +74,11 @@ auras_regression_d3_s2002=4.1280/e94f592d652ec13f
 auras_regression_d3_s3003=4.2220/fcba8b69ceff0f79
 auras_regression_d5_s2002=4.1220/44885db4120a1a00
 auras_regression_d5_s3003=4.2100/b6269af426628f17
+goblins_regression_d0_s2002=4.8200/5789cc1d63872161
+goblins_regression_d3_s2002=4.4033/1fb75e1c7f9d38b4
+goblins_regression_d3_s3003=4.4367/92df35be61d453a8
+goblins_regression_d5_s2002=4.4440/ea673b52828898c5
+goblins_regression_d5_s3003=4.4160/542a34802e5ffdfa
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/3c364eea0dbc63eb
