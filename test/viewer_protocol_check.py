@@ -258,8 +258,12 @@ def engine_default(d):
     return 0, "fallback"
 
 
-def check_reference(path):
+def check_reference(path, collect=None):
     """Replay one reference by INTENT, validating the contract at every step.
+
+    collect: optional dict; on return it holds the replay ingredients ('deck', 'prof', 'seed',
+    'gi', 'force', 'side', 'mt', 'resolved' = the content-resolved pick stream actually sent).
+    scripts/ref_regenerate.py uses this to re-write a repaired reference as a fresh engine trace.
 
     A reference records each pick as a positional index into that step's plan list, but it also
     records the full description of the plan it chose (summary/land/casts). Indices are fragile --
@@ -307,6 +311,9 @@ def check_reference(path):
     mt = max(8, ref.get("win_turn") or 0)
 
     resolved = []        # the pick stream actually sent (content-resolved + defaults filled in)
+    if collect is not None:
+        collect.update(deck=deck, prof=prof, seed=seed, gi=gi, force=force, side=side, mt=mt,
+                       resolved=resolved)   # 'resolved' is THIS list; it fills in as the walk runs
     ri = 0               # how many of the reference's own decisions have been consumed
     inserted, shifted = [], []
     hand_checked = False

@@ -95,8 +95,14 @@ categories). shuffle-dead and mull-drift are accepted classes and never gate.
    tools/play/** — `repaired` is fine (re-save when convenient), `play-drift`/`ENUM-GAP` are
    findings to investigate BEFORE re-saving anything (re-saving on top of a regression would
    bake it in).
-4. **References are commit-only** (CLAUDE.md): the checker never writes them; repairs become
-   permanent only when the user re-saves via the play viewer.
+4. **References are commit-only** (CLAUDE.md): the checker never writes them. To make repairs
+   permanent, `scripts/ref_regenerate.py` (user-directed, 2026-07-30) re-writes a `repaired`
+   reference as a fresh engine trace of the SAME game -- overwriting only when the candidate
+   passes all three gates: identical seed/gi/outcome (mulligan compared by RESULTING forced
+   hand, since --force-mulligan may substitute an equivalent copy number), identical semantic
+   line (turn/land/cast-multiset per main phase), and a round-trip through the checker as plain
+   `ok`. All 38 repaired refs were regenerated this way; the reference set now sweeps
+   **138 ok / 0 repaired** and any future `repaired` can be flattened the same way.
 
 ## Artifacts
 

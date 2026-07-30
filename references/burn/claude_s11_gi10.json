@@ -1,14 +1,17 @@
 {
   "seed": 11, "game_index": 10, "win_turn": 6, "won": true,
-  "mulligan": { "count": 4, "bottom": [2, 10, 46, 52] },
+  "mulligan": { "count": 4, "bottom": [10, 46, 52, 57] },
   "decisions": [
     { "chosen": 0, "decision": {
   "decision_index": 0,
+  "main_ordinal": 0,
   "type": "main_phase",
   "turn": 1,
   "phase": "pre_main",
   "on_the_play": false,
-  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 56 },
+  "drew": [{ "turn": 1, "card": "Eidolon of the Great Revel" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 56 },
   "opponent": { "life": 20, "battlefield": [] },
   "plans": [
     { "index": 0, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
@@ -19,11 +22,14 @@
 },
     { "chosen": 0, "decision": {
   "decision_index": 1,
+  "main_ordinal": 1,
   "type": "main_phase",
   "turn": 2,
   "phase": "pre_main",
   "on_the_play": false,
-  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 0, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 55 },
+  "drew": [{ "turn": 2, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 0, "num": 41, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 55 },
   "opponent": { "life": 20, "battlefield": [] },
   "plans": [
     { "index": 0, "summary": "land=Mountain; cast: Eidolon of the Great Revel", "land": "Mountain", "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
@@ -36,14 +42,17 @@
 },
     { "chosen": 0, "decision": {
   "decision_index": 2,
+  "main_ordinal": 2,
   "type": "main_phase",
   "turn": 3,
   "phase": "pre_main",
   "on_the_play": false,
-  "me": { "life": 20, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }, { "name": "Mountain", "idx": 1, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54 },
+  "drew": [{ "turn": 3, "card": "Lightning Bolt" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "num": 2, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 41, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 34, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 21, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54 },
   "opponent": { "life": 20, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=Mountain; cast: Lightning Bolt, Skullcrack", "land": "Mountain", "casts": ["Lightning Bolt", "Skullcrack"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Skullcrack" }] },
+    { "index": 0, "summary": "land=Mountain; cast: Lightning Bolt, Skullcrack", "land": "Mountain", "casts": ["Lightning Bolt", "Skullcrack"], "cast_order_canonical": ["Lightning Bolt", "Skullcrack"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Skullcrack" }] },
     { "index": 1, "summary": "land=Mountain; cast: Skullcrack", "land": "Mountain", "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
     { "index": 2, "summary": "land=Mountain; cast: Lightning Bolt", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
     { "index": 3, "summary": "land=none; cast: Skullcrack", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
@@ -59,8 +68,9 @@
   "type": "target",
   "source": "Lightning Bolt",
   "turn": 3,
-  "per_target_damage": 3, "max_targets": 1,
-  "me": { "life": 18, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "is_land": false }, { "name": "Mountain", "idx": 0, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 1, "is_land": true }, { "name": "Mountain", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54 },
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "num": 2, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 41, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 60, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "floating_mana": {"R": 1, "wild": 1} },
   "opponent": { "life": 20, "battlefield": [] },
   "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "permanent", "index": 2, "label": "Eidolon of the Great Revel (yours)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
   "heuristic_default": 0,
@@ -73,8 +83,9 @@
   "type": "target",
   "source": "Skullcrack",
   "turn": 3,
-  "per_target_damage": 3, "max_targets": 1,
-  "me": { "life": 16, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "is_land": false }, { "name": "Mountain", "idx": 0, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 1, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": ["Lightning Bolt"], "library_size": 54 },
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 16, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "num": 2, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 41, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 34, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 21, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": ["Lightning Bolt"], "library_size": 54 },
   "opponent": { "life": 17, "battlefield": [] },
   "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
   "heuristic_default": 0,
@@ -84,11 +95,15 @@
 },
     { "chosen": 0, "decision": {
   "decision_index": 5,
+  "main_ordinal": 3,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
   "on_the_play": false,
-  "me": { "life": 16, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }, { "name": "Mountain", "idx": 1, "is_land": true }, { "name": "Mountain", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Skullcrack"], "library_size": 53 },
+  "drew": [{ "turn": 4, "card": "Monastery Swiftspear" }],
+  "events": [{ "turn": 3, "kind": "damage", "text": "🔥 Lightning Bolt: 3 to opponent (20→17)" }, { "turn": 3, "kind": "damage", "text": "🔥 Skullcrack: 3 to opponent (17→14)" }, { "turn": 3, "kind": "combat", "text": "⚔ attacked: Eidolon of the Great Revel (2) — 2 to opponent (14→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 16, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "num": 2, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 41, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 34, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 21, "is_land": true }], "vial_counters": [], "hand": [{ "num": 19, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Skullcrack"], "library_size": 53 },
   "opponent": { "life": 12, "battlefield": [] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: Monastery Swiftspear", "land": null, "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
@@ -99,11 +114,15 @@
 },
     { "chosen": 0, "decision": {
   "decision_index": 6,
+  "main_ordinal": 4,
   "type": "main_phase",
   "turn": 5,
   "phase": "pre_main",
   "on_the_play": false,
-  "me": { "life": 14, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 4, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }, { "name": "Mountain", "idx": 1, "is_land": true }, { "name": "Mountain", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Skullcrack"], "library_size": 52 },
+  "drew": [{ "turn": 5, "card": "Goblin Guide" }],
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Eidolon of the Great Revel (2), Monastery Swiftspear (1) — 3 to opponent (12→9)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 14, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "num": 2, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 4, "num": 19, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 41, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 34, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 21, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Skullcrack"], "library_size": 52 },
   "opponent": { "life": 9, "battlefield": [] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: Goblin Guide", "land": null, "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
@@ -112,17 +131,21 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 0, "decision": {
+    { "chosen": 1, "decision": {
   "decision_index": 7,
+  "main_ordinal": 5,
   "type": "main_phase",
   "turn": 6,
   "phase": "pre_main",
   "on_the_play": false,
-  "me": { "life": 12, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "is_land": false }, { "name": "Goblin Guide", "idx": 5, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 4, "is_land": false }, { "name": "Mountain", "idx": 0, "is_land": true }, { "name": "Mountain", "idx": 1, "is_land": true }, { "name": "Mountain", "idx": 3, "is_land": true }], "vial_counters": [], "hand": [{ "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Lightning Bolt", "Skullcrack"], "library_size": 51 },
+  "drew": [{ "turn": 6, "card": "Mountain" }],
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Eidolon of the Great Revel (2), Monastery Swiftspear (1), Goblin Guide (2) — 5 to opponent (9→4)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 12, "battlefield": [{ "name": "Eidolon of the Great Revel", "idx": 2, "num": 2, "is_land": false }, { "name": "Goblin Guide", "idx": 5, "num": 7, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 4, "num": 19, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 41, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 34, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 21, "is_land": true }], "vial_counters": [], "hand": [{ "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Lightning Bolt", "Skullcrack"], "library_size": 51 },
   "opponent": { "life": 4, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
-    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] }
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
