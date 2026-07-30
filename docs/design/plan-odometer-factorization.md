@@ -175,10 +175,22 @@ T5  old: land Mountain; Seething Song; ...; Dragonstorm; ATTACK   [opp -520]
 T5  new: land Mountain
 ```
 
-The corrected bound now offers ritual chains the old too-tight bound pruned away. The blind greedy —
-no lookahead — takes one a turn *before* the payoff arrives, the float evaporates at end of turn, the
-rituals are spent, and the kill never happens. The search sees through this at every searched depth,
-which is why d3/d5 only improve.
+**CORRECTED DIAGNOSIS (instrumented 2026-07-30).** The first reading — "the blind greedy chooses to
+spend its chain early" — is WRONG. A probe in `Solve`'s `consider()` that fires whenever a
+ritual-bearing, payoff-free subset survives the guard reports **zero hits** on this game:
+`SubsetWastesAccelerant` is correct and active, and the solver never emits a wasteful plan.
+
+So the rituals came from a plan that **did** contain a payoff, and the payoff was never cast —
+Dragonstorm *and* Apex of Power were both in the opening hand and both still in hand after T3. This is
+a **rollout-vs-executor divergence** (`docs/design/rollout-executor-lockstep.md`): `consider()` credits
+the Rite-of-Flame triangular term into its pool, `CanPay` accepts, and the executor's real tap/cast
+sequence then cannot reach the payoff, so the rituals resolve and the finisher is stranded. The
+existing `fd-diverge` oracle does not catch it — that only flags a *predicted win* that is not
+realized, and these plans predict no win.
+
+Why the bound fix exposed it: the old too-tight bound filtered these plans out *before* `consider()`
+ever saw them. The over-credit (if any) in `consider()` predates this change; correcting the pre-filter
+merely stopped hiding it.
 
 **Ruled out as causes:**
 - *Not* an enumerator/executor divergence — `fd-diverge` is 0 in both bound arms over 300 games, so the
@@ -206,11 +218,16 @@ not enough; the regressions must be easily recoverable."** Checked explicitly, a
 So the artifact is confined to the blind baseline and is fully recovered by the search the engine
 actually plays with.
 
-**Open follow-up:** the payoff-prune drops a subset that casts a ritual with no payoff *in that subset*,
-but the losing lines here are reached across a turn's successive re-solves, so no single subset looks
-wasteful. Extending the hold rule to "don't start a ritual chain the current hand cannot finish" is a
-`d0`-only heuristic worth measuring separately — it cannot affect the searched depths, which are already
-clean.
+**Open follow-up (the real one).** The fix is NOT another greedy heuristic — it is closing the
+enumerator/executor gap so a committed plan's payoff cannot be stranded. Two candidate shapes:
+(a) reconcile `consider()`'s credited pool with what `TapForCost`/the executor can actually realise for
+a Rite-of-Flame chain (ordering-sensitive gross), or (b) refuse to commit a plan whose payoff the
+payment path cannot pay, falling back to the next-best plan. Both are lockstep work, not tuning.
+
+Worth doing even though the aggregate is small and every affected game recovers at depth: a plan whose
+finisher silently fizzles is a defect that can surface anywhere, and `Solve` is also the rollout leaf,
+so the same path feeds search evaluations. It does not bite there today (0 occurrences measured in
+searched play) — but that is luck of the current decks, not a guarantee.
 
 ### Making the gate free on decks that cannot use it
 
