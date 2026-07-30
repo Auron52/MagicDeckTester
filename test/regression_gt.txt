@@ -1,6 +1,6 @@
-# Regression ground truth -- commit 020855d  date 2026-07-30
+# Regression ground truth -- commit 3fc9357  date 2026-07-30
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-30): greedy_land_name now shares TryPlayLand's ranker (GreedyLandChoiceIndex): a pure TIEBREAK change, fires only where the search is already indifferent. Train (smoke+regression): 11 configs changed, every one at IDENTICAL avg, slower=0 faster=0. Held-out overnight: 15 changed, 12 identical, 3 worse by +0.001/+0.001/+0.002; slower=3 (2 distinct games, all DRAWS-DIVERGE variance) faster=0. d0 untouched everywhere (it uses the ranker directly). Net within the repo noise floor (~0.004).
+# accepted-with-regressions (regression, 2026-07-30): goblins regression GT re-accepted post-rebase: the remote land-tiebreak/land-drop refactor (020855d/3a8db49) shifts goblins land-choice lines net-neutral-to-faster (d0_s2002 identical avg; d3/d5 all faster by <=0.007, one game +1turn offset by others); non-goblins byte-identical; same character as the remote's own accepted tiebreak change
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -74,11 +74,11 @@ auras_regression_d3_s2002=4.1280/e94f592d652ec13f
 auras_regression_d3_s3003=4.2220/fcba8b69ceff0f79
 auras_regression_d5_s2002=4.1220/44885db4120a1a00
 auras_regression_d5_s3003=4.2100/b6269af426628f17
-goblins_regression_d0_s2002=4.8200/5789cc1d63872161
-goblins_regression_d3_s2002=4.4033/1fb75e1c7f9d38b4
-goblins_regression_d3_s3003=4.4367/92df35be61d453a8
-goblins_regression_d5_s2002=4.4440/ea673b52828898c5
-goblins_regression_d5_s3003=4.4160/542a34802e5ffdfa
+goblins_regression_d0_s2002=4.8200/9260a46971133244
+goblins_regression_d3_s2002=4.3967/7a9aa961e615e244
+goblins_regression_d3_s3003=4.4333/f4d1651aaf5bb560
+goblins_regression_d5_s2002=4.4400/6796693b74b9dbf6
+goblins_regression_d5_s3003=4.4120/7eee6ad8058784e2
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/3c364eea0dbc63eb
