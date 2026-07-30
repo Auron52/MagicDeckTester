@@ -14,13 +14,39 @@
 // changes). Call ApplyHeuristicDefaults() at the very top of main(), before any code reads a toggle.
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <string>
 #include <filesystem>
+
+// Resolve the defaults file INDEPENDENT of the process CWD. The old behavior resolved the
+// relative path against the CWD only, so running the binary from logs/, a batch worker, or any
+// non-root directory silently dropped every adopted default -- with no warning and no fingerprint
+// difference to catch it (a cross-machine-reproducibility hazard). Now: walk UP from the
+// executable's own directory (build/<Config>/mtg -> repo root two levels up, but the walk handles
+// any nesting) looking for the relative path; fall back to the CWD-relative path if not found.
+inline std::filesystem::path ResolveHeuristicDefaultsPath(const std::filesystem::path& rel)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path exe = fs::read_symlink("/proc/self/exe", ec);   // Linux; other platforms fall through
+    if (!ec)
+    {
+        for (fs::path dir = exe.parent_path(); !dir.empty(); dir = dir.parent_path())
+        {
+            fs::path cand = dir / rel;
+            if (fs::exists(cand, ec) && !ec) { return cand; }
+            if (dir == dir.root_path()) { break; }
+        }
+    }
+    return rel;                                              // fallback: CWD-relative (old behavior)
+}
 
 inline void ApplyHeuristicDefaults(
     const std::filesystem::path& path = "src/ai/data/heuristic_defaults.env")
 {
-    std::ifstream f(path);
+    const std::filesystem::path resolved =
+        path.is_absolute() ? path : ResolveHeuristicDefaultsPath(path);
+    std::ifstream f(resolved);
     if (!f) { return; }                       // absent -> no-op (byte-identical)
     auto trim = [](std::string s) {
         size_t b = s.find_first_not_of(" \t\r\n");
@@ -28,6 +54,8 @@ inline void ApplyHeuristicDefaults(
         return b == std::string::npos ? std::string() : s.substr(b, e - b + 1);
     };
     std::string line;
+    std::string applied;                      // "KEY=VAL KEY2(env-override) ..."
+    int n_lines = 0;
     while (std::getline(f, line))
     {
         std::string t = trim(line);
@@ -37,7 +65,17 @@ inline void ApplyHeuristicDefaults(
         std::string key = trim(t.substr(0, eq));
         std::string val = trim(t.substr(eq + 1));
         if (key.empty()) { continue; }
+        const bool overridden = std::getenv(key.c_str()) != nullptr;
         // overwrite = 0: an already-set env var wins (explicit override / disable / A-B).
         setenv(key.c_str(), val.c_str(), 0);
+        ++n_lines;
+        if (!applied.empty()) { applied += ' '; }
+        applied += overridden ? key + "(env-override)" : key + "=" + val;
+    }
+    // Make the live adopted-defaults set visible in the run's own log. Silent when the file has
+    // no KEY=VALUE lines (the byte-identical stock state) so normal runs emit nothing.
+    if (n_lines > 0)
+    {
+        std::cerr << "[heuristic-defaults] " << resolved.string() << ": " << applied << "\n";
     }
 }
