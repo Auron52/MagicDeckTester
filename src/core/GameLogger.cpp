@@ -2,6 +2,7 @@
 #include <fstream>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
@@ -36,6 +37,12 @@ std::atomic<long> g_afford_real_fails{0};
 std::atomic<long> g_afford_real_attempts{0};
 bool AffordAuditOn() { static const bool on = std::getenv("MTG_AFFORD_AUDIT") != nullptr; return on; }
 namespace {
+// Dropped-cast breakdown for the stranded-accelerant detector. Guarded by AffordAuditOn() at every
+// call site, so the lock is never taken (and the map never grows) in a normal run.
+std::mutex g_drop_mutex;
+struct DropStat { long total_short = 0; long colour_short = 0; bool accelerant = false; };
+std::map<std::string, DropStat> g_drop_counts;   // card name -> why it was dropped
+
 struct AffordAuditDump
 {
     ~AffordAuditDump()
@@ -46,11 +53,34 @@ struct AffordAuditDump
                 "AFFORD_AUDIT  rollout: fails=%ld / attempts=%ld   real: fails=%ld / attempts=%ld\n",
                 g_afford_rollout_fails.load(), g_afford_rollout_attempts.load(),
                 g_afford_real_fails.load(), g_afford_real_attempts.load());
+            long stranded = 0, benign = 0;
+            for (const auto& kv : g_drop_counts)
+            {
+                const long n = kv.second.total_short + kv.second.colour_short;
+                (kv.second.accelerant ? stranded : benign) += n;
+            }
+            std::fprintf(stderr, "AFFORD_AUDIT  real drops: STRANDED accelerants=%ld  other=%ld"
+                                 "   (total-short = an ORDER could strand/save it; colour-short = the"
+                                 " flat wild-pool approximation, order-independent)\n", stranded, benign);
+            for (const auto& kv : g_drop_counts)
+            {
+                std::fprintf(stderr, "AFFORD_AUDIT    %-28s total-short=%-6ld colour-short=%-6ld%s\n",
+                             kv.first.c_str(), kv.second.total_short, kv.second.colour_short,
+                             kv.second.accelerant ? "   <-- accelerant" : "");
+            }
         }
     }
 };
 AffordAuditDump g_afford_audit_dump;
 }  // namespace
+
+void NoteDroppedCast(const std::string& name, bool is_accelerant, bool colour_short)
+{
+    std::lock_guard<std::mutex> lk(g_drop_mutex);
+    DropStat& e = g_drop_counts[name];
+    ++(colour_short ? e.colour_short : e.total_short);
+    e.accelerant = is_accelerant;
+}
 
 void GameLogger::StartGame(const std::string& run_id, int game_number,
                             const std::string& deck_id, uint64_t seed,

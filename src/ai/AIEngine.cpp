@@ -240,31 +240,23 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
     s_out.flush();
 }
 
-// Provider cast-order rank for a hand cast by name (lower = cast earlier). MUST stay
-// byte-for-byte identical to TurnSolver::CastRankOf so the executor's canonical cast
-// order matches the rollout's (lockstep). Unknown card falls to the noncreature rank.
-static int CastRankAI(const GameState& state, const std::string& name)
-{
-    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
-    return d ? ResolveProvider(state).CastOrderRank(state, *d) : 20;
-}
-
 // Mirror of TurnSolver::CastOrderLess (lockstep): provider rank, then cheapest-first by the action's
 // ACTUAL cost so a dearer accelerant is never attempted before a cheaper one and silently dropped.
 // Keys on Action::cost so a SPLICED Desperate Ritual sorts by its real {2}{R}{R}, not its printed
 // {1}{R}. See the TurnSolver comment for the Dragonstorm repro.
 static bool CastOrderLessAI(const GameState& state, const Action& a, const Action& b)
 {
-    const int ra = CastRankAI(state, a.card_name);
-    const int rb = CastRankAI(state, b.card_name);
+    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
+    const int ra = da ? ResolveProvider(state).CastOrderRank(state, *da) : 20;
+    const int rb = db ? ResolveProvider(state).CastOrderRank(state, *db) : 20;
     if (ra != rb) { return ra < rb; }
+    if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
     if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
     // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
     // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
     // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
     // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
-    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
-    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
     if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
     return a.cost.ManaValue() < b.cost.ManaValue();
 }
@@ -2421,7 +2413,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Clean set: stable-sort the non-sacrifice hand casts by DecisionProvider::CastOrderRank
     // (enabler-first, prowess creatures before noncreature spells, on-cast self-damage
     // sources last). Stable => plan order breaks ties. Mirrors ApplyPlanDirect's canonical
-    // branch (CastRankAI == TurnSolver::CastRankOf) so the executor realises the same line
+    // branch (CastOrderLessAI == TurnSolver::CastOrderLess) so the executor realises the same line
     // the rollout scored. No draw engine here, so no breakpoint handling is needed.
     std::vector<int> order;
     for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
@@ -3675,9 +3667,26 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     {
         if (s_bp_trace && !m_in_rollout)
         { BpTraceCast("exec", state, def->card.m_name.str(), effective, def->card.IsCreature()); }
+        // Audit-only: the untapped-board total BEFORE the attempt, to split a colour shortfall from a
+        // real total-mana shortfall at the drop below. Not computed in a normal run.
+        const int audit_have = AffordAuditOn()
+                             ? BuildAvailableMana(state).Total() + state.floating_mana.Total() : 0;
+        if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
         if (!TapForCost(state, effective, available, def->card.IsCreature()))
         {
             if (s_bp_trace && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
+            // SERVER-TRUTH RESOLUTION: a declared cast that cannot be paid is dropped (left in hand).
+            // Mirrors ApplyPlanDirect::apply_one's drop in the rollout. Audit-only bookkeeping; see the
+            // stranded-accelerant detector in GameLogger.h for why the ACCELERANT drops are the ones
+            // that matter (a plain drop is benign optimism; a dropped ritual/rock strands the payoff).
+            if (AffordAuditOn())
+            {
+                g_afford_real_fails.fetch_add(1, std::memory_order_relaxed);
+                NoteDroppedCast(def->card.m_name.str(),
+                                IsManaRitual(*def)
+                                    || (def->params.mana_rock && !def->card.IsCreature()),
+                                audit_have >= effective.ManaValue());
+            }
             return;
         }
     }

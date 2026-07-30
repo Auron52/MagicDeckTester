@@ -309,6 +309,30 @@ int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) 
     //    5 non-creature mana rocks (Sol Ring): EARLIEST, so the rock's mana is online for the
     //      rest of the line (the same-turn ramp the enumerator now credits). Gated on the rock-
     //      ramp flag so MTG_NO_ROCK_RAMP keeps the legacy order (rocks ranked with noncreatures).
+    //   15/16/18 the SAME-TURN MANA ACCELERANT tiers -- see below.
+    //
+    // ACCELERANT TIERS (15/16/18), checked FIRST so they take precedence exactly as they did when
+    // they lived in the per-archetype overrides. These were written out IDENTICALLY (same ranks,
+    // same reasoning, near-identical comments) in HinataProvider and DragonstormProvider, which
+    // meant every new ritual deck had to rediscover them -- and until it did, its rituals ranked 20,
+    // i.e. TIED WITH THE PAYOFF, so the canonical order could cast the payoff first and strand them
+    // (decks/Unpredictable Cyclone holds Seething Song on the generic provider today: exactly that
+    // hole). They are pure card-parameter tests with no archetype knowledge, so they belong here:
+    // a deck gets correct accelerant ordering from its CARD DATA, with no provider to write.
+    //
+    //   18 a cast-RESTRICTING ritual (Irencrag Feat, "you can cast only one more spell this turn")
+    //      must be the LAST ritual -- after the plain rituals (15) but BEFORE the payoff (20), so
+    //      the only spell that follows it is the payoff. Checked before IsManaRitual because
+    //      Irencrag is both. Lockstep with the max_casts_after budget in Solve::consider.
+    //   16 a cost REDUCER (Ruby Medallion) after the rituals that fund it but before a restrictor:
+    //      cast as the single spell allowed AFTER Irencrag it discounts nothing and wastes the "one
+    //      more spell" slot the payoff should take. Also governs the post-Apex STAGED re-solve,
+    //      where the ordering search cannot reach the exiled casts.
+    //   15 a mana ritual: must resolve BEFORE the payoff so its float is available to pay the
+    //      bigger spell. Between creatures (10) and other noncreatures (20).
+    if (def.params.max_casts_after >= 0)         { return 18; }
+    if (!def.params.reduces_spell_color.empty()) { return 16; }
+    if (IsManaRitual(def))                       { return 15; }
     if (def.params.on_cast_trigger_damage > 0) { return 30; }
     // Destroy-all-enchantments (Reverent Silence) wipes our OWN Aria/Remedy, so cast it LAST --
     // after this turn's wincon casts (Aria's lethal ETB reversal) have already resolved. Casting
@@ -1795,19 +1819,8 @@ HinataProvider::TutorCandidates(const GameState& s, int controller, const CardPa
     return cands;
 }
 
-int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
-{
-    // Irencrag Feat restricts further casts ("you can cast only one more spell this turn"), so it
-    // must be the LAST ritual: cast AFTER other rituals (Reality Spasm, 15) but BEFORE the payoff
-    // (Crackle, 20), so the only spell that follows it is the payoff. Rank 18 -> the cast order and
-    // the max_casts_after check in Solve::consider agree on ...Reality Spasm -> Irencrag -> Crackle.
-    if (def.params.max_casts_after >= 0) { return 18; }
-    // A mana ritual must resolve BEFORE the payoff X-spell so its floating mana is available to
-    // pay the bigger Crackle. Rank it between creatures (Hinata, 10) and other noncreatures
-    // (Crackle, 20). Everything else uses the generic order.
-    if (IsManaRitual(def)) { return 15; }
-    return GenericProvider::CastOrderRank(s, def);
-}
+// CastOrderRank: no override. Hinata's ritual (Reality Spasm, 15) and restrictor (Irencrag Feat, 18)
+// tiers are now the GENERIC card-parameter tiers -- byte-identical ranks, one implementation.
 
 // Archetype gates relocated out of TurnSolver (audit B1/B2). Both branches only pay off with
 // Hinata's per-target discount online: the untap ritual (Reality Spasm) floats mana for a same-turn
@@ -2559,26 +2572,9 @@ int DragonstormProvider::ExtraLethalDamage(const GameState& s,
     return sim.dmg > 1000000 ? 1000000 : static_cast<int>(sim.dmg);   // clamp: never overflow the win-check
 }
 
-int DragonstormProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
-{
-    // Irencrag Feat restricts further casts ("you can cast only one more spell this turn"), so it must
-    // be the LAST ritual: after the other rituals (15) but BEFORE the payoff (Dragonstorm, 20), so the
-    // only spell that follows it is the payoff. (Mirrors HinataProvider's Irencrag handling.)
-    if (def.params.max_casts_after >= 0) { return 18; }
-    // Ruby Medallion (a red cost reducer) must be cast BEFORE Irencrag: casting it as the single spell
-    // allowed AFTER Irencrag discounts nothing and wastes the "one more spell" (the payoff should take
-    // that slot). Rank it just after the rituals (16) -- funded by their floating mana, on the board to
-    // discount the post-Irencrag payoff, and never trailing Irencrag. This governs the fixed-order/d0
-    // path AND the post-Apex STAGED re-solve (where the ordering search can't reach the exiled casts).
-    if (!def.params.reduces_spell_color.empty()) { return 16; }
-    // A mana ritual (Seething Song / Pyretic Ritual / Rite of Flame / Irencrag burst) must resolve
-    // BEFORE the payoff so its floating mana is available to pay Dragonstorm / a hard-cast Dragon /
-    // another Apex. Rank between creatures (10) and other noncreatures (20). Without this the canonical
-    // order can cast the payoff first and strand the mana-positive rituals (the dropped-cast rollback
-    // the user hit; a self-stranded go-off autonomously). Everything else uses the generic order.
-    if (IsManaRitual(def)) { return 15; }
-    return GenericProvider::CastOrderRank(s, def);
-}
+// CastOrderRank: no override. Dragonstorm's ritual (15), Ruby Medallion reducer (16) and Irencrag
+// restrictor (18) tiers are now the GENERIC card-parameter tiers -- byte-identical ranks, one
+// implementation, and any future ritual/reducer deck inherits them from its card data.
 
 // ---- instances + selection --------------------------------------------------
 

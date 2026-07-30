@@ -2594,6 +2594,130 @@ static const bool s_legacy_mana_bound = std::getenv("MTG_LEGACY_MANA_BOUND") != 
 // ritual_float, which consider() credits as this triangular term. Used by BOTH total-mana bounds.
 static inline int ManaGateTriangular(int gy) { return gy > 1 ? gy * (gy - 1) / 2 : 0; }
 
+// ---- Same-turn ritual credit: SEQUENCED vs simultaneous -------------------------------------
+// A/B gate (MTG_RITUAL_SEQ_CREDIT=1; default OFF -> byte-identical). The affordability model in
+// consider()/eval_and_push credits a selected ritual's GROSS float unconditionally while the same
+// ritual's own cost sits in `combined`, i.e. it asks only "pool + Σfloat >= Σcost" SIMULTANEOUSLY --
+// so A RITUAL CAN FUND ITS OWN COST. Irencrag Feat ({1}{R}{R}{R}, floats 6) then looks castable off
+// one land, and Hinata plans a TURN-ONE Irencrag that the executor must silently drop: 548 of its 570
+// Irencrag drops per 400 d0 games are total-mana shortfalls, not colour (MTG_AFFORD_AUDIT).
+// The mana-ROCK branch a few lines below already has exactly this guard -- "a rock never funds its own
+// cost", `if (sel_rock && pool.CanPay(rock_costs))" -- so this is an inconsistency inside one function,
+// not a deliberate asymmetry.
+// SEQUENCED credit instead walks the selected rituals in EXECUTION order (CastOrderRank, then
+// cheapest-first -- the same comparator CastOrderLess uses, so the enumeration's feasibility model and
+// the executor's actual cast order become the same sequence) and credits a ritual's float only once
+// the board plus the floats of the rituals BEFORE it can pay for it. Strictly tighter than the
+// simultaneous model, hence NOT byte-identical: it removes exactly the lines the executor cannot
+// realise. Related but distinct from the note on DropRitualGroupsIfNoPayoff, which rejected this
+// sequencing as a *byte-identical prune* -- here it is a deliberate model change, measured as such.
+// MODES: 0 = off (byte-identical hatch); 1 = LEAF ONLY (Solve::consider -- the greedy/d0 policy and
+// the rollout leaf) = THE DEFAULT; 2 = BOTH (also EnumeratePlans' search branch list).
+//
+// The asymmetry is the point, and it was MEASURED. Optimistic enumeration is SAFE inside the search,
+// which discards unpayable lines by rolling them out -- but at DEPTH 0 there is no search to filter
+// them, so the greedy commits to a line the executor then cannot pay. Mode 1 fixes exactly the site
+// with no safety net and leaves the search's branch list wide. (This mirrors the existing same-turn
+// reducer credit, which is deliberately EnumeratePlans-only for the same reason, in the opposite
+// direction.) Held-out overnight, vs the simultaneous model:
+//     mode 1 (leaf)  NET -0.1816   12 better /  1 worse   searched 4 slower / 13 faster
+//     mode 2 (both)  NET -0.2149   15 better /  7 worse   searched 20 slower / 37 faster
+// Mode 2 wins on aggregate and loses on the bar that matters (new, hard-to-recover regressions):
+// it puts SEVEN cases in the red including every Dragonstorm searched depth. Mode 1 leaves
+// Dragonstorm strictly better with none.
+static int SeqRitualCreditMode()
+{
+    static const int mode = []{
+        const char* e = std::getenv("MTG_RITUAL_SEQ_CREDIT");
+        if (!e) { return 1; }                     // DEFAULT: honest at the leaf
+        const int v = std::atoi(e);
+        return v > 0 ? v : 0;                     // MTG_RITUAL_SEQ_CREDIT=0 -> the legacy hatch
+    }();
+    return mode;
+}
+
+// Gross float creditable to `sel`'s accelerants under the sequenced model. Returns the same total as
+// the simultaneous sum whenever every selected accelerant is genuinely reachable in some order.
+//
+// Order = CHEAPEST-FIRST by the action's own cost, which is both what a self-funding chain needs and
+// what the executor does (CastOrderLess's within-tier rule). Crucially that puts the FREE accelerants
+// first: a Lotus Bloom SacForMana carries ritual_float with cost {0} (tap + sacrifice), so it is always
+// reachable and bootstraps the rest. Ordering by CastOrderRank instead was WRONG and cost a measured
+// Dragonstorm regression -- Lotus Bloom ranks as a plain noncreature (20) behind Seething Song (15), so
+// the sort tested Seething Song against a lone Mountain, gave up, and threw away 6 free mana; the
+// dragonstorm d3 gi129 T4 win (sac both Blooms -> 7 -> Seething Song -> 9 -> Dragonstorm) became a T6.
+// The greedy runs to a FIXPOINT rather than stopping at the first unaffordable accelerant, because
+// CanPay is colour-aware: a cheaper accelerant needing an absent colour must not discard the dearer
+// ones behind it. Sets are tiny (a handful of accelerants), so the extra passes are free.
+// `exclude` (a cands index, -1 = none) drops one accelerant from the set, so the surplus-ritual check
+// downstream can ask "what would this subset credit WITHOUT r?" under the same sequenced model.
+static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>& cands,
+                                 const std::vector<int>& sel, int exclude = -1)
+{
+    // thread_local so the hot path never allocates.
+    thread_local std::vector<int>  rit;
+    thread_local std::vector<char> credited_flag;
+    rit.clear();
+    for (int j : sel) { if (j != exclude && cands[j].ritual_float > 0) { rit.push_back(j); } }
+    if (rit.empty()) { return 0; }
+    if (rit.size() == 1)
+    {
+        // A single accelerant still has to be payable on its own -- that IS the self-funding case.
+        return pool.CanPay(cands[rit[0]].cost) ? cands[rit[0]].ritual_float : 0;
+    }
+    std::stable_sort(rit.begin(), rit.end(), [&](int x, int y)
+    { return cands[x].cost.ManaValue() < cands[y].cost.ManaValue(); });
+
+    // FAST PATH: if the board alone pays for EVERY selected accelerant, the sequence is trivially
+    // realisable and the answer is just the simultaneous sum -- one CanPay instead of the walk below.
+    // This is the common case on ordinary (non-go-off) turns, which is where the hot path lives.
+    ManaCost all;
+    int sum_float = 0, sum_gy = 0;
+    for (int j : rit)
+    {
+        const ManaCost& c = cands[j].cost;
+        all.white += c.white; all.blue  += c.blue;  all.black += c.black;
+        all.red   += c.red;   all.green += c.green;
+        all.colorless += c.colorless;   all.generic += c.generic;
+        sum_float += cands[j].ritual_float;
+        if (cands[j].def && cands[j].def->params.ritual_float_gy_self_bonus) { ++sum_gy; }
+    }
+    if (pool.CanPay(all)) { return sum_float + ManaGateTriangular(sum_gy); }
+
+    credited_flag.assign(rit.size(), 0);
+    ManaCost acc;          // accumulated cost of the accelerants credited so far
+    int credit = 0, gy = 0;
+    bool progress = true;
+    while (progress)
+    {
+        progress = false;
+        bool skipped = false;
+        ManaPool probe = pool;
+        probe.wild += credit + ManaGateTriangular(gy);
+        for (std::size_t i = 0; i < rit.size(); ++i)
+        {
+            if (credited_flag[i]) { continue; }
+            const ManaCost& c = cands[rit[i]].cost;
+            ManaCost trial = acc;
+            trial.white += c.white; trial.blue  += c.blue;  trial.black += c.black;
+            trial.red   += c.red;   trial.green += c.green;
+            trial.colorless += c.colorless;     trial.generic += c.generic;
+            if (!probe.CanPay(trial)) { skipped = true; continue; }   // a later credit may unlock it
+            credited_flag[i] = 1;
+            acc      = trial;
+            credit  += cands[rit[i]].ritual_float;
+            if (cands[rit[i]].def && cands[rit[i]].def->params.ritual_float_gy_self_bonus) { ++gy; }
+            probe       = pool;
+            probe.wild += credit + ManaGateTriangular(gy);
+
+            progress = true;
+        }
+        // Nothing was passed over, so there is nothing a further pass could unlock.
+        if (!skipped) { break; }
+    }
+    return credit + ManaGateTriangular(gy);
+}
+
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands)
 {
     static const bool on = []{ const char* e = std::getenv("MTG_MANA_PRUNE"); return !(e && std::string(e) == "0"); }();
@@ -3633,9 +3757,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Both inert -> byte-identical for decks without rituals or rocks.
         ManaPool eff = pool, eff_nc = pool_noncreature;
         bool credited = false;
+        int  simul_ritual_credit = 0;
         if (any_ritual)
         {
             int ritual_credit = 0;
+            {
             for (int j : sel) { ritual_credit += cands[j].ritual_float; }
             // Rite-of-Flame graveyard self-scaling: k copies cast this turn escalate (+0,+1,...,+k-1)
             // as each prior copy hits the graveyard; the flat per-cast stamp misses that triangular
@@ -3643,6 +3769,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             int gy_self = 0;
             for (int j : sel) { if (cands[j].def && cands[j].def->params.ritual_float_gy_self_bonus) { ++gy_self; } }
             ritual_credit += gy_self * (gy_self - 1) / 2;
+            }
+            simul_ritual_credit = ritual_credit;
             if (ritual_credit > 0) { eff.wild += ritual_credit; eff_nc.wild += ritual_credit; credited = true; }
         }
         if (any_rock)
@@ -3672,10 +3800,36 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         }
         // (No same-turn reducer credit here -- see the note at the any_affinity flag above; the
         // Medallion credit is EnumeratePlans-only so Solve's greedy/leaf stays byte-identical.)
-        const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
-                                       : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
+                                 : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        // SEQUENCED ritual credit, applied LAZILY. The sequenced credit is never LARGER than the
+        // simultaneous one, so a position the cheap model already rejects would be rejected by the
+        // sequenced model too -- only the SURVIVORS need the walk. Most odometer positions are
+        // rejected, so this keeps the honest model off the hot path (measured: Dragonstorm d5
+        // +3.2% -> +1.5% instructions, Hinata2 d5 +0.2%).
+        const bool seq_on = any_ritual && simul_ritual_credit > 0 && SeqRitualCreditMode() >= 1;
+        int  seq_credit   = -1;   // sequenced credit actually folded into eff (-1 = not computed yet)
+        // Fold the sequenced correction into eff/eff_nc. Must run for EVERY surviving position, not
+        // just the mana_ok ones: `eff` is read downstream (fill_surplus, the ritual-drop re-credit),
+        // so a position rescued by the filter/reframe fallback below would otherwise go on spending
+        // the optimistic pool.
+        auto apply_seq = [&]()
+        {
+            if (seq_credit >= 0) { return; }
+            seq_credit = SequencedRitualCredit(pool, cands, sel);
+            if (seq_credit >= simul_ritual_credit) { return; }
+            const int back = simul_ritual_credit - seq_credit;
+            eff.wild    -= back;
+            eff_nc.wild -= back;
+        };
+        if (seq_on && mana_ok)
+        {
+            apply_seq();
+            mana_ok = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
+        }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
         if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { return; }
+        if (seq_on) { apply_seq(); }   // filter-rescued survivor: keep its credited pool honest too
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
@@ -3771,13 +3925,23 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                         flat_sum += cands[j].ritual_float;
                         if (cands[j].def && cands[j].def->params.ritual_float_gy_self_bonus) { ++gy; }
                     }
-                    const int full_credit = flat_sum + gy * (gy - 1) / 2;   // == the wild credited into eff
+                    // What was ACTUALLY credited into eff. Under the sequenced model that is not the
+                    // flat sum (a self-funding ritual earns nothing), and assuming otherwise made this
+                    // check over-subtract and wrongly call load-bearing rituals surplus.
+                    // `seq_bit` = the sequenced model actually withheld something HERE. Where it did
+                    // not, the credited pool is the flat sum and the cheap closed form is exact, so
+                    // those subsets keep the pre-change code path (and its cost) untouched -- only the
+                    // subsets the honest model changed pay for the exact per-ritual recompute.
+                    const bool seq_bit    = (seq_credit >= 0 && seq_credit < simul_ritual_credit);
+                    const int  full_credit = seq_bit ? seq_credit : flat_sum + gy * (gy - 1) / 2;
                     for (int r : sel)
                     {
                         if (cands[r].ritual_float <= 0) { continue; }
                         const bool r_gy   = cands[r].def && cands[r].def->params.ritual_float_gy_self_bonus;
                         const int  gy_r   = gy - (r_gy ? 1 : 0);
-                        const int  cred_r = (flat_sum - cands[r].ritual_float) + gy_r * (gy_r - 1) / 2;
+                        const int  cred_r = seq_bit
+                                          ? SequencedRitualCredit(pool, cands, sel, r)
+                                          : (flat_sum - cands[r].ritual_float) + gy_r * (gy_r - 1) / 2;
 
                         ManaPool ewr = eff, encwr = eff_nc;
                         ewr.wild   = std::max(0, ewr.wild   - (full_credit - cred_r));
@@ -4645,16 +4809,6 @@ static bool PlayLandByName(GameState& state, const std::string& name,
                            const std::string& land_face = "");
 static std::string SimulateLandPlay(GameState& state);
 
-// Provider cast-order rank for a hand cast by name (lower = cast earlier). Thin lookup
-// wrapper around DecisionProvider::CastOrderRank; mirrored byte-for-byte in AIEngine so the
-// rollout's canonical cast order and the real executor's stay in lockstep. Unknown card
-// (should not happen for a planned cast) falls to the noncreature rank.
-static int CastRankOf(const GameState& state, const std::string& name)
-{
-    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
-    return d ? ResolveProvider(state).CastOrderRank(state, *d) : 20;
-}
-
 // Canonical cast-order comparator: provider RANK first, then CHEAPEST-FIRST by the action's ACTUAL
 // cost. The rank alone is not enough -- every mana ritual shares one rank, so their relative order was
 // arbitrary, and the DEAREST could be attempted first, fail to be paid, and be silently dropped
@@ -4669,16 +4823,17 @@ static int CastRankOf(const GameState& state, const std::string& name)
 // Mirrored byte-for-byte by CastOrderLessAI in AIEngine so rollout and executor stay in lockstep.
 static bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
 {
-    const int ra = CastRankOf(state, a.card_name);
-    const int rb = CastRankOf(state, b.card_name);
+    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
+    const int ra = da ? ResolveProvider(state).CastOrderRank(state, *da) : 20;
+    const int rb = db ? ResolveProvider(state).CastOrderRank(state, *db) : 20;
     if (ra != rb) { return ra < rb; }
+    if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
     if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
     // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
     // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
     // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
     // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
-    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
-    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
     if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
     return a.cost.ManaValue() < b.cost.ManaValue();
 }
@@ -8079,9 +8234,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Both inert -> byte-identical for decks without rituals or rocks.
         ManaPool eff = pool, eff_nc = pool_noncreature;
         bool credited = false;
+        int  simul_ritual_credit = 0;
         if (any_ritual)
         {
             int ritual_credit = 0;
+            {
             for (int j : sel) { ritual_credit += cands[j].ritual_float; }
             // Rite-of-Flame graveyard self-scaling: k copies cast this turn escalate (+0,+1,...,+k-1)
             // as each prior copy hits the graveyard; the flat per-cast stamp misses that triangular
@@ -8089,6 +8246,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             int gy_self = 0;
             for (int j : sel) { if (cands[j].def && cands[j].def->params.ritual_float_gy_self_bonus) { ++gy_self; } }
             ritual_credit += gy_self * (gy_self - 1) / 2;
+            }
+            simul_ritual_credit = ritual_credit;
             if (ritual_credit > 0) { eff.wild += ritual_credit; eff_nc.wild += ritual_credit; credited = true; }
         }
         if (any_rock)
@@ -8127,10 +8286,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - rcred);
             }
         }
-        const bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
-                                       : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
+                                 : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        // SEQUENCED ritual credit, applied LAZILY. The sequenced credit is never LARGER than the
+        // simultaneous one, so a position the cheap model already rejects would be rejected by the
+        // sequenced model too -- only the SURVIVORS need the walk. Most odometer positions are
+        // rejected, so this keeps the honest model off the hot path (measured: Dragonstorm d5
+        // +3.2% -> +1.5% instructions, Hinata2 d5 +0.2%).
+        const bool seq_on = any_ritual && simul_ritual_credit > 0 && SeqRitualCreditMode() >= 2;
+        int  seq_credit   = -1;   // sequenced credit actually folded into eff (-1 = not computed yet)
+        // Fold the sequenced correction into eff/eff_nc. Must run for EVERY surviving position, not
+        // just the mana_ok ones: `eff` is read downstream (fill_surplus, the ritual-drop re-credit),
+        // so a position rescued by the filter/reframe fallback below would otherwise go on spending
+        // the optimistic pool.
+        auto apply_seq = [&]()
+        {
+            if (seq_credit >= 0) { return; }
+            seq_credit = SequencedRitualCredit(pool, cands, sel);
+            if (seq_credit >= simul_ritual_credit) { return; }
+            const int back = simul_ritual_credit - seq_credit;
+            eff.wild    -= back;
+            eff_nc.wild -= back;
+        };
+        if (seq_on && mana_ok)
+        {
+            apply_seq();
+            mana_ok = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
+        }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
         bool mana_reject = !mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel));
+        if (seq_on && !mana_reject) { apply_seq(); }   // survivor: keep its credited pool honest too
         if (mana_reject && CostReframeEnabled())
         {
             // Cost reframe (MTG_COST_REFRAME): an INTERACTING subset (reducer/ritual/affinity/rock) the
@@ -11913,7 +12098,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         c.win_turn       = wt;
 
         // Effective cast order, mirroring apply_plan_actions: a searched plan casts in vector
-        // order; otherwise the canonical clean-set order (stable-sort by CastRankOf). The
+        // order; otherwise the canonical clean-set order (stable-sort by CastOrderLess). The
         // enabler-first / opaque-set nuance is approximated (a searched_order flag marks the
         // exact-order plans). Sacrifice-land casts are reported separately (they execute last).
         std::vector<int> hand_casts;

@@ -581,6 +581,26 @@ extern std::atomic<long> g_afford_rollout_attempts;
 extern std::atomic<long> g_afford_real_fails;
 extern std::atomic<long> g_afford_real_attempts;
 
+// STRANDED-ACCELERANT DETECTOR (part of the same audit). A dropped cast is normally BENIGN --
+// enumeration is deliberately optimistic (see SameTurnReducerGenericCredit: over-crediting is safe
+// *because the search discards unpayable lines*), so a suite run drops thousands. What is NOT benign
+// is dropping a same-turn MANA ACCELERANT: the plan committed to a ritual/rock precisely to fund a
+// later spell, so losing it strands the payoff, and unlike a normal drop the search cannot filter it
+// at depth 0. That is exactly the Dragonstorm defect (Seething Song attempted before the cheap
+// rituals). This records each dropped cast by name and flags the accelerant ones, so ANY deck can be
+// checked for a live instance with one env var instead of re-deriving the diagnosis:
+//     MTG_AFFORD_AUDIT=1 ./build/Release/mtg <deck> ... 2>&1 | grep STRANDED
+// A nonzero STRANDED count is a red flag to investigate (a cast order that funds itself would have
+// paid it); zero means this defect class is not live for the deck. Recorded only when the audit is
+// on, so game logic and every digest stay byte-identical.
+// `colour_short` splits WHY it could not be paid, which decides whether a cast ORDER can fix it:
+//   COLOUR shortfall  -- enough total mana was available, the wrong colours. Ordering cannot help;
+//                        this is the flat `wild`-pool enumeration approximation (a "have red" gate
+//                        passes a {R}{R}{R} cost off one red source). See exact-mana-enumeration.md.
+//   TOTAL shortfall   -- not enough mana at all at this point in the turn. THIS is the class a cast
+//                        order can strand or save (the Dragonstorm defect).
+void NoteDroppedCast(const std::string& name, bool is_accelerant, bool colour_short);
+
 // RAII: suppress human-play (and, in a claude-play session, unpruned) semantics for the current
 // scope. Placed at the top of RolloutWinTurn so the engine's clairvoyant playouts match the
 // autonomous game. Restores on exit so nested scopes compose.

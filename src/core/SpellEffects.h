@@ -33,6 +33,17 @@ inline bool RockRampEnumEnabled()
     return on;
 }
 
+// A/B hatch (default OFF): restore the legacy canonical cast order, i.e. provider RANK only, with
+// plan order breaking every tie. Set MTG_LEGACY_CAST_TIER_ORDER=1 to disable the cheapest-first
+// ordering of same-tier mana accelerants (DecisionProvider Hook 30) globally -> byte-identical to
+// the pre-2026-07-30 engine. Read once; shared by the rollout (TurnSolver::CastOrderLess) and the
+// executor (AIEngine::CastOrderLessAI) so the two can never disagree.
+inline bool LegacyCastTierOrder()
+{
+    static const bool on = std::getenv("MTG_LEGACY_CAST_TIER_ORDER") != nullptr;
+    return on;
+}
+
 // Land's Edge firing heuristic: how many lands to discard to a Land's Edge of the
 // given `rate` this activation. Fire all when it is lethal; otherwise fire only the
 // excess over the max hand size (so those lands are not simply discarded to the

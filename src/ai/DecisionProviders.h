@@ -203,9 +203,9 @@ public:
     // card selection deterministically. ScryKeepOnTop above is re-expressed as a threshold on this
     // rank, so the keep/bottom gate and the ordering share one source of truth.
     int  SituationalCardRank(const GameState&, const Card&) const override;
-    // Cast a mana RITUAL (Reality Spasm / Irencrag Feat) BEFORE the payoff so its floating mana
-    // funds the same-turn Crackle: Hinata (creature, 10) -> ritual (15) -> Crackle (noncreature, 20).
-    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // CastOrderRank: NOT overridden. "Cast a mana RITUAL (Reality Spasm / Irencrag Feat) before the
+    // payoff so its float funds the same-turn Crackle" -- Hinata (creature, 10) -> ritual (15) ->
+    // Crackle (20) -- is now the GENERIC card-parameter tiering, shared with every ritual deck.
     // Archetype gates relocated out of the solver (audit B1/B2): the untap-ritual cast variant and
     // Soulfire's own-target branch only earn their keep with Hinata's discount online.
     bool ShouldEmitUntapRitual(const GameState&) const override;
@@ -241,11 +241,10 @@ public:
     std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;
 
-    // Cast mana rituals BEFORE the payoff (Dragonstorm / Apex) so their floating mana is online to pay
-    // it -- otherwise the canonical order can cast the expensive payoff first and strand the rituals
-    // (dropped-cast rollback in human play; a self-stranded, under-resolved go-off autonomously). Mirrors
-    // HinataProvider (ritual -> 15, before the rank-20 payoff; an Irencrag-style cast-restrictor -> 18).
-    int CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // CastOrderRank: NOT overridden. "Cast mana rituals (15) / the Ruby Medallion reducer (16) / an
+    // Irencrag-style cast-restrictor (18) before the rank-20 payoff, so their float is online to pay
+    // it" is now the GENERIC card-parameter tiering -- it was written out identically here and in
+    // HinataProvider, and any future ritual deck now inherits it from its card data.
 
     // Opt in to the acceleration-prefix collapse (Hook 27): the go-off hand's ritual accelerants are
     // enumerated cheapest-first prefix-only rather than powerset. HEURISTIC, MTG_UNPRUNED(AccelPrefix)-
@@ -271,11 +270,8 @@ public:
     // standing MTG_UNPRUNED / MTG_UNPRUNE=payoffprune audit reverts to the full (unpruned) branch set.
     // Measured (train+held-out): ~-0.055 turns, -42% rollout calls. See docs/design/dragonstorm-payoff-prune.md.
     bool PrunesAcceleratorWithoutPayoff() const override { return true; }
-    // Ritual chains fund themselves cheapest-first; see DecisionProvider Hook 30. Keyed on the real
-    // action cost, so a SPLICED Desperate Ritual ({2}{R}{R}) sorts after a plain Rite of Flame ({R})
-    // rather than by its printed {1}{R} -- ranking by the printed cost dropped the spliced copy and
-    // cost 37 games (measured).
-    bool CastCheapestFirstWithinTier() const override { return true; }
+    // CastCheapestFirstWithinTier: NOT overridden -- cheapest-first among same-tier accelerants is now
+    // the ROOT default (DecisionProvider Hook 30), shared with every ritual deck.
 
     // Float-colour collapse (Hook: ImpulseFloatColorRedOnly / RestrictSacColorsToHasteAndRed). Apex of
     // Power floats RED only; Lotus Bloom floats RED unless a HASTE Dragon (Karrthus {4}{B}{R}{G} /

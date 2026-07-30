@@ -412,13 +412,20 @@ public:
     // should net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
     virtual bool PrunesAcceleratorWithoutPayoff() const { return false; }
 
-    // Hook 30: within one CastOrderRank tier, cast CHEAPEST-FIRST by the action's ACTUAL cost.
-    // For a ritual-chain deck the chain funds itself cheapest-first, so a dearer accelerant attempted
-    // before a cheaper one may be unpayable and is then SILENTLY DROPPED (CastSpellFromHand returns
-    // void) -- stranding the mana it would have produced and leaving the payoff short. Default OFF:
-    // measured at the ROOT it regressed slivers/Hinata/Anti-Lifegain/Knights and cost 2 searched
-    // slowdowns, so it is archetype logic (per .claude/skills/heuristic-optimization.md), not generic.
-    virtual bool CastCheapestFirstWithinTier() const { return false; }
+    // Hook 30: within one CastOrderRank tier, cast same-tier MANA ACCELERANTS cheapest-first by the
+    // action's ACTUAL cost. A ritual chain funds itself cheapest-first, so a dearer accelerant
+    // attempted before a cheaper one may be unpayable and is then SILENTLY DROPPED
+    // (CastSpellFromHand returns void) -- stranding the mana it would have produced and leaving the
+    // payoff short (Dragonstorm d0 seed 8585 gi1578: led with Seething Song, floated 7, could not pay
+    // Dragonstorm's 9, whole chain burned).
+    // Default ON (root). An earlier measurement had this default OFF "because at the ROOT it regressed
+    // slivers/Hinata/Anti-Lifegain/Knights and cost 2 searched slowdowns" -- that measurement predates
+    // the IsManaRitual restriction in CastOrderLess and was really measuring the tie-break reordering
+    // CREATURES (Scourge/Lathliss ETB order), which cost is the wrong key for. Restricted to
+    // accelerants it is inert for every deck that never holds two of them at once, so it is a generic
+    // rule, not archetype tuning. A provider may still override to false; MTG_LEGACY_CAST_TIER_ORDER=1
+    // is the global hatch for a byte-identical A/B.
+    virtual bool CastCheapestFirstWithinTier() const { return true; }
 
     // Float-colour collapse for "add N mana of ANY ONE colour" effects (HEURISTIC, provider-owned; NOT
     // byte-identical). These effects emit one cast/sac variant PER candidate colour, and with several Lotus
