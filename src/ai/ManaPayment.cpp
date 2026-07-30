@@ -571,3 +571,115 @@ ManaPool AvailableManaPool(const GameState& state)
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
 }
+
+// THE public payment entry (C1 unit 5) -- reserved-first retry around TapForCostSharedOnce.
+// Snapshot everything a payment can touch (incl. the executor's `available` accounting pool, when
+// present) so a reserved MISS restores byte-identically before the normal attempt (which must
+// reproduce the pre-reservation payment exactly).
+bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
+                      ManaPool* available, bool honor_legacy_cco)
+{
+    const std::uint64_t rmask = ReservableSpecialMask(state);
+    if (rmask != 0)
+    {
+        const int a = state.active_player_index;
+        const std::vector<Permanent> bf_snap  = state.battlefield;
+        const ManaPool               fm_snap  = state.floating_mana;
+        const ManaPool               av_snap  = available ? *available : ManaPool{};
+        const int  la  = state.players[a].life;
+        const int  lo  = state.players[1 - a].life;
+        const bool oll = state.opponent_lost_life_this_turn;
+        if (TapForCostSharedOnce(state, cost_in, for_creature, rmask, available, honor_legacy_cco))
+        { return true; }
+        state.battlefield                  = bf_snap;
+        state.floating_mana                = fm_snap;
+        if (available) { *available = av_snap; }
+        state.players[a].life              = la;
+        state.players[1 - a].life          = lo;
+        state.opponent_lost_life_this_turn = oll;
+    }
+    return TapForCostSharedOnce(state, cost_in, for_creature, /*reserved_mask=*/0, available,
+                                honor_legacy_cco);
+}
+
+// Animate all animatable lands (e.g. Mutavault) if the active player has spare mana. Run after
+// spells are cast, before combat, so the animated land can attack.
+// PRESERVED divergence: the executor gates on its accounting pool BEFORE attempting -- a FAILED
+// single attempt does not restore `available` (see the header), so it must not attempt what the
+// pool says it cannot pay. The rollout keeps no pool and simply tries (a failed direct payment
+// leaves the board untouched).
+void AnimateLandsShared(GameState& state, ManaPool* available)
+{
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index
+            || p.tapped || p.is_animated) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        if (!def || !def->params.can_animate || !def->params.animate_cost.has_value()) { continue; }
+        const ManaCost& cost = def->params.animate_cost.value();
+        if (available != nullptr && !available->CanPay(cost)) { continue; }
+        if (!TapForCostShared(state, cost, false, available,
+                              /*honor_legacy_cco=*/available == nullptr)) { continue; }
+        p.is_animated = true;
+    }
+}
+
+// Activate tap-and-pay token abilities (e.g. Sliver Hive) with any spare mana.
+// PRESERVED divergence around the affordability gate: the executor gates on its accounting pool
+// BEFORE tapping the source (so the gate can still see the source's own mana, though the payment
+// itself cannot use it -- the source is tapped first), and un-taps on a failed payment. The
+// rollout taps the {T} source FIRST and gates on a fresh board pool that therefore EXCLUDES the
+// source's own contribution, then ignores the payment result (the gate already passed). Neither
+// side's gate is wrong enough to matter in the suite, but they are NOT the same predicate; the
+// branch below keeps each side byte-identical to its historical behaviour.
+void ActivateTapTokensShared(GameState& state, ManaPool* available)
+{
+    int bf_size = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < bf_size; ++i)
+    {
+        if (state.battlefield[i].controller_index != state.active_player_index
+            || state.battlefield[i].tapped) { continue; }
+        const CardDefinition* def =
+            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
+        if (!def || !def->params.tap_token_cost.has_value()) { continue; }
+
+        if (!def->params.tap_token_requires_subtypes.empty())
+        {
+            bool found = false;
+            for (int j = 0; j < bf_size; ++j)
+            {
+                if (state.battlefield[j].controller_index != state.active_player_index) { continue; }
+                for (const std::string& req : def->params.tap_token_requires_subtypes)
+                    for (const std::string& cs : state.battlefield[j].card.m_subtypes)
+                        if (cs == req) { found = true; break; }
+                if (found) { break; }
+            }
+            if (!found) { continue; }
+        }
+
+        const ManaCost& add_cost = def->params.tap_token_cost.value();
+        if (available != nullptr)
+        {
+            if (!available->CanPay(add_cost)) { continue; }
+            state.battlefield[i].tapped = true;
+            if (!TapForCostShared(state, add_cost, true, available, /*honor_legacy_cco=*/false))
+            {
+                state.battlefield[i].tapped = false;
+                continue;
+            }
+        }
+        else
+        {
+            state.battlefield[i].tapped = true;   // {T} cost; tap before building pool
+            ManaPool remaining = AvailableManaPool(state);
+            if (!remaining.CanPay(add_cost)) { state.battlefield[i].tapped = false; continue; }
+            TapForCostShared(state, add_cost, true, nullptr, /*honor_legacy_cco=*/true);
+        }
+
+        // CreateToken appends to battlefield -- access via index afterward, never via stale refs.
+        CreateToken(state, state.active_player_index,
+                    def->params.tap_token_power,
+                    def->params.tap_token_toughness,
+                    def->params.tap_token_subtypes);
+    }
+}

@@ -1,7 +1,7 @@
 #pragma once
-// THE single-attempt mana payment (backlog C1, unification step 2). The executor
-// (AIEngine::TapForCostOnce) and the rollout (TurnSolver's TapForCostDirectOnce) were twin
-// ~380-line copies of this function kept in sync by comment discipline -- and every historical
+// THE single-attempt mana payment (backlog C1, unification step 2). The executor and the rollout
+// each carried a twin ~380-line copy of this function kept in sync by comment discipline -- and
+// every historical
 // divergence between them was a real bug (coloured-pip EffectiveProduces, Karoo two-colour
 // credit, storage burst; see docs/design/rollout-executor-lockstep.md). Both now delegate here.
 //
@@ -47,3 +47,22 @@ bool OrderingOpaque(const std::string& name);
 // produce this phase, plus the turn-scoped floating reserve. Was a byte-identical twin pair
 // (TurnSolver's file-static BuildPool / AIEngine::BuildAvailableMana); both sides now call this.
 ManaPool AvailableManaPool(const GameState& state);
+
+// THE public payment entry (C1 unit 5). Mana-source RESERVATION ("leaving sources up"): FIRST try
+// to pay while HOLDING the special sources (dorks / {C}-manlands / depletion) untapped; only if the
+// cost cannot be met without them fall through to the normal payment. Slack-only, so it is weakly
+// dominant. MTG_NO_RESERVE -> mask 0 -> a single normal attempt. Was a twin pair
+// (AIEngine::TapForCost / TurnSolver's TapForCostDirect) differing only in the `available`
+// accounting snapshot; parameters as in TapForCostSharedOnce (executor: &pool,false;
+// rollout: nullptr,true).
+bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
+                      ManaPool* available, bool honor_legacy_cco);
+
+// Post-spell mana sinks (C1 unit 5): animate manlands (Mutavault) / tap-and-pay token abilities
+// (Sliver Hive), run pre-combat so the creatures can attack. Twin pairs
+// (AIEngine::{AnimateLands,ActivateTapTokens} / TurnSolver's Simulate{AnimateLands,TapTokens})
+// with one PRESERVED structural divergence each around the affordability gate -- see the
+// definitions. `available` = the executor's accounting pool, nullptr for the rollout (which also
+// selects the rollout's MTG_LEGACY_CCO_PAY hatch, the poolless caller being the only one with it).
+void AnimateLandsShared(GameState& state, ManaPool* available);
+void ActivateTapTokensShared(GameState& state, ManaPool* available);

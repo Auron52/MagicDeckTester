@@ -3423,7 +3423,7 @@ inline bool HasUntappedRampFeeder(const GameState& state)
 
 // True if the active player controls an untapped filter / ramp-filter mana source (Cascade Bluffs
 // is_filter, Ferrous Lake ramp_filter) whose colour conversion the flat pool cannot model. Used to
-// gate the payment's floating-fed-filter retry (see TapForCostDirectOnce / AIEngine::TapForCostOnce)
+// gate the payment's floating-fed-filter retry (see TapForCostSharedOnce, ManaPayment.cpp)
 // so that retry is reached ONLY when such a land exists -> every filter-less board stays byte-identical.
 inline bool AnyUntappedFilterSource(const GameState& state)
 {

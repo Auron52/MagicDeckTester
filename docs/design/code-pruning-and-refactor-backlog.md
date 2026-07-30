@@ -59,8 +59,18 @@ really was Debug; the orphans really are referenced by nothing but this document
   `src/ai/ManaPayment.cpp`, byte-identical (unit + smoke + full regression).
 - **C1 unit 4 DONE** — `BuildPool`/`AIEngine::BuildAvailableMana` twins → the shared
   `AvailableManaPool` (`src/ai/ManaPayment.cpp`), byte-identical. All call sites renamed to
-  the one name; the test seam's pool helper dropped (the shared function is public). Next
-  units per the safety order: `AnimateLands`/`ActivateTapTokens` → land play → combat.
+  the one name; the test seam's pool helper dropped (the shared function is public).
+- **C1 unit 5 DONE** — the payment WRAPPER twins (`AIEngine::TapForCost` /
+  `TapForCostDirect`, reserved-first retry) → `TapForCostShared`, and the mana-sink twins
+  (`AnimateLands`/`ActivateTapTokens` vs `SimulateAnimateLands`/`SimulateTapTokens`) →
+  `AnimateLandsShared`/`ActivateTapTokensShared` (all in `src/ai/ManaPayment.cpp`); the
+  now-dead `TapForCostOnce`/`TapForCostDirectOnce` delegator layer deleted. Byte-identical.
+  **Finding:** the tap-token twins were NOT byte-equal — the executor gates affordability on
+  its accounting pool BEFORE tapping the {T} source (the gate can see the source's own mana),
+  the rollout taps first and gates on a fresh board pool that excludes it (and ignores the
+  payment result). Preserved as an explicit executor/rollout branch in
+  `ActivateTapTokensShared` rather than silently picking one. Next units per the safety
+  order: land play → combat.
 - **D1/D2 PARTIAL (user-approved)** — deleted with sign-off: 9 spent diagnostics
   (`MTG_ESC_PREDICT_{STATS,COSTCURVE,RALPHA}`, `MTG_HYBRID_LEAFDIAG`, `MTG_KEEP_{DETECT_Z,DUMP,SLOW_LOG}`,
   `MTG_TRACE_PLAYOUT_{SEED,TURN}`), 8 rejected-experiment knobs (`MTG_ESC_SINGLE_{ABS,FALLBACK,NOCLIMB,ROLLDEPTH,SEED}`,

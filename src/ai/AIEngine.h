@@ -341,25 +341,12 @@ private:
     // caller (the DigDraw's nested breakpoint_casts).
     bool PerformDig(GameState& state, const std::string& source, bool is_sacrifice);
 
-    // Animate untapped animatable lands (e.g. Mutavault) if mana is available.
-    void AnimateLands(GameState& state, ManaPool& available);
-
-    // Activate tap-and-pay token abilities (e.g. Sliver Hive) with spare mana.
-    void ActivateTapTokens(GameState& state, ManaPool& available);
-
-    // Build a ManaPool from all currently untapped mana sources the active player controls.
-
     // Tap permanents to pay the cost, updating the available pool in place.
     // for_creature: if false, skip creature-only mana sources (e.g. Ancient Ziggurat).
     // Returns false if the cost cannot be paid (leaves state unchanged on failure).
+    // Delegates to the shared TapForCostShared (ManaPayment.cpp, C1 unit 5).
     bool TapForCost(GameState& state, const ManaCost& cost, ManaPool& available,
                     bool for_creature = true);
-
-    // One payment attempt with a set of special sources HELD (reserved_mask = active-player
-    // battlefield indices never tapped). TapForCost wraps this: reserved attempt first, then a
-    // normal (reserved_mask=0) attempt. See ReserveEnabled / ReservableSpecialMask.
-    bool TapForCostOnce(GameState& state, const ManaCost& cost, ManaPool& available,
-                        bool for_creature, std::uint64_t reserved_mask);
 
     // Remove a spell from hand, tap sources to pay, and push a StackEntry.
     // alt_lifegain > 0 casts via an alternative cost (Invigorate / Skyshroud Cutter / Reverent

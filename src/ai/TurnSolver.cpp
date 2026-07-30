@@ -4168,47 +4168,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 // payment off colored_creature_only lands) moved into the unified TapForCostSharedOnce
 // (ManaPayment.cpp, `honor_legacy_cco`). See docs/design/post-breakpoint-search.md.
 
-// Tap mana sources in-place to pay a cost. Returns false if mana is unavailable.
-// Single payment attempt honouring `reserved_mask`; the public TapForCostDirect wrapper (below)
-// runs this first with the reserved specials held, then again with reserved_mask=0 if that missed.
-// Delegates to the UNIFIED TapForCostSharedOnce (ManaPayment.cpp) -- formerly a ~380-line twin of
-// AIEngine::TapForCostOnce kept in lockstep by comment discipline. The rollout keeps no
-// `available` accounting pool (nullptr) and honours the MTG_LEGACY_CCO_PAY measurement hatch
-// (see ManaPayment.h and PayProduces above).
-static bool TapForCostDirectOnce(GameState& state, const ManaCost& cost_in, bool for_creature,
-                                 std::uint64_t reserved_mask)
-{
-    return TapForCostSharedOnce(state, cost_in, for_creature, reserved_mask, nullptr,
-                                /*honor_legacy_cco=*/true);
-}
-
-// Public payment entry. Mana-source RESERVATION ("leaving sources up", see ReserveEnabled): FIRST
-// try to pay while HOLDING the special sources (dorks / {C}-manlands / depletion) untapped; only if
-// the cost cannot be met without them fall through to the normal payment. Slack-only, so it is
-// weakly dominant (a held source you did not need never hurts and keeps its attack / animate /
-// depletion-counter value). Default ON; MTG_NO_RESERVE -> mask 0 -> a single normal attempt, byte-
-// identical to the pre-reservation code. Mirrored byte-for-byte in AIEngine::TapForCost (lockstep).
+// Public payment entry. Delegates to the UNIFIED TapForCostShared (ManaPayment.cpp) -- formerly a
+// twin of AIEngine::TapForCost kept in lockstep by comment discipline. The rollout keeps no
+// accounting pool and carries the MTG_LEGACY_CCO_PAY measurement hatch.
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature)
 {
-    const std::uint64_t rmask = ReservableSpecialMask(state);
-    if (rmask != 0)
-    {
-        // Snapshot everything a payment can touch so a reserved MISS restores byte-identically
-        // before the normal attempt (which must reproduce the pre-reservation payment exactly).
-        const int a = state.active_player_index;
-        const std::vector<Permanent> bf_snap  = state.battlefield;
-        const ManaPool               fm_snap  = state.floating_mana;
-        const int  la  = state.players[a].life;
-        const int  lo  = state.players[1 - a].life;
-        const bool oll = state.opponent_lost_life_this_turn;
-        if (TapForCostDirectOnce(state, cost_in, for_creature, rmask)) { return true; }
-        state.battlefield                  = bf_snap;
-        state.floating_mana                = fm_snap;
-        state.players[a].life              = la;
-        state.players[1 - a].life          = lo;
-        state.opponent_lost_life_this_turn = oll;
-    }
-    return TapForCostDirectOnce(state, cost_in, for_creature, /*reserved_mask=*/0);
+    return TapForCostShared(state, cost_in, for_creature, nullptr, /*honor_legacy_cco=*/true);
 }
 
 // Apply a plan to the game state sequentially (bypassing the stack).
@@ -6443,64 +6408,6 @@ static void SimulateCombat(GameState& state)
     FireUtvaraAttackTokens(state, active, attackers);
 }
 
-
-// Activate tap-and-pay token abilities (e.g. Sliver Hive) with any spare mana.
-static void SimulateTapTokens(GameState& state)
-{
-    int active = state.active_player_index;
-    int bf_size = static_cast<int>(state.battlefield.size());
-    for (int i = 0; i < bf_size; ++i)
-    {
-        if (state.battlefield[i].controller_index != active
-            || state.battlefield[i].tapped) { continue; }
-        const CardDefinition* def =
-            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
-        if (!def || !def->params.tap_token_cost.has_value()) { continue; }
-
-        if (!def->params.tap_token_requires_subtypes.empty())
-        {
-            bool found = false;
-            for (int j = 0; j < bf_size; ++j)
-            {
-                if (state.battlefield[j].controller_index != active) { continue; }
-                for (const std::string& req : def->params.tap_token_requires_subtypes)
-                    for (const std::string& cs : state.battlefield[j].card.m_subtypes)
-                        if (cs == req) { found = true; break; }
-                if (found) { break; }
-            }
-            if (!found) { continue; }
-        }
-
-        const ManaCost& add_cost = def->params.tap_token_cost.value();
-        state.battlefield[i].tapped = true;  // {T} cost; tap before building pool
-        ManaPool remaining = AvailableManaPool(state);
-        if (!remaining.CanPay(add_cost)) { state.battlefield[i].tapped = false; continue; }
-        TapForCostDirect(state, add_cost, true);
-
-        // CreateToken appends to battlefield — never use stale refs after this point.
-        CreateToken(state, active,
-                    def->params.tap_token_power,
-                    def->params.tap_token_toughness,
-                    def->params.tap_token_subtypes);
-    }
-}
-
-// Animate all animatable lands (e.g. Mutavault) if the active player has spare mana.
-// Called after spells are cast, before combat, so the animated land can attack.
-static void SimulateAnimateLands(GameState& state)
-{
-    int active = state.active_player_index;
-    for (Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != active || p.tapped || p.is_animated) { continue; }
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-        if (!def || !def->params.can_animate || !def->params.animate_cost.has_value()) { continue; }
-        if (TapForCostDirect(state, def->params.animate_cost.value(), false))
-        {
-            p.is_animated = true;
-        }
-    }
-}
 
 // End-of-turn cleanup + start of next turn (untap, draw).
 // Returns false if the player lost on draw (empty library).
@@ -9484,8 +9391,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         }
         int life_before_pl = state.Opponent().life;
         ApplyPlanDirect(state, pre_plan, true);
-        SimulateAnimateLands(state);
-        SimulateTapTokens(state);
+        AnimateLandsShared(state, nullptr);
+        ActivateTapTokensShared(state, nullptr);
 
         // Combat
         SimulateCombat(state);
@@ -9955,8 +9862,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // guard (`self_damage >= ap.life`) so commit-the-line never commits a suicide
         // (burn gi=492: two Eidolons + an extra Goblin Guide = 8 self-damage at 6 life).
         if (s.ActivePlayer().life <= 0) { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
-        SimulateAnimateLands(s);
-        SimulateTapTokens(s);
+        AnimateLandsShared(s, nullptr);
+        ActivateTapTokensShared(s, nullptr);
         SimulateCombat(s);
         if (s.Opponent().life <= 0)  // win this turn -> floor
         {
@@ -10056,8 +9963,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 if (!bp_seen_states.insert(BuildSimKey(s, 0, 0, false)).second) { continue; }
                 if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
                 if (s.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
-                SimulateAnimateLands(s);
-                SimulateTapTokens(s);
+                AnimateLandsShared(s, nullptr);
+                ActivateTapTokensShared(s, nullptr);
                 SimulateCombat(s);
                 if (s.Opponent().life <= 0)       // wins THIS turn -> the earliest possible from here
                 {
@@ -10347,8 +10254,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 g_bp_trace_arm = BpTraceEnabled();
                 ApplyPlanDirect(copy, pp.plan, true);
                 g_bp_trace_arm = false;
-                SimulateAnimateLands(copy);
-                SimulateTapTokens(copy);
+                AnimateLandsShared(copy, nullptr);
+                ActivateTapTokensShared(copy, nullptr);
                 SimulateCombat(copy);
             }
             else
@@ -11320,8 +11227,8 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         }
         else
         {
-            SimulateAnimateLands(s);
-            SimulateTapTokens(s);
+            AnimateLandsShared(s, nullptr);
+            ActivateTapTokensShared(s, nullptr);
             SimulateCombat(s);
             if (s.Opponent().life <= 0)
             {
@@ -11439,8 +11346,8 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
             {
                 if (is_pre_combat)
                 {
-                    SimulateAnimateLands(s);
-                    SimulateTapTokens(s);
+                    AnimateLandsShared(s, nullptr);
+                    ActivateTapTokensShared(s, nullptr);
                     SimulateCombat(s);
                 }
                 if (s.Opponent().life <= 0)         // wins THIS turn (library-independent -> all k agree)
@@ -11744,8 +11651,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     && !bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second
                     && plan.bp_choice >= 0)
                 { ++candidates_done; continue; }
-                SimulateAnimateLands(copy);
-                SimulateTapTokens(copy);
+                AnimateLandsShared(copy, nullptr);
+                ActivateTapTokensShared(copy, nullptr);
 
                 // Combat this turn
                 SimulateCombat(copy);
@@ -11844,8 +11751,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         if (walker.Report(g_bp_cands_last)) { continue; }
                         if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
-                        SimulateAnimateLands(copy);
-                        SimulateTapTokens(copy);
+                        AnimateLandsShared(copy, nullptr);
+                        ActivateTapTokensShared(copy, nullptr);
                         SimulateCombat(copy);
                         if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
                         if (second_main)

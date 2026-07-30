@@ -2470,8 +2470,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // recorded digs above, so running it again would dig a second, off-line time.
         if (!fd_plan_committed) { UseSurplusLandAbilities(state); }
         ManaPool remaining = AvailableManaPool(state);
-        AnimateLands(state, remaining);
-        ActivateTapTokens(state, remaining);
+        AnimateLandsShared(state, &remaining);
+        ActivateTapTokensShared(state, &remaining);
     }
 
     // Restore any unplayed staged cards (still flagged m_is_staged in hand) back to
@@ -2819,23 +2819,6 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     return drew_land;
 }
 
-// ---- Land animation (e.g. Mutavault) ----
-
-void AIEngine::AnimateLands(GameState& state, ManaPool& available)
-{
-    for (Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index
-            || p.tapped || p.is_animated) { continue; }
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-        if (!def || !def->params.can_animate || !def->params.animate_cost.has_value()) { continue; }
-        const ManaCost& cost = def->params.animate_cost.value();
-        if (!available.CanPay(cost)) { continue; }
-        if (!TapForCost(state, cost, available, false)) { continue; }
-        p.is_animated = true;
-    }
-}
-
 // ---- Firebreathing (Scourge / Lathliss) ----
 // Build the leftover-combat-mana pool (the shared AvailableManaPool, the same pool the rollout's
 // SimulateCombat reads) and hand it to the shared ApplyFirebreathing so the executor pumps
@@ -2865,94 +2848,15 @@ void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_in
     ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool);
 }
 
-// ---- Tap-and-pay token abilities (e.g. Sliver Hive) ----
-
-void AIEngine::ActivateTapTokens(GameState& state, ManaPool& available)
-{
-    int bf_size = static_cast<int>(state.battlefield.size());
-    for (int i = 0; i < bf_size; ++i)
-    {
-        if (state.battlefield[i].controller_index != state.active_player_index
-            || state.battlefield[i].tapped) { continue; }
-        const CardDefinition* def =
-            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
-        if (!def || !def->params.tap_token_cost.has_value()) { continue; }
-
-        if (!def->params.tap_token_requires_subtypes.empty())
-        {
-            bool found = false;
-            for (int j = 0; j < bf_size; ++j)
-            {
-                if (state.battlefield[j].controller_index != state.active_player_index) { continue; }
-                for (const std::string& req : def->params.tap_token_requires_subtypes)
-                    for (const std::string& cs : state.battlefield[j].card.m_subtypes)
-                        if (cs == req) { found = true; break; }
-                if (found) { break; }
-            }
-            if (!found) { continue; }
-        }
-
-        const ManaCost& add_cost = def->params.tap_token_cost.value();
-        if (!available.CanPay(add_cost)) { continue; }
-
-        state.battlefield[i].tapped = true;
-        if (!TapForCost(state, add_cost, available, true))
-        {
-            state.battlefield[i].tapped = false;
-            continue;
-        }
-
-        // CreateToken appends to battlefield — access `i` via index afterward, never via ref.
-        CreateToken(state, state.active_player_index,
-                    def->params.tap_token_power,
-                    def->params.tap_token_toughness,
-                    def->params.tap_token_subtypes);
-    }
-}
-
 // ---- Mana ----
 
-// Single payment attempt honouring `reserved_mask` (active-player battlefield indices HELD, never
-// tapped here). The public TapForCost wrapper runs this first with the reserved specials held, then
-// again with reserved_mask=0 on a miss. Delegates to the UNIFIED TapForCostSharedOnce
-// (ManaPayment.cpp) -- formerly a ~380-line twin of TurnSolver's TapForCostDirectOnce kept in
-// lockstep by comment discipline. The executor threads its `available` accounting pool through and
-// has no MTG_LEGACY_CCO_PAY hatch (see ManaPayment.h).
-bool AIEngine::TapForCostOnce(GameState& state, const ManaCost& cost_in, ManaPool& available,
-                             bool for_creature, std::uint64_t reserved_mask)
-{
-    return TapForCostSharedOnce(state, cost_in, for_creature, reserved_mask, &available,
-                                /*honor_legacy_cco=*/false);
-}
-
-// Public payment entry (mirrors TurnSolver::TapForCostDirect). Mana-source RESERVATION: FIRST try to
-// pay while HOLDING the special sources untapped; only fall through to the normal payment when the
-// cost cannot be met without them. Slack-only -> weakly dominant. Default ON; MTG_NO_RESERVE
-// -> mask 0 -> one normal attempt, byte-identical to the pre-reservation code.
+// Public payment entry. Delegates to the UNIFIED TapForCostShared (ManaPayment.cpp) -- formerly a
+// twin of TurnSolver's TapForCostDirect kept in lockstep by comment discipline. The executor
+// threads its `available` accounting pool through and has no MTG_LEGACY_CCO_PAY hatch.
 bool AIEngine::TapForCost(GameState& state, const ManaCost& cost_in, ManaPool& available,
                           bool for_creature)
 {
-    const std::uint64_t rmask = ReservableSpecialMask(state);
-    if (rmask != 0)
-    {
-        // Snapshot everything a payment can touch (incl. the `available` accounting pool) so a
-        // reserved MISS restores byte-identically before the normal attempt.
-        const int a = state.active_player_index;
-        const std::vector<Permanent> bf_snap  = state.battlefield;
-        const ManaPool               fm_snap  = state.floating_mana;
-        const ManaPool               av_snap  = available;
-        const int  la  = state.players[a].life;
-        const int  lo  = state.players[1 - a].life;
-        const bool oll = state.opponent_lost_life_this_turn;
-        if (TapForCostOnce(state, cost_in, available, for_creature, rmask)) { return true; }
-        state.battlefield                  = bf_snap;
-        state.floating_mana                = fm_snap;
-        available                          = av_snap;
-        state.players[a].life              = la;
-        state.players[1 - a].life          = lo;
-        state.opponent_lost_life_this_turn = oll;
-    }
-    return TapForCostOnce(state, cost_in, available, for_creature, /*reserved_mask=*/0);
+    return TapForCostShared(state, cost_in, for_creature, &available, /*honor_legacy_cco=*/false);
 }
 
 // ---- Spell selection ----
