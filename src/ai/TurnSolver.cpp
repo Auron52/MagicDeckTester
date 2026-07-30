@@ -4655,6 +4655,34 @@ static int CastRankOf(const GameState& state, const std::string& name)
     return d ? ResolveProvider(state).CastOrderRank(state, *d) : 20;
 }
 
+// Canonical cast-order comparator: provider RANK first, then CHEAPEST-FIRST by the action's ACTUAL
+// cost. The rank alone is not enough -- every mana ritual shares one rank, so their relative order was
+// arbitrary, and the DEAREST could be attempted first, fail to be paid, and be silently dropped
+// (CastSpellFromHand returns void). That strands the mana it would have produced and can leave the
+// payoff short: Dragonstorm d0 seed 8585 led with Seething Song ({2}{R}) on two lands, skipped it,
+// floated 7 off the cheap rituals and then could not pay Dragonstorm ({8}{R} = 9) -- the whole chain
+// burned. A ritual chain funds itself cheapest-first (the principle BuildAccelPrefixOrder already uses
+// for the ENUMERATION); this applies it to EXECUTION.
+// It must key on Action::cost, NOT the card's printed cost: CastOrderRank only sees the CardDefinition,
+// so it cannot see that a SPLICED Desperate Ritual really costs {2}{R}{R} rather than {1}{R}. Ranking
+// by the printed cost put the spliced copy early and dropped it exactly like Seething Song.
+// Mirrored byte-for-byte by CastOrderLessAI in AIEngine so rollout and executor stay in lockstep.
+static bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
+{
+    const int ra = CastRankOf(state, a.card_name);
+    const int rb = CastRankOf(state, b.card_name);
+    if (ra != rb) { return ra < rb; }
+    if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
+    // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
+    // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
+    // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
+    // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
+    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
+    if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
+    return a.cost.ManaValue() < b.cost.ManaValue();
+}
+
 // A cast whose resolution triggers a mid-turn re-solve breakpoint (draw / staging / cascade
 // / retrace): the rest of the turn re-solves from the post-draw state, so the optimal cast
 // ORDER around it is situation-dependent (mana left, what is revealed) -- a static rank
@@ -6446,7 +6474,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     { order.push_back(i); }
                 }
                 std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-                { return CastRankOf(state, acts[x].card_name) < CastRankOf(state, acts[y].card_name); });
+                { return CastOrderLess(state, acts[x], acts[y]); });
                 for (int i : order)
                 {
                     const Action& a = acts[i];
@@ -11899,8 +11927,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         if (!p.searched_order)
         {
             std::stable_sort(hand_casts.begin(), hand_casts.end(), [&](int x, int y)
-            { return CastRankOf(state, p.actions[x].card_name)
-                   < CastRankOf(state, p.actions[y].card_name); });
+            { return CastOrderLess(state, p.actions[x], p.actions[y]); });
         }
         for (int i : hand_casts) { c.cast_order.push_back(p.actions[i].card_name); }
 
@@ -13281,7 +13308,7 @@ std::vector<std::string> TurnSolver::CanonicalNonSacCastOrder(const GameState& s
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { order.push_back(i); }
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-    { return CastRankOf(state, plan.actions[x].card_name) < CastRankOf(state, plan.actions[y].card_name); });
+    { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
     std::vector<std::string> names;
     names.reserve(order.size());
     for (int i : order) { names.push_back(plan.actions[i].card_name); }

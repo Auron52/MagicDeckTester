@@ -249,6 +249,26 @@ static int CastRankAI(const GameState& state, const std::string& name)
     return d ? ResolveProvider(state).CastOrderRank(state, *d) : 20;
 }
 
+// Mirror of TurnSolver::CastOrderLess (lockstep): provider rank, then cheapest-first by the action's
+// ACTUAL cost so a dearer accelerant is never attempted before a cheaper one and silently dropped.
+// Keys on Action::cost so a SPLICED Desperate Ritual sorts by its real {2}{R}{R}, not its printed
+// {1}{R}. See the TurnSolver comment for the Dragonstorm repro.
+static bool CastOrderLessAI(const GameState& state, const Action& a, const Action& b)
+{
+    const int ra = CastRankAI(state, a.card_name);
+    const int rb = CastRankAI(state, b.card_name);
+    if (ra != rb) { return ra < rb; }
+    if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
+    // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
+    // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
+    // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
+    // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
+    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
+    if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
+    return a.cost.ManaValue() < b.cost.ManaValue();
+}
+
 // Mirror of TurnSolver::OrderingOpaque: a cast with a mid-turn re-solve breakpoint
 // (draw / staging / cascade / retrace). The CastOrderRank reordering is skipped for any
 // set containing one (its ordering is search-owned); such a set keeps its canonical
@@ -2270,7 +2290,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!opaque && !plan.searched_order)
         {
             std::stable_sort(ns.begin(), ns.end(), [&](int x, int y)
-            { return CastRankAI(state, plan.actions[x].card_name) < CastRankAI(state, plan.actions[y].card_name); });
+            { return CastOrderLessAI(state, plan.actions[x], plan.actions[y]); });
         }
         std::string seq;
         for (int i : ns)
@@ -2410,7 +2430,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { order.push_back(i); }
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
-    { return CastRankAI(state, plan.actions[x].card_name) < CastRankAI(state, plan.actions[y].card_name); });
+    { return CastOrderLessAI(state, plan.actions[x], plan.actions[y]); });
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];

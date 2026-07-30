@@ -271,6 +271,11 @@ public:
     // standing MTG_UNPRUNED / MTG_UNPRUNE=payoffprune audit reverts to the full (unpruned) branch set.
     // Measured (train+held-out): ~-0.055 turns, -42% rollout calls. See docs/design/dragonstorm-payoff-prune.md.
     bool PrunesAcceleratorWithoutPayoff() const override { return true; }
+    // Ritual chains fund themselves cheapest-first; see DecisionProvider Hook 30. Keyed on the real
+    // action cost, so a SPLICED Desperate Ritual ({2}{R}{R}) sorts after a plain Rite of Flame ({R})
+    // rather than by its printed {1}{R} -- ranking by the printed cost dropped the spliced copy and
+    // cost 37 games (measured).
+    bool CastCheapestFirstWithinTier() const override { return true; }
 
     // Float-colour collapse (Hook: ImpulseFloatColorRedOnly / RestrictSacColorsToHasteAndRed). Apex of
     // Power floats RED only; Lotus Bloom floats RED unless a HASTE Dragon (Karrthus {4}{B}{R}{G} /

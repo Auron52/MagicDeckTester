@@ -222,7 +222,48 @@ not enough; the regressions must be easily recoverable."** Checked explicitly, a
 So the artifact is confined to the blind baseline and is fully recovered by the search the engine
 actually plays with.
 
-**Open follow-up (the real one).** The fix is NOT another greedy heuristic — it is closing the
+### FIXED (2026-07-30): the cast ORDER was dropping accelerants
+
+Root cause, found by dumping the committed plan. `DragonstormProvider::CastOrderRank` correctly puts
+rituals (15) before the payoff (20), but **every ritual shared rank 15**, so their order among
+themselves was arbitrary. The repro turn led with Seething Song (`{2}{R}`) on two Mountains: it is
+unaffordable, `CastSpellFromHand` returns `void` so the cast is **silently dropped**, the four cheap
+rituals then float 7, and Dragonstorm (`{8}{R}` = 9) is two short — the chain burns for nothing.
+
+The fix is a comparator, `CastOrderLess` / `CastOrderLessAI` (lockstep), applied at all five sort
+sites: provider rank first, then **cheapest-first among mana accelerants** by the action's cost. Three
+details were each measured, and each mattered:
+
+1. **Key on `Action::cost`, not the printed cost.** `CastOrderRank` only sees the `CardDefinition`, so
+   it cannot know a *spliced* Desperate Ritual really costs `{2}{R}{R}`. A first attempt ranked by the
+   printed `{1}{R}`, put the spliced copy early, and dropped it exactly like Seething Song — costing
+   **37 games**.
+2. **Gate it on the provider** (`DecisionProvider` Hook 30 `CastCheapestFirstWithinTier`, default off;
+   Dragonstorm opts in). At the root it churned 21 of 24 smoke configs, regressed
+   slivers/Hinata/Anti-Lifegain/Knights and cost **2 searched slowdowns**.
+3. **Restrict it to mana accelerants.** Applied to every equal-rank tie it also reordered *creatures*,
+   where cost is the wrong key and ETB order carries real value — Scourge of Valkas damages per Dragon
+   that enters, so `Lathliss; Scourge` vs `Scourge; Lathliss` differs by 3 damage, and
+   `overnight_d3_s7007` gi310 lost a turn to exactly that swap with identical draws.
+
+**Measured (final form):** regression net **−0.0760** (1 better / 0 worse); held-out overnight net
+**−0.3895** (4 better / **0 worse**), every Dragonstorm `d0` seed improving −0.0955..−0.0995;
+**searched `slower=0` in all three modes**. The original repro game goes from a loss to a **T3** win —
+two turns better than the pre-existing T5 line, so this is a gain, not merely a recovery.
+
+Note this is **independent of the mana-bound work**: the same game improves T5 → T3 under the legacy
+bound too. It is a latent defect the soundness fix merely exposed.
+
+**Not attempted — "eliminate all dropped casts" is the wrong bar.** Dropped casts are normal and
+by design: enumeration is deliberately optimistic (see `SameTurnReducerGenericCredit`, which documents
+that over-crediting is safe *because the search discards unpayable lines*) and a suite run drops
+thousands (12,607 on Dragonstorm `d0` over 2,000 games). What was wrong here was dropping an accelerant
+when a feasible order existed. The residual optimism still has no safety net at `d0`, where nothing
+filters it — that remains open.
+
+**Open follow-up.** `HinataProvider` gives its rituals a single rank too and has the same Irencrag
+handling, so it likely carries the same defect; it was deliberately left alone to keep attribution
+clean. Beyond that, the deeper item is closing the
 enumerator/executor gap so a committed plan's payoff cannot be stranded. Two candidate shapes:
 (a) reconcile `consider()`'s credited pool with what `TapForCost`/the executor can actually realise for
 a Rite-of-Flame chain (ordering-sensitive gross), or (b) refuse to commit a plan whose payoff the

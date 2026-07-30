@@ -412,6 +412,14 @@ public:
     // should net-help here. Base returns false -> byte-identical; only DragonstormProvider opts in.
     virtual bool PrunesAcceleratorWithoutPayoff() const { return false; }
 
+    // Hook 30: within one CastOrderRank tier, cast CHEAPEST-FIRST by the action's ACTUAL cost.
+    // For a ritual-chain deck the chain funds itself cheapest-first, so a dearer accelerant attempted
+    // before a cheaper one may be unpayable and is then SILENTLY DROPPED (CastSpellFromHand returns
+    // void) -- stranding the mana it would have produced and leaving the payoff short. Default OFF:
+    // measured at the ROOT it regressed slivers/Hinata/Anti-Lifegain/Knights and cost 2 searched
+    // slowdowns, so it is archetype logic (per .claude/skills/heuristic-optimization.md), not generic.
+    virtual bool CastCheapestFirstWithinTier() const { return false; }
+
     // Float-colour collapse for "add N mana of ANY ONE colour" effects (HEURISTIC, provider-owned; NOT
     // byte-identical). These effects emit one cast/sac variant PER candidate colour, and with several Lotus
     // Blooms + Apex in play the per-colour fan-out is the top enumeration driver (branch-stats: up to

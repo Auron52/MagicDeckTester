@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 21f8ad4  date 2026-07-30
+# Regression ground truth -- commit 0607c29  date 2026-07-30
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -22,9 +22,9 @@ antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
 hinata_smoke_d0_s1001=7.1270/ab23db1aa56193c3
 hinata_smoke_d3_s1001=5.9133/eaaaa9939d53bd7a
 hinata_smoke_d5_s1001=6.0400/eea3c46517d76fa6
-dragonstorm_smoke_d0_s1001=5.5150/a3cc4465bcb39551
-dragonstorm_smoke_d3_s1001=4.5267/4008825d1e683e82
-dragonstorm_smoke_d5_s1001=4.4933/43181808ea65d175
+dragonstorm_smoke_d0_s1001=5.4310/c89222f55757ca0a
+dragonstorm_smoke_d3_s1001=4.5267/794744ad2d5af779
+dragonstorm_smoke_d5_s1001=4.4933/dafd9a5af2d05ba1
 auras_smoke_d0_s1001=4.4560/083d95ae3a2a9c0f
 auras_smoke_d3_s1001=4.1533/d1d5be0464ab5754
 auras_smoke_d5_s1001=4.1480/3f0c22061ad83dc3
@@ -60,11 +60,11 @@ hinata_regression_d3_s2002=5.9100/74ede399775b2e6f
 hinata_regression_d3_s3003=5.8700/bb409fa4d314ae87
 hinata_regression_d5_s2002=5.8900/ea2e62bdb8988bb4
 hinata_regression_d5_s3003=5.8200/93721390f3c06633
-dragonstorm_regression_d0_s2002=5.5460/4d686d816e191b22
-dragonstorm_regression_d3_s2002=4.3433/057ecacbb1d34a99
-dragonstorm_regression_d3_s3003=4.4800/d49f561f36ba0ac8
-dragonstorm_regression_d5_s2002=4.3080/e477ae9bdbf00a4e
-dragonstorm_regression_d5_s3003=4.4800/ccf48c3ab3b0fa1e
+dragonstorm_regression_d0_s2002=5.4700/f0f978699be4bf02
+dragonstorm_regression_d3_s2002=4.3433/e6d92c84a8315989
+dragonstorm_regression_d3_s3003=4.4800/c14e6198a96747fa
+dragonstorm_regression_d5_s2002=4.3080/de435797bd065583
+dragonstorm_regression_d5_s3003=4.4800/f7e3b15273b27d83
 auras_regression_d0_s2002=4.4320/6a4d17e05b0f5333
 auras_regression_d3_s2002=4.1280/e94f592d652ec13f
 auras_regression_d3_s3003=4.2220/fcba8b69ceff0f79
@@ -144,18 +144,18 @@ hinata_overnight_d5_s4004=5.9033/b15f5f3f99e89f04
 hinata_overnight_d5_s5005=5.8667/bd0e4bfa4cc48349
 hinata_overnight_d5_s6006=5.9667/5ca778eb56e6981d
 hinata_overnight_d5_s7007=5.9267/37c2f67d73c08b91
-dragonstorm_overnight_d0_s4004=5.5040/716ac503b8546809
-dragonstorm_overnight_d0_s5005=5.5495/a5e2f948d4694c9d
-dragonstorm_overnight_d0_s6006=5.6355/55e6545baca73761
-dragonstorm_overnight_d0_s7007=5.5560/e7b3c6e19fff6409
-dragonstorm_overnight_d3_s4004=4.3860/8b023d7caa86c26a
-dragonstorm_overnight_d3_s5005=4.3120/71453a29fd03c18f
-dragonstorm_overnight_d3_s6006=4.3240/9bef60aeae965d39
-dragonstorm_overnight_d3_s7007=4.4460/b1ccd0aa0e272029
-dragonstorm_overnight_d5_s4004=4.4400/e5f811bcf30e46d7
-dragonstorm_overnight_d5_s5005=4.3667/39faf6fda30dc2e1
-dragonstorm_overnight_d5_s6006=4.2333/531414e95a9802fa
-dragonstorm_overnight_d5_s7007=4.4300/6e68b1e251026cf6
+dragonstorm_overnight_d0_s4004=5.4085/3c198668c4ff4698
+dragonstorm_overnight_d0_s5005=5.4500/2e16ca16ae165edf
+dragonstorm_overnight_d0_s6006=5.5370/c8ae30ee3f3c159f
+dragonstorm_overnight_d0_s7007=5.4600/37376e15fbf8f144
+dragonstorm_overnight_d3_s4004=4.3860/906e31394442e9f0
+dragonstorm_overnight_d3_s5005=4.3120/fa99043beaf0eb56
+dragonstorm_overnight_d3_s6006=4.3240/95d8c7b285c40458
+dragonstorm_overnight_d3_s7007=4.4460/3c25ed86646345d9
+dragonstorm_overnight_d5_s4004=4.4400/6994834e25870748
+dragonstorm_overnight_d5_s5005=4.3667/5ad30c2ed0bcdd0f
+dragonstorm_overnight_d5_s6006=4.2333/25d572ab78777068
+dragonstorm_overnight_d5_s7007=4.4300/c2f216f35c3de6e1
 auras_overnight_d0_s4004=4.4385/edbb0c159cf80669
 auras_overnight_d0_s5005=4.4410/3667ce54fcc6790f
 auras_overnight_d0_s6006=4.4595/927bc0bd5b44c53e
