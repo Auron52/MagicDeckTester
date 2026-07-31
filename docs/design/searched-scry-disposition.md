@@ -164,3 +164,65 @@ decision whose consequences fall outside the horizon. Audited the others: `fetch
 `cands[0]` (the heuristic's top pick) first, `land_face` emits `front` first, `bp_choice` leaves the
 greedy base plan ahead of its variants, and `scry_choice` puts `TopDispositionCandidates[0]` (the
 heuristic) first. Ponder was the only one inverted.
+
+---
+
+## 2026-07-31 — the scry/surveil branch is BUILT and ADOPTED
+
+Built as this doc specified, using the plan-level sub-decision pattern rather than a new breakpoint:
+
+| piece | what |
+|---|---|
+| `Plan::scry_choice` | which candidate the land's ETB look takes; -1 = provider heuristic at resolution |
+| `ScriptedTopChoice` | scoped RAII pin on `g_scripted_top_choice`, consumed by the first look, restored on exit so a nested apply cannot leak its script |
+| `ChooseTopDisposition` | one entry point for all three look sites (`ScryTop` / `SurveilTop` / `ReorderTopOrShuffle`): script, then human chooser, then heuristic |
+| `TopDispositionCandidates` | heuristic at index 0, then every other legal disposition -- so k=1 is byte-identical and ties go to the heuristic |
+
+The disposition resolves INLINE inside a land's ETB, so it cannot be an `Action`; the plan pins it
+for the apply instead, exactly as `bp_choice` pins a breakpoint continuation. Both the rollout
+(`ApplyPlanDirect`) and the executor (`AIEngine::TakeTurn`) set the same pin around the land drop, so
+they stay in lockstep by construction.
+
+**Cost is one AXIS, not a cross product.** The fan-out runs *after* `AppendBreakpointVariants` and
+skips plans that already carry a `bp_choice`, so cost is L+S rather than L*S — the same trade the
+`bp_at` axis makes. A line needing a non-heuristic scry *and* a non-greedy breakpoint continuation
+at once is deliberately out of reach.
+
+### Measured
+
+| mode | result |
+|---|---|
+| smoke | 14 games play-changed, **0 slower, 0 faster** (score-neutral) |
+| regression | **21 faster, 9 slower**; th d3 s2002 −0.0120, d5 s2002 −0.0200, d3 s3003 −0.0020, d5 s3003 +0.0067 |
+| overnight, HELD OUT | **72 faster, 5 slower**, all 8 Treasure Hunt cases improved, **−0.0690** summed |
+
+All **14** slower games across both modes are budget churn: every one recovers at 4x its case budget
+and stays recovered at 16x. Zero persistent slowdowns.
+
+Depth 0 is byte-identical (the branch is depth-gated, and at d0 an extra variant would not be a
+search — just enumeration order picking a different fixed rule). Wall time is unchanged: the
+overnight arm's makespan was 8m27s against 8m39s for the baseline.
+
+Note the audit's inline `explain_game` diff is **not usable for this A/B**: it re-runs both arms as
+subprocesses that inherit `MTG_SCRY_SEARCH` from the environment, so both sides get the branch and it
+reports "kept hand + draws IDENTICAL" for games that in fact diverge. The classification above was
+done by hand, toggling the flag per arm.
+
+### What this unblocks
+
+The three Treasure Hunt decisions parked in `treasure-hunt-open-findings.md` as "no fixed rule can
+express this" (the first Land's Edge on top, a depletion land on top, colour-vs-tempo trades) are now
+reachable by search rather than by another round of scry-heuristic tuning — which was measured out at
+3 games moved in 9,000.
+
+### The heuristic variant is autonomous-only
+
+Enumerating the heuristic first is a claim about the SEARCH's tie-break, and it does not transfer to
+the human-play menu: there the heuristic variant is a duplicate of whichever pinned option it
+resolves to, so the player would see a redundant third entry. It also shifted the recorded plan
+indices of two saved Hinata references (`main_phase` 26 -> 35), which the viewer protocol check
+reported as `repaired` -- informational rather than gating, since both reproduced their recorded line
+exactly, but a needless churn of user-owned files.
+
+`HumanPlayActive()` gates it: autonomous search gets heuristic-first, the human menu keeps the
+explicit two. References return to 138 ok / 0 repaired.
