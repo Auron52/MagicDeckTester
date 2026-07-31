@@ -226,3 +226,26 @@ exactly, but a needless churn of user-owned files.
 
 `HumanPlayActive()` gates it: autonomous search gets heuristic-first, the human menu keeps the
 explicit two. References return to 138 ok / 0 repaired.
+
+---
+
+## CORRECTION 2026-07-31 — the Ponder result was misdiagnosed
+
+The section above attributes the Ponder keep-vs-shuffle result (0.325 worse with the pinned-keep
+variant enumerated first; free once the heuristic was enumerated first) to the search's
+strict-improvement **tie-break**. That reasoning is sound in general and the fix that shipped is
+still the right one, but it is not what was happening.
+
+`ponder_keep` is **cost-neutral**, so all three variants carry the same cast-NAME set — and
+`EnumeratePlans`' autonomous `plan_signature` keys only on names. The dedup therefore keeps the
+first-enumerated variant and discards the other two, every time. Enumerating the pinned keep first
+made the engine *always keep* (which is exactly the 0-shuffles-vs-13 observation); enumerating the
+heuristic first made the branch **not exist** rather than free.
+
+Verified directly: `MTG_PONDER_SEARCH=0` and `MTG_PONDER_SEARCH=1` produce identical play (Hinata,
+200 games, seed 4004, d3, budget 10 → 5.8950 both).
+
+So the Ponder keep-vs-shuffle call is **still unsearched**. The real fix is the post-dedup axis the
+tutor target now uses — see `searched-action-subdecisions.md`. The land-ETB scry disposition in this
+document is unaffected: `Plan::scry_choice` variants are emitted in `EnumeratePlansWithLand` *after*
+`EnumeratePlans` returns, so they never meet the dedup.
