@@ -458,6 +458,100 @@ void PrintTree(const KeepModel& model, const std::vector<KeepNode>& nodes, int i
     std::cerr << pad << "else:\n";
     PrintTree(model, nodes, nd.no, indent + 1);
 }
+// Ridge fit in STANDARDISED feature space (lambda scale-free + well-conditioned despite collinear
+// colour features), mapped back to raw units. Operates on an index subset of `rows`.
+bool RidgeFit(const std::vector<Row>& rows, const std::vector<int>& idx, int D, double lambda,
+              std::vector<double>& coef, double& inter)
+{
+    const int n = static_cast<int>(idx.size());
+    if (n == 0) { return false; }
+    std::vector<double> mean(D, 0.0), sd(D, 0.0); double ybar = 0.0;
+    for (int i : idx) { ybar += rows[i].kv; for (int j = 0; j < D; ++j) { mean[j] += rows[i].x[j]; } }
+    ybar /= n; for (int j = 0; j < D; ++j) { mean[j] /= n; }
+    for (int i : idx) for (int j = 0; j < D; ++j)
+    { const double d = rows[i].x[j] - mean[j]; sd[j] += d * d; }
+    for (int j = 0; j < D; ++j) { sd[j] = (sd[j] > 1e-9) ? std::sqrt(sd[j] / n) : 0.0; }
+    std::vector<std::vector<double>> A(D, std::vector<double>(D, 0.0));
+    std::vector<double> rhs(D, 0.0), z(D, 0.0);
+    for (int i : idx)
+    {
+        for (int j = 0; j < D; ++j) { z[j] = sd[j] > 0.0 ? (rows[i].x[j] - mean[j]) / sd[j] : 0.0; }
+        const double yc = rows[i].kv - ybar;
+        for (int a = 0; a < D; ++a)
+        {
+            if (z[a] == 0.0) { continue; }
+            rhs[a] += z[a] * yc;
+            for (int b = 0; b < D; ++b) { A[a][b] += z[a] * z[b]; }
+        }
+    }
+    for (int j = 0; j < D; ++j) { A[j][j] += lambda; }
+    std::vector<double> w;
+    if (!SolveLinear(A, rhs, w)) { return false; }
+    coef.assign(D, 0.0); inter = ybar;
+    for (int j = 0; j < D; ++j)
+    { if (sd[j] > 0.0) { coef[j] = w[j] / sd[j]; inter -= coef[j] * mean[j]; } }
+    return true;
+}
+
+// Held-out turn-regret of an additive DECISION (keep iff pred<=thr) over a row subset.
+double ScoreRegret(const std::vector<Row>& rows, const std::vector<double>& coef, double inter,
+                   int D, const std::vector<int>& idx)
+{
+    if (idx.empty()) { return 0.0; }
+    double sum = 0.0;
+    for (int i : idx)
+    {
+        double pred = inter;
+        for (int j = 0; j < D; ++j) { pred += coef[j] * rows[i].x[j]; }
+        const bool keep = pred <= rows[i].thr;
+        sum += (keep ? rows[i].kv : rows[i].thr) - std::min(rows[i].kv, rows[i].thr);
+    }
+    return sum / idx.size();
+}
+
+// Fit ONE additive score on a row subset (internal lambda sweep on a sub-split, refit on the full
+// subset), quantised to fixed-point. thr from the baseline. Returns empty on degenerate input.
+KeepScore RidgeScore(const std::vector<Row>& rows, const std::vector<int>& subset, int D,
+                     int label_max, const double (&baseline)[2][M_CAP + 1])
+{
+    if (static_cast<int>(subset.size()) < 30) { return KeepScore{}; }
+    std::vector<int> tr, te;
+    for (int i : subset) { if (rows[i].game % 5 == 0) { te.push_back(i); } else { tr.push_back(i); } }
+    if (tr.empty()) { tr = subset; }
+    const double lambdas[] = { 0.001, 0.1, 1.0, 10.0, 100.0 };
+    double best_lambda = 1.0, best_rg = 1e18; std::vector<double> coef; double inter = 0.0;
+    for (double lam : lambdas)
+    {
+        if (!RidgeFit(rows, tr, D, lam, coef, inter)) { continue; }
+        const double rg = te.empty() ? 0.0 : ScoreRegret(rows, coef, inter, D, te);
+        if (rg < best_rg - 1e-12) { best_rg = rg; best_lambda = lam; }
+    }
+    std::vector<double> ca; double ia = 0.0;
+    if (!RidgeFit(rows, subset, D, best_lambda, ca, ia)) { return KeepScore{}; }
+    KeepScore sc; sc.coefs.resize(D);
+    for (int j = 0; j < D; ++j) { sc.coefs[j] = std::llround(ca[j] * SCORE_SCALE); }
+    sc.intercept = std::llround(ia * SCORE_SCALE);
+    sc.thr.assign(2, {});
+    for (int p = 0; p < 2; ++p) for (int m = 0; m <= label_max; ++m)
+    { sc.thr[p].push_back(std::llround(baseline[p][m + 1] * SCORE_SCALE)); }
+    return sc;
+}
+
+// Walk an UNCOMPACTED tree to the leaf node a feature vector lands in (feat indices into full vector).
+int LeafOf(const std::vector<KeepNode>& nodes, const std::vector<int>& x)
+{
+    const int n = static_cast<int>(nodes.size()); int idx = 0;
+    for (int s = 0; s <= n && idx >= 0 && idx < n; ++s)
+    {
+        const KeepNode& nd = nodes[idx];
+        if (nd.feat < 0) { return idx; }
+        const int v = (nd.feat < static_cast<int>(x.size())) ? x[nd.feat] : 0;
+        const bool t = (nd.op == (int)KeepOp::Ge) ? v >= nd.val : (nd.op == (int)KeepOp::Eq) ? v == nd.val : v <= nd.val;
+        idx = t ? nd.yes : nd.no;
+    }
+    return 0;
+}
+
 } // namespace
 
 // ==========================================================================
@@ -783,83 +877,8 @@ KeepModel BuildKeepModel(const Decklist& deck,
     // predictor in place of the single noisy realised kv. Encodes the "graded accumulation of soft
     // factors" a shallow tree can't. The HYBRID below reuses this per tree-leaf.
 
-    // Ridge fit in STANDARDISED feature space (lambda scale-free + well-conditioned despite collinear
-    // colour features), mapped back to raw units. Operates on an index subset of `rows`.
+    // D is the feature-vector width; the ridge helpers (file scope) take it as a parameter.
     const int D = g_nf;
-    auto ridge_fit = [&](const std::vector<Row>& rows, const std::vector<int>& idx, double lambda,
-                         std::vector<double>& coef, double& inter) -> bool
-    {
-        const int n = static_cast<int>(idx.size());
-        if (n == 0) { return false; }
-        std::vector<double> mean(D, 0.0), sd(D, 0.0); double ybar = 0.0;
-        for (int i : idx) { ybar += rows[i].kv; for (int j = 0; j < D; ++j) { mean[j] += rows[i].x[j]; } }
-        ybar /= n; for (int j = 0; j < D; ++j) { mean[j] /= n; }
-        for (int i : idx) for (int j = 0; j < D; ++j)
-        { const double d = rows[i].x[j] - mean[j]; sd[j] += d * d; }
-        for (int j = 0; j < D; ++j) { sd[j] = (sd[j] > 1e-9) ? std::sqrt(sd[j] / n) : 0.0; }
-        std::vector<std::vector<double>> A(D, std::vector<double>(D, 0.0));
-        std::vector<double> rhs(D, 0.0), z(D, 0.0);
-        for (int i : idx)
-        {
-            for (int j = 0; j < D; ++j) { z[j] = sd[j] > 0.0 ? (rows[i].x[j] - mean[j]) / sd[j] : 0.0; }
-            const double yc = rows[i].kv - ybar;
-            for (int a = 0; a < D; ++a)
-            {
-                if (z[a] == 0.0) { continue; }
-                rhs[a] += z[a] * yc;
-                for (int b = 0; b < D; ++b) { A[a][b] += z[a] * z[b]; }
-            }
-        }
-        for (int j = 0; j < D; ++j) { A[j][j] += lambda; }
-        std::vector<double> w;
-        if (!SolveLinear(A, rhs, w)) { return false; }
-        coef.assign(D, 0.0); inter = ybar;
-        for (int j = 0; j < D; ++j)
-        { if (sd[j] > 0.0) { coef[j] = w[j] / sd[j]; inter -= coef[j] * mean[j]; } }
-        return true;
-    };
-    // Held-out turn-regret of an additive DECISION (keep iff pred<=thr) over a row subset.
-    auto score_regret = [&](const std::vector<Row>& rows, const std::vector<double>& coef, double inter,
-                            const std::vector<int>& idx) -> double
-    {
-        if (idx.empty()) { return 0.0; }
-        double sum = 0.0;
-        for (int i : idx)
-        {
-            double pred = inter;
-            for (int j = 0; j < D; ++j) { pred += coef[j] * rows[i].x[j]; }
-            const bool keep = pred <= rows[i].thr;
-            sum += (keep ? rows[i].kv : rows[i].thr) - std::min(rows[i].kv, rows[i].thr);
-        }
-        return sum / idx.size();
-    };
-    // Fit ONE additive score on a row subset (internal lambda sweep on a sub-split, refit on the full
-    // subset), quantised to fixed-point. thr from the baseline. Returns empty on degenerate input.
-    auto ridge_score = [&](const std::vector<Row>& rows, const std::vector<int>& subset,
-                           const double (&baseline)[2][M_CAP + 1]) -> KeepScore
-    {
-        if (static_cast<int>(subset.size()) < 30) { return KeepScore{}; }
-        std::vector<int> tr, te;
-        for (int i : subset) { if (rows[i].game % 5 == 0) { te.push_back(i); } else { tr.push_back(i); } }
-        if (tr.empty()) { tr = subset; }
-        const double lambdas[] = { 0.001, 0.1, 1.0, 10.0, 100.0 };
-        double best_lambda = 1.0, best_rg = 1e18; std::vector<double> coef; double inter = 0.0;
-        for (double lam : lambdas)
-        {
-            if (!ridge_fit(rows, tr, lam, coef, inter)) { continue; }
-            const double rg = te.empty() ? 0.0 : score_regret(rows, coef, inter, te);
-            if (rg < best_rg - 1e-12) { best_rg = rg; best_lambda = lam; }
-        }
-        std::vector<double> ca; double ia = 0.0;
-        if (!ridge_fit(rows, subset, best_lambda, ca, ia)) { return KeepScore{}; }
-        KeepScore sc; sc.coefs.resize(D);
-        for (int j = 0; j < D; ++j) { sc.coefs[j] = std::llround(ca[j] * SCORE_SCALE); }
-        sc.intercept = std::llround(ia * SCORE_SCALE);
-        sc.thr.assign(2, {});
-        for (int p = 0; p < 2; ++p) for (int m = 0; m <= label_max; ++m)
-        { sc.thr[p].push_back(std::llround(baseline[p][m + 1] * SCORE_SCALE)); }
-        return sc;
-    };
 
     auto fit_score = [&](const double (&baseline)[2][M_CAP + 1], const std::string& tag) -> KeepScore
     {
@@ -867,23 +886,9 @@ KeepModel BuildKeepModel(const Decklist& deck,
         if (static_cast<int>(rows.size()) < 200)
         { std::cerr << "  keep-model" << tag << ": too few labeled hands (" << rows.size() << ").\n"; return KeepScore{}; }
         std::vector<int> all(rows.size()); for (size_t i = 0; i < rows.size(); ++i) { all[i] = static_cast<int>(i); }
-        return ridge_score(rows, all, baseline);
+        return RidgeScore(rows, all, D, label_max, baseline);
     };
 
-    // Walk an UNCOMPACTED tree to the leaf node a feature vector lands in (feat indices into full vector).
-    auto leaf_of = [&](const std::vector<KeepNode>& nodes, const std::vector<int>& x) -> int
-    {
-        const int n = static_cast<int>(nodes.size()); int idx = 0;
-        for (int s = 0; s <= n && idx >= 0 && idx < n; ++s)
-        {
-            const KeepNode& nd = nodes[idx];
-            if (nd.feat < 0) { return idx; }
-            const int v = (nd.feat < static_cast<int>(x.size())) ? x[nd.feat] : 0;
-            const bool t = (nd.op == (int)KeepOp::Ge) ? v >= nd.val : (nd.op == (int)KeepOp::Eq) ? v == nd.val : v <= nd.val;
-            idx = t ? nd.yes : nd.no;
-        }
-        return 0;
-    };
 
     // ---- HYBRID model-tree: a regret tree PARTITIONS the hand space; each leaf decides by its OWN
     // additive score (not a constant keep/mull). Strictly generalises both forms -- a 1-leaf tree = pure
@@ -901,19 +906,19 @@ KeepModel BuildKeepModel(const Decklist& deck,
         // Partition at the REGRET TREE's granularity (fit_nodes uses N/200), NOT a coarse N/40 -- the
         // coarse floor capped the hybrid at ~2 leaves on TH so its leaf scores SMEARED the bimodal
         // structure that the 4-leaf regret tree (downstream -0.009) cleanly partitions. Leaves that end
-        // up too small for a stable ridge (<30 rows) fall back to the node's CONSTANT keep (ridge_score
+        // up too small for a stable ridge (<30 rows) fall back to the node's CONSTANT keep (RidgeScore
         // returns empty), so a fine partition = regret-tree splits + scores grafted onto the big leaves.
         const int min_leaf = std::max(30, N / 200);
 
         // Assemble a hybrid from a partition tree + per-leaf scores fit on `fit_idx` rows; eval regret on
-        // `eval_idx`. Reuses leaf_of to route rows. Returns regret + (optionally) the built model.
+        // `eval_idx`. Reuses LeafOf to route rows. Returns regret + (optionally) the built model.
         auto build_eval = [&](int depth, const std::vector<int>& fit_idx, const std::vector<int>& eval_idx,
                               std::vector<KeepNode>* nodes_out, std::vector<KeepScore>* leaves_out) -> double
         {
             std::vector<KeepNode> nodes = TreeBuilder(rows, depth, min_leaf, /*regret=*/true).Build(fit_idx);
             // group fit rows by leaf
             std::map<int, std::vector<int>> by_leaf;
-            for (int i : fit_idx) { by_leaf[leaf_of(nodes, rows[i].x)].push_back(i); }
+            for (int i : fit_idx) { by_leaf[LeafOf(nodes, rows[i].x)].push_back(i); }
             std::map<int, int> leaf_index;            // leaf node idx -> position in leaves vector
             std::vector<KeepScore> leaves;
             // A leaf earns its linear SCORE only if it BEATS the leaf's CONSTANT decision (the regret-tree
@@ -926,7 +931,7 @@ KeepModel BuildKeepModel(const Decklist& deck,
             constexpr double LEAF_MARGIN = 0.02;
             for (auto& kv : by_leaf)
             {
-                KeepScore sc = ridge_score(rows, kv.second, baseline);
+                KeepScore sc = RidgeScore(rows, kv.second, D, label_max, baseline);
                 if (sc.empty()) { continue; }         // tiny leaf -> fall back to the node's constant keep
                 std::vector<int> ltr, lte;
                 for (int i : kv.second) { (rows[i].game % 5 == 0 ? lte : ltr).push_back(i); }
@@ -953,7 +958,7 @@ KeepModel BuildKeepModel(const Decklist& deck,
             double sum = 0.0; int cnt = 0;
             for (int i : eval_idx)
             {
-                const int lf = leaf_of(nodes, rows[i].x);
+                const int lf = LeafOf(nodes, rows[i].x);
                 bool keep;
                 auto it = leaf_index.find(lf);
                 if (it != leaf_index.end()) { keep = KeepModel::KeepByScoreOf(leaves[it->second], rows[i].x); }
