@@ -88,3 +88,36 @@ Greps literal paths out of every script and asks the filesystem. It cannot see p
 variables, so a clean report is **not** proof a script runs — it is proof of the absence of one
 specific, recurring rot. Currently 52 dead paths across 11 scripts, all from the per-deck folder
 move; those scripts are unverified one-off A/Bs, so they are reported rather than blind-edited.
+
+## `keepgen_check.sh`
+
+```
+bash test/lib/keepgen_check.sh base     # capture a baseline with the current binary
+# ...change code, ./build.sh...
+bash test/lib/keepgen_check.sh mine     # byte-diff every artifact against base
+```
+
+Byte-exact check for the exhaustive keep/bottom generator and the offline merge tool. **The
+regression suite drives `mtg`, not `mtg-analyze`, so it cannot see a change to profile generation at
+all** — a broken generator ships a subtly-worse mulligan policy that surfaces days later as a drifted
+win turn. Ten runs, ~4 minutes, 38 compared artifacts: a below-floor generation (which exercises the
+profile REFUSAL branch), two disjoint-seed chunks that clear the floor (so `BuildPolicyFromTables`
+and the profile write run), their merge, the synthetic adaptive-bottom reconstruction, the offline
+regret simulator, an execution-trace generation, the change-detection carry against a prior pool, the
+same with trace-based cell reuse, and a cross-run prune set emitted then consumed.
+
+It **asserts each opt-in path engaged**, by grepping for the line that path prints. An opt-in path
+that is entered and skipped compares equal and proves nothing, which is the failure mode this kind of
+harness is most prone to.
+
+Four things that silently invalidate a comparison, all handled — and all found the hard way:
+
+- `--seed` is mandatory. Unseeded, the analyzer randomizes `meta.seed_base` per run.
+- `meta.engine_fp` is a build-time hash over the engine source, so it moves on a pure code move.
+- The raw path is echoed into the report, so it is rewritten before comparing.
+- **Each run needs its own raw path.** The generator reads an existing `out_raw` as a resume
+  checkpoint, so a shared path couples the runs — and the first run of a fresh invocation sees no
+  file while the second sees one. Caught by running the harness twice against one build, which is
+  the only way to know a baseline is a baseline.
+- stderr carries wall-clock progress (percent sampled by elapsed time, throughput). Those lines are
+  dropped and timings blanked; semantic stderr (a PRIOR-RAW refusal, a PRUNE-SET carry count) is not.
