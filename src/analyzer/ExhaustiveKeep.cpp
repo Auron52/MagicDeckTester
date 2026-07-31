@@ -993,6 +993,156 @@ static PriorCarry LoadPriorCarry(const Decklist& deck, const ExhaustiveKeepConfi
     return pc;
 }
 
+// The prune-set carry state. Four values escape the load into the sampling loop, so they travel as one
+// struct. Member names match what the locals were called, so every downstream use reads the same as
+// before apart from the `prune.` prefix.
+struct PruneCarry
+{
+    std::vector<std::array<bool, 2>> frozen7;          // skip cells (zero rollouts, prior V preloaded)
+    std::vector<std::array<bool, 2>> carry_lowfloor7;  // verify cells (reduced floor, still refinable)
+    // Phase 2 sub-table freeze: a size-(7-m) sub-hand whose value is confidently ABOVE its keep-bar
+    // Dopt[m+1] is never a KEEP's bottoming argmin (a hand bottoming into it has keep_val > Dopt -> it
+    // mulligans), so skipping its rollouts is decision-preserving. frozen_sub[H][idx][pd], H=1..HAND-1.
+    std::vector<std::vector<std::array<bool, 2>>> frozen_sub;
+    long long carry_floor = 2;   // MTG_KEEP_CARRY_FLOOR: a verify cell's reduced starting rollout count
+};
+
+// ---- Cross-run PRUNE-SET consume / carry-forward (MTG_KEEP_PRUNE_SET) ----------------------------
+// A prior run's prune-set lists size-7 cells that were CONFIDENT MULLIGANS (see the emit path in
+// RunKeepMerge). Two uses, one mechanism -- carry that judgement forward so this run doesn't re-
+// establish the obvious mulligans:
+//   (a) MULTI-CHUNK POOLING (same commit): skip the junk cells in later chunks so the budget lands on
+//       the near-threshold cells; frozen cells' counts come from the earlier chunks at merge.
+//   (b) REGENERATION on a NEW COMMIT (same decklist): reuse last run's confident-mull set so a re-run
+//       (e.g. after a play-logic fix) skips them instead of re-paying their floor pass. This is the
+//       "don't re-run the multi-day deck from scratch" lever. bucket_fp/deck_fp are identical for the
+//       same list, and play_digest/commit are deliberately NOT gated, so a new-commit prune-set is
+//       accepted; the values are stale-commit but a confident mull's value only enters as
+//       min(V,Dopt_new[1])==Dopt_new[1] (Dopt is recomputed fresh from this run's smaller tables).
+//
+// MTG_KEEP_CARRY_MODE selects the fidelity posture (default "verify"):
+//   * verify  -- carried cells start at a REDUCED floor (MTG_KEEP_CARRY_FLOOR, default 2) instead of
+//                being skipped, and are refinable. The adaptive gate is curse-safe (an under-sampled
+//                cell reads LOWER -> looks more keepable -> gets refined), so any hand that FLIPPED to
+//                keepable on the new deck/commit is caught and promoted. Fidelity-preserving; still
+//                saves most of the junk floor. Poolable (real fresh samples). Requires an adaptive run
+//                (a uniform run has no refiner to catch a flip -> carried cells are sampled in full).
+//   * skip    -- carried cells get ZERO rollouts and their prior value is preloaded (asserted MULL).
+//                Max saving. EXACTLY policy-preserving for use (a) [min(V,Dopt[1])==Dopt[1] can't move
+//                Dopt or keep flags, and the pool supplies the real counts]. For use (b) it is a
+//                fidelity BET: a large enough deck/play change could lift the threshold above a carried
+//                hand's true new value, and a hard skip would silently keep it as MULL. Use for a
+//                stable list where the junk is structural (0-land / all-land / off-colour floods).
+//
+// Correctness invariants (both modes): the work vector is left INTACT (a carried cell keeps its work
+// index w, so every OTHER cell's rollout seed stream is byte-identical to an uncarried run); skip sets
+// only t.V (recompute() skips cnt==0 so the preloaded V survives; the raw emits count=0 -> no samples
+// carried into this run's sidecar -> use-(a) pooling takes counts from the earlier chunks, no double-
+// count; per-pd exact). Fingerprints (bucket/deck/equiv_seed/K/max_mull) are checked -- REFUSE on
+// mismatch (a changed decklist changes bucket/deck_fp -> a modified-list carry is a separate feature).
+//
+// `tables` is taken by non-const reference because skip mode preloads the carried cells' V in place.
+static PruneCarry LoadPruneCarry(const Decklist& deck, const ExhaustiveKeepConfig& cfg,
+                                 const EquivReport& eq, std::vector<SizeTable>& tables, int K)
+{
+    auto TB = [&](int H) -> SizeTable& { return tables[HAND - H]; };
+
+    PruneCarry prune;
+    prune.frozen7.assign(TB(HAND).comps.size(), { false, false });
+    prune.carry_lowfloor7.assign(TB(HAND).comps.size(), { false, false });
+    prune.frozen_sub.resize(HAND);
+    for (int H = 1; H < HAND; ++H) { prune.frozen_sub[H].assign(TB(H).comps.size(), { false, false }); }
+    prune.carry_floor = []{ const char* s = std::getenv("MTG_KEEP_CARRY_FLOOR");
+        return (s && *s) ? std::max<long long>(1, std::strtoll(s, nullptr, 10)) : 2LL; }();
+    const bool carry_skip = []{ const char* s = std::getenv("MTG_KEEP_CARRY_MODE");
+        return s && std::string(s) == "skip"; }();   // default (unset / "verify") => verify
+    if (const char* ps = std::getenv("MTG_KEEP_PRUNE_SET"); ps && *ps)
+    {
+        std::ifstream pf(ps);
+        if (!pf) { std::cerr << "[keepgen] PRUNE-SET: cannot open " << ps << " -- ignoring\n" << std::flush; }
+        else
+        {
+            nlohmann::json pj;
+            bool parsed = true;
+            try { pf >> pj; }
+            catch (const std::exception& e)
+            { std::cerr << "[keepgen] PRUNE-SET: bad json (" << e.what() << ") -- ignoring\n" << std::flush; parsed = false; }
+            if (parsed && pj.contains("meta") && pj.contains("frozen"))
+            {
+                // Fingerprints must match, else the frozen comps index a different bucket map / deck and
+                // we'd carry the wrong cells. REFUSE on any mismatch (do not silently mis-apply).
+                uint64_t my_bucket_fp = 1469598103934665603ULL;
+                for (int b = 0; b < K; ++b)
+                { my_bucket_fp = Fnv("|", my_bucket_fp);
+                  for (const std::string& n : eq.classes[b].members) { my_bucket_fp = Fnv(n + ",", my_bucket_fp); } }
+                std::vector<std::string> dn;
+                for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
+                std::sort(dn.begin(), dn.end());
+                uint64_t my_deck_fp = 1469598103934665603ULL;
+                for (const std::string& n : dn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
+                const auto& m = pj["meta"];
+                const bool ok = m.value("bucket_fp", 0ULL) == my_bucket_fp
+                             && m.value("deck_fp", 0ULL) == my_deck_fp
+                             && m.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                             && m.value("K", -1) == K
+                             && m.value("max_mull", -1) == cfg.max_mull;
+                if (!ok)
+                {
+                    std::cerr << "[keepgen] PRUNE-SET: fingerprint mismatch "
+                                 "(bucket/deck/equiv_seed/K/max_mull) -- REFUSING to apply " << ps << "\n" << std::flush;
+                }
+                else
+                {
+                    SizeTable& t7 = TB(HAND);
+                    long long n_carried = 0;
+                    long long n_carried_sub = 0;
+                    for (const auto& e : pj["frozen"])
+                    {
+                        const std::vector<int> comp = e["comp"].get<std::vector<int>>();
+                        const int pd = e.value("pd", -1);
+                        if (pd != 0 && pd != 1) { continue; }
+                        const long long c = e.value("count", 0LL);
+                        if (c <= 0) { continue; }
+                        const int H = e.value("size", HAND);   // sub-table entries carry "size"<7; size-7 default
+                        if (H == HAND)
+                        {
+                            auto it = t7.index.find(comp);
+                            if (it == t7.index.end()) { continue; }
+                            const int idx = it->second;
+                            if (prune.frozen7[idx][pd] || prune.carry_lowfloor7[idx][pd]) { continue; }
+                            if (carry_skip)
+                            {
+                                prune.frozen7[idx][pd] = true;
+                                t7.V[idx][pd]    = e["sum"].get<double>() / static_cast<double>(c);  // preload V only
+                            }
+                            else { prune.carry_lowfloor7[idx][pd] = true; }   // verify: reduced floor, refinable
+                            ++n_carried;
+                        }
+                        else if (H >= 1 && H < HAND && carry_skip)   // sub-table freeze (skip mode only)
+                        {
+                            SizeTable& ts = TB(H);
+                            auto it = ts.index.find(comp);
+                            if (it == ts.index.end()) { continue; }
+                            const int idx = it->second;
+                            if (prune.frozen_sub[H][idx][pd]) { continue; }
+                            prune.frozen_sub[H][idx][pd] = true;
+                            ts.V[idx][pd] = e["sum"].get<double>() / static_cast<double>(c);  // preload high V
+                            ++n_carried_sub;
+                        }
+                    }
+                    std::cerr << "[keepgen] PRUNE-SET: carried " << n_carried << " size-7 + " << n_carried_sub
+                              << " sub-table cell-sides ("
+                              << (carry_skip ? "skip mode -- 0 rollouts, asserted decision (keep/mull)"
+                                             : ("verify mode -- reduced floor " + std::to_string(prune.carry_floor) + ", refinable"))
+                              << ") from " << ps << " (source_R=" << m.value("source_R", 0)
+                              << ", prune_eps=" << m.value("prune_eps", 0.0) << ")\n" << std::flush;
+                }
+            }
+        }
+    }
+    return prune;
+}
+
 void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                        const ExhaustiveKeepConfig& cfg)
 {
@@ -1093,134 +1243,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     const std::map<std::string, int>& bof = bucket_of;   // const ref -> concurrent-safe find()
 
-    // ---- Cross-run PRUNE-SET consume / carry-forward (MTG_KEEP_PRUNE_SET) ------------------------
-    // A prior run's prune-set lists size-7 cells that were CONFIDENT MULLIGANS (see the emit path in
-    // RunKeepMerge). Two uses, one mechanism -- carry that judgement forward so this run doesn't re-
-    // establish the obvious mulligans:
-    //   (a) MULTI-CHUNK POOLING (same commit): skip the junk cells in later chunks so the budget lands on
-    //       the near-threshold cells; frozen cells' counts come from the earlier chunks at merge.
-    //   (b) REGENERATION on a NEW COMMIT (same decklist): reuse last run's confident-mull set so a re-run
-    //       (e.g. after a play-logic fix) skips them instead of re-paying their floor pass. This is the
-    //       "don't re-run the multi-day deck from scratch" lever. bucket_fp/deck_fp are identical for the
-    //       same list, and play_digest/commit are deliberately NOT gated, so a new-commit prune-set is
-    //       accepted; the values are stale-commit but a confident mull's value only enters as
-    //       min(V,Dopt_new[1])==Dopt_new[1] (Dopt is recomputed fresh from this run's smaller tables).
-    //
-    // MTG_KEEP_CARRY_MODE selects the fidelity posture (default "verify"):
-    //   * verify  -- carried cells start at a REDUCED floor (MTG_KEEP_CARRY_FLOOR, default 2) instead of
-    //                being skipped, and are refinable. The adaptive gate is curse-safe (an under-sampled
-    //                cell reads LOWER -> looks more keepable -> gets refined), so any hand that FLIPPED to
-    //                keepable on the new deck/commit is caught and promoted. Fidelity-preserving; still
-    //                saves most of the junk floor. Poolable (real fresh samples). Requires an adaptive run
-    //                (a uniform run has no refiner to catch a flip -> carried cells are sampled in full).
-    //   * skip    -- carried cells get ZERO rollouts and their prior value is preloaded (asserted MULL).
-    //                Max saving. EXACTLY policy-preserving for use (a) [min(V,Dopt[1])==Dopt[1] can't move
-    //                Dopt or keep flags, and the pool supplies the real counts]. For use (b) it is a
-    //                fidelity BET: a large enough deck/play change could lift the threshold above a carried
-    //                hand's true new value, and a hard skip would silently keep it as MULL. Use for a
-    //                stable list where the junk is structural (0-land / all-land / off-colour floods).
-    //
-    // Correctness invariants (both modes): the work vector is left INTACT (a carried cell keeps its work
-    // index w, so every OTHER cell's rollout seed stream is byte-identical to an uncarried run); skip sets
-    // only t.V (recompute() skips cnt==0 so the preloaded V survives; the raw emits count=0 -> no samples
-    // carried into this run's sidecar -> use-(a) pooling takes counts from the earlier chunks, no double-
-    // count; per-pd exact). Fingerprints (bucket/deck/equiv_seed/K/max_mull) are checked -- REFUSE on
-    // mismatch (a changed decklist changes bucket/deck_fp -> a modified-list carry is a separate feature).
-    std::vector<std::array<bool, 2>> frozen7(TB(HAND).comps.size(),   { false, false });  // skip cells
-    std::vector<std::array<bool, 2>> carry_lowfloor7(TB(HAND).comps.size(), { false, false });  // verify cells
-    // Phase 2 sub-table freeze: a size-(7-m) sub-hand whose value is confidently ABOVE its keep-bar
-    // Dopt[m+1] is never a KEEP's bottoming argmin (a hand bottoming into it has keep_val > Dopt -> it
-    // mulligans), so skipping its rollouts is decision-preserving. frozen_sub[H][idx][pd], H=1..HAND-1.
-    std::vector<std::vector<std::array<bool, 2>>> frozen_sub(HAND);
-    for (int H = 1; H < HAND; ++H) { frozen_sub[H].assign(TB(H).comps.size(), { false, false }); }
-    long long carry_floor = []{ const char* s = std::getenv("MTG_KEEP_CARRY_FLOOR");
-        return (s && *s) ? std::max<long long>(1, std::strtoll(s, nullptr, 10)) : 2LL; }();
-    const bool carry_skip = []{ const char* s = std::getenv("MTG_KEEP_CARRY_MODE");
-        return s && std::string(s) == "skip"; }();   // default (unset / "verify") => verify
-    if (const char* ps = std::getenv("MTG_KEEP_PRUNE_SET"); ps && *ps)
-    {
-        std::ifstream pf(ps);
-        if (!pf) { std::cerr << "[keepgen] PRUNE-SET: cannot open " << ps << " -- ignoring\n" << std::flush; }
-        else
-        {
-            nlohmann::json pj;
-            bool parsed = true;
-            try { pf >> pj; }
-            catch (const std::exception& e)
-            { std::cerr << "[keepgen] PRUNE-SET: bad json (" << e.what() << ") -- ignoring\n" << std::flush; parsed = false; }
-            if (parsed && pj.contains("meta") && pj.contains("frozen"))
-            {
-                // Fingerprints must match, else the frozen comps index a different bucket map / deck and
-                // we'd carry the wrong cells. REFUSE on any mismatch (do not silently mis-apply).
-                uint64_t my_bucket_fp = 1469598103934665603ULL;
-                for (int b = 0; b < K; ++b)
-                { my_bucket_fp = Fnv("|", my_bucket_fp);
-                  for (const std::string& n : eq.classes[b].members) { my_bucket_fp = Fnv(n + ",", my_bucket_fp); } }
-                std::vector<std::string> dn;
-                for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
-                std::sort(dn.begin(), dn.end());
-                uint64_t my_deck_fp = 1469598103934665603ULL;
-                for (const std::string& n : dn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
-                const auto& m = pj["meta"];
-                const bool ok = m.value("bucket_fp", 0ULL) == my_bucket_fp
-                             && m.value("deck_fp", 0ULL) == my_deck_fp
-                             && m.value("equiv_seed", 0ULL) == cfg.equiv_seed
-                             && m.value("K", -1) == K
-                             && m.value("max_mull", -1) == cfg.max_mull;
-                if (!ok)
-                {
-                    std::cerr << "[keepgen] PRUNE-SET: fingerprint mismatch "
-                                 "(bucket/deck/equiv_seed/K/max_mull) -- REFUSING to apply " << ps << "\n" << std::flush;
-                }
-                else
-                {
-                    SizeTable& t7 = TB(HAND);
-                    long long n_carried = 0;
-                    long long n_carried_sub = 0;
-                    for (const auto& e : pj["frozen"])
-                    {
-                        const std::vector<int> comp = e["comp"].get<std::vector<int>>();
-                        const int pd = e.value("pd", -1);
-                        if (pd != 0 && pd != 1) { continue; }
-                        const long long c = e.value("count", 0LL);
-                        if (c <= 0) { continue; }
-                        const int H = e.value("size", HAND);   // sub-table entries carry "size"<7; size-7 default
-                        if (H == HAND)
-                        {
-                            auto it = t7.index.find(comp);
-                            if (it == t7.index.end()) { continue; }
-                            const int idx = it->second;
-                            if (frozen7[idx][pd] || carry_lowfloor7[idx][pd]) { continue; }
-                            if (carry_skip)
-                            {
-                                frozen7[idx][pd] = true;
-                                t7.V[idx][pd]    = e["sum"].get<double>() / static_cast<double>(c);  // preload V only
-                            }
-                            else { carry_lowfloor7[idx][pd] = true; }   // verify: reduced floor, refinable
-                            ++n_carried;
-                        }
-                        else if (H >= 1 && H < HAND && carry_skip)   // sub-table freeze (skip mode only)
-                        {
-                            SizeTable& ts = TB(H);
-                            auto it = ts.index.find(comp);
-                            if (it == ts.index.end()) { continue; }
-                            const int idx = it->second;
-                            if (frozen_sub[H][idx][pd]) { continue; }
-                            frozen_sub[H][idx][pd] = true;
-                            ts.V[idx][pd] = e["sum"].get<double>() / static_cast<double>(c);  // preload high V
-                            ++n_carried_sub;
-                        }
-                    }
-                    std::cerr << "[keepgen] PRUNE-SET: carried " << n_carried << " size-7 + " << n_carried_sub
-                              << " sub-table cell-sides ("
-                              << (carry_skip ? "skip mode -- 0 rollouts, asserted decision (keep/mull)"
-                                             : ("verify mode -- reduced floor " + std::to_string(carry_floor) + ", refinable"))
-                              << ") from " << ps << " (source_R=" << m.value("source_R", 0)
-                              << ", prune_eps=" << m.value("prune_eps", 0.0) << ")\n" << std::flush;
-                }
-            }
-        }
-    }
+    // ---- Cross-run PRUNE-SET carry (MTG_KEEP_PRUNE_SET): see LoadPruneCarry above ----------------
+    PruneCarry prune = LoadPruneCarry(deck, cfg, eq, tables, K);
 
     // Rollout-config play digest -- the pooling identity stamped into both the runtime policy and the
     // raw sidecar below. Computed ONCE here (a fixed 64-game d5/b20 battery) rather than just before the
@@ -1807,7 +1831,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 t.sum[i][pd]   = e.value("s", 0.0);
                 t.sumsq[i][pd] = e.value("q", 0.0);
                 t.cnt[i][pd]   = n;
-                if (H == HAND && e.value("f", 0) == 1) { frozen7[i][pd] = true; }
+                if (H == HAND && e.value("f", 0) == 1) { prune.frozen7[i][pd] = true; }
             }
             recompute();
             journal_resumed = (resume_loaded > 0) || refs_loaded;
@@ -2011,8 +2035,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             {
                 // skip mode: a carried (frozen) size-7 cell gets 0 rollouts -- V preloaded, no samples.
                 // Live/other cells keep their w, so seeds are unperturbed.
-                if (Hw == HAND && frozen7[iw][pd]) { continue; }
-                if (Hw >= 1 && Hw < HAND && frozen_sub[Hw][iw][pd]) { continue; }   // Phase 2 sub-table skip
+                if (Hw == HAND && prune.frozen7[iw][pd]) { continue; }
+                if (Hw >= 1 && Hw < HAND && prune.frozen_sub[Hw][iw][pd]) { continue; }   // Phase 2 sub-table skip
                 // Whole-pool reuse (EXTEND-DEPTH / identical play_digest): a cell taken verbatim from the
                 // prior needs NO fresh floor sample -- change-detection marks it `resolved` and
                 // apply_prior_override sets its V from the prior R=40 value regardless. Skipping it spends
@@ -2023,8 +2047,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // verify mode: a carried confident-mull cell starts at a REDUCED floor so the run skips
                 // most of its floor cost; the adaptive refiner still tops it up if it flipped to keepable
                 // on the new deck/commit. Adaptive only -- a uniform run has no refiner, so sample in full.
-                if (Hw == HAND && carry_lowfloor7[iw][pd] && adaptive)
-                { cell_init = std::min(cell_init, carry_floor); }
+                if (Hw == HAND && prune.carry_lowfloor7[iw][pd] && adaptive)
+                { cell_init = std::min(cell_init, prune.carry_floor); }
                 // RESUME / PROBE-CARRY: a cell may already carry rollouts from a reloaded checkpoint or probe
                 // chunk. If it is already at/above its floor, skip it (its accumulators are correct; += would
                 // double-count). Otherwise START at the loaded count so we roll only the DEFICIT r>=have --
@@ -2180,7 +2204,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 {
                     // m=0: size-7 flip gate. Skipped in sub_only mode (the continuous pool owns size-7).
                     // Pruned (frozen) or change-detection-RESOLVED cells are never refined.
-                    if (!sub_only && !frozen7[i][pd] && !pc.resolved[0][i][pd] && H7.cnt[i][pd] < r_max)
+                    if (!sub_only && !prune.frozen7[i][pd] && !pc.resolved[0][i][pd] && H7.cnt[i][pd] < r_max)
                     {
                         const double se = gate_se(H7, static_cast<int>(i), pd, vg[0][pd]);
                         const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
@@ -2281,7 +2305,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
         { const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
           fed[k] = S7.cnt[i][pd];                                    // resume: continue past reloaded cnt
-          afroze[k].store(frozen7[i][pd] ? 1 : 0, std::memory_order_relaxed);
+          afroze[k].store(prune.frozen7[i][pd] ? 1 : 0, std::memory_order_relaxed);
           // Resumed floored/terminal cells already carry cnt>=r0 (no r0-crossing will re-fire). Seed the
           // snapshot with their reloaded accumulators so a vg recompute mirrors the old non-journal reload
           // (mean=sum/cnt); on journal resume refs are restored (not recomputed), so this is unused there.
@@ -2362,9 +2386,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     slot[SLOT(i, pd, r)] = wt; have[SLOT(i, pd, r)] = 1;
                     long long& c = S7.cnt[i][pd];
                     const long long c_before = c;
-                    const bool was_frozen = frozen7[i][pd];
+                    const bool was_frozen = prune.frozen7[i][pd];
                     const bool refine = refs_ready.load(std::memory_order_acquire);
-                    while (!frozen7[i][pd] && c < r_max && have[SLOT(i, pd, c)])
+                    while (!prune.frozen7[i][pd] && c < r_max && have[SLOT(i, pd, c)])
                     {
                         const double v = slot[SLOT(i, pd, c)];
                         S7.sum[i][pd] += v; S7.sumsq[i][pd] += v * v; ++c;
@@ -2376,13 +2400,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         // Freeze only in the refine phase. During floor speculation (refine==false) the fold
                         // just advances the prefix; reconcile applies the freeze test to [r0,c) once refs fix.
                         if (refine && c >= r0 && freeze_hit(i, pd, c, S7.sum[i][pd], S7.sumsq[i][pd]))
-                        { frozen7[i][pd] = true; afroze[k].store(1, std::memory_order_release); }
+                        { prune.frozen7[i][pd] = true; afroze[k].store(1, std::memory_order_release); }
                     }
                     if (journal_on)
                     {
                         if (!refine && c_before < r0 && c >= r0)
                         { jfloor = true; js = S7.sum[i][pd]; jq = S7.sumsq[i][pd]; jn = c; }
-                        else if (!was_frozen && frozen7[i][pd])
+                        else if (!was_frozen && prune.frozen7[i][pd])
                         { jterm = true; js = S7.sum[i][pd]; jq = S7.sumsq[i][pd]; jn = c; }
                     }
                 }
@@ -2441,7 +2465,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
             {
                 const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
-                if (frozen7[i][pd]) { continue; }
+                if (prune.frozen7[i][pd]) { continue; }
                 const long long c_cur = S7.cnt[i][pd];
                 if (c_cur <= r0) { continue; }
                 double rs = floor_sum[k], rq = floor_sumsq[k];   // sum/sumsq at c==r0
@@ -2450,7 +2474,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     const double v = slot[SLOT(i, pd, tc - 1)]; rs += v; rq += v * v;
                     if (freeze_hit(i, pd, tc, rs, rq))
                     {
-                        frozen7[i][pd] = true;
+                        prune.frozen7[i][pd] = true;
                         afroze[k].store(1, std::memory_order_release);
                         S7.sum[i][pd] = rs; S7.sumsq[i][pd] = rq; S7.cnt[i][pd] = tc;   // truncate
                         if (journal_on) { reconcile_terms.push_back({ i, pd, rs, rq, tc }); }
