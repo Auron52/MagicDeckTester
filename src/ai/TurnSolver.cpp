@@ -1379,6 +1379,12 @@ struct FsLineNestGuard
 // default on, disables ONLY that cut for a clean perf/GT A/B (the full search still finds the same win
 // via the go-off lethal model, just after paying for the ritual/Lotus powerset).
 static const bool s_no_goff_shortcircuit = EnvOn("MTG_NO_GOFF_SHORTCIRCUIT");
+// MTG_NO_LETHAL_CUT: isolation toggle for the board-lethal short-circuit (Solve + EnumeratePlans). When
+// the current board's attack-all damage already kills the opponent this turn, attacking with no casts
+// wins now, so the cast-subset powerset is skippable (a turn-winning plan dominates every plan this turn).
+// Default ON (the cut fires); set to disable it for a clean GT/perf A/B. GT-fingerprint-invariant: which
+// winning plan is chosen never changes the win TURN. Generic (all decks); shares MTG_UNPRUNED(ComboLine).
+static const bool s_no_lethal_cut = EnvOn("MTG_NO_LETHAL_CUT");
 // Lotus-independent accel-prefix collapse is OPT-IN (default OFF, enable with MTG_LOTUS_PREFIX). The Lotus
 // sacs are fungible in mana, but the plan signature keys on sac_source_id, so collapsing their branches
 // churns the budget-limited search (measured a few searched slowdowns) -- so it is held behind a flag
@@ -1536,7 +1542,12 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
 // Land's Edge discards are generated as plan-level count variants by the callers,
 // since they depend on the rest of the chosen subset (lands left after retrace).
 // The per-Action valuation scalars are read by each caller's subset evaluator.
-static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_combat*/)
+// The creature-sac OUTLET pre-combat deferral heuristic (Siege-Gang / Pashalik / Skirk / the multi-sac
+// burst) lives in GoblinsProvider::DeferSacOutletPreCombat (ADOPTED default-ON, off-switch
+// MTG_NO_GOBLIN_SAC_2ND); the guard in the sac-outlet loop below calls it. GenericProvider returns
+// false, so every non-Goblins deck enumerates sac outlets pre-combat byte-identically.
+
+static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     const Player& ap = state.ActivePlayer();
     bool has_creature_target = HasLegalCreatureTarget(state);
@@ -2331,6 +2342,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
             if (!sd || !sd->params.sac_creature_outlet) { continue; }
             const bool is_mana_outlet = !sd->params.sac_outlet_add_mana_color.empty();
+            // Sac-outlet pre-combat deferral (GoblinsProvider::DeferSacOutletPreCombat, ADOPTED default-ON,
+            // off-switch MTG_NO_GOBLIN_SAC_2ND): defer the VALUE outlets (Siege-Gang / Pashalik / the multi-
+            // sac burst) to the second main and haste-gate Skirk's mana outlet. Vs the passive opponent a
+            // value sac is >= as good AFTER attacking, so this is near-lossless while dropping them from the
+            // pre-combat O(2^candidates) subset. GenericProvider returns false -> byte-identical for every
+            // non-Goblins deck. See the hook doc for the Skirk haste-gate rationale.
+            if (is_pre_combat && ResolveProvider(state).DeferSacOutletPreCombat(state, src, is_mana_outlet))
+            { continue; }
             const std::string& need_sub = sd->params.sac_creature_requires_subtype;
             // BOUNDED victim selection (heuristic narrowing -- NOT one action per victim, which makes
             // the O(2^candidates) subset search explode on a wide Goblin board / Krenko tokens and
@@ -4046,6 +4065,27 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             best      = saved_best;
             best_mask = saved_mask;
         }
+    }
+
+    // ---- Board-lethal short-circuit (sibling of the combo-line / go-off cuts) -----------------------
+    // If the CURRENT board's attack-all damage already kills the opponent THIS turn (pending_atk >= opp
+    // life), attacking with no casts wins now -- and a turn-winning plan dominates every other plan this
+    // turn, so the whole cast-subset powerset is skippable. Evaluate the do-nothing (attack-only) subset
+    // via the same consider() and, when it wins, return it. GT-fingerprint-invariant by construction:
+    // winning this turn is the minimum possible win-turn, so which winning plan is chosen never changes
+    // the win TURN the search/executor reports (only the pre-combat casts, which are invisible to GT and
+    // moot once combat is lethal). pending_atk (PendingAttackDamage) already counts only legal
+    // CanAttackFull && ShouldAttackWith attackers, so vs the passive opponent it is real, cast-independent
+    // damage. The guard is a cheap pre-filter; consider() owns the authoritative win projection. Isolation
+    // toggle MTG_NO_LETHAL_CUT; also disabled under MTG_UNPRUNED(ComboLine) alongside the sibling cuts.
+    if (!s_no_lethal_cut && ResolveProvider(state).UseLethalShortCircuit()
+        && !DecisionUnpruned(UnprunedGate::ComboLine)
+        && pending_atk >= state.Opponent().life)
+    {
+        consider(std::vector<int>{});                   // the empty (attack-only) subset
+        if (best.wins_this_turn) { return best; }       // board already lethal -> skip the powerset
+        // consider()'s exact projection did not confirm the win (should not happen given the guard) ->
+        // fall through; `best` is merely pre-seeded (harmless move-ordering).
     }
 
     // The default enumeration replaces the 2^m action powerset with the PRODUCT of per-hand-card
@@ -6783,9 +6823,12 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (!edef || !edef->params.echo_cost) { ++i; continue; }
         p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
         const CardParams& ep = edef->params;
-        const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
+        // Pay-vs-decline JUDGEMENT is provider-owned (PayEchoToKeep) -- the SAME decision the executor
+        // (AIEngine) uses, so autonomous play and this rollout stay in lockstep. Default reproduces the
+        // old fixed heuristic; GoblinsProvider adds the Mogg lethal/no-gas keep. TapForCostDirect still
+        // gates on real affordability (returns false if it cannot pay), so an unaffordable keep sacrifices.
         bool kept = false;
-        if (!self_token)
+        if (ResolveProvider(state).PayEchoToKeep(state, p))
         {
             // Pay the echo to keep the body (taps real lands -> unavailable for this turn's plays).
             kept = TapForCostDirect(state, *ep.echo_cost, /*for_creature=*/false);
@@ -7872,6 +7915,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 plans.pop_back();   // not a verified win -> enumerate normally
             }
         }
+    }
+
+    // Board-lethal short-circuit (mirrors Solve's sibling): if the current board's attack-all damage
+    // already kills the opponent this turn, emit JUST the do-nothing (attack-only) plan and skip the
+    // odometer + Plan-B -- a turn-winning branch dominates, so the search commits it and needs no others.
+    // pending_atk is REAL combat damage (PendingAttackDamage counts only legal CanAttackFull attackers vs
+    // the passive opponent), not an optimistic projection, so no re-simulation is needed (unlike the
+    // go-off cut). GT-fingerprint-invariant: which winning branch is chosen never changes the win TURN.
+    if (!s_no_lethal_cut && ResolveProvider(state).UseLethalShortCircuit()
+        && !DecisionUnpruned(UnprunedGate::ComboLine)
+        && pending_atk >= state.Opponent().life)
+    {
+        const size_t before = plans.size();
+        eval_and_push(std::vector<int>{});                  // the empty (attack-only) subset
+        if (plans.size() > before && plans.back().wins_this_turn)
+        {
+            return { std::move(plans.back()) };             // board already lethal -> skip powerset + Plan-B
+        }
+        if (plans.size() > before) { plans.pop_back(); }    // not a confirmed win -> enumerate normally (no dup)
     }
 
     if (enumstats::Enabled())

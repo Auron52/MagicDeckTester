@@ -328,6 +328,47 @@ public:
     // needs to implement it.
     virtual bool OpponentPlaysLands() const { return false; }
 
+    // UseLethalShortCircuit -- opt IN to the board-lethal search short-circuit (Solve + EnumeratePlans):
+    // when the current board's attack-all damage already kills the opponent this turn, skip the cast-subset
+    // odometer and just attack. WIN-TURN-INVARIANT (winning this turn is the min win-turn), but it changes
+    // WHICH winning plan is chosen -> the play log / digest differs. DEFAULT false so every deck's play stays
+    // byte-identical; a provider opts in when the modest rollout speedup is worth re-accepting ITS play
+    // digest (GoblinsProvider). Off-switch MTG_NO_LETHAL_CUT disables it even where opted in.
+    virtual bool UseLethalShortCircuit() const { return false; }
+
+    // DeferSacOutletPreCombat -- should a Goblin-style creature-sac OUTLET (Siege-Gang / Pashalik value
+    // sacs, Skirk Prospector's sac-for-mana) be DROPPED from the PRE-COMBAT action enumeration and left
+    // to the second (post-combat) main? Vs the passive goldfish opponent a VALUE sac is >= as good AFTER
+    // attacking (you keep the attack), so deferring the value outlets is near-lossless while removing
+    // them from the O(2^candidates) pre-combat cast-subset explosion on a wide Goblin board. Skirk's MANA
+    // outlet is gated, not blanket-deferred: its pre-combat float only buys tempo the second main can't
+    // recover when it funds a SAME-TURN attacker (needs haste), so the Goblins provider keeps it pre-combat
+    // only when a Goblin haste lord is in play or castable from hand. `is_mana_outlet` distinguishes the two.
+    // DEFAULT false -> every non-Goblins deck enumerates sac outlets pre-combat byte-identically. NOT pure
+    // (defaulted) so no other provider needs to implement it. Measured quality-neutral (Goblins d3/400-game
+    // 4.4375->4.4350) + 2.5-4.6x faster on the Skirk-amplified rollout outliers. See analysis-goblins.md.
+    virtual bool DeferSacOutletPreCombat(const GameState& s, const Permanent& src,
+                                         bool is_mana_outlet) const
+    { (void)s; (void)src; (void)is_mana_outlet; return false; }
+
+    // PayEchoToKeep -- when an echo obligation comes due and the cost is AFFORDABLE, PAY (keep the body,
+    // return true) or DECLINE (sacrifice it, return false)? The engine owns the affordability gate and the
+    // sacrifice/OnCreatureDies mechanism; only this pay-vs-decline JUDGEMENT is provider-owned so the
+    // executor (AIEngine) and the rollout (TurnSolver) share ONE decision function -> lockstep by
+    // construction. DEFAULT reproduces the historical fixed heuristic verbatim: a self-replacing body
+    // (dies_watch_includes_self + a death token, e.g. Mogg War Marshal) DECLINES (the death token replaces
+    // it, saving the mana); every other echo creature (Stingscourger) PAYS. So every deck is byte-identical
+    // until a provider overrides -- GoblinsProvider adds the lethal/no-gas keep exceptions for Mogg.
+    virtual bool PayEchoToKeep(const GameState& s, const Permanent& p) const
+    {
+        (void)s;
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { return true; }
+        const CardParams& ep = d->params;
+        const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
+        return !self_token;
+    }
+
     // ShouldEmitUntapRitual -- emit the untap-RITUAL cast variant for an {X} untap spell (Reality Spasm)?
     // The variant floats mana for a same-turn payoff and only earns its keep with Hinata's
     // discount making the {X} free, so the solver must NOT branch on it otherwise. This is the

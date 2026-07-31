@@ -863,11 +863,30 @@ public:
     // (callgrind 2026-06-19: name hashing was ~39% of a search game after the
     // by-value-Lookup fix.) Behaviour is identical to Lookup(c.m_name) -- same result,
     // and m_def never escapes into any key/output (see Card::m_def).
+    //
+    // MISS caching (2026-07-31): a TOKEN (or any card not in the DB) has no def, so
+    // Lookup(name) returns nullptr -- and the old code stored that nullptr in m_def, which
+    // is indistinguishable from "not yet resolved", so EVERY LookupCached on a token re-hashed
+    // its name AND paid a failed full-table probe (the most expensive find). On a token-heavy
+    // board (Krenko / Siege-Gang / Mogg spawn many "N/N Goblin Token"s) this was the dominant
+    // hot-path cost -- ~13% of a deep-search game (perf on the seed-8021 60s Goblin outlier).
+    // Cache the MISS with a non-null sentinel (NotInDb, a stable address never dereferenced):
+    // a token now hashes ONCE, then returns nullptr from the cached sentinel forever. The
+    // return value is IDENTICAL (nullptr for a token every time) -- purely a speed fix. The
+    // m_def=nullptr invalidation sites (name change: CardDatabase.cpp / SpellEffects.cpp) still
+    // force a re-lookup, because only the sentinel (not nullptr) means "resolved-and-absent".
+    static const CardDefinition* NotInDb() noexcept
+    {
+        static const char sentinel = 0;   // stable address, distinct from every real def; never dereferenced
+        return reinterpret_cast<const CardDefinition*>(&sentinel);
+    }
     const CardDefinition* LookupCached(const Card& c) const
     {
-        if (c.m_def) { return c.m_def; }
-        c.m_def = Lookup(c.m_name);
-        return c.m_def;
+        if (c.m_def == NotInDb()) { return nullptr; }   // cached miss (token / unknown card)
+        if (c.m_def)              { return c.m_def; }   // cached hit
+        const CardDefinition* d = Lookup(c.m_name);
+        c.m_def = d ? d : NotInDb();
+        return d;
     }
 
     bool IsImplemented(const std::string& name) const;

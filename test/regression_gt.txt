@@ -1,6 +1,5 @@
-# Regression ground truth -- commit bca193a  date 2026-07-30
+# Regression ground truth -- commit be7bc02  date 2026-07-31
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-07-30): goblins overnight GT re-accepted post-rebase: remote land-tiebreak/land-drop refactor (020855d/3a8db49) shifts goblins land-choice lines identical-or-faster (d0 all 4 seeds identical avg digest-only; d3/d5 all faster by <=0.008); audit slower=0 faster=26; non-goblins byte-identical; viewer protocol 138 ok
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -29,9 +28,9 @@ dragonstorm_smoke_d5_s1001=4.4933/dafd9a5af2d05ba1
 auras_smoke_d0_s1001=4.4560/083d95ae3a2a9c0f
 auras_smoke_d3_s1001=4.1533/d1d5be0464ab5754
 auras_smoke_d5_s1001=4.1480/3f0c22061ad83dc3
-goblins_smoke_d0_s1001=4.8100/3e626f67293f5d07
-goblins_smoke_d3_s1001=4.2933/9a3593ccb4c8b6b9
-goblins_smoke_d5_s1001=4.2667/966cbbf416c49981
+goblins_smoke_d0_s1001=4.7860/3df200e7c499e8ee
+goblins_smoke_d3_s1001=4.3133/2bbcbbaa3161c855
+goblins_smoke_d5_s1001=4.2933/57b0caf94562aa25
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/7b06530f1cd2f10f

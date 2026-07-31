@@ -42,6 +42,9 @@ DECKS = {
     # auras (Bogles hexproof-aura aggro): board-driven like burn/slivers -> the value leaf is inert on
     # quality (win decided by visible board+hand, not library uncertainty), a pure search SPEED win.
     "auras":    ("decks/Auras/Auras.cod",                 "decks/Auras/Auras.value.json",                 8),
+    # goblins (aggro): board-driven like burn/slivers/auras -> value leaf expected inert on quality,
+    # a search SPEED win. hdepths capped at 3 (heuristic converges by d3 for aggro). value model 2026-07-31.
+    "goblins":  ("decks/Goblins/Goblins.cod",             "decks/Goblins/Goblins.value.json",             8),
 }
 
 

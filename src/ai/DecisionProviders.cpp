@@ -9,6 +9,7 @@
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
 #include "../deck/DeckLoader.h"     // Decklist
+#include "ManaPayment.h"            // AvailableManaPool (echo "no gas" affordability check)
 
 // Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
 // the search-narrowing heuristics return their MAXIMALLY-PERMISSIVE value so the general
@@ -2558,6 +2559,73 @@ int DragonstormProvider::ExtraLethalDamage(const GameState& s,
 // restrictor (18) tiers are now the GENERIC card-parameter tiers -- byte-identical ranks, one
 // implementation, and any future ritual/reducer deck inherits them from its card data.
 
+// ---- Goblins ---------------------------------------------------------------
+
+// Defer the creature-sac VALUE outlets (Siege-Gang damage / Pashalik tokens / the multi-sac burst) out
+// of the pre-combat enumeration, and haste-gate Skirk's sac-for-mana. Off-switch MTG_NO_GOBLIN_SAC_2ND
+// (ADOPTED default-ON 2026-07-31). See DeferSacOutletPreCombat in DecisionProvider.h and analysis-goblins.md.
+bool GoblinsProvider::DeferSacOutletPreCombat(const GameState& s, const Permanent& src,
+                                              bool is_mana_outlet) const
+{
+    static const bool on = !EnvOn("MTG_NO_GOBLIN_SAC_2ND");
+    if (!on) { return false; }
+    if (!is_mana_outlet) { return true; }   // value outlets: always defer to the second main
+    // Skirk MANA outlet: keep it pre-combat only if a Goblin haste lord is on the battlefield (src is a
+    // Goblin, so HasHasteFromLords answers this) OR one is castable from hand this turn ("our plan").
+    // Without haste its float is second-main-recoverable, and Skirk-for-mana is the dominant pre-combat
+    // branch amplifier on a wide board -- so defer it too when no haste enabler is available.
+    const int active = s.active_player_index;
+    if (HasHasteFromLords(src.card, s.battlefield, active)) { return false; }
+    for (const Card& h : s.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        if (hd && hd->params.grants_haste) { return false; }
+    }
+    return true;   // no haste enabler in play or hand -> defer Skirk to the second main
+}
+
+// Mogg War Marshal echo keep-exception (off-switch MTG_NO_GOBLIN_ECHO -> historical always-decline). The
+// base heuristic ALWAYS declines a self-replacing body (the death token nets the same 1/1 while saving the
+// mana) -- but that token is summoning-SICK, so declining forfeits an attacker THIS turn. Keep (pay) when
+// that attacker matters: (a) the current board is already attack-lethal counting this creature (declining
+// could drop below lethal), or (b) there is no other castable spell this turn ("no gas"), so the banked
+// mana buys nothing and a live attacker strictly beats a sick token. Otherwise decline (cast the gas).
+bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) const
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (!d) { return true; }
+    const CardParams& ep = d->params;
+    const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
+    if (!self_token) { return true; }                       // Stingscourger etc: default PAY
+    static const bool on = !EnvOn("MTG_NO_GOBLIN_ECHO");
+    if (!on) { return false; }                              // isolation: historical always-decline
+
+    const int active   = s.active_player_index;
+    const int opp_life = s.players[1 - active].life;
+    // (a) Lethal now? Sum attack power over legal attackers (this creature is NOT summoning-sick -- echo
+    // resolves the upkeep AFTER it entered). AttackPowerOf mirrors the combat sites (conservative: it omits
+    // double-strike/exalted, absent from this deck), so atk <= true lethal -> we only keep on a real kill.
+    int atk = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != active)                  { continue; }
+        if (!CanAttackFull(q, s.battlefield, active))      { continue; }
+        if (!ShouldAttackWith(s, q))                       { continue; }
+        atk += AttackPowerOf(s, q);
+    }
+    if (atk >= opp_life) { return true; }                   // keeping the body wins this turn -> PAY
+
+    // (b) No gas: any non-land hand card castable from the currently-available mana?
+    const ManaPool pool = AvailableManaPool(s);
+    for (const Card& h : s.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        if (!hd || hd->card.IsLand()) { continue; }
+        if (pool.CanPay(h.m_mana_cost)) { return false; }   // a real alternative play exists -> DECLINE
+    }
+    return true;                                             // nothing else to cast -> keep the attacker (PAY)
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
@@ -2571,6 +2639,7 @@ namespace
     const HinataProvider       g_hinata;
     const BurnProvider         g_burn;
     const DragonstormProvider  g_dragonstorm;
+    const GoblinsProvider      g_goblins;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -2639,12 +2708,14 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
-    // Goblins ride GenericProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
+    // Goblins ride GoblinsProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
     // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
     // It sits below dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those
     // signatures (no tutor_to_battlefield / hinata_cost_reducer), so exclusivity is preserved: this
-    // branch fires iff the deck has a Goblin gated param, which no other suite deck does.
-    if (goblin) { return g_generic; }
+    // branch fires iff the deck has a Goblin gated param, which no other suite deck does. GoblinsProvider
+    // only overrides DeferSacOutletPreCombat (all other hooks inherit Generic verbatim), so this is
+    // byte-identical to the old g_generic routing EXCEPT for the adopted sac-outlet deferral heuristic.
+    if (goblin) { return g_goblins; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }

@@ -296,6 +296,32 @@ public:
                            const std::vector<const CardDefinition*>&) const override;
 };
 
+// Goblins (aggro tribal: Krenko / Skirk / Siege-Gang / Warchief / Lackey / Aether Vial). The one
+// override defers the creature-sac VALUE outlets (and haste-gates Skirk's sac-for-mana) out of the
+// pre-combat cast-subset enumeration -- the wide-board branch explosion that dominates the deep
+// rollout. Inherits Generic for everything else. Off-switch MTG_NO_GOBLIN_SAC_2ND (default ON).
+class GoblinsProvider : public GenericProvider
+{
+public:
+    bool DeferSacOutletPreCombat(const GameState&, const Permanent&, bool) const override;
+    // Opt in to the board-lethal search short-circuit (win-turn-invariant; see UseLethalShortCircuit). Kept
+    // Goblins-only so the other suite decks' play digests stay byte-identical -- Goblins re-accepts its GT
+    // for the sac-deferral heuristic anyway, so absorbing this cut's play-digest change costs nothing extra.
+    bool UseLethalShortCircuit() const override { return true; }
+    // (A per-turn enumeration breadth cap was evaluated here and REJECTED: even a gentle top-6 cap skewed
+    // the rollout win-turn (+0.0025 at cap6, +0.085 at cap4), which would corrupt the depth-matrix's
+    // heuristic-arm reference. Goblin card value is too deep for a static SituationalCardRank. See
+    // analysis-goblins.md. Goblins therefore inherit GenericProvider's EnumGroupCap (12; never fires here).)
+    // Mogg War Marshal echo keep-exception: pay to keep the body (instead of the default decline) when the
+    // live attacker is needed -- it is lethal THIS turn (the death token would be summoning-sick) or there
+    // is no other castable spell ("no gas"), so the banked mana buys nothing. Off-switch MTG_NO_GOBLIN_ECHO.
+    bool PayEchoToKeep(const GameState&, const Permanent&) const override;
+    // (A Goblin Matron tutor-target exclusion list -- drop Pashalik Mons / Goblin King-when-Chieftain /
+    // lone Goblin Lackey -- was evaluated here and REJECTED: it cost the clairvoyant search a line
+    // (rollout 4.4350 -> 4.4375). Picking the best fetch needs depth a static list lacks, so Goblins
+    // inherit GenericProvider's full-candidate TutorCandidates. See analysis-goblins.md.)
+};
+
 // Process-lifetime default provider (stateless, shared across threads). Used as the
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();

@@ -3,6 +3,87 @@
 Per-deck durable state for the `analyze-deck` workflow (survives compaction / handoff).
 Deck: `decks/Goblins/Goblins.cod`. Branch: `phase-1-2-deck-analyzer`.
 
+## ⇩⇩ RESUME HERE — VALUE-LEAF + DEEP-SEARCH OPTIMIZATION (post-compaction) — 2026-07-31
+**Task:** create the Goblins value-leaf / play profile. En route, user asked to OPTIMIZE the deep-search
+first (the depth matrix's unbounded H-cells have extreme long tails). **Branch `phase-1-2-deck-analyzer`
+@ `be7bc02`, in sync w/ origin.** Rebuild before using the binary (`bash build.sh`).
+
+**★ KEY REFRAMING (2026-07-31): the "extremely long games" are the PURE-ROLLOUT arm, not shipped play.**
+`UseValueModel()` is **ADOPTED default-ON** (DecisionProviders.cpp:130; the DecisionProvider.h:75 comment
+saying "default OFF" is STALE) — the learned value leaf replaces the horizon rollout whenever a
+`<deck>.value.json` sidecar is present. Controlled test, seed 9040, d5, same binary/flag/seed: **value.json
+PRESENT → 6 s; value.json MOVED ASIDE → 560 s (~90×).** So the shipped `value_play` config is already fast;
+the slow runs are the **depth-matrix's HEURISTIC cells** (value leaf OFF via `MTG_VALUE_MODEL=0`), which
+exist to calibrate the leaf's fallback crossover. Optimizing the rollout arm = making those deep H-cells
+tractable, NOT fixing shipped play.
+
+**UNCOMMITTED WORKING TREE (survives compaction; nothing committed yet):**
+- `src/cards/CardDatabase.h` — **DONE, verified byte-identical, ready to commit.** Token-hash fix: tokens
+  aren't in the DB → `LookupCached` re-hashed the name + failed a full-table probe every call. Now caches
+  the MISS via a `NotInDb()` sentinel. ~13% of the deep rollout. Smoke 27/27, 0 configs changed.
+- **Idea 1 ADOPTED into `GoblinsProvider` (NEW class, DecisionProviders.{h,cpp}).** Hook
+  `DeferSacOutletPreCombat(state, src, is_mana_outlet)` (DecisionProvider.h, non-pure default `false` →
+  every non-Goblins deck byte-identical). Defers the VALUE sac outlets (Siege-Gang/Pashalik/burst) to the
+  2nd main; **haste-gates Skirk's mana outlet** (keep pre-combat only if a Goblin haste lord is in play or
+  castable from hand, else defer). ADOPTED default-ON, off-switch `MTG_NO_GOBLIN_SAC_2ND`. `TurnSolver.cpp`
+  `CollectActions` now calls the hook (old root `MTG_GOBLIN_SAC_2ND` flag REMOVED). Verified equivalent:
+  d3/400 (value.json aside) provider-ON=4.4350, provider-OFF(`MTG_NO_GOBLIN_SAC_2ND=1`)=4.4375 (=GT
+  baseline) — matches the old flag-on/off exactly. `goblin` now routes to `g_goblins` (was `g_generic`).
+- `scripts/attic/valueleaf_depth_matrix.py` + `valueleaf_table_to_metadata.py` — goblins registered.
+- `decks/Goblins/Goblins.value.json` (untracked) — value model + enabled `value_play` (d5/b20). **STALE:
+  pre-token-fix + pre-idea-1 binary. Must regenerate on the final binary.**
+
+**IDEA 1 A/B (measured, quality-neutral, adopt-worthy):** d3/400 (rollout) 4.4375→4.4350 (−0.0025, noise);
+every outlier wins the SAME turn. Speed on the pure-rollout d5 outliers: **8151 757→163 s (4.6×), 8021
+363→132 s (2.75×), 8111 38→15 s (2.53×)** — big on Skirk-amplified seeds; **9040 624→560 s (1.11×), 9175
+740→695 s (1.06×)** — near-flat on cast-subset-bound seeds (correct: those have a haste lord out, so idea 1
+KEEPS Skirk). [Note: those raw d5 numbers were inflated by running 6 games in parallel; single-run is less,
+but the RATIOS hold.]
+
+**9040 EXAMPLE HAND (the case idea 1 doesn't speed — user asked to see it):** opening 2×Skirk / 3×Mountain
+/ Goblin Warchief / Goblin Lackey. By T5 MAIN_1 the board is 2×Skirk, Lackey, **Warchief**, Stingscourger,
+Aether Vial; opp at **7 life**; hand=1 card. With Warchief's +1/+0 anthem the 5 creatures swing for **11 ≥ 7
+= ALREADY LETHAL with zero casts**, yet the rollout still enumerates ~2⁶ cast subsets at that node. Branch-
+stats drivers (rollout, 212K EnumeratePlans): Goblin Warchief (max odo 64), Skirk (64), Lackey, Aether Vial,
+Stingscourger. → this is a **lethal-board node** (idea 2 fires here) AND has legit build-up cast-subsets.
+
+**RESIDUAL-TAIL LEVERS — RESOLVED (2026-07-31). User chose "most thorough" (idea2 + cap + Matron + Mogg);
+outcome after A/B: 2 ADOPTED, 2 REJECTED (quality), 1 KEPT-but-inert.**
+1. **Idea 2 — lethal-board short-circuit — ADOPTED but GOBLINS-ONLY (provider hook UseLethalShortCircuit,
+   default false; GoblinsProvider returns true; off-switch MTG_NO_LETHAL_CUT).** In Solve (sibling of the
+   combo-line/go-off cuts, ~TurnSolver.cpp:4064) AND EnumeratePlans (~:7920): if `pending_atk >= opp.life`,
+   evaluate the empty (attack-only) subset via consider()/eval_and_push and return it, skipping the 2^m
+   odometer. **WIN-TURN-invariant but NOT play-digest-invariant** — the smoke revealed it changes WHICH
+   winning plan is chosen (skips pointless pre-lethal casts) on EVERY deck: all non-Goblins avgs identical
+   but their play_digests differed (22 "fails", all same-avg). So it was gated Goblins-only to keep the 6
+   other decks byte-identical; Goblins re-accepts its GT for idea 1 anyway, so the digest change is free
+   there. Speedup MODEST (~7%: 9040 rollout 237→221 s) -- the cost is turn 3-4 BUILD-UP (non-lethal) nodes.
+2. **Cast-subset breadth cap (CapGroupsBySituationalRank) — REJECTED.** GoblinsProvider EnumGroupCap +
+   SituationalCardRank override. A/B: cap6 4.4375 (+0.0025), cap5 4.4400, cap4 4.5200 — NOT quality-neutral,
+   AND ~0 speedup on 9040 (217/219/239 s). A static rank can't capture Goblin card value (too deep). A
+   non-neutral cap would also corrupt the depth-matrix's heuristic-arm reference. Overrides REVERTED.
+3. **Goblin Matron tutor exclusion (Pashalik/King-when-Chieftain/lone-Lackey) — REJECTED.** A/B: narrowing
+   ON 4.4375 vs OFF 4.4350 (+0.0025) — the clairvoyant search finds a line through an "excluded" target.
+   User's own "tricky at best" intuition confirmed. Override REVERTED.
+4. **Mogg War Marshal echo keep-exception — KEPT but MEASUREMENT-INERT.** Provider hook `PayEchoToKeep`
+   (DecisionProvider.h base = old fixed heuristic verbatim → all decks byte-identical; GoblinsProvider
+   overrides). Both echo sites (AIEngine.cpp:~1218 executor + TurnSolver.cpp:~6825 rollout) call the hook
+   → lockstep by construction. Rule: a self-token body (Mogg) PAYS echo (keeps the live attacker) when
+   lethal THIS turn (the death token is summoning-SICK) OR no other castable spell ("no gas"); else
+   declines (default). Correct + never-worse + user-requested, but **d3/2000 ON=OFF=4.3930 (0 change)** —
+   the scenario ~never arises in random goldfish play (you're usually at overkill or win next turn anyway).
+   Off-switch MTG_NO_GOBLIN_ECHO. Kept as a correctness safety net (may matter in claude-play / edge lines).
+
+**ALSO: token-hash fix (CardDatabase.h) still uncommitted + ready (~13% of the deep rollout).**
+**Net Goblins d3/400 rollout: 4.4375 (all-off) → 4.4350 (all-on).** Non-Goblins byte-identical (smoke
+verifying at time of writing; idea 2 is the only generic change and it is GT-invariant by construction).
+
+**PIPELINE ORDER (do NOT skip):** freeze ALL heuristics FIRST → rebuild → **regenerate the ENTIRE value-leaf
+pipeline** (rows+train+matrix+gate+A/B) on the final binary (heuristics change `CollectActions` → shift
+rows/matrix/play at ALL depths) → adopt value_play → **rebaseline GT** (idea 1 shifts d3 AND d5 coverage;
+the value leaf shifts the d5 value_play case) across all 3 tiers → commit (token fix can commit now) + push.
+Value-leaf pipeline cmds retained in the section below.
+
 ## ✅ REBASE-THEN-PUSH — DONE — 2026-07-30
 **Goblins work is rebased onto `origin/phase-1-2-deck-analyzer` (tip `eb29a90`) and verified.** No merge commit (linear rebase, per user).
 - **Rebase:** 20 commits replayed cleanly onto `eb29a90` (0 behind after). Conflicts resolved with `rerere`:
