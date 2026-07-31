@@ -147,6 +147,16 @@ static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD", true);
 // Drop the committed line when the searched discard deviates from the heuristic pick (the line was
 // searched assuming the heuristic shed). MTG_DISCARD_RELINE=0 keeps replaying the stale line.
 static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
+// MTG_SEARCHED_VIAL: the Aether Vial upkeep charge is a real BRANCH (charge / hold), not a rule.
+// Holding at the current count keeps this turn's free deploy of an MV-k creature; charging trades it
+// for an MV-(k+1) deploy next turn. The heuristic (WantVialCharge: hold while a creature of the
+// current MV is in hand, else climb) is a good default and an excellent tie-break, but it cannot see
+// which side actually wins the game -- so it is now the DEFAULT + TIE-BREAK of a searched decision,
+// exactly like the cleanup discard. MTG_SEARCHED_VIAL=0 restores the pure heuristic.
+// The trial resumes at ResumeAt::UpkeepTail (the charge is mid-upkeep -- resuming at Draw would
+// skip this turn's upkeep tokens); vials AFTER this one in the same loop are charged on the
+// heuristic first, or the trial would drop their counters entirely.
+static const bool  s_searched_vial     = EnvOn("MTG_SEARCHED_VIAL", true);
 // MTG_DIVERGENCE_LOG=<file>: DIAGNOSTIC (diagnosis only, no play change). On the search-driven path,
 // at each real pre-combat main decision, ALSO compute the greedy d0 plan (TurnSolver::Solve) for the
 // SAME untouched state and append one JSONL record {seed,turn,diverge,search_land,search,greedy,feat[]}.
@@ -1167,18 +1177,72 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 // TakeTurn
 // ============================================================
 
-bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial) const
+// Charge every Vial at or after `from_index` on the pure heuristic. Used to finish the upkeep loop a
+// searched charge trial interrupted: the trial resumes at UpkeepTail, which is PAST the loop, so
+// without this the later Vials silently lose the counter they would really have gained.
+static void ChargeRemainingVialsHeuristic(GameState& s, int from_index)
+{
+    for (int i = from_index; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        Permanent& p = s.battlefield[i];
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.upkeep_adds_charge) { continue; }
+        if (ResolveProvider(s).WantVialCharge(s, p)) { ++p.charge_counters; }
+    }
+}
+
+bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial)
 {
     // Hand-aware charge policy (shared with the rollout): hold while a creature of the
     // current MV is in hand to deploy, otherwise climb toward a bigger creature in hand
     // (up to Haytham's MV 4), else pre-charge toward the deck's dominant MV. See
-    // WantVialCharge.
+    // WantVialCharge. This is the DEFAULT, the FALLBACK and the TIE-BREAK of the searched pass below.
     bool heuristic = ResolveProvider(state).WantVialCharge(state, vial);
     // An external controller (claude-play / human-play) may decide differently -- but NOT inside the
     // engine's clairvoyant rollouts (bottoming / keep eval), which must play autonomously so the kept
     // hand reproduces the real search's game. Without the m_in_rollout guard the external chooser
     // would fire (exit 70 / consume a --choices token) from within a bottoming rollout for a Vial deck.
     if (m_external_vial_chooser && !m_in_rollout) { return m_external_vial_chooser(state, vial, heuristic); }
+
+    // SEARCHED charge (mirrors the searched cleanup discard): roll the game out under BOTH answers
+    // and take the one that wins soonest, heuristic first so it owns every tie.
+    //   * Only with lookahead (depth > 0); at d0 this is inert => byte-identical greedy.
+    //   * NEVER inside a rollout (m_in_rollout): the trial's PlayOutFrom reaches this same upkeep,
+    //     so a nested searched pass would blow up exponentially. Rollout upkeeps use the heuristic.
+    if (!s_searched_vial || !LookaheadBottoming() || m_in_rollout) { return heuristic; }
+
+    // The Permanent is a reference INTO state.battlefield (GameEngine's upkeep loop hands us the
+    // live element), so its index is recoverable -- and needed, because the trial is a deep copy.
+    int vi = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    { if (&state.battlefield[i] == &vial) { vi = i; break; } }
+    if (vi < 0) { return heuristic; }   // not a live battlefield element -> nothing to search
+
+    int win[2] = { 0, 0 };
+    const bool order[2] = { heuristic, !heuristic };   // heuristic FIRST: ties go to it
+    for (int k = 0; k < 2; ++k)
+    {
+        GameState trial = state;
+        if (order[k]) { ++trial.battlefield[vi].charge_counters; }
+        ChargeRemainingVialsHeuristic(trial, vi + 1);
+        win[k] = RolloutWinTurnFrom(std::move(trial), m_max_turns, GameEngine::ResumeAt::UpkeepTail);
+    }
+    static const bool s_vial_trace = EnvOn("MTG_VIAL_TRACE");
+    if (s_vial_trace)
+    {
+        std::cerr << "[vial_trace turn=" << state.turn_number << " counters=" << vial.charge_counters
+                  << " heur=" << (heuristic ? "charge" : "hold")
+                  << " win(heur)=" << win[0] << " win(alt)=" << win[1] << "]\n";
+    }
+    if (win[1] < win[0])
+    {
+        // DEVIATION from the heuristic: every plan in the committed line was searched (and this
+        // trial was rolled out) assuming the heuristic charge, so the line is now stale. Same
+        // reasoning as s_discard_reline -- drop it and let next turn re-search what we created.
+        if (s_discard_reline) { m_committed_line.clear(); }
+        return order[1];
+    }
     return heuristic;
 }
 
@@ -2791,6 +2855,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
 // combat is the last mana use for firebreathing decks), so both worlds see the same leftover mana.
 void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_indices)
 {
+    g_fb_activations_this_turn = 0;   // MTG_FB_TRACE diagnostic; reset every combat
     if (attacker_indices.empty()) { return; }
     if (!ControlsFirebreathingSource(state, state.active_player_index)) { return; }
     ManaPool pool = AvailableManaPool(state);
@@ -2815,8 +2880,8 @@ void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_in
     // (TurnSolver's SimulateCombat) reads the SAME hook, so executor and rollout pump alike.
     const std::vector<int> fb = ResolveProvider(state).FirebreatheActivations(state);
     const int fb_k = fb.empty() ? -1 : fb.front();
-    if (fb_k < 0) { ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool); }
-    else          { ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, fb_k); }
+    if (fb_k < 0) { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool); }
+    else          { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, fb_k); }
 }
 
 // ---- Mana ----

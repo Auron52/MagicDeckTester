@@ -24,11 +24,13 @@
 //     return EVERY legal target instead of the heuristic-narrowed pick, and TurnSolver lifts
 //     its fetch-target search cap. So the search branches over every tutor/fetch target.
 // Expect a large branching blow-up -- run with a high budget. Pure DECISION/POLICY hooks that
-// pick ONE option the search never alternatives over (cast-ORDER, vial-charge, scry-keep,
-// combat) are NOT yet opened here: making the search branch on them needs new enumeration
-// (the ordering/combat work items), not just a wider gate. Cleanup DISCARD has since left this
-// list -- it is searched by default (AIEngine::ChooseDiscard, MTG_SEARCHED_DISCARD), with this
-// hook's ranked pick as its prune and tie-break.
+// pick ONE option the search never alternatives over (cast-ORDER, combat) are NOT yet opened
+// here: making the search branch on them needs new enumeration (the ordering/combat work items),
+// not just a wider gate. Three have since LEFT this list, each searched by default with this
+// hook's ranked pick as its prune and tie-break:
+//   * cleanup DISCARD  -- AIEngine::ChooseDiscard      (MTG_SEARCHED_DISCARD)
+//   * scry-keep        -- Plan::scry_choice            (MTG_SCRY_SEARCH), land ETB dispositions
+//   * vial-charge      -- AIEngine::DecideVialCharge   (MTG_SEARCHED_VIAL)
 // Human-play suppression, shared by both the global and per-gate forms: in a --claude-play
 // session (MTG_HUMAN_PLAY set) the engine's clairvoyant bottoming/keep rollout is an ENGINE
 // decision the human never makes, so un-pruning is suppressed there (a HumanPlaySuppress guard

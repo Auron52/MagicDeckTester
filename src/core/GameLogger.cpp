@@ -28,6 +28,7 @@ thread_local DragonChooser*  g_play_dragon_chooser = nullptr;
 thread_local LackeyChooser*  g_play_lackey_chooser = nullptr;
 thread_local LightPawsChooser* g_play_lightpaws_chooser = nullptr;
 thread_local FirebreatheChooser* g_play_firebreathe_chooser = nullptr;
+thread_local int                 g_fb_activations_this_turn = 0;   // MTG_FB_TRACE diagnostic
 thread_local CastOrderChooser* g_play_cast_order_chooser = nullptr;
 thread_local StorageHoldChooser* g_play_storage_hold_chooser = nullptr;
 thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullptr;

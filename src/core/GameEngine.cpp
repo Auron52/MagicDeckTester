@@ -5,6 +5,7 @@
 #include "../ai/Combat.h"
 #include "../cards/CardDatabase.h"
 #include <algorithm>
+#include <iostream>   // MTG_FB_TRACE diagnostic
 
 GameEngine::GameEngine(AIEngine& ai) : m_ai(ai) {}
 
@@ -143,7 +144,12 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     {
         ++state.turn_number;
         UntapStep(state);
-        UpkeepStep(state);
+        UpkeepStep(state);   // includes UpkeepTail
+    }
+    else if (at <= static_cast<int>(ResumeAt::UpkeepTail))
+    {
+        // Resumed from inside the Vial charge loop: finish the upkeep the caller interrupted.
+        UpkeepTail(state);
     }
     if (at <= static_cast<int>(ResumeAt::Draw))
     {
@@ -245,6 +251,14 @@ void GameEngine::UpkeepStep(GameState& state)
         if (m_ai.DecideVialCharge(state, p)) { ++p.charge_counters; }
     }
 
+    UpkeepTail(state);
+}
+
+// The rest of the upkeep, after the Vial charge loop. Its own function so a searched Vial charge
+// can resume here (ResumeAt::UpkeepTail) instead of jumping to the draw and losing this turn's
+// upkeep tokens / stack resolution. Called unconditionally by UpkeepStep -> byte-identical.
+void GameEngine::UpkeepTail(GameState& state)
+{
     // #6 Dwarven Hold (storage_charge_mode "upkeep_if_tapped"): its tap-vs-charge commitment is made at
     // the UNTAP/UPKEEP step -- BEFORE the draw -- because the literal card charges by being HELD TAPPED
     // through untap ("if tapped at upkeep, +1"). So the non-clairvoyant human must decide to hold (charge)
@@ -339,6 +353,14 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     // cast a draw-engine spell (DrawUntilNonland / cascade) whose resolution can put
     // new castable spells in hand (e.g. Land's Edge found by Treasure Hunt).
     auto resolver = [this](GameState& s) { ResolveStack(s); };
+    // MTG_FB_TRACE: DIAGNOSTIC (no play change). Firebreathing spends its pool without TAPPING
+    // anything (ApplyFirebreathing takes the pool by value), which is only sound if combat is the
+    // last mana use of the turn -- the comment on AIEngine::Firebreathe asserts exactly that. If a
+    // post-combat main casts on a turn that pumped, the same mana was spent twice, and greedy-max
+    // stops being provably dominant (it would be trading real main-2 casts for pump damage). This
+    // prints the turns where that happens so the claim is measured, not assumed.
+    static const bool s_fb_trace = EnvOn("MTG_FB_TRACE");
+    const int fb_casts_before = state.spells_cast_this_turn;
     bool may_draw_spells = m_ai.TakeTurn(state, is_pre_combat, resolver);
     ResolveStack(state);  // resolve any trailing entries; usually empty after sequential casts
 
@@ -347,6 +369,14 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     {
         m_ai.TakeTurn(state, is_pre_combat, resolver);
         ResolveStack(state);
+    }
+
+    if (s_fb_trace && !is_pre_combat && g_fb_activations_this_turn > 0)
+    {
+        const int main2_casts = state.spells_cast_this_turn - fb_casts_before;
+        std::cerr << "[fb_trace] pumped=" << g_fb_activations_this_turn
+                  << " main2_casts=" << main2_casts
+                  << (main2_casts > 0 ? "  DOUBLE-SPEND" : "  ok") << "\n";
     }
 
     // Discard lands to Land's Edge after stack resolves so Treasure Hunt's drawn

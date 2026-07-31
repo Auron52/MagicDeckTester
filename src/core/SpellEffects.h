@@ -4023,6 +4023,12 @@ inline TopDisposition HeuristicTopDisposition(const GameState& state, const std:
 // the cleanup discard use.
 extern thread_local int g_scripted_top_choice;
 
+// MTG_FB_TRACE diagnostic only (no play change): how many firebreathing activations the CURRENT
+// turn's combat paid for. Reset at every Firebreathe call; read by GameEngine::MainPhase to detect
+// a post-combat main that casts on a turn that pumped -- the one situation in which the pump pool's
+// "read, never tap" shortcut would double-spend mana. See docs/design/engine-heuristics-to-providers.md.
+extern thread_local int g_fb_activations_this_turn;
+
 // Scoped pin. Restores the previous value on exit, so a nested apply (a breakpoint re-solve inside
 // an apply) cannot leak its script into the outer one. `k < 0` is inert.
 struct ScriptedTopChoice
