@@ -254,6 +254,21 @@ bool GenericProvider::DiscardLandsFirst(const GameState&) const
     return false;   // generic: discard the highest-MV card, not lands.
 }
 
+// The BASE cleanup-discard rule for every provider (see DecisionProvider::CleanupDiscardCandidates).
+// Lives on the base class, not GenericProvider, because it is the shared default an archetype
+// narrows or widens rather than a generic-deck-only answer.
+//
+// Returns the historical SINGLE pick, so this port is byte-identical: every caller takes index 0,
+// which is exactly the index SelectCleanupDiscardIndex returned before the hook existed. Widening
+// it to several candidates is what turns the discard into a search branch.
+std::vector<int> DecisionProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    const int idx = SelectCleanupDiscardIndex(s, required_pieces);
+    if (idx < 0) { return {}; }
+    return std::vector<int>{ idx };
+}
+
 bool GenericProvider::ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const
 {
     return false;   // no risky alt-cost payloads in a generic deck.

@@ -151,8 +151,46 @@ public:
 
     // DiscardLandsFirst -- discard-to-7 policy: when shedding to hand size, prefer discarding a LAND
     // first (true) over the highest-MV card (false). Used when a Land's Edge land outlet
-    // makes lands ammunition. Required-piece protection stays engine-side.
+    // makes lands ammunition. An INPUT to CleanupDiscardCandidates below, not a separate decision.
     virtual bool DiscardLandsFirst(const GameState& s) const = 0;
+
+    // CleanupDiscardCandidates -- cleanup discard (hand over its size limit): WHICH card to shed,
+    // as hand indices in PREFERENCE order. This is the whole rule, provider-owned: the engine keeps
+    // only the mechanism (move the chosen card to the graveyard).
+    //
+    // [heuristic-then-search]: index 0 is what a non-branching caller takes, so returning ONE index
+    // decides the discard with no branch (and is byte-identical to the historical single answer);
+    // returning several is what lets the search choose among them instead of trusting the ranking.
+    //
+    // `required_pieces` is the deck's protected combo-piece list. It is passed in rather than read
+    // off the state because the executor sources it from its own MulliganProfile while the rollout
+    // reads GameState::m_required_pieces -- the same set, but the caller owns which.
+    //
+    // The base implementation is the engine's historical rule, so a provider that does not override
+    // behaves exactly as before:
+    //   1. If DiscardLandsFirst (a land outlet makes lands ammunition), the first non-staged LAND.
+    //   2. Otherwise the highest-MV non-staged card that is not a protected required piece
+    //      (protection scope per DiscardProtectScope; a redundant copy stays discardable).
+    //   3. Last resort, when every non-staged card is protected: max-MV overall, staged preferred.
+    // Defined out-of-line (DecisionProviders.cpp) because that rule lives in SpellEffects.h, which
+    // includes this header.
+    virtual std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const;
+
+    // FirebreatheActivations -- combat pump ("firebreathing"): how many activations to pay for.
+    // Returns candidate counts in PREFERENCE order; index 0 is what a non-branching caller takes.
+    // A NEGATIVE entry means "as many as the pool affords" -- the greedy maximum -- which is the
+    // default, so this costs no probe and is byte-identical to the historical behaviour.
+    //
+    // Provider-owned because "spend the whole pool on pump" is an ASSUMPTION, not a rule: it is
+    // right for a goldfish with no second main and wrong for a deck that needs to hold mana (a
+    // Scourge ping, an instant). Returning several concrete counts is what lets the search decide.
+    // The engine keeps the mechanism (which activation, in what order -- ApplyFirebreathing).
+    virtual std::vector<int> FirebreatheActivations(const GameState& s) const
+    {
+        (void)s;
+        return std::vector<int>{ -1 };
+    }
 
     // ShouldEmitRiskyAltPayload -- whether to EMIT a risky alt-cost payload (Reverent Silence: free, but its
     // destroy-all-enchantments wipes the caster's own Aria/Remedy) as a searched action.
