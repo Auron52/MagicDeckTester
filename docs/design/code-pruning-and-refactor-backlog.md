@@ -240,7 +240,7 @@ every one of the analyzer/tooling targets is done or much smaller.** What is lef
 
 | function | LOC | risk |
 |---|---|---|
-| `RunExhaustiveKeep` | 1959 | analyzer — harnessed, safe |
+| `RunExhaustiveKeep` | 1758 | analyzer — harnessed, safe |
 | `ApplyPlanDirect` | 1834 | **engine** |
 | `AIEngine::TakeTurn` | 1443 | **engine** |
 | `EnumeratePlans` / `CollectActions` / `Solve` / `FullSearchLineHybrid` / `CheckLine` | 969–678 | **engine** |
@@ -248,20 +248,38 @@ every one of the analyzer/tooling targets is done or much smaller.** What is lef
 | `RunKeepMerge` | 615 | analyzer — harnessed |
 | `main` (runner) | 501 | tooling |
 
-- `RunExhaustiveKeep` — the `MTG_KEEP_PRIOR_RAW` change-detection carry is the largest single block
-  left at ~203 LOC, but ~9 of its locals escape into the refine loop (27 later references). Apply the
-  harness pattern above (a generator struct whose phases are member functions) rather than passing a
-  carry struct around; it also needs a new PRIOR_RAW verification path.
+- `RunExhaustiveKeep` (now **1758**, after `c2419bd` lifted the `MTG_KEEP_PRIOR_RAW` change-detection
+  carry into `LoadPriorCarry` + a `PriorCarry` struct — ten values escape that block, so they became
+  one object, named to match the locals so downstream reads are unchanged apart from a `pc.` prefix).
+  What is left is the prune-set carry (~128), the per-cell journal (~150), the resume/journal-replay
+  path (~140), the probe carry (~190), and the continuous adaptive pool (~400). The journal/resume
+  ones need an interrupted run to exercise, so **cover them in the harness before touching them.**
 - `ApplyPlanDirect` / `TakeTurn` are also the two remaining C1 units, so do them as C1, against the
   play-digest bar, not as a size exercise.
 - B4 item 1 (the TurnSolver split) — note this now carries an inlining cost the analyzer splits did
   not: `TurnSolver.cpp`'s internals are hot and there is no LTO, so it needs a deterministic
   callgrind Ir A/B, exactly as B4 item 2 did.
 
-**A harness hazard that cost a false failure here:** the modes check runs the DEFAULT grid path, which
-regenerates `burn.profile.json` in the scratch deck folder — and the keep-model harness reads that
-profile as its input. Running them in that order made four keep-model artifacts "differ" with no code
-cause. Restore the scratch deck from `decks/` between harnesses.
+**`test/lib/keepgen_check.sh` now exists and is the tool for all of this** (`60ac464`). The regression
+suite drives `mtg`, not `mtg-analyze`, so nothing in the tree could see a change to profile
+*generation* — a broken generator ships a subtly-worse mulligan policy that surfaces days later as a
+drifted win turn. Ten runs, ~4 min, 38 compared artifacts, covering the paths the ad-hoc checks
+missed: the below-floor refusal, two chunks that clear the floor (so `BuildPolicyFromTables` runs),
+the merge, the synth reconstruction, the regret simulator, a traced generation, the prior-pool carry,
+trace-based cell reuse, and a prune set emitted then consumed. **It asserts each opt-in path
+ENGAGED**, by grepping for the line that path prints — an opt-in path that is entered and skipped
+compares equal and proves nothing.
+
+Three harness hazards found the hard way, each of which silently invalidates a comparison:
+- **Sharing one `out_raw` path couples the runs.** The generator reads an existing `out_raw` as a
+  RESUME checkpoint, so a later run can inherit an earlier one's cells — and the first run of a fresh
+  invocation sees no file while the second does. Only running the harness twice against one build
+  exposes this; that self-check is the only way to know a baseline is a baseline.
+- **stderr progress is sampled by wall clock** (percent, throughput, elapsed), so it differs run to
+  run on one binary. Dropped; semantic stderr is kept.
+- **The modes check regenerates `burn.profile.json` in the scratch deck folder**, and the keep-model
+  harness reads that profile as input. Running them in that order made four keep-model artifacts
+  "differ" with no code cause. Restore the scratch deck from `decks/` between harnesses.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
