@@ -248,38 +248,71 @@ every one of the analyzer/tooling targets is done or much smaller.** What is lef
 | `RunKeepMerge` | 615 | analyzer — harnessed |
 | `main` (runner) | 501 | tooling |
 
-- `RunExhaustiveKeep` (now **1758**, after `c2419bd` lifted the `MTG_KEEP_PRIOR_RAW` change-detection
-  carry into `LoadPriorCarry` + a `PriorCarry` struct — ten values escape that block, so they became
-  one object, named to match the locals so downstream reads are unchanged apart from a `pc.` prefix).
-  What is left is the prune-set carry (~128), the per-cell journal (~150), the resume/journal-replay
-  path (~140), the probe carry (~190), and the continuous adaptive pool (~400). The journal/resume
-  ones need an interrupted run to exercise, so **cover them in the harness before touching them.**
+- `RunExhaustiveKeep` (now **1548**), after four more units:
+  `c2419bd` lifted the `MTG_KEEP_PRIOR_RAW` change-detection carry into `LoadPriorCarry` + a
+  `PriorCarry` struct — ten values escape that block, so they became one object, named to match the
+  locals so downstream reads are unchanged apart from a `pc.` prefix.
+  `0cb44b7` did the same for the `MTG_KEEP_PRUNE_SET` carry (`LoadPruneCarry` + `PruneCarry`, four
+  escaping values; `carry_skip` does *not* escape and stayed a local). Its `tables` parameter is
+  deliberately non-const: skip mode preloads a carried cell's V in place, which is why it cannot be a
+  pure function of the config.
+  `0bfb548` collapsed **eight hand-written copies** of the `(bucket_fp, deck_fp)` pooling fingerprint
+  into `DeckFp` / `ComputePoolFp` — the KeepVal lesson again, and a correctness argument before a
+  tidiness one: those copies gate every cross-run reuse in the file, they only work while they agree,
+  and one drifting would disarm exactly one guard while the other seven kept passing. It also removed
+  a `compute_fps` lambda that was a partial version of the same idea covering three of the eight.
+  `4d2ab4b` lifted the probe carry into `LoadProbeCarry`, which returns the carried
+  count rather than touching the caller's `resume_loaded` / `recompute()`.
+  What is left is the per-cell journal (~150), the resume/journal-replay path (~140), and the
+  continuous adaptive pool (~400) — **all three now covered by the harness** (see below).
 - `ApplyPlanDirect` / `TakeTurn` are also the two remaining C1 units, so do them as C1, against the
   play-digest bar, not as a size exercise.
 - B4 item 1 (the TurnSolver split) — note this now carries an inlining cost the analyzer splits did
   not: `TurnSolver.cpp`'s internals are hot and there is no LTO, so it needs a deterministic
   callgrind Ir A/B, exactly as B4 item 2 did.
 
-**`test/lib/keepgen_check.sh` now exists and is the tool for all of this** (`60ac464`). The regression
-suite drives `mtg`, not `mtg-analyze`, so nothing in the tree could see a change to profile
-*generation* — a broken generator ships a subtly-worse mulligan policy that surfaces days later as a
-drifted win turn. Ten runs, ~4 min, 38 compared artifacts, covering the paths the ad-hoc checks
+**`test/lib/keepgen_check.sh` now exists and is the tool for all of this** (`60ac464`, extended in
+`cee5569`). The regression suite drives `mtg`, not `mtg-analyze`, so nothing in the tree could see a
+change to profile *generation* — a broken generator ships a subtly-worse mulligan policy that
+surfaces days later as a drifted win turn. Fifteen runs, ~7 min, covering the paths the ad-hoc checks
 missed: the below-floor refusal, two chunks that clear the floor (so `BuildPolicyFromTables` runs),
 the merge, the synth reconstruction, the regret simulator, a traced generation, the prior-pool carry,
-trace-based cell reuse, and a prune set emitted then consumed. **It asserts each opt-in path
-ENGAGED**, by grepping for the line that path prints — an opt-in path that is entered and skipped
-compares equal and proves nothing.
+trace-based cell reuse, a prune set emitted then consumed, a `--gen-mulligan recommend` probe
+consumed as a later gen's r=0 slice, and a continuous run **hard-killed and restarted** to reach the
+journal-resume path. **It asserts each opt-in path ENGAGED**, by grepping for the line that path
+prints — an opt-in path that is entered and skipped compares equal and proves nothing.
 
-Three harness hazards found the hard way, each of which silently invalidates a comparison:
+It also asserts **two invariants within a single tag**, which a cross-tag diff structurally cannot
+see (a refactor breaking both arms equally still compares identical): probe carry ≡ rolling r=0
+fresh, and a killed+resumed run ≡ an uninterrupted one.
+
+Harness hazards found the hard way, each of which silently invalidates a comparison:
 - **Sharing one `out_raw` path couples the runs.** The generator reads an existing `out_raw` as a
   RESUME checkpoint, so a later run can inherit an earlier one's cells — and the first run of a fresh
   invocation sees no file while the second does. Only running the harness twice against one build
   exposes this; that self-check is the only way to know a baseline is a baseline.
 - **stderr progress is sampled by wall clock** (percent, throughput, elapsed), so it differs run to
-  run on one binary. Dropped; semantic stderr is kept.
+  run on one binary. Dropped; semantic stderr is kept. Match on the SHAPE of a progress line, not the
+  phase name: the original filters were written for `full-pass`/`refine wave` while the generator
+  prints `floor-pass`/`refine-wave-<n>`, so they matched nothing and the sampled counts leaked into
+  the diff — a pure code move then read as two DIFFERING artifacts (`d3d5430`).
 - **The modes check regenerates `burn.profile.json` in the scratch deck folder**, and the keep-model
   harness reads that profile as input. Running them in that order made four keep-model artifacts
   "differ" with no code cause. Restore the scratch deck from `decks/` between harnesses.
+- **Interrupt the resume run when its JOURNAL HAS RECORDS, not after a fixed delay.** A fixed 8 s
+  landed during equivalence discovery, so there was nothing to resume from: the restart ran from
+  scratch, the byte-identity invariant still passed, and only the engagement check noticed the path
+  was testing nothing.
+- **`MTG_KEEP_MAX_MULL` is not a flag** (`max_mull` is fixed at 6 in the analyzer CLI). The harness
+  set it for months and only earned a "not a flag this binary reads" warning.
+
+**One real defect fell out of building that coverage** — see
+[`rollout-config-digest-depth-blindness.md`](rollout-config-digest-depth-blindness.md). `play_digest`
+is the gate on every cross-run reuse here, and it hashes only a 64-game battery, never
+`depth`/`budget_ms`/`max_turns`: identical hash at d5 and d6 while 2 % of keep rollouts differ. The
+severe consumer is not probe carry but `reuse_all_cells`, which reuses a WHOLE prior table with zero
+fresh rollouts when the digest matches. Measured, documented, **not fixed** — the one-line fix
+invalidates every existing sidecar's reuse, which is the user's call.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
