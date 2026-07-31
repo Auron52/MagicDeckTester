@@ -766,6 +766,233 @@ static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const Exhaus
     }
 }
 
+
+// The prior-pool carry state. Ten values escape the load into the refine loop, which is why this
+// block could not simply be hoisted: they are one thing (what the prior told us about each cell),
+// so they are one struct. Member names match what the locals were called, so every downstream use
+// reads the same as before apart from the `pc.` prefix.
+struct PriorCarry
+{
+    std::vector<std::vector<std::array<double, 2>>>    pri_V, pri_var;
+    std::vector<std::vector<std::array<long long, 2>>> pri_n;
+    std::vector<std::vector<std::array<bool, 2>>>      has_prior, resolved;
+    std::vector<std::vector<char>> trace_reuse;   // per (H-idx, cell): prior disjoint from changed
+    bool   change_detect   = false;
+    bool   reuse_all_cells = false;   // prior reused WHOLESALE (identical play_digest)
+    double detect_delta    = 0.10;    // decision-relevant win-turn shift
+    double detect_z        = 1.64;    // CI band for the "unmoved" call
+};
+
+// ---- Change-detection carry (MTG_KEEP_PRIOR_RAW) ---------------------------------------------
+// Whole-pool warm-start: given a PRIOR pool (from a previous run, typically an older commit, same
+// decklist), re-sample every cell only THINLY at the floor and then spend the refine budget ONLY on
+// the cells the change actually MOVED -- detected by comparing this run's thin floor estimate to the
+// prior. Unmoved cells reuse the prior's (higher-R) value; moved cells are refined fresh. This scopes
+// a re-run to what the change touched without needing to know what changed. See
+// docs/design/change-detection-carry.md. Rule-0 refinement: a play change only invalidates the cells
+// whose rollouts hit the changed code; an unmoved cell's prior value is not stale, it is the same
+// number. The ONLY risk is a false negative (miss a real move), so the test is biased toward MOVED.
+//
+// Extracted from RunExhaustiveKeep (B1). Reads the prior; writes nothing but the returned carry.
+static PriorCarry LoadPriorCarry(const Decklist& deck, const ExhaustiveKeepConfig& cfg,
+                                 const EquivReport& eq, const std::vector<SizeTable>& tables,
+                                 int K, int min_size, const std::string& play_digest)
+{
+    PriorCarry pc;
+    auto TB = [&](int H) -> const SizeTable& { return tables[HAND - H]; };
+    pc.pri_V.resize(tables.size());     pc.pri_var.resize(tables.size());
+    pc.pri_n.resize(tables.size());     pc.has_prior.resize(tables.size());
+    pc.resolved.resize(tables.size());  pc.trace_reuse.resize(tables.size());
+    for (int H = HAND; H >= min_size; --H)
+    {
+        const std::size_t n = TB(H).comps.size();
+        pc.pri_V[HAND - H].assign(n, { 0.0, 0.0 });     pc.pri_var[HAND - H].assign(n, { 0.0, 0.0 });
+        pc.pri_n[HAND - H].assign(n, { 0, 0 });         pc.has_prior[HAND - H].assign(n, { false, false });
+        pc.resolved[HAND - H].assign(n, { false, false });
+    }
+    pc.detect_delta = []{ const char* s = std::getenv("MTG_KEEP_DETECT_DELTA");
+        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();
+    // EXECUTION-TRACE reuse (MTG_KEEP_CHANGED_CARDS): the set of cards a change touched. A prior cell
+    // whose recorded touched-set is DISJOINT from this set is byte-identical on the new commit -> reuse
+    // its prior value EXACTLY (0 samples of refine), including near-threshold + bottoming cells that the
+    // statistical test can't clear. Requires a TRACED prior (its entries carry "touched").
+    std::set<std::string> changed_cards;
+    if (const char* cc = std::getenv("MTG_KEEP_CHANGED_CARDS"); cc && *cc)
+    {
+        std::string s = cc, cur;
+        for (char ch : s) { if (ch == ',') { if (!cur.empty()) changed_cards.insert(cur); cur.clear(); } else cur += ch; }
+        if (!cur.empty()) { changed_cards.insert(cur); }
+    }
+    long long n_trace_reuse = 0; bool prior_traced = false;
+    // Set true below when the prior is reused WHOLESALE (identical play_digest). Hoisted to this scope so
+    // Pass A can skip the throwaway floor sample on every reused cell (its value comes from the prior).
+    if (const char* pr = std::getenv("MTG_KEEP_PRIOR_RAW"); pr && *pr)
+    {
+        std::ifstream prf(pr);
+        if (!prf) { std::cerr << "[keepgen] PRIOR-RAW: cannot open " << pr << " -- ignoring\n" << std::flush; }
+        else
+        {
+            nlohmann::json pj; bool parsed = true;
+            try { prf >> pj; } catch (const std::exception& e)
+            { std::cerr << "[keepgen] PRIOR-RAW: bad json (" << e.what() << ") -- ignoring\n" << std::flush; parsed = false; }
+            if (parsed && pj.contains("meta") && pj.contains("sizes"))
+            {
+                uint64_t my_bucket_fp = 1469598103934665603ULL;
+                for (int b = 0; b < K; ++b)
+                { my_bucket_fp = Fnv("|", my_bucket_fp);
+                  for (const std::string& n : eq.classes[b].members) { my_bucket_fp = Fnv(n + ",", my_bucket_fp); } }
+                std::vector<std::string> dnn;
+                for (const Card& c : deck.mainboard) { dnn.push_back(c.m_name.str()); }
+                std::sort(dnn.begin(), dnn.end());
+                uint64_t my_deck_fp = 1469598103934665603ULL;
+                for (const std::string& n : dnn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
+                const auto& mm = pj["meta"];
+                // EXTEND-DEPTH: a prior with max_mull <= this run's may seed it. The prior supplies its
+                // sizes 7..7-prior_mm; the DEEPER sizes it lacks are rolled fresh, then BuildPolicy runs at
+                // the run's (deeper) max_mull. A shallower prior is a strict subset (same buckets/deck/
+                // equiv_seed/K), so pooling parity holds. (prior_mm > cfg.max_mull would need DROPPING
+                // sizes and is not supported here.)
+                const int prior_mm = mm.value("max_mull", -1);
+                const bool ok = mm.value("bucket_fp", 0ULL) == my_bucket_fp
+                             && mm.value("deck_fp", 0ULL) == my_deck_fp
+                             && mm.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                             && mm.value("K", -1) == K
+                             && prior_mm >= 0 && prior_mm <= cfg.max_mull;
+                if (!ok)
+                { std::cerr << "[keepgen] PRIOR-RAW: fingerprint mismatch (bucket/deck/equiv_seed/K/max_mull)"
+                               " -- REFUSING (a changed decklist needs bucket translation, not yet built)\n" << std::flush; }
+                else if (!(cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts))
+                { std::cerr << "[keepgen] PRIOR-RAW: change-detection needs an ADAPTIVE run "
+                               "(0 < MTG_KEEP_R_FLOOR < MTG_KEEP_ROLLOUTS) -- ignoring prior\n" << std::flush; }
+                else
+                {
+                    prior_traced = mm.value("traced", false);
+                    if (prior_mm < cfg.max_mull)
+                    { std::cerr << "[keepgen] EXTEND-DEPTH: prior max_mull=" << prior_mm << " -> this run "
+                                << cfg.max_mull << "; sizes " << HAND << ".." << (HAND - prior_mm)
+                                << " reuse from prior, sizes " << (HAND - prior_mm - 1)
+                                << "..1 roll fresh\n" << std::flush; }
+
+                    // ---- Phase B AUTO-ATTRIBUTION + ENGINE GUARD --------------------------------------
+                    // When the operator did NOT declare MTG_KEEP_CHANGED_CARDS, derive the reuse scope
+                    // automatically from the prior's stored provenance (meta.play_digest / engine_fp /
+                    // card_defs) vs this build + cards.json:
+                    //   1. play_digest UNCHANGED  -> byte-identical play -> reuse the ENTIRE prior pool.
+                    //   2. play_digest changed, engine_fp MATCHES, some card DEFS changed -> card-level
+                    //      trace reuse scoped to those cards (the existing disjointness path).
+                    //   3. play_digest changed, engine_fp DIFFERS/unavailable -> engine (shared-code)
+                    //      change can move any cell -> REFUSE card-level reuse; statistical only.
+                    // A manual MTG_KEEP_CHANGED_CARDS always wins (human-in-the-loop override).
+                    const bool manual_changed = !changed_cards.empty();
+                    const std::string prior_pd = mm.value("play_digest", std::string());
+                    // Coarse reuse: play_digest IS the pooling identity, so an identical digest proves
+                    // byte-identical play and every prior cell reproduces exactly on this build -> reuse the
+                    // ENTIRE prior pool (0 fresh rollouts on reused cells). Checked OUTSIDE the card_defs
+                    // guard so a MERGE-output prior (carries play_digest but not card_defs) also qualifies --
+                    // this is what lets it seed a deeper-max_mull EXTEND run.
+                    if (!manual_changed && !prior_pd.empty() && prior_pd == play_digest)
+                    {
+                        pc.reuse_all_cells = true;
+                        std::cerr << "[keepgen] AUTO-ATTRIB: play_digest unchanged -> reuse the ENTIRE"
+                                     " prior pool (0 fresh rollouts on reused cells)\n" << std::flush;
+                    }
+                    // Finer reuse (play_digest DIFFERS): if the engine is unchanged, scope reuse to the cards
+                    // whose defs moved; else fall back to statistical change-detection only.
+                    else if (!manual_changed && mm.contains("card_defs"))
+                    {
+                        const std::string prior_efp = mm.value("engine_fp", std::string());
+                        const std::string cur_efp   = MTG_ENGINE_FP;
+                        const bool engine_ok = !prior_efp.empty() && !cur_efp.empty() && prior_efp == cur_efp;
+                        if (engine_ok)
+                        {
+                            const auto& cd = mm["card_defs"];
+                            std::set<std::string> distinct;
+                            for (const Card& c : deck.mainboard) { distinct.insert(c.m_name.str()); }
+                            for (const std::string& n : distinct)
+                            {
+                                const uint64_t cur = CardDatabase::Instance().DefHash(n);
+                                const uint64_t prv = cd.contains(n) ? cd[n].get<uint64_t>() : ~0ULL;
+                                if (cur != prv) { changed_cards.insert(n); }
+                            }
+                            if (changed_cards.empty())
+                            { std::cerr << "[keepgen] AUTO-ATTRIB: play_digest changed but engine_fp AND all"
+                                           " card defs match -- unexpected; REFUSING card-level reuse"
+                                           " (statistical only)\n" << std::flush; }
+                            else
+                            { std::cerr << "[keepgen] AUTO-ATTRIB: engine_fp matches; " << changed_cards.size()
+                                        << " card def(s) changed {"
+                                        << [&]{ std::string s; for (const auto& c : changed_cards) { s += (s.empty()?"":",") + c; } return s; }()
+                                        << "} -> card-level trace reuse\n" << std::flush; }
+                        }
+                        else
+                        {
+                            std::cerr << "[keepgen] AUTO-ATTRIB: play_digest changed and engine_fp "
+                                      << ((prior_efp.empty() || cur_efp.empty()) ? "unavailable" : "differs")
+                                      << " -- engine change; REFUSING card-level reuse (statistical only)\n" << std::flush;
+                        }
+                    }
+
+                    const bool trace_active = pc.reuse_all_cells || !changed_cards.empty();
+                    if (!pc.reuse_all_cells && !changed_cards.empty() && !prior_traced)
+                    { std::cerr << "[keepgen] CHANGED-CARDS set but prior is NOT traced (no per-cell touched"
+                                   " sets) -- falling back to statistical change-detection only\n" << std::flush; }
+                    for (int H = HAND; H >= min_size; --H) { pc.trace_reuse[HAND - H].assign(TB(H).comps.size(), 0); }
+                    long long loaded = 0;
+                    for (const auto& sz : pj["sizes"])
+                    {
+                        const int H = sz.value("H", 0);
+                        if (H > HAND || H < min_size) { continue; }
+                        const SizeTable& t = TB(H);
+                        for (const auto& e : sz["entries"])
+                        {
+                            auto it = t.index.find(e["comp"].get<std::vector<int>>());
+                            if (it == t.index.end()) { continue; }
+                            const int i = it->second;
+                            // reuse-all (play_digest identical): every cell reuses the prior exactly; the
+                            // per-cell touched set is irrelevant (no card/engine change to scope against).
+                            if (pc.reuse_all_cells) { pc.trace_reuse[HAND - H][i] = 1; ++n_trace_reuse; }
+                            // Execution-trace: disjoint from the changed cards => provably unmoved => reuse.
+                            else if (trace_active && prior_traced && e.contains("touched"))
+                            {
+                                bool disjoint = true;
+                                for (const auto& nm : e["touched"])
+                                    if (changed_cards.count(nm.get<std::string>())) { disjoint = false; break; }
+                                if (disjoint) { pc.trace_reuse[HAND - H][i] = 1; ++n_trace_reuse; }
+                            }
+                            if (!e.contains("sumsq")) { continue; }   // need variance for the statistical test
+                            for (int pd = 0; pd < 2; ++pd)
+                            {
+                                const long long c = e["count"][pd].get<long long>();
+                                if (c < 2) { continue; }
+                                const double s = e["sum"][pd].get<double>();
+                                const double sq = e["sumsq"][pd].get<double>();
+                                const double V = s / c;
+                                pc.pri_V[HAND - H][i][pd]     = V;
+                                pc.pri_var[HAND - H][i][pd]   = std::max(0.0, sq / c - V * V);
+                                pc.pri_n[HAND - H][i][pd]     = c;
+                                pc.has_prior[HAND - H][i][pd] = true;
+                                ++loaded;
+                            }
+                        }
+                    }
+                    if (pc.reuse_all_cells)
+                    { std::cerr << "[keepgen] EXECUTION-TRACE: " << n_trace_reuse
+                                << " cells reused from the identical-play prior (whole-pool)\n" << std::flush; }
+                    else if (trace_active && prior_traced)
+                    { std::cerr << "[keepgen] EXECUTION-TRACE: " << n_trace_reuse << " cells provably untouched by {"
+                                << [&]{ std::string s; for (const auto& c : changed_cards) { s += (s.empty()?"":",") + c; } return s; }()
+                                << "} -> reuse prior exactly\n" << std::flush; }
+                    pc.change_detect = true;
+                    std::cerr << "[keepgen] PRIOR-RAW: loaded " << loaded << " prior cell-sides from " << pr
+                              << " (source_R=" << mm.value("R", 0) << ", pc.detect_delta=" << pc.detect_delta
+                              << ", pc.detect_z=" << pc.detect_z << ") -- change-detection ON\n" << std::flush;
+                }
+            }
+        }
+    }
+    return pc;
+}
+
 void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                        const ExhaustiveKeepConfig& cfg)
 {
@@ -1007,209 +1234,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
            << ", 64-game battery): " << play_digest << "\n";
     }
 
-    // ---- Change-detection carry (MTG_KEEP_PRIOR_RAW) ---------------------------------------------
-    // Whole-pool warm-start: given a PRIOR pool (from a previous run, typically an older commit, same
-    // decklist), re-sample every cell only THINLY at the floor and then spend the refine budget ONLY on
-    // the cells the change actually MOVED -- detected by comparing this run's thin floor estimate to the
-    // prior. Unmoved cells reuse the prior's (higher-R) value; moved cells are refined fresh. This scopes
-    // a re-run to what the change touched without needing to know what changed. See
-    // docs/design/change-detection-carry.md. Rule-0 refinement: a play change only invalidates the cells
-    // whose rollouts hit the changed code; an unmoved cell's prior value is not stale, it is the same
-    // number. The ONLY risk is a false negative (miss a real move), so the test is biased toward MOVED.
-    std::vector<std::vector<std::array<double, 2>>>    pri_V(tables.size()), pri_var(tables.size());
-    std::vector<std::vector<std::array<long long, 2>>> pri_n(tables.size());
-    std::vector<std::vector<std::array<bool, 2>>>      has_prior(tables.size()), resolved(tables.size());
-    for (int H = HAND; H >= min_size; --H)
-    {
-        const std::size_t n = TB(H).comps.size();
-        pri_V[HAND - H].assign(n, { 0.0, 0.0 });     pri_var[HAND - H].assign(n, { 0.0, 0.0 });
-        pri_n[HAND - H].assign(n, { 0, 0 });         has_prior[HAND - H].assign(n, { false, false });
-        resolved[HAND - H].assign(n, { false, false });
-    }
-    bool   change_detect = false;
-    double detect_delta  = []{ const char* s = std::getenv("MTG_KEEP_DETECT_DELTA");
-        return (s && *s) ? std::max(0.0, std::atof(s)) : 0.10; }();   // decision-relevant win-turn shift
-    double detect_z      = 1.64;   // CI band for the "unmoved" call
-    // EXECUTION-TRACE reuse (MTG_KEEP_CHANGED_CARDS): the set of cards a change touched. A prior cell
-    // whose recorded touched-set is DISJOINT from this set is byte-identical on the new commit -> reuse
-    // its prior value EXACTLY (0 samples of refine), including near-threshold + bottoming cells that the
-    // statistical test can't clear. Requires a TRACED prior (its entries carry "touched").
-    std::set<std::string> changed_cards;
-    if (const char* cc = std::getenv("MTG_KEEP_CHANGED_CARDS"); cc && *cc)
-    {
-        std::string s = cc, cur;
-        for (char ch : s) { if (ch == ',') { if (!cur.empty()) changed_cards.insert(cur); cur.clear(); } else cur += ch; }
-        if (!cur.empty()) { changed_cards.insert(cur); }
-    }
-    std::vector<std::vector<char>> trace_reuse(tables.size());   // per (H-idx, cell): prior disjoint from changed
-    long long n_trace_reuse = 0; bool prior_traced = false;
-    // Set true below when the prior is reused WHOLESALE (identical play_digest). Hoisted to this scope so
-    // Pass A can skip the throwaway floor sample on every reused cell (its value comes from the prior).
-    bool reuse_all_cells = false;
-    if (const char* pr = std::getenv("MTG_KEEP_PRIOR_RAW"); pr && *pr)
-    {
-        std::ifstream prf(pr);
-        if (!prf) { std::cerr << "[keepgen] PRIOR-RAW: cannot open " << pr << " -- ignoring\n" << std::flush; }
-        else
-        {
-            nlohmann::json pj; bool parsed = true;
-            try { prf >> pj; } catch (const std::exception& e)
-            { std::cerr << "[keepgen] PRIOR-RAW: bad json (" << e.what() << ") -- ignoring\n" << std::flush; parsed = false; }
-            if (parsed && pj.contains("meta") && pj.contains("sizes"))
-            {
-                uint64_t my_bucket_fp = 1469598103934665603ULL;
-                for (int b = 0; b < K; ++b)
-                { my_bucket_fp = Fnv("|", my_bucket_fp);
-                  for (const std::string& n : eq.classes[b].members) { my_bucket_fp = Fnv(n + ",", my_bucket_fp); } }
-                std::vector<std::string> dnn;
-                for (const Card& c : deck.mainboard) { dnn.push_back(c.m_name.str()); }
-                std::sort(dnn.begin(), dnn.end());
-                uint64_t my_deck_fp = 1469598103934665603ULL;
-                for (const std::string& n : dnn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
-                const auto& mm = pj["meta"];
-                // EXTEND-DEPTH: a prior with max_mull <= this run's may seed it. The prior supplies its
-                // sizes 7..7-prior_mm; the DEEPER sizes it lacks are rolled fresh, then BuildPolicy runs at
-                // the run's (deeper) max_mull. A shallower prior is a strict subset (same buckets/deck/
-                // equiv_seed/K), so pooling parity holds. (prior_mm > cfg.max_mull would need DROPPING
-                // sizes and is not supported here.)
-                const int prior_mm = mm.value("max_mull", -1);
-                const bool ok = mm.value("bucket_fp", 0ULL) == my_bucket_fp
-                             && mm.value("deck_fp", 0ULL) == my_deck_fp
-                             && mm.value("equiv_seed", 0ULL) == cfg.equiv_seed
-                             && mm.value("K", -1) == K
-                             && prior_mm >= 0 && prior_mm <= cfg.max_mull;
-                if (!ok)
-                { std::cerr << "[keepgen] PRIOR-RAW: fingerprint mismatch (bucket/deck/equiv_seed/K/max_mull)"
-                               " -- REFUSING (a changed decklist needs bucket translation, not yet built)\n" << std::flush; }
-                else if (!(cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts))
-                { std::cerr << "[keepgen] PRIOR-RAW: change-detection needs an ADAPTIVE run "
-                               "(0 < MTG_KEEP_R_FLOOR < MTG_KEEP_ROLLOUTS) -- ignoring prior\n" << std::flush; }
-                else
-                {
-                    prior_traced = mm.value("traced", false);
-                    if (prior_mm < cfg.max_mull)
-                    { std::cerr << "[keepgen] EXTEND-DEPTH: prior max_mull=" << prior_mm << " -> this run "
-                                << cfg.max_mull << "; sizes " << HAND << ".." << (HAND - prior_mm)
-                                << " reuse from prior, sizes " << (HAND - prior_mm - 1)
-                                << "..1 roll fresh\n" << std::flush; }
-
-                    // ---- Phase B AUTO-ATTRIBUTION + ENGINE GUARD --------------------------------------
-                    // When the operator did NOT declare MTG_KEEP_CHANGED_CARDS, derive the reuse scope
-                    // automatically from the prior's stored provenance (meta.play_digest / engine_fp /
-                    // card_defs) vs this build + cards.json:
-                    //   1. play_digest UNCHANGED  -> byte-identical play -> reuse the ENTIRE prior pool.
-                    //   2. play_digest changed, engine_fp MATCHES, some card DEFS changed -> card-level
-                    //      trace reuse scoped to those cards (the existing disjointness path).
-                    //   3. play_digest changed, engine_fp DIFFERS/unavailable -> engine (shared-code)
-                    //      change can move any cell -> REFUSE card-level reuse; statistical only.
-                    // A manual MTG_KEEP_CHANGED_CARDS always wins (human-in-the-loop override).
-                    const bool manual_changed = !changed_cards.empty();
-                    const std::string prior_pd = mm.value("play_digest", std::string());
-                    // Coarse reuse: play_digest IS the pooling identity, so an identical digest proves
-                    // byte-identical play and every prior cell reproduces exactly on this build -> reuse the
-                    // ENTIRE prior pool (0 fresh rollouts on reused cells). Checked OUTSIDE the card_defs
-                    // guard so a MERGE-output prior (carries play_digest but not card_defs) also qualifies --
-                    // this is what lets it seed a deeper-max_mull EXTEND run.
-                    if (!manual_changed && !prior_pd.empty() && prior_pd == play_digest)
-                    {
-                        reuse_all_cells = true;
-                        std::cerr << "[keepgen] AUTO-ATTRIB: play_digest unchanged -> reuse the ENTIRE"
-                                     " prior pool (0 fresh rollouts on reused cells)\n" << std::flush;
-                    }
-                    // Finer reuse (play_digest DIFFERS): if the engine is unchanged, scope reuse to the cards
-                    // whose defs moved; else fall back to statistical change-detection only.
-                    else if (!manual_changed && mm.contains("card_defs"))
-                    {
-                        const std::string prior_efp = mm.value("engine_fp", std::string());
-                        const std::string cur_efp   = MTG_ENGINE_FP;
-                        const bool engine_ok = !prior_efp.empty() && !cur_efp.empty() && prior_efp == cur_efp;
-                        if (engine_ok)
-                        {
-                            const auto& cd = mm["card_defs"];
-                            std::set<std::string> distinct;
-                            for (const Card& c : deck.mainboard) { distinct.insert(c.m_name.str()); }
-                            for (const std::string& n : distinct)
-                            {
-                                const uint64_t cur = CardDatabase::Instance().DefHash(n);
-                                const uint64_t prv = cd.contains(n) ? cd[n].get<uint64_t>() : ~0ULL;
-                                if (cur != prv) { changed_cards.insert(n); }
-                            }
-                            if (changed_cards.empty())
-                            { std::cerr << "[keepgen] AUTO-ATTRIB: play_digest changed but engine_fp AND all"
-                                           " card defs match -- unexpected; REFUSING card-level reuse"
-                                           " (statistical only)\n" << std::flush; }
-                            else
-                            { std::cerr << "[keepgen] AUTO-ATTRIB: engine_fp matches; " << changed_cards.size()
-                                        << " card def(s) changed {"
-                                        << [&]{ std::string s; for (const auto& c : changed_cards) { s += (s.empty()?"":",") + c; } return s; }()
-                                        << "} -> card-level trace reuse\n" << std::flush; }
-                        }
-                        else
-                        {
-                            std::cerr << "[keepgen] AUTO-ATTRIB: play_digest changed and engine_fp "
-                                      << ((prior_efp.empty() || cur_efp.empty()) ? "unavailable" : "differs")
-                                      << " -- engine change; REFUSING card-level reuse (statistical only)\n" << std::flush;
-                        }
-                    }
-
-                    const bool trace_active = reuse_all_cells || !changed_cards.empty();
-                    if (!reuse_all_cells && !changed_cards.empty() && !prior_traced)
-                    { std::cerr << "[keepgen] CHANGED-CARDS set but prior is NOT traced (no per-cell touched"
-                                   " sets) -- falling back to statistical change-detection only\n" << std::flush; }
-                    for (int H = HAND; H >= min_size; --H) { trace_reuse[HAND - H].assign(TB(H).comps.size(), 0); }
-                    long long loaded = 0;
-                    for (const auto& sz : pj["sizes"])
-                    {
-                        const int H = sz.value("H", 0);
-                        if (H > HAND || H < min_size) { continue; }
-                        SizeTable& t = TB(H);
-                        for (const auto& e : sz["entries"])
-                        {
-                            auto it = t.index.find(e["comp"].get<std::vector<int>>());
-                            if (it == t.index.end()) { continue; }
-                            const int i = it->second;
-                            // reuse-all (play_digest identical): every cell reuses the prior exactly; the
-                            // per-cell touched set is irrelevant (no card/engine change to scope against).
-                            if (reuse_all_cells) { trace_reuse[HAND - H][i] = 1; ++n_trace_reuse; }
-                            // Execution-trace: disjoint from the changed cards => provably unmoved => reuse.
-                            else if (trace_active && prior_traced && e.contains("touched"))
-                            {
-                                bool disjoint = true;
-                                for (const auto& nm : e["touched"])
-                                    if (changed_cards.count(nm.get<std::string>())) { disjoint = false; break; }
-                                if (disjoint) { trace_reuse[HAND - H][i] = 1; ++n_trace_reuse; }
-                            }
-                            if (!e.contains("sumsq")) { continue; }   // need variance for the statistical test
-                            for (int pd = 0; pd < 2; ++pd)
-                            {
-                                const long long c = e["count"][pd].get<long long>();
-                                if (c < 2) { continue; }
-                                const double s = e["sum"][pd].get<double>();
-                                const double sq = e["sumsq"][pd].get<double>();
-                                const double V = s / c;
-                                pri_V[HAND - H][i][pd]     = V;
-                                pri_var[HAND - H][i][pd]   = std::max(0.0, sq / c - V * V);
-                                pri_n[HAND - H][i][pd]     = c;
-                                has_prior[HAND - H][i][pd] = true;
-                                ++loaded;
-                            }
-                        }
-                    }
-                    if (reuse_all_cells)
-                    { std::cerr << "[keepgen] EXECUTION-TRACE: " << n_trace_reuse
-                                << " cells reused from the identical-play prior (whole-pool)\n" << std::flush; }
-                    else if (trace_active && prior_traced)
-                    { std::cerr << "[keepgen] EXECUTION-TRACE: " << n_trace_reuse << " cells provably untouched by {"
-                                << [&]{ std::string s; for (const auto& c : changed_cards) { s += (s.empty()?"":",") + c; } return s; }()
-                                << "} -> reuse prior exactly\n" << std::flush; }
-                    change_detect = true;
-                    std::cerr << "[keepgen] PRIOR-RAW: loaded " << loaded << " prior cell-sides from " << pr
-                              << " (source_R=" << mm.value("R", 0) << ", detect_delta=" << detect_delta
-                              << ", detect_z=" << detect_z << ") -- change-detection ON\n" << std::flush;
-                }
-            }
-        }
-    }
+    // ---- Change-detection carry (MTG_KEEP_PRIOR_RAW): see LoadPriorCarry above ------------------
+    PriorCarry pc = LoadPriorCarry(deck, cfg, eq, tables, K, min_size, play_digest);
 
     // Append rollouts [r0,r1) to cell `w`, mode `pd`, folding into its sum/sumsq/cnt accumulators.
     // Each (w,pd) is scheduled at most once per wave, so the direct writes are race-free. The seed is a
@@ -1962,7 +1988,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // floor-R cells from the bottoming argmin (so curse-noise can't pick one). Size-7 always starts at floor.
     // change-detection also needs every sub-table sampled at the floor first (as the detection batch),
     // even with bottoming on -- moved sub-cells are then refined to the cap, unmoved reuse the prior.
-    const bool sub_floor = (adaptive && (!cfg.bottoming_enabled || cfg.adaptive_bottom)) || change_detect;
+    const bool sub_floor = (adaptive && (!cfg.bottoming_enabled || cfg.adaptive_bottom)) || pc.change_detect;
     // Sub-table FUSION: when the continuous pool caps the sub-tables (not floors them), run that capping
     // INSIDE the single size-7 pool instead of a separate Pass-A join -> the size-7 floor overlaps the
     // sub-cap tail (no Pass-A -> size-7 barrier). Only the sub_floor=false case (bottoming-on, no
@@ -1992,7 +2018,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // apply_prior_override sets its V from the prior R=40 value regardless. Skipping it spends
                 // the floor pass ONLY on cells the prior lacks (the new deeper sizes), turning a full
                 // re-sample of every reused cell (~94% of the work on a depth extend) into ~zero.
-                if (reuse_all_cells && has_prior[HAND - Hw][iw][pd]) { continue; }
+                if (pc.reuse_all_cells && pc.has_prior[HAND - Hw][iw][pd]) { continue; }
                 long long cell_init = init;
                 // verify mode: a carried confident-mull cell starts at a REDUCED floor so the run skips
                 // most of its floor cost; the adaptive refiner still tops it up if it flipped to keepable
@@ -2057,16 +2083,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // would otherwise clobber the prior value on resolved cells).
     auto apply_prior_override = [&]()
     {
-        if (!change_detect) { return; }
+        if (!pc.change_detect) { return; }
         for (int H = HAND; H >= min_size; --H)
         {
             SizeTable& t = tables[HAND - H];
             for (std::size_t i = 0; i < t.comps.size(); ++i)
                 for (int pd = 0; pd < 2; ++pd)
-                    if (resolved[HAND - H][i][pd]) { t.V[i][pd] = pri_V[HAND - H][i][pd]; }
+                    if (pc.resolved[HAND - H][i][pd]) { t.V[i][pd] = pc.pri_V[HAND - H][i][pd]; }
         }
     };
-    if (change_detect)
+    if (pc.change_detect)
     {
         // Effective delta = DISTANCE TO THRESHOLD, not a flat tolerance. We don't care whether a cell
         // moved; only whether it moved enough to flip its DECISION. A size-7 cell's m=0 keep decision
@@ -2087,35 +2113,35 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             for (std::size_t i = 0; i < t.comps.size(); ++i)
                 for (int pd = 0; pd < 2; ++pd)
                 {
-                    if (!has_prior[HAND - H][i][pd]) { continue; }   // no prior -> treat as moved (refine)
+                    if (!pc.has_prior[HAND - H][i][pd]) { continue; }   // no prior -> treat as moved (refine)
                     // Execution-trace: prior touched-set disjoint from the changed cards => this cell's
                     // rollouts are byte-identical on the new commit => reuse the prior EXACTLY (no
                     // statistical test, covers near-threshold + bottoming cells). Composes with the
                     // statistical detection below for cells that DID touch a changed card.
-                    if (!trace_reuse[HAND - H].empty() && trace_reuse[HAND - H][i])
-                    { resolved[HAND - H][i][pd] = true; continue; }
+                    if (!pc.trace_reuse[HAND - H].empty() && pc.trace_reuse[HAND - H][i])
+                    { pc.resolved[HAND - H][i][pd] = true; continue; }
                     const long long nf = t.cnt[i][pd];
                     if (nf < 1) { continue; }
                     ++n_tested;
                     const double Vf   = t.V[i][pd];
-                    const double Vp   = pri_V[HAND - H][i][pd];
+                    const double Vp   = pc.pri_V[HAND - H][i][pd];
                     const double varf = (nf > 1) ? std::max(0.0, t.sumsq[i][pd] / nf - Vf * Vf)
-                                                 : pri_var[HAND - H][i][pd];
-                    const double np   = static_cast<double>(pri_n[HAND - H][i][pd]);
-                    const double se   = std::sqrt(varf / nf + pri_var[HAND - H][i][pd] / np);
+                                                 : pc.pri_var[HAND - H][i][pd];
+                    const double np   = static_cast<double>(pc.pri_n[HAND - H][i][pd]);
+                    const double se   = std::sqrt(varf / nf + pc.pri_var[HAND - H][i][pd] / np);
                     const double shift = std::abs(Vf - Vp);
                     // margin: size-7 -> distance from the prior value to the m=0 threshold; sub-cells ->
                     // flat delta.
-                    const double margin = (H == HAND) ? std::abs(Vp - Dopt_det[pd][1]) : detect_delta;
-                    if (shift + detect_z * se < margin)
-                    { resolved[HAND - H][i][pd] = true; ++n_unmoved; }
+                    const double margin = (H == HAND) ? std::abs(Vp - Dopt_det[pd][1]) : pc.detect_delta;
+                    if (shift + pc.detect_z * se < margin)
+                    { pc.resolved[HAND - H][i][pd] = true; ++n_unmoved; }
                     else { ++n_moved; }
                 }
         }
         apply_prior_override();
         os << "change-detection: " << n_tested << " prior cell-sides tested -> " << n_unmoved
            << " unmoved (reuse prior), " << n_moved << " moved (refine fresh)  [size-7 margin=dist-to-thr, "
-           << "sub delta=" << detect_delta << ", z=" << detect_z << "]\n";
+           << "sub delta=" << pc.detect_delta << ", z=" << pc.detect_z << "]\n";
         std::cerr << "[keepgen] change-detection: " << n_unmoved << " unmoved / " << n_moved
                   << " moved (of " << n_tested << " prior cell-sides)\n" << std::flush;
     }
@@ -2154,7 +2180,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 {
                     // m=0: size-7 flip gate. Skipped in sub_only mode (the continuous pool owns size-7).
                     // Pruned (frozen) or change-detection-RESOLVED cells are never refined.
-                    if (!sub_only && !frozen7[i][pd] && !resolved[0][i][pd] && H7.cnt[i][pd] < r_max)
+                    if (!sub_only && !frozen7[i][pd] && !pc.resolved[0][i][pd] && H7.cnt[i][pd] < r_max)
                     {
                         const double se = gate_se(H7, static_cast<int>(i), pd, vg[0][pd]);
                         const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
@@ -2166,7 +2192,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         const int arg = ArgminSub(tables, K, H7.comps[i], m, pd);
                         if (arg < 0) { continue; }
-                        if (resolved[m][arg][pd]) { continue; }       // change-detection: unmoved -> prior
+                        if (pc.resolved[m][arg][pd]) { continue; }       // change-detection: unmoved -> prior
                         const SizeTable& t = tables[m];               // size-(7-m) table
                         if (t.cnt[arg][pd] >= r_max) { continue; }
                         if (m == cfg.max_mull) { mark.insert({ m, arg, pd }); continue; }   // terminal: always
@@ -2201,7 +2227,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                                      + std::to_string(refine_waves + 1);
             process_tasks(tasks, wlabel.c_str());
             recompute();
-            apply_prior_override();   // recompute derives V from fresh accumulators -> restore prior on resolved
+            apply_prior_override();   // recompute derives V from fresh accumulators -> restore prior on resolved cells
             ++refine_waves;
             maybe_checkpoint();   // crash-safe: dump the raw sidecar every checkpoint_sec (post-floor)
         }
