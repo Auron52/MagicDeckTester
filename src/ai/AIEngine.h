@@ -2,6 +2,7 @@
 #include "../core/EnvFlags.h"
 #include "../core/GameState.h"
 #include "../core/GameLogger.h"
+#include "../core/GameEngine.h"   // GameEngine::ResumeAt (rollout resume point); fwd-declares AIEngine
 #include "../core/ManaPool.h"
 #include "../cards/CardDatabase.h"
 #include "MulliganProfile.h"
@@ -315,7 +316,13 @@ private:
 
     // Plays a full clairvoyant game from a (post-mulligan) trial state and returns
     // the win turn, or max_turns + 1 if no win. Suppresses logging during the rollout.
+    // Starts a FRESH turn -- correct only for a state captured between turns.
     int RolloutWinTurn(GameState trial, int max_turns, int* lands_out = nullptr);
+
+    // RolloutWinTurn resuming part-way through the current turn (GameEngine::ResumeAt). Use this
+    // for any trial state captured MID-turn; the plain form would skip the rest of that turn.
+    int RolloutWinTurnFrom(GameState trial, int max_turns, GameEngine::ResumeAt from,
+                           int* lands_out = nullptr);
 
     // Discards up to `count` lands from hand to Land's Edge at `rate` damage each.
     // Used by ActivateLandsEdge for both the real game path and rollout comparisons.

@@ -99,7 +99,19 @@ int GameEngine::RunGame(GameState& state, int max_turns)
 
 int GameEngine::PlayOut(GameState& state, int max_turns)
 {
+    return PlayOutFrom(state, max_turns, ResumeAt::NewTurn);
+}
+
+int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
+{
     m_ai.SetMaxTurns(max_turns);
+    // Finish the turn already in progress before the normal fresh-turn loop takes over.
+    if (from != ResumeAt::NewTurn)
+    {
+        RunTurnFrom(state, from);
+        if (CheckWinCondition(state))       { return state.turn_number; }
+        if (state.ActivePlayer().HasLost()) { return -1; }
+    }
     while (state.turn_number < max_turns)
     {
         if (state.player_lost_on_draw) { return -1; }
@@ -118,24 +130,42 @@ int GameEngine::PlayOut(GameState& state, int max_turns)
 
 void GameEngine::RunTurn(GameState& state)
 {
-    ++state.turn_number;
-    UntapStep(state);
-    UpkeepStep(state);
-    DrawStep(state);
-    if (state.player_lost_on_draw) { return; }
-    MainPhase(state, /*is_pre_combat=*/true);
-    CombatPhase(state);
-    // State-based action (CR 704.5a / 104.3a): a player at 0 or less life loses
-    // immediately -- before its controller gets priority for the post-combat main. Without
-    // this check the turn would continue and a post-combat lifegain could "un-kill" a dead
-    // opponent (e.g. Swords to Plowshares' controller-lifegain rider once a Tainted Remedy
-    // has left), pushing the realised win to a later turn than the search (which checks
-    // opp.life <= 0 right after combat, SimulateToEndImpl) predicts. Mirrors the leaf so the
-    // executor realises the win the search commits. Opp-loss wins even if we also died this
-    // turn (CheckWinCondition is the opponent's loss; PlayOut handles our own loss after).
-    if (CheckWinCondition(state)) { return; }
-    MainPhase(state, /*is_pre_combat=*/false);
-    EndStep(state);
+    RunTurnFrom(state, ResumeAt::NewTurn);
+}
+
+// One turn, entered at `from`. NewTurn is the whole turn (the only entry the real game uses);
+// every later entry finishes a turn a rollout was launched part-way through. The step order and
+// the early-outs are identical either way -- this is a resume point, not a variant turn.
+void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
+{
+    const int at = static_cast<int>(from);
+    if (from == ResumeAt::NewTurn)
+    {
+        ++state.turn_number;
+        UntapStep(state);
+        UpkeepStep(state);
+    }
+    if (at <= static_cast<int>(ResumeAt::Draw))
+    {
+        DrawStep(state);
+        if (state.player_lost_on_draw) { return; }
+    }
+    if (at <= static_cast<int>(ResumeAt::Main1)) { MainPhase(state, /*is_pre_combat=*/true); }
+    if (at <= static_cast<int>(ResumeAt::Combat))
+    {
+        CombatPhase(state);
+        // State-based action (CR 704.5a / 104.3a): a player at 0 or less life loses
+        // immediately -- before its controller gets priority for the post-combat main. Without
+        // this check the turn would continue and a post-combat lifegain could "un-kill" a dead
+        // opponent (e.g. Swords to Plowshares' controller-lifegain rider once a Tainted Remedy
+        // has left), pushing the realised win to a later turn than the search (which checks
+        // opp.life <= 0 right after combat, SimulateToEndImpl) predicts. Mirrors the leaf so the
+        // executor realises the win the search commits. Opp-loss wins even if we also died this
+        // turn (CheckWinCondition is the opponent's loss; PlayOut handles our own loss after).
+        if (CheckWinCondition(state)) { return; }
+    }
+    if (at <= static_cast<int>(ResumeAt::Main2)) { MainPhase(state, /*is_pre_combat=*/false); }
+    if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
 }
 
