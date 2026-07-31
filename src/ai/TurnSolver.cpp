@@ -1283,13 +1283,21 @@ static int BpSearchWidth()
 // assuming a number. Unbounded budget => every nested breakpoint is reached => coverage is
 // structural. Raising this promotes nesting into wave 0 for an A/B.
 // See docs/design/post-breakpoint-search.md.
-// Searched land-ETB scry/surveil disposition (MTG_SCRY_SEARCH, opt-in; MTG_SCRY_WIDTH caps how many
-// candidates the enumeration emits, heuristic-first). Off => the provider heuristic decides every
-// look at resolution, byte-identical to before the branch existed.
+static bool SearchedPlayActive();   // defined with the searched-play depth gate, below
+
+// Searched land-ETB scry/surveil disposition (MTG_SCRY_SEARCH, default ON; MTG_SCRY_WIDTH caps how
+// many candidates the enumeration emits, heuristic-first). Off => the provider heuristic decides
+// every look at resolution, byte-identical to before the branch existed.
+//
+// DEPTH-GATED like cantrip-first and the Ponder branch: at depth 0 there is no rollout to score the
+// variants, so an extra plan variant would not be a search -- just enumeration order picking a
+// different fixed rule. Held-out overnight: 72 games faster, 5 slower (all five budget churn --
+// each recovers at 4x and stays recovered at 16x), all 8 Treasure Hunt cases improved, -0.0690
+// summed, and no measurable wall-time cost. See docs/design/searched-scry-disposition.md.
 static bool ScrySearchEnabled()
 {
-    static const bool on = EnvOn("MTG_SCRY_SEARCH");
-    return on;
+    static const bool on = EnvOn("MTG_SCRY_SEARCH", true);
+    return on && SearchedPlayActive();
 }
 static std::size_t ScrySearchWidth()
 {
@@ -2312,9 +2320,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // and 2560ms, identical digests). That is a tie-break defect, not a search result.
             // Heuristic first makes the branch free: it can only override on a difference it can
             // actually see. See docs/design/searched-scry-disposition.md.
+            //
+            // NOT in the human-play menu: there the heuristic variant is a duplicate of whichever
+            // pinned option it resolves to, so it would show the player a redundant third entry --
+            // and it shifted the recorded plan indices of two saved Hinata references (26 -> 35,
+            // reported as `repaired`). A human picking the disposition wants the explicit keep and
+            // shuffle options; the tie-break argument above is about the SEARCH's strict-improvement
+            // rule, which does not apply when a person is choosing.
             Action keep_a = a;            keep_a.ponder_keep = 1;
             Action shuf_a = a;            shuf_a.ponder_keep = 0;
-            actions.push_back(std::move(a));        // a.ponder_keep stays -1 == resolution heuristic
+            if (!HumanPlayActive())
+            {
+                actions.push_back(std::move(a));    // a.ponder_keep stays -1 == resolution heuristic
+            }
             actions.push_back(std::move(keep_a));
             actions.push_back(std::move(shuf_a));
         }
