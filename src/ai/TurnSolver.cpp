@@ -1600,11 +1600,21 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
 // because both the rollout (ApplyPlanDirect) and the executor (AIEngine::TakeTurn) follow plan
 // order for opaque sets -- so the two stay in lockstep BY CONSTRUCTION rather than by twin edits.
 //
-// MTG_CANTRIP_FIRST=1 opts in; default OFF => byte-identical while it is measured.
+// DEPTH-GATED: searched play only (see TurnSolver::SetSearchedPlay). MTG_NO_CANTRIP_FIRST=1 is the
+// off-switch for the A/B; MTG_CANTRIP_FIRST=1 forces it on even at depth 0 (measurement only --
+// d0 measures worse, which is the reason for the gate).
+static std::atomic<bool> g_searched_play{false};
+void TurnSolver::SetSearchedPlay(bool enable)
+{
+    g_searched_play.store(enable, std::memory_order_relaxed);
+}
+
 static bool CantripFirstEnabled()
 {
-    static const bool on = EnvOn("MTG_CANTRIP_FIRST");
-    return on;
+    static const bool off   = EnvOn("MTG_NO_CANTRIP_FIRST");
+    static const bool force = EnvOn("MTG_CANTRIP_FIRST");
+    if (off) { return false; }
+    return force || g_searched_play.load(std::memory_order_relaxed);
 }
 
 // A plain cantrip: the breakpoint class this rule targets (site 3 of PlanOpensBreakpoint -- a

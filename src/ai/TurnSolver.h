@@ -316,6 +316,16 @@ public:
     static void SetTraceSolve(bool enable);
     static bool GetTraceSolve();
 
+    // Is this run SEARCHED play (lookahead depth > 0)? Set once from the AIEngine constructor.
+    // Gates cantrip-first ordering (docs/design/cantrip-first-collapse.md), whose justification --
+    // an earlier draw improves the decisions that FOLLOW it -- presupposes a searcher able to act
+    // on that information. At depth 0 there is none: the greedy post-draw re-solve just strands a
+    // different set of spells, and it measures WORSE (+0.0830 across the three seed sets) while
+    // searched play measures -0.2040. Applied via a run-level flag rather than per-call site so the
+    // rollout leaf policy (Solve) and the searched plans (EnumeratePlans) order IDENTICALLY -- a
+    // per-site gate would make the leaf estimate mis-order relative to the line it is scoring.
+    static void SetSearchedPlay(bool enable);
+
     // --- External-controller hooks (Claude-play / human-play prototype) ---------
     // Expose the same candidate enumeration and plan application the solver uses, so
     // an external decision provider can be offered the legal main-phase plans and have
