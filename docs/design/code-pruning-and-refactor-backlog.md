@@ -176,7 +176,38 @@ really was Debug; the orphans really are referenced by nothing but this document
   inlined today and therefore **do not appear in a profile by name at all**; only total Ir moves,
   which is why the adopt/reject test has to be a deterministic Ir A/B rather than intuition.
 
-Still open: Tier B1 (incl. B4 item 1, the TurnSolver split), remaining C1 units.
+- **B1 IN PROGRESS (analyzer half).** Five commits (`d83dac4`, `c0929ab`, `8d94d7a`, `2817eb6`,
+  `7e55c28`), one unit each, every one verified byte-identical before the next was started:
+  `RunExhaustiveKeep` **2423 → 1959 LOC** (equivalence-class construction; the policy-value,
+  disagreement and label-noise reports; the notable-hands report; the runtime-policy and raw-sidecar
+  writers) and `BuildKeepModel` **860 → 716 LOC** (the ridge-fit machinery).
+  **The unlock was deduplication, not extraction.** `KeepVal` / `ArgminSub` / the hypergeometric hand
+  weights / the Dopt backward induction existed as `[&]`-capturing lambdas in *three* functions —
+  the policy builder, the generator and the merge tool's synth path — which is why the reporting
+  sections could not move: they reached the machinery through a capture. One file-scope definition
+  each removed both the duplication hazard (the copies had to agree exactly or a merged profile
+  would stop matching the in-run one — the third copy is literally introduced by the comment
+  "mirrors BuildPolicyFromTables' internals") and the obstacle.
+  **Verification harness, reusable — build it before touching this file.** A deterministic ~20 s
+  `MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=1 MTG_KEEP_MAX_MULL=1 MTG_EQUIV_PROBES=4` burn
+  regeneration whose raw sidecar and report are byte-diffable, extended to four paths: that gen, two
+  disjoint-seed R=10 chunks (which cross the R floor and so actually write a runtime profile and
+  exercise `BuildPolicyFromTables`), their merge, and a `MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM`
+  reconstruction of that merge — twelve artifacts, ~2 min 40 s. For `BuildKeepModel`,
+  `MTG_KEEP_MODEL_ONLY=1 MTG_KEEP_SPLIT=both MTG_KEEP_GAMES=200 MTG_ANALYZE_DEPTH=2` against a
+  *copy* of the deck folder fits all four models (gini / regret / additive score / hybrid) from one
+  rollout table in ~46 s. Two gotchas, each of which silently invalidates a comparison:
+  **`--seed` is mandatory** (an unseeded analyzer randomizes `meta.seed_base` per run, so every
+  diff shows churn), and **`meta.engine_fp` must be normalized away** — it is a build-time hash over
+  the engine source and so moves on a pure code move.
+  Both files are in `mtg-analyze` only, never `mtg`/`mtg-core`, so no analyzer extraction can reach
+  a play digest; the suite was still run (156/156, 27/27) before pushing.
+
+Still open: the rest of B1 — `RunExhaustiveKeep`'s remaining bulk (the `MTG_KEEP_PRIOR_RAW`
+change-detection carry is the largest single block left at ~256 LOC, but ~9 of its locals escape into
+the refine loop, so it needs a carry struct and a new verification path rather than a verbatim move),
+`RunKeepMerge` (958), `RunClaudePlay` (1083 — note `test/lib/capture_decisions.py` from B2 is already
+the exact verifier for it), and B4 item 1 (the TurnSolver split). Remaining C1 units.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
