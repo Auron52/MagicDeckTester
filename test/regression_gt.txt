@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 665c521  date 2026-07-31
+# Regression ground truth -- commit 7a999b8  date 2026-07-31
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -20,7 +20,7 @@ antilife_smoke_d0_s1001=5.5820/fcddbc3ccb346733
 antilife_smoke_d3_s1001=4.2200/142a40e97cc48f60
 antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
 hinata_smoke_d0_s1001=7.0790/a4e4cb40e5d85841
-hinata_smoke_d3_s1001=5.9000/d73c9c001eaa6c48
+hinata_smoke_d3_s1001=5.9000/4347ae4a7f4f729e
 hinata_smoke_d5_s1001=6.0267/b342d4a4a6f29b03
 dragonstorm_smoke_d0_s1001=5.4300/16986eaeb61de74e
 dragonstorm_smoke_d3_s1001=4.5067/034c99d56e059dde
@@ -144,7 +144,7 @@ hinata_overnight_d0_s4004=7.1410/f033900b0f987ba8
 hinata_overnight_d0_s5005=7.0820/25c4e0666a27019d
 hinata_overnight_d0_s6006=7.0915/83e33be15e923d58
 hinata_overnight_d0_s7007=7.1570/cbf9372c9b0e17aa
-hinata_overnight_d3_s4004=5.9375/873da507618ad5e8
+hinata_overnight_d3_s4004=5.9375/99eddcfaf6b2f9d9
 hinata_overnight_d3_s5005=5.9125/b17c3c945e088984
 hinata_overnight_d3_s6006=5.9700/c9f53b088a276ef3
 hinata_overnight_d3_s7007=5.9775/4f421609bca689e4
