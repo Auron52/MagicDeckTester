@@ -48,7 +48,25 @@ DECKS = {
 }
 
 
-def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_depth):
+# DECK PROFILE (<name>.profile.json). ADDED 2026-07-31: neither run() nor run_batch() used to pass
+# --profile at all, so EVERY value-leaf depth table in this repo was measured on a deck with NO
+# profile -- no mulligan/keep model, no card_scores. That is not the deck we ship, and it is exactly
+# why Hinata's table needed regenerating once its exhaustive keep model existed. The engine resolves
+# the keepmodel/value/eval siblings directory-relative off this path (see CLAUDE.md), so passing the
+# profile is all that is needed to measure SHIPPED play.
+PROFILES = {
+    "antilife":    "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+    "slivers":     "decks/slivers_vial/slivers_vial.profile.json",
+    "TH":          "decks/treasure_hunt/treasure_hunt.profile.json",
+    "burn":        "decks/burn/burn.profile.json",
+    "knights":     "decks/Knights/Knights.profile.json",
+    "hinata":      "decks/Hinata2/Hinata2.profile.json",
+    "dragonstorm": "decks/Dragonstorm/Dragonstorm.profile.json",
+    "auras":       "decks/Auras/Auras.profile.json",
+}
+
+def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_depth,
+        deck_profile=None):
     env = dict(os.environ)
     for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
               "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE","MTG_VALUE_STARTGATE_ALPHA"):
@@ -64,6 +82,7 @@ def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_dept
     # sweep depths. Harmless for decks without an enabled block (CLI depth just wins). REQUIRED now.
     cmd=[MTG,deck,"--games",str(games),"--seed",str(seed),"--depth",str(depth),
          "--max-turns",str(mt),"--threads",str(threads),"--ignore-play-profile"]
+    if deck_profile: cmd += ["--profile", deck_profile]
     t0=time.time(); out=subprocess.run(cmd,capture_output=True,text=True,env=env).stdout; dt=time.time()-t0
     p=int(re.search(r"Games played\s*:\s*(\d+)",out).group(1))
     # Merged metric (a4f2be7): "avg (turns)" IS the loss-penalised avg win turn (unwon = max_turns+1)
@@ -88,7 +107,8 @@ def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_dept
 # mtg process that loads the deck's keep model; antilife is ~1GB/process (post the share+stream-parse memory
 # fix, 82859f7), so --workers 24 ~ 24GB -- was ~6GB/proc before the fix (would OOM). Tune --workers to RAM.
 
-def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_depth, prof):
+def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_depth, prof,
+              deck_profile=None):
     """Run global games [offset, offset+batch) for this cell's base `seed`. Returns (lp, wall_s, games)."""
     env = dict(os.environ)
     for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
@@ -101,6 +121,7 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
         env["MTG_VALUE_MODEL"]="0"
     cmd=[MTG, deck_file, "--seed", str(seed+offset), "--game-index", str(offset), "--games", str(batch),
          "--max-turns", str(mt), "--threads", "1", "--ignore-play-profile", "--depth", str(depth)]
+    if deck_profile: cmd += ["--profile", deck_profile]
     t0=time.time(); out=subprocess.run(cmd,capture_output=True,text=True,env=env).stdout; wall=time.time()-t0
     pm=re.search(r"Games played\s*:\s*(\d+)",out); p=int(pm.group(1)) if pm else 0
     m=re.search(r"avg \(turns\)\s*:\s*([\d.]+)",out); lp=float(m.group(1)) if m else float("nan")
@@ -178,7 +199,8 @@ def run_incremental(args):
         off=c["batches"]*args.batch
         deck_file,prof,mt=DECKS[c["deck"]]
         futs[ex.submit(run_batch,deck_file,mt,c["depth"],c["seed"],off,args.batch,
-                       c["arm"]=="V",args.value_min_depth,prof)]=c
+                       c["arm"]=="V",args.value_min_depth,prof,
+                       PROFILES.get(c["deck"]))]=c
         return True
 
     while len(futs)<args.workers and submit_next(): pass
@@ -222,8 +244,8 @@ def main():
                          "is genuinely expensive -- cheap decks (slivers/knights/burn/TH) keep FULL games at every "
                          "depth incl. H5; do not pass this for them.")
     ap.add_argument("--seeds",nargs="+",type=int,default=[4004,5005,6006,7007])
-    ap.add_argument("--hdepths",nargs="+",type=int,default=[1,2,3,4,5])
-    ap.add_argument("--vdepths",nargs="+",type=int,default=[1,2,3,4,5])
+    ap.add_argument("--hdepths",nargs="*",type=int,default=[1,2,3,4,5])
+    ap.add_argument("--vdepths",nargs="*",type=int,default=[1,2,3,4,5])
     ap.add_argument("--value-min-depth",type=int,default=0,
                     help="MTG_VALUE_MIN_DEPTH for the value arm; 0 = PURE value-leaf (no redo). Default 0.")
     ap.add_argument("--threads",type=int,default=6)
