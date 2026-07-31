@@ -150,6 +150,7 @@ the answer to compile time.
 | [exhaustive-profile-workflow-deferred.md](exhaustive-profile-workflow-deferred.md) | `DEFERRED` | Two workflow improvements queued behind the Hinata pipeline. |
 | [nc-mulligan-table-generation.md](nc-mulligan-table-generation.md) | `DEFERRED` | Non-clairvoyant mulligan-table generation. |
 | [play-digest-and-pooling-gate.md](play-digest-and-pooling-gate.md) | `ADOPTED`/`DEFERRED` | The per-deck play digest shipped as the regression tripwire (it is the `/<digest>` half of every GT fingerprint); the mulligan-pooling gate half is not built. |
+| [rollout-config-digest-depth-blindness.md](rollout-config-digest-depth-blindness.md) | `OPEN` | **Measured defect in a shipped gate:** `play_digest` hashes only the 64-game battery, never `depth`/`budget_ms`/`max_turns` — identical hash at d5 and d6 while 2% of keep rollouts differ. Lets `reuse_all_cells` reuse a whole prior table rolled at another depth. Fix is one line but invalidates existing sidecars' reuse. |
 | [dragonstorm-mulligan-tractability.md](dragonstorm-mulligan-tractability.md) | `HISTORICAL` | **Answer: NO.** A definitive R=40 Dragonstorm profile is ~80–90 h, not one overnight. |
 | [dragonstorm-mulligan-reference-gap.md](dragonstorm-mulligan-reference-gap.md) | `DEFERRED` | The Dragonstorm *play* is perfect; the mulligan heuristic is the gap. Deferred by the user; see dead ends for the measured quick fix. |
 | [hinata-profile-generation.md](hinata-profile-generation.md) | `HISTORICAL` | The multi-day chunked cross-machine generation recipe for Hinata. |
