@@ -217,17 +217,51 @@ really was Debug; the orphans really are referenced by nothing but this document
   (replay all 138 references to completion with `--log-dir`, diff the result frame plus the written
   trace bytes; 106 result frames) is the other half and belongs with it.
 
-Still open: the rest of B1.
-- `RunExhaustiveKeep` (1959) — the `MTG_KEEP_PRIOR_RAW` change-detection carry is the largest single
-  block left at ~256 LOC, but ~9 of its locals escape into the refine loop (27 later references), so it
-  needs a carry struct and a new verification path rather than a verbatim move.
-- `RunClaudePlay` (1018) — the remaining ~760 LOC is eighteen chooser lambdas. **Do not move them
-  piecemeal:** the engine stores their addresses in `g_play_*` globals, so a lambda that moves out of
-  the function's stack frame dangles. The extraction that works is an owning `struct PlayChoosers`
-  built in the caller plus a context struct for what they capture (`decisions_made`, `choices`,
-  `trace`, `main_ordinal`, `state`, `reveal_count`, `log_dir`) — a design change, not a move, and it
-  needs both halves of the verification above.
-- B4 item 1 (the TurnSolver split). Remaining C1 units.
+- **B1 continued: `RunClaudePlay` 1018 → 70** (`cff80b7`) and the analyzer's **`main()` 670 → 115**
+  (`954e408`).
+  `RunClaudePlay`'s remaining bulk was eighteen chooser lambdas, and the obstacle to moving them was a
+  **lifetime trap worth stating explicitly**: the engine stores RAW POINTERS to the chooser objects
+  (the `g_play_*` globals and AIEngine's external-chooser slots), so the obvious split — a helper
+  taking the context by reference, choosers still `[&]` — is UB. A `[&]` lambda built inside that
+  helper captures its REFERENCE PARAMETERS, which die when it returns; every chooser would dangle and
+  would very likely still appear to work. The shape that is correct is an **owning struct whose
+  members are the context, with the choosers built in a member function and capturing `this`**. That
+  also made the move nearly textual: keeping the member names the locals had left every chooser body
+  and install line unchanged. `Install()` is then five member functions grouped by how a chooser gets
+  its answer. Soulfire's two capture-less sentinel lambdas had to become free functions for the same
+  reason. The same pattern is the answer for `RunExhaustiveKeep` below.
+  The analyzer's `main()` was seven inline mode blocks, each gated by its own `MTG_*` flag and each
+  ending in a return; one function each plus an `AnalyzerArgs`. Two traps there: `MTG_LOG_HAND`'s
+  block declares a LOCAL `seed` loop variable shadowing the CLI seed it never reads, and it consumes
+  the flag's VALUE through the `if (const char* e = getenv(...))` init-statement.
+
+**Where B1 stands: 11 functions ≥ 500 LOC, down from the 20+ this document was written against, and
+every one of the analyzer/tooling targets is done or much smaller.** What is left splits cleanly:
+
+| function | LOC | risk |
+|---|---|---|
+| `RunExhaustiveKeep` | 1959 | analyzer — harnessed, safe |
+| `ApplyPlanDirect` | 1834 | **engine** |
+| `AIEngine::TakeTurn` | 1443 | **engine** |
+| `EnumeratePlans` / `CollectActions` / `Solve` / `FullSearchLineHybrid` / `CheckLine` | 969–678 | **engine** |
+| `BuildKeepModel` | 716 | analyzer — harnessed |
+| `RunKeepMerge` | 615 | analyzer — harnessed |
+| `main` (runner) | 501 | tooling |
+
+- `RunExhaustiveKeep` — the `MTG_KEEP_PRIOR_RAW` change-detection carry is the largest single block
+  left at ~203 LOC, but ~9 of its locals escape into the refine loop (27 later references). Apply the
+  harness pattern above (a generator struct whose phases are member functions) rather than passing a
+  carry struct around; it also needs a new PRIOR_RAW verification path.
+- `ApplyPlanDirect` / `TakeTurn` are also the two remaining C1 units, so do them as C1, against the
+  play-digest bar, not as a size exercise.
+- B4 item 1 (the TurnSolver split) — note this now carries an inlining cost the analyzer splits did
+  not: `TurnSolver.cpp`'s internals are hot and there is no LTO, so it needs a deterministic
+  callgrind Ir A/B, exactly as B4 item 2 did.
+
+**A harness hazard that cost a false failure here:** the modes check runs the DEFAULT grid path, which
+regenerates `burn.profile.json` in the scratch deck folder — and the keep-model harness reads that
+profile as its input. Running them in that order made four keep-model artifacts "differ" with no code
+cause. Restore the scratch deck from `decks/` between harnesses.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
