@@ -1594,63 +1594,121 @@ std::cout << "  \"win_turn\": " << (won ? win_turn : -1)
           << "\n}\n<<<END_RESULT>>>\n";
 }
 
-static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
-                         uint64_t seed, int game_index, int max_turns,
-                         int lookahead_depth, int timeout_ms, std::vector<int> choices,
-                         int reveal_count, const std::filesystem::path& log_dir,
-                         const std::string& validate_line = "",
-                         const std::string& force_mulligan = "",
-                         const std::string& firebreathe_spec = "",
-                         bool firebreathe_prompt = false,
-                         const std::string& cast_order_spec = "",
-                         const std::string& storage_hold_spec = "",
-                         bool storage_hold_prompt = false)
+
+// Soulfire Eruption's target encoding: SoulfireDig speaks sentinels for the two faces plus raw
+// battlefield indices; the generic target decision speaks ChosenTarget. These two map between them.
+// Free functions rather than capture-less lambdas inside the harness -- a chooser that captured them
+// by reference would dangle the moment the installer returned.
+ChosenTarget SentinelToChosen(int t, int ci)
 {
-    GameState state = GoldFishRunner::SetupGame(deck, seed);
-    state.vial_target_mv = profile.vial_target_mv;
-    GoldFishRunner::PopulateOpponentSpawns(state, game_index);
-    // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
-    // them so the emitted hand/decision JSON carries real "num"s and --force-mulligan can bottom a
-    // specific card by number (mulligan reproducibility). See docs/design/claude-play-mulligan-*.
-    GoldFishRunner::AssignCardNumbers(state, GoldFishRunner::BuildCardNumbering(deck));
+    if (t == TARGET_OPP_FACE)  { return ChosenTarget{ 0, 1 - ci, 0 }; }
+    if (t == TARGET_SELF_FACE) { return ChosenTarget{ 0, ci,     0 }; }
+    return ChosenTarget{ 1, t, 0 };
+}
 
-    AIEngine ai(profile, lookahead_depth, timeout_ms);
+int ChosenToSentinel(const ChosenTarget& c, int ci)
+{
+    if (c.kind == 0) { return (c.index == ci) ? TARGET_SELF_FACE : TARGET_OPP_FACE; }
+    return c.index;
+}
 
-    // Mulligan reproducibility (--force-mulligan "<count>:<n1,n2,...>"): reconstruct a reference's
-    // exact opening hand by keeping at <count> mulligans and bottoming the listed card numbers,
-    // independent of the current keep/bottoming heuristics. See docs/design/claude-play-mulligan-*.
-    if (!force_mulligan.empty())
-    {
-        int fcount = 0;
-        std::vector<int> fbottom;
-        ParseForcedMulliganSpec(force_mulligan, fcount, fbottom);
-        ai.SetForcedMulligan(fcount, std::move(fbottom));
-    }
-    size_t cursor = 0;
-    int decisions_made = 0;
-    // #10: ordinal of the current main-phase decision among all main-phase decisions (the external chooser
-    // is called once per main-phase decision, exactly mirroring AIEngine::m_ext_main_ordinal). Emitted in
-    // the decision JSON so the viewer keys --cast-order by it. Post-incremented at each external-chooser call.
-    int main_ordinal = 0;
+
+// ---- --claude-play harness ----------------------------------------------------------------------
+// The eighteen decision choosers plus the state they thread. This exists as ONE object because of a
+// lifetime constraint that is easy to miss: the engine stores RAW POINTERS to the chooser objects
+// (the g_play_* globals, and AIEngine's external-chooser slots), so every chooser must outlive the
+// game. As eighteen separate locals inside RunClaudePlay whose addresses were taken, that was implied
+// by nothing; here the harness owns them and the caller owns the harness.
+//
+// The choosers capture `this` only. That is deliberate and load-bearing: a `[&]` lambda built inside
+// a helper function would capture that helper's REFERENCE PARAMETERS, which die when it returns --
+// so the naive "pass the context in by reference" split would leave every chooser dangling.
+struct ClaudePlayHarness
+{
+    // ---- context the choosers thread ----
+    std::vector<int>       choices;         // the positional --choices stream
+    std::filesystem::path  log_dir;
+    std::string            validate_line;
+    const GameState*       state   = nullptr;
+    const MulliganProfile* profile = nullptr;
+    int         reveal_count   = 0;
+    std::size_t cursor         = 0;         // next unconsumed --choices index
+    int         decisions_made = 0;
+    // #10: ordinal of the current main-phase decision among all main-phase decisions (the external
+    // chooser is called once per main-phase decision, exactly mirroring AIEngine::m_ext_main_ordinal).
+    // Emitted in the decision JSON so the viewer keys --cast-order by it. Post-incremented per call.
+    int         main_ordinal   = 0;
     std::vector<std::string> trace;   // one entry per RESOLVED decision (for --log-dir)
     // Accurate per-draw reporting: the real draw sites append (turn, card_name) here as cards are
     // drawn (see g_play_draw_sink). It accumulates the draws since the last RESOLVED main-phase
     // decision, so the NEXT emitted main-phase decision reports exactly the new draws for the
     // viewer history. Nulled by RevealLogPause during the search, so only real draws land here.
     std::vector<std::pair<int, std::string>> draw_log;
-    g_play_draw_sink = &draw_log;
     // Life-affecting events (combat/burn/lifegain-loss) since the last resolved main decision, for the
     // viewer history. Same lifecycle as draw_log: real sites append, cleared when a decision is consumed.
     std::vector<PlayEvent> event_log;
-    g_play_event_sink = &event_log;
     // Server-truth resolution: the DECLARED casts of the last-applied committed plan that the executor
     // could not pay (dropped, left in hand). Same lifecycle as draw_log -- the apply site appends, and
     // it is cleared when a decision is consumed, so the next emitted decision carries exactly the
     // just-committed plan's dropped casts. The browser reads this instead of guessing via detectDropped.
     std::vector<std::string> dropped_log;
+    // ---- parsed side channels (keyed args, not the positional --choices stream) ----
+    std::map<int, int>                      firebreathe_by_turn;
+    std::map<int, std::vector<std::string>> cast_order_by_main;
+    std::map<std::pair<int, int>, bool>     storage_hold_by_land;
+    bool firebreathe_prompt  = false;
+    bool storage_hold_prompt = false;
+
+    // ---- the chooser objects themselves; the engine holds their addresses ----
+    TopChooser            top_chooser;
+    TargetChooser         target_chooser;
+    BounceChooser         bounce_chooser;
+    BounceChooser         sacrifice_chooser;
+    DigChooser            dig_chooser;
+    LightPawsChooser      lightpaws_chooser;
+    LackeyChooser         lackey_chooser;
+    DragonChooser         dragon_chooser;
+    DiscardChooser        discard_chooser;
+    EIChooser             ei_chooser;
+    RetraceDiscardChooser retrace_chooser;
+    ReplicateChooser      replicate_chooser;
+    FirebreatheChooser    firebreathe_chooser;
+    CastOrderChooser      cast_order_chooser;
+    StorageHoldChooser    storage_hold_chooser;
+    LandEntryChooser      land_entry_chooser;
+    SoulfireTargetChooser soulfire_chooser;
+
+    void Install(AIEngine& ai);
+
+  private:
+    // Install() in five parts, grouped by how a chooser gets its answer. Member functions, so
+    // each chooser still captures only `this`.
+    void InstallEngineChoosers(AIEngine& ai);
+    void InstallResolutionChoosers(AIEngine& ai);
+    void InstallCardChoosers(AIEngine& ai);
+    void InstallSideChannelChoosers(AIEngine& ai);
+    void InstallLandAndSoulfireChoosers(AIEngine& ai);
+};
+
+void ClaudePlayHarness::Install(AIEngine& ai)
+{
+    g_play_draw_sink         = &draw_log;
+    g_play_event_sink        = &event_log;
     g_play_dropped_cast_sink = &dropped_log;
+
+    InstallEngineChoosers(ai);
+    InstallResolutionChoosers(ai);
+    InstallCardChoosers(ai);
+    InstallSideChannelChoosers(ai);
+    InstallLandAndSoulfireChoosers(ai);
+}
+
+// The five choosers AIEngine owns directly (it stores them, so these are not g_play_* globals):
+// the main-phase plan pick plus vial, echo, mulligan and bottom.
+void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
+{
     ai.SetExternalChooser(
-        [&](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
+        [this](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
         {
             int di = static_cast<int>(cursor);
             const int this_main_ordinal = main_ordinal++;   // #10: this decision's main-phase ordinal
@@ -1758,7 +1816,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // main phase). Reply 1 = add a counter, 0 = hold. (Future default: only surface this
     // when the decision is genuinely ambiguous, not every upkeep.)
     ai.SetExternalVialChooser(
-        [&](const GameState& s, const Permanent& vial, bool heuristic) -> bool
+        [this](const GameState& s, const Permanent& vial, bool heuristic) -> bool
         {
             int di = static_cast<int>(cursor);
             if (cursor < choices.size())
@@ -1787,7 +1845,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // before the main phase). Reply 1 = pay (keep), 0 = sacrifice. AIEngine only calls this when paying
     // is affordable, so every emission is a genuine choice.
     ai.SetExternalEchoChooser(
-        [&](const GameState& s, const Permanent& creature, bool heuristic) -> bool
+        [this](const GameState& s, const Permanent& creature, bool heuristic) -> bool
         {
             std::string echo_cost;
             const CardDefinition* d = CardDatabase::Instance().LookupCached(creature.card);
@@ -1818,7 +1876,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // the one --choices stream (these fire FIRST, before any turn decision). Reply 1 keep / 0 mulligan.
     // Skipped entirely under --force-mulligan (that reconstructs an exact recorded hand on the engine).
     ai.SetExternalMulliganChooser(
-        [&](const std::vector<Card>& hand, int mull_count, bool on_play, bool ai_keep) -> bool
+        [this](const std::vector<Card>& hand, int mull_count, bool on_play, bool ai_keep) -> bool
         {
             int di = static_cast<int>(cursor);
             if (cursor < choices.size())
@@ -1845,7 +1903,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // London bottoming (claude-play): after the kept hand, the human bottoms one card at a time.
     // Reply the hand INDEX to bottom. Shares the --choices stream, consumed right after the keep.
     ai.SetExternalBottomChooser(
-        [&](const std::vector<Card>& hand, int ai_pick, const std::vector<char>& win_opt,
+        [this](const std::vector<Card>& hand, int ai_pick, const std::vector<char>& win_opt,
             int step, int total) -> int
         {
             int di = static_cast<int>(cursor);
@@ -1853,8 +1911,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             // GUI pre-selects it. Empty for a table-less deck (GUI falls back to the per-step deep hint).
             static const ExhaustiveKeepPolicy kNoExhaustive;   // fallback when the deck has no sidecar
             std::vector<int> ai_set = ExhaustiveBottomSet(
-                hand, profile.exhaustive_keep ? *profile.exhaustive_keep : kNoExhaustive,
-                total, state.on_the_play);
+                hand, profile->exhaustive_keep ? *profile->exhaustive_keep : kNoExhaustive,
+                total, state->on_the_play);
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -1875,13 +1933,19 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::cout.flush();
             std::exit(70);
         });
+}
 
+// Resolution-time choosers that share the positional --choices stream: look-at-top dispositions
+// (scry / surveil / reorder) and board-click targeting.
+void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
+{
+    (void)ai;
     // Look-at-top resolution decisions (Scry / Surveil / Ponder-reorder). Fired from inside
     // ScryTop/SurveilTop/ReorderTopOrShuffle during REAL resolution (gated by g_reveal_logger, so
     // never the search). The player replies one option index into the enumerated dispositions;
     // shares the single --choices stream, consumed in resolution order like the vial decision.
-    TopChooser top_chooser =
-        [&](const GameState& s, const std::string& source, const std::vector<Card>& looked,
+    top_chooser =
+        [this](const GameState& s, const std::string& source, const std::vector<Card>& looked,
             LookKind kind) -> TopDisposition
         {
             std::vector<TopOption> opts = EnumerateTopDispositions(kind, looked);
@@ -1918,8 +1982,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // Board-click targeting for uniform-damage spells (fixed burn, Crackle). Fired from
     // CastSpellFromHand during the real cast; shares the --choices stream. The player replies one
     // option index (a target set). Prepopulated default = the AI's heuristic pick (usually face).
-    TargetChooser target_chooser =
-        [&](const GameState& s, const CardDefinition& def, int controller, int max_targets,
+    target_chooser =
+        [this](const GameState& s, const CardDefinition& def, int controller, int max_targets,
             int per_target_damage, const std::vector<ChosenTarget>& heuristic) -> std::vector<ChosenTarget>
         {
             // Own-creature pump (Invigorate): legal targets are the controller's creatures, not
@@ -2042,11 +2106,17 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         };
     g_play_target_chooser = &target_chooser;
+}
 
+// Per-card choosers, all the same shape: enumerate the options, take the recorded pick if the
+// --choices stream still has one, else emit the decision and exit(70).
+void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
+{
+    (void)ai;
     // Karoo bounce-land return: the player picks which land goes back to hand. Shares the --choices
     // stream; replies one option index into the legal lands. Default = the engine's heuristic pick.
-    BounceChooser bounce_chooser =
-        [&](const GameState& s, int controller, const std::string& source,
+    bounce_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<int>& legal, int heuristic_pick) -> int
         {
             (void)controller;
@@ -2077,8 +2147,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // Sacrifice-a-land (Shard Volley's additional cost): identical board-land picker as bounce, but the
     // land is sacrificed (to graveyard). Shares the --choices stream; reply an option index into the
     // legal lands. Default = the engine's pick (a tapped land if any). Nulled for search by RevealLogPause.
-    BounceChooser sacrifice_chooser =
-        [&](const GameState& s, int controller, const std::string& source,
+    sacrifice_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<int>& legal, int heuristic_pick) -> int
         {
             (void)controller;
@@ -2109,8 +2179,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // ETB dig (Acclaimed Contender): the player picks which examined card enters hand (or declines).
     // Shares the --choices stream; the reply is an examined index, or -1 to take nothing. Default =
     // the engine's heuristic pick (the first legal match).
-    DigChooser dig_chooser =
-        [&](const GameState& s, int controller, const std::string& source,
+    dig_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<Card>& examined, const std::vector<int>& legal, int heuristic_pick) -> int
         {
             (void)controller;
@@ -2143,8 +2213,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // Light-Paws tutor-attach (Light-Paws, Emperor's Voice): the player picks which library Aura it
     // fetches + attaches to itself (or -1 to decline). Shares the --choices stream; the reply is a pool
     // index, or -1. Default = the engine's heuristic pick (the highest static-power eligible Aura).
-    LightPawsChooser lightpaws_chooser =
-        [&](const GameState& s, int controller, const std::string& source,
+    lightpaws_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<Card>& pool, const std::vector<int>& legal, int heuristic_pick) -> int
         {
             (void)controller;
@@ -2178,8 +2248,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // hand (or -1 to decline). Shares the --choices stream; the reply is a candidate index, or -1.
     // Default = the engine's heuristic pick (highest-MV matching hand card). Human-play only (nulled for
     // search/rollout), so batch ground truth is unaffected.
-    LackeyChooser lackey_chooser =
-        [&](const GameState& s, int controller, const std::string& source,
+    lackey_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<Card>& candidates, int heuristic_index) -> int
         {
             (void)controller;
@@ -2214,8 +2284,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // copy), read positionally like the divide / Soulfire decisions (any subset up to max_puts is
     // expressible). Default = the rule's selection (heuristic_subset). Human-play only (the chooser is
     // nulled for the search/rollout), so batch ground truth is unaffected.
-    DragonChooser dragon_chooser =
-        [&](const GameState& s, int controller, const std::string& source,
+    dragon_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<Card>& candidates, int max_puts,
             const std::vector<int>& heuristic_subset) -> std::vector<int>
         {
@@ -2252,8 +2322,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
 
     // Cleanup discard (#2): the player picks which hand card to discard to max hand size. Shares the
     // --choices stream; the reply is a hand index. Default = the engine's heuristic pick.
-    DiscardChooser discard_chooser =
-        [&](const GameState& s, int controller, const std::vector<int>& hand_indices, int heuristic_pick) -> int
+    discard_chooser =
+        [this](const GameState& s, int controller, const std::vector<int>& hand_indices, int heuristic_pick) -> int
         {
             (void)controller;
             int di = static_cast<int>(cursor);
@@ -2285,8 +2355,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // Expressive Iteration (#): the player assigns the looked-at top cards to hand / exile (play this
     // turn) / bottom. Shares the --choices stream; the reply is an option index into the enumerated
     // splits. Default = the engine's heuristic split (heur_hand_idx, heur_exile_idx).
-    EIChooser ei_chooser =
-        [&](const GameState& s, const std::vector<Card>& looked, int heur_hand, int heur_exile)
+    ei_chooser =
+        [this](const GameState& s, const std::vector<Card>& looked, int heur_hand, int heur_exile)
             -> std::pair<int,int>
         {
             std::vector<std::pair<int,int>> asg = EIAssignments(static_cast<int>(looked.size()));
@@ -2320,8 +2390,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // Retrace discard: the player picks which land to discard as Throes of Chaos's additional cost.
     // Shares the --choices stream; the reply is a hand index. Default = the engine's heuristic (first
     // land in hand order).
-    RetraceDiscardChooser retrace_chooser =
-        [&](const GameState& s, int controller, const std::string& source,
+    retrace_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<int>& lands, int heuristic_pick) -> int
         {
             (void)controller;
@@ -2354,8 +2424,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // Replicate: the player picks how many times to replicate a Sliver spell on cast (each pays the
     // replicate cost again to make a token copy). Shares the --choices stream; the reply is the count in
     // [0, max_count]. Default (out-of-range or absent) = the engine's greedy heuristic (max affordable).
-    ReplicateChooser replicate_chooser =
-        [&](const GameState& s, int controller, const std::string& source, int max_count) -> int
+    replicate_chooser =
+        [this](const GameState& s, int controller, const std::string& source, int max_count) -> int
         {
             (void)controller;
             int di = static_cast<int>(cursor);
@@ -2381,16 +2451,22 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         };
     g_play_replicate_chooser = &replicate_chooser;
+}
 
+// The three KEYED side-channel choosers. They do NOT consume the positional --choices cursor, so
+// installing them never shifts an existing reference; each is installed only when it has
+// something to do (a recorded answer, or live prompting).
+void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
+{
+    (void)ai;
     // #4 Firebreathe-amount: at combat, how many pump activations to buy with leftover mana. Rides a
     // TURN-keyed side-channel (--firebreathe "turn:count,..."), NOT the positional --choices cursor, so
     // it never shifts the stream and existing references (no --firebreathe) replay byte-identically as
     // greedy. Installed ONLY when there is something to do -- a recorded answer to apply (non-empty map)
     // or live prompting (--firebreathe-prompt). Otherwise left null -> AIEngine::Firebreathe stays greedy
     // (no probe, byte-identical) -- which is exactly the reference-check / autonomous case.
-    const std::map<int, int> firebreathe_by_turn = ParseFirebreatheSpec(firebreathe_spec);
-    FirebreatheChooser firebreathe_chooser =
-        [&](const GameState& s, int controller, const std::vector<int>& attackers, int max_count) -> int
+    firebreathe_chooser =
+        [this](const GameState& s, int controller, const std::vector<int>& attackers, int max_count) -> int
         {
             (void)controller;
             int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
@@ -2424,10 +2500,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // names pipe-separated (pipe never appears in a card name, unlike ',' which some names carry).
     // Absent => the map is empty => the chooser returns {} for every ordinal => canonical order =>
     // existing references (no --cast-order) replay byte-identically. Installed only when non-empty.
-    const std::map<int, std::vector<std::string>> cast_order_by_main =
-        ParseCastOrderSpec(cast_order_spec);
-    CastOrderChooser cast_order_chooser =
-        [&](int main_ordinal) -> std::vector<std::string>
+    cast_order_chooser =
+        [this](int main_ordinal) -> std::vector<std::string>
         {
             auto it = cast_order_by_main.find(main_ordinal);
             return it != cast_order_by_main.end() ? it->second : std::vector<std::string>{};
@@ -2440,10 +2514,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // byte-identically as the burst heuristic. BOTH answers are recorded (a 0 = an explicit "no hold")
     // so live prompting never re-asks an answered land. Installed only when there is a recorded answer or
     // live prompting (--storage-hold-prompt); otherwise null -> the engine never consults it (no hold).
-    const std::map<std::pair<int, int>, bool> storage_hold_by_land =
-        ParseStorageHoldSpec(storage_hold_spec);   // (turn, land battlefield index) -> hold?
-    StorageHoldChooser storage_hold_chooser =
-        [&](const GameState& s, const Permanent& land, int counters) -> bool
+    storage_hold_chooser =
+        [this](const GameState& s, const Permanent& land, int counters) -> bool
         {
             int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
             const int land_idx = static_cast<int>(&land - s.battlefield.data());   // #6 side-channel key
@@ -2468,12 +2540,17 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         };
     if (storage_hold_prompt || !storage_hold_by_land.empty()) { g_play_storage_hold_chooser = &storage_hold_chooser; }
+}
 
+// Land-entry (shock lands / Snarls) and Soulfire Eruption targeting.
+void ClaudePlayHarness::InstallLandAndSoulfireChoosers(AIEngine& ai)
+{
+    (void)ai;
     // Land entry (shock lands / Frostboil Snarl): the player chooses whether the land enters untapped
     // (paying its life / revealing a matching land) or tapped. Shares the --choices stream; the reply
     // is 1 (untapped, pay) or 0 (tapped). Default (out-of-range or absent) = the engine's heuristic.
-    LandEntryChooser land_entry_chooser =
-        [&](const GameState& s, int controller, const std::string& source, int pay_life,
+    land_entry_chooser =
+        [this](const GameState& s, int controller, const std::string& source, int pay_life,
             const std::vector<std::string>& reveal_types, bool heuristic_untapped) -> bool
         {
             (void)controller;
@@ -2507,17 +2584,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // reuse the generic `target` decision + EnumerateTargetSets, tagged random_damage so the viewer
     // shows "a random card's mana value each" instead of a fixed number. The reply is an option index;
     // we map the chosen target set back to the sentinel encoding SoulfireDig expects.
-    auto sentinelToChosen = [](int t, int ci) -> ChosenTarget {
-        if (t == TARGET_OPP_FACE)  { return ChosenTarget{ 0, 1 - ci, 0 }; }
-        if (t == TARGET_SELF_FACE) { return ChosenTarget{ 0, ci,     0 }; }
-        return ChosenTarget{ 1, t, 0 };
-    };
-    auto chosenToSentinel = [](const ChosenTarget& c, int ci) -> int {
-        if (c.kind == 0) { return (c.index == ci) ? TARGET_SELF_FACE : TARGET_OPP_FACE; }
-        return c.index;
-    };
-    SoulfireTargetChooser soulfire_chooser =
-        [&](const GameState& s, int controller, const std::string& source,
+    soulfire_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<int>& legal, int min_targets,
             const std::vector<int>& heuristic_subset) -> std::vector<int>
         {
@@ -2525,7 +2593,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::vector<ChosenTarget> legal_ct; std::vector<std::string> legal_labels;
             for (int t : legal)
             {
-                legal_ct.push_back(sentinelToChosen(t, controller));
+                legal_ct.push_back(SentinelToChosen(t, controller));
                 if      (t == TARGET_OPP_FACE)  { legal_labels.push_back("Opponent (face)"); }
                 else if (t == TARGET_SELF_FACE) { legal_labels.push_back("You (face)"); }
                 else if (t >= 0 && t < static_cast<int>(s.battlefield.size()))
@@ -2542,7 +2610,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             if (opts.empty()) { return heuristic_subset; }   // defensive
             // Default index = the option whose target set matches the heuristic (floor) subset.
             std::vector<ChosenTarget> heur;
-            for (int t : heuristic_subset) { heur.push_back(sentinelToChosen(t, controller)); }
+            for (int t : heuristic_subset) { heur.push_back(SentinelToChosen(t, controller)); }
             auto same = [](const std::vector<ChosenTarget>& a, const std::vector<ChosenTarget>& b) {
                 if (a.size() != b.size()) { return false; }
                 for (size_t i = 0; i < a.size(); ++i) { if (a[i].kind != b[i].kind || a[i].index != b[i].index) { return false; } }
@@ -2550,7 +2618,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             int heur_option = 0;
             for (size_t oi = 0; oi < opts.size(); ++oi) { if (same(opts[oi].targets, heur)) { heur_option = static_cast<int>(oi); break; } }
             auto toSentinels = [&](const std::vector<ChosenTarget>& ts) {
-                std::vector<int> out; for (const ChosenTarget& c : ts) { out.push_back(chosenToSentinel(c, controller)); } return out; };
+                std::vector<int> out; for (const ChosenTarget& c : ts) { out.push_back(ChosenToSentinel(c, controller)); } return out; };
             int di = static_cast<int>(cursor);
             // PER-TARGET reply (issue #8): Soulfire targets ANY number of the legal targets, but the
             // 256-option enumeration can't represent a wide set (with ~13 targets the largest enumerated
@@ -2589,6 +2657,55 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
             std::exit(70);
         };
     g_play_soulfire_chooser = &soulfire_chooser;
+}
+
+static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
+                         uint64_t seed, int game_index, int max_turns,
+                         int lookahead_depth, int timeout_ms, std::vector<int> choices,
+                         int reveal_count, const std::filesystem::path& log_dir,
+                         const std::string& validate_line = "",
+                         const std::string& force_mulligan = "",
+                         const std::string& firebreathe_spec = "",
+                         bool firebreathe_prompt = false,
+                         const std::string& cast_order_spec = "",
+                         const std::string& storage_hold_spec = "",
+                         bool storage_hold_prompt = false)
+{
+    GameState state = GoldFishRunner::SetupGame(deck, seed);
+    state.vial_target_mv = profile.vial_target_mv;
+    GoldFishRunner::PopulateOpponentSpawns(state, game_index);
+    // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
+    // them so the emitted hand/decision JSON carries real "num"s and --force-mulligan can bottom a
+    // specific card by number (mulligan reproducibility). See docs/design/claude-play-mulligan-*.
+    GoldFishRunner::AssignCardNumbers(state, GoldFishRunner::BuildCardNumbering(deck));
+
+    AIEngine ai(profile, lookahead_depth, timeout_ms);
+
+    // Mulligan reproducibility (--force-mulligan "<count>:<n1,n2,...>"): reconstruct a reference's
+    // exact opening hand by keeping at <count> mulligans and bottoming the listed card numbers,
+    // independent of the current keep/bottoming heuristics. See docs/design/claude-play-mulligan-*.
+    if (!force_mulligan.empty())
+    {
+        int fcount = 0;
+        std::vector<int> fbottom;
+        ParseForcedMulliganSpec(force_mulligan, fcount, fbottom);
+        ai.SetForcedMulligan(fcount, std::move(fbottom));
+    }
+    // The choosers and the state they thread. Owned here: the engine keeps raw pointers into it,
+    // so it must outlive the game (see ClaudePlayHarness).
+    ClaudePlayHarness h;
+    h.choices              = std::move(choices);
+    h.log_dir              = log_dir;
+    h.validate_line        = validate_line;
+    h.state                = &state;
+    h.profile              = &profile;
+    h.reveal_count         = reveal_count;
+    h.firebreathe_by_turn  = ParseFirebreatheSpec(firebreathe_spec);
+    h.cast_order_by_main   = ParseCastOrderSpec(cast_order_spec);
+    h.storage_hold_by_land = ParseStorageHoldSpec(storage_hold_spec);
+    h.firebreathe_prompt   = firebreathe_prompt;
+    h.storage_hold_prompt  = storage_hold_prompt;
+    h.Install(ai);
 
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);
@@ -2606,9 +2723,9 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     const std::string mulligan_json = mull_ss.str();
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.
-    WriteClaudePlayTrace(log_dir, seed, game_index, won, win_turn, mulligan_json, trace);
+    WriteClaudePlayTrace(log_dir, seed, game_index, won, win_turn, mulligan_json, h.trace);
 
-    WriteClaudePlayResult(state, event_log, dropped_log, won, win_turn, decisions_made,
+    WriteClaudePlayResult(state, h.event_log, h.dropped_log, won, win_turn, h.decisions_made,
                           mulligan_json);
     return 0;
 }
