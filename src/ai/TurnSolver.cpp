@@ -1311,6 +1311,49 @@ static std::size_t ScrySearchWidth()
     return w;
 }
 
+// ---- Cost-neutral action sub-decisions as a post-dedup AXIS -----------------------------------
+// A sub-decision that does not change what the plan can AFFORD (a tutor target, Ponder's
+// keep-vs-shuffle) produces variants with an identical cast-NAME set -- and EnumeratePlans'
+// autonomous plan_signature keys only on names, so the dedup silently kept the first and threw the
+// rest away. The decision was therefore never searched at all; it was the provider's ordering
+// wearing a search's clothes. (The signature comment says so outright: "NOT a correctness property
+// -- an efficiency shortcut that DELEGATES the sub-decision to the heuristic".)
+//
+// The fix is the shape the engine already uses for every other inline sub-decision (fetch_target,
+// land_face, scry_choice, bp_choice): emit ONE option inside the odometer, then fan the alternatives
+// out AFTER the dedup as a second axis. Cost becomes P+W instead of P*k, and the options are really
+// scored. MTG_TUTOR_AXIS=0 restores the old collapse-to-heuristic behaviour for the A/B.
+static bool TutorAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_TUTOR_AXIS", true);
+    return on;
+}
+// How many tutor targets the axis scores, INCLUDING the provider's best (so 1 == the old
+// heuristic-only behaviour). The provider orders candidates best-first, so this is a pure cost
+// prune in preference order, exactly like MTG_SCRY_WIDTH.
+//
+// DEFAULT 6, from a full held-out (overnight) sweep -- searched-depth sum vs the pre-axis baseline:
+//     W=1  0.0000     W=2  -0.2679     W=3  -0.2828     W=4  -0.3175
+//     W=6 -0.3868     W=8  -0.3987     W=12 -0.4151
+// MONOTONE, unlike the breakpoint width (which dilutes), because this axis is ADDITIVE (P+W) rather
+// than a factor of the odometer: makespan moved only 457s -> 522s across the whole range. 6 takes
+// ~93% of the W=12 gain at the smallest slower-count of the strong arms and keeps Hinata near its
+// own best. Per-deck optima DIFFER (goblins keeps improving to 12 at -0.2740; Hinata peaks at W=2
+// with -0.1359 and dilutes to -0.0851 by 12; antilife plateaus at -0.0560 from W=2), so a
+// provider-owned width is the natural follow-up -- deliberately NOT tuned per-deck here, because
+// these are the held-out seeds and picking per-deck values off them would consume the holdout.
+static std::size_t TutorAxisWidth()
+{
+    static const std::size_t w = []() -> std::size_t
+    {
+        const char* v = std::getenv("MTG_TUTOR_WIDTH");
+        if (v == nullptr || *v == '\0') { return 6; }
+        const int n = std::atoi(v);
+        return n < 1 ? 1 : static_cast<std::size_t>(n);
+    }();
+    return w;
+}
+
 static int BpSearchDepth()
 {
     static const int d = []() -> int
@@ -2021,23 +2064,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
         {
             std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
             if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
-            // MTG_TUTOR_WIDTH=<n>: cap the target group at the provider's n most-preferred targets.
-            // A/B LEVER for the branching root-cause (measured 2026-07-31, MTG_BRANCH_STATS on
-            // Hinata): an unfiltered tutor (Gamble, no tutor_types) offers EVERY distinct library
-            // name -- ~30 options once Hinata is online -- and because the group is one factor of
-            // the plan odometer that ~30 MULTIPLIES the whole rest of the turn. Gamble alone was
-            // 75% of Hinata's total enumeration odometer from 3.7% of its EnumeratePlans calls.
-            // Default 0 = UNCAPPED (byte-identical); the cap is a pure COST prune -- the provider
-            // already orders candidates best-first (SituationalCardRank), so n=1 is exactly the
-            // heuristic pick and larger n keeps the search's freedom in preference order.
-            static const std::size_t s_tutor_width = []() -> std::size_t
-            {
-                const char* v = std::getenv("MTG_TUTOR_WIDTH");
-                if (v == nullptr || *v == '\0') { return 0; }
-                const int n = std::atoi(v);
-                return n < 1 ? 0 : static_cast<std::size_t>(n);
-            }();
-            if (s_tutor_width > 0 && cands.size() > s_tutor_width) { cands.resize(s_tutor_width); }
+            // Emit ONE target here (the provider's best) and search the rest as a post-dedup AXIS
+            // (see the tutor fan-out in EnumeratePlansWithLand). Emitting them all was almost pure
+            // WASTE: EnumeratePlans' autonomous plan_signature keys only on cast NAMES, so every
+            // tutor variant of one subset shares a signature and the dedup already kept exactly this
+            // first one and discarded the rest. Measured (MTG_BRANCH_STATS, Hinata d3): Gamble was
+            // 75% of the whole enumeration odometer and 54% of total raw plan work, and capping the
+            // emission left sum_final and the play identical there.
+            // NOT byte-identical overall, though: TurnSolver::Solve has its own odometer and no
+            // signature dedup (it is d0 and every rollout leaf), and its smallest-mask tie-break can
+            // land differently with fewer candidates. Measured cost of that churn on the full
+            // held-out suite at axis width 1: searched sum 0.0000 (0 slower / 0 faster), d0 sum
+            // -0.0015. See docs/design/searched-action-subdecisions.md.
+            // Human play keeps every variant: there the signature DOES include the target (the human
+            // is the decision-maker and must see all of them), so nothing is discarded downstream.
+            if (!HumanPlayActive() && TutorAxisEnabled() && cands.size() > 1) { cands.resize(1); }
             for (const std::string& tgt : cands)
             {
                 Action a;
@@ -2326,6 +2367,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // and 2560ms, identical digests). That is a tie-break defect, not a search result.
             // Heuristic first makes the branch free: it can only override on a difference it can
             // actually see. See docs/design/searched-scry-disposition.md.
+            //
+            // CORRECTION (2026-07-31): the tie-break reasoning above is sound in general but is NOT
+            // the mechanism here, and this branch is currently INERT. ponder_keep is cost-neutral,
+            // so all three variants carry the same cast-NAME set -- and EnumeratePlans' autonomous
+            // plan_signature keys only on names, so the dedup keeps the FIRST and discards the other
+            // two. Enumerating keep-first therefore made the engine "always keep" (the 0-vs-13
+            // shuffles above); enumerating the heuristic first makes the branch not EXIST rather
+            // than free. Verified: MTG_PONDER_SEARCH=0 and =1 give identical play (Hinata 200 games,
+            // d3 b10 -> 5.8950 both). The fix that shipped was still the right one; the decision is
+            // simply still unsearched. The real fix is the post-dedup AXIS the tutor target now uses
+            // (TutorAxisEnabled) -- see docs/design/searched-action-subdecisions.md.
             //
             // NOT in the human-play menu: there the heuristic variant is a duplicate of whichever
             // pinned option it resolves to, so it would show the player a redundant third entry --
@@ -9569,6 +9621,52 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                               std::make_move_iterator(extra.end()));
     }
 
+    // SEARCHED TUTOR TARGET (a cost-neutral action sub-decision -- see TutorAxisEnabled). The target
+    // does not change what the plan can afford, so its variants all share a cast-name signature and
+    // the dedup inside EnumeratePlans discarded every one but the provider's best. Fan them out HERE,
+    // after the dedup, so they survive to be scored.
+    //
+    // Why the axis loses nothing this turn: a tutor is NOT a breakpoint site (the five sites are
+    // stages/EI, DrawUntilNonland, impulse_exile, plain cantrip, dig-through-lands) and Gamble is
+    // not a draw spell, so no re-solve follows the fetch -- the plan's action list is frozen before
+    // the card arrives and the fetched card CANNOT be cast this turn. The target therefore cannot
+    // interact with the rest of this turn's subset, which is exactly the condition that makes a
+    // second axis equivalent to the cross product rather than an approximation of it.
+    if (TutorAxisEnabled() && TutorAxisWidth() > 1 && !HumanPlayActive())
+    {
+        std::vector<TurnSolver::Plan> extra;
+        // The candidate list depends only on `state`, so build it at most once per tutor param set.
+        std::map<std::string, std::vector<std::string>> cand_cache;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only -- one axis at a time, so cost stays additive (same trade as scry).
+            if (p.scry_choice >= 0 || p.bp_choice >= 0) { continue; }
+            for (std::size_t ai = 0; ai < p.actions.size(); ++ai)
+            {
+                const Action& act = p.actions[ai];
+                if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top)) { continue; }
+                std::vector<std::string>& cands = cand_cache[act.card_name];
+                if (cands.empty())
+                {
+                    cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index,
+                                                                   d->params);
+                }
+                const std::size_t k = std::min(cands.size(), TutorAxisWidth());
+                for (std::size_t c = 1; c < k; ++c)
+                {
+                    if (cands[c] == act.tutor_target) { continue; }
+                    TurnSolver::Plan v = p;
+                    v.actions[ai].tutor_target = cands[c];
+                    extra.push_back(std::move(v));
+                }
+                break;   // vary ONE tutor per variant; a second tutor keeps its heuristic target
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
