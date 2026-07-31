@@ -231,3 +231,29 @@ NEXT LEVER: leaf fidelity, not branching. Candidates -- raise s_fd_leaf_depth fo
 scoring specifically; use the learned value model at the continuation leaf; or verify the top-k
 continuations at higher depth rather than ranking all of them cheaply. Widening W, MTG_BP_MAXBASE
 or the wave ranks is measured NOT to be the answer.
+
+### Unlimited budget settles it: CORRECT but UNAFFORDABLE (2026-07-31)
+
+Same 100-game Hinata probe (seed 4004), `--budget-ms 0`:
+
+    class OFF   5.8900
+    class ON  W=2  5.8400     W=4  5.8400     W=8  5.8400
+
+Two results, both clean:
+
+1. **The class is a genuine WIN at unlimited: -0.0500.** There is no ranking defect and no bug --
+   searching the cantrip continuations is simply correct. It cannot yet pay for itself at the suite
+   budget, which is a COST problem, not a quality one.
+2. **Width is irrelevant at unlimited -- W=2, 4 and 8 are IDENTICAL.** This is direct confirmation
+   that the deferred waves turned W into a pure cost prune: it decides only WHEN a rank is visited,
+   never WHETHER, so with unbounded budget every arm reaches every rank and they converge.
+
+This CORRECTS the reading in the section above. The monotonic W degradation at fixed budget
+(+0.0090 / +0.0499 / +0.1041) is pure DILUTION, not a mis-ranking -- it disappears completely once
+the budget does. The leaf still stands between "correct at unlimited" and "positive at the suite
+budget", but as a cost problem: the fix is cheaper or sharper per-continuation evaluation
+(continuation-specific leaf depth, the learned value model at that leaf, or high-depth verification
+of only the top-k), never more enumeration.
+
+Note the class-OFF non-monotonicity persists (unlimited 5.8900 vs 320ms 5.8400), which is the
+separate open lead recorded above.
