@@ -75,6 +75,38 @@ uint64_t Fnv(const std::string& s, uint64_t h = 1469598103934665603ULL)
     return h;
 }
 
+// ---- The pooling identity ------------------------------------------------------------------------
+// Every raw sidecar, checkpoint and prune-set stamps (bucket_fp, deck_fp), and every consumer -- the
+// prior carry, the prune-set carry, the journal resume, the probe carry, the equivalence cache and the
+// offline merge -- re-derives the pair and REFUSES on a mismatch. So all of them must hash exactly the
+// same bytes in exactly the same order. This used to be eight hand-copies of the same two loops, and a
+// single copy drifting would have quietly disarmed ONE guard while the others kept passing, which is
+// the failure this consolidation is really about (a wrong-deck pool silently merged, not a crash).
+uint64_t DeckFp(const Decklist& deck)          // FNV-1a over the SORTED mainboard names
+{
+    std::vector<std::string> dn;
+    for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
+    std::sort(dn.begin(), dn.end());
+    uint64_t fp = 1469598103934665603ULL;
+    for (const std::string& n : dn) { fp = Fnv(n + ",", fp); }
+    return fp;
+}
+
+struct PoolFp { uint64_t bucket = 0; uint64_t deck = 0; };
+
+// The bucket half hashes each class's member list in CLASS ORDER, "|"-separated -- so it pins the
+// clustering, not just the card set (two runs that bucket the same cards differently must not pool).
+PoolFp ComputePoolFp(const Decklist& deck, const EquivReport& eq, int K)
+{
+    PoolFp fp;
+    fp.bucket = 1469598103934665603ULL;
+    for (int b = 0; b < K; ++b)
+    { fp.bucket = Fnv("|", fp.bucket);
+      for (const std::string& n : eq.classes[b].members) { fp.bucket = Fnv(n + ",", fp.bucket); } }
+    fp.deck = DeckFp(deck);
+    return fp;
+}
+
 // Enumerate every composition of `total` over K buckets with per-bucket cap `cap`.
 void EnumComps(int i, int rem, std::vector<int>& cur, const std::vector<int>& cap,
                std::vector<std::vector<int>>& out)
@@ -303,13 +335,7 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
     // re-derives the same (minutes-long) bucketing. Fingerprint-gate a JSON cache: a hit skips discovery;
     // any spec/commit change re-discovers and overwrites. Absent -> unchanged (always discovers).
     EquivReport eq;
-    uint64_t eq_deck_fp = 1469598103934665603ULL;
-    {
-        std::vector<std::string> dn;
-        for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
-        std::sort(dn.begin(), dn.end());
-        for (const std::string& n : dn) { eq_deck_fp = Fnv(n + ",", eq_deck_fp); }
-    }
+    const uint64_t eq_deck_fp = DeckFp(deck);
     const std::string eq_commit = []{ const char* s = std::getenv("MTG_COMMIT"); return s ? std::string(s) : std::string(); }();
     const long long   eq_thr_x1e6 = static_cast<long long>(std::llround(cfg.threshold * 1e6));
     const char*       eq_cache    = std::getenv("MTG_EQUIV_CACHE");
@@ -694,20 +720,12 @@ static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const Exhaus
     if (!cfg.out_raw.empty())
     {
         using json = nlohmann::json;
-        // Fingerprints: bucket map (sorted member lists) and deck (sorted mainboard names).
-        uint64_t bucket_fp = 1469598103934665603ULL;
-        for (int b = 0; b < K; ++b)
-        { bucket_fp = Fnv("|", bucket_fp); for (const std::string& n : eq.classes[b].members) bucket_fp = Fnv(n + ",", bucket_fp); }
-        std::vector<std::string> deck_names;
-        for (const Card& c : deck.mainboard) { deck_names.push_back(c.m_name.str()); }
-        std::sort(deck_names.begin(), deck_names.end());
-        uint64_t deck_fp = 1469598103934665603ULL;
-        for (const std::string& n : deck_names) { deck_fp = Fnv(n + ",", deck_fp); }
+        const PoolFp fp = ComputePoolFp(deck, eq, K);
 
         json root;
         root["meta"] = {
             { "commit", cfg.commit }, { "play_digest", play_digest },
-            { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
+            { "bucket_fp", fp.bucket }, { "deck_fp", fp.deck },
             { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
@@ -837,15 +855,7 @@ static PriorCarry LoadPriorCarry(const Decklist& deck, const ExhaustiveKeepConfi
             { std::cerr << "[keepgen] PRIOR-RAW: bad json (" << e.what() << ") -- ignoring\n" << std::flush; parsed = false; }
             if (parsed && pj.contains("meta") && pj.contains("sizes"))
             {
-                uint64_t my_bucket_fp = 1469598103934665603ULL;
-                for (int b = 0; b < K; ++b)
-                { my_bucket_fp = Fnv("|", my_bucket_fp);
-                  for (const std::string& n : eq.classes[b].members) { my_bucket_fp = Fnv(n + ",", my_bucket_fp); } }
-                std::vector<std::string> dnn;
-                for (const Card& c : deck.mainboard) { dnn.push_back(c.m_name.str()); }
-                std::sort(dnn.begin(), dnn.end());
-                uint64_t my_deck_fp = 1469598103934665603ULL;
-                for (const std::string& n : dnn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
+                const PoolFp fp = ComputePoolFp(deck, eq, K);
                 const auto& mm = pj["meta"];
                 // EXTEND-DEPTH: a prior with max_mull <= this run's may seed it. The prior supplies its
                 // sizes 7..7-prior_mm; the DEEPER sizes it lacks are rolled fresh, then BuildPolicy runs at
@@ -853,8 +863,8 @@ static PriorCarry LoadPriorCarry(const Decklist& deck, const ExhaustiveKeepConfi
                 // equiv_seed/K), so pooling parity holds. (prior_mm > cfg.max_mull would need DROPPING
                 // sizes and is not supported here.)
                 const int prior_mm = mm.value("max_mull", -1);
-                const bool ok = mm.value("bucket_fp", 0ULL) == my_bucket_fp
-                             && mm.value("deck_fp", 0ULL) == my_deck_fp
+                const bool ok = mm.value("bucket_fp", 0ULL) == fp.bucket
+                             && mm.value("deck_fp", 0ULL) == fp.deck
                              && mm.value("equiv_seed", 0ULL) == cfg.equiv_seed
                              && mm.value("K", -1) == K
                              && prior_mm >= 0 && prior_mm <= cfg.max_mull;
@@ -1071,18 +1081,10 @@ static PruneCarry LoadPruneCarry(const Decklist& deck, const ExhaustiveKeepConfi
             {
                 // Fingerprints must match, else the frozen comps index a different bucket map / deck and
                 // we'd carry the wrong cells. REFUSE on any mismatch (do not silently mis-apply).
-                uint64_t my_bucket_fp = 1469598103934665603ULL;
-                for (int b = 0; b < K; ++b)
-                { my_bucket_fp = Fnv("|", my_bucket_fp);
-                  for (const std::string& n : eq.classes[b].members) { my_bucket_fp = Fnv(n + ",", my_bucket_fp); } }
-                std::vector<std::string> dn;
-                for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
-                std::sort(dn.begin(), dn.end());
-                uint64_t my_deck_fp = 1469598103934665603ULL;
-                for (const std::string& n : dn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
+                const PoolFp fp = ComputePoolFp(deck, eq, K);
                 const auto& m = pj["meta"];
-                const bool ok = m.value("bucket_fp", 0ULL) == my_bucket_fp
-                             && m.value("deck_fp", 0ULL) == my_deck_fp
+                const bool ok = m.value("bucket_fp", 0ULL) == fp.bucket
+                             && m.value("deck_fp", 0ULL) == fp.deck
                              && m.value("equiv_seed", 0ULL) == cfg.equiv_seed
                              && m.value("K", -1) == K
                              && m.value("max_mull", -1) == cfg.max_mull;
@@ -1342,18 +1344,6 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         journal_f << "{\"H\":" << H << ",\"i\":" << idx << ",\"p\":" << pd
                   << ",\"s\":" << s << ",\"q\":" << q << ",\"n\":" << n << ",\"f\":" << f << "}\n";
         journal_f.flush();   // push to the OS page cache -> a process kill (not power loss) keeps it
-    };
-    auto compute_fps = [&](uint64_t& bucket_fp, uint64_t& deck_fp)
-    {
-        bucket_fp = 1469598103934665603ULL;
-        for (int b = 0; b < K; ++b)
-        { bucket_fp = Fnv("|", bucket_fp);
-          for (const std::string& n : eq.classes[b].members) { bucket_fp = Fnv(n + ",", bucket_fp); } }
-        std::vector<std::string> dn;
-        for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
-        std::sort(dn.begin(), dn.end());
-        deck_fp = 1469598103934665603ULL;
-        for (const std::string& n : dn) { deck_fp = Fnv(n + ",", deck_fp); }
     };
 
     auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
@@ -1709,21 +1699,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     auto write_raw_atomic = [&](const std::string& path, bool as_probe = false) -> bool
     {
         using json = nlohmann::json;
-        uint64_t bucket_fp = 1469598103934665603ULL;
-        for (int b = 0; b < K; ++b)
-        { bucket_fp = Fnv("|", bucket_fp); for (const std::string& n : eq.classes[b].members) bucket_fp = Fnv(n + ",", bucket_fp); }
-        std::vector<std::string> deck_names;
-        for (const Card& c : deck.mainboard) { deck_names.push_back(c.m_name.str()); }
-        std::sort(deck_names.begin(), deck_names.end());
-        uint64_t deck_fp = 1469598103934665603ULL;
-        for (const std::string& n : deck_names) { deck_fp = Fnv(n + ",", deck_fp); }
+        const PoolFp fp = ComputePoolFp(deck, eq, K);
         json root;
         // A checkpoint stamps an empty play_digest (resume gates on the fingerprints, not the digest -- it is
         // inherently the same commit). A PROBE chunk stamps the real play_digest + floor_complete markers so a
         // later gen only reuses it when play is byte-identical (the byte-identical-r=0 precondition).
         root["meta"] = {
             { "commit", cfg.commit }, { "play_digest", as_probe ? play_digest : std::string() },
-            { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
+            { "bucket_fp", fp.bucket }, { "deck_fp", fp.deck },
             { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
@@ -1792,10 +1775,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             nlohmann::json hm;
             try { hm = nlohmann::json::parse(firstline); } catch (...) { hm = nlohmann::json(); }
-            uint64_t jb, jd; compute_fps(jb, jd);
+            const PoolFp jfp = ComputePoolFp(deck, eq, K);
             const auto& m = hm.contains("meta") ? hm["meta"] : hm;
-            matched = m.value("bucket_fp", 0ULL) == jb
-                   && m.value("deck_fp", 0ULL) == jd
+            matched = m.value("bucket_fp", 0ULL) == jfp.bucket
+                   && m.value("deck_fp", 0ULL) == jfp.deck
                    && m.value("seed_base", ~0ULL) == cfg.seed
                    && m.value("K", -1) == K
                    && m.value("max_mull", -1) == cfg.max_mull
@@ -1852,18 +1835,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         try { rf >> rj; } catch (...) { ok_parse = false; }
         if (ok_parse && rj.contains("meta") && rj.contains("sizes"))
         {
-            uint64_t r_bucket_fp = 1469598103934665603ULL;
-            for (int b = 0; b < K; ++b)
-            { r_bucket_fp = Fnv("|", r_bucket_fp);
-              for (const std::string& n : eq.classes[b].members) { r_bucket_fp = Fnv(n + ",", r_bucket_fp); } }
-            std::vector<std::string> rdn;
-            for (const Card& c : deck.mainboard) { rdn.push_back(c.m_name.str()); }
-            std::sort(rdn.begin(), rdn.end());
-            uint64_t r_deck_fp = 1469598103934665603ULL;
-            for (const std::string& n : rdn) { r_deck_fp = Fnv(n + ",", r_deck_fp); }
+            const PoolFp rfp = ComputePoolFp(deck, eq, K);
             const auto& rm = rj["meta"];
-            const bool match = rm.value("bucket_fp", 0ULL) == r_bucket_fp
-                            && rm.value("deck_fp", 0ULL) == r_deck_fp
+            const bool match = rm.value("bucket_fp", 0ULL) == rfp.bucket
+                            && rm.value("deck_fp", 0ULL) == rfp.deck
                             && rm.value("seed_base", ~0ULL) == cfg.seed
                             && rm.value("K", -1) == K
                             && rm.value("max_mull", -1) == cfg.max_mull
@@ -1925,11 +1900,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             try { pf >> pj; } catch (...) { okp = false; }
             if (okp && pj.contains("meta") && pj.contains("sizes"))
             {
-                uint64_t pb, pdk; compute_fps(pb, pdk);
+                const PoolFp pfp = ComputePoolFp(deck, eq, K);
                 const auto& pm = pj["meta"];
                 const bool match = pm.value("probe", false) && pm.value("floor_complete", false)
-                                && pm.value("bucket_fp", 0ULL) == pb
-                                && pm.value("deck_fp", 0ULL) == pdk
+                                && pm.value("bucket_fp", 0ULL) == pfp.bucket
+                                && pm.value("deck_fp", 0ULL) == pfp.deck
                                 && pm.value("seed_base", ~0ULL) == cfg.seed
                                 && pm.value("K", -1) == K
                                 && pm.value("max_mull", -1) == cfg.max_mull
@@ -1995,8 +1970,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             journal_f << std::setprecision(17);   // sticky: round-trippable doubles for byte-identical resume
             if (!keep)
             {
-                uint64_t jb, jd; compute_fps(jb, jd);
-                nlohmann::json meta = { { "commit", cfg.commit }, { "bucket_fp", jb }, { "deck_fp", jd },
+                const PoolFp jfp = ComputePoolFp(deck, eq, K);
+                nlohmann::json meta = { { "commit", cfg.commit }, { "bucket_fp", jfp.bucket }, { "deck_fp", jfp.deck },
                     { "seed_base", cfg.seed }, { "R", static_cast<long long>(cfg.rollouts) },
                     { "max_mull", cfg.max_mull }, { "K", K }, { "equiv_seed", cfg.equiv_seed } };
                 journal_f << nlohmann::json({ { "meta", meta } }).dump() << "\n";
@@ -3232,11 +3207,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     // The deck on the command line must be the one the sidecars were built on (its counts drive the
     // hypergeometric hand weights). Verify the fingerprint; warn loudly on mismatch rather than
     // silently weight with the wrong counts.
-    std::vector<std::string> dn;
-    for (const Card& c : deck.mainboard) { dn.push_back(c.m_name.str()); }
-    std::sort(dn.begin(), dn.end());
-    uint64_t my_deck_fp = 1469598103934665603ULL;
-    for (const std::string& n : dn) { my_deck_fp = Fnv(n + ",", my_deck_fp); }
+    const uint64_t my_deck_fp = DeckFp(deck);
     if (my_deck_fp != deck_fp)
     { os << "WARNING: command-line deck fp " << my_deck_fp << " != pooled deck_fp " << deck_fp
          << " -- hand weights may be wrong. Pass the SAME deck the sidecars were built on.\n"; }
