@@ -1400,6 +1400,200 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
     return ls;
 }
 
+// ---- --claude-play side-channel spec parsers ----------------------------------------------------
+// Each turns one CLI string into the lookup its chooser consults. Pure string -> map: they touch no
+// game state, and they were inline blocks inside RunClaudePlay. Every one of them SKIPS a malformed
+// token rather than failing -- deliberate (a replay should not die on a stale spec), and preserved.
+
+// --force-mulligan "<count>:<n1,n2,...>" -> keep at <count> mulligans, bottoming those card numbers.
+void ParseForcedMulliganSpec(const std::string& spec_in, int& count, std::vector<int>& bottom)
+{
+    std::string spec = spec_in;
+    auto colon = spec.find(':');
+    int fcount = std::stoi(spec.substr(0, colon));
+    std::vector<int> fbottom;
+    if (colon != std::string::npos)
+    {
+        std::stringstream bs(spec.substr(colon + 1));
+        std::string tok;
+        while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fbottom.push_back(std::stoi(tok)); } }
+    }
+    count  = fcount;
+    bottom = std::move(fbottom);
+}
+
+// --firebreathe "<turn>:<count>,..." -> turn -> pump count.
+std::map<int, int> ParseFirebreatheSpec(const std::string& firebreathe_spec)
+{
+    std::map<int, int> firebreathe_by_turn;
+    std::stringstream fs(firebreathe_spec);
+    std::string ftok;
+    while (std::getline(fs, ftok, ','))
+    {
+        auto fc = ftok.find(':');
+        if (fc == std::string::npos) { continue; }
+        try { firebreathe_by_turn[std::stoi(ftok.substr(0, fc))] = std::stoi(ftok.substr(fc + 1)); }
+        catch (...) { /* skip malformed token */ }
+    }
+    return firebreathe_by_turn;
+}
+
+// --cast-order "<ord>:A|B|C;<ord>:X|Y" -> main-phase ordinal -> card names, in cast order. Names are
+// pipe-separated because ',' appears inside real card names.
+std::map<int, std::vector<std::string>> ParseCastOrderSpec(const std::string& cast_order_spec)
+{
+    std::map<int, std::vector<std::string>> cast_order_by_main;
+    std::stringstream cs(cast_order_spec);
+    std::string entry;
+    while (std::getline(cs, entry, ';'))
+    {
+        auto colon = entry.find(':');
+        if (colon == std::string::npos) { continue; }
+        int ord = 0;
+        try { ord = std::stoi(entry.substr(0, colon)); }
+        catch (...) { continue; }
+        std::vector<std::string> names;
+        std::stringstream ns(entry.substr(colon + 1));
+        std::string nm;
+        while (std::getline(ns, nm, '|')) { if (!nm.empty()) { names.push_back(nm); } }
+        if (!names.empty()) { cast_order_by_main[ord] = std::move(names); }
+    }
+    return cast_order_by_main;
+}
+
+// --storage-hold "<turn>:<land#>:<0|1>,..." -> (turn, land battlefield index) -> hold the counter?
+std::map<std::pair<int, int>, bool> ParseStorageHoldSpec(const std::string& storage_hold_spec)
+{
+    std::map<std::pair<int, int>, bool> storage_hold_by_land;
+    std::stringstream ss(storage_hold_spec);
+    std::string tok;
+    while (std::getline(ss, tok, ','))
+    {
+        auto c1 = tok.find(':');
+        if (c1 == std::string::npos) { continue; }
+        auto c2 = tok.find(':', c1 + 1);
+        if (c2 == std::string::npos) { continue; }
+        try
+        {
+            int t = std::stoi(tok.substr(0, c1));
+            int n = std::stoi(tok.substr(c1 + 1, c2 - c1 - 1));
+            int v = std::stoi(tok.substr(c2 + 1));
+            storage_hold_by_land[{ t, n }] = (v != 0);
+        }
+        catch (...) { /* skip malformed token */ }
+    }
+    return storage_hold_by_land;
+}
+
+// ---- --claude-play teardown + output ------------------------------------------------------------
+// The engine holds RAW POINTERS to the chooser objects RunClaudePlay owns on its stack, so every one
+// has to be cleared before those objects go out of scope. Keeping the full list in one function makes
+// a missed entry visible instead of buried at the end of a 1100-line body.
+void ClearClaudePlayChoosers()
+{
+g_play_top_chooser = nullptr;
+g_play_target_chooser = nullptr;
+g_play_bounce_chooser = nullptr;
+g_play_sacrifice_chooser = nullptr;
+g_play_dig_chooser = nullptr;
+g_play_discard_chooser = nullptr;
+g_play_ei_chooser = nullptr;
+g_play_retrace_chooser = nullptr;
+g_play_replicate_chooser = nullptr;
+g_play_land_entry_chooser = nullptr;
+g_play_dragon_chooser = nullptr;
+g_play_lackey_chooser = nullptr;
+g_play_lightpaws_chooser = nullptr;
+g_play_firebreathe_chooser = nullptr;
+g_play_cast_order_chooser = nullptr;
+g_play_storage_hold_chooser = nullptr;
+g_play_draw_sink = nullptr;
+g_play_event_sink = nullptr;
+g_play_dropped_cast_sink = nullptr;
+}
+
+// The per-game trace file a --log-dir run writes: the reference format the play viewer and
+// test/viewer_protocol_check.py read back.
+void WriteClaudePlayTrace(const std::filesystem::path& log_dir, uint64_t seed, int game_index,
+                          bool won, int win_turn, const std::string& mulligan_json,
+                          const std::vector<std::string>& trace)
+{
+if (!log_dir.empty())
+{
+    std::error_code ec;
+    std::filesystem::create_directories(log_dir, ec);
+    std::ostringstream fn;
+    fn << "claude_s" << seed << "_gi" << game_index << ".json";
+    std::ofstream out(log_dir / fn.str());
+    out << "{\n  \"seed\": " << seed << ", \"game_index\": " << game_index
+        << ", \"win_turn\": " << (won ? win_turn : -1)
+        << ", \"won\": " << (won ? "true" : "false")
+        << ",\n  \"mulligan\": " << mulligan_json << ",\n  \"decisions\": [\n";
+    for (size_t i = 0; i < trace.size(); ++i)
+    {
+        out << "    " << trace[i] << (i + 1 < trace.size() ? ",\n" : "\n");
+    }
+    out << "  ]\n}\n";
+    std::cerr << "Claude-play trace written to " << (log_dir / fn.str()).string() << "\n";
+}
+}
+
+// The <<<CLAUDE_RESULT>>> frame. Takes `state` by non-const reference because it temporarily forces
+// the goldfish perspective for the board dump and restores it -- the original did the same inline.
+void WriteClaudePlayResult(GameState& state, const std::vector<PlayEvent>& event_log,
+                           const std::vector<std::string>& dropped_log, bool won, int win_turn,
+                           int decisions_made, const std::string& mulligan_json)
+{
+// Final life totals (player 0 = goldfish, player 1 = opponent) so the GUI can show the
+// opponent at 0/negative on a win, making the lethal blow visible rather than freezing the
+// board at the pre-win life.
+// Include the FINAL board (the post-final-turn state) so the win screen shows the permanents
+// actually in play at the end -- including those played on the winning turn -- rather than
+// freezing on the last decision's board. Force the player's (player 0) perspective so "me" is
+// always the goldfish regardless of whose turn the game ended on.
+int saved_ap = state.active_player_index;
+state.active_player_index = 0;
+std::cout << "<<<CLAUDE_RESULT>>>\n{\n";
+WriteBoardContext(std::cout, state, 0);   // emits "me": {...}, "opponent": {...},
+state.active_player_index = saved_ap;
+// Events since the last decision -- crucially the WINNING turn's combat/damage/life swings, which
+// happen after the final chooser call and would otherwise be dropped (no next decision to carry them).
+if (!event_log.empty())
+{
+    std::cout << "  \"events\": [";
+    for (size_t ei = 0; ei < event_log.size(); ++ei)
+    {
+        if (ei) { std::cout << ", "; }
+        std::cout << "{ \"turn\": " << event_log[ei].turn << ", \"kind\": ";
+        JsonStr(std::cout, event_log[ei].kind);
+        std::cout << ", \"text\": ";
+        JsonStr(std::cout, event_log[ei].text);
+        std::cout << " }";
+    }
+    std::cout << "],\n";
+}
+// Server-truth: casts of the final committed line the executor couldn't pay (dropped). Carried on
+// the result too so a line that drops a cast AS the game ends is still caught by the viewer (parity
+// with the per-decision dropped_casts). Empty (the common case) => the final line fully resolved.
+if (!dropped_log.empty())
+{
+    std::cout << "  \"dropped_casts\": [";
+    for (size_t di = 0; di < dropped_log.size(); ++di)
+    {
+        if (di) { std::cout << ", "; }
+        JsonStr(std::cout, dropped_log[di]);
+    }
+    std::cout << "],\n";
+}
+std::cout << "  \"win_turn\": " << (won ? win_turn : -1)
+          << ", \"won\": " << (won ? "true" : "false")
+          << ", \"decisions_made\": " << decisions_made
+          << ", \"opponent_life\": " << state.players[1].life
+          << ", \"player_life\": " << state.players[0].life
+          << ", \"mulligan\": " << mulligan_json
+          << "\n}\n<<<END_RESULT>>>\n";
+}
+
 static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          uint64_t seed, int game_index, int max_turns,
                          int lookahead_depth, int timeout_ms, std::vector<int> choices,
@@ -1427,16 +1621,9 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // independent of the current keep/bottoming heuristics. See docs/design/claude-play-mulligan-*.
     if (!force_mulligan.empty())
     {
-        std::string spec = force_mulligan;
-        auto colon = spec.find(':');
-        int fcount = std::stoi(spec.substr(0, colon));
+        int fcount = 0;
         std::vector<int> fbottom;
-        if (colon != std::string::npos)
-        {
-            std::stringstream bs(spec.substr(colon + 1));
-            std::string tok;
-            while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fbottom.push_back(std::stoi(tok)); } }
-        }
+        ParseForcedMulliganSpec(force_mulligan, fcount, fbottom);
         ai.SetForcedMulligan(fcount, std::move(fbottom));
     }
     size_t cursor = 0;
@@ -2201,18 +2388,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // greedy. Installed ONLY when there is something to do -- a recorded answer to apply (non-empty map)
     // or live prompting (--firebreathe-prompt). Otherwise left null -> AIEngine::Firebreathe stays greedy
     // (no probe, byte-identical) -- which is exactly the reference-check / autonomous case.
-    std::map<int, int> firebreathe_by_turn;
-    {
-        std::stringstream fs(firebreathe_spec);
-        std::string ftok;
-        while (std::getline(fs, ftok, ','))
-        {
-            auto fc = ftok.find(':');
-            if (fc == std::string::npos) { continue; }
-            try { firebreathe_by_turn[std::stoi(ftok.substr(0, fc))] = std::stoi(ftok.substr(fc + 1)); }
-            catch (...) { /* skip malformed token */ }
-        }
-    }
+    const std::map<int, int> firebreathe_by_turn = ParseFirebreatheSpec(firebreathe_spec);
     FirebreatheChooser firebreathe_chooser =
         [&](const GameState& s, int controller, const std::vector<int>& attackers, int max_count) -> int
         {
@@ -2248,24 +2424,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // names pipe-separated (pipe never appears in a card name, unlike ',' which some names carry).
     // Absent => the map is empty => the chooser returns {} for every ordinal => canonical order =>
     // existing references (no --cast-order) replay byte-identically. Installed only when non-empty.
-    std::map<int, std::vector<std::string>> cast_order_by_main;
-    {
-        std::stringstream cs(cast_order_spec);
-        std::string entry;
-        while (std::getline(cs, entry, ';'))
-        {
-            auto colon = entry.find(':');
-            if (colon == std::string::npos) { continue; }
-            int ord = 0;
-            try { ord = std::stoi(entry.substr(0, colon)); }
-            catch (...) { continue; }
-            std::vector<std::string> names;
-            std::stringstream ns(entry.substr(colon + 1));
-            std::string nm;
-            while (std::getline(ns, nm, '|')) { if (!nm.empty()) { names.push_back(nm); } }
-            if (!names.empty()) { cast_order_by_main[ord] = std::move(names); }
-        }
-    }
+    const std::map<int, std::vector<std::string>> cast_order_by_main =
+        ParseCastOrderSpec(cast_order_spec);
     CastOrderChooser cast_order_chooser =
         [&](int main_ordinal) -> std::vector<std::string>
         {
@@ -2280,26 +2440,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // byte-identically as the burst heuristic. BOTH answers are recorded (a 0 = an explicit "no hold")
     // so live prompting never re-asks an answered land. Installed only when there is a recorded answer or
     // live prompting (--storage-hold-prompt); otherwise null -> the engine never consults it (no hold).
-    std::map<std::pair<int, int>, bool> storage_hold_by_land;   // (turn, land battlefield index) -> hold?
-    {
-        std::stringstream ss(storage_hold_spec);
-        std::string tok;
-        while (std::getline(ss, tok, ','))
-        {
-            auto c1 = tok.find(':');
-            if (c1 == std::string::npos) { continue; }
-            auto c2 = tok.find(':', c1 + 1);
-            if (c2 == std::string::npos) { continue; }
-            try
-            {
-                int t = std::stoi(tok.substr(0, c1));
-                int n = std::stoi(tok.substr(c1 + 1, c2 - c1 - 1));
-                int v = std::stoi(tok.substr(c2 + 1));
-                storage_hold_by_land[{ t, n }] = (v != 0);
-            }
-            catch (...) { /* skip malformed token */ }
-        }
-    }
+    const std::map<std::pair<int, int>, bool> storage_hold_by_land =
+        ParseStorageHoldSpec(storage_hold_spec);   // (turn, land battlefield index) -> hold?
     StorageHoldChooser storage_hold_chooser =
         [&](const GameState& s, const Permanent& land, int counters) -> bool
         {
@@ -2450,25 +2592,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
 
     GameEngine engine(ai);
     int win_turn = engine.RunGame(state, max_turns);
-    g_play_top_chooser = nullptr;
-    g_play_target_chooser = nullptr;
-    g_play_bounce_chooser = nullptr;
-    g_play_sacrifice_chooser = nullptr;
-    g_play_dig_chooser = nullptr;
-    g_play_discard_chooser = nullptr;
-    g_play_ei_chooser = nullptr;
-    g_play_retrace_chooser = nullptr;
-    g_play_replicate_chooser = nullptr;
-    g_play_land_entry_chooser = nullptr;
-    g_play_dragon_chooser = nullptr;
-    g_play_lackey_chooser = nullptr;
-    g_play_lightpaws_chooser = nullptr;
-    g_play_firebreathe_chooser = nullptr;
-    g_play_cast_order_chooser = nullptr;
-    g_play_storage_hold_chooser = nullptr;
-    g_play_draw_sink = nullptr;
-    g_play_event_sink = nullptr;
-    g_play_dropped_cast_sink = nullptr;
+    ClearClaudePlayChoosers();
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Mulligan reproducibility: the actual (count, bottomed-card-numbers) this game used. Recorded
@@ -2482,73 +2606,10 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     const std::string mulligan_json = mull_ss.str();
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.
-    if (!log_dir.empty())
-    {
-        std::error_code ec;
-        std::filesystem::create_directories(log_dir, ec);
-        std::ostringstream fn;
-        fn << "claude_s" << seed << "_gi" << game_index << ".json";
-        std::ofstream out(log_dir / fn.str());
-        out << "{\n  \"seed\": " << seed << ", \"game_index\": " << game_index
-            << ", \"win_turn\": " << (won ? win_turn : -1)
-            << ", \"won\": " << (won ? "true" : "false")
-            << ",\n  \"mulligan\": " << mulligan_json << ",\n  \"decisions\": [\n";
-        for (size_t i = 0; i < trace.size(); ++i)
-        {
-            out << "    " << trace[i] << (i + 1 < trace.size() ? ",\n" : "\n");
-        }
-        out << "  ]\n}\n";
-        std::cerr << "Claude-play trace written to " << (log_dir / fn.str()).string() << "\n";
-    }
+    WriteClaudePlayTrace(log_dir, seed, game_index, won, win_turn, mulligan_json, trace);
 
-    // Final life totals (player 0 = goldfish, player 1 = opponent) so the GUI can show the
-    // opponent at 0/negative on a win, making the lethal blow visible rather than freezing the
-    // board at the pre-win life.
-    // Include the FINAL board (the post-final-turn state) so the win screen shows the permanents
-    // actually in play at the end -- including those played on the winning turn -- rather than
-    // freezing on the last decision's board. Force the player's (player 0) perspective so "me" is
-    // always the goldfish regardless of whose turn the game ended on.
-    int saved_ap = state.active_player_index;
-    state.active_player_index = 0;
-    std::cout << "<<<CLAUDE_RESULT>>>\n{\n";
-    WriteBoardContext(std::cout, state, 0);   // emits "me": {...}, "opponent": {...},
-    state.active_player_index = saved_ap;
-    // Events since the last decision -- crucially the WINNING turn's combat/damage/life swings, which
-    // happen after the final chooser call and would otherwise be dropped (no next decision to carry them).
-    if (!event_log.empty())
-    {
-        std::cout << "  \"events\": [";
-        for (size_t ei = 0; ei < event_log.size(); ++ei)
-        {
-            if (ei) { std::cout << ", "; }
-            std::cout << "{ \"turn\": " << event_log[ei].turn << ", \"kind\": ";
-            JsonStr(std::cout, event_log[ei].kind);
-            std::cout << ", \"text\": ";
-            JsonStr(std::cout, event_log[ei].text);
-            std::cout << " }";
-        }
-        std::cout << "],\n";
-    }
-    // Server-truth: casts of the final committed line the executor couldn't pay (dropped). Carried on
-    // the result too so a line that drops a cast AS the game ends is still caught by the viewer (parity
-    // with the per-decision dropped_casts). Empty (the common case) => the final line fully resolved.
-    if (!dropped_log.empty())
-    {
-        std::cout << "  \"dropped_casts\": [";
-        for (size_t di = 0; di < dropped_log.size(); ++di)
-        {
-            if (di) { std::cout << ", "; }
-            JsonStr(std::cout, dropped_log[di]);
-        }
-        std::cout << "],\n";
-    }
-    std::cout << "  \"win_turn\": " << (won ? win_turn : -1)
-              << ", \"won\": " << (won ? "true" : "false")
-              << ", \"decisions_made\": " << decisions_made
-              << ", \"opponent_life\": " << state.players[1].life
-              << ", \"player_life\": " << state.players[0].life
-              << ", \"mulligan\": " << mulligan_json
-              << "\n}\n<<<END_RESULT>>>\n";
+    WriteClaudePlayResult(state, event_log, dropped_log, won, win_turn, decisions_made,
+                          mulligan_json);
     return 0;
 }
 
