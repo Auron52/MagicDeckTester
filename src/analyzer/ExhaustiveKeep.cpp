@@ -241,24 +241,17 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 }
 }  // namespace
 
-void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
-                       const ExhaustiveKeepConfig& cfg)
+// ---- 1. Buckets (objective-relative equivalence) ------------------------------------------------
+// Bucketing uses the FIXED equiv_seed (not the rollout seed) so the clustering is byte-identical
+// across machines -- a precondition for pooling their raw tables.
+//
+// Hoisted out of RunExhaustiveKeep verbatim (B1): the cache lookup / discovery / cache write /
+// manual force-merge chain produces exactly ONE value the rest of the function reads -- `eq`.
+// Every other local here (the fingerprints, the cache path, the merge scratch) dies with it, so
+// the seam is airtight and the move is mechanical.
+static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganProfile& profile,
+                                           const ExhaustiveKeepConfig& cfg)
 {
-    // Backstop: max_mull must be >= 1. The CLI now hard-codes it to 6 (there is no knob), so this can't be
-    // hit from a normal run -- it defends the library entry point against a future/direct caller passing a
-    // bad config. max_mull=0 leaves only size 7 with nothing to mulligan into and underflows the
-    // bottoming/Dopt sizing downstream (an opaque "vector > max_size" throw); fail loudly and early instead.
-    if (cfg.max_mull < 1)
-    {
-        os << "ERROR: max_mull=" << cfg.max_mull << " is invalid -- the exhaustive keep needs max_mull>=1 "
-              "(sizes 7..7-max_mull; a keep decision has nothing to mulligan into at 0). Aborting.\n" << std::flush;
-        std::cerr << "[keepgen] ERROR: max_mull=" << cfg.max_mull << " < 1 -- aborting (need >=1)\n" << std::flush;
-        return;
-    }
-
-    // ---- 1. Buckets (objective-relative equivalence) --------------------------------------------
-    // Bucketing uses the FIXED equiv_seed (not the rollout seed) so the clustering is byte-identical
-    // across machines -- a precondition for pooling their raw tables.
     const auto t_bucket = std::chrono::steady_clock::now();
     // Discovery CACHE (MTG_EQUIV_CACHE=<path>): the equivalence classes are a deterministic function of
     // (deck cards, probes, depth, budget_ms, threshold, equiv_seed, max_turns, play commit), yet the
@@ -387,6 +380,28 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         eq.classes = std::move(kept);
         std::cerr << "[keepgen] force-merge applied: -> " << eq.classes.size() << " buckets\n" << std::flush;
     }
+    return eq;
+}
+
+void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
+                       const ExhaustiveKeepConfig& cfg)
+{
+    // Backstop: max_mull must be >= 1. The CLI now hard-codes it to 6 (there is no knob), so this can't be
+    // hit from a normal run -- it defends the library entry point against a future/direct caller passing a
+    // bad config. max_mull=0 leaves only size 7 with nothing to mulligan into and underflows the
+    // bottoming/Dopt sizing downstream (an opaque "vector > max_size" throw); fail loudly and early instead.
+    if (cfg.max_mull < 1)
+    {
+        os << "ERROR: max_mull=" << cfg.max_mull << " is invalid -- the exhaustive keep needs max_mull>=1 "
+              "(sizes 7..7-max_mull; a keep decision has nothing to mulligan into at 0). Aborting.\n" << std::flush;
+        std::cerr << "[keepgen] ERROR: max_mull=" << cfg.max_mull << " < 1 -- aborting (need >=1)\n" << std::flush;
+        return;
+    }
+
+    // ---- 1. Buckets (objective-relative equivalence) --------------------------------------------
+    // Bucketing uses the FIXED equiv_seed (not the rollout seed) so the clustering is byte-identical
+    // across machines -- a precondition for pooling their raw tables.
+    EquivReport eq = BuildEquivalenceClasses(deck, profile, cfg);
     const int K = static_cast<int>(eq.classes.size());
 
     std::map<std::string, int> bucket_of;             // card name -> bucket index
