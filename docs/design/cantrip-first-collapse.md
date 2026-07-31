@@ -173,3 +173,35 @@ held-out delta is **0.0000**. Run `MTG_BP_SITES=31` **with** the rule against it
 seeds; the class earns its place only if it lands at or below 0.0000 there. Also re-check TH and
 Dragonstorm, which currently gain from nesting and must not lose it (th −0.0040, dragonstorm
 −0.0020 held-out).
+
+## Outcome (2026-07-31)
+
+Adopted for searched play in `7dbfc8c`: **-0.2040** across the three seed sets (smoke -0.0466,
+regression -0.0600, held-out -0.0974), d0 byte-identical via the depth gate, every non-Hinata deck
+byte-identical (no plain cantrips). References 138 ok / 0 play-drift throughout.
+
+**The breakpoint cantrip class is now NEUTRAL, not a regression.** Re-measured on held-out seeds
+with the rule adopted: **+0.0090** (4 better, 4 worse), against +0.0466 before it. So the ordering
+was the whole defect. It remains OFF because neutral does not earn the nodes; a 100-game
+single-seed probe (seed 4004) had it ahead at every budget (20ms -0.0300, 80ms -0.0200, 320ms
+-0.0500, unlimited -0.0500), but the 4-seed suite is better powered and disagrees, so that is not
+enough to flip the default.
+
+### Open lead: budget non-monotonicity may be a BUG, not a property
+
+That probe also showed UNLIMITED budget scoring WORSE than 320ms in BOTH arms (5.8900 vs 5.8400
+class-off; 5.8400 vs 5.7900 class-on). The user's criterion sharpens what that is allowed to mean:
+
+> "unlimited can be worse for sure, if the win is not in our window. Otherwise it should be just as
+> good or better."
+
+That is a falsifiable test, and a better one than the repo's standing "budget is non-monotonic"
+note. More budget can legitimately change the answer only when the win lies OUTSIDE the searched
+window, where the extra work merely re-estimates a guessing leaf. For a game whose win turn is
+INSIDE the horizon, more budget must be neutral-or-better -- a slower in-window game at a larger
+budget is a defect.
+
+Next step: take the games that degrade from 320ms to unlimited, split them by whether the win turn
+falls inside the committed horizon (`out_committed_depth`; a win is VERIFIED iff
+`win_turn <= turn + committed_depth - 1`), and check whether any IN-WINDOW game got slower. If one
+did, that is a bug to investigate, not budget churn.
