@@ -27,8 +27,15 @@
 # Deck folder: runs against a COPY under $SCRATCH, because the keep-model path writes its output next
 # to the deck. Never point this at decks/ directly.
 #
-# NOT covered: MTG_KEEP_TRACE's journal/resume paths (they need an interrupted run) and MTG_LOG_HAND
-# (it scans up to 200k seeds silently -- minutes, and not diffable in reasonable time).
+# TWO KINDS OF CHECK, both required:
+#   * CROSS-TAG byte diff -- every artifact of `mine` against the same artifact of `base`. Catches any
+#     behaviour change in a refactor.
+#   * INVARIANTS asserted WITHIN one tag -- the generator's own claims about its reuse paths (probe
+#     carry and crash-resume are advertised as producing byte-identical output). A cross-tag diff
+#     cannot see these: both tags would be equally wrong. These are the reason the run costs ~7 min.
+#
+# NOT covered: MTG_LOG_HAND (it scans up to 200k seeds silently -- minutes, and not diffable in
+# reasonable time; verified at the source level instead).
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
 
@@ -102,6 +109,51 @@ else
     echo "NOTE: the merge emitted no prune set at this size, so the consume path is not covered"
 fi
 
+# --- 11-13. PROBE CARRY: a recommend probe's r=0 slice must BE this gen's r=0 slice ----------------
+# --gen-mulligan recommend rolls at the deck's value_play depth (6 for burn), while the
+# MTG_KEEP_EXHAUSTIVE env path defaults to MTG_EQUIV_DEPTH=5 -- so the env arms are PINNED to 6 here.
+# Without that pin the two arms roll different games and the invariant fails for a reason that has
+# nothing to do with the carry. Do not "simplify" it away: the play_digest gate does NOT catch the
+# mismatch (measured -- docs/design/rollout-config-digest-depth-blindness.md), which is exactly why
+# this check pins the depth by hand instead of trusting the gate.
+env MTG_EQUIV_PROBES=4 MTG_KEEP_OUT_RAW="$D/probe.raw" "$BIN" "$DECK" --seed 4242 \
+    --gen-mulligan recommend >"$D/probe.report" 2>"$D/probe.err" \
+    || { echo "FAILED: probe"; tail -5 "$D/probe.err"; exit 1; }
+norm "$D/probe.raw.probe" "$D/probe.probe.n"
+gen d6plain 4 4242 MTG_EQUIV_DEPTH=6
+cp "$D/probe.raw.probe" "$D/d6carry.raw.probe"
+gen d6carry 4 4242 MTG_EQUIV_DEPTH=6 MTG_KEEP_PROBE_CARRY=1
+
+# --- 14-15. JOURNAL + byte-identical RESUME -------------------------------------------------------
+# The generator's crash-safety claim: an interrupted run, restarted with the same command, resumes
+# from its journal and lands on the SAME raw as an uninterrupted run.
+#
+# This deliberately hard-kills its OWN scratch child a few seconds in. That is the mechanism under
+# test (an interrupted run is the only way to reach the resume path), NOT a result-producing run
+# being cancelled -- the repo rule about never killing a run is about the latter.
+#
+# The interruption POINT is wall-clock dependent, so resume.err/.report are excluded from the
+# cross-tag diff below (NOCMP). The asserted artifact is not: whatever the resumed run inherits, its
+# final raw must equal the uninterrupted one's.
+cont() { env MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=4 MTG_KEEP_R_FLOOR=2 MTG_KEEP_CONTINUOUS=1 \
+    MTG_EQUIV_PROBES=4 MTG_KEEP_OUT_RAW="$D/$1.raw" MTG_KEEP_OUT_PROFILE="$D/$1.profile" \
+    "$BIN" "$DECK" --seed 4242 >"$D/$1.report" 2>>"$D/$1.err"; }
+: >"$D/cont.err";   cont cont   || { echo "FAILED: cont"; exit 1; }
+norm "$D/cont.raw" "$D/cont.raw.n"
+: >"$D/resume.err"; cont resume & KPID=$!
+# Interrupt only ONCE THE JOURNAL HAS RECORDS. A fixed delay does not work: the first ~7s is
+# equivalence discovery, and a kill during it leaves nothing to resume from -- the restart then runs
+# from scratch, the invariant below still passes, and the path silently tests nothing. (That is not
+# hypothetical: an 8s fixed delay did exactly this, and only the engagement check caught it.)
+for _ in $(seq 60); do [ -s "$D/resume.raw.journal" ] && break; sleep 1; done
+sleep 3                           # let a few more cells commit, so the resume has real work to skip
+pkill -9 -P "$KPID" 2>/dev/null   # `cont x &` may run in a subshell, so kill the child too...
+kill  -9 "$KPID"    2>/dev/null   # ...and the subshell/binary itself, whichever $! turned out to be
+wait "$KPID" 2>/dev/null
+for _ in 1 2 3 4 5; do pgrep -f "MTG_KEEP_OUT_RAW=$D/resume.raw" >/dev/null || break; sleep 1; done
+cont resume || { echo "FAILED: resume"; tail -5 "$D/resume.err"; exit 1; }
+norm "$D/resume.raw" "$D/resume.raw.n"
+
 # The reports echo absolute paths; make two tags comparable.
 sed -i "s#$D#<D>#g; s#$SCRATCH#<S>#g" "$D"/*.report "$D"/*.err 2>/dev/null
 # WALL-CLOCK NOISE. Everything dropped below is sampled by elapsed time, so it differs run to run on the
@@ -128,16 +180,31 @@ engaged traced       "traced"               "execution trace recorded"
 engaged sim          "ADAPTIVE-BOTTOM REGRET SIM" "regret simulator ran"
 engaged synth        "SYNTH-ABOT"           "adaptive-bottom reconstruction ran"
 engaged prune        "PRUNE-SET: carried"   "cross-run prune set consumed"
+engaged d6carry      "PROBE-CARRY: reused"  "recommend probe consumed as the r=0 slice"
+engaged resume       "RESUME(journal)"      "interrupted run resumed from its journal"
 [ "$ENG" -ne 0 ] && echo "  (engagement is part of the check: an opt-in path that is entered and skipped proves nothing)"
+
+# The generator's OWN invariants -- asserted within this tag, because a cross-tag diff cannot see them
+# (a refactor that broke both arms equally would still compare identical).
+invariant() { cmp -s "$D/$1" "$D/$2" \
+    && echo "  [ok] $3" || { echo "  [!!] $3 -- VIOLATED ($1 != $2)"; INV=1; }; }
+INV=0
+echo "generator invariants:"
+invariant d6carry.raw.n d6plain.raw.n "probe carry is byte-identical to rolling r=0 fresh"
+invariant resume.raw.n  cont.raw.n    "a killed+resumed run lands on the uninterrupted run's raw"
 
 if [ "$tag" = base ]; then
     echo "baseline captured in $D ($(ls "$D" | wc -l) artifacts)"
-    exit 0
+    exit $((ENG != 0 || INV != 0))
 fi
 
-ok=0; n=0
+# resume.* records how far the interrupted attempt got before the kill -- wall-clock dependent by
+# construction, so it is asserted by the invariant above and NOT byte-compared across tags.
+NOCMP=" resume.err resume.report "
+ok=$((ENG != 0 || INV != 0)); n=0
 for f in $(cd "$ROOT/base" && ls); do
-    case "$f" in *.raw) continue ;; esac          # the normalized .raw.n is what we compare
+    case "$f" in *.raw | *.raw.probe) continue ;; esac   # the normalized .raw.n / .probe.n is what we compare
+    case "$NOCMP" in *" $f "*) continue ;; esac
     n=$((n + 1))
     if cmp -s "$ROOT/base/$f" "$D/$f"; then printf '  %-24s identical\n' "$f"
     else printf '  %-24s DIFFERS\n' "$f"; ok=1; fi

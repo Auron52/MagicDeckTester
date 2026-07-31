@@ -115,15 +115,37 @@ bash test/lib/keepgen_check.sh mine     # byte-diff every artifact against base
 Byte-exact check for the exhaustive keep/bottom generator and the offline merge tool. **The
 regression suite drives `mtg`, not `mtg-analyze`, so it cannot see a change to profile generation at
 all** — a broken generator ships a subtly-worse mulligan policy that surfaces days later as a drifted
-win turn. Ten runs, ~4 minutes, 38 compared artifacts: a below-floor generation (which exercises the
-profile REFUSAL branch), two disjoint-seed chunks that clear the floor (so `BuildPolicyFromTables`
-and the profile write run), their merge, the synthetic adaptive-bottom reconstruction, the offline
-regret simulator, an execution-trace generation, the change-detection carry against a prior pool, the
-same with trace-based cell reuse, and a cross-run prune set emitted then consumed.
+win turn. Fifteen runs, ~7 minutes: a below-floor generation (which exercises the profile REFUSAL
+branch), two disjoint-seed chunks that clear the floor (so `BuildPolicyFromTables` and the profile
+write run), their merge, the synthetic adaptive-bottom reconstruction, the offline regret simulator,
+an execution-trace generation, the change-detection carry against a prior pool, the same with
+trace-based cell reuse, a cross-run prune set emitted then consumed, a `--gen-mulligan recommend`
+probe consumed as a later gen's r=0 slice, and a continuous run that is **hard-killed and restarted**
+to reach the journal-resume path.
 
 It **asserts each opt-in path engaged**, by grepping for the line that path prints. An opt-in path
 that is entered and skipped compares equal and proves nothing, which is the failure mode this kind of
-harness is most prone to.
+harness is most prone to. That check earns its keep: a fixed 8-second delay before interrupting the
+resume run landed during equivalence discovery, so there was no journal to resume from — the restart
+ran from scratch, the invariant still passed, and only the engagement check said so. It now waits for
+the journal to have records before interrupting.
+
+### Two kinds of check
+
+The cross-tag byte diff catches a refactor changing behaviour. It cannot catch the generator's own
+reuse paths being wrong, because both tags would be equally wrong — so two **invariants** are
+asserted within a single tag:
+
+| Invariant | What it would catch |
+|---|---|
+| probe carry ≡ rolling r=0 fresh | a preloaded probe slice that is not the slice it replaces |
+| killed+resumed run ≡ uninterrupted run | a crash-resume that silently loses or double-counts cells |
+
+The probe arms are pinned to `MTG_EQUIV_DEPTH=6` by hand, because `--gen-mulligan recommend` rolls at
+the deck's `value_play` depth while the env path defaults to 5 — and the `play_digest` gate does *not*
+catch that mismatch (measured; see
+[`rollout-config-digest-depth-blindness.md`](../../docs/design/rollout-config-digest-depth-blindness.md)).
+Do not "simplify" the pin away.
 
 Four things that silently invalidate a comparison, all handled — and all found the hard way:
 
