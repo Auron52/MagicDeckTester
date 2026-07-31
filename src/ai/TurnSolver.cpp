@@ -1306,21 +1306,47 @@ static int BpSearchDepth()
 // continuation replays at the wrong breakpoint, so this is deliberately one global value and not
 // something a plan or a wave carries.
 //
-// DEFAULT 0x1F = every class. Bit 3 (plain cantrip) used to be masked off as a measured
-// budget-dilution case (~+26-31% nodes on Hinata, sign-flipping between d3 and d5). Excluding a
-// class here is a QUALITY prune -- it makes those continuations unreachable at ANY budget -- which
-// is exactly what the wave mechanism exists to eliminate, so the cost is now paid where it belongs:
-// BpWave0SiteMask below narrows which classes get a WAVE-0 fan-out (pure cost, the wave phase
-// covers the rest at rank 0).
+// DEFAULT 0x17 = every class EXCEPT bit 3 (plain cantrip), and that exclusion is an ADMITTED
+// QUALITY PRUNE, not a design: it makes Ponder/Preordain continuations unreachable at any budget,
+// which is exactly what the wave mechanism exists to eliminate everywhere else.
+//
+// It stays off because it is MEASURED to cost, on held-out (overnight) seeds, isolated 2026-07-31
+// by running the two axes separately on Hinata:
+//     nesting only  (MTG_BP_NEST_DISCOVER=1, this mask)  ->  0.0000  (every score identical)
+//     cantrip only  (MTG_BP_NEST_DISCOVER=0, mask 0x1F)  -> +0.0392  (avg win turn, WORSE)
+// so the plain-cantrip class is the whole of the Hinata regression and nesting is free. It also
+// does NOT respond to the obvious cost knob: deferring the class out of wave 0
+// (MTG_BP_W0_SITES=0x17 with this mask at 0x1F) made Hinata WORSE still (+0.0666), so the wave-
+// reached cantrip continuations are being mis-RANKED, not merely mis-afforded. That points at the
+// continuation ranking / leaf scoring, which is the open work -- do not retry the W0 knob blind.
+//
+// MTG_BP_SITES=31 turns it on and is the benchmark this prune must eventually justify itself
+// against. See docs/design/post-breakpoint-search.md.
 static int BpSiteMask()
 {
     static const int m = []() -> int
     {
         const char* v = std::getenv("MTG_BP_SITES");
-        if (v == nullptr || *v == '\0') { return 0x1F; }
+        if (v == nullptr || *v == '\0') { return 0x17; }
         return std::atoi(v) & 0x1F;
     }();
     return m;
+}
+
+// A/B hatch for the NESTING axis alone (MTG_BP_NEST_DISCOVER=0). The wave walker learns how many
+// breakpoints an apply reached and opens slots for bp_at = 1, 2, ...; setting this to 0 keeps only
+// the bp_at < BpSearchDepth() slots, i.e. the pre-nesting engine, while leaving the site mask and
+// the rank waves alone. Exists so the two axes can be attributed separately -- MTG_BP_W0_SITES
+// isolates the class axis, this one isolates nesting.
+static bool BpNestDiscover()
+{
+    static const bool on = []() -> bool
+    {
+        const char* v = std::getenv("MTG_BP_NEST_DISCOVER");
+        if (v == nullptr || *v == '\0') { return true; }
+        return std::atoi(v) != 0;
+    }();
+    return on;
 }
 
 // Which classes get a WAVE-0 fan-out (MTG_BP_W0_SITES), a subset of BpSiteMask. PURE COST PRUNE:
@@ -8932,7 +8958,7 @@ public:
         const bool past_end = (n <= m_last_k);
         if (past_end) { sl.done = true; }
         // Open slots for every nested breakpoint this apply proved exists.
-        if (seen > 0) { AddSlots(plans, bi, seen); }
+        if (seen > 0 && BpNestDiscover()) { AddSlots(plans, bi, seen); }
         return past_end;
     }
 
