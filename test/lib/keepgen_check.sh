@@ -50,9 +50,11 @@ s=open(sys.argv[1]).read()
 open(sys.argv[2],"w").write(re.sub(r"\"engine_fp\":\"[0-9a-f]*\"","\"engine_fp\":\"<normalized>\"",s))' "$1" "$2"; }
 
 # gen <name> <R> <seed> [extra env...] -- one generation run; keeps the raw (and profile, if written).
+# R is the only size knob: max_mull is FIXED at 6 in the analyzer CLI (there is no MTG_KEEP_MAX_MULL --
+# setting one only earns a "not a flag this binary reads" warning), so every run covers sizes 7..1.
 gen() {
     local name=$1 R=$2 seed=$3; shift 3
-    env "$@" MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS="$R" MTG_KEEP_MAX_MULL=1 MTG_EQUIV_PROBES=4 \
+    env "$@" MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS="$R" MTG_EQUIV_PROBES=4 \
         MTG_KEEP_OUT_RAW="$D/$name.raw" MTG_KEEP_OUT_PROFILE="$D/$name.profile" \
         "$BIN" "$DECK" --seed "$seed" >"$D/$name.report" 2>"$D/$name.err" \
         || { echo "FAILED: $name"; tail -5 "$D/$name.err"; exit 1; }
@@ -102,11 +104,17 @@ fi
 
 # The reports echo absolute paths; make two tags comparable.
 sed -i "s#$D#<D>#g; s#$SCRATCH#<S>#g" "$D"/*.report "$D"/*.err 2>/dev/null
-# stderr carries WALL-CLOCK progress (percent-done sampled by elapsed time, throughput, seconds),
-# which differs run to run on the same binary -- verified by running this twice against one build.
-# Drop the sampled progress lines and blank the timings, so a real stderr change (a PRIOR-RAW refusal,
-# a PRUNE-SET carry count, a fingerprint mismatch) still shows while machine noise does not.
-sed -i -E '/full-pass +[0-9]+%/d; /refine wave .*[0-9]+\/s/d' "$D"/*.err 2>/dev/null
+# WALL-CLOCK NOISE. Everything dropped below is sampled by elapsed time, so it differs run to run on the
+# SAME binary (proven by running this twice against one build). Drop it before comparing; every semantic
+# line (a PRIOR-RAW refusal, a PRUNE-SET carry count, a fingerprint mismatch, the adaptive wave summary)
+# is left intact, so a real change still shows.
+#   * stderr progress lines -- the PERCENTAGE is time-sampled, so the "(N/M tasks, R rollouts)" counts at
+#     that instant move even when the run is byte-identical. Match on the shape, not the phase name: the
+#     phases are floor-pass / refine-wave-<n> / full-pass and a new one must not silently escape this.
+#   * the report's gen-time projection and slowest-rollout table -- pure ms measurements and their
+#     derived hour estimates, whose ORDER also changes when two cells time within noise of each other.
+sed -i -E '/[0-9]+% +\([0-9]+\/[0-9]+ tasks/d' "$D"/*.err 2>/dev/null
+sed -i -E '/^  floor pass: [0-9]+s @ /d; /^  projected (COMPLETE|FAST)/d; /^  overnight target:/d; /^ +[0-9]+ms  size[0-9]+ (play|draw)/d' "$D"/*.report 2>/dev/null
 sed -i -E 's#[0-9]+/s#<rate>/s#g; s#\b[0-9]+s\b#<t>s#g' "$D"/*.err "$D"/*.report 2>/dev/null
 
 # Guard against a path that silently does nothing: assert the opt-in ones actually engaged.
