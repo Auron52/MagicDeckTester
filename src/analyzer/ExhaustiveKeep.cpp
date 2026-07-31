@@ -110,25 +110,49 @@ struct SizeTable
 // implementation of the decision rule. `tables` is indexed [HAND-H]; `count[b]` is the deck copies in
 // bucket b; `deck_size` = mainboard size (hypergeometric denominator). If `Dopt_out` is non-null it
 // receives the per-(pd,mull) optimal mulligan values (for reporting).
-ExhaustiveKeepPolicy BuildPolicyFromTables(
-    const std::vector<SizeTable>& tables, const std::vector<int>& count,
-    const std::vector<std::vector<std::string>>& bucket_members, int deck_size, int max_mull,
-    int effective_R, bool bottoming_enabled = false, long long bottom_floor = -1,
-    std::array<std::vector<double>, 2>* Dopt_out = nullptr)
+// ---- Shared keep-value machinery ----------------------------------------------------------------
+// The backward-induction primitives that turn a set of SizeTables into a keep policy. Each of these
+// used to be a [&]-capturing lambda re-declared in every function that needed it -- the policy
+// builder, the generator, and the merge tool's synth path -- and the copies had to stay in exact
+// agreement or a merged profile would silently stop matching the in-run one (a hazard the call sites
+// call out in comments: "mirrors BuildPolicyFromTables' internals"). One definition each instead.
+
+// Best (HAND-m)-subcomposition value of hand `h` for pd (1=play, 0=draw): enumerate the
+// subcompositions bounded by the hand and take the min over those present in the size-(HAND-m) table.
+double KeepVal(const std::vector<SizeTable>& tables, int K, const std::vector<int>& h, int m, int pd)
+{
+    std::vector<std::vector<int>> subs;
+    std::vector<int> cur(K, 0);
+    EnumComps(0, HAND - m, cur, h, subs);            // subcompositions bounded by the hand
+    double best = 1e9;
+    const SizeTable& t = tables[m];                  // tables[HAND - (HAND-m)] -- the size-(HAND-m) table
+    for (const std::vector<int>& s : subs)
+    { auto it = t.index.find(s); if (it != t.index.end()) { best = std::min(best, t.V[it->second][pd]); } }
+    return best;
+}
+
+// The cell index in tables[m] that ATTAINS KeepVal -- the argmin subcomposition. Its noise is what
+// drives hand h's mull-m keep decision (and its bottoming). Returns -1 if no subcomposition is present.
+int ArgminSub(const std::vector<SizeTable>& tables, int K, const std::vector<int>& h, int m, int pd)
+{
+    std::vector<std::vector<int>> subs;
+    std::vector<int> cur(K, 0);
+    EnumComps(0, HAND - m, cur, h, subs);
+    double best = 1e9; int arg = -1;
+    const SizeTable& t = tables[m];
+    for (const std::vector<int>& s : subs)
+    {
+        auto it = t.index.find(s);
+        if (it != t.index.end() && t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; }
+    }
+    return arg;
+}
+
+// Multivariate-hypergeometric weight P(draw this composition) for every size-HAND cell.
+std::vector<double> HandWeights(const std::vector<SizeTable>& tables, const std::vector<int>& count,
+                                int deck_size)
 {
     const int K = static_cast<int>(count.size());
-    auto keep_val = [&](const std::vector<int>& h, int m, int pd) -> double
-    {
-        const int target = HAND - m;
-        std::vector<std::vector<int>> subs;
-        std::vector<int> cur(K, 0);
-        EnumComps(0, target, cur, h, subs);          // subcompositions bounded by the hand
-        double best = 1e9;
-        const SizeTable& t = tables[HAND - target];
-        for (const std::vector<int>& s : subs)
-        { auto it = t.index.find(s); if (it != t.index.end()) { best = std::min(best, t.V[it->second][pd]); } }
-        return best;
-    };
     const long long denom = Comb(deck_size, HAND);
     const SizeTable& H7 = tables[0];
     std::vector<double> P(H7.comps.size());
@@ -138,17 +162,37 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
         for (int b = 0; b < K; ++b) { num *= Comb(count[b], H7.comps[i][b]); }
         P[i] = static_cast<double>(num) / static_cast<double>(denom);
     }
+    return P;
+}
+
+// Backward induction: Dopt[m] = expected win-turn of the OPTIMAL keep policy at mull level m.
+// Dopt[max_mull] is the forced keep (no mulligan left); below it each hand takes the better of keeping
+// (KeepVal) and mulliganing (Dopt[m+1]), weighted by its draw probability.
+std::vector<double> ComputeDopt(const std::vector<SizeTable>& tables, int K,
+                                const std::vector<double>& P, int max_mull, int pd)
+{
+    const SizeTable& H7 = tables[0];
+    const int M = max_mull;
+    std::vector<double> Dopt(M + 1, 0.0);
+    for (std::size_t i = 0; i < H7.comps.size(); ++i)
+    { Dopt[M] += P[i] * KeepVal(tables, K, H7.comps[i], M, pd); }
+    for (int m = M - 1; m >= 0; --m)
+        for (std::size_t i = 0; i < H7.comps.size(); ++i)
+        { Dopt[m] += P[i] * std::min(KeepVal(tables, K, H7.comps[i], m, pd), Dopt[m + 1]); }
+    return Dopt;
+}
+
+ExhaustiveKeepPolicy BuildPolicyFromTables(
+    const std::vector<SizeTable>& tables, const std::vector<int>& count,
+    const std::vector<std::vector<std::string>>& bucket_members, int deck_size, int max_mull,
+    int effective_R, bool bottoming_enabled = false, long long bottom_floor = -1,
+    std::array<std::vector<double>, 2>* Dopt_out = nullptr)
+{
+    const int K = static_cast<int>(count.size());
+    const SizeTable& H7 = tables[0];
+    const std::vector<double> P = HandWeights(tables, count, deck_size);
     std::array<std::vector<double>, 2> Dopt_pd;
-    for (int pd = 0; pd < 2; ++pd)
-    {
-        const int M = max_mull;
-        std::vector<double> Dopt(M + 1, 0.0);
-        for (std::size_t i = 0; i < H7.comps.size(); ++i) { Dopt[M] += P[i] * keep_val(H7.comps[i], M, pd); }
-        for (int m = M - 1; m >= 0; --m)
-            for (std::size_t i = 0; i < H7.comps.size(); ++i)
-            { Dopt[m] += P[i] * std::min(keep_val(H7.comps[i], m, pd), Dopt[m + 1]); }
-        Dopt_pd[pd] = std::move(Dopt);
-    }
+    for (int pd = 0; pd < 2; ++pd) { Dopt_pd[pd] = ComputeDopt(tables, K, P, max_mull, pd); }
     // Optimal bottoming target: the argmin (7-m)-subcomposition (same enumeration keep_val minimises,
     // but recording WHICH subcomp wins). Shared with the keep flags so the serialized keep decision
     // and its bottoming are mutually consistent (keep_val == V of the recorded target).
@@ -193,7 +237,7 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
             for (int m = 0; m <= max_mull; ++m)
             {
                 flags[m * 2 + pd] = ((m == max_mull)
-                                     || (keep_val(H7.comps[i], m, pd) <= Dopt_pd[pd][m + 1])) ? 1 : 0;
+                                     || (KeepVal(tables, K, H7.comps[i], m, pd) <= Dopt_pd[pd][m + 1])) ? 1 : 0;
                 bk[m * 2 + pd] = best_sub(H7.comps[i], m, pd);   // subcomp to KEEP after bottoming m
             }
         ek.keep[H7.comps[i]]        = std::move(flags);
@@ -1202,50 +1246,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     };
 
-    // Hypergeometric hand weights P and the keep/bottoming machinery (shared by the adaptive refine loop
-    // below and the reporting in Sections 4-5). keep_val = best (HAND-m)-subcomposition value; argmin_sub
-    // = the index of that best subcomposition in tables[m] (the cell whose noise drives the decision).
-    const long long denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
+    // Hypergeometric hand weights P, shared by the adaptive refine loop below and the reporting in
+    // Sections 4-5. The keep/bottoming machinery it feeds -- KeepVal, ArgminSub, ComputeDopt -- is
+    // file-scope (see "Shared keep-value machinery" above), so this function and the policy builder
+    // cannot drift apart.
     const SizeTable& H7 = tables[0];
-    std::vector<double> P(H7.comps.size());
-    for (std::size_t i = 0; i < H7.comps.size(); ++i)
-    {
-        long long num = 1;
-        for (int b = 0; b < K; ++b) { num *= Comb(count[b], H7.comps[i][b]); }
-        P[i] = static_cast<double>(num) / static_cast<double>(denom);
-    }
-    auto keep_val = [&](const std::vector<int>& h, int m, int pd) -> double
-    {
-        const int target = HAND - m;
-        std::vector<std::vector<int>> subs;
-        std::vector<int> cur(K, 0);
-        EnumComps(0, target, cur, h, subs);   // subcompositions bounded by the hand
-        double best = 1e9;
-        const SizeTable& t = tables[HAND - target];
-        for (const std::vector<int>& s : subs)
-        {
-            auto it = t.index.find(s);
-            if (it != t.index.end()) { best = std::min(best, t.V[it->second][pd]); }
-        }
-        return best;
-    };
-    // The (7-m)-subcomposition that ATTAINS keep_val(h,m,pd) -- i.e. the argmin cell in tables[m]. Its
-    // noise is what drives hand h's mull-m keep decision (and its bottoming). Returns -1 if none.
-    auto argmin_sub = [&](const std::vector<int>& h, int m, int pd) -> int
-    {
-        const int target = HAND - m;
-        std::vector<std::vector<int>> subs;
-        std::vector<int> cur(K, 0);
-        EnumComps(0, target, cur, h, subs);
-        double best = 1e9; int arg = -1;
-        const SizeTable& t = tables[HAND - target];   // == tables[m]
-        for (const std::vector<int>& s : subs)
-        {
-            auto it = t.index.find(s);
-            if (it != t.index.end() && t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; }
-        }
-        return arg;
-    };
+    const std::vector<double> P = HandWeights(tables, count, static_cast<int>(deck.mainboard.size()));
     // Shrunk stderr of the mean for the STOP gate: pull the cell's sample variance toward the table's
     // pooled variance `vg` with se_prior pseudo-observations, so a low-R cell's spuriously-small sample
     // variance can't fake confidence (see MTG_KEEP_SE_PRIOR).
@@ -1258,25 +1264,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const double vs   = (c * vc + cfg.se_prior * vg) / (c + cfg.se_prior);
         return std::sqrt(vs / c);
     };
-    auto compute_Dopt = [&](int pd) -> std::vector<double>
-    {
-        const int M = cfg.max_mull;
-        std::vector<double> Dopt(M + 1, 0.0);
-        for (std::size_t i = 0; i < H7.comps.size(); ++i) { Dopt[M] += P[i] * keep_val(H7.comps[i], M, pd); }
-        for (int m = M - 1; m >= 0; --m)
-            for (std::size_t i = 0; i < H7.comps.size(); ++i)
-            { Dopt[m] += P[i] * std::min(keep_val(H7.comps[i], m, pd), Dopt[m + 1]); }
-        return Dopt;
-    };
 
     // Adaptive schedule (influence-driven). Sample EVERY cell to the floor r0, then in waves add
     // rollouts only to cells that could still change a keep decision or bias the threshold, until none
     // qualify or all hit the cap. r_floor<=0 or >=rollouts => uniform R (byte-identical to the old path).
     //
     // Two cell roles:
-    //  * size-7 cell (mull-0): keep_val(h,0)=V[7][h], a plain mean. Refine while the mull-0 flip prob vs
+    //  * size-7 cell (mull-0): KeepVal(h,0)=V[7][h], a plain mean. Refine while the mull-0 flip prob vs
     //    the threshold exceeds eps (a genuine near-tie); confident hands stay at the floor.
-    //  * sub-cell (size 7-m, m>=1): sets keep_val(h,m)=min over subcomps. It is needed IFF it is the
+    //  * sub-cell (size 7-m, m>=1): sets KeepVal(h,m)=min over subcomps. It is needed IFF it is the
     //    argmin for a hand that is NOT a confident mulligan -- i.e. a confident KEEP (its keep_val feeds
     //    the threshold, which must stay unbiased) or a near-tie (its own decision), or the terminal
     //    forced-keep level. Needed sub-cells go to the cap; sub-cells that are the argmin ONLY for
@@ -1744,7 +1740,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // not well-defined -- they use the flat MTG_KEEP_DETECT_DELTA (conservative -> refine more; the
         // R-hungry bottoming carry is future work). Dopt from the fresh floor batch (its noise is small
         // -- an average over cells -- and deep-cell margins dwarf it).
-        const std::array<std::vector<double>, 2> Dopt_det = { compute_Dopt(0), compute_Dopt(1) };
+        const std::array<std::vector<double>, 2> Dopt_det = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
         long long n_unmoved = 0, n_moved = 0, n_tested = 0;
         for (int H = HAND; H >= min_size; --H)
         {
@@ -1797,7 +1793,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const double SQRT2 = 1.4142135623730951;
         for (;;)
         {
-            const std::array<std::vector<double>, 2> Dopt = { compute_Dopt(0), compute_Dopt(1) };
+            const std::array<std::vector<double>, 2> Dopt = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
             // Pooled win-turn variance per table per pd -- the shrink target for the stop gate (variance
             // scales with hand size, so it is per-table). Recomputed each wave; cheap vs the rollouts.
             std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });
@@ -1829,7 +1825,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // m>=1: the argmin sub-cell is needed unless h is a confident mulligan at m.
                     for (int m = 1; m <= cfg.max_mull; ++m)
                     {
-                        const int arg = argmin_sub(H7.comps[i], m, pd);
+                        const int arg = ArgminSub(tables, K, H7.comps[i], m, pd);
                         if (arg < 0) { continue; }
                         if (resolved[m][arg][pd]) { continue; }       // change-detection: unmoved -> prior
                         const SizeTable& t = tables[m];               // size-(7-m) table
@@ -1839,7 +1835,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         // keep), which needs the full sub-table accurate -- so skip the confident-mull
                         // shortcut and drive every sub-cell to the cap. Keep-only (bottoming off) profiles
                         // may skip confident-mulligan sub-cells (their value is never read via min).
-                        const double kv  = t.V[arg][pd];              // = keep_val(h,m)
+                        const double kv  = t.V[arg][pd];              // = KeepVal(h,m)
                         const double thr = Dopt[pd][m + 1];
                         const double se  = gate_se(t, arg, pd, vg[m][pd]);
                         const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
@@ -2071,7 +2067,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                            vg[pd] += std::max(0.0, floor_sumsq[k] / c - mn * mn); ++ng[pd]; } }
             for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[pd] /= ng[pd]; } }
             vg_ref = vg;
-            Dopt_ref = { compute_Dopt(0), compute_Dopt(1) };
+            Dopt_ref = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
 
             // Reconcile: for each live cell speculated past r0, replay the freeze test over (r0, cnt] in
             // fixed order from the r0 snapshot; freeze + truncate at the first hit (byte-identical to the
@@ -2377,8 +2373,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     }
 
     // ---- 4/5. Backward-induction mulligan value: optimal keep vs the static keep rule ------------
-    // keep_val / P / denom / H7 were hoisted above (shared with the adaptive refine loop). Weights P
-    // are the multivariate-hypergeometric P(draw this 7-card composition).
+    // P / H7 were hoisted above (shared with the adaptive refine loop); KeepVal is file-scope. Weights
+    // P are the multivariate-hypergeometric P(draw this 7-card composition).
     AIEngine ref_ai(profile, cfg.depth, cfg.budget_ms);   // static keep rule (ReferenceKeep = KeepHand)
     auto hand_cards = [&](const std::vector<int>& h)
     {
@@ -2398,7 +2394,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // Terminal (forced keep at the deepest mulligan): value = KeepVal, no mull option.
         for (std::size_t i = 0; i < H7.comps.size(); ++i)
         {
-            double kv = keep_val(H7.comps[i], M, pd);
+            double kv = KeepVal(tables, K, H7.comps[i], M, pd);
             Dopt[M] += P[i] * kv;
             Dst[M]  += P[i] * kv;
         }
@@ -2407,7 +2403,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             for (std::size_t i = 0; i < H7.comps.size(); ++i)
             {
-                double kv = keep_val(H7.comps[i], m, pd);
+                double kv = KeepVal(tables, K, H7.comps[i], m, pd);
                 Dopt[m] += P[i] * std::min(kv, Dopt[m + 1]);
                 bool sk = ref_ai.ReferenceKeep(hand_cards(H7.comps[i]), m, pd == 1);
                 Dst[m]  += P[i] * (sk ? kv : Dst[m + 1]);
@@ -2447,7 +2443,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     const std::vector<double>& Do = Dopt_pd[1];
     for (std::size_t i = 0; i < H7.comps.size(); ++i)
     {
-        double kv = keep_val(H7.comps[i], 0, 1);
+        double kv = KeepVal(tables, K, H7.comps[i], 0, 1);
         bool ok = kv <= Do[1];
         bool sk = ref_ai.ReferenceKeep(hand_cards(H7.comps[i]), 0, true);
         if (ok == sk) { continue; }
@@ -2490,13 +2486,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const int pd = 1, M = cfg.max_mull;
         std::vector<double> Dopt(M + 1, 0.0), Dst(M + 1, 0.0);
         for (std::size_t i = 0; i < H7.comps.size(); ++i)
-        { double kv = keep_val(H7.comps[i], M, pd); Dopt[M] += P[i]*kv; Dst[M] += P[i]*kv; }
+        { double kv = KeepVal(tables, K, H7.comps[i], M, pd); Dopt[M] += P[i]*kv; Dst[M] += P[i]*kv; }
         for (int m = M - 1; m >= 0; --m)
             for (std::size_t i = 0; i < H7.comps.size(); ++i)
-            { double kv = keep_val(H7.comps[i], m, pd);
+            { double kv = KeepVal(tables, K, H7.comps[i], m, pd);
               Dopt[m] += P[i]*std::min(kv, Dopt[m+1]);
               Dst[m]  += P[i]*(ref_ai.ReferenceKeep(hand_cards(H7.comps[i]), m, true) ? kv : Dst[m+1]); }
-        double kv0 = keep_val(h, 0, pd);
+        double kv0 = KeepVal(tables, K, h, 0, pd);
         bool opt_keep = kv0 <= Dopt[1];
         bool st_keep  = ref_ai.ReferenceKeep(hand_cards(h), 0, true);
         os << "  optimal=" << (opt_keep ? "KEEP" : "MULL")
@@ -3327,40 +3323,25 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
                     t.cnt[c][pd] = ab_floor; } }
             }
 
-            // keep_val / argmin / Dopt over the CURRENT tables (mirrors BuildPolicyFromTables' internals).
-            const long long denom = Comb(static_cast<int>(deck.mainboard.size()), HAND);
+            // KeepVal / ArgminSub / ComputeDopt run over the CURRENT tables. These are the same
+            // file-scope primitives BuildPolicyFromTables uses, which is the point: this path
+            // reproduces one realization of the gen's adaptive-bottom loop, so it has to agree with
+            // the policy builder exactly. It used to say so in a comment and re-implement them.
             const SizeTable& H7 = tables[0];
-            std::vector<double> P(H7.comps.size());
-            for (std::size_t i = 0; i < H7.comps.size(); ++i)
-            { long long num = 1; for (int b = 0; b < K; ++b) { num *= Comb(count[b], H7.comps[i][b]); }
-              P[i] = static_cast<double>(num) / static_cast<double>(denom); }
-            auto argmin_sub = [&](const std::vector<int>& h, int m, int pd) -> int {
-                std::vector<std::vector<int>> subs; std::vector<int> cur(K, 0);
-                EnumComps(0, HAND - m, cur, h, subs);
-                double best = 1e9; int arg = -1; const SizeTable& t = tables[m];
-                for (const std::vector<int>& s : subs) { auto it = t.index.find(s);
-                    if (it != t.index.end() && t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; } }
-                return arg; };
-            auto keep_val = [&](const std::vector<int>& h, int m, int pd) -> double {
-                const int a = argmin_sub(h, m, pd); return a < 0 ? 1e9 : tables[m].V[a][pd]; };
-            auto compute_Dopt = [&](int pd) -> std::vector<double> {
-                std::vector<double> D(M + 1, 0.0);
-                for (std::size_t i = 0; i < H7.comps.size(); ++i) { D[M] += P[i] * keep_val(H7.comps[i], M, pd); }
-                for (int m = M - 1; m >= 0; --m) for (std::size_t i = 0; i < H7.comps.size(); ++i)
-                    { D[m] += P[i] * std::min(keep_val(H7.comps[i], m, pd), D[m + 1]); }
-                return D; };
+            const std::vector<double> P =
+                HandWeights(tables, count, static_cast<int>(deck.mainboard.size()));
             // Refine waves: drive each hand's current argmin sub-cell to its TRUE mean unless the hand is a
             // confident mulligan at m -- exactly the gen's adaptive_bottom mark loop, one realization.
             int waves = 0;
             for (;;)
             {
-                const std::array<std::vector<double>, 2> Dopt_c = { compute_Dopt(0), compute_Dopt(1) };
+                const std::array<std::vector<double>, 2> Dopt_c = { ComputeDopt(tables, K, P, M, 0), ComputeDopt(tables, K, P, M, 1) };
                 std::set<std::array<int, 3>> mark;   // (m, cellIdx, pd)
                 for (int pd = 0; pd < 2; ++pd)
                     for (std::size_t i = 0; i < H7.comps.size(); ++i)
                         for (int m = 1; m <= M; ++m)
                         {
-                            const int arg = argmin_sub(H7.comps[i], m, pd);
+                            const int arg = ArgminSub(tables, K, H7.comps[i], m, pd);
                             if (arg < 0 || tables[m].cnt[arg][pd] >= ab_cap) { continue; }   // absent / refined
                             if (m == M) { mark.insert({ m, arg, pd }); continue; }
                             const double kv = tables[m].V[arg][pd], thr = Dopt_c[pd][m + 1];
