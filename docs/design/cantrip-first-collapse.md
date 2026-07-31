@@ -311,10 +311,18 @@ the order the evidence supports:
 
 1. **Stop re-enumerating per continuation.** `EnumerateBreakpointPlans` already memoises on
    `BuildBreakpointKey`; measure its hit rate for this class specifically before assuming it helps.
-2. **Score continuations with the O(1) learned value model instead of a nested search.** Hinata
-   *has* a `Hinata2.value.json` sibling but its profile carries **no `value_play` block**, so the
-   value leaf is inert for Hinata play today. That is a concrete, already-built lever that has never
-   been pointed at this deck.
+2. **Score continuations with the O(1) learned value model instead of a nested search.**
+   CORRECTION (same day): an earlier revision of this section claimed Hinata's value leaf was inert
+   because its *profile* has no `value_play` block. That was wrong -- `value_play` lives in the
+   **`Hinata2.value.json` sibling**, not the profile, and it is ENABLED: `target_depth 5`,
+   `budget_ms 20`, `regime heavy`, beam W=3/leafdepth=2. The leaf is live in every shipped Hinata
+   game. What is actually wrong with it is its PROVENANCE, which is worse: its own note says
+   *"PROVISIONAL d5 default; revise after mulligan profile + depth table"*, its `value_leaf_table`
+   has only **hdepths [1,2,3]** (H4/H5 never measured) from 200 games x 2 seeds, and -- decisively --
+   `scripts/attic/valueleaf_depth_matrix.py` never passed `--profile` at all, so every cell in it was
+   measured on a Hinata with **no mulligan/keep model and no card_scores**. The antilife precedent
+   (`antilife-valueleaf-deep-cells-overnight.md`) shows exactly how badly a table built on a
+   different engine state misleads. Regenerating it is in flight.
 3. **Shortlist continuations cheaply, verify only the top-k deeply** — the standard fix when the
    cost is in expanding candidates rather than judging them.
 
