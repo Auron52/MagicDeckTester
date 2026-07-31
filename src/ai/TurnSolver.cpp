@@ -1578,6 +1578,83 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
     return colors;
 }
 
+// ---- Cantrip-first ordering (docs/design/cantrip-first-collapse.md) --------------------------
+// Casting a cantrip EARLIER is strictly more information for every decision that follows it this
+// turn, and it moves the re-solve breakpoint to where the continuation still has the whole turn
+// left to decide -- a cantrip cast LAST opens its breakpoint at the end of the turn, where the
+// searched continuations are near-duplicates that burn wave ranks without being able to differ.
+// That is the measured failure of the plain-cantrip class (+0.0392 Hinata held-out, and WORSE when
+// deferred out of wave 0, i.e. mis-RANKED rather than mis-afforded).
+//
+// So a plan containing a cantrip is reordered to:  [may-precede] -> [cantrips] -> [rest],
+// each group keeping its relative order (stable).
+//
+// This is NOT applied via CastOrderRank: a set containing a cantrip is OrderingOpaque
+// (params.draw > 0), which bypasses that hook entirely. Reordering the PLAN's action vector works
+// because both the rollout (ApplyPlanDirect) and the executor (AIEngine::TakeTurn) follow plan
+// order for opaque sets -- so the two stay in lockstep BY CONSTRUCTION rather than by twin edits.
+//
+// MTG_CANTRIP_FIRST=1 opts in; default OFF => byte-identical while it is measured.
+static bool CantripFirstEnabled()
+{
+    static const bool on = EnvOn("MTG_CANTRIP_FIRST");
+    return on;
+}
+
+// A plain cantrip: the breakpoint class this rule targets (site 3 of PlanOpensBreakpoint -- a
+// DrawSpell that is neither a staging card nor Expressive Iteration, both of which re-solve inline).
+static bool IsPlainCantrip(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    const CardDefinition* d = a.def;
+    if (d == nullptr) { return false; }
+    return d->tmpl == CardTemplate::DrawSpell
+        && !d->params.stages_cards && !d->params.expressive_iteration;
+}
+
+// May this action legitimately precede a cantrip? Two reasons, both derived from CARD PARAMS (never
+// a name list -- an omission there would silently lose a real line):
+//   AFFORDABILITY -- it funds the cantrip: mana acceleration (ritual float / same-turn rock /
+//                    sac-for-mana) or cost reduction (Hinata, Goblin Warchief).
+//   VALUE         -- it is a cast-triggered PAYOFF whose trigger the cantrip's own cast would then
+//                    fire (Guttersnipe / Vivi). NOT YET REPRESENTABLE: the existing
+//                    on_cast_trigger_* pair models Eidolon of the Great Revel, which damages the
+//                    CASTER (a punisher, opposite polarity), and no suite deck has a payoff card --
+//                    so this category is currently EMPTY, not mis-modelled. When such a card is
+//                    implemented it needs a payoff-polarity param, and the check goes here.
+// Where neither applies, cantrip-first is a strict dominance improvement.
+static bool MayPrecedeCantrip(const Action& a)
+{
+    if (a.ritual_float > 0)                  { return true; }   // ritual / accelerant float
+    if (a.rock_mana.Total() > 0)             { return true; }   // same-turn mana rock
+    if (a.kind == Action::Kind::SacForMana)  { return true; }   // Lotus Bloom sac
+    const CardDefinition* d = a.def;
+    if (d == nullptr) { return false; }
+    if (!d->params.reduces_spell_color.empty())   { return true; }   // cost reduction (Hinata)
+    if (!d->params.reduces_spell_subtype.empty()) { return true; }   // (Goblin Warchief)
+    return false;
+}
+
+static void ApplyCantripFirstOrder(std::vector<Action>& acts)
+{
+    if (!CantripFirstEnabled() || acts.size() < 2) { return; }
+    bool any = false;
+    for (const Action& a : acts) { if (IsPlainCantrip(a)) { any = true; break; } }
+    if (!any) { return; }   // no cantrip in this plan -> untouched
+    std::vector<Action> pre, cantrips, rest;
+    pre.reserve(acts.size()); cantrips.reserve(acts.size()); rest.reserve(acts.size());
+    for (Action& a : acts)
+    {
+        if      (IsPlainCantrip(a))    { cantrips.push_back(std::move(a)); }
+        else if (MayPrecedeCantrip(a)) { pre.push_back(std::move(a)); }
+        else                           { rest.push_back(std::move(a)); }
+    }
+    acts.clear();
+    for (Action& a : pre)      { acts.push_back(std::move(a)); }
+    for (Action& a : cantrips) { acts.push_back(std::move(a)); }
+    for (Action& a : rest)     { acts.push_back(std::move(a)); }
+}
+
 // ---- CollectActions ------------------------------------------------------
 //
 // The single enumeration of action SOURCES, shared by Solve and EnumeratePlans.
@@ -3997,6 +4074,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
         best.actions.clear();
         for (int j : sel) { best.actions.push_back(j == fill_j ? fill_action : cands[j]); }
+        ApplyCantripFirstOrder(best.actions);   // no-op unless MTG_CANTRIP_FIRST
         best.value          = rank_value;
         best.wins_this_turn = wins;
         best_mask           = mask;
@@ -7859,6 +7937,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
+        ApplyCantripFirstOrder(plan.actions);   // no-op unless MTG_CANTRIP_FIRST
         // A sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature) must resolve AFTER
         // its enabler aura, so stable-sort those conditional payoffs to the end (key 1 vs 0). Apply's own
         // clean-set sort is rank-equal for auras (all rank 20) and stable, so it preserves this order. A
