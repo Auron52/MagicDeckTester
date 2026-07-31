@@ -23,8 +23,50 @@ dominates `A then C` — the line reaches the same board with strictly more know
 - **lands** — not a cast at all (the land drop is a separate plan field), so a land needed to PAY
   for the cantrip may precede it.
 
-That is exactly the exemption set. Note Soulfire Eruption is not itself exempt; it is *unaffected*
-because the thing that legitimately precedes it is Hinata's reduction, which is.
+Note Soulfire Eruption is not itself exempt; it is *unaffected* because the thing that legitimately
+precedes it is Hinata's reduction, which is.
+
+### It is NOT pure dominance: cast-triggered payoffs (user correction, same session)
+
+> "To be fair I can think of some cases where this is not pure dominance, but those are 'I benefit
+> from cantrips being cast' type of effects like Guttersnipe, Vivi etc. We can have a list of cards
+> that fits the bill for each deck as needed."
+
+Correct, and it adds a THIRD exemption category of a different kind. The first two are about
+**affordability**; this one is about **value**: a permanent that triggers on each spell cast
+(Guttersnipe, Vivi Ornitier, prowess, Aria of Flame) must be deployed BEFORE the cantrip, because
+then the cantrip's own cast is worth damage/pump on top of the card. Deploying it after wastes a
+trigger. Those cards are neither accelerants nor reducers, so the affordability-only rule would
+wrongly forbid the correct line.
+
+So the exemption is "anything that makes the cantrip **cheaper or better**":
+
+| category | reason | examples |
+|----------|--------|----------|
+| mana acceleration | affordability | Reality Spasm, rituals, rocks, Lotus sac |
+| cost reduction | affordability | Hinata |
+| funding land | affordability | the drop that pays for it |
+| **cast-triggered payoff** | **value** | **Guttersnipe, Vivi, prowess, Aria of Flame** |
+
+**Derive the fourth category before hand-listing it.** A per-deck name list is the stated fallback,
+but it is also the failure mode: an unlisted payoff card silently loses a real line, and a quality
+prune that depends on someone remembering a card is exactly the "surprise heuristic" this whole
+effort is removing. The engine already has the machinery — `CollectTriggerSources` /
+`TriggerSource` in `TurnSolver.cpp` enumerate the permanents that trigger on cast — so the default
+should be derived from card params, with the provider list as a backstop for what params cannot
+express.
+
+That also converts the rule from an assumed prune into a **checkable precondition**, which is
+better than either:
+
+> If the board has NO cast-trigger source and the subset has no affordability dependency, then
+> cantrip-first is provably dominant and the collapse is unconditionally safe. Otherwise fall back
+> to full enumeration for that node.
+
+Most decks and most turns hit the safe path (no trigger sources at all), so the collapse still buys
+the branching reduction where it matters, without ever being a guess. Where it does not hold, the
+search simply keeps its current freedom. `MTG_UNPRUNED` (`UnprunedGate::CantripFirst`) still gates
+the whole thing for the standing pruned-vs-unpruned A/B.
 
 ### The land drop should also come after (user, same session)
 
