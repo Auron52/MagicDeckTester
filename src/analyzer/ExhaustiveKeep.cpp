@@ -634,6 +634,138 @@ static void ReportNotableHands(std::ostream& os, const ExhaustiveKeepConfig& cfg
              "Galerider Sliver", "Muscle Sliver", "Striking Sliver" });     // good curve
 }
 
+// ---- 6. Serialize the keep policy (bucket map + per-composition keep decisions) -----------------
+// Writes the RUNTIME profile. Split out of RunExhaustiveKeep with its guard intact: the R floor that
+// makes a low-quality policy structurally unshippable lives here, so there is exactly one place that
+// decides whether this run is allowed to ship a profile.
+static void WriteRuntimePolicy(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
+                               const ExhaustiveKeepConfig& cfg, const std::vector<SizeTable>& tables,
+                               const std::vector<int>& count, const EquivReport& eq,
+                               long long r0, const std::string& play_digest)
+{
+    const int K = static_cast<int>(eq.classes.size());
+
+    if (!cfg.out_profile.empty() && cfg.rollouts < kMinProfileR)
+    {
+        // Hard floor: a run whose cap R is below the minimum usable precision may NOT write a runtime
+        // profile -- only a poolable chunk. This makes a low-R profile structurally impossible (a stray
+        // low MTG_KEEP_ROLLOUTS can at worst emit a chunk, never ship a bad policy).
+        os << "\nREFUSING to write a runtime profile at R=" << cfg.rollouts
+           << " (< min usable R=" << kMinProfileR << ") -- too low-quality to ship.\n";
+        if (!cfg.out_raw.empty())
+        { os << "  A poolable raw chunk is written to " << cfg.out_raw
+             << " instead; merge chunks (MTG_KEEP_MERGE) up to R>=" << kMinProfileR
+             << " to build a profile.\n"; }
+        else
+        { os << "  ERROR: no out_raw chunk target set either -- nothing usable produced. Re-run with an\n"
+                "  out_raw target (so the rollouts become a poolable chunk) and merge, or raise R>="
+             << kMinProfileR << ".\n"; }
+    }
+    else if (!cfg.out_profile.empty())
+    {
+        std::vector<std::vector<std::string>> bmembers;
+        for (int b = 0; b < K; ++b) { bmembers.push_back(eq.classes[b].members); }
+        ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
+            tables, count, bmembers, static_cast<int>(deck.mainboard.size()),
+            cfg.max_mull, cfg.rollouts, cfg.bottoming_enabled,
+            cfg.adaptive_bottom ? r0 : -1);
+        ek.commit      = cfg.commit;
+        ek.play_digest = play_digest;
+        MulliganProfile out = profile;
+        out.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek));
+        if (SaveDeckProfile(cfg.out_profile, out))
+        { os << "\nexhaustive keep policy written to " << cfg.out_profile << "\n"; }
+        else
+        { os << "\nWARNING: failed to write " << cfg.out_profile << "\n"; }
+    }
+}
+
+// ---- 6b. Poolable RAW sidecar -------------------------------------------------------------------
+// Writes the CHUNK: per-(size,composition,pd) rollout sum/sumsq/count plus the fingerprints that gate
+// cross-machine merges. Separate from the runtime profile above on purpose -- a run too low-R to ship
+// a policy can still emit a poolable chunk, and this is the function that emits it.
+static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const ExhaustiveKeepConfig& cfg,
+                            const std::vector<SizeTable>& tables, const EquivReport& eq, int min_size,
+                            const std::string& play_digest, bool trace_on,
+                            const std::vector<std::string>& touch_names)
+{
+    const int K = static_cast<int>(eq.classes.size());
+
+    if (!cfg.out_raw.empty())
+    {
+        using json = nlohmann::json;
+        // Fingerprints: bucket map (sorted member lists) and deck (sorted mainboard names).
+        uint64_t bucket_fp = 1469598103934665603ULL;
+        for (int b = 0; b < K; ++b)
+        { bucket_fp = Fnv("|", bucket_fp); for (const std::string& n : eq.classes[b].members) bucket_fp = Fnv(n + ",", bucket_fp); }
+        std::vector<std::string> deck_names;
+        for (const Card& c : deck.mainboard) { deck_names.push_back(c.m_name.str()); }
+        std::sort(deck_names.begin(), deck_names.end());
+        uint64_t deck_fp = 1469598103934665603ULL;
+        for (const std::string& n : deck_names) { deck_fp = Fnv(n + ",", deck_fp); }
+
+        json root;
+        root["meta"] = {
+            { "commit", cfg.commit }, { "play_digest", play_digest },
+            { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
+            { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
+            { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
+        };
+        // Execution-trace Phase B provenance (auto card-scope attribution at re-run): the engine
+        // fingerprint (was the compiled engine the same?) and a per-card behaviourally-relevant
+        // definition hash (which cards' DATA changed?). A re-run diffs these against the current build
+        // + cards.json to derive the changed-card set automatically -- no manual MTG_KEEP_CHANGED_CARDS.
+        // Cheap and always written (unknown keys are ignored by older readers).
+        root["meta"]["engine_fp"] = std::string(MTG_ENGINE_FP);
+        {
+            std::set<std::string> distinct_deck;
+            for (const Card& c : deck.mainboard) { distinct_deck.insert(c.m_name.str()); }
+            json card_defs = json::object();
+            for (const std::string& n : distinct_deck)
+            { card_defs[n] = CardDatabase::Instance().DefHash(n); }
+            root["meta"]["card_defs"] = card_defs;
+        }
+        json buckets = json::array();
+        for (int b = 0; b < K; ++b) { buckets.push_back(eq.classes[b].members); }
+        root["buckets"] = buckets;
+        json sizes = json::array();
+        for (int H = HAND; H >= min_size; --H)
+        {
+            const SizeTable& t = tables[HAND - H];
+            json entries = json::array();
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+            {
+                json je;
+                je["comp"]  = t.comps[i];
+                // Actual per-cell rollout sums + counts (adaptive sampling varies count by cell). The
+                // merge path reads counts per-entry and rebuilds V=sum/count, so pooling is exact even
+                // when two runs sampled a cell to different depths.
+                je["sum"]   = { t.sum[i][0], t.sum[i][1] };
+                je["sumsq"] = { t.sumsq[i][0], t.sumsq[i][1] };
+                je["count"] = { t.cnt[i][0], t.cnt[i][1] };
+                // Execution-trace: union over both pd of the card NAMES whose effect ran in this cell's
+                // rollouts (names, not indices, so a re-run matches by MTG_KEEP_CHANGED_CARDS regardless
+                // of index order). Present only when tracing.
+                if (trace_on && i < t.touched.size())
+                {
+                    std::set<int> u = t.touched[i][0];
+                    u.insert(t.touched[i][1].begin(), t.touched[i][1].end());
+                    json tn = json::array();
+                    for (int idx : u) { tn.push_back(touch_names[idx]); }
+                    je["touched"] = tn;
+                }
+                entries.push_back(je);
+            }
+            sizes.push_back({ { "H", H }, { "entries", entries } });
+        }
+        root["sizes"] = sizes;
+        if (trace_on) { root["meta"]["traced"] = true; }
+        std::ofstream f(cfg.out_raw);
+        if (f) { f << root.dump(); os << "raw poolable table written to " << cfg.out_raw << "\n"; }
+        else   { os << "WARNING: failed to write " << cfg.out_raw << "\n"; }
+    }
+}
+
 void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                        const ExhaustiveKeepConfig& cfg)
 {
@@ -2585,121 +2717,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     AIEngine ref_ai(profile, cfg.depth, cfg.budget_ms);   // static keep rule (ReferenceKeep = KeepHand)
     ReportPolicyValue(os, cfg, tables, P, rep, label, ref_ai);
 
+    // ---- 6 / 6b. Serialize: the runtime policy, then the poolable raw chunk ---------------------
     // (play_digest is computed earlier -- the change-detection carry needs it -- and reused here.)
-
-    // ---- 6. Serialize the keep policy (bucket map + per-composition keep decisions) --------------
-    // Built via the shared BuildPolicyFromTables so the in-run policy is byte-identical to what the
-    // offline merge tool (RunKeepMerge) produces from the same pooled V's.
-    if (!cfg.out_profile.empty() && cfg.rollouts < kMinProfileR)
-    {
-        // Hard floor: a run whose cap R is below the minimum usable precision may NOT write a runtime
-        // profile -- only a poolable chunk. This makes a low-R profile structurally impossible (a stray
-        // low MTG_KEEP_ROLLOUTS can at worst emit a chunk, never ship a bad policy).
-        os << "\nREFUSING to write a runtime profile at R=" << cfg.rollouts
-           << " (< min usable R=" << kMinProfileR << ") -- too low-quality to ship.\n";
-        if (!cfg.out_raw.empty())
-        { os << "  A poolable raw chunk is written to " << cfg.out_raw
-             << " instead; merge chunks (MTG_KEEP_MERGE) up to R>=" << kMinProfileR
-             << " to build a profile.\n"; }
-        else
-        { os << "  ERROR: no out_raw chunk target set either -- nothing usable produced. Re-run with an\n"
-                "  out_raw target (so the rollouts become a poolable chunk) and merge, or raise R>="
-             << kMinProfileR << ".\n"; }
-    }
-    else if (!cfg.out_profile.empty())
-    {
-        std::vector<std::vector<std::string>> bmembers;
-        for (int b = 0; b < K; ++b) { bmembers.push_back(eq.classes[b].members); }
-        ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
-            tables, count, bmembers, static_cast<int>(deck.mainboard.size()),
-            cfg.max_mull, cfg.rollouts, cfg.bottoming_enabled,
-            cfg.adaptive_bottom ? r0 : -1);
-        ek.commit      = cfg.commit;
-        ek.play_digest = play_digest;
-        MulliganProfile out = profile;
-        out.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek));
-        if (SaveDeckProfile(cfg.out_profile, out))
-        { os << "\nexhaustive keep policy written to " << cfg.out_profile << "\n"; }
-        else
-        { os << "\nWARNING: failed to write " << cfg.out_profile << "\n"; }
-    }
-
-    // ---- 6b. Poolable RAW sidecar: per-(size,composition,pd) rollout sum + count, plus a fingerprint
-    // gating cross-machine merges (same commit + bucket map + deck; disjoint seed_base). count == R
-    // here but is stored per entry so a merge is a plain element-wise sum.
-    if (!cfg.out_raw.empty())
-    {
-        using json = nlohmann::json;
-        // Fingerprints: bucket map (sorted member lists) and deck (sorted mainboard names).
-        uint64_t bucket_fp = 1469598103934665603ULL;
-        for (int b = 0; b < K; ++b)
-        { bucket_fp = Fnv("|", bucket_fp); for (const std::string& n : eq.classes[b].members) bucket_fp = Fnv(n + ",", bucket_fp); }
-        std::vector<std::string> deck_names;
-        for (const Card& c : deck.mainboard) { deck_names.push_back(c.m_name.str()); }
-        std::sort(deck_names.begin(), deck_names.end());
-        uint64_t deck_fp = 1469598103934665603ULL;
-        for (const std::string& n : deck_names) { deck_fp = Fnv(n + ",", deck_fp); }
-
-        json root;
-        root["meta"] = {
-            { "commit", cfg.commit }, { "play_digest", play_digest },
-            { "bucket_fp", bucket_fp }, { "deck_fp", deck_fp },
-            { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
-            { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
-        };
-        // Execution-trace Phase B provenance (auto card-scope attribution at re-run): the engine
-        // fingerprint (was the compiled engine the same?) and a per-card behaviourally-relevant
-        // definition hash (which cards' DATA changed?). A re-run diffs these against the current build
-        // + cards.json to derive the changed-card set automatically -- no manual MTG_KEEP_CHANGED_CARDS.
-        // Cheap and always written (unknown keys are ignored by older readers).
-        root["meta"]["engine_fp"] = std::string(MTG_ENGINE_FP);
-        {
-            std::set<std::string> distinct_deck;
-            for (const Card& c : deck.mainboard) { distinct_deck.insert(c.m_name.str()); }
-            json card_defs = json::object();
-            for (const std::string& n : distinct_deck)
-            { card_defs[n] = CardDatabase::Instance().DefHash(n); }
-            root["meta"]["card_defs"] = card_defs;
-        }
-        json buckets = json::array();
-        for (int b = 0; b < K; ++b) { buckets.push_back(eq.classes[b].members); }
-        root["buckets"] = buckets;
-        json sizes = json::array();
-        for (int H = HAND; H >= min_size; --H)
-        {
-            const SizeTable& t = tables[HAND - H];
-            json entries = json::array();
-            for (std::size_t i = 0; i < t.comps.size(); ++i)
-            {
-                json je;
-                je["comp"]  = t.comps[i];
-                // Actual per-cell rollout sums + counts (adaptive sampling varies count by cell). The
-                // merge path reads counts per-entry and rebuilds V=sum/count, so pooling is exact even
-                // when two runs sampled a cell to different depths.
-                je["sum"]   = { t.sum[i][0], t.sum[i][1] };
-                je["sumsq"] = { t.sumsq[i][0], t.sumsq[i][1] };
-                je["count"] = { t.cnt[i][0], t.cnt[i][1] };
-                // Execution-trace: union over both pd of the card NAMES whose effect ran in this cell's
-                // rollouts (names, not indices, so a re-run matches by MTG_KEEP_CHANGED_CARDS regardless
-                // of index order). Present only when tracing.
-                if (trace_on && i < t.touched.size())
-                {
-                    std::set<int> u = t.touched[i][0];
-                    u.insert(t.touched[i][1].begin(), t.touched[i][1].end());
-                    json tn = json::array();
-                    for (int idx : u) { tn.push_back(touch_names[idx]); }
-                    je["touched"] = tn;
-                }
-                entries.push_back(je);
-            }
-            sizes.push_back({ { "H", H }, { "entries", entries } });
-        }
-        root["sizes"] = sizes;
-        if (trace_on) { root["meta"]["traced"] = true; }
-        std::ofstream f(cfg.out_raw);
-        if (f) { f << root.dump(); os << "raw poolable table written to " << cfg.out_raw << "\n"; }
-        else   { os << "WARNING: failed to write " << cfg.out_raw << "\n"; }
-    }
+    WriteRuntimePolicy(os, deck, profile, cfg, tables, count, eq, r0, play_digest);
+    WriteRawSidecar(os, deck, cfg, tables, eq, min_size, play_digest, trace_on, touch_names);
 
     ReportNotableHands(os, cfg, tables, P, rep, bucket_of, ref_ai);
     os << std::flush;
