@@ -48,13 +48,35 @@ So the exemption is "anything that makes the cantrip **cheaper or better**":
 | funding land | affordability | the drop that pays for it |
 | **cast-triggered payoff** | **value** | **Guttersnipe, Vivi, prowess, Aria of Flame** |
 
-**Derive the fourth category before hand-listing it.** A per-deck name list is the stated fallback,
-but it is also the failure mode: an unlisted payoff card silently loses a real line, and a quality
-prune that depends on someone remembering a card is exactly the "surprise heuristic" this whole
-effort is removing. The engine already has the machinery — `CollectTriggerSources` /
-`TriggerSource` in `TurnSolver.cpp` enumerate the permanents that trigger on cast — so the default
-should be derived from card params, with the provider list as a backstop for what params cannot
-express.
+**Derive the fourth category from a card PARAM; do not hand-list it.** (User: "That would be much
+better than a list if we checked for a trigger.") A per-deck name list is the failure mode: an
+unlisted payoff card silently loses a real line, and a quality prune that depends on someone
+remembering a card is exactly the "surprise heuristic" this effort is removing. A param cannot be
+forgotten by a rule author — implementing the card is what registers it.
+
+**What exists today, checked 2026-07-31 — the param is NOT yet there.** `CardParams` has
+`on_cast_trigger_max_mv` / `on_cast_trigger_damage`, but its documented meaning is *Eidolon of the
+Great Revel*: "when the controller casts a spell with MV <= max_mv, deal damage **to that player**".
+That is a symmetric PUNISHER aimed at the caster — the opposite polarity to a Guttersnipe payoff.
+`CollectTriggerSources` (`TurnSolver.cpp`) scans the battlefield for exactly that param and nothing
+else, so it does not currently identify payoff permanents. No suite deck has a Guttersnipe/Vivi, so
+the category is presently EMPTY rather than mis-modelled.
+
+What the rule needs, therefore:
+
+1. **A payoff-polarity param**, added when the first such card is implemented — either a target
+   field on the existing pair (`on_cast_trigger_target` = self | opponent) or a separate
+   `on_cast_payoff_*`. Prefer extending the existing pair so one mechanism covers both polarities.
+2. **The exemption predicate reads the ACTION, not the board.** The board scan
+   (`CollectTriggerSources`) answers "what already triggers"; this rule needs "is the card I am
+   about to cast a payoff I should deploy first", i.e. a check on `a.def->params` using the `def`
+   pointer `CollectActions` already caches on every `Action`. O(1) per action, no lookup.
+3. **Honour the MV gate.** These triggers fire only on spells with MV <= max_mv. If the cantrip's MV
+   does not qualify, deploying the payoff first buys nothing and the collapse stays safe — a
+   precision win that is checkable rather than assumed.
+
+A card whose "benefits from casts" ability has no param at all is simply an unimplemented card,
+which is a `cards.json` gap the coverage stage already catches — not a hole in this rule.
 
 That also converts the rule from an assumed prune into a **checkable precondition**, which is
 better than either:
