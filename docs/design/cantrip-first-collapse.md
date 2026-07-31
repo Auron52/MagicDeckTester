@@ -205,3 +205,29 @@ Next step: take the games that degrade from 320ms to unlimited, split them by wh
 falls inside the committed horizon (`out_committed_depth`; a win is VERIFIED iff
 `win_turn <= turn + committed_depth - 1`), and check whether any IN-WINDOW game got slower. If one
 did, that is a bug to investigate, not budget churn.
+
+### Width is REFUTED as the limiter -- it is the LEAF (2026-07-31)
+
+Keeping the class off is not a neutral default: it means every Ponder/Preordain continuation is
+decided by a GREEDY re-solve, and with cantrip-first casting the cantrip FIRST that greedy re-solve
+now decides the whole REST of the turn. So "off" is the maximally-greedy option (user: "I don't
+trust greedy rollouts and want them essentially nowhere in my search"), and neutral is a reason to
+find the limiter, not to leave it off.
+
+Width was the obvious suspect -- W=2 was tuned when cantrip-LAST made continuations near-duplicates.
+Measured on Hinata held-out, class ON:
+
+    W=2  +0.0090     W=4  +0.0499     W=8  +0.1041
+
+Monotonically WORSE. The class is not width-limited, and more options actively hurt.
+
+That isolates the limiter as the LEAF EVALUATOR, not the enumeration. Continuations are ranked by
+the rollout leaf; at a fixed budget, more candidates means shallower, noisier estimates per
+candidate, so the extra choices are picked between by a worse judge. This is the same mechanism the
+doc's earlier note describes ("the greedy continuation's real damage is to the LEAF EVALUATOR") --
+now measured from the other direction.
+
+NEXT LEVER: leaf fidelity, not branching. Candidates -- raise s_fd_leaf_depth for the continuation
+scoring specifically; use the learned value model at the continuation leaf; or verify the top-k
+continuations at higher depth rather than ranking all of them cheaply. Widening W, MTG_BP_MAXBASE
+or the wave ranks is measured NOT to be the answer.
