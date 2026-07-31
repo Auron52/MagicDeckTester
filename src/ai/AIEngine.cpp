@@ -1892,6 +1892,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 else
                 {
+                    // Same pin the search applied when it scored this plan (Plan::scry_choice), so
+                    // the realised land ETB disposes of the top card exactly as the line assumed.
+                    ScriptedTopChoice _stc(plan.scry_choice);
                     TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target, plan.land_face);
                 }
             }

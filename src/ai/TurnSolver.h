@@ -259,6 +259,17 @@ public:
         // non-MDFC). Parallels fetch_target: a plan-level land sub-decision, searched not narrowed.
         std::string land_face;
 
+        // Land ETB scry/surveil disposition (Temple of Epiphany etb_scry, Thundering Falls
+        // etb_surveil): which candidate of TopDispositionCandidates that look takes. -1 (default)
+        // == the provider heuristic decides at resolution, byte-identical to no branch. k >= 0 ==
+        // the land enumeration emitted one Plan variant per candidate and the search -- not
+        // ScryKeepOnTop -- picks. The disposition resolves INLINE inside the land's ETB, so it
+        // cannot be an Action; it is pinned for the apply instead (ScriptedTopChoice), exactly as
+        // bp_choice pins a breakpoint continuation. Parallels fetch_target / land_face: a
+        // plan-level land sub-decision, searched rather than narrowed.
+        // See docs/design/searched-scry-disposition.md.
+        int scry_choice = -1;
+
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
         // cards. Top-level (triggered by the main plan); each entry nests its own

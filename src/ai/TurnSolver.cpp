@@ -1283,6 +1283,26 @@ static int BpSearchWidth()
 // assuming a number. Unbounded budget => every nested breakpoint is reached => coverage is
 // structural. Raising this promotes nesting into wave 0 for an A/B.
 // See docs/design/post-breakpoint-search.md.
+// Searched land-ETB scry/surveil disposition (MTG_SCRY_SEARCH, opt-in; MTG_SCRY_WIDTH caps how many
+// candidates the enumeration emits, heuristic-first). Off => the provider heuristic decides every
+// look at resolution, byte-identical to before the branch existed.
+static bool ScrySearchEnabled()
+{
+    static const bool on = EnvOn("MTG_SCRY_SEARCH");
+    return on;
+}
+static std::size_t ScrySearchWidth()
+{
+    static const std::size_t w = []() -> std::size_t
+    {
+        const char* v = std::getenv("MTG_SCRY_WIDTH");
+        if (v == nullptr || *v == '\0') { return 2; }
+        const int n = std::atoi(v);
+        return n < 1 ? 1 : static_cast<std::size_t>(n);
+    }();
+    return w;
+}
+
 static int BpSearchDepth()
 {
     static const int d = []() -> int
@@ -1614,6 +1634,14 @@ static thread_local bool g_searched_play = false;
 void TurnSolver::SetSearchedPlay(bool enable)
 {
     g_searched_play = enable;
+}
+
+// Is this run's play SEARCHED (lookahead depth > 0)? Gates the branches that only mean something
+// when there is a rollout to score them -- at depth 0 an extra plan variant is not a search, it is
+// just a different fixed rule chosen by enumeration order.
+static bool SearchedPlayActive()
+{
+    return g_searched_play;
 }
 
 static bool CantripFirstEnabled()
@@ -2267,13 +2295,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // which for Hinata is the situational-rank threshold) -- one variant, no branch. MTG_UNPRUNED
         // restores the searched 2-way branch for the standing A/B. The provider still supplies the
         // kept-card ORDER (by situational rank) either way.
-        static const bool s_ponder_search = EnvOn("MTG_PONDER_SEARCH");
-        if (def.params.cast_reorder > 0 && (s_ponder_search || DecisionUnpruned(UnprunedGate::Ponder)))
+        // Searched by default at depth > 0 (MTG_PONDER_SEARCH=0 forces the single-variant heuristic
+        // back). DEPTH-GATED like cantrip-first: at depth 0 there is no rollout to score the
+        // variants, so the "branch" would just be enumeration order picking a different fixed rule.
+        static const bool s_ponder_search = EnvOn("MTG_PONDER_SEARCH", true);
+        if (def.params.cast_reorder > 0
+            && ((s_ponder_search && SearchedPlayActive()) || DecisionUnpruned(UnprunedGate::Ponder)))
         {
-            Action keep_a = a;            keep_a.ponder_keep    = 1;
-            a.ponder_keep = 0;            // `a` becomes the shuffle variant
+            // HEURISTIC FIRST (ponder_keep = -1), then the two pinned alternatives. The order is the
+            // whole point: the search accepts a variant only on a STRICT improvement, so whichever
+            // plan is enumerated first owns every tie -- and this decision ties constantly, because
+            // the cost of keeping three dead cards on top lands OUTSIDE a depth-3 horizon. With the
+            // pinned keep variant first (the old order) the search silently became "always keep": in
+            // 48 Hinata Ponder resolutions it shuffled 0 times where the heuristic shuffled 13, and
+            // it measured worse at EVERY budget including a converged one (6.2750 -> 6.6000 at 640ms
+            // and 2560ms, identical digests). That is a tie-break defect, not a search result.
+            // Heuristic first makes the branch free: it can only override on a difference it can
+            // actually see. See docs/design/searched-scry-disposition.md.
+            Action keep_a = a;            keep_a.ponder_keep = 1;
+            Action shuf_a = a;            shuf_a.ponder_keep = 0;
+            actions.push_back(std::move(a));        // a.ponder_keep stays -1 == resolution heuristic
             actions.push_back(std::move(keep_a));
-            actions.push_back(std::move(a));
+            actions.push_back(std::move(shuf_a));
         }
         else
         {
@@ -5007,6 +5050,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             { allow_shock_pay = true; break; }
                         }
                     }
+                    // Pin the land's ETB scry/surveil disposition when this plan variant carries one
+                    // (searched, not narrowed -- see Plan::scry_choice). Consumed by the first look.
+                    ScriptedTopChoice _stc(plan.scry_choice);
                     PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay, plan.land_face);
                 }
             }
@@ -9550,6 +9596,46 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     }
 
     AppendBreakpointVariants(state, all);
+    // SEARCHED land-ETB scry/surveil (MTG_SCRY_SEARCH, opt-in). The disposition resolves inline
+    // inside the land's ETB, so it cannot be an Action -- instead emit one plan variant per
+    // candidate disposition and let the outer rollout score each, exactly as fetch_target and
+    // land_face do for the other land sub-decisions. Candidate 0 is the provider heuristic, so
+    // the k=1 case (and every deck with no etb_scry/etb_surveil land) is byte-identical.
+    // See docs/design/searched-scry-disposition.md.
+    if (ScrySearchEnabled())
+    {
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only. Running AFTER AppendBreakpointVariants and skipping the breakpoint
+            // variants keeps this a second AXIS rather than a cross product: cost is L+S, not L*S.
+            // Same trade the bp_at axis makes -- a line needing a non-heuristic scry AND a
+            // non-greedy breakpoint continuation at once is deliberately out of reach.
+            if (p.land_to_play.empty() || p.scry_choice >= 0 || p.bp_choice >= 0) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(p.land_to_play);
+            if (d == nullptr) { continue; }
+            const bool  surveil = d->params.etb_surveil > 0;
+            const int   n       = surveil ? d->params.etb_surveil : d->params.etb_scry;
+            if (n <= 0) { continue; }
+            const int look = std::min<int>(n, static_cast<int>(ap.library.size()));
+            if (look <= 0) { continue; }
+            // The land drop is applied before this plan's casts, so the true top `look` cards are
+            // what the ETB will see. A plan that draws first still resolves safely: the scripted
+            // index is clamped to the candidate count at resolution.
+            const std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
+            const std::size_t k = TopDispositionCandidates(
+                state, looked, surveil ? LookKind::Surveil : LookKind::Scry).size();
+            for (std::size_t c = 1; c < std::min(k, ScrySearchWidth()); ++c)
+            {
+                TurnSolver::Plan v = p;
+                v.scry_choice = static_cast<int>(c);
+                extra.push_back(std::move(v));
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());

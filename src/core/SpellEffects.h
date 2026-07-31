@@ -4062,6 +4062,61 @@ inline TopDisposition HeuristicTopDisposition(const GameState& state, const std:
     return disp;
 }
 
+// SEARCH-SCRIPTED disposition (see docs/design/searched-scry-disposition.md). A scry/surveil/reorder
+// resolves INLINE, deep inside a land ETB or a spell resolution, so the plan search cannot branch on
+// it by enumerating actions -- it has to pin the choice and re-run the apply, exactly as bp_choice
+// pins a breakpoint continuation. This thread-local is that pin: >= 0 means "take candidate k of
+// TopDispositionCandidates at the NEXT look", -1 (the default) means the provider heuristic decides
+// at resolution, which is byte-identical to the pre-branch engine.
+//
+// Consumed-once by design: the look that reads it resets it, so a plan carrying one scripted choice
+// scripts exactly one look and any further look in the same apply falls back to the heuristic. That
+// is the same "branch on the first divergence, default for the tail" shape the breakpoint waves and
+// the cleanup discard use.
+extern thread_local int g_scripted_top_choice;
+
+// Scoped pin. Restores the previous value on exit, so a nested apply (a breakpoint re-solve inside
+// an apply) cannot leak its script into the outer one. `k < 0` is inert.
+struct ScriptedTopChoice
+{
+    explicit ScriptedTopChoice(int k) : saved(g_scripted_top_choice) { g_scripted_top_choice = k; }
+    ~ScriptedTopChoice() { g_scripted_top_choice = saved; }
+    ScriptedTopChoice(const ScriptedTopChoice&) = delete;
+    ScriptedTopChoice& operator=(const ScriptedTopChoice&) = delete;
+    int saved;
+};
+
+// The candidate dispositions this look may take, HEURISTIC FIRST. Index 0 is exactly what
+// HeuristicTopDisposition returns, so a k=1 enumeration is byte-identical to no branch at all; the
+// rest are the alternatives the search may score. Lives here (not on DecisionProvider) only because
+// TopDisposition is defined here -- the RANKING inside it is provider-owned via ScryKeepOnTop /
+// SituationalCardRank, and a provider that wants a different candidate SET should override
+// ScryKeepOnTop rather than reorder this list.
+inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& state,
+                                                            const std::vector<Card>& looked,
+                                                            LookKind kind, int keep_decision = -1);
+
+// Resolve one look's disposition: scripted pin first (search), then the human chooser, then the
+// provider heuristic. Shared by ScryTop / SurveilTop / ReorderTopOrShuffle so all three branch
+// identically.
+inline TopDisposition ChooseTopDisposition(const GameState& state, const std::string& source,
+                                           const std::vector<Card>& looked, LookKind kind,
+                                           int keep_decision = -1)
+{
+    if (g_scripted_top_choice >= 0)
+    {
+        const int k = g_scripted_top_choice;
+        g_scripted_top_choice = -1;                    // consumed by this look
+        std::vector<TopDisposition> cands = TopDispositionCandidates(state, looked, kind, keep_decision);
+        if (!cands.empty())
+        {
+            return cands[static_cast<std::size_t>(k) < cands.size() ? k : cands.size() - 1];
+        }
+    }
+    if (g_play_top_chooser) { return (*g_play_top_chooser)(state, source, looked, kind); }
+    return HeuristicTopDisposition(state, looked, kind, keep_decision);
+}
+
 // Enumerate the legal player dispositions (for the claude-play decision menu). Scry/Surveil:
 // every ordered subset kept on top (rest away). Reorder: every ordering of all N on top, plus a
 // shuffle option. N is tiny (1-3) for every modelled card, so the factorial blowup is bounded.
@@ -4111,10 +4166,28 @@ inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std:
     return opts;
 }
 
+// The heuristic pick first, then every OTHER legal disposition in EnumerateTopDispositions order.
+// Deduped against the heuristic by top_order + shuffle so candidate 0 is never repeated later.
+inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& state,
+                                                            const std::vector<Card>& looked,
+                                                            LookKind kind, int keep_decision)
+{
+    std::vector<TopDisposition> out;
+    out.push_back(HeuristicTopDisposition(state, looked, kind, keep_decision));
+    const TopDisposition& h = out.front();
+    for (const TopOption& o : EnumerateTopDispositions(kind, looked))
+    {
+        if (o.disp.shuffle == h.shuffle && o.disp.top_order == h.top_order) { continue; }
+        out.push_back(o.disp);
+    }
+    return out;
+}
+
 // Scry N (e.g. Temple of Epiphany): look at the top N cards and bottom the unwanted ones using a
 // deck-aware heuristic (HeuristicTopDisposition), then keep the rest on top in look order. Under
 // --claude-play g_play_top_chooser is set (and RevealLogPause nulls it during the search, so this
-// is REAL resolution only) and the human picks the disposition instead. Byte-identical for search.
+// is REAL resolution only) and the human picks the disposition instead. Byte-identical for search
+// unless a plan pinned a scripted choice (g_scripted_top_choice).
 inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
 {
     Player& ap = state.ActivePlayer();
@@ -4122,9 +4195,7 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
     if (look <= 0) { return; }
 
     std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
-    TopDisposition disp = (g_play_top_chooser)
-        ? (*g_play_top_chooser)(state, source, looked, LookKind::Scry)
-        : HeuristicTopDisposition(state, looked, LookKind::Scry);
+    TopDisposition disp = ChooseTopDisposition(state, source, looked, LookKind::Scry);
 
     // Reveal capture (real play only; null during search): seen cards in look order, and which
     // were kept on top vs bottomed -- read from the chosen disposition BEFORE looked is consumed.
@@ -4171,9 +4242,7 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
     // provider heuristic do (byte-identical to the original -- HeuristicTopDisposition reproduces
     // the wanted-first ordering, and in legacy mode the shuffle branch still only fires with an
     // empty `wanted`, so the pre-shuffle order is the same look order).
-    TopDisposition disp = (g_play_top_chooser)
-        ? (*g_play_top_chooser)(state, source, looked, LookKind::Reorder)
-        : HeuristicTopDisposition(state, looked, LookKind::Reorder, keep_decision);
+    TopDisposition disp = ChooseTopDisposition(state, source, looked, LookKind::Reorder, keep_decision);
 
     if (g_reveal_logger)
     {
@@ -4217,9 +4286,7 @@ inline void SurveilTop(GameState& state, int n, const std::string& source = "Sur
     if (look <= 0) { return; }
 
     std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
-    TopDisposition disp = (g_play_top_chooser)
-        ? (*g_play_top_chooser)(state, source, looked, LookKind::Surveil)
-        : HeuristicTopDisposition(state, looked, LookKind::Surveil);
+    TopDisposition disp = ChooseTopDisposition(state, source, looked, LookKind::Surveil);
 
     const bool capture = (g_reveal_logger != nullptr);
     if (capture)
