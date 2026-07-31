@@ -427,6 +427,213 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
     return eq;
 }
 
+// The concrete Card list for a bucket composition -- one representative Card per copy. This is what
+// the static keep rule (AIEngine::ReferenceKeep) is asked about.
+std::vector<Card> HandCards(const std::vector<Card>& rep, const std::vector<int>& h)
+{
+    std::vector<Card> cards;
+    for (std::size_t b = 0; b < rep.size(); ++b) { for (int c = 0; c < h[b]; ++c) { cards.push_back(rep[b]); } }
+    return cards;
+}
+
+// ---- 4/5, 5b, 5c. Policy-value report ------------------------------------------------------------
+// Pure reporting over the finished tables: the optimal-vs-static backward induction, the full
+// disagreement set that exactly decomposes their gap, and the label-noise diagnostic. Nothing here
+// feeds the serialized policy -- every result goes to `os`. ref_ai is passed IN rather than
+// constructed here so this report and the notable-hands report below still share one engine object,
+// as they did when both were inline.
+static void ReportPolicyValue(std::ostream& os, const ExhaustiveKeepConfig& cfg,
+                              const std::vector<SizeTable>& tables, const std::vector<double>& P,
+                              const std::vector<Card>& rep, const std::vector<std::string>& label,
+                              AIEngine& ref_ai)
+{
+    const int K = static_cast<int>(rep.size());
+    const SizeTable& H7 = tables[0];
+
+    os << "\n--- policy value (expected win-turn; lower is better) ---\n";
+    os << "pd      D_opt   D_static   gap      keep%%_opt  keep%%_static\n";
+    double opt_avg = 0, stat_avg = 0;
+    std::array<std::vector<double>, 2> Dopt_pd, Dst_pd;
+    for (int pd = 0; pd < 2; ++pd)
+    {
+        const int M = cfg.max_mull;
+        std::vector<double> Dopt(M + 1, 0.0), Dst(M + 1, 0.0);
+        // Terminal (forced keep at the deepest mulligan): value = KeepVal, no mull option.
+        for (std::size_t i = 0; i < H7.comps.size(); ++i)
+        {
+            double kv = KeepVal(tables, K, H7.comps[i], M, pd);
+            Dopt[M] += P[i] * kv;
+            Dst[M]  += P[i] * kv;
+        }
+        long long kept_opt = 0, kept_st = 0;
+        for (int m = M - 1; m >= 0; --m)
+        {
+            for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            {
+                double kv = KeepVal(tables, K, H7.comps[i], m, pd);
+                Dopt[m] += P[i] * std::min(kv, Dopt[m + 1]);
+                bool sk = ref_ai.ReferenceKeep(HandCards(rep, H7.comps[i]), m, pd == 1);
+                Dst[m]  += P[i] * (sk ? kv : Dst[m + 1]);
+                if (m == 0)
+                {
+                    if (kv <= Dopt[1]) { kept_opt++; }
+                    if (sk)            { kept_st++;  }
+                }
+            }
+        }
+        // keep% at m=0 by hand-count (unweighted) for a quick read of aggressiveness.
+        double kopt = 100.0 * static_cast<double>(kept_opt) / static_cast<double>(H7.comps.size());
+        double kst  = 100.0 * static_cast<double>(kept_st)  / static_cast<double>(H7.comps.size());
+        os << (pd == 1 ? "play  " : "draw  ")
+           << "  " << Dopt[0] << "   " << Dst[0]
+           << "   " << (Dst[0] - Dopt[0]) << "    " << kopt << "      " << kst << "\n";
+        opt_avg += Dopt[0] / 2.0; stat_avg += Dst[0] / 2.0;
+        Dopt_pd[pd] = std::move(Dopt); Dst_pd[pd] = std::move(Dst);
+    }
+    os << "avg     D_opt=" << opt_avg << "  D_static=" << stat_avg
+       << "  gap=" << (stat_avg - opt_avg) << " turns (optimal keep decisions vs static)\n";
+
+    // ---- 5b. Full disagreement set: every m=0 hand where optimal != static, ranked by the ------
+    // win-turn cost it contributes (P(hand) * |V_keep - mull threshold|). The agreeing hands add 0,
+    // so these rows EXACTLY decompose the D_static-D_opt gap. On the play (pd=1).
+    auto fmt_hand = [&](const std::vector<int>& h)
+    {
+        std::string s; bool first = true;
+        for (int b = 0; b < K; ++b)
+        { if (h[b] > 0) { if (!first) { s += ", "; } first = false;
+                          s += std::to_string(h[b]) + "x " + label[b]; } }
+        return s;
+    };
+    struct Diff { std::vector<int> h; double P, kv, thr, weighted; bool opt_keep, st_keep; };
+    std::vector<Diff> diffs;
+    double mass = 0.0, gap = 0.0, mass_overkeep = 0.0, mass_overmull = 0.0;
+    const std::vector<double>& Do = Dopt_pd[1];
+    for (std::size_t i = 0; i < H7.comps.size(); ++i)
+    {
+        double kv = KeepVal(tables, K, H7.comps[i], 0, 1);
+        bool ok = kv <= Do[1];
+        bool sk = ref_ai.ReferenceKeep(HandCards(rep, H7.comps[i]), 0, true);
+        if (ok == sk) { continue; }
+        double regret = std::abs(kv - Do[1]);
+        diffs.push_back({ H7.comps[i], P[i], kv, Do[1], P[i] * regret, ok, sk });
+        mass += P[i]; gap += P[i] * regret;
+        if (sk && !ok) { mass_overkeep += P[i]; } else { mass_overmull += P[i]; }
+    }
+    std::sort(diffs.begin(), diffs.end(),
+              [](const Diff& a, const Diff& b){ return a.weighted > b.weighted; });
+    os << "\n--- static vs optimal DISAGREEMENTS (on the play, mull 0) ---\n";
+    os << diffs.size() << " hand-types disagree; total draw-prob " << (100.0 * mass)
+       << "% ; win-turn cost " << gap << " (static over-keeps " << (100.0 * mass_overkeep)
+       << "%, over-mulls " << (100.0 * mass_overmull) << "%)\n";
+    os << "rank  P%      Vkeep  thr    static->opt   cost    cum%   hand\n";
+    double cum = 0.0;
+    for (std::size_t i = 0; i < diffs.size() && i < 25; ++i)
+    {
+        const Diff& d = diffs[i];
+        cum += d.weighted;
+        os << "  " << (i + 1) << "   " << (100.0 * d.P) << "   " << d.kv << "  " << d.thr
+           << "   " << (d.st_keep ? "KEEP->MULL" : "MULL->KEEP")
+           << "   " << d.weighted << "   " << (gap > 0 ? 100.0 * cum / gap : 0.0)
+           << "   " << fmt_hand(d.h) << "\n";
+    }
+
+    // ---- 5c. Label-noise diagnostic: how much draw-probability mass sits within k*stderr of the ---
+    // keep/mull threshold (where R's noise can flip the decision). Large mass here => need more R.
+    {
+        const double thr = Dopt_pd[1][1];   // on-the-play mull-0 threshold
+        double se_mass = 0.0, amb1 = 0.0, amb2 = 0.0, noise_regret = 0.0; long long amb2n = 0;
+        for (std::size_t i = 0; i < H7.comps.size(); ++i)
+        {
+            const double se = H7.se[i][1];
+            const double v  = H7.V[i][1];    // KeepVal(h,0) = V[7][h] for m=0
+            const double d  = std::abs(v - thr);
+            se_mass += P[i] * se;
+            if (se > 0 && d < se)       { amb1 += P[i]; }
+            if (se > 0 && d < 2.0 * se) { amb2 += P[i]; ++amb2n; }
+            // Expected win-turn lost to noise on this hand: probability the noisy estimate lands on
+            // the wrong side of the threshold, times the cost of being wrong (= the true gap d).
+            // Flips only happen where d is small, so each term -- and the total -- is marginal.
+            const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * 1.4142135623730951))
+                                         : (d == 0 ? 0.5 : 0.0);
+            noise_regret += P[i] * d * flip;
+        }
+        os << "\n--- label noise (R=" << cfg.rollouts << ", on the play, mull 0) ---\n";
+        os << "prob-weighted per-hand stderr = " << se_mass << " turns\n";
+        os << "draw-prob mass within 1 stderr of threshold = " << (100.0 * amb1)
+           << "% ; within 2 stderr = " << (100.0 * amb2) << "% (" << amb2n << " hand-types)\n";
+        os << "EST. win-turn lost to label noise ~= " << noise_regret
+           << " (flips only near-ties -> shortfall stays marginal; raise R to shrink)\n";
+        // Project the noise-regret at other R from this run's per-hand variance (stderr ~ 1/sqrt(R)).
+        // Shows how low R can go before the policy degrades -- the lever for higher-combination decks.
+        os << "projected regret vs R (extrapolated): ";
+        for (int Rt : { 5, 10, 20, 50, 100, 200, 500 })
+        {
+            double reg = 0.0;
+            for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            {
+                const double seR = H7.se[i][1] * std::sqrt(static_cast<double>(cfg.rollouts) / Rt);
+                const double d   = std::abs(H7.V[i][1] - thr);
+                const double flip = (seR > 0) ? 0.5 * std::erfc(d / (seR * 1.4142135623730951))
+                                              : (d == 0 ? 0.5 : 0.0);
+                reg += P[i] * d * flip;
+            }
+            os << "R=" << Rt << ":~" << reg << "  ";
+        }
+        os << "\n";
+    }
+}
+
+// ---- 6. Decisions on notable marginal hands -----------------------------------------------------
+// Printed LAST (after the profile / raw-sidecar messages), so this stays a separate call rather than
+// folding into ReportPolicyValue.
+static void ReportNotableHands(std::ostream& os, const ExhaustiveKeepConfig& cfg,
+                               const std::vector<SizeTable>& tables, const std::vector<double>& P,
+                               const std::vector<Card>& rep,
+                               const std::map<std::string, int>& bucket_of, AIEngine& ref_ai)
+{
+    const int K = static_cast<int>(rep.size());
+    const SizeTable& H7 = tables[0];
+
+    auto decide = [&](const std::vector<std::string>& names)
+    {
+        std::vector<int> h(K, 0);
+        bool ok = true;
+        for (const std::string& nm : names)
+        {
+            auto it = bucket_of.find(nm);
+            if (it == bucket_of.end()) { ok = false; break; }
+            h[it->second]++;
+        }
+        if (!ok || (int)names.size() != HAND) { os << "  (skip: " << names.size() << " cards)\n"; return; }
+        // recompute Dopt[1]/Dst[1] on the play for the threshold (pd=1).
+        const int pd = 1, M = cfg.max_mull;
+        std::vector<double> Dopt(M + 1, 0.0), Dst(M + 1, 0.0);
+        for (std::size_t i = 0; i < H7.comps.size(); ++i)
+        { double kv = KeepVal(tables, K, H7.comps[i], M, pd); Dopt[M] += P[i]*kv; Dst[M] += P[i]*kv; }
+        for (int m = M - 1; m >= 0; --m)
+            for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            { double kv = KeepVal(tables, K, H7.comps[i], m, pd);
+              Dopt[m] += P[i]*std::min(kv, Dopt[m+1]);
+              Dst[m]  += P[i]*(ref_ai.ReferenceKeep(HandCards(rep, H7.comps[i]), m, true) ? kv : Dst[m+1]); }
+        double kv0 = KeepVal(tables, K, h, 0, pd);
+        bool opt_keep = kv0 <= Dopt[1];
+        bool st_keep  = ref_ai.ReferenceKeep(HandCards(rep, h), 0, true);
+        os << "  optimal=" << (opt_keep ? "KEEP" : "MULL")
+           << " (V=" << kv0 << " vs mull " << Dopt[1] << ")   static="
+           << (st_keep ? "KEEP" : "MULL") << "   [";
+        for (std::size_t i = 0; i < names.size(); ++i) { os << (i ? ", " : "") << names[i]; }
+        os << "]\n";
+    };
+
+    os << "\n--- notable hands (on the play) ---\n";
+    decide({ "Unclaimed Territory", "Ancient Ziggurat", "Aether Vial", "Aether Vial",
+             "Aether Vial", "Aether Vial", "Predatory Sliver" });          // the 4-Vial trap
+    decide({ "Unclaimed Territory", "Ancient Ziggurat", "Aether Vial", "Predatory Sliver",
+             "Galerider Sliver", "Striking Sliver", "Sinew Sliver" });      // 2 land + 1 Vial + slivers
+    decide({ "Unclaimed Territory", "Cavern of Souls", "Sliver Hive", "Predatory Sliver",
+             "Galerider Sliver", "Muscle Sliver", "Striking Sliver" });     // good curve
+}
+
 void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                        const ExhaustiveKeepConfig& cfg)
 {
@@ -2372,179 +2579,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
            << "% saved)\n" << std::flush;
     }
 
-    // ---- 4/5. Backward-induction mulligan value: optimal keep vs the static keep rule ------------
-    // P / H7 were hoisted above (shared with the adaptive refine loop); KeepVal is file-scope. Weights
-    // P are the multivariate-hypergeometric P(draw this 7-card composition).
+    // ---- 4/5, 5b, 5c. Policy-value report + 6. notable hands ------------------------------------
+    // Both are pure reporting over the finished tables; they share one AIEngine (the static keep
+    // rule) and print at two different points, so ref_ai lives here and is passed to each.
     AIEngine ref_ai(profile, cfg.depth, cfg.budget_ms);   // static keep rule (ReferenceKeep = KeepHand)
-    auto hand_cards = [&](const std::vector<int>& h)
-    {
-        std::vector<Card> cards;
-        for (int b = 0; b < K; ++b) { for (int c = 0; c < h[b]; ++c) { cards.push_back(rep[b]); } }
-        return cards;
-    };
-
-    os << "\n--- policy value (expected win-turn; lower is better) ---\n";
-    os << "pd      D_opt   D_static   gap      keep%%_opt  keep%%_static\n";
-    double opt_avg = 0, stat_avg = 0;
-    std::array<std::vector<double>, 2> Dopt_pd, Dst_pd;
-    for (int pd = 0; pd < 2; ++pd)
-    {
-        const int M = cfg.max_mull;
-        std::vector<double> Dopt(M + 1, 0.0), Dst(M + 1, 0.0);
-        // Terminal (forced keep at the deepest mulligan): value = KeepVal, no mull option.
-        for (std::size_t i = 0; i < H7.comps.size(); ++i)
-        {
-            double kv = KeepVal(tables, K, H7.comps[i], M, pd);
-            Dopt[M] += P[i] * kv;
-            Dst[M]  += P[i] * kv;
-        }
-        long long kept_opt = 0, kept_st = 0;
-        for (int m = M - 1; m >= 0; --m)
-        {
-            for (std::size_t i = 0; i < H7.comps.size(); ++i)
-            {
-                double kv = KeepVal(tables, K, H7.comps[i], m, pd);
-                Dopt[m] += P[i] * std::min(kv, Dopt[m + 1]);
-                bool sk = ref_ai.ReferenceKeep(hand_cards(H7.comps[i]), m, pd == 1);
-                Dst[m]  += P[i] * (sk ? kv : Dst[m + 1]);
-                if (m == 0)
-                {
-                    if (kv <= Dopt[1]) { kept_opt++; }
-                    if (sk)            { kept_st++;  }
-                }
-            }
-        }
-        // keep% at m=0 by hand-count (unweighted) for a quick read of aggressiveness.
-        double kopt = 100.0 * static_cast<double>(kept_opt) / static_cast<double>(H7.comps.size());
-        double kst  = 100.0 * static_cast<double>(kept_st)  / static_cast<double>(H7.comps.size());
-        os << (pd == 1 ? "play  " : "draw  ")
-           << "  " << Dopt[0] << "   " << Dst[0]
-           << "   " << (Dst[0] - Dopt[0]) << "    " << kopt << "      " << kst << "\n";
-        opt_avg += Dopt[0] / 2.0; stat_avg += Dst[0] / 2.0;
-        Dopt_pd[pd] = std::move(Dopt); Dst_pd[pd] = std::move(Dst);
-    }
-    os << "avg     D_opt=" << opt_avg << "  D_static=" << stat_avg
-       << "  gap=" << (stat_avg - opt_avg) << " turns (optimal keep decisions vs static)\n";
-
-    // ---- 5b. Full disagreement set: every m=0 hand where optimal != static, ranked by the ------
-    // win-turn cost it contributes (P(hand) * |V_keep - mull threshold|). The agreeing hands add 0,
-    // so these rows EXACTLY decompose the D_static-D_opt gap. On the play (pd=1).
-    auto fmt_hand = [&](const std::vector<int>& h)
-    {
-        std::string s; bool first = true;
-        for (int b = 0; b < K; ++b)
-        { if (h[b] > 0) { if (!first) { s += ", "; } first = false;
-                          s += std::to_string(h[b]) + "x " + label[b]; } }
-        return s;
-    };
-    struct Diff { std::vector<int> h; double P, kv, thr, weighted; bool opt_keep, st_keep; };
-    std::vector<Diff> diffs;
-    double mass = 0.0, gap = 0.0, mass_overkeep = 0.0, mass_overmull = 0.0;
-    const std::vector<double>& Do = Dopt_pd[1];
-    for (std::size_t i = 0; i < H7.comps.size(); ++i)
-    {
-        double kv = KeepVal(tables, K, H7.comps[i], 0, 1);
-        bool ok = kv <= Do[1];
-        bool sk = ref_ai.ReferenceKeep(hand_cards(H7.comps[i]), 0, true);
-        if (ok == sk) { continue; }
-        double regret = std::abs(kv - Do[1]);
-        diffs.push_back({ H7.comps[i], P[i], kv, Do[1], P[i] * regret, ok, sk });
-        mass += P[i]; gap += P[i] * regret;
-        if (sk && !ok) { mass_overkeep += P[i]; } else { mass_overmull += P[i]; }
-    }
-    std::sort(diffs.begin(), diffs.end(),
-              [](const Diff& a, const Diff& b){ return a.weighted > b.weighted; });
-    os << "\n--- static vs optimal DISAGREEMENTS (on the play, mull 0) ---\n";
-    os << diffs.size() << " hand-types disagree; total draw-prob " << (100.0 * mass)
-       << "% ; win-turn cost " << gap << " (static over-keeps " << (100.0 * mass_overkeep)
-       << "%, over-mulls " << (100.0 * mass_overmull) << "%)\n";
-    os << "rank  P%      Vkeep  thr    static->opt   cost    cum%   hand\n";
-    double cum = 0.0;
-    for (std::size_t i = 0; i < diffs.size() && i < 25; ++i)
-    {
-        const Diff& d = diffs[i];
-        cum += d.weighted;
-        os << "  " << (i + 1) << "   " << (100.0 * d.P) << "   " << d.kv << "  " << d.thr
-           << "   " << (d.st_keep ? "KEEP->MULL" : "MULL->KEEP")
-           << "   " << d.weighted << "   " << (gap > 0 ? 100.0 * cum / gap : 0.0)
-           << "   " << fmt_hand(d.h) << "\n";
-    }
-
-    // ---- 6. Decisions on notable marginal hands -------------------------------------------------
-    auto decide = [&](const std::vector<std::string>& names)
-    {
-        std::vector<int> h(K, 0);
-        bool ok = true;
-        for (const std::string& nm : names)
-        {
-            auto it = bucket_of.find(nm);
-            if (it == bucket_of.end()) { ok = false; break; }
-            h[it->second]++;
-        }
-        if (!ok || (int)names.size() != HAND) { os << "  (skip: " << names.size() << " cards)\n"; return; }
-        // recompute Dopt[1]/Dst[1] on the play for the threshold (pd=1).
-        const int pd = 1, M = cfg.max_mull;
-        std::vector<double> Dopt(M + 1, 0.0), Dst(M + 1, 0.0);
-        for (std::size_t i = 0; i < H7.comps.size(); ++i)
-        { double kv = KeepVal(tables, K, H7.comps[i], M, pd); Dopt[M] += P[i]*kv; Dst[M] += P[i]*kv; }
-        for (int m = M - 1; m >= 0; --m)
-            for (std::size_t i = 0; i < H7.comps.size(); ++i)
-            { double kv = KeepVal(tables, K, H7.comps[i], m, pd);
-              Dopt[m] += P[i]*std::min(kv, Dopt[m+1]);
-              Dst[m]  += P[i]*(ref_ai.ReferenceKeep(hand_cards(H7.comps[i]), m, true) ? kv : Dst[m+1]); }
-        double kv0 = KeepVal(tables, K, h, 0, pd);
-        bool opt_keep = kv0 <= Dopt[1];
-        bool st_keep  = ref_ai.ReferenceKeep(hand_cards(h), 0, true);
-        os << "  optimal=" << (opt_keep ? "KEEP" : "MULL")
-           << " (V=" << kv0 << " vs mull " << Dopt[1] << ")   static="
-           << (st_keep ? "KEEP" : "MULL") << "   [";
-        for (std::size_t i = 0; i < names.size(); ++i) { os << (i ? ", " : "") << names[i]; }
-        os << "]\n";
-    };
-    // ---- 5c. Label-noise diagnostic: how much draw-probability mass sits within k*stderr of the ---
-    // keep/mull threshold (where R's noise can flip the decision). Large mass here => need more R.
-    {
-        const double thr = Dopt_pd[1][1];   // on-the-play mull-0 threshold
-        double se_mass = 0.0, amb1 = 0.0, amb2 = 0.0, noise_regret = 0.0; long long amb2n = 0;
-        for (std::size_t i = 0; i < H7.comps.size(); ++i)
-        {
-            const double se = H7.se[i][1];
-            const double v  = H7.V[i][1];    // KeepVal(h,0) = V[7][h] for m=0
-            const double d  = std::abs(v - thr);
-            se_mass += P[i] * se;
-            if (se > 0 && d < se)       { amb1 += P[i]; }
-            if (se > 0 && d < 2.0 * se) { amb2 += P[i]; ++amb2n; }
-            // Expected win-turn lost to noise on this hand: probability the noisy estimate lands on
-            // the wrong side of the threshold, times the cost of being wrong (= the true gap d).
-            // Flips only happen where d is small, so each term -- and the total -- is marginal.
-            const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * 1.4142135623730951))
-                                         : (d == 0 ? 0.5 : 0.0);
-            noise_regret += P[i] * d * flip;
-        }
-        os << "\n--- label noise (R=" << cfg.rollouts << ", on the play, mull 0) ---\n";
-        os << "prob-weighted per-hand stderr = " << se_mass << " turns\n";
-        os << "draw-prob mass within 1 stderr of threshold = " << (100.0 * amb1)
-           << "% ; within 2 stderr = " << (100.0 * amb2) << "% (" << amb2n << " hand-types)\n";
-        os << "EST. win-turn lost to label noise ~= " << noise_regret
-           << " (flips only near-ties -> shortfall stays marginal; raise R to shrink)\n";
-        // Project the noise-regret at other R from this run's per-hand variance (stderr ~ 1/sqrt(R)).
-        // Shows how low R can go before the policy degrades -- the lever for higher-combination decks.
-        os << "projected regret vs R (extrapolated): ";
-        for (int Rt : { 5, 10, 20, 50, 100, 200, 500 })
-        {
-            double reg = 0.0;
-            for (std::size_t i = 0; i < H7.comps.size(); ++i)
-            {
-                const double seR = H7.se[i][1] * std::sqrt(static_cast<double>(cfg.rollouts) / Rt);
-                const double d   = std::abs(H7.V[i][1] - thr);
-                const double flip = (seR > 0) ? 0.5 * std::erfc(d / (seR * 1.4142135623730951))
-                                              : (d == 0 ? 0.5 : 0.0);
-                reg += P[i] * d * flip;
-            }
-            os << "R=" << Rt << ":~" << reg << "  ";
-        }
-        os << "\n";
-    }
+    ReportPolicyValue(os, cfg, tables, P, rep, label, ref_ai);
 
     // (play_digest is computed earlier -- the change-detection carry needs it -- and reused here.)
 
@@ -2662,13 +2701,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         else   { os << "WARNING: failed to write " << cfg.out_raw << "\n"; }
     }
 
-    os << "\n--- notable hands (on the play) ---\n";
-    decide({ "Unclaimed Territory", "Ancient Ziggurat", "Aether Vial", "Aether Vial",
-             "Aether Vial", "Aether Vial", "Predatory Sliver" });          // the 4-Vial trap
-    decide({ "Unclaimed Territory", "Ancient Ziggurat", "Aether Vial", "Predatory Sliver",
-             "Galerider Sliver", "Striking Sliver", "Sinew Sliver" });      // 2 land + 1 Vial + slivers
-    decide({ "Unclaimed Territory", "Cavern of Souls", "Sliver Hive", "Predatory Sliver",
-             "Galerider Sliver", "Muscle Sliver", "Striking Sliver" });     // good curve
+    ReportNotableHands(os, cfg, tables, P, rep, bucket_of, ref_ai);
     os << std::flush;
 }
 
