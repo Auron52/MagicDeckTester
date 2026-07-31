@@ -137,7 +137,16 @@ static const bool  s_eval_rows_honest = EnvOn("MTG_EVAL_ROWS_HONEST");
 // a train/serve mismatch (rollouts assume heuristic discards later, the real game searches them) plus
 // clairvoyance, at real compute cost -- so it ships OFF pending a reproduced combo-discard win (the
 // Dragonstorm "don't pitch Apex/Dragonstorm" case is absent from seed 1001). See ChooseDiscard.
-static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD");
+// The cleanup discard is SEARCHED by default (MTG_SEARCHED_DISCARD=0 restores the pure heuristic).
+// It shipped off for a year because it measured worse; both reasons turned out to be defects in how
+// candidates were EVALUATED, not in searching them -- a trial state rolled out from mid-cleanup
+// (fixed: RolloutWinTurnFrom / ResumeAt::Cleanup) and a committed line left stale by the deviation
+// (fixed: s_discard_reline). With both fixed it is monotone-better: held-out overnight 39 games
+// faster / 0 slower. See docs/design/searched-cleanup-discard.md.
+static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD", true);
+// Drop the committed line when the searched discard deviates from the heuristic pick (the line was
+// searched assuming the heuristic shed). MTG_DISCARD_RELINE=0 keeps replaying the stale line.
+static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
 // MTG_DIVERGENCE_LOG=<file>: DIAGNOSTIC (diagnosis only, no play change). On the search-driven path,
 // at each real pre-combat main decision, ALSO compute the greedy d0 plan (TurnSolver::Solve) for the
 // SAME untouched state and append one JSONL record {seed,turn,diverge,search_land,search,greedy,feat[]}.
@@ -898,6 +907,16 @@ void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan
 
 int AIEngine::RolloutWinTurn(GameState trial, int max_turns, int* lands_out)
 {
+    return RolloutWinTurnFrom(std::move(trial), max_turns, GameEngine::ResumeAt::NewTurn, lands_out);
+}
+
+// `from` is where in the CURRENT turn the rollout resumes (see GameEngine::ResumeAt). Every
+// between-turns caller passes NewTurn (= the old PlayOut behaviour); a caller that captured its
+// trial state part-way through a turn MUST name its own step, or the rest of that turn is skipped
+// and the label describes a state the real game cannot reach.
+int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
+                                 GameEngine::ResumeAt from, int* lands_out)
+{
     RevealLogPause _rlp;  // rollout: suppress scry/dig reveal logging (real play only)
     HumanPlaySuppress _hps;  // rollout: play autonomously even under --claude-play (bottoming/keep parity)
     GameLogger* saved = m_logger;
@@ -922,7 +941,7 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns, int* lands_out)
     std::deque<TurnSolver::PhasePlan> saved_line = std::move(m_committed_line);
     m_committed_line.clear();
     GameEngine engine(*this);
-    int win_turn = engine.PlayOut(trial, max_turns);
+    int win_turn = engine.PlayOutFrom(trial, max_turns, from);
     if (lands_out)
     {
         int n = 0;
@@ -3223,12 +3242,22 @@ Card* AIEngine::ChooseDiscard(GameState& state)
             Player& tap = trial.ActivePlayer();
             tap.graveyard.push_back(tap.hand[j]);
             tap.hand.erase(tap.hand.begin() + j);
-            win_turn[j] = RolloutWinTurn(std::move(trial), m_max_turns);
+            // Resume IN the cleanup step: the remaining sheds of this same cleanup run first (on the
+            // heuristic, since m_in_rollout gates this searched pass off inside a rollout), so the
+            // searched candidate is only the FIRST shed and the label is a state the real game can
+            // actually reach. A plain PlayOut here would jump straight to the next turn holding the
+            // whole untrimmed hand -- on Treasure Hunt that is ~20 points of phantom Land's Edge
+            // ammunition, which scored every candidate a phantom turn-3 kill and cost a real T4 win
+            // (gi61: T4 -> T8). See docs/design/searched-cleanup-discard.md.
+            win_turn[j] = RolloutWinTurnFrom(std::move(trial), m_max_turns,
+                                             GameEngine::ResumeAt::Cleanup);
             if (win_turn[j] < best_win) { best_win = win_turn[j]; }
         }
-        if (TurnSolver::GetTraceSolve())
+        static const bool s_discard_trace = EnvOn("MTG_DISCARD_TRACE");
+        if (TurnSolver::GetTraceSolve() || s_discard_trace)
         {
-            std::cerr << "[discard_trace depth=" << m_lookahead_depth << "]\n";
+            std::cerr << "[discard_trace turn=" << state.turn_number
+                      << " depth=" << m_lookahead_depth << " heur=" << ap.hand[heur].m_name << "]\n";
             for (int j = 0; j < hand_size; ++j)
             {
                 std::cerr << "  discard " << ap.hand[j].m_name << " -> win=" << win_turn[j]
@@ -3240,7 +3269,18 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         if (win_turn[heur] == best_win) { return &ap.hand[heur]; }
         for (int j = 0; j < hand_size; ++j)
         {
-            if (win_turn[j] == best_win) { return &ap.hand[j]; }
+            if (win_turn[j] == best_win)
+            {
+                // DEVIATION from the heuristic. Every plan in the committed line was searched under
+                // SimulateEndAndStartNextTurn, whose cleanup sheds the HEURISTIC card -- so the line
+                // waiting to be replayed assumes a hand this discard is about to falsify, and the
+                // rollout that justified this pick assumed no such line (RolloutWinTurnFrom starts
+                // the trial on an empty one). Replaying it anyway is a train/serve split: the label
+                // came from a fresh search, the realised game from a stale plan. Drop the line so
+                // next turn re-searches the state we actually created.
+                if (s_discard_reline) { m_committed_line.clear(); }
+                return &ap.hand[j];
+            }
         }
     }
     return &ap.hand[heur];

@@ -25,8 +25,10 @@
 //     its fetch-target search cap. So the search branches over every tutor/fetch target.
 // Expect a large branching blow-up -- run with a high budget. Pure DECISION/POLICY hooks that
 // pick ONE option the search never alternatives over (cast-ORDER, vial-charge, scry-keep,
-// discard-order, combat) are NOT yet opened here: making the search branch on them needs new
-// enumeration (the ordering/combat work items), not just a wider gate.
+// combat) are NOT yet opened here: making the search branch on them needs new enumeration
+// (the ordering/combat work items), not just a wider gate. Cleanup DISCARD has since left this
+// list -- it is searched by default (AIEngine::ChooseDiscard, MTG_SEARCHED_DISCARD), with this
+// hook's ranked pick as its prune and tie-break.
 // Human-play suppression, shared by both the global and per-gate forms: in a --claude-play
 // session (MTG_HUMAN_PLAY set) the engine's clairvoyant bottoming/keep rollout is an ENGINE
 // decision the human never makes, so un-pruning is suppressed there (a HumanPlaySuppress guard
