@@ -79,6 +79,31 @@ Greedy-max is a reasonable default; it should not be the only reachable answer. 
 already asks for a count in `[0, max]`, so the enumeration exists — it is simply not offered to the
 search.
 
+### MEASURED 2026-07-31: greedy-max is DOMINANT in the current model, so there is nothing to search
+
+The "no second main" clause above is the whole argument, and it was an assumption. It is now a
+measurement. `ApplyFirebreathing` takes its `ManaPool` **by value** and never taps a real source, so
+the pump is free unless something later in the turn wants that mana — i.e. unless a post-combat main
+casts on a turn that pumped. `MTG_FB_TRACE=1` (diagnostic, no play change; `GameEngine::MainPhase`
+compares `spells_cast_this_turn` across main 2 against `g_fb_activations_this_turn`) counts exactly
+that:
+
+| deck | pumping combats | main-2 casts after a pump |
+|---|---|---|
+| Dragonstorm | 88 | **0** |
+| Dragons | 252 | **0** |
+
+300 games each, seed 4004, d3. Both firebreathing cards (Scourge of Valkas, Lathliss) are in both
+decks, so the sample is real, not vacuous.
+
+With no competing use, every extra activation is weakly more face damage at zero cost, so
+greedy-max **weakly dominates every smaller count** — the alternatives a search would enumerate are
+dominated options, not rival answers. This is the one #6-class decision that does *not* want a
+branch; the `FirebreatheActivations` hook stays as the escape hatch for a deck that ever does need
+to hold mana (a real second main, an instant), and `MTG_FB_TRACE` is the standing check that says
+when that day arrives. If it ever prints `DOUBLE-SPEND`, the pool-not-tapped shortcut has become a
+modelling bug and *then* the count becomes a real decision.
+
 ## Rule 3 — scry/surveil disposition composition (PARTIALLY PROVIDER-OWNED)
 
 `HeuristicTopDisposition` (`src/core/SpellEffects.h`) composes provider answers into a placement:

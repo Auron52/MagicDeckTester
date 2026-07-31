@@ -172,9 +172,12 @@ public:
         std::function<int(const std::vector<Card>&, int, const std::vector<char>&, int, int)>;
     void SetExternalBottomChooser(ExternalBottomChooser c) { m_external_bottom_chooser = std::move(c); }
 
-    // True if a charge counter should be added to `vial` this upkeep (called by
-    // GameEngine). Defaults to the heuristic; consults the external vial chooser if set.
-    bool DecideVialCharge(const GameState& state, const Permanent& vial) const;
+    // True if a charge counter should be added to `vial` this upkeep (called by GameEngine).
+    // SEARCHED with lookahead (roll the game out under charge and hold, earliest win wins, the
+    // heuristic breaks ties -- MTG_SEARCHED_VIAL=0 for the pure heuristic); the heuristic alone at
+    // d0 and inside rollouts. Consults the external vial chooser if set. Non-const because the
+    // searched pass rolls out through this same engine.
+    bool DecideVialCharge(const GameState& state, const Permanent& vial);
 
     // Mulligan keep-model GENERATOR hook (analyzer-only): clairvoyant "keep value" of an
     // opening hand. Bottoms `mulligan_count` cards using the SAME lookahead bottoming that

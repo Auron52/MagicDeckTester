@@ -2032,6 +2032,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         {
             std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
             if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
+            // MTG_TUTOR_WIDTH=<n>: cap the target group at the provider's n most-preferred targets.
+            // A/B LEVER for the branching root-cause (measured 2026-07-31, MTG_BRANCH_STATS on
+            // Hinata): an unfiltered tutor (Gamble, no tutor_types) offers EVERY distinct library
+            // name -- ~30 options once Hinata is online -- and because the group is one factor of
+            // the plan odometer that ~30 MULTIPLIES the whole rest of the turn. Gamble alone was
+            // 75% of Hinata's total enumeration odometer from 3.7% of its EnumeratePlans calls.
+            // Default 0 = UNCAPPED (byte-identical); the cap is a pure COST prune -- the provider
+            // already orders candidates best-first (SituationalCardRank), so n=1 is exactly the
+            // heuristic pick and larger n keeps the search's freedom in preference order.
+            static const std::size_t s_tutor_width = []() -> std::size_t
+            {
+                const char* v = std::getenv("MTG_TUTOR_WIDTH");
+                if (v == nullptr || *v == '\0') { return 0; }
+                const int n = std::atoi(v);
+                return n < 1 ? 0 : static_cast<std::size_t>(n);
+            }();
+            if (s_tutor_width > 0 && cands.size() > s_tutor_width) { cands.resize(s_tutor_width); }
             for (const std::string& tgt : cands)
             {
                 Action a;
