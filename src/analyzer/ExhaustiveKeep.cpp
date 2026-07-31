@@ -1145,6 +1145,80 @@ static PruneCarry LoadPruneCarry(const Decklist& deck, const ExhaustiveKeepConfi
     return prune;
 }
 
+// ---- Probe carry: reuse a COMPLETE recommend-probe chunk (<out_raw>.probe) as this gen's r=0 slice ----
+// --gen-mulligan recommend already sampled EVERY cell once (R=1) at the SAME seed/depth/budget/bucketing/
+// commit, and the rollout seed is a pure fn of (seed_base,r,w,pd) -- so the probe's r=0 IS byte-identically
+// this gen's r=0. Preload it and the Pass-A floor rolls only r>=1 (honours the loaded count), saving
+// one rollout/cell with ZERO change to output. Gated hard: probe/floor_complete markers + fingerprints +
+// play_digest (reuse ONLY if play is unchanged -- the byte-identical precondition); any mismatch is
+// silently ignored (fresh run).
+//
+// KNOWN HOLE in that gate: play_digest hashes only a 64-game battery, never depth/budget_ms/max_turns,
+// so a probe rolled at a DIFFERENT depth passes it -- measured at 16/791 cells on burn. See
+// docs/design/rollout-config-digest-depth-blindness.md. test/lib/keepgen_check.sh therefore pins the
+// depth by hand rather than trusting the gate.
+//
+// Returns the number of cell-sides preloaded (0 = nothing carried). The caller owns what happens next:
+// resume_loaded and recompute() are its state, not this function's.
+static long long LoadProbeCarry(const Decklist& deck, const ExhaustiveKeepConfig& cfg,
+                                const EquivReport& eq, std::vector<SizeTable>& tables,
+                                int K, int min_size, const std::string& play_digest)
+{
+    const std::string probe_path = cfg.out_raw + ".probe";
+    std::ifstream pf(probe_path);
+    if (!pf) { return 0; }
+    nlohmann::json pj; bool okp = true;
+    try { pf >> pj; } catch (...) { okp = false; }
+    if (!okp || !pj.contains("meta") || !pj.contains("sizes")) { return 0; }
+
+    const PoolFp pfp = ComputePoolFp(deck, eq, K);
+    const auto& pm = pj["meta"];
+    const bool match = pm.value("probe", false) && pm.value("floor_complete", false)
+                    && pm.value("bucket_fp", 0ULL) == pfp.bucket
+                    && pm.value("deck_fp", 0ULL) == pfp.deck
+                    && pm.value("seed_base", ~0ULL) == cfg.seed
+                    && pm.value("K", -1) == K
+                    && pm.value("max_mull", -1) == cfg.max_mull
+                    && pm.value("equiv_seed", 0ULL) == cfg.equiv_seed
+                    && pm.value("play_digest", std::string()) == play_digest;
+    if (!match)
+    {
+        std::cerr << "[keepgen] PROBE-CARRY: " << probe_path << " present but fingerprint/play_digest"
+                     " MISMATCH -- ignoring (running fresh)\n" << std::flush;
+        return 0;
+    }
+
+    long long carried = 0;
+    for (const auto& sz : pj["sizes"])
+    {
+        const int H = sz.value("H", 0);
+        if (H > HAND || H < min_size) { continue; }
+        SizeTable& t = tables[HAND - H];
+        for (const auto& e : sz["entries"])
+        {
+            auto it = t.index.find(e["comp"].get<std::vector<int>>());
+            if (it == t.index.end()) { continue; }
+            const int i = it->second;
+            for (int pd = 0; pd < 2; ++pd)
+            {
+                const long long c = e["count"][pd].get<long long>();
+                if (c <= 0) { continue; }
+                t.sum[i][pd]   = e["sum"][pd].get<double>();
+                t.sumsq[i][pd] = e["sumsq"][pd].get<double>();
+                t.cnt[i][pd]   = c;
+                ++carried;
+            }
+        }
+    }
+    if (carried > 0)
+    {
+        std::cerr << "[keepgen] PROBE-CARRY: reused " << carried << " cell-sides (r=0/cell) from "
+                  << probe_path << " -> rolling only r>=1 (byte-identical; saves 1 rollout/cell)\n"
+                  << std::flush;
+    }
+    return carried;
+}
+
 void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                        const ExhaustiveKeepConfig& cfg)
 {
@@ -1881,74 +1955,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     }
 
-    // ---- Probe carry: reuse a COMPLETE recommend-probe chunk (<out_raw>.probe) as this gen's r=0 slice ----
-    // --gen-mulligan recommend already sampled EVERY cell once (R=1) at the SAME seed/depth/budget/bucketing/
-    // commit, and the rollout seed is a pure fn of (seed_base,r,w,pd) -- so the probe's r=0 IS byte-identically
-    // this gen's r=0. Preload it and the Pass-A floor below rolls only r>=1 (honours the loaded count), saving
-    // one rollout/cell with ZERO change to output. Gated hard: probe/floor_complete markers + fingerprints +
-    // play_digest (reuse ONLY if play is unchanged -- the byte-identical precondition); any mismatch is
-    // silently ignored (fresh run). Skipped if a journal/out_raw resume already loaded state (same run
-    // continuing), and opt-out-able via MTG_KEEP_NO_PROBE_CARRY for an A/B.
+    // ---- Probe carry (<out_raw>.probe): see LoadProbeCarry above --------------------------------
+    // Skipped when a journal/out_raw resume already loaded state (the same run continuing), and
+    // opt-out-able via MTG_KEEP_NO_PROBE_CARRY for an A/B.
     if (cfg.use_probe_carry && !cfg.recommend_only && resume_loaded == 0 && !cfg.out_raw.empty()
         && !EnvOn("MTG_KEEP_NO_PROBE_CARRY"))
     {
-        const std::string probe_path = cfg.out_raw + ".probe";
-        std::ifstream pf(probe_path);
-        if (pf)
+        const long long carried = LoadProbeCarry(deck, cfg, eq, tables, K, min_size, play_digest);
+        if (carried > 0)
         {
-            nlohmann::json pj; bool okp = true;
-            try { pf >> pj; } catch (...) { okp = false; }
-            if (okp && pj.contains("meta") && pj.contains("sizes"))
-            {
-                const PoolFp pfp = ComputePoolFp(deck, eq, K);
-                const auto& pm = pj["meta"];
-                const bool match = pm.value("probe", false) && pm.value("floor_complete", false)
-                                && pm.value("bucket_fp", 0ULL) == pfp.bucket
-                                && pm.value("deck_fp", 0ULL) == pfp.deck
-                                && pm.value("seed_base", ~0ULL) == cfg.seed
-                                && pm.value("K", -1) == K
-                                && pm.value("max_mull", -1) == cfg.max_mull
-                                && pm.value("equiv_seed", 0ULL) == cfg.equiv_seed
-                                && pm.value("play_digest", std::string()) == play_digest;
-                if (match)
-                {
-                    long long carried = 0;
-                    for (const auto& sz : pj["sizes"])
-                    {
-                        const int H = sz.value("H", 0);
-                        if (H > HAND || H < min_size) { continue; }
-                        SizeTable& t = tables[HAND - H];
-                        for (const auto& e : sz["entries"])
-                        {
-                            auto it = t.index.find(e["comp"].get<std::vector<int>>());
-                            if (it == t.index.end()) { continue; }
-                            const int i = it->second;
-                            for (int pd = 0; pd < 2; ++pd)
-                            {
-                                const long long c = e["count"][pd].get<long long>();
-                                if (c <= 0) { continue; }
-                                t.sum[i][pd]   = e["sum"][pd].get<double>();
-                                t.sumsq[i][pd] = e["sumsq"][pd].get<double>();
-                                t.cnt[i][pd]   = c;
-                                ++carried;
-                            }
-                        }
-                    }
-                    if (carried > 0)
-                    {
-                        resume_loaded += carried;   // engages the Pass-A "start from loaded count" path below
-                        recompute();
-                        std::cerr << "[keepgen] PROBE-CARRY: reused " << carried << " cell-sides (r=0/cell) from "
-                                  << probe_path << " -> rolling only r>=1 (byte-identical; saves 1 rollout/cell)\n"
-                                  << std::flush;
-                    }
-                }
-                else
-                {
-                    std::cerr << "[keepgen] PROBE-CARRY: " << probe_path << " present but fingerprint/play_digest"
-                                 " MISMATCH -- ignoring (running fresh)\n" << std::flush;
-                }
-            }
+            resume_loaded += carried;   // engages the Pass-A "start from loaded count" path below
+            recompute();
         }
     }
 
