@@ -1603,10 +1603,17 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
 // DEPTH-GATED: searched play only (see TurnSolver::SetSearchedPlay). MTG_NO_CANTRIP_FIRST=1 is the
 // off-switch for the A/B; MTG_CANTRIP_FIRST=1 forces it on even at depth 0 (measurement only --
 // d0 measures worse, which is the reason for the gate).
-static std::atomic<bool> g_searched_play{false};
+// THREAD-LOCAL, not a shared global. BatchRunner::RunManifest flattens every game of every job into
+// ONE work list, so a depth-0 game and a depth-3 game of different jobs run CONCURRENTLY in the same
+// process -- and this value is written by each AIEngine constructor. As a shared global, a d0 game
+// starting mid-flight would flip the flag under a d3 game's search, making play depend on thread
+// interleaving and breaking the harness's determinism/thread-invariance contract. Each worker builds
+// and uses its own engines, so thread_local is exactly the right scope.
+// See docs/design/searched-play-flag-thread-scope.md.
+static thread_local bool g_searched_play = false;
 void TurnSolver::SetSearchedPlay(bool enable)
 {
-    g_searched_play.store(enable, std::memory_order_relaxed);
+    g_searched_play = enable;
 }
 
 static bool CantripFirstEnabled()
@@ -1614,7 +1621,7 @@ static bool CantripFirstEnabled()
     static const bool off   = EnvOn("MTG_NO_CANTRIP_FIRST");
     static const bool force = EnvOn("MTG_CANTRIP_FIRST");
     if (off) { return false; }
-    return force || g_searched_play.load(std::memory_order_relaxed);
+    return force || g_searched_play;
 }
 
 // A plain cantrip: the breakpoint class this rule targets (site 3 of PlanOpensBreakpoint -- a
