@@ -270,7 +270,12 @@ static double ComputeHandScore(const std::vector<Card>& hand,
 }
 
 AIEngine::AIEngine(MulliganProfile profile, int lookahead_depth, int budget_ms)
-    : m_profile(std::move(profile)), m_lookahead_depth(lookahead_depth), m_budget_ms(budget_ms) {}
+    : m_profile(std::move(profile)), m_lookahead_depth(lookahead_depth), m_budget_ms(budget_ms)
+{
+    // Run-level: searched play (depth > 0) enables cantrip-first ordering in BOTH the searched
+    // plans and the rollout leaf policy. See TurnSolver::SetSearchedPlay.
+    TurnSolver::SetSearchedPlay(lookahead_depth > 0);
+}
 
 void AIEngine::OnGameEnd(const GameState& state, int win_turn)
 {

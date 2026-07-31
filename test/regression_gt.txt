@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 61cd9a3  date 2026-07-31
+# Regression ground truth -- commit 3b09de2  date 2026-07-31
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -20,8 +20,8 @@ antilife_smoke_d0_s1001=5.5820/fcddbc3ccb346733
 antilife_smoke_d3_s1001=4.2200/142a40e97cc48f60
 antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
 hinata_smoke_d0_s1001=7.0790/a4e4cb40e5d85841
-hinata_smoke_d3_s1001=5.9200/64c776e12c3f3799
-hinata_smoke_d5_s1001=6.0533/82762042b7c9dafb
+hinata_smoke_d3_s1001=5.9000/d73c9c001eaa6c48
+hinata_smoke_d5_s1001=6.0267/b342d4a4a6f29b03
 dragonstorm_smoke_d0_s1001=5.4300/16986eaeb61de74e
 dragonstorm_smoke_d3_s1001=4.5133/f0e29dbe4e7a8b8c
 dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
@@ -59,10 +59,10 @@ antilife_regression_d3_s3003=4.2733/fae8f7672be975ba
 antilife_regression_d5_s2002=4.3160/813eb57410e13781
 antilife_regression_d5_s3003=4.2560/54b6ba9626291185
 hinata_regression_d0_s2002=7.1500/001f525039d5cf55
-hinata_regression_d3_s2002=5.9150/70440c3e47f7cecd
-hinata_regression_d3_s3003=5.8650/13dedc54e5ec938a
-hinata_regression_d5_s2002=5.8900/c8a54c2abee1f041
-hinata_regression_d5_s3003=5.8200/004413ccffe84c00
+hinata_regression_d3_s2002=5.9050/a5b3b758cacef10d
+hinata_regression_d3_s3003=5.8650/94f52fc604515804
+hinata_regression_d5_s2002=5.8500/7dbe73e8003d3f27
+hinata_regression_d5_s3003=5.8100/84fe9b9f37c766a4
 dragonstorm_regression_d0_s2002=5.4650/ee8f05ecde76fb8b
 dragonstorm_regression_d3_s2002=4.3367/42e2b2ffa993a091
 dragonstorm_regression_d3_s3003=4.4767/d691c989f057d8bd
@@ -144,14 +144,14 @@ hinata_overnight_d0_s4004=7.1410/f033900b0f987ba8
 hinata_overnight_d0_s5005=7.0820/25c4e0666a27019d
 hinata_overnight_d0_s6006=7.0915/83e33be15e923d58
 hinata_overnight_d0_s7007=7.1570/cbf9372c9b0e17aa
-hinata_overnight_d3_s4004=5.9650/79ffe1e9108acb9f
-hinata_overnight_d3_s5005=5.9175/f097494023efafbf
-hinata_overnight_d3_s6006=5.9850/77ecea5a8ee58fb3
-hinata_overnight_d3_s7007=6.0000/aea11f5747bc70a9
-hinata_overnight_d5_s4004=5.9033/f29958562e24ef99
-hinata_overnight_d5_s5005=5.8567/151b48f4a5fdcfcf
-hinata_overnight_d5_s6006=5.9700/d695c974a24a5723
-hinata_overnight_d5_s7007=5.9133/6e1d624884dc1fd1
+hinata_overnight_d3_s4004=5.9425/830d708b4de8b4b3
+hinata_overnight_d3_s5005=5.9125/b17c3c945e088984
+hinata_overnight_d3_s6006=5.9775/f73b0f1304c63b77
+hinata_overnight_d3_s7007=5.9775/4f421609bca689e4
+hinata_overnight_d5_s4004=5.8967/56c5c9d15e7c3a52
+hinata_overnight_d5_s5005=5.8667/c79523a6b8f4b7e7
+hinata_overnight_d5_s6006=5.9500/10eed670c3aebdee
+hinata_overnight_d5_s7007=5.8900/8c93717e1a4fb002
 dragonstorm_overnight_d0_s4004=5.4035/624b5581a33a44d1
 dragonstorm_overnight_d0_s5005=5.4415/cf6c78dc2f3a3bb0
 dragonstorm_overnight_d0_s6006=5.5225/0f199fd1165fdfa1
