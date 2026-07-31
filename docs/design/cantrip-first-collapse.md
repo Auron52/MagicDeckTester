@@ -257,3 +257,66 @@ of only the top-k), never more enumeration.
 
 Note the class-OFF non-monotonicity persists (unlimited 5.8900 vs 320ms 5.8400), which is the
 separate open lead recorded above.
+
+---
+
+## FINAL RE-MEASURE 2026-07-31 — the class stays OFF, and now for a quantified reason
+
+Re-measured on held-out (overnight) seeds at the shipped configuration, twice: once before the
+tutor axis landed and once after.
+
+| configuration | class ON − OFF (searched depths, 8 cases) |
+|---|---|
+| before this session's work (recorded above) | **+0.0090** |
+| after searched Ponder / scry / Vial, tutor still collapsed | **−0.0009** |
+| after the tutor axis (shipped default, W=6) | **+0.0717** |
+
+The middle row answers the standing question — the class did *not* get less affordable when the
+Ponder/scry/Vial branches landed; it drifted to neutral. The third row is the informative one:
+**freeing enumeration budget made the class WORSE, not better.**
+
+### Why: the budget went somewhere that pays better
+
+The falsifiable budget test (`test/cantrip_budget_ab.sh`) was built to check whether the class is
+budget-limited by capping the tutor group. It returned identical results at every width, which
+turned out to be the discovery that the tutor variants were being generated and then discarded by
+the plan dedup at all (`searched-action-subdecisions.md`). Fixing that turned the tutor target into
+a real searched decision — and it now competes for the same per-decision node budget.
+
+At **unlimited** budget both features are genuine and independent (Hinata, 100 games, seed 4004, d5):
+
+|  | tutor W=1 | tutor W=6 |
+|---|---|---|
+| class OFF | 5.9300 | 5.9100 |
+| class ON | 5.8400 | 5.8200 |
+
+class −0.0900, tutor axis −0.0200, additive. So the cantrip class is worth **more** than the tutor
+axis when neither is rationed. At the shipped budget the ranking inverts completely: the tutor axis
+buys −0.1218 on Hinata held-out while the class costs +0.0717.
+
+That is the whole finding, and it is a cost-structure difference, not a quality one:
+
+- the **tutor axis is additive** — `P + W` plans, one extra rollout each, no new tree;
+- the **cantrip class is a nested re-solve** — measured at +113% interior nodes for +2% rollout
+  calls, moving the node budget from 25% to 43% interior expansion.
+
+So the class buys the better answer and charges for it in the currency the search is shortest of.
+
+### Mitigation: attack the interior cost, not the leaf and not the width
+
+The earlier "the limiter is the LEAF" reading needs the same correction the width reading got: the
+class's own cost is **interior expansion**, not leaf evaluation (+113% vs +2%). A cheaper leaf helps
+only by freeing budget generally; it does not make a continuation cheaper to open. Candidates, in
+the order the evidence supports:
+
+1. **Stop re-enumerating per continuation.** `EnumerateBreakpointPlans` already memoises on
+   `BuildBreakpointKey`; measure its hit rate for this class specifically before assuming it helps.
+2. **Score continuations with the O(1) learned value model instead of a nested search.** Hinata
+   *has* a `Hinata2.value.json` sibling but its profile carries **no `value_play` block**, so the
+   value leaf is inert for Hinata play today. That is a concrete, already-built lever that has never
+   been pointed at this deck.
+3. **Shortlist continuations cheaply, verify only the top-k deeply** — the standard fix when the
+   cost is in expanding candidates rather than judging them.
+
+Width, `MTG_BP_MAXBASE` and the wave ranks remain measured NOT to be the answer. Re-running the
+class after any of the three above is a single command: `bash test/cantrip_budget_ab.sh`.
