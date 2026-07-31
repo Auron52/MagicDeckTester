@@ -2785,7 +2785,13 @@ void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_in
             return;
         }
     }
-    ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool);
+    // Provider-owned activation count (FirebreatheActivations). Index 0 is the ranked pick; a
+    // negative value means the greedy maximum, which is the default -> byte-identical. The rollout
+    // (TurnSolver's SimulateCombat) reads the SAME hook, so executor and rollout pump alike.
+    const std::vector<int> fb = ResolveProvider(state).FirebreatheActivations(state);
+    const int fb_k = fb.empty() ? -1 : fb.front();
+    if (fb_k < 0) { ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool); }
+    else          { ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, fb_k); }
 }
 
 // ---- Mana ----
@@ -3186,7 +3192,10 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     // card and the greedy/d0 path is byte-identical. It is also the FALLBACK + the tie-break for the
     // searched pass below. required_pieces comes from this engine's profile (the rollout reads the
     // identical set via GameState::m_required_pieces, stamped in HandleMulligan).
-    const int heur = SelectCleanupDiscardIndex(state, &m_profile.required_pieces);
+    const std::vector<int> cand =
+        ResolveProvider(state).CleanupDiscardCandidates(state, &m_profile.required_pieces);
+    const int heur = cand.empty() ? -1 : cand.front();
+    if (heur < 0) { return &ap.hand[0]; }
     const int hand_size = static_cast<int>(ap.hand.size());
 
     // SEARCHED cleanup discard (mirrors the lookahead bottomer, BottomCards): roll out a full
