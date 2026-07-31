@@ -89,6 +89,21 @@ variables, so a clean report is **not** proof a script runs — it is proof of t
 specific, recurring rot. Currently 52 dead paths across 11 scripts, all from the per-deck folder
 move; those scripts are unverified one-off A/Bs, so they are reported rather than blind-edited.
 
+## `capture_decisions.py` + `capture_results.py`
+
+```
+python3 test/lib/capture_decisions.py /tmp/before.txt   # 11,511 decision frames, 23 wire types
+python3 test/lib/capture_results.py   /tmp/before_r.txt # 106 result frames + the --log-dir traces
+# ...change src/main.cpp, ./build.sh...
+python3 test/lib/capture_decisions.py /tmp/after.txt  && cmp /tmp/before.txt /tmp/after.txt
+python3 test/lib/capture_results.py   /tmp/after_r.txt && cmp /tmp/before_r.txt /tmp/after_r.txt
+```
+
+**Run both.** `capture_decisions.py` covers every decision emitter but stops at decisions — it never
+runs a game to completion, so it never reaches the terminal `<<<CLAUDE_RESULT>>>` frame or the
+reference file a `--log-dir` run writes. Those are different emitters, and a refactor can break them
+while all 11,511 decision frames stay byte-identical. `capture_results.py` is the other half.
+
 ## `keepgen_check.sh`
 
 ```
