@@ -203,11 +203,31 @@ really was Debug; the orphans really are referenced by nothing but this document
   Both files are in `mtg-analyze` only, never `mtg`/`mtg-core`, so no analyzer extraction can reach
   a play digest; the suite was still run (156/156, 27/27) before pushing.
 
-Still open: the rest of B1 — `RunExhaustiveKeep`'s remaining bulk (the `MTG_KEEP_PRIOR_RAW`
-change-detection carry is the largest single block left at ~256 LOC, but ~9 of its locals escape into
-the refine loop, so it needs a carry struct and a new verification path rather than a verbatim move),
-`RunKeepMerge` (958), `RunClaudePlay` (1083 — note `test/lib/capture_decisions.py` from B2 is already
-the exact verifier for it), and B4 item 1 (the TurnSolver split). Remaining C1 units.
+- **B1 continued: `RunKeepMerge` 958 → 615** (`3af9fa4`) and **`RunClaudePlay` 1151 → 1018**
+  (`d6c98a9`). A third of `RunKeepMerge` was one opt-in diagnostic (`MTG_KEEP_SIM_ADAPTIVE_BOTTOM`)
+  that writes nothing and always returned, so it lifts out whole and the caller returns after the
+  call. From `RunClaudePlay`: the four side-channel spec parsers, the chooser teardown, and the two
+  output writers.
+  **Two verification lessons worth keeping.** First, an opt-in path must be *entered and shown to do
+  work* — the sim path was added as a fifth harness arm and the check only means something because it
+  printed real numbers (+0.0157t blend regret, 50.9–31.8 % sub-table savings), not because it exited 0.
+  Second, **`test/lib/capture_decisions.py` alone is NOT sufficient for `main.cpp`**: it stops at
+  decision frames and never reaches the terminal `<<<CLAUDE_RESULT>>>` block or the `--log-dir` trace
+  file, which is exactly what `WriteClaudePlayResult` / `WriteClaudePlayTrace` emit. The second A/B
+  (replay all 138 references to completion with `--log-dir`, diff the result frame plus the written
+  trace bytes; 106 result frames) is the other half and belongs with it.
+
+Still open: the rest of B1.
+- `RunExhaustiveKeep` (1959) — the `MTG_KEEP_PRIOR_RAW` change-detection carry is the largest single
+  block left at ~256 LOC, but ~9 of its locals escape into the refine loop (27 later references), so it
+  needs a carry struct and a new verification path rather than a verbatim move.
+- `RunClaudePlay` (1018) — the remaining ~760 LOC is eighteen chooser lambdas. **Do not move them
+  piecemeal:** the engine stores their addresses in `g_play_*` globals, so a lambda that moves out of
+  the function's stack frame dangles. The extraction that works is an owning `struct PlayChoosers`
+  built in the caller plus a context struct for what they capture (`decisions_made`, `choices`,
+  `trace`, `main_ordinal`, `state`, `reveal_count`, `log_dir`) — a design change, not a move, and it
+  needs both halves of the verification above.
+- B4 item 1 (the TurnSolver split). Remaining C1 units.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
