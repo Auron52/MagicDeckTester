@@ -39,7 +39,8 @@ The harness lives in `test/`:
 All runs are **deterministic and thread-invariant** — same seed + budget ⇒ same
 result on any core count. That is what makes ground-truth comparison and A/B
 testing valid. Every search run (depth > 0) uses `--lookahead-bottoming`. Build
-Release first: `cmake --build build --config Release`.
+Release first: `./build.sh` (never raw `cmake` — see CLAUDE.md; a bare `cmake` leaves
+`CMAKE_BUILD_TYPE` empty and silently builds at `-O0`).
 
 ---
 
@@ -256,11 +257,16 @@ The rules — all of them, every time:
    allowed — measure the mode you are accepting, on **its own seeds**. Different
    seeds expose different games (in practice a game going from a win to unwon
    appeared at exactly one overnight seed and nowhere in smoke/regression).
-4. **Surface the maximal moves explicitly.** List every `X → -1` (a win became
-   unwon — the maximal slowdown) and `-1 → X` (unwon became a win — the maximal
-   speedup). These are the loudest per-game signal an avg can bury; **every win that
-   became unwon must be individually root-caused** before you accept, no matter how
-   net-positive the totals are.
+4. **Surface the maximal moves explicitly — but they are not a separate category.**
+   List every `X → -1` (a win became unwon) and `-1 → X` (unwon became a win). Under the
+   metric a win becoming unwon is **just the maximal slowdown** (win turn replaced by the
+   `max_turns+1` loss score) and is already inside the average — `audit_changed_games.py`
+   says exactly this at the top of the file. So surface them as the loudest per-game
+   signal an avg can bury, and use them to hunt bugs, but **decide on the NET
+   loss-penalized delta**; do not gate an accept on root-causing each one, and do not
+   report them as a distinct harm alongside the average (they would be double-counted).
+   A cluster of them at `max_turns`/`max_turns-1` is usually knife-edge games at the
+   horizon, each costing only +1 or +2, not a new failure mode.
 5. **Diff against the right baseline: the prior committed code (the change you
    are certifying), not the stale ground truth.** When the GT is itself stale
    (e.g. it predates an earlier switch), diffing the new binary against the stale
@@ -272,8 +278,22 @@ The rules — all of them, every time:
    the baseline by checking out the **parent revision of the changed files**
    (`git checkout <C>~1 -- <files>`), and sanity-check that a config you *expect*
    to move actually shows nonzero diffs before believing any clean result.
+7. **Space base seeds by AT LEAST the games-per-job, or your sample silently
+   collapses.** A game's identity is `base_seed + game_index`, so a job with base
+   `B` and `N` games covers effective seeds `[B, B+N-1]`. Base seeds spaced closer
+   than `N` make consecutive jobs **replay the same games**. A 2026-08-01 goblins run
+   used bases `100001..100100` at 1000 games/job and believed it had 100,000 games per
+   arm; it had **1,099 distinct games, each counted up to 100 times**, which inflated a
+   1.3σ result into a reported −14.4σ. Use `base = S0 + i*N`, key the analysis on
+   `base+gi` rather than on the job, and assert
+   `distinct(base+gi) == sum(games)`. **A zero-variance paired result is the tell** —
+   an average over exactly `N` games is an integer turn-sum / `N`, so identical
+   per-seed deltas across supposedly independent seeds mean one game seen `k` times.
 
-Recipe (isolates THIS change; works whether or not it is already committed):
+Recipe (isolates THIS change; works whether or not it is already committed).
+**Prefer a `git worktree` over checking files out in place** — `git worktree add /tmp/wt_<sha> <sha>`
+then `bash build.sh` inside it gives you a second binary without ever touching the working tree,
+which sidesteps the hard rule against `git checkout` over uncommitted work:
 
 ```bash
 # NEW arm = current HEAD (your change). Dump + normalize per-game win turns:
@@ -285,10 +305,10 @@ MTG_DUMP_WINS=1 ./build/Release/mtg <deck> --seed S --games N --depth D \
 # committed as <C>, check out its PARENT for the touched files (NOT git stash —
 # that is a no-op on committed files and silently gives you two identical arms):
 git checkout <C>~1 -- <changed files>
-cmake --build build --config Release
+./build.sh
 MTG_DUMP_WINS=1 ./build/Release/mtg <deck> ... --threads 1 2>&1 \
   | sed -E 's/.*gi=([0-9]+) wt=(-?[0-9]+).*/\1 \2/' | sort -n > old.txt
-git checkout HEAD -- <changed files>; cmake --build build --config Release
+git checkout HEAD -- <changed files>; ./build.sh
 
 # SANITY (rule 6): the arms MUST differ for a config you expect to change.
 diff old.txt new.txt | grep -c '^[<>]'        # 0 here on an expected-change config => invalid A/B
