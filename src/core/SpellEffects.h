@@ -1921,6 +1921,10 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
 // ETB (Siege-Gang tokens, Muxus reveal, ...). Heuristic pick: highest mana value, tie-break higher
 // printed power then lower card number (deterministic; the human-play/viewer chooser is wired later).
 // Gated: no Lackey-flagged damaging attacker (or no matching hand card) -> no-op, other decks identical.
+// Forward declaration: EnforceLegendRule is defined later in this header (the cheat-into-play put
+// must run it immediately -- CR 704.5j is a state-based action; see the call site below).
+inline void EnforceLegendRule(GameState& state, int controller_index);
+
 inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                                           const std::vector<int>& damaging_attacker_indices)
 {
@@ -1981,6 +1985,44 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
             best = ranked[std::min(k, ranked.size() - 1)];
         }
         state.scripted_cheat_choice = -1;   // consumed by this trigger
+        // MTG_LACKEY_PREF: DIAGNOSTIC (no play change). Logs the REVEALED PREFERENCE of the search --
+        // the candidate set that was actually available and the card the chosen plan actually put --
+        // for REAL resolutions only (g_real_resolution; every rollout scope clears it). Run with a
+        // wide MTG_LACKEY_WIDTH so the search sees every candidate, then aggregate pairwise: a pair
+        // that splits ~100/0 is a STRICT dominance and the loser can be pruned safely; a pair that
+        // splits ~60/40 is SITUATIONAL and must stay in the searched set.
+        static const bool s_lackey_pref = EnvOn("MTG_LACKEY_PREF");
+        if (s_lackey_pref && g_real_resolution && cand_hand.size() > 1)
+        {
+            std::string line = "[lackey-pref] chose=";
+            line += ap.hand[best].m_name.str();
+            line += " from=";
+            for (std::size_t ci = 0; ci < cand_hand.size(); ++ci)
+            {
+                // '|', NOT ',': card names contain commas ("Muxus, Goblin Grandee", "Krenko, Mob
+                // Boss"), and a comma-separated list silently splits them into phantom cards that
+                // match nothing -- which made Muxus read as chosen 0/131 times on the first pass.
+                if (ci) { line += "|"; }
+                line += ap.hand[cand_hand[ci]].m_name.str();
+            }
+            // Which candidate names the controller ALREADY has on the battlefield. A second copy of
+            // an ETB payoff (Muxus) is worth less than the first, so a preference that looks strict
+            // overall may reverse once a copy is down -- that is a board-CONDITIONED effect a static
+            // ranking cannot express, and the reason to check before pruning on the raw split.
+            line += " inplay=";
+            bool first_ip = true;
+            for (int ci : cand_hand)
+            {
+                bool on_board = false;
+                for (const Permanent& q : state.battlefield)
+                { if (q.controller_index == controller && q.card.m_name == ap.hand[ci].m_name) { on_board = true; break; } }
+                if (!on_board) { continue; }
+                if (!first_ip) { line += "|"; }
+                first_ip = false;
+                line += ap.hand[ci].m_name.str();
+            }
+            std::fprintf(stderr, "%s\n", line.c_str());
+        }
 
         // Human play (--claude-play/viewer): let the player pick WHICH Goblin permanent to put, or
         // decline (it is a "may"). Nulled by RevealLogPause for every search/rollout scope, so this
@@ -2015,6 +2057,14 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         const int slot = static_cast<int>(state.battlefield.size()) - 1;
         OnDragonEnters(state, controller, slot);   // in case a put permanent is ever a Dragon
         OnGoblinEnters(state, controller, slot);   // fire the put permanent's own Goblin ETB cascade
+        // Legend rule (CR 704.5j) -- a STATE-BASED action, checked continuously, so it must run the
+        // moment the duplicate enters. It was missing here: the other put path (a Vial deploy) does
+        // enforce it, but this put resolves in the COMBAT-DAMAGE step, i.e. AFTER the combat-start
+        // enforcement in GameEngine::CombatPhase / SimulateCombat. A second Muxus or Krenko cheated
+        // in by Lackey therefore survived until the NEXT turn's combat start, giving a free extra
+        // body and double-counting any static buff for a full turn cycle.
+        if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
+        { EnforceLegendRule(state, controller); }
     }
 }
 

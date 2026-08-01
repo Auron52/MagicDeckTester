@@ -14,6 +14,7 @@ thread_local TopChooser*    g_play_top_chooser = nullptr;
 // Search-scripted scry/surveil/reorder disposition; -1 = the provider heuristic decides at
 // resolution (the default, byte-identical). See SpellEffects.h ChooseTopDisposition.
 thread_local int            g_scripted_top_choice = -1;
+thread_local bool           g_real_resolution = true;   // cleared by RevealLogPause (diagnostic only)
 thread_local int            g_scripted_etbdig_choice = -1;
 thread_local TargetChooser* g_play_target_chooser = nullptr;
 thread_local BounceChooser*  g_play_bounce_chooser = nullptr;
