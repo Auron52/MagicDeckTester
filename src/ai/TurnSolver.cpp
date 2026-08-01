@@ -5174,6 +5174,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
     // did not branch on the axis leaves any outer value alone.
     if (plan.lackey_choice >= 0) { state.scripted_cheat_choice = plan.lackey_choice; }
+    // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
+    // after this function returns, so it rides the STATE rather than a scoped guard.
+    if (plan.discard_choice >= 0) { state.scripted_discard_choice = plan.discard_choice; }
 
     // Commit-the-line recording (out_breakpoint != null, set only when building the
     // committed line): capture the casts each draw-breakpoint re-solve makes so the
@@ -7135,7 +7138,19 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             const std::vector<int> cd =
                 ResolveProvider(state).CleanupDiscardCandidates(state, state.m_required_pieces);
             if (cd.empty()) { break; }
-            victim = ap.hand.begin() + cd.front();
+            // SEARCHED cleanup discard (Plan::discard_choice -> GameState::scripted_discard_choice):
+            // the plan's pinned candidate, consumed by the FIRST shed of this cleanup and cleared,
+            // so a multi-card cleanup sheds one searched card and then falls back to the ranked
+            // default -- the same one-per-plan convention as the ETB-dig and Lackey axes. Clamped,
+            // because the plan was enumerated before this turn's draws and casts changed the hand.
+            std::size_t pick = 0;
+            if (state.scripted_discard_choice > 0)
+            {
+                pick = std::min(static_cast<std::size_t>(state.scripted_discard_choice),
+                                cd.size() - 1);
+            }
+            state.scripted_discard_choice = -1;
+            victim = ap.hand.begin() + cd[pick];
         }
         else
         {
@@ -9919,6 +9934,37 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                     extra.push_back(std::move(v));
                 }
                 break;   // vary ONE dig per variant; a second dig keeps its ranked default
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED CLEANUP DISCARD -- the post-dedup fan-out for the END-OF-TURN shed. Unlike every
+    // other axis here the decision does not happen during the plan at all: it fires in
+    // SimulateEndAndStartNextTurn, after the apply, which is why the pick rides the STATE.
+    //
+    // It is also the one axis that cannot size its candidate list at enumeration time -- the hand
+    // that will be over the limit is the hand AFTER this turn's draws and casts, and for Treasure
+    // Hunt the whole point is that a DrawUntilNonland resolving mid-turn is what floods it. So the
+    // width is taken on faith and the index is clamped at resolution (the scry axis does the same),
+    // and the axis is gated on the PROVIDER opting in rather than on a hand-size guess: five of
+    // nine suite decks never reach a cleanup discard at all, and a variant pinning an index nothing
+    // consumes is a duplicate plan that costs a rollout to discover it changed nothing.
+    const int discard_width = ResolveProvider(state).CleanupDiscardSearchWidth();
+    if (discard_width > 1 && !HumanPlayActive())
+    {
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only -- one axis at a time, so cost stays additive.
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                || p.lackey_choice >= 0 || p.ponder_choice >= 0) { continue; }
+            for (int c = 1; c < discard_width; ++c)
+            {
+                TurnSolver::Plan v = p;
+                v.discard_choice = c;
+                extra.push_back(std::move(v));
             }
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),

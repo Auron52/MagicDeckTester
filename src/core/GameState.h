@@ -217,6 +217,13 @@ struct GameState
     // Consumed by the first cheat trigger and reset at the start of each turn, so it cannot leak
     // into a later combat.
     int                      scripted_cheat_choice = -1;
+    // Searched CLEANUP DISCARD (Plan::discard_choice): which candidate of the provider's ranked
+    // CleanupDiscardCandidates this turn's FIRST cleanup shed takes. Same state-pin shape as
+    // scripted_cheat_choice and for the same reason -- the decision belongs to the turn's plan but
+    // fires at END of turn, after the plan apply has returned, so a scoped guard would be gone.
+    // Consumed by the first shed (later sheds of the same cleanup use the ranked default) and
+    // cleared there, so it cannot leak into a later turn. -1 == the provider's top pick.
+    int                      scripted_discard_choice = -1;
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
