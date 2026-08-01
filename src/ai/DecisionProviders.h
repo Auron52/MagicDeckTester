@@ -316,10 +316,12 @@ public:
     // live attacker is needed -- it is lethal THIS turn (the death token would be summoning-sick) or there
     // is no other castable spell ("no gas"), so the banked mana buys nothing. Off-switch MTG_NO_GOBLIN_ECHO.
     bool PayEchoToKeep(const GameState&, const Permanent&) const override;
-    // (A Goblin Matron tutor-target exclusion list -- drop Pashalik Mons / Goblin King-when-Chieftain /
-    // lone Goblin Lackey -- was evaluated here and REJECTED: it cost the clairvoyant search a line
-    // (rollout 4.4350 -> 4.4375). Picking the best fetch needs depth a static list lacks, so Goblins
-    // inherit GenericProvider's full-candidate TutorCandidates. See analysis-goblins.md.)
+    // (A Goblin Matron tutor-target exclusion list was evaluated + REJECTED. The +0.0025 rollout regression
+    // was NOT a clairvoyance artifact -- per-game diff (2026-07-31) showed the two slower games were the
+    // "lone Lackey" exclusion misfiring: with a bomb IN HAND (Muxus/Krenko/Warchief), fetching Lackey to
+    // cheat it into play via combat is the genuinely fast line and needs no future knowledge. Lackey's value
+    // depends on what's in hand to cheat -- exactly the depth a static list lacks -- so Goblins inherit
+    // GenericProvider's full-candidate TutorCandidates. See analysis-goblins.md.)
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

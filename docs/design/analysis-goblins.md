@@ -3,7 +3,50 @@
 Per-deck durable state for the `analyze-deck` workflow (survives compaction / handoff).
 Deck: `decks/Goblins/Goblins.cod`. Branch: `phase-1-2-deck-analyzer`.
 
-## ⇩⇩ RESUME HERE — VALUE-LEAF + DEEP-SEARCH OPTIMIZATION (post-compaction) — 2026-07-31
+## ✅ OPTIMIZATION COMMITTED + PUSHED — 2026-07-31
+Search-perf heuristics + GT re-accept are **committed and pushed** (branch `phase-1-2-deck-analyzer`;
+`ec70359` heuristics+smoke-GT, `5e2a30f` regression-GT; rebased cleanly onto the remote's 23 B1-refactor
+commits — GT held, no conflicts). Adopted: token-hash fix (~13%), idea 1 (haste-gated Skirk, GoblinsProvider),
+idea 2 (board-lethal cut, **Goblins-only** via `UseLethalShortCircuit`), Mogg echo `PayEchoToKeep` (kept but
+inert). Rejected: breadth cap + Matron narrowing (quality regressions). Net Goblins **regression tier all 5
+configs IMPROVED** on held-out 2002/3003 (d0 4.8200→4.7530); non-Goblins byte-identical; 0 play-drift.
+**Post-rebase quirk:** one of the 23 remote commits made the value leaf ACTIVE in the d5 smoke case (pre-rebase
+it was leaf-independent) — with the untracked `value.json` present, local d5 = 4.3067 vs committed no-leaf GT
+4.2933. Harmless: `value.json` is untracked, so a fresh checkout / CI uses the built-in default and smoke is
+**27/27**. If d5 GT is ever re-accepted, do it with `value.json` moved aside (the committed state).
+**Remaining follow-ups:** (1) overnight-tier GT re-accept (leaf-independent; the documented 8h tail).
+(2) DEPTH MATRIX generation — IN PROGRESS (see below). (3) global lethal-cut eval — docs/design/lethal-short-circuit-global.md.
+
+## 📊 DEPTH MATRIX — GENERATED + H3/H4 RESAMPLE RUNNING (2026-07-31)
+Built the V1-8 × H1-7 fallback table (`logs/eval/goblins_depth_matrix.txt`; run log goblins_matrix_run.out).
+Existing (stale) leaf used for the V-arm; the H-arm (user's emphasis) is pure rollout / leaf-INDEPENDENT.
+**Results (mean over seeds 8008/9009):**
+- **Heuristic (rollout):** H1=4.4625[53ms/400g] H2=4.4350[365ms/400g] H3=4.3800[3.4s/100g*] H4=4.3600[13.6s/100g*]
+  H5=4.1000[22s/50g*] H6=4.1000[29s/50g*] H7=4.1000[28s/50g*].  (* = intractable → reference-only.)
+- **Value leaf:** V1=4.8175 V2=4.7300 V3=4.5775 V4=4.4712 V5=4.4313[435ms/400g] V6=4.4437* V7=4.4150* V8=4.3800*.
+- **Two findings:** (1) deep rollout keeps improving (H5-7≈4.10) but is 22-30 s/game → infeasible in play (that
+  is WHY the leaf exists). H5-7 are 50g reference (noisy; the identical 4.10 is the small sample saturating).
+  (2) **The current leaf is WEAK**: V5 (4.4313) ≈ H2 (4.4350) and is WORSE than H3 (4.3800) — searching to
+  depth 5 with this leaf buys only ~depth-2 quality. A good leaf should push V5 toward H5(~4.10). This is a
+  stale/under-trained leaf → **regenerating it would likely help** (deferred; user leaned "use existing").
+- **H3/H4 RESAMPLE RUNNING** (user wants H3 full + H4 to 300-400g for the escalation decision — "is it safe to
+  only escalate to H3?"): `python3 scripts/attic/valueleaf_depth_matrix.py --decks goblins --hdepths 3 4
+  --vdepths 5 --seeds 8008 9009 --incremental --batch 50 --target 400 --reference-target 400
+  --intractable-sec-per-game 30 --out logs/eval/goblins_h34.txt` (log: goblins_h34_run.out). ~1.5h (H4 =
+  13.6s/game × 400g × 2 seeds). RESUMABLE. When done: read logs/eval/goblins_h34.txt for H3@400g / H4@400g and
+  decide escalation depth (if H4 ≈ H3, cap at H3; if H4 shows the H5-ward jump, escalate to H4).
+
+## ✅ MATRON open question — RESOLVED (NOT a clairvoyance artifact) — 2026-07-31
+Per-game diff (RelWithDebInfo build, `MTG_GOBLIN_MATRON` flag, `MTG_VALUE_MODEL=0`, d3/400 seed 8000; logs in
+logs/matron_on|off): narrowing ON=4.4375 vs OFF=4.4350 = exactly 3 games differ (217,259 SLOWER 5→6; 273
+FASTER 5→4). The 2 slower are the **lone-Lackey exclusion misfiring**: game 217 opening has **Muxus** in hand,
+game 259 has **Krenko+Warchief** — HEAD fetches Goblin Lackey T3, Lackey connects T4 and cheats the in-hand
+BOMB into play → win T5. The line needs NO future knowledge (the bomb is visible in hand), so it is a REAL
+fast line, not an oracle artifact. My static "lone Lackey = too slow" rule can't see the in-hand bomb. Verdict:
+**rejection stands, understood** — leaving Matron to the search is correct (Lackey's value depends on what's in
+hand to cheat, which a static list lacks). Investigation code reverted; HEAD clean.
+
+## ⇩⇩ (historical) VALUE-LEAF + DEEP-SEARCH OPTIMIZATION (post-compaction) — 2026-07-31
 **Task:** create the Goblins value-leaf / play profile. En route, user asked to OPTIMIZE the deep-search
 first (the depth matrix's unbounded H-cells have extreme long tails). **Branch `phase-1-2-deck-analyzer`
 @ `be7bc02`, in sync w/ origin.** Rebuild before using the binary (`bash build.sh`).
@@ -62,9 +105,18 @@ outcome after A/B: 2 ADOPTED, 2 REJECTED (quality), 1 KEPT-but-inert.**
    SituationalCardRank override. A/B: cap6 4.4375 (+0.0025), cap5 4.4400, cap4 4.5200 — NOT quality-neutral,
    AND ~0 speedup on 9040 (217/219/239 s). A static rank can't capture Goblin card value (too deep). A
    non-neutral cap would also corrupt the depth-matrix's heuristic-arm reference. Overrides REVERTED.
-3. **Goblin Matron tutor exclusion (Pashalik/King-when-Chieftain/lone-Lackey) — REJECTED.** A/B: narrowing
-   ON 4.4375 vs OFF 4.4350 (+0.0025) — the clairvoyant search finds a line through an "excluded" target.
-   User's own "tricky at best" intuition confirmed. Override REVERTED.
+3. **Goblin Matron tutor exclusion (Pashalik/King-when-Chieftain/lone-Lackey) — REVERTED, but REJECTION IS
+   AN OPEN QUESTION (revisit after the matrix).** A/B: narrowing ON 4.4375 vs OFF 4.4350 (+0.0025) — the
+   clairvoyant search finds a line through an "excluded" target. Code reverted so HEAD is clean. BUT the
+   +0.0025 may be a **clairvoyance ARTIFACT**, not a real loss: the regression GT is the CLAIRVOYANT search's
+   output, so pruning a line the oracle only found because it knew the deck order reads as a "regression"
+   even if it improves real (non-clairvoyant) play — the same tension as the fd-oracle "faster line greedy
+   can't reproduce" finding. TODO (post-matrix, user-requested): diff per-game win-turns (narrow OFF vs ON,
+   d3/400 seed 8000) to pinpoint the ~few regressed games; for each, inspect via `test/explain_game.py` /
+   claude-play whether the lost line DEPENDS on knowing the future draw (artifact -> narrowing is actually
+   correct for real play -> reconsider adopting) or is a blind-reproducible line (real loss -> stay reverted).
+   The narrowing lives (reverted) in git history / this session for easy re-apply. See heuristic-optimization
+   skill (clairvoyance-vs-artifact attribution).
 4. **Mogg War Marshal echo keep-exception — KEPT but MEASUREMENT-INERT.** Provider hook `PayEchoToKeep`
    (DecisionProvider.h base = old fixed heuristic verbatim → all decks byte-identical; GoblinsProvider
    overrides). Both echo sites (AIEngine.cpp:~1218 executor + TurnSolver.cpp:~6825 rollout) call the hook
@@ -248,3 +300,52 @@ All 5 worktree agents built clean; diffs applied via `git apply --3way` onto the
 
 ## Approved deferrals
 None (full faithful build). Inert-collapse disclosures above are cosmetic, not feature deferrals.
+
+## Depth-ladder + value_play settings investigation (2026-07-31)
+
+**Converged escalation ladder** (3000g/cell, seeds 8008/9009, `--ignore-play-profile --depth`, avg-win-turn lower=better; logs/eval/goblins_depth_overnight.txt + goblins_vladder.txt):
+- Heuristic: H1=4.4358, H2=4.4092, H3=4.3988, H4=4.3952, H5=4.3926 (H5 last batch had a ~50-min pathological game — deep-heuristic long tail).
+- Value leaf: V5=4.4018, V6=4.3967, V7=4.3947, V8=4.3947 (V8 = full-horizon).
+- **Both ladders converge to the same ~4.395 floor.** Heuristic flat above H4 (H4≈H5). Value ties the floor only at V7 (V7=V8); V5/V6 fall short.
+- Cross: at MATCHED depth the rollout beats the leaf (H5 4.3926 > V5 4.4018 by 0.009; H3 4.3988 > V5 by 0.003). The leaf reaches deep-heuristic quality only by going deeper (V7≈H4/H5), which it does ~1/30th the cost.
+- **Escalation-cap decision: cap at H3** — within 0.004t of the floor; H4 marginal (0.0036), H5 provably adds nothing AND has multi-min pathological games.
+
+**Clean single-thread runtime probe** (50g seed 8008; logs/eval/rt_probe.out): H3=1308ms; V5=254, V6=295, V7=292, V8=288ms. Value ladder is **cost-flat** (V5–V8 all ~290ms) — extra plies add ~nothing because the O(1) leaf caps every branch and games end by ~t5. So V7 is the value-arm sweet spot (floor quality at V8 cost), and V8 is NOT more expensive than V6/V7.
+
+**value_play settings A/B (production path, held-out seeds 2002/3003/4004/5005, 3000g/arm):** baseline `d5/b20/fallback` MEAN=4.3896 (at floor).
+- V8-trust (target_depth=8, budget_ms=0 no-budget, no-fallback): quality-NEUTRAL (sanity byte-identical) BUT the unbounded search **HANGS on wide-board goblin games** (huge d8 action trees) — the 20ms/decision budget is **load-bearing** (bounds worst-case latency; the probe's clean 288ms was an easy slice hiding the tail). REJECTED.
+- d7/b20 (deeper target, budget PRESERVED): **byte-identical to baseline** (MEAN=4.3897=4.3897 every seed) — inert, the 20ms budget binds before depth 7. REJECTED.
+- **DECISION: keep the current adopted `value_play` = target_depth 5 / budget_ms 20 / escalation_cap 5 / fallback ON.** At the quality floor AND robust; no tested variant improves it. Leaf stays adopted (it's what mulligan gen inherits). Scratch variant profiles removed.
+
+## Mulligan profile cost scout (2026-07-31, RUNNING)
+Kicked off the R=1 cost scout to understand generation cost (user request):
+`./build/Release/mtg-analyze decks/Goblins/Goblins.cod --cards-json src/cards/data/cards.json --gen-mulligan recommend`
+→ logs/eval/goblins_mull_recommend.out. Inherits the adopted leaf (rollout depth 5 / budget 20ms from value_play). recommend = one rollout/cell (R=1) → prints GEN-TIME PROJECTION (complete ~Xh / fast ~Yh) + slowest cells; writes a poolable R=1 probe chunk but NO profile (R<10 floor). User to evaluate the projection.
+NOTE: `decks/Goblins/Goblins.value.json` is currently UNTRACKED — commit/freeze it before the definitive high-R generation (Rule 0: gen on a frozen commit; the raw sidecar's commit fingerprint gates pooling).
+
+## FINAL play/gen config decision (2026-07-31/08-01) — SUPERSEDES the "keep d5/b20" note above
+
+The "keep d5/b20" conclusion above was only vs the *no-budget* and *tight-budget-d7* variants. A finer
+**budget-frontier sweep** (d6 trusted no-fallback × budget {20,40,60,80,100,200}, held-out seeds) found the
+budget is the real quality dial and **d6/b40 dominates baseline**:
+- Frontier (avg-win-turn, lower=better; baseline d5/b20/fallback = 4.3897 @98s): b20=4.3870@83s, **b40=4.3857@98s**,
+  b60=4.3857@115s (dominated), b80=4.3853@124s, b100=4.3847@135s, b200=4.3830@170s. **d6=d7** (7th ply inert).
+- **b40 = sweet spot**: −0.0040t at *baseline speed*. VALIDATED on a disjoint seed set (6006/7007/1001/2468):
+  −0.0033t, better on 3/4, never worse → not overfit.
+- Trusting the leaf (no-fallback) is a PLAY win but does NOT help GEN cost: full-game rollout is the bottleneck,
+  not the fallback (d5-trusted 24/s vs 21/s fallback; d6/b40 24/s). K=20/455k hands is the real gen driver
+  (legitimate — 1 land bucket + 19 distinct cards, 8 real singletons; NOT a merge bug).
+
+**Gen-config KEY finding (corrects an earlier mistake):** the fast gen path is `mull_gen_depth=3` **WITH the
+fallback** — the crossover forces the **heuristic H3 line** (NOT the value-leaf V3). Verified in play: d3+fallback
+= 4.3825/4.4025 ≈ H3 (4.3988), nowhere near V3 (4.5775). So d3-gen is fast (~57/s, ~4.4h R=1 floor pass) AND good
+rollout quality (H3), not the 0.18t disaster I first feared (that number was V3, the wrong thing).
+
+**ADOPTED (`decks/Goblins/Goblins.value.json`, committed/frozen):**
+- Play: `target_depth=6, budget_ms=40`, `value_no_fallback=false` with crossover
+  `take_heuristic_at_hdepth=[1,1,1,1,3,9,9,9]` (keep-leaf at committed ≥6, fall back to H only on shallow
+  truncation ≤5). Play A/B of this exact config = 4.3870 (beats baseline 4.3897).
+- Gen: `mull_gen_depth=3, mull_gen_budget_ms=10` → H3 heuristic rollouts (capped at d3, fallback always fires).
+- **Generation plan:** R=1 recommend chunk on the FROZEN commit for a trustworthy `complete`(R40) projection
+  (pools into the full run via MTG_KEEP_PRIOR_RAW); launch full R40 if projection ≤4 days. This is the secondary
+  machine (can run days). Rough estimate from the ~57/s rate: R=1 ≈ 4.4h, full R40 ≈ 2–4 days.
