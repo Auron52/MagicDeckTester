@@ -2999,9 +2999,11 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
     // It sits below dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those
     // signatures (no tutor_to_battlefield / hinata_cost_reducer), so exclusivity is preserved: this
-    // branch fires iff the deck has a Goblin gated param, which no other suite deck does. GoblinsProvider
-    // only overrides DeferSacOutletPreCombat (all other hooks inherit Generic verbatim), so this is
-    // byte-identical to the old g_generic routing EXCEPT for the adopted sac-outlet deferral heuristic.
+    // branch fires iff the deck has a Goblin gated param, which no other suite deck does.
+    //
+    // Was g_generic until GoblinsProvider had MEASURED hooks to hold: the sac-outlet deferral and the
+    // Matron tutor width (12, -0.0620 held-out). It derives from GenericProvider and overrides only
+    // those, so every other decision still resolves through exactly the code this deck used before.
     if (goblin) { return g_goblins; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }

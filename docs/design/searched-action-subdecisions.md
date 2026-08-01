@@ -89,8 +89,65 @@ This is the shape the engine already uses for every other inline sub-decision �
 **after** `EnumeratePlans` returns, in `EnumeratePlansWithLand`. Cost becomes `P + W` instead of
 `P × k`, and the alternatives actually get scored.
 
-`MTG_TUTOR_AXIS=0` restores the old collapse; `MTG_TUTOR_WIDTH=<n>` sets how many targets the axis
-scores including the provider's best (so `n=1` is exactly the old behaviour — verified byte-identical).
+`MTG_TUTOR_AXIS=0` restores the old collapse; `MTG_TUTOR_WIDTH=<n>` overrides how many targets the
+axis scores including the provider's best (so `n=1` is exactly the old behaviour — verified
+byte-identical). Unset, the width comes from the **provider** (`DecisionProvider::TutorSearchWidth`).
+
+### The width is per-deck, and the per-deck optima genuinely diverge
+
+The first sweep produced one global constant, 6. That was the best available *average*, but the
+per-deck curves it averaged over do not have the same shape at all — they have three different
+shapes, and the mechanism for each is legible:
+
+| deck | width | curve | why |
+|------|-------|-------|-----|
+| antilife | **2** | flat from 2 | the pool *is* 2 — the deck's only enchantments are Tainted Remedy and Aria of Flame and it runs no artifacts, so both tutors see the same two-card list. Play digests are byte-identical from width 2 to 12: there was never a third candidate. |
+| hinata | 6 (base, **not** overridden) | peaks at 2 on train, then dilutes | `TutorCandidates` is already combo-aware (Hinata alone while she is missing; `SituationalCardRank` order once she is online), so the hypothesis was that extra targets only dilute. Train agreed; **the holdout did not** — see below. |
+| goblins | **12** | monotone, knee at 8 | Matron fetches "a Goblin card" from ~16 distinct names that are *not* close substitutes (Muxus vs. Mogg War Marshal), so the search keeps finding value well past the top few. |
+
+Measured on the TRAIN seeds (1001/2002/3003), searched-depth sum vs width 1:
+
+```
+width      antilife       goblins        hinata
+    1       +0.0000       +0.0000       +0.0000
+    2       -0.0293       -0.0294       -0.0568   <- antilife & hinata best
+    4       -0.0293       -0.1627       -0.0518
+    6       -0.0293       -0.1846       -0.0284   <- the old global default
+    8       -0.0293       -0.2100       -0.0484
+   12       -0.0293       -0.2108       -0.0168   <- goblins best
+```
+
+Two things this makes concrete. First, a single width is not a compromise between these — at 6 it
+was paying antilife's enumeration for a provably empty candidate list to buy goblins a gain it
+would rather have had in full. Second, **width is not monotonically good**: the tutor axis is
+additive in cost, but the budget it consumes is not free, so a deck whose provider ranks well is
+not helped by searching deeper. That is the same result the Ponder ORDER axis produced from the
+other direction.
+
+### What the holdout was for: one of the three picks did not survive it
+
+The widths were chosen on the TRAIN seeds specifically so the overnight seeds stayed a validation
+set (`test/tutor_width_sweep.sh` sweeps; `test/tutor_width_holdout.sh` confirms **once**). Running
+the finished config against the shipped global 6 on the held-out seeds:
+
+```
+=== SEARCHED (d3/d5) ===          delta vs global width 6
+  goblins    -0.0620    8 of 8 cases improve, none worse
+  hinata     +0.0009    a wash -- the train delta did NOT replicate
+  antilife    0.0000    exactly as predicted: identical play, less enumeration
+  d0          0.0000    every deck, as expected -- no rollout to score a variant with
+```
+
+Goblins and antilife shipped. **Hinata's did not**: train said width 2 beat 6 by −0.0284, the
+direct held-out comparison said +0.0009, and width 2 is not cheaper either (overnight makespan 68s
+vs 69s), so there is no cost argument to fall back on. A train-only delta of that size, on the arm
+that was *selected because* it was best on train, is what a selection artifact looks like — so
+Hinata keeps the base 6. This is the split doing its job; without it, "two of three decks want 2"
+would have read as a pattern.
+
+The **base** class default stays 6, deliberately untouched: it now only governs decks with no
+measurement behind them, and re-tuning it off these three would be fitting a default to the decks
+that no longer use it.
 
 ### Why a second axis loses nothing *this* turn for a tutor
 
@@ -107,8 +164,8 @@ candidate set with a heuristic.
 
 ## Still open
 
-`ponder_keep` has the same shape and the same fix available (it is cost-neutral, so it is collapsed
-100% of the time). It is not done here — one axis at a time, each measured. The cost-changing
+`ponder_keep` is DONE (`083b546`, −0.8467 over 7 seeds, and faster) — see the commit and the
+memory note; its ORDER sub-axis was measured and **rejected** at +0.0266. The cost-changing
 sub-decisions (`chosen_x`, `splice_count`, `soulfire_own_targets`, `enchant_target`) are a separate
 and harder case: they are only *partly* collapsed, and moving them out of the odometer would change
 what the mana solve can see.
