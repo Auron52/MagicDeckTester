@@ -252,8 +252,18 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
         for (const Permanent& perm : state.battlefield)
         { if (perm.controller_index == state.active_player_index && perm.card.IsLand()) { ++lip; } }
         for (const Card& h : ap.hand) { if (CleanupDiscardIsLand(h)) { ++lands_in_hand; } }
-        TRACE("discard", "T%d hand=%zu cands=%zu lip=%d landsinhand=%d -> %s",
-              state.turn_number, ap.hand.size(), out.size(), lip, lands_in_hand,
+        // tower=1 means a no-max-hand-size land was sitting IN HAND while we discarded -- i.e. the
+        // hand limit we are paying was avoidable by playing it. That is a LAND-DROP question, not a
+        // discard-ranking one, so it is reported here rather than fixed here.
+        int tower = 0;
+        const int drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable() ? 1 : 0;
+        for (const Card& h : ap.hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (hd != nullptr && hd->params.no_max_hand_size && hd->card.IsLand()) { tower = 1; }
+        }
+        TRACE("discard", "T%d hand=%zu cands=%zu lip=%d landsinhand=%d tower=%d dropopen=%d -> %s",
+              state.turn_number, ap.hand.size(), out.size(), lip, lands_in_hand, tower, drop_open,
               ap.hand[out.front()].m_name.str().c_str());
     }
     return out;
