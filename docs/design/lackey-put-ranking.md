@@ -80,6 +80,88 @@ redundant. MV wins every head-to-head against a rival rule and still leaves 0.05
 two-wide search. Rankings are static; the search sees the actual board. This is the concrete case
 for "a heuristic is a branch's DEFAULT, not a substitute for branching".
 
+## Revealed preference: is the ordering strict, or situational?
+
+`MTG_LACKEY_PREF` logs which candidate the SEARCH actually took, for real resolutions only
+(`g_real_resolution`, cleared by `RevealLogPause`), run at `MTG_LACKEY_WIDTH=12` so nothing is
+pruned before the search sees it. 823 contested triggers:
+
+| card | picked/available | | card | picked/available |
+|---|---|---|---|---|
+| Muxus, Goblin Grandee | 204/206 **99.0%** | | Goblin King | 37/157 23.6% |
+| Siege-Gang Commander | 180/244 73.8% | | Pashalik Mons | 15/74 20.3% |
+| Krenko, Mob Boss | 34/73 46.6% | | Goblin Matron | 20/151 13.2% |
+| Twinshot Sniper | 31/73 42.5% | | Goblin Piledriver | 17/132 12.9% |
+| Goblin Warchief | 26/62 41.9% | | Rundvelt Hordemaster | 5/136 3.7% |
+| Goblin Chieftain | 29/87 33.3% | | Skirk Prospector | 0/32 0.0% |
+
+**30 of 33 pairs are shutouts; only 3 are contested** — Muxus/Siege-Gang 77-2, Warchief/Siege-Gang
+1-14, Siege-Gang/Skirk 13-1. All three are at the TOP of the order, i.e. where the decision matters.
+
+## Why a per-deck priority table is NOT worth shipping (measured 0.0000)
+
+That order is **exactly mana-value order across tiers**, which is why the plain MV rule scored so
+well. The mechanism (user): the put is free and summoning-sick, so its value is the mana you skipped
+— and the cheap card gets hard-cast anyway, so using the Lackey on the expensive one usually deploys
+BOTH. Twinshot Sniper and Krenko are MV 4, a tier above the 3s, so MV already ranks them right.
+
+MV is blind only WITHIN a tier: six cards tie at MV 3 with a 3x spread in pick rate, where the tie
+falls through to power then card NUMBER (shuffle order). A `GoblinsProvider` was built to supply
+that within-tier order from the measured data, keeping MV primary. It measures **+0.0000 on all
+seven seed sets**. Verified live rather than assumed — INVERTING the table moves play, so the null
+is real:
+
+| perturbation | cost |
+|---|---|
+| invert the ACROSS-tier order (`MTG_LACKEY_RANK=low`) | **+0.85** |
+| invert the WITHIN-tier order (inverted priority table) | **+0.0033** |
+
+Two orders of magnitude apart. Within-tier order is worth ~0.003 at most, and the searched axis
+already recovers it: W=2 gives the search two shots, and the third-ranked candidate is rarely the
+right answer. So the table was **not shipped** — it is dead weight plus a hardcoded name list that
+goes stale the moment the decklist changes, bought for nothing.
+
+**The reusable lesson:** before hand-building a per-deck priority table, measure the *tier* signal
+against the *within-tier* signal. Here one is 250x the other and only the cheap generic rule (mana
+value) was needed.
+
+### The one genuine CROSS-tier exception — and why it still needs no table
+
+A per-deck table keeping MV primary could not have fixed a cross-tier error anyway. Tested the two
+proposed candidates (user: "Twinshot Sniper could definitely be incorrect to prioritize over Goblin
+Chieftain. Maybe Krenko as well"):
+
+- **Krenko, Mob Boss is NOT an exception** — 16-0 vs Chieftain, 11-0 vs Warchief, 17-0 vs King,
+  12-0 vs Chainwhirler. MV order is right every time.
+- **Twinshot Sniper IS**, and BOARD WIDTH is the condition:
+
+| Twinshot Sniper vs | creatures <= 2 | creatures >= 3 |
+|---|---|---|
+| Goblin Chieftain | **3-3 (50%)** | 7-0 (100%) |
+| Goblin Warchief | **2-2 (50%)** | 1-0 |
+
+A lord's value scales with the bodies it buffs; Twinshot's 2 damage does not. So on a narrow board
+it is a coin flip and on a wide one the 4-drop wins. Small n — suggestive, not settled.
+
+The point: those numbers ARE the search's own choices. Twinshot (MV 4) and Chieftain (MV 3) are the
+top two by mana value, so at W=2 both are scored and the search took Chieftain in 3 of 13. A static
+rank — per-deck table or not — cannot express "unless the board is narrow"; the branch can. This is
+the same conclusion the axis measurement reached, arrived at from the opposite direction.
+
+## Hypotheses tested and not supported
+
+- **"A second Muxus is worth less than the first"** — 68-2 with none in play, 9-0 with one already
+  down. Its value is a one-shot ETB, not a static buff, so copies do not go redundant like a lord's.
+  (n=9 rules out a large effect, not a small one.)
+- **"Matron beats a lord on a narrow board"** (fetch Muxus so the Lackey can drop it next turn) —
+  Matron is 0-4 / 0-4 / 0-4 against King / Chieftain / Warchief at `creatures <= 1`, and loses at
+  every board width. But n is small, and the goldfish horizon structurally undervalues the line: it
+  needs Lackey to connect AGAIN a turn later, and with a 4.3-turn average clock a turn-4 Matron
+  rarely cashes. The engine is not disagreeing with the MTG reasoning; it is correctly pricing a
+  two-turn payoff in a format that ends first.
+- Matron DOES beat **Piledriver 15-1**, which confirms the summoning-sick mechanism: Piledriver's
+  whole value is attacking, and a cheated-in creature cannot attack.
+
 ## Implementation note — why this pin lives on GameState
 
 `scry_choice` and `etbdig_choice` pin their decision with a scoped thread-local around the plan
