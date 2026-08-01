@@ -2289,9 +2289,15 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
 std::vector<int> TreasureHuntProvider::RetraceDiscardCandidates(
     const GameState& s, int /*controller*/, const std::vector<int>& hand_land_indices) const
 {
-    // Gated, default OFF pending measurement: this changes WHICH card leaves the hand, so it is
-    // not byte-identical and does not ship on reasoning alone.
-    static const bool s_ranked = EnvOn("MTG_TH_RETRACE_RANKED");
+    // ADOPTED (user-approved). MTG_TH_RETRACE_RANKED=0 restores the historical hand-order pick.
+    // MEASURED (test/th_retrace_ab.sh, 96k d0 games/arm, fresh seeds 32032..39039):
+    //     d0  5.4391 -> 5.4389   -0.0002   t=-4.32   8/8 seeds better   SEPARATED
+    //     divergence 32 of 96000 games -- 24 FASTER, 8 slower
+    // Read the 3:1 ratio, not the -0.0002: this decision is rare (~1 per 8.6 games) but genuinely
+    // contested when it fires -- 98% of retraces have 2+ lands to choose from and the ranking moves
+    // the pick in 60% of them. Contrast the Land's Edge pitch, which burns the whole hand 97.6% of
+    // the time so its ORDER is usually unobservable, and whose divergences were a near coin flip.
+    static const bool s_ranked = EnvOn("MTG_TH_RETRACE_RANKED", true);
     if (!s_ranked) { return hand_land_indices; }
 
     // Rank the WHOLE hand, then keep only the lands this caller offered, in ranked order. Filtering
