@@ -288,6 +288,14 @@ public:
         // step -- a guard around the plan apply would be gone before the trigger fires.
         int lackey_choice = -1;
 
+        // Ponder-style REORDER disposition: which candidate of ReorderCandidatesNarrow the reorder
+        // takes. -1 == the provider heuristic, byte-identical to no branch. Narrow by construction
+        // (shuffle + one variant per distinct TOP card) because Ponder draws immediately, so only
+        // the top card is received now; the full m! permutation set is mostly waste. Pinned for the
+        // apply via ScriptedReorder -- a SEPARATE pin from scry_choice, which the first look of any
+        // kind consumes.
+        int ponder_choice = -1;
+
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
         // cards. Top-level (triggered by the main plan); each entry nests its own

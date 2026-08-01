@@ -4293,6 +4293,63 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
     return out;
 }
 
+// NARROWED reorder candidates (Ponder). TopDispositionCandidates above returns the heuristic plus
+// EVERY permutation -- 6 orderings + shuffle = 7 for a 3-card look -- and searching all of them is
+// mostly waste, because Ponder DRAWS immediately after reordering: only the card placed on TOP is
+// received now. Positions 2 and 3 affect the draws one and two turns later, which a ~5.7-turn
+// average game frequently never reaches.
+//
+// So this returns, heuristic FIRST (index 0 == no branch, byte-identical):
+//   * the heuristic disposition,
+//   * the shuffle (unless the heuristic already shuffles),
+//   * one variant per DISTINCT top card, the remainder following in the heuristic's relative order.
+// That is m + 1 candidates instead of m! + 1 -- 4 instead of 7 at m = 3 -- and it keeps every
+// option that differs in the card actually drawn.
+inline std::vector<TopDisposition> ReorderCandidatesNarrow(const GameState& state,
+                                                          const std::vector<Card>& looked,
+                                                          int keep_decision = -1)
+{
+    std::vector<TopDisposition> out;
+    out.push_back(HeuristicTopDisposition(state, looked, LookKind::Reorder, keep_decision));
+    const int m = static_cast<int>(looked.size());
+    if (m <= 0) { return out; }
+    // The heuristic's ordering, used as the tail order for every top-card variant so the variants
+    // differ ONLY in what is drawn next.
+    std::vector<int> base = out.front().top_order;
+    for (int i = 0; i < m; ++i)
+    { if (std::find(base.begin(), base.end(), i) == base.end()) { base.push_back(i); } }
+    if (!out.front().shuffle)
+    {
+        TopDisposition sh; sh.shuffle = true;
+        out.push_back(sh);
+    }
+    const int heur_top = out.front().shuffle ? -1 : (base.empty() ? -1 : base.front());
+    for (int t = 0; t < m; ++t)
+    {
+        if (t == heur_top) { continue; }
+        TopDisposition d;
+        d.top_order.push_back(t);
+        for (int i : base) { if (i != t) { d.top_order.push_back(i); } }
+        out.push_back(std::move(d));
+    }
+    return out;
+}
+
+// Searched Ponder-style REORDER disposition: an index into ReorderCandidatesNarrow, pinned by the
+// plan and consumed by the first reorder. DELIBERATELY SEPARATE from g_scripted_top_choice: that pin
+// is consumed by the FIRST look of any kind, so a turn that plays an ETB-scry land AND casts Ponder
+// would have the land eat a pin meant for the Ponder. Two pins, two consumers, no collision.
+extern thread_local int g_scripted_reorder_choice;
+
+struct ScriptedReorder
+{
+    explicit ScriptedReorder(int k) : saved(g_scripted_reorder_choice) { g_scripted_reorder_choice = k; }
+    ~ScriptedReorder() { g_scripted_reorder_choice = saved; }
+    ScriptedReorder(const ScriptedReorder&) = delete;
+    ScriptedReorder& operator=(const ScriptedReorder&) = delete;
+    int saved;
+};
+
 // Scry N (e.g. Temple of Epiphany): look at the top N cards and bottom the unwanted ones using a
 // deck-aware heuristic (HeuristicTopDisposition), then keep the rest on top in look order. Under
 // --claude-play g_play_top_chooser is set (and RevealLogPause nulls it during the search, so this
@@ -4352,7 +4409,22 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
     // provider heuristic do (byte-identical to the original -- HeuristicTopDisposition reproduces
     // the wanted-first ordering, and in legacy mode the shuffle branch still only fires with an
     // empty `wanted`, so the pre-shuffle order is the same look order).
-    TopDisposition disp = ChooseTopDisposition(state, source, looked, LookKind::Reorder, keep_decision);
+    //
+    // The searched ORDER axis pins its own index (see ScriptedReorder), consumed here so it cannot
+    // be eaten by an earlier scry look in the same plan. Index 0 is the heuristic, so an unpinned
+    // plan is byte-identical.
+    TopDisposition disp;
+    if (g_scripted_reorder_choice >= 0)
+    {
+        const int k = g_scripted_reorder_choice;
+        g_scripted_reorder_choice = -1;              // consumed by this reorder
+        std::vector<TopDisposition> cands = ReorderCandidatesNarrow(state, looked, keep_decision);
+        disp = cands[static_cast<std::size_t>(k) < cands.size() ? k : cands.size() - 1];
+    }
+    else
+    {
+        disp = ChooseTopDisposition(state, source, looked, LookKind::Reorder, keep_decision);
+    }
 
     if (g_reveal_logger)
     {
