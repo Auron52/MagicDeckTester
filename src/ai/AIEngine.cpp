@@ -3204,11 +3204,33 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // Replicate cost = printed mana cost (CR 702.56a), not the effective cast cost.
         ManaCost rep_cost = def->card.m_mana_cost;
         ManaPool remaining = AvailableManaPool(state);
+        // MTG_REPLICATE_TRACE: DIAGNOSTIC (no play change). Replicate is spent GREEDILY, and unlike
+        // firebreathing -- whose pool is a by-value copy, which is what made greedy-max provably
+        // dominant there -- this TAPS REAL SOURCES. So every extra copy competes with the rest of
+        // the turn. Greedy-max is only dominant if nothing else wanted that mana. This counts hand
+        // cards that WERE payable before the loop and are NOT after it: trades the search never
+        // got offered. Zero => the firebreathing argument transfers and there is nothing to search.
+        static const bool s_rep_trace = EnvOn("MTG_REPLICATE_TRACE");
+        const ManaPool rep_pool_before = remaining;
         while (remaining.CanPay(rep_cost))
         {
             if (!TapForCost(state, rep_cost, available, true)) { break; }
             remaining = AvailableManaPool(state);
             replicate_tokens.push_back(def->card);
+        }
+        if (s_rep_trace && !replicate_tokens.empty())
+        {
+            int squeezed = 0;
+            for (const Card& h : state.ActivePlayer().hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+                if (!hd) { continue; }
+                const ManaCost& hc = hd->card.m_mana_cost;
+                if (rep_pool_before.CanPay(hc) && !remaining.CanPay(hc)) { ++squeezed; }
+            }
+            std::cerr << "[rep-trace] turn=" << state.turn_number << " " << def->card.m_name.str()
+                      << " copies=" << replicate_tokens.size()
+                      << " squeezed_hand_cards=" << squeezed << "\n";
         }
         if (m_logger && !replicate_tokens.empty())
         {
