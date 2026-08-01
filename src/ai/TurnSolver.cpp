@@ -1386,6 +1386,45 @@ static std::size_t EtbDigAxisWidth()
     return w;
 }
 
+// SEARCHED PONDER KEEP-vs-SHUFFLE. The decision has never actually been searched: the variants were
+// emitted inside CollectActions where the name-only dedup deleted them (see the CORRECTION at that
+// site). This is the post-dedup AXIS that makes it real, the same shape as the tutor target.
+//
+// UNLIKE the tutor and ETB-dig axes this is NOT free of same-turn interaction: Ponder DRAWS, and a
+// plain cantrip is one of the five breakpoint sites, so the keep-vs-shuffle choice changes which card
+// arrives and therefore what the breakpoint re-solve can cast this turn. Each variant carries a
+// nested re-solve rather than one cheap rollout -- the cost shape that lost the budget race for the
+// cantrip-first class (+113% interior nodes for +2% rollout calls). DEFAULT OFF pending measurement.
+//
+// `partial` mode fans out only when the heuristic's call is CLOSE -- the looked-at set is mixed
+// (at least one card the provider wants and at least one it does not). A set that is all-wanted or
+// all-unwanted is not a real decision, so spending a variant on it is pure cost.
+static bool PonderAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_PONDER_AXIS", true);
+    return on;
+}
+static bool PonderAxisPartial()
+{
+    static const bool on = EnvOn("MTG_PONDER_PARTIAL");
+    return on;
+}
+
+// Is the top `n` of the library a MIXED set (some wanted, some not)? Used only to decide whether the
+// partial axis bothers emitting a variant; read off the library as it stands at enumeration time,
+// which an earlier cantrip in the same plan can shift -- that staleness costs a wasted variant or a
+// missed one, never correctness (both ponder_keep values are always legal).
+static bool PonderSetIsMixed(const GameState& state, int n)
+{
+    const Player& ap = state.players[state.active_player_index];
+    const int look = std::min(n, static_cast<int>(ap.library.size()));
+    if (look <= 0) { return false; }
+    int wanted = 0;
+    for (int i = 0; i < look; ++i)
+    { if (ResolveProvider(state).ScryKeepOnTop(state, ap.library[i])) { ++wanted; } }
+    return wanted > 0 && wanted < look;
+}
+
 // How many legal dig matches the top `pp.etb_dig_count` of the library holds RIGHT NOW. Used only to
 // SIZE the axis at enumeration time; the real candidate list is rebuilt at resolution (an earlier
 // cantrip in the same plan can shift the top N), and the pin clamps if this over-counts.
@@ -9951,6 +9990,40 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 break;   // vary ONE dig per variant; a second dig keeps its ranked default
             }
         }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED PONDER KEEP-vs-SHUFFLE -- the post-dedup fan-out that makes the decision real. Both
+    // ponder_keep values are always legal, so unlike the tutor/dig axes there is no candidate list to
+    // size: emit the two pinned alternatives and let the base plan carry the heuristic. One of the
+    // two duplicates whatever the heuristic resolves to; a duplicate scores identically and the
+    // search tie-breaks to the base plan, so it costs a variant but cannot change the answer.
+    if (PonderAxisEnabled() && !HumanPlayActive())
+    {
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only -- one axis at a time, so cost stays additive.
+            if (p.scry_choice >= 0 || p.bp_choice >= 0
+                || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
+            for (std::size_t ai = 0; ai < p.actions.size(); ++ai)
+            {
+                const Action& act = p.actions[ai];
+                if (act.kind != Action::Kind::CastFromHand || act.ponder_keep >= 0) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                if (d == nullptr || d->params.cast_reorder <= 0) { continue; }
+                if (PonderAxisPartial() && !PonderSetIsMixed(state, d->params.cast_reorder)) { break; }
+                for (int k = 0; k <= 1; ++k)
+                {
+                    TurnSolver::Plan v = p;
+                    v.actions[ai].ponder_keep = k;
+                    extra.push_back(std::move(v));
+                }
+                break;   // vary ONE Ponder per variant; a second keeps its resolution heuristic
+            }
+        }
+        TRACE("ponder", "T%d ponder axis -> %zu variants", state.turn_number, extra.size());
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
     }
