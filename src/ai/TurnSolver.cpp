@@ -1409,6 +1409,24 @@ static bool PonderAxisPartial()
     static const bool on = EnvOn("MTG_PONDER_PARTIAL");
     return on;
 }
+// ORDER axis: branch on the disposition (which card ends up on TOP, plus shuffle) rather than only
+// keep-vs-shuffle. Ponder draws immediately, so the top card is the one received now.
+static bool PonderOrderAxis()
+{
+    static const bool on = EnvOn("MTG_PONDER_ORDER");
+    return on;
+}
+static std::size_t PonderOrderWidth()
+{
+    static const std::size_t w = []() -> std::size_t
+    {
+        const char* v = std::getenv("MTG_PONDER_ORDER_WIDTH");
+        if (v == nullptr || *v == '\0') { return 4; }   // heuristic + shuffle + 2 top-card variants
+        const int n = std::atoi(v);
+        return n < 1 ? 1 : static_cast<std::size_t>(n);
+    }();
+    return w;
+}
 
 // Is the top `n` of the library a MIXED set (some wanted, some not)? Used only to decide whether the
 // partial axis bothers emitting a variant; read off the library as it stands at enumeration time,
@@ -5215,6 +5233,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // first dig consumes it and any later dig falls back to the provider's ranked default. Scoped,
     // so a nested breakpoint re-solve restores the outer pin if it has not fired yet. -1 is inert.
     ScriptedEtbDig _sed(plan.etbdig_choice);
+    ScriptedReorder _sr(plan.ponder_choice);   // searched Ponder disposition (own pin; see ScriptedReorder)
 
     // Searched Goblin Lackey put: copied onto the STATE (not a scoped guard) because the trigger
     // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
@@ -10014,11 +10033,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
                 if (d == nullptr || d->params.cast_reorder <= 0) { continue; }
                 if (PonderAxisPartial() && !PonderSetIsMixed(state, d->params.cast_reorder)) { break; }
-                for (int k = 0; k <= 1; ++k)
+                if (PonderOrderAxis())
                 {
-                    TurnSolver::Plan v = p;
-                    v.actions[ai].ponder_keep = k;
-                    extra.push_back(std::move(v));
+                    // ORDER axis: branch on the DISPOSITION (which card ends up on top, plus the
+                    // shuffle), not just keep-vs-shuffle. Ponder draws immediately, so the top card
+                    // is what you actually receive; ReorderCandidatesNarrow keeps exactly the
+                    // options that differ in that card (m + 1) instead of every permutation (m! + 1).
+                    // Sized off the library as it stands now -- an earlier cantrip in the same plan
+                    // can shift it, and the pin clamps, so a stale size costs a wasted or missed
+                    // variant, never correctness.
+                    const int look = std::min(d->params.cast_reorder,
+                                              static_cast<int>(ap.library.size()));
+                    const std::size_t k_max =
+                        std::min<std::size_t>(static_cast<std::size_t>(look) + 1, PonderOrderWidth());
+                    for (std::size_t k = 1; k < k_max; ++k)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.ponder_choice = static_cast<int>(k);
+                        extra.push_back(std::move(v));
+                    }
+                }
+                else
+                {
+                    for (int k = 0; k <= 1; ++k)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.actions[ai].ponder_keep = k;
+                        extra.push_back(std::move(v));
+                    }
                 }
                 break;   // vary ONE Ponder per variant; a second keeps its resolution heuristic
             }
