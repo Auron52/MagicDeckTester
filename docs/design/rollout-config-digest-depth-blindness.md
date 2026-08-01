@@ -1,9 +1,13 @@
 # `RolloutConfigDigest` is blind to depth / budget / max_turns
 
-**Status: FOUND AND MEASURED 2026-07-31, NOT FIXED — the fix invalidates existing sidecars' reuse,
-so it is the user's call.** Found while building runtime coverage for the keep generator's carry
-paths (`test/lib/keepgen_check.sh`), not by inspection: the probe-carry path advertises
-"byte-identical" and measurably is not.
+**Status: FOUND AND MEASURED 2026-07-31; FIXED ADDITIVELY 2026-08-01 (user-approved).** Found while
+building runtime coverage for the keep generator's carry paths (`test/lib/keepgen_check.sh`), not by
+inspection: the probe-carry path advertises "byte-identical" and measurably is not.
+
+The fix records the rollout config as its OWN meta fields rather than folding it into the digest, so
+**nothing already generated was invalidated** — see [What shipped](#what-shipped) below. The
+measurement history is kept because it is the reason the gate exists and because four more plausible
+causes were eliminated on the way to it.
 
 ## The claim, and the measurement that breaks it
 
@@ -74,28 +78,69 @@ Regenerate a deck at a different depth after a play-logic change and that is exa
 new depth. The chunked multi-machine workflow drives depth/budget through env overrides, so the
 configurations differing between two chunks is a normal operating condition, not an exotic misuse.
 
-## The fix (one line, not applied)
+## The rejected fix, and why
 
-Fold the three parameters into the hash alongside the battery, which is what the name already
+The obvious fix is one line — fold the three parameters into the hash, which is what the name already
 promises:
 
 ```cpp
-uint64_t fold = 1469598103934665603ULL;
 fold = Fnv("d" + std::to_string(depth) + "/b" + std::to_string(budget_ms)
                 + "/t" + std::to_string(max_turns), fold);
-for (int gi = 0; gi < kGames; ++gi) { /* ... unchanged ... */ }
 ```
 
-**Consequence, and why it is not applied unilaterally:** every existing sidecar, probe and profile
-carries a battery-only digest, so after the change none of them match a fresh run. Every carry then
-*refuses* and re-rolls. That is the safe direction (refuse rather than wrongly accept) but it is not
-free: it discards the reuse value of already-generated artifacts, including any long-running
-generation in flight. Rebuilding them is the user's call, not an agent's.
+It was rejected because of its blast radius, not its correctness. Every existing sidecar, probe and
+profile carries a battery-only digest, so after the change none of them would match a fresh run:
+every carry refuses and re-rolls. That is the *safe* direction, but it discards the reuse value of
+eight decks' worth of already-generated artifacts — hours to days each — including anything in
+flight. It also protects nothing that the additive version does not.
 
-A cheaper variant, if preserving existing artifacts matters more: keep `play_digest` as-is and add a
-separate `rollout_cfg` field (`{depth, budget_ms, max_turns}`) to the raw meta, gate the carries on
-both, and treat a *missing* `rollout_cfg` as "unknown -> refuse to reuse whole-pool, allow per-cell".
-More code, no forced regeneration.
+## What shipped
+
+`depth`, `budget_ms` and `max_turns` are recorded as their own fields in the raw meta, and compared
+**only when both sides carry them**:
+
+| verdict | when | behaviour |
+| --- | --- | --- |
+| `Match` | both recorded, all three equal | reuse, as before |
+| `Differs` | both recorded, any differ | **REFUSE**, naming both configs |
+| `Unverifiable` | either side predates the stamp | proceed exactly as before, with a warning saying the check could not be made |
+
+So a pre-existing artifact behaves precisely as it did — nothing is invalidated, nothing must be
+regenerated — while everything generated from now on is properly gated. The hole closes going
+forward rather than retroactively.
+
+Stamped by: the raw sidecar, the checkpoint/probe writer, and the journal header. Gated by: probe
+carry, prior-raw carry, journal resume, `out_raw` resume, and the merge. Deliberately **not** gated:
+the prune-set carry, which already ignores `play_digest` on purpose (a confident mulligan's value
+only ever enters as `min(V, Dopt[1]) == Dopt[1]`, so the config it was measured at cannot move the
+result). Deliberately **not** stamped: the runtime profile — no consumer reads it there, and adding
+a field would churn the `bincache` binary format for nothing.
+
+A merged sidecar claims a config only when *every* pooled input recorded one and they agreed; one
+unverifiable input leaves the output unstamped rather than inheriting whichever file came first. The
+pooled config is tracked as the first *recorded* one and never cleared, so `{d5, unrecorded, d6}`
+still rejects the d6 chunk — clearing it would have let that through.
+
+### Residual limitation
+
+The eight decks' existing sidecars remain unverifiable forever. Warm-starting one of those at a
+changed depth still silently mixes, exactly as today. If that ever matters more than their reuse
+value, the escalation is to refuse `Unverifiable` for `reuse_all_cells` specifically (where the
+damage concentrates — a whole table adopted with zero fresh rollouts) while still allowing per-cell
+pooling. That is a one-line change to `RolloutCfgAllows`'s `Unverifiable` arm.
+
+### Verified
+
+- The finding's own scenario (probe rolled at d6, run at d5) now refuses:
+  `PROBE-CARRY: ROLLOUT-CONFIG MISMATCH -- ... was rolled at d6/b20/t8, this run is d5/b20/t8`.
+- Matched depth still carries all 1582 cell-sides; a stamp-stripped probe still carries them, with
+  the "predates the rollout-config stamp" warning.
+- Merging a d5 chunk with a d6 chunk now rejects; same-depth chunks still pool; a stamp-stripped
+  chunk still pools with a `NOTE` and leaves the merged output unstamped.
+- `test/lib/keepgen_check.sh`: all 8 opt-in paths engaged, both generator invariants hold, and every
+  one of the 15 raw artifacts differs from the pre-change baseline **only** by the added three
+  fields — the sample data is byte-identical. `mtg-test` 156/156, smoke 27/27 (the digest is never
+  compared at play time, so no game could change).
 
 ## Reproducing
 

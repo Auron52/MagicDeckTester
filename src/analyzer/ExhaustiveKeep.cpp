@@ -107,6 +107,69 @@ PoolFp ComputePoolFp(const Decklist& deck, const EquivReport& eq, int K)
     return fp;
 }
 
+// ---- The rollout CONFIG a sidecar's samples were produced under -----------------------------------
+// Companion to play_digest, and deliberately NOT folded into it. play_digest answers "does this deck
+// still play the same way?" by replaying a fixed 64-game goldfish battery -- but the keep rollouts are
+// searched at (depth, budget_ms, max_turns), and a change to those only moves the digest if it happens
+// to alter one of those 64 games. Measured on burn: d5 and d6 produce the SAME digest while 16 of 791
+// cells' rollouts differ (docs/design/rollout-config-digest-depth-blindness.md). So the digest alone
+// cannot tell you two sidecars' samples are comparable; these three values can.
+//
+// Recorded as their own meta fields rather than mixed into the hash so that EXISTING sidecars stay
+// usable: they simply lack the fields, which reads as UNVERIFIABLE -- the pre-existing behaviour, plus
+// a warning that the check could not be made. Nothing already generated is invalidated.
+struct RolloutCfg
+{
+    int depth = -1, budget_ms = -1, max_turns = -1;
+    bool present() const { return depth >= 0 && budget_ms >= 0 && max_turns >= 0; }
+    std::string str() const
+    { return present() ? ("d" + std::to_string(depth) + "/b" + std::to_string(budget_ms)
+                          + "/t" + std::to_string(max_turns)) : std::string("<not recorded>"); }
+};
+
+enum class CfgVerdict { Match, Differs, Unverifiable };
+
+RolloutCfg RolloutCfgOf(const ExhaustiveKeepConfig& cfg)
+{ return { cfg.depth, cfg.budget_ms, cfg.max_turns }; }
+
+RolloutCfg RolloutCfgFromMeta(const nlohmann::json& m)
+{ return { m.value("depth", -1), m.value("budget_ms", -1), m.value("max_turns", -1) }; }
+
+void StampRolloutCfg(nlohmann::json& meta, const RolloutCfg& rc)
+{
+    if (!rc.present()) { return; }   // never stamp a partial config -- absent means "unknown", not "zero"
+    meta["depth"] = rc.depth; meta["budget_ms"] = rc.budget_ms; meta["max_turns"] = rc.max_turns;
+}
+
+CfgVerdict CompareRolloutCfg(const RolloutCfg& a, const RolloutCfg& b)
+{
+    if (!a.present() || !b.present()) { return CfgVerdict::Unverifiable; }
+    return (a.depth == b.depth && a.budget_ms == b.budget_ms && a.max_turns == b.max_turns)
+         ? CfgVerdict::Match : CfgVerdict::Differs;
+}
+
+// One place to say it, so every consumer says it the same way. Returns false when the caller must
+// refuse. `what` names the reuse being gated (it is what the operator needs to see).
+bool RolloutCfgAllows(const RolloutCfg& mine, const RolloutCfg& theirs, const char* what,
+                      const std::string& path)
+{
+    switch (CompareRolloutCfg(mine, theirs))
+    {
+        case CfgVerdict::Match: return true;
+        case CfgVerdict::Differs:
+            std::cerr << "[keepgen] " << what << ": ROLLOUT-CONFIG MISMATCH -- " << path << " was rolled at "
+                      << theirs.str() << ", this run is " << mine.str()
+                      << " -- REFUSING (its samples are not this run's samples)\n" << std::flush;
+            return false;
+        case CfgVerdict::Unverifiable:
+            std::cerr << "[keepgen] " << what << ": " << path << " predates the rollout-config stamp"
+                         " (this run is " << mine.str() << ") -- CANNOT VERIFY it was rolled at the same"
+                         " depth/budget; proceeding as before\n" << std::flush;
+            return true;
+    }
+    return true;
+}
+
 // Enumerate every composition of `total` over K buckets with per-bucket cap `cap`.
 void EnumComps(int i, int rem, std::vector<int>& cur, const std::vector<int>& cap,
                std::vector<std::vector<int>>& out)
@@ -729,6 +792,7 @@ static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const Exhaus
             { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
+        StampRolloutCfg(root["meta"], RolloutCfgOf(cfg));   // what the samples were searched at
         // Execution-trace Phase B provenance (auto card-scope attribution at re-run): the engine
         // fingerprint (was the compiled engine the same?) and a per-card behaviourally-relevant
         // definition hash (which cards' DATA changed?). A re-run diffs these against the current build
@@ -871,6 +935,11 @@ static PriorCarry LoadPriorCarry(const Decklist& deck, const ExhaustiveKeepConfi
                 if (!ok)
                 { std::cerr << "[keepgen] PRIOR-RAW: fingerprint mismatch (bucket/deck/equiv_seed/K/max_mull)"
                                " -- REFUSING (a changed decklist needs bucket translation, not yet built)\n" << std::flush; }
+                // The gate play_digest cannot make. This is the SEVERE consumer: on an identical digest
+                // the whole prior pool is reused with zero fresh rollouts (reuse_all_cells below), so a
+                // prior rolled at another depth would be adopted wholesale and invisibly.
+                else if (!RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(mm), "PRIOR-RAW", pr))
+                { /* refused above, with the reason */ }
                 else if (!(cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts))
                 { std::cerr << "[keepgen] PRIOR-RAW: change-detection needs an ADAPTIVE run "
                                "(0 < MTG_KEEP_R_FLOOR < MTG_KEEP_ROLLOUTS) -- ignoring prior\n" << std::flush; }
@@ -1187,6 +1256,9 @@ static long long LoadProbeCarry(const Decklist& deck, const ExhaustiveKeepConfig
                      " MISMATCH -- ignoring (running fresh)\n" << std::flush;
         return 0;
     }
+    // The gate play_digest cannot make: a probe rolled at another depth/budget passes everything above.
+    if (!RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(pm), "PROBE-CARRY", probe_path))
+    { return 0; }
 
     long long carried = 0;
     for (const auto& sz : pj["sizes"])
@@ -1784,6 +1856,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             { "seed_base", cfg.seed }, { "R", cfg.rollouts }, { "max_mull", cfg.max_mull },
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
+        // Stamped on BOTH shapes: a checkpoint is resumed by this same run (so it must agree), and a
+        // probe chunk is consumed by a later gen (so that gen must be able to check it).
+        StampRolloutCfg(root["meta"], RolloutCfgOf(cfg));
         if (as_probe) { root["meta"]["probe"] = true; root["meta"]["floor_complete"] = true; }
         json buckets = json::array();
         for (int b = 0; b < K; ++b) { buckets.push_back(eq.classes[b].members); }
@@ -1857,7 +1932,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                    && m.value("K", -1) == K
                    && m.value("max_mull", -1) == cfg.max_mull
                    && m.value("equiv_seed", 0ULL) == cfg.equiv_seed
-                   && m.value("R", -1LL) == static_cast<long long>(cfg.rollouts);
+                   && m.value("R", -1LL) == static_cast<long long>(cfg.rollouts)
+                   // A restart at another depth is a different run, not a continuation of this one.
+                   && RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(m), "RESUME(journal)",
+                                       journal_path);
         }
         if (matched)
         {
@@ -1917,7 +1995,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                             && rm.value("K", -1) == K
                             && rm.value("max_mull", -1) == cfg.max_mull
                             && rm.value("equiv_seed", 0ULL) == cfg.equiv_seed
-                            && rm.value("R", -1LL) == static_cast<long long>(cfg.rollouts);
+                            && rm.value("R", -1LL) == static_cast<long long>(cfg.rollouts)
+                            // Same reason as the journal: a checkpoint from a run at another depth is
+                            // not this run's checkpoint, however well its fingerprints match.
+                            && RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(rm), "RESUME",
+                                                cfg.out_raw);
             if (match)
             {
                 for (const auto& sz : rj["sizes"])
@@ -1991,6 +2073,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 nlohmann::json meta = { { "commit", cfg.commit }, { "bucket_fp", jfp.bucket }, { "deck_fp", jfp.deck },
                     { "seed_base", cfg.seed }, { "R", static_cast<long long>(cfg.rollouts) },
                     { "max_mull", cfg.max_mull }, { "K", K }, { "equiv_seed", cfg.equiv_seed } };
+                StampRolloutCfg(meta, RolloutCfgOf(cfg));   // a restart at another depth must not resume this
                 journal_f << nlohmann::json({ { "meta", meta } }).dump() << "\n";
                 journal_f.flush();
             }
@@ -3131,6 +3214,12 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     std::vector<std::vector<std::string>> buckets;
     std::string commit;                                     // advisory once play_digest is present
     std::string play_digest;                                // the pooling identity (rollout-config play)
+    // The rollout config the pool is being built at. `known_rc` is the first RECORDED one and is never
+    // cleared -- clearing it would let {d5, <unrecorded>, d6} through, since d6 would then compare
+    // against nothing. `rc_unverified` remembers that some input predates the stamp, which is what
+    // stops the merged output from claiming a config it cannot vouch for.
+    RolloutCfg known_rc;
+    bool       rc_unverified = false;
     std::set<std::string> commits;                          // equivalence class of commits pooled together
     uint64_t bucket_fp = 0, deck_fp = 0, equiv_seed = 0;
     int K = -1, max_mull = -1;
@@ -3179,6 +3268,16 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
             buckets = root["buckets"].get<std::vector<std::vector<std::string>>>();
             first = false;
         }
+        else if (RolloutCfgFromMeta(m).present() && known_rc.present()
+                 && CompareRolloutCfg(known_rc, RolloutCfgFromMeta(m)) == CfgVerdict::Differs)
+        {
+            // The check play_digest cannot make: two sidecars can play the same 64 goldfish games
+            // identically and still have had their KEEP rollouts searched at different depths.
+            os << "  REJECT (rollout-config mismatch): " << path << "\n"
+               << "    rolled at " << RolloutCfgFromMeta(m).str() << " vs pooled " << known_rc.str()
+               << " -- summing them would average samples from two different searches\n";
+            continue;
+        }
         else if (!play_compatible() || bfp != bucket_fp || dfp != deck_fp || es != equiv_seed
                  || k != K || mm != max_mull)
         {
@@ -3198,6 +3297,19 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         { os << "  REJECT (seed_base overlap -> would double-count): " << path << "\n"; continue; }
         for (uint64_t b : file_bases) { seed_bases.insert(b); }
         for (const std::string& fc : file_commits) { commits.insert(fc); }   // equivalence class
+
+        // Rollout-config bookkeeping for the accepted file. A sidecar written before the stamp existed
+        // is pooled exactly as it always was -- but it is called out, and it stops the merged output
+        // from asserting a config that only some of its inputs actually agreed on.
+        const RolloutCfg file_rc = RolloutCfgFromMeta(m);
+        if (file_rc.present()) { if (!known_rc.present()) { known_rc = file_rc; } }
+        else
+        {
+            rc_unverified = true;
+            os << "  NOTE (rollout config not recorded): " << path
+               << " predates the depth/budget stamp -- pooled, but it cannot be checked against "
+               << (known_rc.present() ? known_rc.str() : std::string("the others")) << "\n";
+        }
 
         for (const json& sz : root["sizes"])
         {
@@ -3700,6 +3812,10 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
             { "pooled_seed_bases", bases }, { "pooled_files", files_ok },
             { "R", effective_R }, { "max_mull", max_mull }, { "K", K }, { "equiv_seed", equiv_seed }
         };
+        // Only claim a rollout config when EVERY pooled input recorded one and they agreed. If any input
+        // predated the stamp, the merged output stays unstamped -- honest about being unverifiable
+        // rather than inheriting a claim from whichever file happened to be first.
+        if (!rc_unverified) { StampRolloutCfg(root["meta"], known_rc); }
         json jb = json::array();
         for (const auto& mem : buckets) { jb.push_back(mem); }
         root["buckets"] = jb;
