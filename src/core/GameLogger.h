@@ -211,6 +211,13 @@ private:
 // Logging never mutates GameState, so this cannot affect the simulation in any way.
 extern thread_local GameLogger* g_reveal_logger;
 
+// Is this the REAL game, or a hypothetical the search is scoring? Defaults to TRUE and is cleared by
+// RevealLogPause, which already wraps every search/rollout/enumeration scope -- so top-level play is
+// "real" and everything the search does underneath is not, with no runner plumbing. Exists because
+// g_reveal_logger only answers this when a logger happens to be attached. DIAGNOSTIC USE ONLY: no
+// game logic may branch on it, or the search and the real game would stop being the same function.
+extern thread_local bool g_real_resolution;
+
 // ---- Human-play "look at the top N" resolution chooser ---------------------------------
 // Scry / Surveil / Ponder-style reorder all resolve a "look at the top N, decide their
 // disposition" sub-decision. Autonomously the provider heuristic (ScryKeepOnTop / KeepReorderTop)
@@ -526,7 +533,8 @@ struct RevealLogPause
     FirebreatheChooser* saved_fbchooser;
     CastOrderChooser* saved_cochooser;
     StorageHoldChooser* saved_shchooser;
-    RevealLogPause() : saved(g_reveal_logger), saved_chooser(g_play_top_chooser),
+    bool saved_real;
+    RevealLogPause() : saved(g_reveal_logger), saved_real(g_real_resolution), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
@@ -539,7 +547,7 @@ struct RevealLogPause
                        saved_fbchooser(g_play_firebreathe_chooser),
                        saved_cochooser(g_play_cast_order_chooser),
                        saved_shchooser(g_play_storage_hold_chooser)
-    { g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
+    { g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
       g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
@@ -548,7 +556,7 @@ struct RevealLogPause
       g_play_lackey_chooser = nullptr;
       g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
       g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr; }
-    ~RevealLogPause() { g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
+    ~RevealLogPause() { g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
