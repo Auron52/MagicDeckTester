@@ -60,6 +60,8 @@ DECK_ONLY=""      # --deck=<name>: restrict this run to one deck's cases (see re
 for arg in "$@"; do
   case "$arg" in
     --smoke)     MODE=smoke ;;
+    --regression) MODE=regression ;;   # the default; accepted explicitly so a scripted sweep can
+                                       # pass a mode flag UNIFORMLY instead of special-casing ""
     --overnight) MODE=overnight ;;
     --fast)      MODE=smoke ;;      # back-compat alias
     --accept)    ACCEPT=1 ;;
@@ -90,16 +92,22 @@ case "$MODE" in
   overnight)  CASES=( "${OVERNIGHT_CASES[@]}" ) ;;
 esac
 
-# --deck=<name>: keep only that deck's cases (the run path -- manifest, compare, per-game diff,
-# and .wins promotion all iterate CASES). The aggregate-GT rebuild on --accept still iterates the
-# FULL mode arrays (sourcing existing GT first), so a per-deck accept updates only this deck's keys
-# and leaves every other deck's ground truth intact.
+# --deck=<name>[,<name>...]: keep only those decks' cases (the run path -- manifest, compare,
+# per-game diff, and .wins promotion all iterate CASES). The aggregate-GT rebuild on --accept still
+# iterates the FULL mode arrays (sourcing existing GT first), so a per-deck accept updates only
+# those decks' keys and leaves every other deck's ground truth intact.
+#
+# A COMMA LIST matters for A/B sweeps: an arm that touches three decks must run them as ONE pooled
+# batch (repo policy -- one load-imbalance tail, not one per deck), and running the full suite
+# instead would spend the majority of the makespan on decks the flag cannot reach.
 if [ -n "$DECK_ONLY" ]; then
   _filtered=()
   for spec in "${CASES[@]}"; do
     # shellcheck disable=SC2086
     set -- $spec
-    [ "$1" = "$DECK_ONLY" ] && _filtered+=("$spec")
+    for _d in ${DECK_ONLY//,/ }; do
+      [ "$1" = "$_d" ] && { _filtered+=("$spec"); break; }
+    done
   done
   [ ${#_filtered[@]} -eq 0 ] && { echo "ERROR: --deck=$DECK_ONLY matched no $MODE cases" >&2; exit 2; }
   CASES=( "${_filtered[@]}" )
