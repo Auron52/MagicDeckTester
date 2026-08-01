@@ -2277,6 +2277,42 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
 }
 
 // How many ranked cards the ROLLOUT's cleanup shed branches over. TH is the only deck that opts in
+// Throes of Chaos retraces by discarding a land. That is the same question as the cleanup shed and
+// the Land's Edge pitch -- "which land in this hand is worth least to me" -- so it reuses the same
+// ranking instead of holding a third, differently-arbitrary opinion. The base rule (first land in
+// hand order) is the defect this deck has now measured twice.
+//
+// Note the direction of the two rules agrees rather than conflicting: the cleanup ranking puts
+// Throes ITSELF at band 1 (shedding it weakly dominates shedding a land, because the land stays in
+// hand to pay a later retrace), and this makes the retrace it enables spend the cheapest land. The
+// unifying idea is one notion of "least valuable card", asked by three different callers.
+std::vector<int> TreasureHuntProvider::RetraceDiscardCandidates(
+    const GameState& s, int /*controller*/, const std::vector<int>& hand_land_indices) const
+{
+    // Gated, default OFF pending measurement: this changes WHICH card leaves the hand, so it is
+    // not byte-identical and does not ship on reasoning alone.
+    static const bool s_ranked = EnvOn("MTG_TH_RETRACE_RANKED");
+    if (!s_ranked) { return hand_land_indices; }
+
+    // Rank the WHOLE hand, then keep only the lands this caller offered, in ranked order. Filtering
+    // after ranking (rather than ranking a filtered list) matters: the ranking's bands are relative
+    // to the whole hand -- the Tower rule, for instance, asks what else is in play and in hand.
+    const std::vector<int> ranked = CleanupDiscardCandidates(s, s.m_required_pieces);
+    std::vector<int> out;
+    out.reserve(hand_land_indices.size());
+    for (int i : ranked)
+    {
+        if (std::find(hand_land_indices.begin(), hand_land_indices.end(), i) != hand_land_indices.end()
+            && std::find(out.begin(), out.end(), i) == out.end())
+        { out.push_back(i); }
+    }
+    // Anything the ranking did not name keeps its historical hand order at the back, so a short
+    // ranking can never drop a legal choice and make the cost unpayable.
+    for (int i : hand_land_indices)
+    { if (std::find(out.begin(), out.end(), i) == out.end()) { out.push_back(i); } }
+    return out;
+}
+
 // -- it is the only one that reaches this decision often enough for a plan variant to be anything
 // but wasted enumeration (336 discards per 400 d0 games; five suite decks never reach it at all).
 int TreasureHuntProvider::CleanupDiscardSearchWidth() const
