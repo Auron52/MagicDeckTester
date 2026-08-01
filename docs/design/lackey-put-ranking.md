@@ -162,6 +162,53 @@ the same conclusion the axis measurement reached, arrived at from the opposite d
 - Matron DOES beat **Piledriver 15-1**, which confirms the summoning-sick mechanism: Piledriver's
   whole value is attacking, and a cheated-in creature cannot attack.
 
+## Why mana value is the right key: it proxies REACHABILITY
+
+The mechanism (user): the Lackey slot's opportunity cost is not "can I cast this now" but "will I
+get it anyway soon". A card at or below NEXT turn's mana ceiling (lands + 1 land drop) arrives
+regardless, so spending the free put on it buys only a turn of tempo; a card above that ceiling is
+otherwise unreachable. So the contention is never "Lackey the Chieftain vs hard-cast the Chieftain"
+— it is between the unreachable card and the best card you will not get anyway.
+
+Measured over 1754 contested triggers (lethal cases excluded, since a separate rule governs those),
+for every pair where one candidate is strictly dearer:
+
+| | dearer card taken |
+|---|---|
+| cheaper card IS reachable next turn | 1623/1651 — **98.3%** |
+| cheaper card is NOT reachable next turn | 254/254 — **100%** |
+
+The search already plays this rule, and is ABSOLUTE when the cheap card is genuinely unreachable.
+The 1.7% of deviations occur only in the case where deviating is cheap.
+
+Land counts at the decision: 2 lands 1072x, 3 lands 516x, 4 lands 115x. So the ceiling is almost
+always 3-4, which means "MV >= 4" and "unreachable next turn" select the SAME cards. **Mana value is
+not a crude proxy for value here — it is a good proxy for reachability**, which is the real
+mechanism. That is why the plain MV rule beat every rival ranking, and why no per-deck table or
+affordability term was needed on top of it.
+
+Untested: whether a lord is worse specifically when castable THIS turn. `Goblin Chieftain` was
+castable in zero contested samples, so that variant has no evidence either way.
+
+**Two refinements this measurement does NOT capture** (user, and both correct):
+
+1. **Reachability is not per-card — cheap cards compete for the same future mana.** The table above
+   asks "is candidate B under next turn's ceiling" independently per pair. With Chieftain AND King
+   both in hand, only one 3-drop is castable next turn; the second is two turns out and therefore
+   effectively unreachable. So the real contention with a Twinshot Sniper is against the SECOND
+   lord, not the first, and the 98.3% figure understates how often the dear card is correct. A
+   faithful test would model the mana CURVE against the whole hand, not one pair at a time.
+
+2. **`Goblin Warchief` is not just a lord — it is a cost reducer** (`reduces_spell_subtype:
+   "Goblin"`, modelled), and the put lands in the combat-damage step, so the discount is usable in
+   the SAME turn's second main and certainly the next. The data already reflects this without being
+   told: Warchief has the highest pick rate of the mana-value-3 cards (41.9%, vs Chieftain 33.3% and
+   King 23.6%) and its pair with Siege-Gang is one of only three contested ones in the whole
+   census (1-14). The search finds the discount; a mana-value rank cannot see it.
+
+Both are arguments for keeping the branch rather than growing the rule: each is a state-dependent
+correction that a static rank cannot express, and the search already prices them.
+
 ## Implementation note — why this pin lives on GameState
 
 `scry_choice` and `etbdig_choice` pin their decision with a scoped thread-local around the plan
