@@ -1365,9 +1365,15 @@ static bool EtbDigAxisEnabled()
     return on;
 }
 // How many dig candidates the axis scores, INCLUDING the provider's best (so 1 == heuristic only).
-// DEFAULT 3: MTG_ETBDIG_TRACE over 200 Knights games measured the legal-match count at 5.9% one,
-// 60.0% two, 6.9% three, 23.4% four, 3.7% five (mean 2.6), so 3 covers the whole distribution up to
-// the tail while keeping the common two-match case exact.
+//
+// DEFAULT 3 = the measured knee, 300 games x 7 seeds spanning all three seed sets:
+//     W3 - W2 = -0.0099   (3 seeds improve, 4 tie, none worse)
+//     W5 - W3 = +0.0000   (identical on every seed)
+// The first sweep of this width was run on seed 4004 ALONE, where W2 and W3 tie, and that single
+// seed made W=2 look like the whole gain -- the mirror of the standing "sum all seed sets before
+// calling a small delta a win" rule, applied to calling one a non-win. The distribution
+// (MTG_ETBDIG_TRACE: 5.9% one legal match, 60.0% two, 6.9% three, 23.4% four, 3.7% five, mean 2.6)
+// explains the shape: past 3 the extra candidates are ones the provider already ranked last.
 static std::size_t EtbDigAxisWidth()
 {
     static const std::size_t w = []() -> std::size_t
