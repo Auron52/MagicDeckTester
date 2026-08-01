@@ -175,6 +175,15 @@ net-negative avg with every SLOWER game understood, not a top-line number that "
    benign search-truncation) vs `PERSISTS` (draw-divergence variance if the deck
    shuffles/fetches, else a real same-draws slowdown).
 
+   > **`PERSISTS` does NOT mean "real regression".** It re-runs only the NEW arm, so it
+   > cannot see the case where the OLD side's faster win was itself budget luck. Measured
+   > 2026-08-01: `goblins_smoke_d5_s1001` gi43 went T5 → T6 and classified `PERSISTS` at 4x
+   > and 16x — but the *old* arm also becomes T6 at 4x and stays T6 at **unlimited** budget,
+   > so the baseline was the artifact, not the change. **Before calling a searched slowdown
+   > real, re-run BOTH arms at `--budget-ms 0`.** Note `0` means unlimited — a large number
+   > does not; the budget is a deterministic virtual work-unit count
+   > (`SearchBudget::NODES_PER_VIRTUAL_MS`), and `<= 0` disables the limit.
+
 You can also run the raw audit / a single-game diff directly (what the harness invokes):
 
 ```bash
@@ -186,6 +195,17 @@ python3 test/explain_game.py <mode> <key> <gi>      # old-vs-new per-turn diff o
         # baseline = logs/snapshots/<mode>-baseline (from the last --accept); or pass
         # --old-bin <snapshot> (see test/snapshot_bin.sh) to diff against any build.
 ```
+
+> **Two ways `explain_game.py` diagnoses the wrong thing** (both measured 2026-08-01, see
+> `docs/design/goblins-value-model-ab.md`):
+> - It pins `--depth <case depth> --ignore-play-profile`. That is right for d0/d3, whose manifest
+>   jobs pin depth too — but the **d5 job OMITS the depth key on purpose so the deck's `value_play`
+>   block owns the depth**. Pinning it bypasses the block and diagnoses a configuration the case
+>   never ran; where the arms' blocks differ they may not even run at the same depth. Reproduce a d5
+>   case by omitting `--depth` and passing only `--budget-ms`.
+> - `--old-bin` resolves the DECK from the current tree. Fine for a code change; useless when the
+>   change is a deck-sibling data file (`<deck>.value.json`), because the old binary still picks up
+>   the new file and reports "no change". A/B a **copy** of the deck folder instead.
 
 It diffs the committed per-game GT against this run and prints, **split by depth**,
 the per-game `slower` / `faster` / `play-changed` counts, listing each searched-depth SLOWER
