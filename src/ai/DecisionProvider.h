@@ -450,6 +450,16 @@ public:
     // MTG_TUTOR_WIDTH still overrides engine-side for A/B. See docs/design/searched-action-subdecisions.md.
     virtual int TutorSearchWidth() const { return 6; }
 
+    // CleanupDiscardSearchWidth -- how many of CleanupDiscardCandidates' ranked cards the ROLLOUT's
+    // end-of-turn cleanup branches over (1 == the ranked pick only, byte-identical to no branch).
+    //
+    // The EXECUTOR already searches this decision; the rollout did not, so every line the search
+    // scored assumed the heuristic's shed. Provider-owned and DEFAULT 1 because the decision is
+    // dead in most decks -- per 400 d0 games, five of nine suite decks never reach a cleanup
+    // discard at all and three more are under 40 -- so a global width would buy plan variants that
+    // pin an index nothing ever consumes. A deck that actually makes this decision opts in.
+    virtual int CleanupDiscardSearchWidth() const { return 1; }
+
     // ManaSourceRank -- mana-source TAP ORDER: flexibility rank of a mana source (LOWER = tap earlier).
     // The greedy mana solver (AIEngine::TapForCost / TurnSolver::TapForCostDirect, scarcity path)
     // pays each pip from the lowest-ranked qualifying source, so the flexible sources stay up and the

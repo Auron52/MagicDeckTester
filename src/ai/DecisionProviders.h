@@ -173,6 +173,9 @@ public:
     // lands, two ETB-scry lands and four duals. Those are different cards, not copies of "a land".
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // The only deck that opts into branching the ROLLOUT's cleanup shed. MTG_TH_DISCARD_WIDTH
+    // overrides for the sweep; see the definition for the measured value.
+    int CleanupDiscardSearchWidth() const override;
 };
 
 // Aether Vial decks (Slivers, Knights): the hand-aware vial charge policy.

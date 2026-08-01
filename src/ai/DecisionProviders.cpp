@@ -1697,7 +1697,29 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
 //   5 mono     -- + among the untapped keepers, a land producing FEWER distinct colours goes first
 //                 (Island before a U/R dual): the dual is the one that can still cast both halves
 //                 of the deck, so the mono source is the more expendable of two untapped lands.
-enum class ThDiscard { Base = 0, Dup = 1, Tapped = 2, NoDig = 3, TapDig = 4, Mono = 5 };
+//   6 mix      -- ROLE DIVERSITY instead of a static category order, and the one rung whose shape
+//                 differs from the rest. The measurement that sank rungs 2-5 says ordering the
+//                 ~10-land pool by category is invisible; what a flooded hand can still get wrong
+//                 is keeping ten lands that all do the SAME thing. So: classify each land by ROLE
+//                 (untapped dual / untapped mono / depletion / digger / tapped / no-max-hand), and
+//                 shed from the role we hold the MOST of, never taking the last copy of a role
+//                 while a role with spares exists. Note this SUBSUMES the adopted rung's duplicate
+//                 rule -- a name-duplicate is just the special case of functional redundancy where
+//                 the two cards are the same card -- so it is built on top of rung 1 rather than
+//                 replacing it.
+//   7 keep     -- an explicit KEEP SET in priority order (2 untapped incl. one filter, then
+//                 depletion 1-per-name, then diggers) rather than a shed order, with Frostboil
+//                 Snarl only counting as untapped when an enabler SURVIVES the cleanup. See the
+//                 keep-set construction below for why that ordering has to exist.
+//   8 shop     -- the keep set as an explicit SHOPPING LIST sized to the hand limit: 1 untapped
+//                 non-filter, 1 untapped filter, 2 depletion (one per name), 3 diggers (Fiery
+//                 Islet, then a 1-mana cycler, then a typed scry/surveil land). That is exactly 7
+//                 -- if the hand can fill it there is no room left, which is fine, and any slot it
+//                 cannot fill is simply given back to whatever lands remain. Differs from rung 7
+//                 in taking a filter as its OWN slot rather than as a preference inside two shared
+//                 untapped slots, and in buying three diggers rather than one or two.
+enum class ThDiscard { Base = 0, Dup = 1, Tapped = 2, NoDig = 3, TapDig = 4, Mono = 5, Mix = 6,
+                       Keep = 7, Shop = 8 };
 static ThDiscard ThDiscardVariant()
 {
     static const ThDiscard v = []() -> ThDiscard
@@ -1711,7 +1733,10 @@ static ThDiscard ThDiscardVariant()
             case 2:  return ThDiscard::Tapped;
             case 3:  return ThDiscard::NoDig;
             case 4:  return ThDiscard::TapDig;
-            default: return ThDiscard::Mono;
+            case 5:  return ThDiscard::Mono;
+            case 6:  return ThDiscard::Mix;
+            case 7:  return ThDiscard::Keep;
+            default: return ThDiscard::Shop;
         }
     }();
     return v;
@@ -1745,6 +1770,237 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         { if (perm.controller_index == s.active_player_index && perm.card.m_name == name) { ++k; } }
         return k;
     };
+
+    // What JOB a land does, for the rung-6 diversity rule. Deliberately coarse: the point is not to
+    // rank these against each other (rungs 4/5 measured that as invisible) but to notice when the
+    // hand holds five of one and none of another. Order of the tests matters -- a cycler that also
+    // enters tapped is a DIGGER, because that is the job we would miss.
+    auto th_role = [&](const Card& c) -> int
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const CardParams*     p = d != nullptr ? &d->params : nullptr;
+        if (p == nullptr)                            { return 0; }
+        if (p->no_max_hand_size)                     { return 1; }   // ends the decision entirely
+        if (p->cycling_cost.has_value()
+            || p->sacrifice_draw_cost.has_value())   { return 2; }   // digger
+        if (p->enters_tapped_with_depletion > 0)     { return 3; }   // burst mana
+        if (d != nullptr && LandWouldEnterTapped(s, *d)) { return 4; }   // tapped mana
+        return p->produces.size() > 1 ? 5 : 6;                       // untapped dual / untapped mono
+    };
+
+    // Rung 7 -- an explicit KEEP SET, built once before ranking. The hand ends at seven cards, so
+    // the real question is not "which land is worst" but "which few lands do we want left", in
+    // priority order: two untapped sources (one of them ideally a FILTER -- Cascade Bluffs, else
+    // Ferrous Lake), then the depletion lands one per name, then diggers if room remains.
+    //
+    // Two things need the keep set to exist BEFORE the ranking rather than being decided per card:
+    //   * Frostboil Snarl enters untapped only while an Island/Mountain card can be revealed, so it
+    //     counts toward the untapped quota ONLY if an enabler is itself being kept. Asking
+    //     LandWouldEnterTapped instead (as rungs 4-6 do) reads the hand as it is NOW -- and a
+    //     cleanup that sheds three cards can shed the enabler and quietly turn the Snarl into a
+    //     tapped land. That is the easy mistake here, and it is invisible without this ordering.
+    //   * Fiery Islet is the best FIRST digger precisely because it doubles as untapped U/R mana --
+    //     a fact about the rest of the keep set, not about the card alone.
+    std::vector<char> kept(static_cast<std::size_t>(n), 0);
+    // Rung 8 fallback ordering for lands the shopping list did not buy: 0 == not ranked, otherwise
+    // smaller == more wanted. Cards ranked here are shed AFTER the unranked surplus, in reverse.
+    std::vector<int>  fallback(static_cast<std::size_t>(n), 0);
+    if (variant >= ThDiscard::Keep)
+    {
+        auto par = [&](int i) -> const CardParams*
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            return d != nullptr ? &d->params : nullptr;
+        };
+        auto is_snarl = [&](int i) { const CardParams* p = par(i);
+                                     return p != nullptr && !p->etb_untap_reveal_subtypes.empty(); };
+        // "Dig" is the whole selection category, not just cycling: a scry/surveil land is the
+        // weakest member of it rather than a separate role, because when PLAYED it also filters.
+        auto digs_i   = [&](int i) { const CardParams* p = par(i);
+                                     return p != nullptr && (p->cycling_cost.has_value()
+                                                          || p->sacrifice_draw_cost.has_value()
+                                                          || p->etb_scry > 0 || p->etb_surveil > 0); };
+        auto deplet_i = [&](int i) { const CardParams* p = par(i);
+                                     return p != nullptr && p->enters_tapped_with_depletion > 0; };
+        // "Untapped" for quota purposes: not the tapped flag, and not a Snarl (handled separately).
+        auto untapped_i = [&](int i)
+        {
+            const CardParams* p = par(i);
+            if (p == nullptr || deplet_i(i) || is_snarl(i)) { return false; }
+            return !p->enters_tapped;
+        };
+        // Preference inside the untapped slots: a filter first (Cascade Bluffs over Ferrous Lake),
+        // then a dual, then a mono source.
+        auto untapped_rank = [&](int i)
+        {
+            const CardParams* p = par(i);
+            if (p == nullptr) { return 9; }
+            if (p->is_filter)              { return 0; }
+            if (p->ramp_filter)            { return 1; }
+            return p->produces.size() > 1 ? 2 : 3;
+        };
+
+        std::vector<int> lands_i;
+        for (int i = 0; i < n; ++i)
+        { if (!ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i])) { lands_i.push_back(i); } }
+
+        // Reliquary Tower is never shed, so it is kept outside the quotas.
+        for (int i : lands_i) { const CardParams* p = par(i);
+                                if (p != nullptr && p->no_max_hand_size) { kept[i] = 1; } }
+
+        // 1. two untapped sources, best-ranked first.
+        std::vector<int> ups;
+        for (int i : lands_i) { if (untapped_i(i)) { ups.push_back(i); } }
+        std::stable_sort(ups.begin(), ups.end(),
+                         [&](int a, int b) { return untapped_rank(a) < untapped_rank(b); });
+        int untapped_kept = 0;
+        if (variant >= ThDiscard::Shop)
+        {
+            // One NON-filter untapped source and one FILTER, as separate slots -- the filter is not
+            // a better version of a plain untapped land, it is a different tool, so competing them
+            // for the same two slots (rung 7) can end up buying two of one kind.
+            bool took_plain = false, took_filter = false;
+            for (int i : ups)
+            {
+                const CardParams* p2 = par(i);
+                const bool filt = p2 != nullptr && (p2->is_filter || p2->ramp_filter);
+                if (filt && !took_filter)       { kept[i] = 1; took_filter = true; ++untapped_kept; }
+                else if (!filt && !took_plain)  { kept[i] = 1; took_plain  = true; ++untapped_kept; }
+            }
+        }
+        else
+        {
+            for (int i : ups) { if (untapped_kept < 2) { kept[i] = 1; ++untapped_kept; } }
+        }
+
+        // A Snarl only fills a remaining untapped slot if something we are KEEPING turns it on.
+        if (untapped_kept < 2)
+        {
+            for (int i : lands_i)
+            {
+                if (untapped_kept >= 2 || !is_snarl(i) || kept[i]) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+                bool enabled = false;
+                for (int j : lands_i)
+                {
+                    if (!kept[j] || j == i) { continue; }
+                    const CardDefinition* e = CardDatabase::Instance().LookupCached(ap.hand[j]);
+                    const SubtypeSet& subs = e != nullptr ? e->card.m_subtypes : ap.hand[j].m_subtypes;
+                    for (const std::string& cs : subs)
+                        for (const std::string& want : d->params.etb_untap_reveal_subtypes)
+                            if (cs == want) { enabled = true; }
+                }
+                if (enabled) { kept[i] = 1; ++untapped_kept; }
+            }
+        }
+
+        // 2. depletion lands, one per NAME, the OUTLET's colour first. Sandstone Needle before
+        //    Saprazzan Skerry -- and that ordering is derivable rather than a card-name table:
+        //    Land's Edge, the deck's payoff, costs {1}{R}{R}, and a depletion land is how a
+        //    three-land board pays a DOUBLE pip. Treasure Hunt is {1}{U}, so the blue one is the
+        //    better OPENING-hand card -- but by the time a cleanup discard is happening the engine
+        //    has usually already run, and it is the payoff that still needs casting.
+        int outlet_w = 0, outlet_u = 0, outlet_b = 0, outlet_r = 0, outlet_g = 0;
+        {
+            auto note_outlet = [&](const Card& c)
+            {
+                const CardDefinition* d2 = CardDatabase::Instance().LookupCached(c);
+                if (d2 == nullptr || d2->params.discard_land_damage <= 0) { return; }
+                const ManaCost& mc = d2->card.m_mana_cost;
+                outlet_w += mc.white; outlet_u += mc.blue;  outlet_b += mc.black;
+                outlet_r += mc.red;   outlet_g += mc.green;
+            };
+            for (const Card& c : ap.hand)    { note_outlet(c); }
+            for (const Card& c : ap.library) { note_outlet(c); }
+        }
+        auto outlet_colored = [&](int i)
+        {
+            const CardParams* p2 = par(i);
+            if (p2 == nullptr) { return false; }
+            for (Color col : p2->produces)
+            {
+                if (col == Color::White && outlet_w > 0) { return true; }
+                if (col == Color::Blue  && outlet_u > 0) { return true; }
+                if (col == Color::Black && outlet_b > 0) { return true; }
+                if (col == Color::Red   && outlet_r > 0) { return true; }
+                if (col == Color::Green && outlet_g > 0) { return true; }
+            }
+            return false;
+        };
+        std::vector<int> deps;
+        for (int i : lands_i) { if (!kept[i] && deplet_i(i)) { deps.push_back(i); } }
+        std::stable_sort(deps.begin(), deps.end(), [&](int a, int b)
+        { return outlet_colored(a) > outlet_colored(b); });
+        for (int i : deps)
+        {
+            bool have_name = false;
+            for (int j : lands_i)
+            { if (kept[j] && ap.hand[j].m_name == ap.hand[i].m_name) { have_name = true; } }
+            if (!have_name) { kept[i] = 1; }
+        }
+
+        // 3. diggers if room remains, in the order they are worth a slot:
+        //      0  Fiery Islet   -- also untapped U/R mana, so it pays for its slot twice
+        //      1  a 1-mana cycler (Lonely Sandbar, Forgotten Cave) -- selection at a real price
+        //      2  a costlier cycler (Remote Isle at {2})
+        //      3  a scry/surveil land -- it only filters if we get to PLAY it
+        //    Fewer when a Treasure Hunt is already in hand: the dig role matters less when the
+        //    engine we would be digging for is here.
+        auto dig_rank = [&](int i) -> int
+        {
+            const CardParams* p = par(i);
+            if (p == nullptr) { return 4; }
+            if (p->sacrifice_draw_cost.has_value() && !p->enters_tapped) { return 0; }
+            if (p->cycling_cost.has_value())
+            { return p->cycling_cost->ManaValue() <= 1 ? 1 : 2; }
+            if (p->sacrifice_draw_cost.has_value()) { return 1; }
+            // Scry/surveil lands last -- and among them, one carrying BASIC LAND TYPES first
+            // (Thundering Falls is Island Mountain, Temple of Epiphany is a bare Land). The types
+            // are not cosmetic here: they are exactly what a Frostboil Snarl reveals to enter
+            // untapped, so the typed one is worth strictly more to this hand than the other.
+            const CardDefinition* dd = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            const SubtypeSet& subs = dd != nullptr ? dd->card.m_subtypes : ap.hand[i].m_subtypes;
+            return subs.begin() != subs.end() ? 3 : 4;
+        };
+        std::vector<int> digs_v;
+        for (int i : lands_i) { if (!kept[i] && digs_i(i)) { digs_v.push_back(i); } }
+        std::stable_sort(digs_v.begin(), digs_v.end(),
+                         [&](int a, int b) { return dig_rank(a) < dig_rank(b); });
+        // Three dig slots at rung 8 -- the list is sized to the hand limit, not rationed.
+        const int dig_quota = variant >= ThDiscard::Shop ? 3 : (have_engine ? 1 : 2);
+        int dig_kept = 0;
+        for (int i : digs_v) { if (dig_kept < dig_quota) { kept[i] = 1; ++dig_kept; } }
+
+        // 4. FALLBACK for slots the hand could not fill (or capacity past the list): alternate
+        //    untapped and dig while both remain, then take whatever is left. Alternating matters
+        //    because the list is a shopping list, not a ration -- a hand that is all diggers should
+        //    not end up keeping seven diggers just because the untapped slots went unfilled. The
+        //    only way to finish with a lopsided hand is to have held nothing else.
+        if (variant >= ThDiscard::Shop)
+        {
+            std::vector<int> rest_up, rest_dig, rest_other;
+            for (int i : lands_i)
+            {
+                if (kept[i]) { continue; }
+                if (untapped_i(i))   { rest_up.push_back(i); }
+                else if (digs_i(i))  { rest_dig.push_back(i); }
+                else                 { rest_other.push_back(i); }
+            }
+            std::stable_sort(rest_dig.begin(), rest_dig.end(),
+                             [&](int a, int b) { return dig_rank(a) < dig_rank(b); });
+            std::stable_sort(rest_up.begin(), rest_up.end(),
+                             [&](int a, int b) { return untapped_rank(a) < untapped_rank(b); });
+            // fallback_rank: earlier = more wanted. Interleave, then the remainder, then the rest.
+            std::size_t a_i = 0, d_i = 0;
+            int order = 0;
+            while (a_i < rest_up.size() || d_i < rest_dig.size())
+            {
+                if (a_i < rest_up.size())  { fallback[rest_up[a_i++]]  = ++order; }
+                if (d_i < rest_dig.size()) { fallback[rest_dig[d_i++]] = ++order; }
+            }
+            for (int i : rest_other) { fallback[i] = ++order + 100; }
+        }
+    }
 
     // Lower band = shed earlier. Bands, not a comparator chain, so the ladder rungs compose and a
     // stable_sort keeps hand order inside a band (the historical tie-break). Band 99 means "do not
@@ -1807,6 +2063,59 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         // spare nonlands above, because a land is at least ammunition and they are not.
         if (variant >= ThDiscard::Dup && copies_seen(c.m_name) > 1) { return 2; }
 
+        // Rung 6 -- QUOTAS per role, not a static category order. A flooded hand's real mistake is
+        // not "kept the wrong land", it is "kept ten lands that all do the same job", so each role
+        // gets a number it is worth holding and everything past it is surplus:
+        //
+        //   no-max-hand   never shed        it ends the decision
+        //   untapped dual 2                 "a couple of untapped, ideally tapping both colours"
+        //   untapped mono 1                 a colour-restricted source is worth less of the quota
+        //   depletion     1 PER NAME        worth having, but a second Skerry adds nothing a first
+        //                                   one does not -- so the quota is per card, not per role
+        //   digger        1 with a Treasure Hunt in hand, else 2 -- the dig role matters less when
+        //                                   the engine we would be digging for is already here
+        //   tapped mana   0                 nothing to reserve; this is the surplus role
+        //
+        // Surplus lands are shed in role order (tapped first); anything inside quota sits behind
+        // every surplus card. Quota is filled in HAND ORDER, which keeps the historical tie-break.
+        // Rung 7 -- the keep set decides: anything holding a slot sits behind everything that does
+        // not, and the surplus is shed in role order.
+        if (variant >= ThDiscard::Keep)
+        {
+            if (kept[i]) { return 20 + th_role(c); }
+            if (variant >= ThDiscard::Shop && fallback[i] > 0)
+            {
+                // Ranked fallback: wanted-est last to be shed. 19 down to 3, so every fallback land
+                // still sheds after the unranked surplus below and before anything holding a slot.
+                return std::max(3, 19 - fallback[i]);
+            }
+            static const int kSurplus[7] = { 8, 8, 5, 6, 3, 4, 4 };
+            return kSurplus[th_role(c)];
+        }
+        if (variant >= ThDiscard::Mix)
+        {
+            if (p != nullptr && p->no_max_hand_size) { return 9; }
+            const int role  = th_role(c);
+            const int quota = role == 5 ? 2
+                            : role == 6 ? 1
+                            : role == 3 ? 1
+                            : role == 2 ? (have_engine ? 1 : 2)
+                            : 0;
+            // Position of this card among the ones competing for the same quota. Depletion lands
+            // count PER NAME (each is its own burst source); every other role counts per role.
+            int ahead = 0;
+            for (int j = 0; j < i; ++j)
+            {
+                const Card& h = ap.hand[j];
+                if (h.m_is_staged || !CleanupDiscardIsLand(h)) { continue; }
+                if (role == 3 ? (h.m_name == c.m_name) : (th_role(h) == role)) { ++ahead; }
+            }
+            const bool surplus = ahead >= quota;
+            // 3..8 for surplus (tapped soonest), 10+ for anything holding a quota slot.
+            static const int kShedOrder[7] = { 8, 6, 5, 7, 3, 4, 4 };
+            return surplus ? kShedOrder[role] : 10 + role;
+        }
+
         // Rungs 4/5 -- the faithful "tapped unless it digs or is a depletion land" rule.
         if (variant >= ThDiscard::TapDig)
         {
@@ -1842,6 +2151,21 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
     std::stable_sort(pref.begin(), pref.end(),
                      [&](int a, int b) { return band(a) < band(b); });
     return CleanupDiscardRankingWithOrder(s, required_pieces, pref);
+}
+
+// How many ranked cards the ROLLOUT's cleanup shed branches over. TH is the only deck that opts in
+// -- it is the only one that reaches this decision often enough for a plan variant to be anything
+// but wasted enumeration (336 discards per 400 d0 games; five suite decks never reach it at all).
+int TreasureHuntProvider::CleanupDiscardSearchWidth() const
+{
+    static const int w = []() -> int
+    {
+        const char* e = std::getenv("MTG_TH_DISCARD_WIDTH");
+        if (e == nullptr || *e == '\0') { return 1; }   // DEFAULT: see the sweep before raising
+        const int n = std::atoi(e);
+        return n < 1 ? 1 : n;
+    }();
+    return w;
 }
 
 bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,

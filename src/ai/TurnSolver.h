@@ -296,6 +296,18 @@ public:
         // kind consumes.
         int ponder_choice = -1;
 
+        // CLEANUP DISCARD (hand over its size limit at end of turn): which candidate of the
+        // provider's ranked CleanupDiscardCandidates this turn's first shed takes. -1 (default) ==
+        // the provider's top pick, byte-identical to no branch.
+        //
+        // The EXECUTOR already searches this decision (AIEngine::ChooseDiscard rolls out every hand
+        // card and keeps the win-optimal ones). The ROLLOUT did not -- SimulateEndAndStartNextTurn
+        // sheds the heuristic's card, so every line the search scored assumed that shed. This axis
+        // is what lets a plan be scored against a DIFFERENT one. Copied onto
+        // GameState::scripted_discard_choice rather than pinned by a scoped guard, for the same
+        // reason as lackey_choice: cleanup runs after ApplyPlanDirect returns.
+        int discard_choice = -1;
+
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
         // cards. Top-level (triggered by the main plan); each entry nests its own
