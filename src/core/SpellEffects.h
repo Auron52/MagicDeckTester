@@ -1950,6 +1950,18 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         }
         if (ranked.empty()) { continue; }   // "may": nothing matching to put -> decline
         int best = ranked.front();
+        // SEARCHED pick: the main-phase plan may have pinned an index into `ranked`
+        // (Plan::lackey_choice -> GameState::scripted_cheat_choice). Clamped rather than dropped --
+        // the enumerator sizes the axis off the hand as it stood before combat, and a cast in the
+        // same plan can shrink it, leaving a pinned index past the end. Clamping makes that variant
+        // a duplicate of the last (identical state -> the search tie-breaks to the first, which is
+        // the provider's pick) instead of a silent decline.
+        if (state.scripted_cheat_choice >= 0)
+        {
+            const std::size_t k = static_cast<std::size_t>(state.scripted_cheat_choice);
+            best = ranked[std::min(k, ranked.size() - 1)];
+        }
+        state.scripted_cheat_choice = -1;   // consumed by this trigger
 
         // Human play (--claude-play/viewer): let the player pick WHICH Goblin permanent to put, or
         // decline (it is a "may"). Nulled by RevealLogPause for every search/rollout scope, so this

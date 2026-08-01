@@ -207,6 +207,16 @@ struct GameState
     // PATTERNS table in GoldFishRunner (PopulateOpponentSpawns). nullptr -> no spawns.
     const std::vector<OpponentSpawn>* opponent_spawns = nullptr;
     int                      vial_target_mv        = 0;   // most common creature MV in the deck; Aether Vial stops here
+
+    // SEARCHED Goblin Lackey put (Plan::lackey_choice): an index into the provider's ranked
+    // CombatCheatCandidates list, or -1 for the provider's top pick. Unlike the scry/ETB-dig pins
+    // this lives on the STATE rather than a scoped thread_local, because the decision is made in the
+    // main phase but consumed in the COMBAT-DAMAGE step -- a scoped guard around the plan apply
+    // would be destroyed before the trigger ever fires. Living on the state also means it rides
+    // every rollout deep-copy for free, so each plan variant carries its own pick.
+    // Consumed by the first cheat trigger and reset at the start of each turn, so it cannot leak
+    // into a later combat.
+    int                      scripted_cheat_choice = -1;
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers

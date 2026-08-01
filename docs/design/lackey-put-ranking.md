@@ -53,6 +53,46 @@ So: the value here is in **not getting it wrong**, and highest-MV already gets i
 argument for keeping MV as the default — not an argument against searching it, only against
 expecting a search to find much.
 
+## The search still beats it (MTG_LACKEY_AXIS, default ON)
+
+That expectation was wrong, and the way it was wrong is the point. Ranked candidates + a searched
+axis (width 2), 300 games x 7 seeds, vs the heuristic alone:
+
+| seed | heuristic | searched | delta |
+|---|---|---|---|
+| 1001 | 4.3367 | 4.3267 | −0.0100 |
+| 2002 | 4.3600 | 4.3567 | −0.0033 |
+| 3003 | 4.3733 | 4.3700 | −0.0033 |
+| 4004 | 4.3267 | 4.3200 | −0.0067 |
+| 5005 | 4.3433 | 4.3367 | −0.0066 |
+| 6006 | 4.3700 | 4.3633 | −0.0067 |
+| 7007 | 4.4400 | 4.4267 | −0.0133 |
+| **total** | | | **−0.0499** |
+
+**7/7 improve.** W=3 and W=4 measure identical to W=2 on every seed, so the entire contribution is
+"occasionally the provider's #2 beats its #1" — not a deep re-ranking. Cost +12% makespan on
+goblins; no other deck has a cheat source, so no other deck pays anything. Suite: 4 faster, 0
+slower, 22 same-score line changes (spot-checked: identical hands and draws, the new line simply
+deploys more).
+
+**The lesson.** A heuristic being *measurably the best available ranking* does not make the branch
+redundant. MV wins every head-to-head against a rival rule and still leaves 0.05 on the table for a
+two-wide search. Rankings are static; the search sees the actual board. This is the concrete case
+for "a heuristic is a branch's DEFAULT, not a substitute for branching".
+
+## Implementation note — why this pin lives on GameState
+
+`scry_choice` and `etbdig_choice` pin their decision with a scoped thread-local around the plan
+apply. That does not work here: the put is chosen in the MAIN phase but consumed in the
+COMBAT-DAMAGE step, so a scoped guard is destroyed before the trigger ever fires.
+`GameState::scripted_cheat_choice` instead rides every rollout deep-copy for free, so each plan
+variant carries its own pick. It is consumed by the first trigger and reset at the start of each
+turn (in both `GameEngine::UntapStep` and `SimulateEndAndStartNextTurn`) so it cannot leak into a
+later combat.
+
+This keeps the card's real timing — the put still happens in the combat-damage step, as printed —
+rather than relocating it to the second main.
+
 ## Status
 
 - **Ported** to `CombatCheatCandidates` (byte-identical) — commit `0a67d09`.

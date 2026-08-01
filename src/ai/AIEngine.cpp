@@ -2017,6 +2017,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // rest of the phase; the first dig consumes it. -1 (no variant chosen) is inert.
     ScriptedEtbDig _sed_exec(plan.etbdig_choice);
 
+    // Same for the searched Lackey put -- executor/rollout lockstep: without it the search would
+    // score one Goblin entering and the real game would put a different one.
+    if (plan.lackey_choice >= 0) { state.scripted_cheat_choice = plan.lackey_choice; }
+
     // Cast a spell from hand by name.
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
                             int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,

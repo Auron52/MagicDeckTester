@@ -1402,6 +1402,66 @@ static std::size_t EtbDigCandidateCountNow(const GameState& state, const CardPar
     return matches;
 }
 
+// SEARCHED GOBLIN LACKEY PUT. The put is free and lands after attackers are declared, so like the
+// tutor target and the ETB dig it is cost-neutral and its variants all share a cast-name signature
+// -- the dedup inside EnumeratePlans kept only the provider's top pick.
+//
+// DEFAULT ON; =0 restores the pure heuristic. This is the case that justifies the "a heuristic is a
+// branch's DEFAULT, not a substitute for branching" rule: highest-MV was measured BEST of four
+// rankings (a bad rule costs 1.47 turns, every sensible one lands within 0.06 --
+// docs/design/lackey-put-ranking.md), and the search STILL finds -0.0499 on top of it, 7/7 seed
+// sets. A good heuristic and a live branch are not substitutes.
+static bool LackeyAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_LACKEY_AXIS", true);
+    return on;
+}
+// Width 2 -- the ranked top two. Measured identical to W=3 and W=4 on every held-out seed, which
+// says the search's whole contribution is "occasionally the provider's #2 is better than its #1",
+// not a deep re-ranking. Costs +12% makespan on goblins; no other deck has a cheat source, so no
+// other deck pays anything.
+static std::size_t LackeyAxisWidth()
+{
+    static const std::size_t w = []() -> std::size_t
+    {
+        const char* v = std::getenv("MTG_LACKEY_WIDTH");
+        if (v == nullptr || *v == '\0') { return 2; }
+        const int n = std::atoi(v);
+        return n < 1 ? 1 : static_cast<std::size_t>(n);
+    }();
+    return w;
+}
+
+// How many matching permanents a cheat trigger could choose among RIGHT NOW, and whether a source
+// that can attack is even on the board. Used only to SIZE the axis at enumeration time; the real
+// list is rebuilt at resolution and the pin clamps if this over-counts.
+static std::size_t LackeyCandidateCountNow(const GameState& state)
+{
+    const int active = state.active_player_index;
+    bool have_source = false;
+    std::vector<std::string> want;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.combat_damage_puts_subtype_from_hand.empty()) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        have_source = true;
+        want = d->params.combat_damage_puts_subtype_from_hand;
+        break;
+    }
+    if (!have_source) { return 0; }
+    std::size_t n = 0;
+    for (const Card& c : state.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+        const Card& hc = hd ? hd->card : c;
+        if (hc.IsInstant() || hc.IsSorcery()) { continue; }
+        for (const std::string& sub : want) { if (CardHasSubtype(hc, sub)) { ++n; break; } }
+    }
+    return n;
+}
+
 static int BpSearchDepth()
 {
     static const int d = []() -> int
@@ -5018,6 +5078,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // so a nested breakpoint re-solve restores the outer pin if it has not fired yet. -1 is inert.
     ScriptedEtbDig _sed(plan.etbdig_choice);
 
+    // Searched Goblin Lackey put: copied onto the STATE (not a scoped guard) because the trigger
+    // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
+    // did not branch on the axis leaves any outer value alone.
+    if (plan.lackey_choice >= 0) { state.scripted_cheat_choice = plan.lackey_choice; }
+
     // Commit-the-line recording (out_breakpoint != null, set only when building the
     // committed line): capture the casts each draw-breakpoint re-solve makes so the
     // AIEngine replay can reproduce them verbatim. sink_stack.back() is the container
@@ -7034,6 +7099,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
     state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
+    state.scripted_cheat_choice   = -1;            // searched Lackey put is per-turn (lockstep w/ GameEngine::UntapStep)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
 
@@ -9765,6 +9831,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED GOBLIN LACKEY PUT -- the same post-dedup fan-out, keyed on the BOARD rather than on a
+    // cast: the trigger belongs to a Lackey already in play, not to anything in `actions`. Only the
+    // pre-combat plan can carry it, since the put resolves in that combat's damage step.
+    if (LackeyAxisEnabled() && LackeyAxisWidth() > 1 && !HumanPlayActive() && is_pre_combat)
+    {
+        const std::size_t cands_now = LackeyCandidateCountNow(state);
+        const std::size_t k = std::min(cands_now, LackeyAxisWidth());
+        if (k > 1)
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                // Base plans only -- one axis at a time, so cost stays additive.
+                if (p.scry_choice >= 0 || p.bp_choice >= 0
+                    || p.etbdig_choice >= 0 || p.lackey_choice >= 0) { continue; }
+                for (std::size_t c = 1; c < k; ++c)
+                {
+                    TurnSolver::Plan v = p;
+                    v.lackey_choice = static_cast<int>(c);
+                    extra.push_back(std::move(v));
+                }
+            }
+            TRACE("lackey", "T%d cands_now=%zu -> %zu variants/plan", state.turn_number, cands_now, k - 1);
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
     }
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
