@@ -2101,21 +2101,35 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { if (AffordAuditOn()) { g_afford_real_fails.fetch_add(1, std::memory_order_relaxed); } return; }
 
         // Additional cost: discard `discard_lands` land cards from hand to the graveyard.
-        // (Autonomous ExecutePlan path -- claude-play executes retrace via TurnSolver::ApplyPlan,
-        // where the human's land-discard chooser lives; here the heuristic first-land pick stands.)
-        int discarded = 0;
-        for (auto hit = ap.hand.begin(); hit != ap.hand.end() && discarded < discard_lands; )
+        // WHICH land is provider-owned (RetraceDiscardCandidates), the SAME hook the rollout asks
+        // in TurnSolver's retrace path. This site used to walk the hand and take the first land
+        // itself, which was byte-identical only because the base rule is also first-in-hand-order:
+        // the instant a provider ranked these, the rollout would have planned against one land and
+        // the executor discarded another, and the projection would silently stop matching the game
+        // it was projecting. Same lockstep requirement as Land's Edge's pitch order.
+        // (claude-play executes retrace via TurnSolver::ApplyPlan, where the human chooser lives.)
+        for (int discarded = 0; discarded < discard_lands; ++discarded)
         {
-            const CardDefinition* hdef = CardDatabase::Instance().Lookup(hit->m_name);
-            bool is_land = hdef ? hdef->card.IsLand() : hit->IsLand();
-            if (is_land)
+            std::vector<int> lands;
+            for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
             {
-                if (m_logger) { m_logger->LogDiscard(hit->m_number, hit->m_name); }
-                ap.graveyard.push_back(*hit);
-                hit = ap.hand.erase(hit);
-                ++discarded;
+                const CardDefinition* hdef = CardDatabase::Instance().Lookup(ap.hand[i].m_name);
+                if (hdef ? hdef->card.IsLand() : ap.hand[i].IsLand()) { lands.push_back(i); }
             }
-            else { ++hit; }
+            if (lands.empty()) { break; }
+            const std::vector<int> ranked =
+                ResolveProvider(state).RetraceDiscardCandidates(state, state.active_player_index, lands);
+            const int pick = ranked.empty() ? lands.front() : ranked.front();
+            // MTG_TRACE=retrace: how often this decision happens and how CONTENDED it is. `cands`
+            // is the width the ranking has to justify; `diff` says the ranking actually moved the
+            // pick off hand order. Without these a null A/B cannot be told apart from a rule that
+            // never fires -- the trap this deck's Land's Edge pitch fell into (97.6% of pitches
+            // burn the whole hand, so the order was unobservable).
+            TRACE("retrace", "T%d cands=%zu diff=%d -> %s", state.turn_number, lands.size(),
+                  pick != lands.front() ? 1 : 0, ap.hand[pick].m_name.str().c_str());
+            if (m_logger) { m_logger->LogDiscard(ap.hand[pick].m_number, ap.hand[pick].m_name); }
+            ap.graveyard.push_back(ap.hand[pick]);
+            ap.hand.erase(ap.hand.begin() + pick);
         }
 
         // Remove the source from the graveyard (re-find: push_back above may reallocate).

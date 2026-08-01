@@ -176,6 +176,12 @@ public:
     // The only deck that opts into branching the ROLLOUT's cleanup shed. MTG_TH_DISCARD_WIDTH
     // overrides for the sweep; see the definition for the measured value.
     int CleanupDiscardSearchWidth() const override;
+    // Throes of Chaos' retrace cost is "discard a land" -- the SAME question the cleanup shed and
+    // the Land's Edge pitch ask, so it gets the same answer rather than a third opinion. The base
+    // rule was first-land-in-hand-order, which this deck has now measured twice as the wrong way
+    // to choose among 13 distinct lands.
+    std::vector<int> RetraceDiscardCandidates(
+        const GameState&, int, const std::vector<int>&) const override;
 };
 
 // Aether Vial decks (Slivers, Knights): the hand-aware vial charge policy.
