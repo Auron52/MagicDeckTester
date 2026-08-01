@@ -9,12 +9,15 @@
 # the "unaffordable" reading is wrong and the limiter is elsewhere.
 #
 # Runs Hinata's OVERNIGHT (held-out) cases -- one pooled batch per arm, per repo policy.
-#   bash test/cantrip_budget_ab.sh [widths...]      (default: uncapped 8 4 2)
+# Widths run TIGHTEST-LAST: 8, 4, 2, then 1 == the axis off entirely (one target, the provider's).
+# NOTE: MTG_TUTOR_WIDTH=0 does NOT mean "uncapped" -- it always clamped to 1, and now means "defer
+# to the provider's own width". Arms are spelled explicitly so the label matches the arm.
+#   bash test/cantrip_budget_ab.sh [widths...]      (default: 8 4 2 1)
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 OUT=logs/cantrip_budget_ab
 mkdir -p "$OUT"
-WIDTHS=("$@"); [ ${#WIDTHS[@]} -eq 0 ] && WIDTHS=(0 8 4 2)
+WIDTHS=("$@"); [ ${#WIDTHS[@]} -eq 0 ] && WIDTHS=(8 4 2 1)
 
 for w in "${WIDTHS[@]}"; do
   for sites in 0x17 31; do
