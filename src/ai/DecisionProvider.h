@@ -741,6 +741,24 @@ public:
         return duplicates.empty() ? -1 : duplicates.front();
     }
 
+    // StorageLandHold -- a storage land (Mercadian Bazaar: "{T}: put a storage counter") offers a
+    // real either/or every main phase: tap it for MANA NOW, or hold it untapped so it CHARGES for a
+    // bigger burst later. `counters` is what it already holds.
+    //
+    // OWNERSHIP GAP THIS CLOSES: the choice existed only for a HUMAN (g_play_storage_hold_chooser).
+    // Autonomously and in the rollout the chooser is null, so the engine silently took "never hold"
+    // -- a hardcoded answer to a genuine decision that no provider could express or override. It
+    // was invisible to the chooser-list inventory precisely BECAUSE it has a chooser: the audit
+    // asked "does a chooser exist" (yes) rather than "what happens when it is absent" (a built-in
+    // rule). Any decision whose autonomous path bypasses the chooser hides here.
+    //
+    // Base returns false = never hold = exactly the historical autonomous behaviour, so this is
+    // byte-identical. Dwarven Hold ("upkeep_if_tapped") is NOT routed here -- its commitment is
+    // pre-draw, in GameEngine::UpkeepStep, and is a separate decision.
+    virtual bool StorageLandHold(const GameState& /*s*/, int /*controller*/,
+                                 const CardDefinition& /*def*/, int /*counters*/) const
+    { return false; }
+
     // OfferDuplicateLegendCast -- should the search even CONSIDER casting a legendary permanent
     // whose copy we already control? The legend rule (CR 704.5j) kills one immediately on
     // resolution, so for a card with no enter-triggered effect the cast buys literally nothing and
