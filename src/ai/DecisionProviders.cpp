@@ -10,7 +10,7 @@
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
 #include "../deck/DeckLoader.h"     // Decklist
-#include "ManaPayment.h"            // AvailableManaPool (echo "no gas" affordability check)
+#include "ManaPayment.h"            // AvailableManaPool (echo "no gas" check; MTG_LACKEY_RANK=uncast)
 
 // Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
 // the search-narrowing heuristics return their MAXIMALLY-PERMISSIVE value so the general
@@ -284,16 +284,56 @@ std::vector<int> DecisionProvider::CleanupDiscardCandidates(
 // put is free and lands after attackers are declared, so it is an Aether Vial-shaped "what do I want
 // on board" choice, and MV is only a proxy for that. Ranked-best-first means a search over the axis
 // inherits the historical pick as its tie-break winner.
+// TEMPORARY A/B selector (MTG_LACKEY_RANK), per the heuristic-optimization loop: expose the rival
+// orderings behind a runtime lever, sweep, report, then delete the losers. "mv" is the shipped rule.
+//   mv     -- highest MV, ties by power, then lowest card number  (the historical engine rule)
+//   low    -- LOWEST MV first. Deliberate anti-heuristic: it exists to BOUND the headroom. If the
+//             best and worst orderings play nearly the same, the choice does not matter much and a
+//             search axis over it cannot repay its cost, whatever ranking wins.
+//   pow    -- highest power first (is the body what matters, or the mana you skipped paying?)
+//   uncast -- highest MV among the cards you could NOT cast right now, then the rest by MV. The
+//             put is free and lands after attackers are declared, so its whole value is the mana you
+//             never paid; a card you were going to cast anyway converts far less of that.
+enum class LackeyRank { Mv, Low, Pow, Uncast };
+static LackeyRank LackeyRankMode()
+{
+    static const LackeyRank m = []() -> LackeyRank {
+        const char* v = std::getenv("MTG_LACKEY_RANK");
+        if (v == nullptr || *v == '\0') { return LackeyRank::Mv; }
+        const std::string s = v;
+        if (s == "low")    { return LackeyRank::Low; }
+        if (s == "pow")    { return LackeyRank::Pow; }
+        if (s == "uncast") { return LackeyRank::Uncast; }
+        return LackeyRank::Mv;
+    }();
+    return m;
+}
+
 std::vector<int> DecisionProvider::CombatCheatCandidates(
     const GameState& s, int /*controller*/, const CardDefinition& /*source*/,
     const std::vector<int>& hand_indices) const
 {
     const Player& ap = s.players[s.active_player_index];
+    const LackeyRank mode = LackeyRankMode();
+    // Affordability is only consulted by the `uncast` variant, and it is the expensive part, so it
+    // is computed once per call and only when that variant is live.
+    ManaPool pool;
+    if (mode == LackeyRank::Uncast) { pool = AvailableManaPool(s); }
     auto key = [&](int h) {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[h]);
         const Card& c = d ? d->card : ap.hand[h];
-        return std::make_tuple(-c.m_mana_cost.ManaValue(), -c.m_power.value_or(0),
-                               ap.hand[h].m_number);
+        const int mv = c.m_mana_cost.ManaValue();
+        const int pw = c.m_power.value_or(0);
+        const int num = ap.hand[h].m_number;
+        switch (mode)
+        {
+            case LackeyRank::Low:    return std::make_tuple(mv, -pw, num);
+            case LackeyRank::Pow:    return std::make_tuple(-pw, -mv, num);
+            case LackeyRank::Uncast: return std::make_tuple(pool.CanPay(c.m_mana_cost) ? 1 : 0,
+                                                            -mv, num);
+            case LackeyRank::Mv:
+            default:                 return std::make_tuple(-mv, -pw, num);
+        }
     };
     std::vector<int> out = hand_indices;
     std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return key(a) < key(b); });

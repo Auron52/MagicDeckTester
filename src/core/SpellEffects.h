@@ -1941,6 +1941,19 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         // index 0 is the non-branching answer.
         const std::vector<int> ranked =
             ResolveProvider(state).CombatCheatCandidates(state, controller, *sd, cand_hand);
+        // MTG_LACKEY_TRACE: DIAGNOSTIC (no play change). Sizes the decision -- how many matching
+        // permanents the put actually chooses among, and what the ranked pick costs. One candidate
+        // is forced; the arbitrary-pick risk only bites at two or more.
+        static const bool s_lackey_trace = EnvOn("MTG_LACKEY_TRACE");
+        if (s_lackey_trace && !cand_hand.empty())
+        {
+            const CardDefinition* pd = ranked.empty()
+                ? nullptr : CardDatabase::Instance().LookupCached(ap.hand[ranked.front()]);
+            std::fprintf(stderr, "[lackey] turn=%d cands=%d pick=%s mv=%d\n",
+                         state.turn_number, static_cast<int>(cand_hand.size()),
+                         pd ? pd->card.m_name.str().c_str() : "-",
+                         pd ? pd->card.m_mana_cost.ManaValue() : -1);
+        }
         if (ranked.empty()) { continue; }   // "may": nothing matching to put -> decline
         int best = ranked.front();
 
