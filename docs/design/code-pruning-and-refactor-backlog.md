@@ -306,13 +306,16 @@ Harness hazards found the hard way, each of which silently invalidates a compari
 - **`MTG_KEEP_MAX_MULL` is not a flag** (`max_mull` is fixed at 6 in the analyzer CLI). The harness
   set it for months and only earned a "not a flag this binary reads" warning.
 
-**One real defect fell out of building that coverage** — see
+**One real defect fell out of building that coverage, and is now fixed** (`ec60e80`) — see
 [`rollout-config-digest-depth-blindness.md`](rollout-config-digest-depth-blindness.md). `play_digest`
 is the gate on every cross-run reuse here, and it hashes only a 64-game battery, never
 `depth`/`budget_ms`/`max_turns`: identical hash at d5 and d6 while 2 % of keep rollouts differ. The
 severe consumer is not probe carry but `reuse_all_cells`, which reuses a WHOLE prior table with zero
-fresh rollouts when the digest matches. Measured, documented, **not fixed** — the one-line fix
-invalidates every existing sidecar's reuse, which is the user's call.
+fresh rollouts when the digest matches. Fixed **additively** — the three values are stamped as their
+own raw-meta fields and compared only when both sides carry them — so nothing already generated was
+invalidated. Worth reading for the method as much as the result: four more plausible causes
+(scheduling, adaptive bottoming, the adaptive floor path's seed stream, bucketing) were each killed
+by a cheap measurement before the real one showed up in the settings banner.
 
 Items are grouped by **risk tier**, not by subsystem, because in this repo the cost of a change
 is dominated by how hard it is to prove it did not alter play. Work top-down: Tier A items are
