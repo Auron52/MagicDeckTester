@@ -115,10 +115,35 @@ mostly harmless (for Scry the non-kept cards are bottomed, so their relative ord
 so this is the weakest of the three cases. The real gap here is branching, not ownership — see
 `searched-scry-disposition.md`.
 
+## The 2026-08-01 audit — how to find these
+
+The three rules above were found ad hoc. The systematic inventory is the **`g_play_*` human-play
+chooser declarations** in `src/core/GameLogger.h` (~lines 210–470): a chooser exists exactly where a
+human must be able to override an engine default, so the list of choosers *is* the list of decision
+points. That audit found ~13 more, of which these are now handled:
+
+- **ETB dig** (`PerformEtbDig`) → `EtbDigCandidates`, then **searched** — see the status table.
+- **Goblin Lackey put** (`FireCombatDamageCheatIntoPlay`) → `CombatCheatCandidates`, reviewed and
+  measured in `lackey-put-ranking.md`.
+- **Replicate count** → `ReplicateCounts` (greedy-max default, deliberately not branched: greedy is
+  a per-deck fact that happens to be right for slivers, and `MTG_REPLICATE_TRACE` shows the pool is
+  contended, so the hook is the escape hatch for a deck where it is not).
+
+Still engine-owned with no hook: `FindBurnKillTarget`, `FindLifegainRemovalTarget` (which also
+hides a *cast gate* — "don't cast Swords without a Remedy enabler" — inside a targeting helper),
+`FindBestOwnAttacker`, the burn face-vs-creature default, `PerformLightPawsAttach` (a **tutor**,
+while every other tutor is provider-owned), the Retrace discard ("first land in hand order"), the
+Shard Volley sac-a-land, `BounceKarooLand`, `EnforceLegendRule` ("keep the oldest", though CR
+704.5j makes it the controller's choice and copies differ by auras/counters/summoning sickness),
+and the shock/reveal land entry.
+
 ## Status
 
 | rule | ported | reviewed | branched |
 |------|--------|----------|----------|
 | cleanup discard | yes (byte-identical) | see above — **two objections** | no |
-| firebreathing count | no | see above | no |
+| firebreathing count | hook exists (`FirebreatheActivations`) | greedy-max **measured dominant** | n/a — dominated |
 | scry disposition composition | n/a (inputs already hooks) | see above | no |
+| ETB dig pick | yes (`EtbDigCandidates`) | first-match-in-shuffle-order, **94% of digs have a choice** | **yes — `910a234`, 7/7 seeds, −0.0599** |
+| Goblin Lackey put | yes (`CombatCheatCandidates`) | highest-MV **measured best of 4**; a bad rule costs 1.47 | ranked for it; axis not yet emitted |
+| replicate count | yes (`ReplicateCounts`) | greedy-max right for slivers, per-deck | deliberately not |
