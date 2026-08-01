@@ -166,6 +166,13 @@ public:
     int         ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
     bool        ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     KeepGuard   KeepFloor(const std::vector<Card>&, int, bool) const override;
+    // Cleanup discard: THE deck that makes this decision. Per 400 d0 games it discards 336 times;
+    // every other deck in the suite is under 40 and five are at zero. The base rule sheds "the first
+    // non-staged land in hand order", which for this deck is a choice among 4-22 lands spanning 13
+    // distinct names -- a Reliquary Tower, three cyclers, a sac-to-draw, two depletion/storage
+    // lands, two ETB-scry lands and four duals. Those are different cards, not copies of "a land".
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
 };
 
 // Aether Vial decks (Slivers, Knights): the hand-aware vial charge policy.

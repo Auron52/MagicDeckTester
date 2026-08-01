@@ -122,191 +122,154 @@ inline DiscardProtectScope EffectiveDiscardProtectScope(const GameState& state)
     if (const char* ov = DiscardProtectScopeOverride()) { return DiscardProtectScopeFromString(ov); }
     return state.m_discard_protect;
 }
-// TEMPORARY A/B lever (MTG_DISCARD_PICK), per the heuristic-optimization loop. BOTH halves of the
-// cleanup-discard rule below break their tie by HAND ORDER -- "the first non-staged land", and
-// "the first card at the top mana value" (`mv > best_mv` keeps the earliest). Hand order is not a
-// judgement about the cards, so that tie-break is arbitrary, and MTG_TRACE=discard says it is
-// arbitrary in 100% of the discards Treasure Hunt actually makes, across 4-22 DISTINCT lands.
+// ---- Cleanup discard: the full RANKING, not one answer ---------------------------------------
+// CR 514.1. The engine used to compute a single index here. It is a ranked LIST now because the
+// pick is consumed in two places that both need more than the winner:
+//   * AIEngine::ChooseDiscard rolls out every hand card and keeps the win-optimal ones, then
+//     TIE-BREAKS on this ranking -- and in a goldfish the tied set is usually everything (shedding
+//     any one of eleven lands reaches the same turn inside the horizon), so the ranking, not the
+//     rollout, is what actually decides;
+//   * the rollout's own cleanup (SimulateEndAndStartNextTurn) has no search at all and takes
+//     index 0, so a bad ranking biases every line the search scores.
+// Index 0 is exactly the historical single pick, so widening this is byte-identical by itself.
 //
-// `last` is the deliberate anti-heuristic: same rule, opposite end of the tied set. It exists to
-// BOUND the headroom before any axis is built -- if first and last play the same, the decision does
-// not matter and no search over it can repay its cost, whatever ranking would win. (Same probe
-// shape as MTG_LACKEY_RANK=low.) Value-carrying, so it keeps the raw getenv + parse.
-// `keeper` is the ADVERSARIAL arm, and it is the one that makes the bound trustworthy: `last` only
-// flips WHICH END of the tied set is taken, and both ends are arbitrary with respect to card
-// quality, so two mediocre rules agreeing proves little.
+// The base ranking is the engine's historical rule, in tiers:
+//   A. if DiscardLandsFirst (a land outlet makes lands ammunition): the non-staged LANDS, hand order
+//   B. the non-staged, non-protected cards by DESCENDING mana value (ties keep the earlier card)
+//   C. last resort, when every non-staged card is protected: non-staged before staged, then max MV
+// A provider that knows its deck overrides CleanupDiscardCandidates and orders tier A itself --
+// hand order is not a judgement about the cards, and for Treasure Hunt those lands are 13 different
+// cards, not eleven copies of "a land". See TreasureHuntProvider.
 //
-// It scores a card by how much it does BESIDES making mana and sheds the best one -- deliberately
-// throwing away the most useful card in hand. The scale is param-driven rather than a card-name
-// table, so it needs no deck knowledge and stays honest on any deck:
-//     3  no_max_hand_size    (Reliquary Tower -- the card that ENDS this decision entirely)
-//     2  cycling / sac-to-draw  (a land that is also a card: Lonely Sandbar, Fiery Islet)
-//     1  etb_scry / etb_surveil (Temple of Epiphany, Thundering Falls)
-//     0  a plain mana source
-// (SituationalCardRank was the first attempt and is INERT here -- Treasure Hunt's ScryKeepOnTop
-// answers `lands_in_play < 2` for a land, which is the same verdict for EVERY land, so the arm
-// reproduced `first` exactly. An inert probe reads identically to "no effect", so the arms are
-// diffed on the actual discarded-card distribution before any number from them is believed.)
-enum class DiscardPick { First, Last, Keeper };
-inline int DiscardKeeperScore(const Card& c)
+// (A previous MTG_DISCARD_PICK lever bounded how much the ARBITRARY half of this was worth -- see
+// docs/design/cleanup-discard-measured.md. Its arms are gone; what it could not measure is what a
+// deck-aware ranking is worth, which is what the provider overrides are for.)
+inline bool CleanupDiscardProtected(const GameState& state, const Card& c,
+                                    const std::vector<std::string>* required_pieces)
 {
-    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-    if (d == nullptr) { return 0; }
-    const CardParams& p = d->params;
-    if (p.no_max_hand_size)                             { return 3; }
-    if (p.cycling_cost.has_value() || p.sacrifice_draw_cost.has_value()) { return 2; }
-    if (p.etb_scry > 0 || p.etb_surveil > 0)            { return 1; }
-    return 0;
+    if (required_pieces == nullptr) { return false; }
+    bool is_req = false;
+    for (const std::string& piece : *required_pieces)
+    { if (c.m_name == piece) { is_req = true; break; } }
+    if (!is_req) { return false; }
+    // A redundant required piece stays discardable (and, being high-MV, is picked ahead of the
+    // rituals). Count copies in hand -- staged included, since a staged copy is already committed to
+    // a line, which is exactly what makes the loose one spare -- plus, under the `deck` scope, the
+    // copies still in the library. Protection re-engages once the count hits 1.
+    const Player& ap = state.players[state.active_player_index];
+    const DiscardProtectScope scope = EffectiveDiscardProtectScope(state);
+    if (scope == DiscardProtectScope::All) { return true; }
+    int copies = 0;
+    for (const Card& h : ap.hand) { if (h.m_name == c.m_name) { ++copies; } }
+    if (scope == DiscardProtectScope::LastInDeck)
+    { for (const Card& l : ap.library) { if (l.m_name == c.m_name) { ++copies; } } }
+    return copies <= 1;
 }
-inline DiscardPick DiscardPickMode()
+
+inline int CleanupDiscardManaValue(const Card& c)
 {
-    static const DiscardPick mode = []() -> DiscardPick
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+    return def != nullptr ? def->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
+}
+
+inline bool CleanupDiscardIsLand(const Card& c)
+{
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+    return def != nullptr ? def->card.IsLand() : c.IsLand();
+}
+
+// The base ranking. `preferred`, when non-empty, is the provider's OWN order for the cards it has an
+// opinion about -- it is placed first, and everything it did not mention falls through to tiers B
+// and C below in the historical order. That is the whole extension point an archetype needs: a
+// deck-aware provider names the cards it wants shed (and the order), and by SAYING NOTHING about a
+// card it pushes that card behind every card it did name. "Keep this unless forced" needs no
+// separate mechanism -- it is just omission.
+inline std::vector<int> CleanupDiscardRankingWithOrder(
+    const GameState& state, const std::vector<std::string>* required_pieces,
+    const std::vector<int>& preferred)
+{
+    const Player& ap = state.players[state.active_player_index];
+    std::vector<int> out;
+    if (ap.hand.empty()) { return out; }
+    const int n = static_cast<int>(ap.hand.size());
+    std::vector<char> taken(static_cast<std::size_t>(n), 0);
+    auto push = [&](int i)
+    { if (i >= 0 && i < n && !taken[static_cast<std::size_t>(i)]) { taken[static_cast<std::size_t>(i)] = 1; out.push_back(i); } };
+
+    // Tier A -- the provider's own order, else lands-as-ammunition in hand order.
+    // A provider order does NOT get to override required-piece protection or the staged exemption:
+    // those are correctness invariants (a staged card is in EXILE and cannot be shed at all; a
+    // protected piece is the deck's only copy of a combo piece), not preferences, so entries that
+    // violate them are dropped here rather than trusted.
+    if (!preferred.empty())
     {
-        const char* v = std::getenv("MTG_DISCARD_PICK");
-        if (v == nullptr || *v == '\0') { return DiscardPick::First; }
-        const std::string s(v);
-        if (s == "last")   { return DiscardPick::Last; }
-        if (s == "keeper") { return DiscardPick::Keeper; }
-        return DiscardPick::First;   // DEFAULT = the shipped rule
-    }();
-    return mode;
+        for (int i : preferred)
+        {
+            if (i < 0 || i >= n || ap.hand[i].m_is_staged) { continue; }
+            if (CleanupDiscardProtected(state, ap.hand[i], required_pieces)) { continue; }
+            push(i);
+        }
+    }
+    else if (ResolveProvider(state).DiscardLandsFirst(state))
+    {
+        for (int i = 0; i < n; ++i)
+        { if (!ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i])) { push(i); } }
+    }
+
+    // Tier B -- eligible cards, descending mana value, ties keeping the earlier card.
+    std::vector<int> tier_b;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        if (CleanupDiscardProtected(state, ap.hand[i], required_pieces)) { continue; }
+        tier_b.push_back(i);
+    }
+    std::stable_sort(tier_b.begin(), tier_b.end(), [&](int a, int b)
+    { return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]); });
+    for (int i : tier_b) { push(i); }
+
+    // Tier C -- last resort: non-staged before staged, then max mana value, stable.
+    std::vector<int> tier_c;
+    for (int i = 0; i < n; ++i) { if (!taken[static_cast<std::size_t>(i)]) { tier_c.push_back(i); } }
+    std::stable_sort(tier_c.begin(), tier_c.end(), [&](int a, int b)
+    {
+        const bool sa = ap.hand[a].m_is_staged, sb = ap.hand[b].m_is_staged;
+        if (sa != sb) { return !sa; }
+        return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]);
+    });
+    for (int i : tier_c) { push(i); }
+
+    // MTG_TRACE=discard: what the rule chose BETWEEN. `cands` is the width of the decision -- the
+    // number an axis over it has to justify -- and the distribution is the case for a deck-aware
+    // ranking. It lives HERE, in the shared builder, not in SelectCleanupDiscardIndex: both real
+    // callers (AIEngine::ChooseDiscard, the rollout cleanup) take the provider hook directly, so a
+    // trace in the single-index helper sees nothing a goldfish run does. Gated on g_real_resolution
+    // (every rollout scope clears it) so a searched run reports the discards the GAME actually
+    // made, not the millions the search imagined.
+    if (TRACE_ON("discard") && g_real_resolution && !out.empty())
+    {
+        int lip = 0, lands_in_hand = 0;
+        for (const Permanent& perm : state.battlefield)
+        { if (perm.controller_index == state.active_player_index && perm.card.IsLand()) { ++lip; } }
+        for (const Card& h : ap.hand) { if (CleanupDiscardIsLand(h)) { ++lands_in_hand; } }
+        TRACE("discard", "T%d hand=%zu cands=%zu lip=%d landsinhand=%d -> %s",
+              state.turn_number, ap.hand.size(), out.size(), lip, lands_in_hand,
+              ap.hand[out.front()].m_name.str().c_str());
+    }
+    return out;
+}
+
+inline std::vector<int> CleanupDiscardRanking(const GameState& state,
+                                              const std::vector<std::string>* required_pieces)
+{
+    return CleanupDiscardRankingWithOrder(state, required_pieces, {});
 }
 
 inline int SelectCleanupDiscardIndex(const GameState& state,
                                      const std::vector<std::string>* required_pieces)
 {
-    const Player& ap = state.players[state.active_player_index];
-    if (ap.hand.empty()) { return -1; }
-    const DiscardPick pick = DiscardPickMode();
-    const bool pick_last   = pick == DiscardPick::Last;
-    const bool pick_keeper = pick == DiscardPick::Keeper;
-
-    const bool has_land_outlet = ResolveProvider(state).DiscardLandsFirst(state);
-    if (has_land_outlet)
-    {
-        int land_idx = -1, keeper_rank = -1;
-        for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
-        {
-            if (ap.hand[i].m_is_staged) { continue; }
-            const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
-            bool is_land = def ? def->card.IsLand() : ap.hand[i].IsLand();
-            if (!is_land) { continue; }
-            if (pick_keeper)
-            {
-                const int r = DiscardKeeperScore(ap.hand[i]);
-                if (r > keeper_rank) { keeper_rank = r; land_idx = i; }
-                continue;
-            }
-            land_idx = i;
-            if (!pick_last) { break; }   // default: first in hand order (the shipped rule)
-        }
-        if (land_idx >= 0)
-        {
-            // MTG_TRACE=discard: how many lands this rule was choosing BETWEEN. It takes the first
-            // in HAND ORDER, which is arbitrary among them -- `lands` is the width of that
-            // arbitrariness, and the number an axis over this rule would have to justify. Gated on
-            // g_real_resolution (every rollout scope clears it) so a searched run reports the
-            // discards the GAME actually made, not the millions the search imagined.
-            if (TRACE_ON("discard") && g_real_resolution)
-            {
-                int lands = 0;
-                for (const Card& c : ap.hand)
-                {
-                    if (c.m_is_staged) { continue; }
-                    const CardDefinition* d2 = CardDatabase::Instance().LookupCached(c);
-                    if (d2 != nullptr ? d2->card.IsLand() : c.IsLand()) { ++lands; }
-                }
-                TRACE("discard", "T%d landfirst hand=%zu lands=%d -> %s",
-                      state.turn_number, ap.hand.size(), lands,
-                      ap.hand[land_idx].m_name.str().c_str());
-            }
-            return land_idx;
-        }
-    }
-
-    // Highest-MV non-staged card that is not a required combo piece.
-    int best_idx = -1, best_mv = -1;
-    int elig = 0, tie = 0;   // MTG_TRACE=discard only
-    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
-    {
-        if (ap.hand[i].m_is_staged) { continue; }
-        bool is_req = false;
-        if (required_pieces)
-        {
-            for (const std::string& piece : *required_pieces)
-            {
-                if (ap.hand[i].m_name == piece) { is_req = true; break; }
-            }
-        }
-        // A redundant required piece stays discardable (and, being high-MV, is picked ahead of the
-        // rituals). Count copies in hand -- staged included, since a staged copy is already
-        // committed to a line, which is exactly what makes the loose one spare -- plus, under the
-        // `deck` scope, the copies still in the library. Protection re-engages once the count hits 1.
-        if (is_req)
-        {
-            const DiscardProtectScope scope = EffectiveDiscardProtectScope(state);
-            if (scope == DiscardProtectScope::All) { continue; }
-            int copies = 0;
-            for (const Card& c : ap.hand) { if (c.m_name == ap.hand[i].m_name) { ++copies; } }
-            if (scope == DiscardProtectScope::LastInDeck)
-            {
-                for (const Card& c : ap.library) { if (c.m_name == ap.hand[i].m_name) { ++copies; } }
-            }
-            if (copies <= 1) { continue; }
-        }
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
-        int mv = def ? def->card.m_mana_cost.ManaValue() : ap.hand[i].m_mana_cost.ManaValue();
-        ++elig;
-        // `keeper` shadows mana value entirely with the provider's own keep verdict -- the whole
-        // point of the adversarial arm is to shed what the deck wants most, and in TH every
-        // eligible card is a mana-value-0 land, so an MV-based tie-break cannot express that.
-        if (pick_keeper) { mv = DiscardKeeperScore(ap.hand[i]); }
-        // `>` keeps the EARLIEST card at the top mana value (the shipped rule); `>=` keeps the
-        // latest, which is the MTG_DISCARD_PICK=last bound probe -- same ranking, opposite end of
-        // the tie. Nothing else about the rule changes.
-        if (pick_last ? (mv >= best_mv) : (mv > best_mv))
-        {
-            if (mv == best_mv) { ++tie; } else { tie = 1; }
-            best_mv = mv; best_idx = i;
-        }
-        else if (mv == best_mv) { ++tie; }
-    }
-    if (best_idx >= 0)
-    {
-        // MTG_TRACE=discard: `elig` is how many cards were shed-able at all and `tie` how many share
-        // the top mana value. A tie is decided by HAND ORDER (`mv > best_mv` keeps the earliest),
-        // which is not a judgement about the cards -- so tie>1 is the frequency of the arbitrary
-        // half of this rule, and elig>1 the frequency of the ranked half being live at all.
-        // Real resolutions only -- see the landfirst site above.
-        if (g_real_resolution)
-        {
-            TRACE("discard", "T%d mv hand=%zu elig=%d best_mv=%d tie=%d -> %s",
-                  state.turn_number, ap.hand.size(), elig, best_mv, tie,
-                  ap.hand[best_idx].m_name.str().c_str());
-        }
-        return best_idx;
-    }
-    if (g_real_resolution)
-    {
-        TRACE("discard", "T%d lastresort hand=%zu (every non-staged card protected)",
-              state.turn_number, ap.hand.size());
-    }
-
-    // Last resort: max-MV including staged + required, staged preferred for discard
-    // (mirrors ChooseDiscard's staged-aware comparator).
-    best_idx = 0;
-    for (int i = 1; i < static_cast<int>(ap.hand.size()); ++i)
-    {
-        const Card& a = ap.hand[best_idx];
-        const Card& b = ap.hand[i];
-        if (a.m_is_staged != b.m_is_staged) { if (a.m_is_staged) { best_idx = i; } continue; }
-        const CardDefinition* da = CardDatabase::Instance().LookupCached(a);
-        const CardDefinition* db = CardDatabase::Instance().LookupCached(b);
-        int mv_a = da ? da->card.m_mana_cost.ManaValue() : a.m_mana_cost.ManaValue();
-        int mv_b = db ? db->card.m_mana_cost.ManaValue() : b.m_mana_cost.ManaValue();
-        if (mv_a < mv_b) { best_idx = i; }
-    }
-    return best_idx;
+    const std::vector<int> rank = ResolveProvider(state).CleanupDiscardCandidates(state, required_pieces);
+    return rank.empty() ? -1 : rank.front();
 }
 
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.

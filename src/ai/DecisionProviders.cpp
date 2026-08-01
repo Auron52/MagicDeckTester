@@ -264,15 +264,15 @@ bool GenericProvider::DiscardLandsFirst(const GameState&) const
 // Lives on the base class, not GenericProvider, because it is the shared default an archetype
 // narrows or widens rather than a generic-deck-only answer.
 //
-// Returns the historical SINGLE pick, so this port is byte-identical: every caller takes index 0,
-// which is exactly the index SelectCleanupDiscardIndex returned before the hook existed. Widening
-// it to several candidates is what turns the discard into a search branch.
+// Returns the FULL ranking now, not just the winner -- index 0 is still the historical single pick,
+// so this stays byte-identical for every caller that takes the front. The tail is what lets
+// AIEngine::ChooseDiscard tie-break among win-optimal discards and what the searched rollout axis
+// fans out over. Must NOT call SelectCleanupDiscardIndex: that routes through this hook (so a
+// provider override reaches every caller), which would recurse.
 std::vector<int> DecisionProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
-    const int idx = SelectCleanupDiscardIndex(s, required_pieces);
-    if (idx < 0) { return {}; }
-    return std::vector<int>{ idx };
+    return CleanupDiscardRanking(s, required_pieces);
 }
 
 // The BASE Goblin Lackey put rule (see DecisionProvider::CombatCheatCandidates). Highest MV, ties
@@ -1653,6 +1653,195 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
         return lip < 2;
     }
     return ScryKeepOnTopLands(s, top_card);
+}
+
+// Treasure Hunt's cleanup discard. The answer is essentially always "shed a land" (the base rule's
+// tier A already says that, because a Land's Edge outlet makes lands ammunition) -- the real
+// question is WHICH, and the base rule answers it with hand order. This orders the lands.
+//
+// Authored from the deck's actual structure, as a LADDER so each rule is separately attributable
+// (MTG_TH_DISCARD selects a rung for the sweep; the adopted default is documented at the enum):
+//
+//   1 dup      -- the SPARE cards first, in the order they are spare: a dead duplicate Land's Edge,
+//                 then a retrace card (recastable from the graveyard), then a duplicate land. The
+//                 safest rule available -- each is a card whose copy in hand is doing nothing
+//                 another copy (or another zone) is not already doing.
+//   2 tapped   -- then lands that ENTER TAPPED, excluding the depletion/storage lands. Entering
+//                 tapped is a real tempo cost, and Temple of Epiphany / Thundering Falls pay for
+//                 it with an ETB that only ever fires if the land is PLAYED -- so in hand they are
+//                 the plainest lands the deck has. The depletion lands (Saprazzan Skerry, Sandstone
+//                 Needle) are excluded deliberately: they also enter tapped, but produce TWO mana,
+//                 which is a burst this deck actually wants.
+//   3 nodig    -- and the diggers (cycling: Lonely Sandbar / Forgotten Cave / Remote Isle;
+//                 sacrifice-to-draw: Fiery Islet) are protected to the BACK, most strongly when no
+//                 Treasure Hunt is in hand -- with no engine to find, a land that replaces itself
+//                 is the deck's remaining source of cards.
+//
+// Reliquary Tower is last at every rung: it is the card that ENDS this decision (no maximum hand
+// size), so shedding it to satisfy a hand limit is self-defeating.
+//
+// MEASURED (test/th_discard_sweep.sh, TRAIN seeds; searched d3/d5 + d0 sums vs rung 0):
+//     rung 1  -0.0073 / -0.0130   <- ADOPTED, the only rung that pays
+//     rung 2  -0.0006 / -0.0130      the tapped rule gives back the searched half
+//     rung 3  +0.0027 / -0.0110      protecting the diggers is worse still
+// Rungs 2 and 3 are NOT adopted, and the reason they fail is instructive: these diggers are
+// LANDS, not spells. Cycling one costs mana AND spends a card that was Land's Edge ammunition, so
+// "protect the diggers" is not the free upside it is in a deck where the digger is a cantrip --
+// and for the outlet's purposes the deck's lands are largely interchangeable, which is why
+// discriminating further among them stops paying once the genuinely SPARE cards are handled.
+//   4 tapdig   -- the FAITHFUL version of rung 2: tapped-and-not-a-digger-and-not-depletion goes
+//                 early (Temple of Epiphany, Thundering Falls, and a Frostboil Snarl we cannot
+//                 currently turn on), while the diggers sit NEUTRAL with the plain untapped lands
+//                 rather than being protected to the back. See the note on rungs 2/3 above for why
+//                 neither of them actually tested this.
+//   5 mono     -- + among the untapped keepers, a land producing FEWER distinct colours goes first
+//                 (Island before a U/R dual): the dual is the one that can still cast both halves
+//                 of the deck, so the mono source is the more expendable of two untapped lands.
+enum class ThDiscard { Base = 0, Dup = 1, Tapped = 2, NoDig = 3, TapDig = 4, Mono = 5 };
+static ThDiscard ThDiscardVariant()
+{
+    static const ThDiscard v = []() -> ThDiscard
+    {
+        const char* e = std::getenv("MTG_TH_DISCARD");
+        if (e == nullptr || *e == '\0') { return ThDiscard::Dup; }     // DEFAULT (see the sweep)
+        switch (std::atoi(e))
+        {
+            case 0:  return ThDiscard::Base;
+            case 1:  return ThDiscard::Dup;
+            case 2:  return ThDiscard::Tapped;
+            case 3:  return ThDiscard::NoDig;
+            case 4:  return ThDiscard::TapDig;
+            default: return ThDiscard::Mono;
+        }
+    }();
+    return v;
+}
+
+std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    const ThDiscard variant = ThDiscardVariant();
+    if (variant == ThDiscard::Base) { return CleanupDiscardRanking(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int     n  = static_cast<int>(ap.hand.size());
+
+    // "with no engine to find" -- a Treasure Hunt still in hand means the diggers have a better
+    // card to find than themselves, so their protection only tightens once it is gone.
+    bool have_engine = false;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->tmpl == CardTemplate::DrawUntilNonland) { have_engine = true; break; }
+    }
+
+    // Copies of a name across hand AND battlefield: a Land's Edge in hand is dead if one is already
+    // in play, which "duplicates in hand" alone would miss.
+    auto copies_seen = [&](const InternedName& name) -> int
+    {
+        int k = 0;
+        for (const Card& h : ap.hand) { if (h.m_name == name) { ++k; } }
+        for (const Permanent& perm : s.battlefield)
+        { if (perm.controller_index == s.active_player_index && perm.card.m_name == name) { ++k; } }
+        return k;
+    };
+
+    // Lower band = shed earlier. Bands, not a comparator chain, so the ladder rungs compose and a
+    // stable_sort keeps hand order inside a band (the historical tie-break). Band 99 means "do not
+    // name this card at all" -- omitting it from the provider order is how a card gets pushed
+    // behind everything the provider DID name (see CleanupDiscardRankingWithOrder).
+    auto band = [&](int i) -> int
+    {
+        const Card&           c = ap.hand[i];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const CardParams*     p = d != nullptr ? &d->params : nullptr;
+        const bool is_land   = CleanupDiscardIsLand(c);
+        const bool depletion = p != nullptr && p->enters_tapped_with_depletion > 0;
+        const bool digs      = p != nullptr && (p->cycling_cost.has_value()
+                                             || p->sacrifice_draw_cost.has_value());
+        const bool tapped    = p != nullptr && p->enters_tapped && !depletion;
+        // Rungs 4+ ask the STATE-AWARE predicate instead of the raw flag, because "enters tapped"
+        // is not a property of the card for two of this deck's lands: Frostboil Snarl
+        // (etb_untap_reveal_subtypes) enters untapped only while a revealable Island/Mountain card
+        // is in hand, and Steam Vents (etb_pay_life_to_untap) only if the life is there to pay.
+        // A Snarl we cannot currently turn on IS a tapped land and should be shed like one.
+        const bool tapped_now = d != nullptr && !depletion && LandWouldEnterTapped(s, *d);
+        const int  colors     = p != nullptr ? static_cast<int>(p->produces.size()) : 0;
+
+        if (p != nullptr && p->no_max_hand_size) { return 9; }   // never: it ends this decision
+
+        if (!is_land)
+        {
+            // NONLANDS. Only two are ever spare, and both for a structural reason rather than a
+            // value judgement, so this needs no card names. Both are safe to shed AHEAD of a real
+            // land -- a land is at least Land's Edge ammunition, and these two are not even that --
+            // but they are not equally spare:
+            //
+            //   * a duplicate Land's Edge (discard_land_damage) is DEAD. One outlet is all the deck
+            //     can use, so the second copy does nothing the first does not, and shedding it
+            //     costs literally nothing. Band 0 -- the best discard in the deck.
+            //   * retrace (Throes of Chaos) WEAKLY DOMINATES shedding a land, which is a structural
+            //     argument rather than a measured preference: whatever land we would have discarded
+            //     instead is still in hand afterwards, and it is exactly what pays the retrace cost
+            //     when we cast Throes from the graveyard. So shedding Throes cannot come out behind
+            //     shedding that land -- at worst it DEFERS the same land discard to a turn where we
+            //     choose it with more information, and in the games where Throes is never cast at
+            //     all it was pure gain. Band 1: behind the free discard, ahead of every real card.
+            //     (Promoting it here from band 6 improved the train sum on both metrics, which is
+            //     what a genuinely dominant rule should do -- searched -0.0053 -> -0.0073, d0
+            //     -0.0070 -> -0.0130. Any residual downside is churn, not a real cost.)
+            //
+            // Everything else -- Treasure Hunt above all -- is deliberately NOT named, which puts
+            // it behind every land in the ranking: kept unless the hand is nothing but engine.
+            if (variant >= ThDiscard::Dup)
+            {
+                if (p != nullptr && p->discard_land_damage > 0
+                    && copies_seen(c.m_name) > 1)                                  { return 0; }
+                if (p != nullptr && p->retrace)                                    { return 1; }
+            }
+            return 99;
+        }
+
+        // A duplicate LAND is the safest land discard -- the second copy is the one card in hand
+        // guaranteed to be doing nothing the first is not -- but it still ranks behind the two
+        // spare nonlands above, because a land is at least ammunition and they are not.
+        if (variant >= ThDiscard::Dup && copies_seen(c.m_name) > 1) { return 2; }
+
+        // Rungs 4/5 -- the faithful "tapped unless it digs or is a depletion land" rule.
+        if (variant >= ThDiscard::TapDig)
+        {
+            if (tapped_now && !digs) { return 3; }   // its ETB only ever pays if the land is PLAYED
+            if (depletion)           { return 6; }   // two mana off one land: keep it
+            // Rung 4 stops here: diggers and untapped lands are all NEUTRAL at 4, so this rung
+            // isolates the tapped rule and nothing else. Rung 5 then splits the untapped mana by
+            // colour count -- the mono source goes first, because the dual is the one that can
+            // still cast both halves of the deck -- and parks the diggers alongside the duals:
+            // worth more than a spare mono source, not worth protecting behind the depletion lands
+            // (rung 3 showed that protection costs more than it returns, since cycling one spends
+            // BOTH mana and a card that was Land's Edge ammunition).
+            if (variant >= ThDiscard::Mono) { return digs ? 5 : (colors <= 1 ? 4 : 5); }
+            return 4;
+        }
+
+        if (variant >= ThDiscard::NoDig && digs) { return have_engine ? 7 : 8; }
+        if (variant >= ThDiscard::Tapped)
+        {
+            if (tapped)    { return 3; }   // plain tapped land: the ETB only pays if it is PLAYED
+            if (depletion) { return 5; }   // two mana off one land -- keep over a plain untapped one
+            return 4;                      // plain untapped land
+        }
+        return 4;
+    };
+
+    std::vector<int> pref;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        if (band(i) < 99) { pref.push_back(i); }
+    }
+    std::stable_sort(pref.begin(), pref.end(),
+                     [&](int a, int b) { return band(a) < band(b); });
+    return CleanupDiscardRankingWithOrder(s, required_pieces, pref);
 }
 
 bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,
