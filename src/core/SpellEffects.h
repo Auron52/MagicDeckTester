@@ -12,6 +12,7 @@
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
 #include "../cards/CardDatabase.h"
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
+#include "Trace.h"                     // MTG_TRACE=discard: cleanup-discard tie distribution
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -121,26 +122,75 @@ inline DiscardProtectScope EffectiveDiscardProtectScope(const GameState& state)
     if (const char* ov = DiscardProtectScopeOverride()) { return DiscardProtectScopeFromString(ov); }
     return state.m_discard_protect;
 }
+// TEMPORARY A/B lever (MTG_DISCARD_PICK), per the heuristic-optimization loop. BOTH halves of the
+// cleanup-discard rule below break their tie by HAND ORDER -- "the first non-staged land", and
+// "the first card at the top mana value" (`mv > best_mv` keeps the earliest). Hand order is not a
+// judgement about the cards, so that tie-break is arbitrary, and MTG_TRACE=discard says it is
+// arbitrary in 100% of the discards Treasure Hunt actually makes, across 4-22 DISTINCT lands.
+//
+// `last` is the deliberate anti-heuristic: same rule, opposite end of the tied set. It exists to
+// BOUND the headroom before any axis is built -- if first and last play the same, the decision does
+// not matter and no search over it can repay its cost, whatever ranking would win. (Same probe
+// shape as MTG_LACKEY_RANK=low.) Value-carrying, so it keeps the raw getenv + parse.
+enum class DiscardPick { First, Last };
+inline DiscardPick DiscardPickMode()
+{
+    static const DiscardPick mode = []() -> DiscardPick
+    {
+        const char* v = std::getenv("MTG_DISCARD_PICK");
+        if (v != nullptr && *v != '\0' && std::string(v) == "last") { return DiscardPick::Last; }
+        return DiscardPick::First;   // DEFAULT = the shipped rule
+    }();
+    return mode;
+}
+
 inline int SelectCleanupDiscardIndex(const GameState& state,
                                      const std::vector<std::string>* required_pieces)
 {
     const Player& ap = state.players[state.active_player_index];
     if (ap.hand.empty()) { return -1; }
+    const bool pick_last = DiscardPickMode() == DiscardPick::Last;
 
     const bool has_land_outlet = ResolveProvider(state).DiscardLandsFirst(state);
     if (has_land_outlet)
     {
+        int land_idx = -1;
         for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
         {
             if (ap.hand[i].m_is_staged) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
             bool is_land = def ? def->card.IsLand() : ap.hand[i].IsLand();
-            if (is_land) { return i; }
+            if (!is_land) { continue; }
+            land_idx = i;
+            if (!pick_last) { break; }   // default: first in hand order (the shipped rule)
+        }
+        if (land_idx >= 0)
+        {
+            // MTG_TRACE=discard: how many lands this rule was choosing BETWEEN. It takes the first
+            // in HAND ORDER, which is arbitrary among them -- `lands` is the width of that
+            // arbitrariness, and the number an axis over this rule would have to justify. Gated on
+            // g_real_resolution (every rollout scope clears it) so a searched run reports the
+            // discards the GAME actually made, not the millions the search imagined.
+            if (TRACE_ON("discard") && g_real_resolution)
+            {
+                int lands = 0;
+                for (const Card& c : ap.hand)
+                {
+                    if (c.m_is_staged) { continue; }
+                    const CardDefinition* d2 = CardDatabase::Instance().LookupCached(c);
+                    if (d2 != nullptr ? d2->card.IsLand() : c.IsLand()) { ++lands; }
+                }
+                TRACE("discard", "T%d landfirst hand=%zu lands=%d -> %s",
+                      state.turn_number, ap.hand.size(), lands,
+                      ap.hand[land_idx].m_name.str().c_str());
+            }
+            return land_idx;
         }
     }
 
     // Highest-MV non-staged card that is not a required combo piece.
     int best_idx = -1, best_mv = -1;
+    int elig = 0, tie = 0;   // MTG_TRACE=discard only
     for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
     {
         if (ap.hand[i].m_is_staged) { continue; }
@@ -170,9 +220,37 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
         }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
         int mv = def ? def->card.m_mana_cost.ManaValue() : ap.hand[i].m_mana_cost.ManaValue();
-        if (mv > best_mv) { best_mv = mv; best_idx = i; }
+        ++elig;
+        // `>` keeps the EARLIEST card at the top mana value (the shipped rule); `>=` keeps the
+        // latest, which is the MTG_DISCARD_PICK=last bound probe -- same ranking, opposite end of
+        // the tie. Nothing else about the rule changes.
+        if (pick_last ? (mv >= best_mv) : (mv > best_mv))
+        {
+            if (mv == best_mv) { ++tie; } else { tie = 1; }
+            best_mv = mv; best_idx = i;
+        }
+        else if (mv == best_mv) { ++tie; }
     }
-    if (best_idx >= 0) { return best_idx; }
+    if (best_idx >= 0)
+    {
+        // MTG_TRACE=discard: `elig` is how many cards were shed-able at all and `tie` how many share
+        // the top mana value. A tie is decided by HAND ORDER (`mv > best_mv` keeps the earliest),
+        // which is not a judgement about the cards -- so tie>1 is the frequency of the arbitrary
+        // half of this rule, and elig>1 the frequency of the ranked half being live at all.
+        // Real resolutions only -- see the landfirst site above.
+        if (g_real_resolution)
+        {
+            TRACE("discard", "T%d mv hand=%zu elig=%d best_mv=%d tie=%d -> %s",
+                  state.turn_number, ap.hand.size(), elig, best_mv, tie,
+                  ap.hand[best_idx].m_name.str().c_str());
+        }
+        return best_idx;
+    }
+    if (g_real_resolution)
+    {
+        TRACE("discard", "T%d lastresort hand=%zu (every non-staged card protected)",
+              state.turn_number, ap.hand.size());
+    }
 
     // Last resort: max-MV including staged + required, staged preferred for discard
     // (mirrors ChooseDiscard's staged-aware comparator).
