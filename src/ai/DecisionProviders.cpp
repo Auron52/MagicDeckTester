@@ -1726,6 +1726,32 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
 //                 capacity prefers CYCLERS rather than alternating, so the extras keep digging.
 //                 The measured symptom this targets: rung 8 shed MORE cyclers than the simple
 //                 rule, which is the opposite of its intent.
+//
+// ADOPTED: rung 9 is the default. Read the size of that decision honestly -- the whole ladder is
+// worth very little, and almost all of what it IS worth comes from rung 1:
+//
+//   test/th_rung0_baseline_ab.sh, 320k d0 games/arm, fresh seeds 16016..23023, vs rung 0
+//   (the arbitrary rule: base ranking, WHICH land chosen by hand order)
+//                       d0        d3        d5
+//     rung 1        -0.0041   -0.0015   -0.0005     the two spare-card rules
+//     rung 9        -0.0042   -0.0022   -0.0011     + this entire keep-order spec
+//
+// So rung 1 does ~98% of the work at d0, and the keep order adds -0.0001. It earns more at
+// searched depth (-0.0007 at d3, -0.0006 at d5, on 20-50x fewer games), and it is separated
+// (t=-7.6, 8/8 seeds, every depth agreeing in sign) -- but separated at 320k games is not the
+// same as material, and it is not claimed to be.
+//
+// WHY SO SMALL, measured rather than guessed (test/th_mechanism_probe.sh): Land's Edge deals
+// damage PER LAND, so WHICH land it burns is unobservable unless the outlet takes a strict subset
+// of the hand -- and it burns everything ~97.6% of the time. The ranked pitch picks a different
+// set in 1.7% of activations. That one number explains this whole family of nulls.
+//
+// It was adopted anyway, and the reason is mechanism rather than metric: the ranking demonstrably
+// does what it says. Cleanup discards per 1000 games, rung 1 -> rung 9 --
+//     digger-cycle 174.5 -> 145.2   depletion 166.5 -> 120.2   digger-scry 117.8 -> 158.0
+// i.e. it keeps 17% more cycling lands and 28% more depletion lands, paying in scry/surveil lands,
+// which is exactly the trade this spec asks for. A rule that is right for a stated reason and
+// costs nothing beats an arbitrary hand-order tie-break of equal measured value.
 enum class ThDiscard { Base = 0, Dup = 1, Tapped = 2, NoDig = 3, TapDig = 4, Mono = 5, Mix = 6,
                        Keep = 7, Shop = 8, Islet = 9 };
 static ThDiscard ThDiscardVariant()
@@ -1733,7 +1759,7 @@ static ThDiscard ThDiscardVariant()
     static const ThDiscard v = []() -> ThDiscard
     {
         const char* e = std::getenv("MTG_TH_DISCARD");
-        if (e == nullptr || *e == '\0') { return ThDiscard::Dup; }     // DEFAULT (see the sweep)
+        if (e == nullptr || *e == '\0') { return ThDiscard::Islet; }   // DEFAULT (see the sweep)
         switch (std::atoi(e))
         {
             case 0:  return ThDiscard::Base;
@@ -1883,9 +1909,19 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         for (int i = 0; i < n; ++i)
         { if (!ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i])) { lands_i.push_back(i); } }
 
-        // Reliquary Tower is never shed, so it is kept outside the quotas.
-        for (int i : lands_i) { const CardParams* p = par(i);
-                                if (p != nullptr && p->no_max_hand_size) { take(i); } }
+        // Reliquary Tower is kept outside the quotas -- but only while it still HAS the job that
+        // earns the exemption, so the keep set agrees with band() instead of quietly contradicting
+        // it. Buying it unconditionally made the shopping list say "most-wanted land in the deck"
+        // about a card band() had already decided was spare. band()'s early returns mean this take()
+        // cannot actually change a ranking (all three Tower states return before the keep-set
+        // banding), but a keep set that disagrees with the ranking it feeds is how the last two
+        // bugs here hid -- and an unconditional take() also silently shifts every other land's slot
+        // number by one.
+        if (!outlet_in_play && !tower_in_play)
+        {
+            for (int i : lands_i) { const CardParams* p = par(i);
+                                    if (p != nullptr && p->no_max_hand_size) { take(i); } }
+        }
 
         // 1. two untapped sources, best-ranked first.
         std::vector<int> ups;
@@ -2084,9 +2120,13 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         //   * another no-max-hand-size land already in play -> the one in hand is DEAD, exactly
         //     like a duplicate Land's Edge. Shed it first. (Reached only via a non-cleanup discard:
         //     CleanupStep skips the shed entirely once one is out.)
-        //   * a Land's Edge outlet in play -> the hand is being CONVERTED to damage, so the hand
-        //     limit is moot and the Tower is worth the same 2 points as any other land. No claim
-        //     to protection; fall through and rank it as the ordinary land it now is.
+        //   * a Land's Edge outlet in play -> SPARE, band 2, same as a duplicate land. The outlet
+        //     costs no mana to activate ("Discard a land card:"), so excess cards are never
+        //     discarded to a hand limit while it is out -- they are converted to damage instead.
+        //     That kills the Tower's one distinguishing ability outright, and what is left is a
+        //     land producing only {C}: no dig, no depletion burst, and the only mana in the deck
+        //     that cannot help cast {1}{R}{R}. Redundant ability plus the weakest mana is the same
+        //     shape as a duplicate, which is why it shares that band rather than a new one.
         //   * otherwise -> protect it. 90 is above every band any rung can produce (kept tops out
         //     at 59, the rung-8 fallback at 18, surplus at 8).
         //
@@ -2097,6 +2137,14 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         {
             if (tower_in_play) { return 0; }
             if (!outlet_in_play) { return 90; }
+            // ADOPTED (user-approved), but BELOW MEASUREMENT and labelled as such: on its own it
+            // never changed a game -- 0 diverged of 320k d0 games -- because a cleanup discard
+            // essentially never happens while a free outlet is out (that is the same fact that
+            // makes the Tower dead here). It only reaches a decision through the Land's Edge pitch,
+            // and there it is worth +0.0000. Kept because the reasoning is structural rather than
+            // fitted, and it costs nothing; NOT kept on the strength of a number.
+            static const bool s_tower_spare = EnvOn("MTG_TH_TOWER_SPARE", true);
+            if (s_tower_spare && variant >= ThDiscard::Dup) { return 2; }
         }
 
         if (!is_land)
