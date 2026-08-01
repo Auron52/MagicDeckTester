@@ -300,17 +300,18 @@ std::vector<int> DecisionProvider::CombatCheatCandidates(
     return out;
 }
 
-// The BASE ETB-dig rule (see DecisionProvider::EtbDigCandidates): the FIRST legal match in look
-// order, which is what PerformEtbDig took inline before the hook existed -> byte-identical.
-// Deliberately returns ONLY that one index rather than the whole legal list: widening the base rule
-// would change play for every deck, and the rule is bad enough that the right move is a provider
-// override with a real ranking, not a wider arbitrary one.
+// The BASE ETB-dig rule (see DecisionProvider::EtbDigCandidates): HEURISTIC FIRST, then the
+// alternatives. Index 0 is the FIRST legal match in look order -- exactly what PerformEtbDig took
+// inline before the hook existed -- so a non-branching caller (and MTG_ETBDIG_WIDTH=1) is
+// byte-identical. The REST of the legal matches follow in look order so the searched axis has
+// something to choose among; the base rule cannot rank them (look order is library order, i.e.
+// shuffle order), which is precisely why this decision is handed to the search rather than to a
+// better default. Same shape as TopDispositionCandidates.
 std::vector<int> DecisionProvider::EtbDigCandidates(
     const GameState& /*s*/, int /*controller*/, const std::vector<Card>& /*examined*/,
     const std::vector<int>& legal) const
 {
-    if (legal.empty()) { return {}; }
-    return std::vector<int>{ legal.front() };
+    return legal;
 }
 
 bool GenericProvider::ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const

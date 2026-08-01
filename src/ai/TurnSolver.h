@@ -270,6 +270,16 @@ public:
         // See docs/design/searched-scry-disposition.md.
         int scry_choice = -1;
 
+        // ETB-dig pick (Acclaimed Contender's "look at the top 5, put a Knight into your hand"):
+        // which candidate of the provider's ranked EtbDigCandidates the dig takes. -1 (default) ==
+        // the provider's top pick, byte-identical to no branch. k >= 0 == the enumeration emitted one
+        // Plan variant per candidate and the SEARCH picks. Like scry_choice, the dig resolves INLINE
+        // inside the creature's ETB, so it cannot be an Action; it is pinned for the apply instead
+        // (ScriptedEtbDig). The dug card goes to HAND and is not castable this turn, so the pick
+        // cannot interact with the rest of this turn's subset -- the same property that makes the
+        // tutor axis additive rather than an approximation of a cross product.
+        int etbdig_choice = -1;
+
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
         // cards. Top-level (triggered by the main plan); each entry nests its own

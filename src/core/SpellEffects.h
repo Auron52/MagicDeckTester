@@ -4070,6 +4070,28 @@ inline TopDisposition HeuristicTopDisposition(const GameState& state, const std:
 // the cleanup discard use.
 extern thread_local int g_scripted_top_choice;
 
+// Searched ETB-DIG pick (Acclaimed Contender). Same shape as g_scripted_top_choice: an index into
+// the provider's ranked EtbDigCandidates list, pinned by the plan for the apply and consumed by the
+// first dig, so a plan carrying one scripts exactly one dig and any later dig in the same apply
+// falls back to the provider's ranked default. `k < 0` is inert (heuristic).
+//
+// This exists because the base rule -- the FIRST legal match in look order, i.e. library order --
+// is an arbitrary pick, and the choice is live almost every time: MTG_ETBDIG_TRACE over 200 Knights
+// games measured 94% of digs with 2+ legal matches (mean 2.6). Which Knight you want depends on
+// board and curve, so it is a search decision, not a ranking problem.
+extern thread_local int g_scripted_etbdig_choice;
+
+// Scoped pin, mirroring ScriptedTopChoice (restores on exit so a nested apply cannot leak its
+// script into the outer one).
+struct ScriptedEtbDig
+{
+    explicit ScriptedEtbDig(int k) : saved(g_scripted_etbdig_choice) { g_scripted_etbdig_choice = k; }
+    ~ScriptedEtbDig() { g_scripted_etbdig_choice = saved; }
+    ScriptedEtbDig(const ScriptedEtbDig&) = delete;
+    ScriptedEtbDig& operator=(const ScriptedEtbDig&) = delete;
+    int saved;
+};
+
 // MTG_FB_TRACE diagnostic only (no play change): how many firebreathing activations the CURRENT
 // turn's combat paid for. Reset at every Firebreathe call; read by GameEngine::MainPhase to detect
 // a post-combat main that casts on a turn that pumped -- the one situation in which the pump pool's
