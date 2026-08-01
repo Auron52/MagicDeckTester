@@ -2499,14 +2499,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool /*is_pre_
             // reported as `repaired`). A human picking the disposition wants the explicit keep and
             // shuffle options; the tie-break argument above is about the SEARCH's strict-improvement
             // rule, which does not apply when a person is choosing.
-            Action keep_a = a;            keep_a.ponder_keep = 1;
-            Action shuf_a = a;            shuf_a.ponder_keep = 0;
+            // COST FIX (2026-08-01): emit ONE variant for autonomous play, not three. The two pinned
+            // alternatives were always discarded by the name-only dedup (see the CORRECTION above),
+            // but they were emitted INSIDE CollectActions, so they entered the odometer first: this
+            // group cost (1 + 3) = 4 where one variant costs (1 + 1) = 2, i.e. 2x the enumeration
+            // per Ponder in hand, compounding across copies -- paid on what MTG_BRANCH_STATS measured
+            // as the single largest branching source (~47% of all enumeration), for candidates that
+            // could never survive. Byte-identical: the dedup already kept exactly this variant.
+            //
+            // Human play still gets the explicit keep/shuffle pair -- the sub-decision block is not
+            // dedup-gated there, so both options are real, and a person choosing wants them named
+            // rather than a heuristic entry that duplicates whichever one it resolves to.
             if (!HumanPlayActive())
             {
                 actions.push_back(std::move(a));    // a.ponder_keep stays -1 == resolution heuristic
             }
-            actions.push_back(std::move(keep_a));
-            actions.push_back(std::move(shuf_a));
+            else
+            {
+                Action keep_a = a;            keep_a.ponder_keep = 1;
+                Action shuf_a = a;            shuf_a.ponder_keep = 0;
+                actions.push_back(std::move(keep_a));
+                actions.push_back(std::move(shuf_a));
+            }
         }
         else
         {
