@@ -1,5 +1,6 @@
-# Regression ground truth -- commit 40e23be  date 2026-08-01
+# Regression ground truth -- commit bbed1e5  date 2026-08-01
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (overnight, 2026-08-01): goblins d3/d5 +0.0030 each: attributed to ec70359 (d3 +0.00177 isolated on 100k distinct games) + the value model (d3 +0.00041, d5 -0.00136 i.e. an improvement); d0 -0.0659 from ec70359's GoblinsProvider dominates => tier net -0.03144 over 16000 games
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -176,15 +177,15 @@ auras_overnight_d5_s4004=4.1320/abe55509c44c4d5c
 auras_overnight_d5_s5005=4.1600/0d9029f8f375773c
 auras_overnight_d5_s6006=4.1320/ae1a03f312ec1f50
 auras_overnight_d5_s7007=4.1680/3f886fb40dd223d7
-goblins_overnight_d0_s4004=4.8805/1073629d49abf7ae
-goblins_overnight_d0_s5005=4.8620/975a3047a98f4f2a
-goblins_overnight_d0_s6006=4.8660/45e743b806ae584d
-goblins_overnight_d0_s7007=4.8825/1f9eb27c6498fa54
-goblins_overnight_d3_s4004=4.3820/0abc9c3f98e11faf
-goblins_overnight_d3_s5005=4.3860/515901e2a806a993
-goblins_overnight_d3_s6006=4.3730/3b30c00df54a541d
-goblins_overnight_d3_s7007=4.4500/a205dd528ea200dc
-goblins_overnight_d5_s4004=4.3770/057919e4254f28ad
-goblins_overnight_d5_s5005=4.3830/97638e353316faa7
-goblins_overnight_d5_s6006=4.3660/8f8cf92084bf0685
-goblins_overnight_d5_s7007=4.4470/651c9247f03acbe2
+goblins_overnight_d0_s4004=4.8100/3d206a65c790d7de
+goblins_overnight_d0_s5005=4.7885/52060fafa37f1e5a
+goblins_overnight_d0_s6006=4.8095/d5bba01bac01a0c7
+goblins_overnight_d0_s7007=4.8195/83bf521cb9f404c6
+goblins_overnight_d3_s4004=4.3840/86ca7a755402c73a
+goblins_overnight_d3_s5005=4.3880/4210e6fad9303326
+goblins_overnight_d3_s6006=4.3770/0c5a7971ace35e56
+goblins_overnight_d3_s7007=4.4540/7b583c12e21018c5
+goblins_overnight_d5_s4004=4.3740/52187cdb300a3e30
+goblins_overnight_d5_s5005=4.3880/0a1f7c50028c2e0a
+goblins_overnight_d5_s6006=4.3690/5d9563e60a9968e9
+goblins_overnight_d5_s7007=4.4540/c4d4b1fca781bb5f
