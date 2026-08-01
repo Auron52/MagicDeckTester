@@ -358,6 +358,63 @@ std::vector<int> DecisionProvider::CombatCheatCandidates(
         if (la != lb) { return la; }
         return key(a) < key(b);
     });
+
+    // DOMINANCE PRUNE (MTG_LACKEY_DOMINANCE, default ON). Drop a candidate that another candidate in
+    // the same set beats on every axis the engine models, so it cannot consume a searched slot. This
+    // is NOT a ranking preference -- it is "B can never be right while A is here", which is the only
+    // safe reason to remove an option from a search entirely.
+    //
+    // Live case: Goblin King vs Goblin Chieftain. Same mana cost, same body, identical lord params
+    // (+1/+1 to other Goblins); Chieftain additionally grants haste, while King's only differentiator
+    // is mountainwalk, which the card data itself marks INERT in goldfishing (the opponent never
+    // blocks). So King is dominated -- in THIS format, not in real Magic. Measured: the search chose
+    // King 0 times in 62 triggers where Chieftain was also in hand.
+    //
+    // It matters because those two tie on mana value AND power, so the sort falls through to card
+    // NUMBER (shuffle order) -- with both plus a Goblin Warchief in hand, a width-2 axis could spend
+    // both slots on the lords and never score the Warchief, which is the best of the three.
+    //
+    // Param-derived, not name-keyed: same cost, same P/T, same lord effect, and a strict superset of
+    // grant flags. A new card that happens to be dominated is handled without a code change.
+    static const bool s_dominance = EnvOn("MTG_LACKEY_DOMINANCE", true);
+    if (s_dominance && out.size() > 1)
+    {
+        auto def_of = [&](int h) { return CardDatabase::Instance().LookupCached(ap.hand[h]); };
+        auto dominates = [&](int a, int b) {   // does a strictly dominate b?
+            const CardDefinition* da = def_of(a);
+            const CardDefinition* db = def_of(b);
+            if (da == nullptr || db == nullptr || da == db) { return false; }
+            const ManaCost& ca = da->card.m_mana_cost;
+            const ManaCost& cb = db->card.m_mana_cost;
+            if (ca.generic != cb.generic || ca.white != cb.white || ca.blue != cb.blue
+                || ca.black != cb.black || ca.red != cb.red || ca.green != cb.green
+                || ca.colorless != cb.colorless || ca.has_x != cb.has_x) { return false; }
+            if (da->card.m_power != db->card.m_power || da->card.m_toughness != db->card.m_toughness)
+            { return false; }
+            const CardParams& pa = da->params;
+            const CardParams& pb = db->params;
+            if (pa.subtypes_affected != pb.subtypes_affected) { return false; }
+            if (pa.power_bonus != pb.power_bonus || pa.tough_bonus != pb.tough_bonus) { return false; }
+            if (pa.lord_excludes_self != pb.lord_excludes_self) { return false; }
+            if (pa.etb_damage_any != pb.etb_damage_any) { return false; }
+            // Same cost, body and lord effect: a wins iff it grants something b does not, and b
+            // grants nothing a does not. Only MODELLED grants count -- an unmodelled ability is
+            // inert by construction, which is exactly why this is a goldfish-only relation.
+            const bool a_extra = (pa.grants_haste && !pb.grants_haste)
+                              || (!pa.reduces_spell_subtype.empty() && pb.reduces_spell_subtype.empty());
+            const bool b_extra = (pb.grants_haste && !pa.grants_haste)
+                              || (!pb.reduces_spell_subtype.empty() && pa.reduces_spell_subtype.empty());
+            return a_extra && !b_extra;
+        };
+        std::vector<int> kept;
+        for (int cand : out)
+        {
+            bool dominated = false;
+            for (int other : out) { if (dominates(other, cand)) { dominated = true; break; } }
+            if (!dominated) { kept.push_back(cand); }
+        }
+        if (!kept.empty()) { out.swap(kept); }
+    }
     return out;
 }
 
