@@ -2021,7 +2021,16 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                 first_ip = false;
                 line += ap.hand[ci].m_name.str();
             }
-            std::fprintf(stderr, "%s\n", line.c_str());
+            // Board width, and whether the deck's top payoff is still findable. A lord's value scales
+            // with the creatures it buffs, while a tutor's does not -- so a pair that looks like a
+            // shutout in aggregate can reverse on a narrow board. Without this the data cannot tell
+            // a STRICT preference from one that is merely strict AT THE USUAL BOARD WIDTH.
+            int my_creatures = 0;
+            for (const Permanent& q : state.battlefield)
+            { if (q.controller_index == controller && q.card.IsCreature()) { ++my_creatures; } }
+            int muxus_left = 0;
+            for (const Card& q : ap.library) { if (q.m_name == "Muxus, Goblin Grandee") { ++muxus_left; } }
+            std::fprintf(stderr, "%s creatures=%d muxus_in_lib=%d\n", line.c_str(), my_creatures, muxus_left);
         }
 
         // Human play (--claude-play/viewer): let the player pick WHICH Goblin permanent to put, or
