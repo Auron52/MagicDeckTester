@@ -132,13 +132,41 @@ inline DiscardProtectScope EffectiveDiscardProtectScope(const GameState& state)
 // BOUND the headroom before any axis is built -- if first and last play the same, the decision does
 // not matter and no search over it can repay its cost, whatever ranking would win. (Same probe
 // shape as MTG_LACKEY_RANK=low.) Value-carrying, so it keeps the raw getenv + parse.
-enum class DiscardPick { First, Last };
+// `keeper` is the ADVERSARIAL arm, and it is the one that makes the bound trustworthy: `last` only
+// flips WHICH END of the tied set is taken, and both ends are arbitrary with respect to card
+// quality, so two mediocre rules agreeing proves little.
+//
+// It scores a card by how much it does BESIDES making mana and sheds the best one -- deliberately
+// throwing away the most useful card in hand. The scale is param-driven rather than a card-name
+// table, so it needs no deck knowledge and stays honest on any deck:
+//     3  no_max_hand_size    (Reliquary Tower -- the card that ENDS this decision entirely)
+//     2  cycling / sac-to-draw  (a land that is also a card: Lonely Sandbar, Fiery Islet)
+//     1  etb_scry / etb_surveil (Temple of Epiphany, Thundering Falls)
+//     0  a plain mana source
+// (SituationalCardRank was the first attempt and is INERT here -- Treasure Hunt's ScryKeepOnTop
+// answers `lands_in_play < 2` for a land, which is the same verdict for EVERY land, so the arm
+// reproduced `first` exactly. An inert probe reads identically to "no effect", so the arms are
+// diffed on the actual discarded-card distribution before any number from them is believed.)
+enum class DiscardPick { First, Last, Keeper };
+inline int DiscardKeeperScore(const Card& c)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr) { return 0; }
+    const CardParams& p = d->params;
+    if (p.no_max_hand_size)                             { return 3; }
+    if (p.cycling_cost.has_value() || p.sacrifice_draw_cost.has_value()) { return 2; }
+    if (p.etb_scry > 0 || p.etb_surveil > 0)            { return 1; }
+    return 0;
+}
 inline DiscardPick DiscardPickMode()
 {
     static const DiscardPick mode = []() -> DiscardPick
     {
         const char* v = std::getenv("MTG_DISCARD_PICK");
-        if (v != nullptr && *v != '\0' && std::string(v) == "last") { return DiscardPick::Last; }
+        if (v == nullptr || *v == '\0') { return DiscardPick::First; }
+        const std::string s(v);
+        if (s == "last")   { return DiscardPick::Last; }
+        if (s == "keeper") { return DiscardPick::Keeper; }
         return DiscardPick::First;   // DEFAULT = the shipped rule
     }();
     return mode;
@@ -149,18 +177,26 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
 {
     const Player& ap = state.players[state.active_player_index];
     if (ap.hand.empty()) { return -1; }
-    const bool pick_last = DiscardPickMode() == DiscardPick::Last;
+    const DiscardPick pick = DiscardPickMode();
+    const bool pick_last   = pick == DiscardPick::Last;
+    const bool pick_keeper = pick == DiscardPick::Keeper;
 
     const bool has_land_outlet = ResolveProvider(state).DiscardLandsFirst(state);
     if (has_land_outlet)
     {
-        int land_idx = -1;
+        int land_idx = -1, keeper_rank = -1;
         for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
         {
             if (ap.hand[i].m_is_staged) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
             bool is_land = def ? def->card.IsLand() : ap.hand[i].IsLand();
             if (!is_land) { continue; }
+            if (pick_keeper)
+            {
+                const int r = DiscardKeeperScore(ap.hand[i]);
+                if (r > keeper_rank) { keeper_rank = r; land_idx = i; }
+                continue;
+            }
             land_idx = i;
             if (!pick_last) { break; }   // default: first in hand order (the shipped rule)
         }
@@ -221,6 +257,10 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
         const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
         int mv = def ? def->card.m_mana_cost.ManaValue() : ap.hand[i].m_mana_cost.ManaValue();
         ++elig;
+        // `keeper` shadows mana value entirely with the provider's own keep verdict -- the whole
+        // point of the adversarial arm is to shed what the deck wants most, and in TH every
+        // eligible card is a mana-value-0 land, so an MV-based tie-break cannot express that.
+        if (pick_keeper) { mv = DiscardKeeperScore(ap.hand[i]); }
         // `>` keeps the EARLIEST card at the top mana value (the shipped rule); `>=` keeps the
         // latest, which is the MTG_DISCARD_PICK=last bound probe -- same ranking, opposite end of
         // the tie. Nothing else about the rule changes.

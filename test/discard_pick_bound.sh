@@ -24,7 +24,7 @@ OUT=logs/discard_pick_bound
 mkdir -p "$OUT"
 DECKS=th,hinata,dragonstorm
 
-for arm in first last; do
+for arm in first last keeper; do
   for mode in smoke regression; do
     echo "===== ARM $arm mode=$mode ($(date +%H:%M:%S)) ====="
     env MTG_DISCARD_PICK="$arm" \
@@ -47,22 +47,25 @@ def load(p):
             k, v = ln.split('=', 1); d[k] = v
     return d
 arm = {}
-for a in ('first', 'last'):
+for a in ('first', 'last', 'keeper'):
     d = {}
     for m in ('smoke', 'regression'):
         d.update(load(f"{out}/env_{a}_{m}.env"))
     arm[a] = d
-keys = sorted(set(arm['first']) & set(arm['last']))
-per = collections.defaultdict(float); tot = 0.0; moved = 0
-print(f"\n{'case':36s} {'first':>9} {'last':>9} {'delta':>9}")
-for k in keys:
-    f, l = float(arm['first'][k].split('/')[0]), float(arm['last'][k].split('/')[0])
-    per[k.split('_')[0]] += l - f; tot += l - f
-    if abs(l - f) > 1e-9:
-        moved += 1
-        print(f"{k:36s} {f:9.4f} {l:9.4f} {l-f:+9.4f}")
-print(f"\ncases whose score MOVED at all: {moved}/{len(keys)}")
-for d in sorted(per): print(f"  -- {d:12s} {per[d]:+.4f}")
-print(f"  == TOTAL (|delta| is the HEADROOM BOUND) {tot:+.4f}")
+keys = sorted(set(arm['first']) & set(arm['last']) & set(arm['keeper']))
+for probe in ('last', 'keeper'):
+    per = collections.defaultdict(float); tot = 0.0; moved = 0
+    label = 'opposite end of the tie' if probe == 'last' else 'ADVERSARIAL: shed the best card'
+    print(f"\n=== {probe} vs first  ({label}) ===")
+    print(f"{'case':36s} {'first':>9} {probe:>9} {'delta':>9}")
+    for k in keys:
+        f, l = float(arm['first'][k].split('/')[0]), float(arm[probe][k].split('/')[0])
+        per[k.split('_')[0]] += l - f; tot += l - f
+        if abs(l - f) > 1e-9:
+            moved += 1
+            print(f"{k:36s} {f:9.4f} {l:9.4f} {l-f:+9.4f}")
+    print(f"cases whose score MOVED at all: {moved}/{len(keys)}")
+    for d in sorted(per): print(f"  -- {d:12s} {per[d]:+.4f}")
+    print(f"  == TOTAL (|delta| is the HEADROOM BOUND) {tot:+.4f}")
 PY
 echo ALLDONE
