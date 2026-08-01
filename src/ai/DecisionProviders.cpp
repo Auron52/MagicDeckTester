@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstdint>
 #include <algorithm>   // std::stable_sort (OrderEntriesByEtbValue payoff-ordering primitive)
+#include <tuple>       // std::make_tuple (CombatCheatCandidates ranking key)
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
@@ -271,6 +272,44 @@ std::vector<int> DecisionProvider::CleanupDiscardCandidates(
     const int idx = SelectCleanupDiscardIndex(s, required_pieces);
     if (idx < 0) { return {}; }
     return std::vector<int>{ idx };
+}
+
+// The BASE Goblin Lackey put rule (see DecisionProvider::CombatCheatCandidates). Highest MV, ties
+// by power, then by lowest card number -- exactly the ordering FireCombatDamageCheatIntoPlay
+// computed inline before the hook existed, so index 0 reproduces the historical single pick and
+// this port is byte-identical.
+//
+// The FULL ranked list is returned (not just the winner) because this decision wants a search: the
+// put is free and lands after attackers are declared, so it is an Aether Vial-shaped "what do I want
+// on board" choice, and MV is only a proxy for that. Ranked-best-first means a search over the axis
+// inherits the historical pick as its tie-break winner.
+std::vector<int> DecisionProvider::CombatCheatCandidates(
+    const GameState& s, int /*controller*/, const CardDefinition& /*source*/,
+    const std::vector<int>& hand_indices) const
+{
+    const Player& ap = s.players[s.active_player_index];
+    auto key = [&](int h) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[h]);
+        const Card& c = d ? d->card : ap.hand[h];
+        return std::make_tuple(-c.m_mana_cost.ManaValue(), -c.m_power.value_or(0),
+                               ap.hand[h].m_number);
+    };
+    std::vector<int> out = hand_indices;
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return key(a) < key(b); });
+    return out;
+}
+
+// The BASE ETB-dig rule (see DecisionProvider::EtbDigCandidates): the FIRST legal match in look
+// order, which is what PerformEtbDig took inline before the hook existed -> byte-identical.
+// Deliberately returns ONLY that one index rather than the whole legal list: widening the base rule
+// would change play for every deck, and the rule is bad enough that the right move is a provider
+// override with a real ranking, not a wider arbitrary one.
+std::vector<int> DecisionProvider::EtbDigCandidates(
+    const GameState& /*s*/, int /*controller*/, const std::vector<Card>& /*examined*/,
+    const std::vector<int>& legal) const
+{
+    if (legal.empty()) { return {}; }
+    return std::vector<int>{ legal.front() };
 }
 
 bool GenericProvider::ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const

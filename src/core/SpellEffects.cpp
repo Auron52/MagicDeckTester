@@ -418,7 +418,12 @@ bool PerformEtbDig(GameState& state, int controller_index,
         }
         if (match) { legal.push_back(i); }
     }
-    int take = legal.empty() ? -1 : legal.front();   // heuristic: first match (byte-identical search)
+    // WHICH match to take is provider-owned (EtbDigCandidates). The base rule is the historical
+    // "first legal match in look order", so this is byte-identical; look order is library order, so
+    // that rule is effectively an arbitrary pick among the matches and providers should override it.
+    const std::vector<int> ranked =
+        ResolveProvider(state).EtbDigCandidates(state, controller_index, examined, legal);
+    int take = ranked.empty() ? -1 : ranked.front();
 
     // Human play: with at least one legal candidate, let the player choose WHICH match enters hand
     // (or take nothing). Nulled by RevealLogPause for search/rollout, so this never fires during

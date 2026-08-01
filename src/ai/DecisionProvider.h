@@ -532,6 +532,64 @@ public:
     // does).
     virtual std::vector<ScaledCastVariant>
     ScaledCastVariants(const GameState& /*s*/, const CardDefinition& /*def*/) const { return {}; }
+
+    // ---- Ported engine built-ins (2026-08-01 audit) ------------------------------------------
+    // Each of the hooks below replaces a rule that was hard-coded in the engine with no provider
+    // involvement at all -- found by auditing the g_play_* human-play choosers, which mark exactly
+    // the points where a human must be able to override an engine default. Every base
+    // implementation reproduces the historical rule EXACTLY, so adding them is byte-identical; the
+    // point is ownership first, review and branching second (see
+    // docs/design/engine-heuristics-to-providers.md).
+
+    // CombatCheatCandidates -- Goblin Lackey: "whenever this deals combat damage to a player, you MAY
+    // put a <subtype> permanent card from your hand onto the battlefield." WHICH card (or decline) is
+    // a real choice, and it is NOT a cast: it is free, and it resolves during the combat-damage step,
+    // so the put permanent is summoning-sick and cannot attack this turn. That makes it the same
+    // KIND of decision as an Aether Vial deploy -- "which permanent do I want on board going
+    // forward" -- rather than "what is the biggest thing I can sneak in".
+    //
+    // Returns hand indices in PREFERENCE order; index 0 is what a non-branching caller takes, so
+    // returning ONE index decides it with no branch. Empty == decline the "may".
+    //
+    // The base implementation is the engine's historical rule -- highest MV, ties by power, then by
+    // card number -- so a provider that does not override behaves exactly as before. Highest-MV is a
+    // reasonable default and is usually right; it is offered FIRST precisely so that a search over
+    // this axis inherits it as the tie-break winner (defect class 3: strict improvement means the
+    // first-enumerated option owns every tie).
+    virtual std::vector<int> CombatCheatCandidates(
+        const GameState& s, int controller, const CardDefinition& source,
+        const std::vector<int>& hand_indices) const;
+
+    // EtbDigCandidates -- ETB "look at the top N, you may reveal a <subtype> card and put it into your
+    // hand" (Acclaimed Contender). Returns indices INTO `examined` in PREFERENCE order, restricted to
+    // `legal` (the subtype-matching looks); index 0 is what a non-branching caller takes. Empty ==
+    // take nothing (it is a "may").
+    //
+    // The base implementation is the historical rule: the FIRST legal match in look order. That rule
+    // is poor and is retained only for byte-identity -- look order is library order, i.e. shuffle
+    // order, so which Knight you take is effectively random among the matches. It is the same defect
+    // as "first land in hand order" in the cleanup-discard rule: a ranking that is really insertion
+    // order. Providers should override; see docs/design/engine-heuristics-to-providers.md.
+    virtual std::vector<int> EtbDigCandidates(
+        const GameState& s, int controller, const std::vector<Card>& examined,
+        const std::vector<int>& legal) const;
+
+    // ReplicateCounts -- Hatchery Sliver replicate: how many token copies to pay for on cast.
+    // Returns candidate counts in PREFERENCE order; index 0 is what a non-branching caller takes. A
+    // NEGATIVE entry means "as many as the pool affords" (greedy max), which is the default.
+    //
+    // Provider-owned because greedy-max is a PER-DECK fact, not an engine truth. It is right for
+    // slivers -- a deck of one-drops and lords, where an extra body is almost always the best use of
+    // the mana -- and that is the deck that has the card today. It need not hold for a deck whose
+    // replicate target competes with an expensive payoff. Unlike firebreathing (whose pool is a
+    // by-value copy, making greedy-max provably dominant), replicate taps REAL sources:
+    // MTG_REPLICATE_TRACE measured 59 of 189 replicate events squeezing at least one hand card out of
+    // affordability, so the pool is genuinely contended.
+    virtual std::vector<int> ReplicateCounts(const GameState& /*s*/,
+                                             const CardDefinition& /*def*/) const
+    {
+        return std::vector<int>{ -1 };
+    }
 };
 
 // ---------------------------------------------------------------------------------------------------

@@ -1911,24 +1911,19 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         };
 
         std::vector<int> cand_hand;   // hand indices of matching Goblin-permanent cards (chooser pool)
-        int best = -1;
         for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
         {
             const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[h]);
             const Card& hc = hd ? hd->card : ap.hand[h];
-            if (!is_match(hc)) { continue; }
-            cand_hand.push_back(h);
-            if (best < 0) { best = h; continue; }
-            const CardDefinition* bd = CardDatabase::Instance().LookupCached(ap.hand[best]);
-            const Card& bc = bd ? bd->card : ap.hand[best];
-            const int hmv = hc.m_mana_cost.ManaValue(), bmv = bc.m_mana_cost.ManaValue();
-            const int hp  = hc.m_power.value_or(0),     bp  = bc.m_power.value_or(0);
-            if (hmv > bmv
-                || (hmv == bmv && hp > bp)
-                || (hmv == bmv && hp == bp && ap.hand[h].m_number < ap.hand[best].m_number))
-            { best = h; }
+            if (is_match(hc)) { cand_hand.push_back(h); }
         }
-        if (best < 0) { continue; }   // "may": nothing matching to put -> decline
+        // WHICH permanent to put is provider-owned (CombatCheatCandidates): the base rule is the
+        // historical highest-MV/power/number pick, so this is byte-identical. Ranked best-first;
+        // index 0 is the non-branching answer.
+        const std::vector<int> ranked =
+            ResolveProvider(state).CombatCheatCandidates(state, controller, *sd, cand_hand);
+        if (ranked.empty()) { continue; }   // "may": nothing matching to put -> decline
+        int best = ranked.front();
 
         // Human play (--claude-play/viewer): let the player pick WHICH Goblin permanent to put, or
         // decline (it is a "may"). Nulled by RevealLogPause for every search/rollout scope, so this
