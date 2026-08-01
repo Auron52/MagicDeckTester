@@ -2705,6 +2705,35 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     {
         if (g.second.size() < 2) { continue; }
         const int keep = ResolveProvider(state).LegendKeepIndex(state, controller_index, g.second);
+        // MTG_TRACE=legend: is "keep the original" ever actually WRONG? One copy dies either way and
+        // the ETB is already banked before this state-based action runs, so the choice is purely
+        // about WHICH BODY survives -- i.e. it can only matter when the copies differ in a way that
+        // affects what the survivor can do. `differs` counts exactly that; a group where every copy
+        // is in the same state is a decision with no content, however often it fires. Measure the
+        // contested rate BEFORE building a rule, the way the retrace/pitch pair showed matters.
+        if (TRACE_ON("legend") && g_real_resolution)
+        {
+            const Permanent& a = state.battlefield[g.second.front()];
+            bool d_tap = false, d_sick = false, d_dmg = false, d_ctr = false, d_pump = false;
+            for (int idx : g.second)
+            {
+                const Permanent& p = state.battlefield[idx];
+                if (p.tapped            != a.tapped)            { d_tap  = true; }
+                if (p.entered_this_turn != a.entered_this_turn) { d_sick = true; }
+                if (p.damage            != a.damage)            { d_dmg  = true; }
+                if (p.counters.size()   != a.counters.size())   { d_ctr  = true; }
+                if (p.temp_power_bonus  != a.temp_power_bonus
+                 || p.temp_tough_bonus  != a.temp_tough_bonus)  { d_pump = true; }
+            }
+            // Auras are NOT compared here (the link is aura->host via aura_attached_to, so it needs
+            // a battlefield scan); noted so a "differs=0" is read as "none of these five differ",
+            // not as "the copies are provably identical".
+            TRACE("legend", "T%d %s n=%zu keep=%s tap=%d sick=%d dmg=%d ctr=%d pump=%d differs=%d",
+                  state.turn_number, g.first.c_str(), g.second.size(),
+                  keep == g.second.front() ? "oldest" : "other",
+                  d_tap, d_sick, d_dmg, d_ctr, d_pump,
+                  (d_tap || d_sick || d_dmg || d_ctr || d_pump) ? 1 : 0);
+        }
         for (int idx : g.second) { if (idx != keep) { doomed.push_back(idx); } }
     }
     if (doomed.empty()) { return; }

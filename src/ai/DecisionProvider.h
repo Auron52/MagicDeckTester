@@ -711,6 +711,30 @@ public:
     // The base rule keeps the OLDEST (lowest battlefield index). The rules make this the
     // controller's choice for a reason: the copies are not interchangeable once one carries an aura,
     // counters, or damage, or once one is summoning-sick and another is not.
+    //
+    // MEASURED (MTG_TRACE=legend, 600 d0 games per deck) AND DELIBERATELY NOT BRANCHED. The keep is
+    // near-inert FOR GOLDFISHING, and the reason is structural rather than a small effect size:
+    //
+    //   deck      events   what differs between the copies
+    //   Hinata      106    91 summoning sickness ONLY, 10 tapped+sick
+    //   goblins      19    Muxus: tapped + sick + temp pump
+    //   knights       4    2 sickness, 2 nothing at all
+    //   TH / burn     0    no legendary duplicates arise
+    //
+    // Exactly one copy survives, and the ETB is already banked before this state-based action runs,
+    // so the choice is only ever "which BODY survives". For a body whose sole use is ATTACKING --
+    // Hinata (static + flier), Haytham (ETB + lord), Muxus (its trigger is "enters or attacks") --
+    // the only within-turn content is "can the survivor attack now", and keeping the OLDEST already
+    // answers that correctly because the oldest is the un-sick one. Every other difference observed
+    // (tapped, sickness, temp pump) is erased by the next untap step, after which the copies are
+    // interchangeable. So a smarter rule has nothing left to win.
+    //
+    // WHAT WOULD MAKE IT LIVE (the user's criterion, and it is the right one): a legend with a use
+    // OTHER than attacking, since only one copy can attack either way. Krenko, Mob Boss ({T}: create
+    // X Goblins) is exactly that -- keeping an untapped, un-sick Krenko would be worth real tokens.
+    // It duplicated ZERO times in 600 games. Revisit this hook if a deck runs a legend with a tap
+    // ability or a sacrifice outlet that actually duplicates; until then the base rule is not a
+    // placeholder, it is the answer.
     virtual int LegendKeepIndex(const GameState& /*s*/, int /*controller*/,
                                 const std::vector<int>& duplicates) const
     {
