@@ -46,6 +46,19 @@ LIVE=decks/Hinata2/Hinata2.value.json
 # wrong -- the same shape as the matrix's <out>.cells.json and the mulligan generator's chunks.
 # Safe to Ctrl-C or kill at any moment; just re-run the same command.
 #
+# !!! DO NOT USE dumpB/dumpA -- THEY VIOLATE THE REPO'S BATCHING RULE. Use instead:
+#         bash scripts/hinata_valueleaf_batch_dump.sh [games]
+#     run_chunked_dump is a `while` loop of sequential `mtg` invocations, one per chunk, each with
+#     its own --threads 24. Every invocation pays its OWN load-imbalance tail, and a chunk commits
+#     only on clean exit -- so a few slow games hold the whole chunk hostage. MEASURED 2026-08-01:
+#     chunk 215 finished 98 of 100 games in ~5 h, then TWO games (seeds 20249, 20280) ran 3 h more
+#     with ~20 of 24 cores IDLE and not one row committed. ~113 rows/h before the stall, ~0 after,
+#     against the ~823 rows/h documented below -- treat that figure as unvalidated at this chunk
+#     size. The pooled version puts every game in ONE queue so stragglers occupy their own threads
+#     instead of blocking everyone. The chunk/.part machinery was never needed for durability
+#     either: the row writer is mutex-guarded and flushes EVERY row, so rows are on disk as
+#     produced; resume by deduplicating on (seed, turn), which every row already carries.
+#
 # Usage: dumpB [target_rows] [games_per_chunk]   (chunk defaults: B 100 games ~42 min,
 # A 50 games ~48 min -- that is the MOST an interruption can cost).
 #   dumpB : K=3 volume run   ~823 rows/hr on 24 threads -> ~11k (the knee) in ~12 h
