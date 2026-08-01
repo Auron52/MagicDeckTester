@@ -1925,6 +1925,10 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
 // must run it immediately -- CR 704.5j is a state-based action; see the call site below).
 inline void EnforceLegendRule(GameState& state, int controller_index);
 
+// Forward declaration only (ai/ManaPayment.h cannot be included here -- it includes this header).
+// Used solely by the MTG_LACKEY_PREF diagnostic below, never by game logic.
+ManaPool AvailableManaPool(const GameState& state);
+
 inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                                           const std::vector<int>& damaging_attacker_indices)
 {
@@ -2030,7 +2034,24 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
             { if (q.controller_index == controller && q.card.IsCreature()) { ++my_creatures; } }
             int muxus_left = 0;
             for (const Card& q : ap.library) { if (q.m_name == "Muxus, Goblin Grandee") { ++muxus_left; } }
-            std::fprintf(stderr, "%s creatures=%d muxus_in_lib=%d\n", line.c_str(), my_creatures, muxus_left);
+            // Opponent life, and whether the controller could just CAST each candidate right now.
+            // Both are hypotheses for why a cheaper card ever beats a dearer one in this slot: an
+            // ETB-damage creature can simply be lethal, and a card you can already afford wastes the
+            // free put (the Lackey slot is for what you cannot pay for).
+            std::string affordable;
+            {
+                ManaPool pool_now = AvailableManaPool(state);
+                for (int ci : cand_hand)
+                {
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(ap.hand[ci]);
+                    if (cd == nullptr || !pool_now.CanPay(cd->card.m_mana_cost)) { continue; }
+                    if (!affordable.empty()) { affordable += "|"; }
+                    affordable += ap.hand[ci].m_name.str();
+                }
+            }
+            std::fprintf(stderr, "%s creatures=%d muxus_in_lib=%d opplife=%d castable=%s\n",
+                         line.c_str(), my_creatures, muxus_left,
+                         state.players[1 - controller].life, affordable.c_str());
         }
 
         // Human play (--claude-play/viewer): let the player pick WHICH Goblin permanent to put, or
