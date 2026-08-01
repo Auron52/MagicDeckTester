@@ -1299,6 +1299,13 @@ static bool ScrySearchEnabled()
     static const bool on = EnvOn("MTG_SCRY_SEARCH", true);
     return on && SearchedPlayActive();
 }
+// NOT under-measured -- SATURATED, which is why there is no sweep to point at. Both modelled ETB
+// look cards examine exactly ONE card (Temple of Epiphany etb_scry 1, Thundering Falls etb_surveil 1,
+// Treasure Hunt the only deck running either), and for a 1-card look EnumerateTopDispositions yields
+// 2^1 = 2 dispositions, so TopDispositionCandidates returns 2 and `min(k, width)` is already the
+// whole legal space at width 2. Raising this is a provable no-op at the current card pool.
+// It starts to matter the moment a multi-card look is modelled: k becomes 2^m ordered subsets
+// (4 at scry 2, 8 at scry 3), and only THEN is the prune real and a sweep meaningful.
 static std::size_t ScrySearchWidth()
 {
     static const std::size_t w = []() -> std::size_t
@@ -1332,26 +1339,33 @@ static bool TutorAxisEnabled()
 // heuristic-only behaviour). The provider orders candidates best-first, so this is a pure cost
 // prune in preference order, exactly like MTG_SCRY_WIDTH.
 //
-// DEFAULT 6, from a full held-out (overnight) sweep -- searched-depth sum vs the pre-axis baseline:
-//     W=1  0.0000     W=2  -0.2679     W=3  -0.2828     W=4  -0.3175
-//     W=6 -0.3868     W=8  -0.3987     W=12 -0.4151
-// MONOTONE, unlike the breakpoint width (which dilutes), because this axis is ADDITIVE (P+W) rather
-// than a factor of the odometer: makespan moved only 457s -> 522s across the whole range. 6 takes
-// ~93% of the W=12 gain at the smallest slower-count of the strong arms and keeps Hinata near its
-// own best. Per-deck optima DIFFER (goblins keeps improving to 12 at -0.2740; Hinata peaks at W=2
-// with -0.1359 and dilutes to -0.0851 by 12; antilife plateaus at -0.0560 from W=2), so a
-// provider-owned width is the natural follow-up -- deliberately NOT tuned per-deck here, because
-// these are the held-out seeds and picking per-deck values off them would consume the holdout.
-static std::size_t TutorAxisWidth()
+// The width is PROVIDER-OWNED (DecisionProvider::TutorSearchWidth) rather than one global constant,
+// because the per-deck optima genuinely diverge rather than scatter around a shared value. Goblins
+// keeps improving to W=12 (Matron's ~16 Goblin names are not close substitutes); antilife's pool
+// IS 2 (its only enchantments are Tainted Remedy and Aria of Flame, and it runs no artifacts), so
+// everything above 2 was enumeration cost for a provably empty gain. Held-out confirmation of the
+// finished config vs this global 6: goblins -0.0620 (8/8 cases), antilife 0.0000 with identical
+// play, d0 unmoved. Hinata was ALSO trained to 2 and did NOT survive the holdout (+0.0009, and no
+// cheaper), so it keeps this base -- see docs/design/searched-action-subdecisions.md.
+//
+// MTG_TUTOR_WIDTH overrides every provider for the A/B; unset (or 0) defers to the provider.
+static std::size_t TutorAxisWidthOverride()
 {
     static const std::size_t w = []() -> std::size_t
     {
         const char* v = std::getenv("MTG_TUTOR_WIDTH");
-        if (v == nullptr || *v == '\0') { return 6; }
+        if (v == nullptr || *v == '\0') { return 0; }   // 0 == not set == defer to the provider
         const int n = std::atoi(v);
         return n < 1 ? 1 : static_cast<std::size_t>(n);
     }();
     return w;
+}
+static std::size_t TutorAxisWidth(const GameState& s)
+{
+    const std::size_t ovr = TutorAxisWidthOverride();
+    if (ovr > 0) { return ovr; }
+    const int w = ResolveProvider(s).TutorSearchWidth();
+    return w < 1 ? 1 : static_cast<std::size_t>(w);
 }
 
 // SEARCHED ETB-DIG PICK (Acclaimed Contender). Same additive post-dedup axis as the tutor target:
@@ -9835,7 +9849,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // the card arrives and the fetched card CANNOT be cast this turn. The target therefore cannot
     // interact with the rest of this turn's subset, which is exactly the condition that makes a
     // second axis equivalent to the cross product rather than an approximation of it.
-    if (TutorAxisEnabled() && TutorAxisWidth() > 1 && !HumanPlayActive())
+    if (TutorAxisEnabled() && TutorAxisWidth(state) > 1 && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
         // The candidate list depends only on `state`, so build it at most once per tutor param set.
@@ -9856,7 +9870,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                     cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index,
                                                                    d->params);
                 }
-                const std::size_t k = std::min(cands.size(), TutorAxisWidth());
+                const std::size_t k = std::min(cands.size(), TutorAxisWidth(state));
                 for (std::size_t c = 1; c < k; ++c)
                 {
                     if (cands[c] == act.tutor_target) { continue; }

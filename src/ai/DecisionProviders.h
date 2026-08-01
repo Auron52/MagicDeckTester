@@ -138,6 +138,13 @@ public:
     // Mana-hungry combo (dorks + on-curve enabler deploy) with NO land-as-resource mechanic -> the NC
     // search should ALWAYS develop mana, not just while establishing the base. Aggressive (ungated).
     double NcLandDropTempoBonus(const GameState&, int) const override;
+    // Both tutors here fetch from a pool of exactly TWO distinct names: the deck's only enchantments
+    // are Tainted Remedy and Aria of Flame, and it runs no artifacts at all -- so Idyllic Tutor
+    // (enchantment) and Enlightened Tutor (artifact or enchantment) see the same two-card list. 2 is
+    // therefore EXHAUSTIVE, not a prune: the train sweep's play digests are byte-identical from
+    // width 2 all the way to 12, because there was never a third candidate to enumerate. The old
+    // global 6 was pure enumeration cost here for a provably empty gain.
+    int TutorSearchWidth() const override { return 2; }
 };
 
 // Treasure Hunt + Land's Edge: dig-when-stuck, Land's Edge fire count, deck-aware
@@ -166,6 +173,25 @@ class VialProvider : public GenericProvider
 {
 public:
     bool WantVialCharge(const GameState&, const Permanent&) const override;
+};
+
+// Goblins (Lackey / Matron / Muxus aggro). The deck rode GenericProvider until there was something
+// MEASURED to put here -- an earlier attempt at a Goblins Lackey-put priority table was worth
+// exactly 0.0000 and was correctly not shipped. This is the first hook that pays: Goblin Matron
+// tutors for "a Goblin card" out of ~16 distinct Goblin names, and unlike every other tutor in the
+// suite its targets are not close substitutes (Muxus and Mogg War Marshal are not the same fetch),
+// so the search keeps finding value well past the provider's top few.
+//
+// Measured, MONOTONE with a knee at 8 -- the opposite shape to Hinata's dilution:
+//   TRAIN (1001/2002/3003)   w2 -0.0294  w4 -0.1627  w6 -0.1846  w8 -0.2100  w12 -0.2108
+//   HELD-OUT (4004..7007)    w12 -0.2740 (the best arm measured there too)
+// 8 and 12 are statistically indistinguishable on train (0.0008 apart over 15 cases); 12 is taken
+// because both seed sets rank it no worse and the axis is ADDITIVE -- the whole 3-deck regression
+// makespan moves 38s -> 46s across the entire width range, not per-width multiplicatively.
+class GoblinsProvider : public GenericProvider
+{
+public:
+    int TutorSearchWidth() const override { return 12; }
 };
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
@@ -228,6 +254,16 @@ public:
     // default-ON (2026-07-21); MTG_LEGACY_MAGMA -> {} -> byte-identical over-count path. See the .cpp.
     std::vector<ScaledCastVariant>
     ScaledCastVariants(const GameState&, const CardDefinition&) const override;
+    // TutorSearchWidth: deliberately NOT overridden -- this deck keeps the base 6. Worth recording
+    // because the train seeds said otherwise and the holdout overruled them. Gamble is unrestricted
+    // ("search your library for a card") but TutorCandidates above already narrows it hard (Hinata
+    // alone while she is missing; SituationalCardRank order once she is online), so the hypothesis
+    // was that extra targets are ones the provider already judged worse and only dilute a deck whose
+    // turns are the most budget-starved in the suite. Train agreed -- w2 -0.0568 vs w6 -0.0284.
+    // The direct held-out check did NOT: w2 vs w6 came out +0.0009, a wash, and w2 is not cheaper
+    // either (overnight makespan 68s vs 69s). A train-only delta of that size is what a selection
+    // artifact looks like, so there is nothing to adopt. (Both seed sets DO agree Hinata dislikes a
+    // WIDE width -- w12 is its worst arm on each -- so if the base ever moves, it must not move up.)
 };
 
 // Dragonstorm (mono-red ritual-storm combo): a {8}{R} Storm sorcery puts min(storm+1, Dragons

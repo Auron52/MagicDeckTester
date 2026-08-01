@@ -397,6 +397,18 @@ public:
     // generic value (byte-identical). MTG_UNPRUNED still opens the full list engine-side.
     virtual int FetchSearchCap() const { return 2; }
 
+    // TutorSearchWidth -- tutor BREADTH policy: how many of TutorCandidates' ordered targets the
+    // post-dedup tutor axis actually scores, INCLUDING the provider's best (so 1 == the old
+    // heuristic-only behaviour, byte-identical). Sibling of FetchSearchCap, and provider-owned for a
+    // measured reason rather than a symmetry one: the axis is ADDITIVE (cost P+W, one rollout per
+    // extra target), so unlike a multiplicative width it does not dilute the budget the same way --
+    // and the per-deck optima genuinely DIVERGE. A deck whose tutor fetches a combo piece wants to
+    // look deep; a deck whose tutor is a value grab is best served by its own top pick, because the
+    // targets past rank ~2 are ones the provider already judged worse and the variants only spend
+    // budget the rest of the turn wanted. Default 6 = the prior global constant.
+    // MTG_TUTOR_WIDTH still overrides engine-side for A/B. See docs/design/searched-action-subdecisions.md.
+    virtual int TutorSearchWidth() const { return 6; }
+
     // ManaSourceRank -- mana-source TAP ORDER: flexibility rank of a mana source (LOWER = tap earlier).
     // The greedy mana solver (AIEngine::TapForCost / TurnSolver::TapForCostDirect, scarcity path)
     // pays each pip from the lowest-ranked qualifying source, so the flexible sources stay up and the

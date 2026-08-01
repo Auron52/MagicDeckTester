@@ -2859,6 +2859,7 @@ namespace
     const HinataProvider       g_hinata;
     const BurnProvider         g_burn;
     const DragonstormProvider  g_dragonstorm;
+    const GoblinsProvider      g_goblins;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -2927,12 +2928,16 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
-    // Goblins ride GenericProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
-    // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
-    // It sits below dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those
-    // signatures (no tutor_to_battlefield / hinata_cost_reducer), so exclusivity is preserved: this
-    // branch fires iff the deck has a Goblin gated param, which no other suite deck does.
-    if (goblin) { return g_generic; }
+    // Goblins. This return WINS OVER anti (Goblin Matron's tutor_to_hand would otherwise set anti and
+    // misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic. It sits below
+    // dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those signatures (no
+    // tutor_to_battlefield / hinata_cost_reducer), so exclusivity is preserved: this branch fires iff
+    // the deck has a Goblin gated param, which no other suite deck does.
+    //
+    // Was g_generic until GoblinsProvider had a MEASURED hook to hold (its Matron tutor width, 12).
+    // GoblinsProvider derives from GenericProvider and overrides only that, so every other decision
+    // still resolves through exactly the code this deck used before.
+    if (goblin) { return g_goblins; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }
