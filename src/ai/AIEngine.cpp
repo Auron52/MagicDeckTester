@@ -3457,12 +3457,16 @@ void AIEngine::DoActivateLandsEdge(GameState& state, int count, int rate, bool l
     Player& ap  = state.ActivePlayer();
     Player& opp = state.Opponent();
 
+    // WHICH lands to burn: the provider ranking (LandsEdgePitchOrder), most expendable first.
+    const std::vector<int> pitch = LandsEdgePitchOrder(state, &m_profile.required_pieces, count);
+    std::vector<char> burn(ap.hand.size(), 0);
+    for (int i : pitch) { burn[static_cast<std::size_t>(i)] = 1; }
     std::vector<Card> keep;
-    int fired = 0;
+    int fired = 0, idx = -1;
     for (Card& c : ap.hand)
     {
-        auto def     = CardDatabase::Instance().LookupCached(c);
-        bool is_land = def ? def->card.IsLand() : c.IsLand();
+        ++idx;
+        bool is_land = burn[static_cast<std::size_t>(idx)] != 0;
         if (is_land && fired < count)
         {
             ap.graveyard.push_back(c);

@@ -6763,12 +6763,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (le_rate <= 0) { continue; }   // no Land's Edge in play -> nothing to fire
             Player& le_ap = state.ActivePlayer();
             const int le_life_before = state.players[opp_idx].life;   // play-viewer "before->after"
+            // Same provider ranking as the executor (LandsEdgePitchOrder) -- these two must model
+            // identical Land's Edge damage or the rollout's projection and the realised game
+            // diverge, which is the classic executor/rollout lockstep failure.
+            const std::vector<int> le_pitch =
+                LandsEdgePitchOrder(state, state.m_required_pieces, a.discard_lands);
+            std::vector<char> le_burn(le_ap.hand.size(), 0);
+            for (int bi : le_pitch) { le_burn[static_cast<std::size_t>(bi)] = 1; }
             std::vector<Card> keep;
-            int fired = 0;
+            int fired = 0, le_idx = -1;
             for (Card& c : le_ap.hand)
             {
-                auto cdef    = CardDatabase::Instance().LookupCached(c);
-                bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
+                ++le_idx;
+                bool is_land = le_burn[static_cast<std::size_t>(le_idx)] != 0;
                 if (is_land && fired < a.discard_lands)
                 {
                     le_ap.graveyard.push_back(c);
