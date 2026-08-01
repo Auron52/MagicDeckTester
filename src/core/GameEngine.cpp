@@ -268,18 +268,27 @@ void GameEngine::UpkeepTail(GameState& state)
     // A "hold" flags the land not-live for the turn (StorageSourceLive) so it is never tapped for mana ->
     // stays untapped -> banks its counter at end of turn. Human-play only (chooser null autonomously / in
     // rollout) -> byte-identical for the search and every non-storage deck.
-    if (g_play_storage_hold_chooser)
+    // The AUTONOMOUS answer is provider-owned, exactly as it now is for Mercadian Bazaar's
+    // main-phase variant (AIEngine): base returns false = never hold = the historical behaviour, so
+    // this stays byte-identical. Previously the whole block was gated on the chooser being non-null,
+    // which meant the search and the autonomous engine could not represent holding EITHER storage
+    // land -- the two were only superficially different, and were in fact identically un-hooked.
+    //
+    // The pre-draw/post-draw asymmetry described above is real but it is an INFORMATION difference,
+    // so it only bites a NON-CLAIRVOYANT decider (a human, or the NC model). A clairvoyant search
+    // sees this turn's draw either way, so both lands should be equally representable to it.
+    for (Permanent& p : state.battlefield)
     {
-        for (Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            if (p.tapped || p.storage_counters <= 0) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (!d || !d->params.storage_land || d->params.storage_charge_mode != "upkeep_if_tapped")
-            { continue; }
-            if ((*g_play_storage_hold_chooser)(state, p, p.storage_counters))
-            { p.storage_hold_this_turn = true; }
-        }
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.tapped || p.storage_counters <= 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.storage_land || d->params.storage_charge_mode != "upkeep_if_tapped")
+        { continue; }
+        bool hold = ResolveProvider(state).StorageLandHold(
+            state, state.active_player_index, *d, p.storage_counters);
+        if (g_play_storage_hold_chooser)
+        { hold = (*g_play_storage_hold_chooser)(state, p, p.storage_counters); }
+        if (hold) { p.storage_hold_this_turn = true; }
     }
 
     // Upkeep token creation (e.g. Thrumming Hivepool: create two 1/1 Sliver tokens).
