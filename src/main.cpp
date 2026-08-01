@@ -36,7 +36,7 @@ static void PrintUsage(const char* prog)
               << "  <deckfile>      Plain text (.txt) or Cockatrice (.cod) decklist\n"
               << "  --games N       Number of games to simulate (default: 10000)\n"
               << "  --seed S        Base RNG seed (omit to generate randomly)\n"
-              << "  --max-turns T   Maximum turns before declaring no-win (default: 20)\n"
+              << "  --max-turns T   Maximum turns before declaring no-win (default: 8)\n"
               << "  --depth D       Lookahead depth (higher = stronger but slower). Omit --depth AND\n"
               << "                  --budget-ms to use the deck's value_play play policy (or the built-in\n"
               << "                  d5/budget-20 default). Passing either reproduces the old CLI behavior.\n"
