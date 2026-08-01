@@ -735,16 +735,20 @@ inline bool CanAttackFull(const Permanent&, const std::vector<Permanent>&, int);
 // creature whose extra damage matters most.
 inline int FindBestOwnAttacker(const GameState& state, int controller_index)
 {
-    int best = -1, best_pw = -1;
+    // WHICH of your creatures a self-targeting pump picks is provider-owned
+    // (OwnPumpTargetCandidates); the base rule is the historical highest-power pick.
+    std::vector<int> mine;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != controller_index) { continue; }
         if (!CanAttackFull(p, state.battlefield, controller_index)) { continue; }
-        int pw = p.EffectivePower();
-        if (pw > best_pw) { best_pw = pw; best = i; }
+        mine.push_back(i);
     }
-    return best;
+    if (mine.empty()) { return -1; }
+    const std::vector<int> ranked =
+        ResolveProvider(state).OwnPumpTargetCandidates(state, controller_index, mine);
+    return ranked.empty() ? -1 : ranked.front();
 }
 
 // Target selection for the controller-lifegain removal (Swords to Plowshares). Its rider makes the
@@ -760,16 +764,21 @@ inline int FindBestOwnAttacker(const GameState& state, int controller_index)
 // Phase 2. Only Swords carries controller_lifegain_equals_power, so every other deck is untouched.
 inline int FindLifegainRemovalTarget(const GameState& state, int active)
 {
+    // The WHETHER-to-cast gate stays here, NOT in the provider: it is a castability precondition
+    // shared in lockstep by the enumeration gate, the rollout, and the executor, and a provider that
+    // disagreed with it would desync the three. Only WHICH creature is provider-owned.
     if (!RemedyActive(state, active)) { return -1; }
-    int best = -1, best_pw = -1;
+    std::vector<int> opp;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& p = state.battlefield[i];
         if (p.controller_index == active || !p.card.IsCreature()) { continue; }
-        int pw = p.EffectivePower();
-        if (pw > best_pw) { best_pw = pw; best = i; }
+        opp.push_back(i);
     }
-    return best;
+    if (opp.empty()) { return -1; }
+    const std::vector<int> ranked =
+        ResolveProvider(state).LifegainRemovalCandidates(state, active, opp);
+    return ranked.empty() ? -1 : ranked.front();
 }
 
 // Apply a creature-targeting burn's damage AND its delayed "when that creature dies" death trigger
@@ -809,15 +818,19 @@ inline void ApplyBurnToCreature(GameState& state, Permanent& target, int damage_
 // which creature dies is irrelevant beyond enabling this rider (revisit for a real opponent).
 inline int FindBurnKillTarget(const GameState& state, int active, int damage)
 {
-    int first = -1;
+    // WHICH creature is provider-owned (BurnCreatureTargetCandidates); the base rule is the
+    // historical killable-first / else-first pick, so this is byte-identical.
+    std::vector<int> opp;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& p = state.battlefield[i];
         if (p.controller_index == active || !p.card.IsCreature()) { continue; }
-        if (first < 0) { first = i; }
-        if (p.EffectiveToughness() <= damage) { return i; }   // killable -> the rider fires
+        opp.push_back(i);
     }
-    return first;   // none killable (or -1 = no opponent creature)
+    if (opp.empty()) { return -1; }   // no opponent creature -> uncastable
+    const std::vector<int> ranked =
+        ResolveProvider(state).BurnCreatureTargetCandidates(state, active, damage, opp);
+    return ranked.empty() ? -1 : ranked.front();
 }
 
 // The damage a creature-targeting burn deals to its creature target (Searing Blood 2; Searing Blaze 1,
@@ -2345,29 +2358,36 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index)
 // double-count their continuous buffs in the damage step.
 inline void EnforceLegendRule(GameState& state, int controller_index)
 {
-    std::vector<std::string> seen;
-    for (std::vector<Permanent>::iterator it = state.battlefield.begin();
-         it != state.battlefield.end(); )
+    // WHICH copy survives is the controller's choice (CR 704.5j) and is provider-owned
+    // (LegendKeepIndex); the base rule keeps the OLDEST (lowest battlefield index), which is what
+    // the previous erase-as-you-scan loop did, so this is byte-identical.
+    //
+    // Grouped first, then resolved, because a provider may keep a copy that is not the first -- the
+    // old loop could only ever keep the first. Graveyard order stays ASCENDING by battlefield index
+    // (as before); the erase runs descending so the indices stay valid.
+    std::vector<std::pair<std::string, std::vector<int>>> groups;   // name -> indices, ascending
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
-        if (it->controller_index != controller_index
-            || !it->card.HasSupertype(Supertype::Legendary))
-        {
-            ++it;
-            continue;
-        }
-        bool duplicate = false;
-        for (const std::string& nm : seen) { if (nm == it->card.m_name) { duplicate = true; break; } }
-        if (duplicate)
-        {
-            state.players[it->owner_index].graveyard.push_back(it->card);
-            it = state.battlefield.erase(it);
-        }
-        else
-        {
-            seen.push_back(it->card.m_name);
-            ++it;
-        }
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller_index
+            || !p.card.HasSupertype(Supertype::Legendary)) { continue; }
+        bool found = false;
+        for (auto& g : groups) { if (g.first == p.card.m_name) { g.second.push_back(i); found = true; break; } }
+        if (!found) { groups.emplace_back(p.card.m_name.str(), std::vector<int>{ i }); }
     }
+    std::vector<int> doomed;
+    for (const auto& g : groups)
+    {
+        if (g.second.size() < 2) { continue; }
+        const int keep = ResolveProvider(state).LegendKeepIndex(state, controller_index, g.second);
+        for (int idx : g.second) { if (idx != keep) { doomed.push_back(idx); } }
+    }
+    if (doomed.empty()) { return; }
+    std::sort(doomed.begin(), doomed.end());
+    for (int idx : doomed)   // ascending -> graveyard order matches the old scan
+    { state.players[state.battlefield[idx].owner_index].graveyard.push_back(state.battlefield[idx].card); }
+    for (auto it = doomed.rbegin(); it != doomed.rend(); ++it)   // descending -> indices stay valid
+    { state.battlefield.erase(state.battlefield.begin() + *it); }
 }
 
 // PerformEtbDig -- body in SpellEffects.cpp (see the header note above).
@@ -3780,10 +3800,17 @@ inline bool LandCanReveal(const GameState& state, const CardDefinition& def)
 inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& def, bool allow_pay_life = true)
 {
     const CardParams& pp = def.params;
+    // The pay-the-cost-or-enter-tapped decision is provider-owned (LandEntersUntapped); the base
+    // hook returns the engine answer unchanged, so this is byte-identical. It is routed through the
+    // PREDICATE (not just the real land drop) because the enumeration prices a plan's mana off this
+    // same function -- if the two disagreed, the plan's mana and the realised mana would diverge.
     if (pp.etb_pay_life_to_untap > 0)
-        return !(allow_pay_life && state.ActivePlayer().life > pp.etb_pay_life_to_untap);
+    {
+        const bool heur = allow_pay_life && state.ActivePlayer().life > pp.etb_pay_life_to_untap;
+        return !ResolveProvider(state).LandEntersUntapped(state, def, heur);
+    }
     if (!pp.etb_untap_reveal_subtypes.empty())
-        return !LandCanReveal(state, def);
+        return !ResolveProvider(state).LandEntersUntapped(state, def, LandCanReveal(state, def));
     if (pp.fastland_max_other_lands >= 0)
     {
         // Fastland (Razorverge Thicket): enters untapped iff you control <= N other lands. The card

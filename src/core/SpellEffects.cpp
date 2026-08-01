@@ -211,37 +211,23 @@ void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
             if (d->params.aura_enchant_requires == "modified"     && !CreatureIsModified(lp_now(), state)) { return false; }
             return true;
         };
-        int best_idx = -1, best_pw = -1;
+        // WHICH Aura to fetch is provider-owned (LightPawsAuraCandidates). This is a TUTOR, and it
+        // was the one tutor in the engine that did not route through a provider. The base rule --
+        // rank by the power the Aura would REALIZE if attached now, ties to higher MV -- is the
+        // historical pick, so this is byte-identical. (A scaling Aura grants per matching permanent,
+        // so on a wide board its true contribution dwarfs a flat +N; the old static coefficient
+        // undervalued exactly those payoff Auras. MTG_LEGACY_LIGHTPAWS_STATIC restores it.)
+        std::vector<int> lp_legal;
         for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
-            if (!eligible(i, d)) { continue; }
-            // Rank by the power this Aura would REALIZE if fetched now (attached to Light-Paws), not by a
-            // static coefficient. A scaling Aura grants aura_scale_power PER matching permanent, so on a
-            // wide board (All That Glitters = +1/artifact+enchantment, Ethereal Armor = +1/enchantment,
-            // Ancestral Mask = +2/other-enchantment) its true contribution dwarfs a flat +N Aura -- the
-            // old "aura_power_bonus + aura_scale_power" undervalued exactly these payoff Auras. The fetched
-            // Aura will itself be an enchantment you control, so it adds one to its own count (the
-            // "other_enchantments" kind excludes itself, but CountAuraScaleUnits' built-in -1 assumes the
-            // Aura is already on the battlefield -- not yet true here -- so +1 corrects all three kinds).
-            // MTG_LEGACY_LIGHTPAWS_STATIC reverts to the old static coefficient rank (byte-identical A/B).
-            static const bool lp_static = EnvOn("MTG_LEGACY_LIGHTPAWS_STATIC");
-            int contrib;
-            if (lp_static) { contrib = d->params.aura_power_bonus + d->params.aura_scale_power; }
-            else
-            {
-                contrib = d->params.aura_power_bonus;
-                if (!d->params.aura_scale_kind.empty())
-                {
-                    int units = CountAuraScaleUnits(d->params.aura_scale_kind, lp_now(), state, controller) + 1;
-                    contrib += d->params.aura_scale_power * units;
-                }
-            }
-            if (contrib > best_pw || (contrib == best_pw && d->card.m_mana_cost.ManaValue() >
-                                      (best_idx >= 0 ? CardDatabase::Instance().LookupCached(ap.library[best_idx])->card.m_mana_cost.ManaValue() : -1)))
-            { best_pw = contrib; best_idx = i; }
+            if (eligible(i, d)) { lp_legal.push_back(i); }
         }
-        if (best_idx < 0) { continue; }   // no eligible aura -> no put
+        if (lp_legal.empty()) { continue; }   // no eligible aura -> no put
+        const std::vector<int> lp_ranked = ResolveProvider(state).LightPawsAuraCandidates(
+            state, controller, lp_now(), lp_legal);
+        if (lp_ranked.empty()) { continue; }   // provider declined the "may search"
+        int best_idx = lp_ranked.front();
 
         // Human play (--claude-play/viewer): let the player choose WHICH Aura Light-Paws fetches (or
         // decline -- it is a "may search"). Nulled by RevealLogPause for every search/rollout scope, so
@@ -274,8 +260,12 @@ void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
         Card fetched = ap.library[best_idx];
         if (lp_trace)
         {
-            std::fprintf(stderr, "[lp:%s] turn=%d FETCH %s (idx=%d, contrib=%d)\n",
-                         side, state.turn_number, fetched.m_name.str().c_str(), best_idx, best_pw);
+            // `rank` replaces the old `contrib` print: the ranking now lives in the provider, so the
+            // engine no longer holds the winning score -- the position in the ranked list is the
+            // equivalent diagnostic (0 = the provider's top pick).
+            std::fprintf(stderr, "[lp:%s] turn=%d FETCH %s (idx=%d, rank=0/%zu)\n",
+                         side, state.turn_number, fetched.m_name.str().c_str(), best_idx,
+                         lp_ranked.size());
         }
         ap.library.erase(ap.library.begin() + best_idx);
         Permanent perm;
@@ -568,33 +558,24 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     //   (3) among those, prefer a land that ENTERS UNTAPPED when replayed (a basic / untapped
     //       dual) over one that enters tapped (a tapland / another Karoo), so the forced
     //       replay gives mana immediately rather than wasting next turn's tempo.
-    // Lexicographic via additive weights; ties break to the lowest index (deterministic).
-    auto land_score = [&](int i) -> long
-    {
-        const Permanent& p = state.battlefield[i];
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        const bool is_karoo = d && d->params.etb_bounce_land;
-        const bool enters_untapped =
-            !(d && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
-        long s = 0;
-        if (is_karoo)        { s -= 1000; }   // (1) avoid the bounce loop
-        if (p.tapped)        { s += 100;  }   // (2) no mana lost this turn
-        if (enters_untapped) { s += 10;   }   // (3) clean replay
-        return s;
-    };
-    // Legal returnable lands (controller's lands other than the karoo), best-scored first kept as
-    // the heuristic default; the karoo itself is the forced fallback when it is the only land.
+    // Legal returnable lands (controller's lands other than the karoo). WHICH one is provider-owned
+    // (BounceLandCandidates); the base rule is the historical avoid-karoo / prefer-tapped /
+    // prefer-enters-untapped weighting, so this is byte-identical. The karoo itself is the forced
+    // fallback when it is the only land (the bounce is mandatory).
     std::vector<int> legal;
-    int  pick = -1;
-    long best = 0;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         if (i == self_index) { continue; }
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != controller || !p.card.IsLand()) { continue; }
         legal.push_back(i);
-        const long s = land_score(i);
-        if (pick < 0 || s > best) { pick = i; best = s; }   // strict > => lowest index wins ties
+    }
+    int pick = -1;
+    if (!legal.empty())
+    {
+        const std::vector<int> ranked =
+            ResolveProvider(state).BounceLandCandidates(state, controller, self_index, legal);
+        if (!ranked.empty()) { pick = ranked.front(); }
     }
     if (pick < 0) { pick = self_index; legal.push_back(self_index); }  // mandatory: only the karoo
     // Human play (claude-play): let the player choose which land to return. The chooser gets the

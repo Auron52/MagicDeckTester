@@ -590,6 +590,109 @@ public:
     {
         return std::vector<int>{ -1 };
     }
+
+    // ---- Remaining engine built-ins, ported byte-identically -----------------------------------
+    // Every hook below returns candidates in PREFERENCE order with index 0 equal to the historical
+    // inline pick, so a non-branching caller is unchanged. Several of these base rules are known to
+    // be weak (see the individual notes and engine-heuristics-to-providers.md); they are preserved
+    // as-is here because the port must not move play. Fixing them is the next step, per rule.
+
+    // LightPawsAuraCandidates -- Light-Paws, Emperor's Voice: which Aura the on-cast trigger fetches
+    // onto the battlefield attached to her. `legal` is library indices already filtered to the legal
+    // fetches (MV <= the cast Aura's, a name you do not already control, enchant restriction
+    // satisfied); return them ranked, or {} to decline (it is a "may search").
+    //
+    // Provider-owned because this is a TUTOR, and every other tutor in the engine already routes
+    // through TutorCandidates -- this one was the exception. The base rule ranks by the power the
+    // Aura would REALIZE if attached now (scaling Auras counted against the live board), which is a
+    // genuinely good rule; it is deck-agnostic and stays the default.
+    virtual std::vector<int> LightPawsAuraCandidates(
+        const GameState& s, int controller, const Permanent& lightpaws,
+        const std::vector<int>& legal) const;
+
+    // RetraceDiscardCandidates -- retrace (Throes of Chaos) casts from the graveyard by discarding a
+    // LAND as an additional cost. Which land, as hand indices in preference order.
+    //
+    // The base rule is the historical FIRST land in hand order -- i.e. insertion order, the same
+    // arbitrary-ranking defect as rule 1 of the cleanup discard. Lands are not fungible; this wants
+    // a real ranking (ManaSourceRank is already provider-owned and is the obvious input).
+    virtual std::vector<int> RetraceDiscardCandidates(
+        const GameState& /*s*/, int /*controller*/,
+        const std::vector<int>& hand_land_indices) const { return hand_land_indices; }
+
+    // SacrificeLandCandidates -- "as an additional cost to cast this spell, sacrifice a land"
+    // (Shard Volley). Battlefield indices in preference order.
+    //
+    // Base rule: the first TAPPED land (already spent this turn, so sacrificing it costs no mana
+    // now), else the first land. The tapped-first half is sound; the fallback is hand-order
+    // arbitrary again.
+    virtual std::vector<int> SacrificeLandCandidates(
+        const GameState& s, int controller, const std::vector<int>& land_indices) const;
+
+    // BounceLandCandidates -- a Karoo bounce land (Izzet Boilerworks) returns one of your lands to
+    // hand as it enters. Battlefield indices in preference order; never empty (the bounce is
+    // mandatory, and the Karoo itself is the forced fallback when it is the only land).
+    //
+    // Base rule, lexicographic: never bounce another Karoo (replaying it just triggers another
+    // bounce), prefer an already-TAPPED land (spent this turn -> no mana lost), prefer one that
+    // re-enters UNTAPPED. That is a well-reasoned rule; it is provider-owned for ownership, not
+    // because it looks wrong.
+    virtual std::vector<int> BounceLandCandidates(
+        const GameState& s, int controller, int self_index,
+        const std::vector<int>& legal) const;
+
+    // LegendKeepIndex -- legend rule (CR 704.5j): you control two or more legendary permanents with
+    // the same name, so you CHOOSE one to keep and the rest go to the graveyard. `duplicates` is the
+    // battlefield indices of one such same-name group, ascending; return the index to KEEP.
+    //
+    // The base rule keeps the OLDEST (lowest battlefield index). The rules make this the
+    // controller's choice for a reason: the copies are not interchangeable once one carries an aura,
+    // counters, or damage, or once one is summoning-sick and another is not.
+    virtual int LegendKeepIndex(const GameState& /*s*/, int /*controller*/,
+                                const std::vector<int>& duplicates) const
+    {
+        return duplicates.empty() ? -1 : duplicates.front();
+    }
+
+    // LandEntersUntapped -- a land that offers "pay a cost, or enter tapped": a shock land
+    // (etb_pay_life_to_untap) or a reveal land (etb_untap_reveal_subtypes). `heuristic` carries the
+    // engine's answer (shock: pay whenever mana is needed this turn and life allows; reveal: reveal
+    // whenever able). Return true to enter untapped.
+    //
+    // Base returns `heuristic` unchanged, so this is byte-identical and applies uniformly to the
+    // enumeration predicate as well as the real land drop -- the two MUST agree or the plan's mana
+    // and the realised mana diverge.
+    virtual bool LandEntersUntapped(const GameState& /*s*/, const CardDefinition& /*def*/,
+                                    bool heuristic) const { return heuristic; }
+
+    // BurnCreatureTargetCandidates -- a creature-targeting burn that carries a "when that creature
+    // dies" rider (Searing Blood: 2 to a creature, then 3 to its controller if it dies). Opponent
+    // battlefield indices in preference order.
+    //
+    // Base rule: prefer a creature this spell KILLS (EffectiveToughness <= damage) so the rider
+    // fires, else the first opponent creature. Sound for a goldfish, where which creature dies is
+    // irrelevant beyond enabling the rider -- revisit against a real opponent.
+    virtual std::vector<int> BurnCreatureTargetCandidates(
+        const GameState& s, int active, int damage,
+        const std::vector<int>& opp_creatures) const;
+
+    // LifegainRemovalCandidates -- controller-lifegain removal (Swords to Plowshares). Its rider
+    // makes the EXILED creature's controller gain life equal to its power, which a Tainted Remedy /
+    // Plague Drone turns into that much life LOSS -- so the base rule targets the opponent's
+    // LARGEST-power creature.
+    //
+    // NOTE: the WHETHER-to-cast gate ("only while a Remedy enabler is in play") deliberately stays in
+    // the engine helper, not here: it is a castability precondition shared in lockstep by the
+    // enumeration gate, the rollout, and the executor, and moving it would let a provider desync
+    // them. This hook owns only WHICH creature.
+    virtual std::vector<int> LifegainRemovalCandidates(
+        const GameState& s, int active, const std::vector<int>& opp_creatures) const;
+
+    // OwnPumpTargetCandidates -- a spell that targets YOUR OWN creature (a pump / prowess enabler):
+    // which one. Own battlefield indices in preference order. Base rule: highest effective power
+    // among creatures that can attack.
+    virtual std::vector<int> OwnPumpTargetCandidates(
+        const GameState& s, int controller, const std::vector<int>& own_attackers) const;
 };
 
 // ---------------------------------------------------------------------------------------------------

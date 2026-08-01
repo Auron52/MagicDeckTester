@@ -354,6 +354,116 @@ std::vector<int> DecisionProvider::EtbDigCandidates(
     return legal;
 }
 
+// ---- Base rules for the remaining ported built-ins -------------------------------------------
+// Each reproduces the historical inline pick at index 0, so every port is byte-identical. See the
+// hook declarations in DecisionProvider.h for what each rule says and where it looks weak.
+
+std::vector<int> DecisionProvider::LightPawsAuraCandidates(
+    const GameState& s, int controller, const Permanent& lightpaws,
+    const std::vector<int>& legal) const
+{
+    const Player& ap = s.players[controller];
+    // Rank by the power the Aura would REALIZE if attached now, not by a static coefficient: a
+    // scaling Aura grants per matching permanent, so on a wide board its true contribution dwarfs a
+    // flat +N. The fetched Aura is itself an enchantment you control, hence the +1 correction (see
+    // the original note at the call site). MTG_LEGACY_LIGHTPAWS_STATIC restores the static rank.
+    static const bool lp_static = EnvOn("MTG_LEGACY_LIGHTPAWS_STATIC");
+    auto contrib = [&](int i) -> int {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+        if (d == nullptr) { return 0; }
+        if (lp_static) { return d->params.aura_power_bonus + d->params.aura_scale_power; }
+        int c = d->params.aura_power_bonus;
+        if (!d->params.aura_scale_kind.empty())
+        {
+            const int units = CountAuraScaleUnits(d->params.aura_scale_kind, lightpaws, s, controller) + 1;
+            c += d->params.aura_scale_power * units;
+        }
+        return c;
+    };
+    auto mv = [&](int i) -> int {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+        return d ? d->card.m_mana_cost.ManaValue() : -1;
+    };
+    std::vector<int> out = legal;
+    // Original scan: higher contrib wins; on equal contrib the higher MV wins; both comparisons are
+    // strict, so the FIRST library index wins any remaining tie -- which stable_sort preserves.
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        const int ca = contrib(a), cb = contrib(b);
+        if (ca != cb) { return ca > cb; }
+        return mv(a) > mv(b);
+    });
+    return out;
+}
+
+std::vector<int> DecisionProvider::SacrificeLandCandidates(
+    const GameState& s, int /*controller*/, const std::vector<int>& land_indices) const
+{
+    // Historical rule: the first TAPPED land if any, else the first land. Reproduced as "tapped
+    // before untapped, stable within each band" -- index 0 is the same land as before.
+    std::vector<int> out = land_indices;
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        return s.battlefield[a].tapped && !s.battlefield[b].tapped;
+    });
+    return out;
+}
+
+std::vector<int> DecisionProvider::BounceLandCandidates(
+    const GameState& s, int /*controller*/, int /*self_index*/,
+    const std::vector<int>& legal) const
+{
+    auto score = [&](int i) -> long {
+        const Permanent& p = s.battlefield[i];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const bool is_karoo = d && d->params.etb_bounce_land;
+        const bool enters_untapped =
+            !(d && (d->params.enters_tapped || d->params.enters_tapped_with_depletion > 0));
+        long v = 0;
+        if (is_karoo)        { v -= 1000; }   // never re-trigger the bounce loop
+        if (p.tapped)        { v += 100;  }   // already spent -> no mana lost this turn
+        if (enters_untapped) { v += 10;   }   // clean replay
+        return v;
+    };
+    std::vector<int> out = legal;
+    // The original scan kept a strict `>` winner, so the LOWEST index wins ties -- stable_sort on a
+    // descending score over an ascending input reproduces that.
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return score(a) > score(b); });
+    return out;
+}
+
+std::vector<int> DecisionProvider::BurnCreatureTargetCandidates(
+    const GameState& s, int /*active*/, int damage,
+    const std::vector<int>& opp_creatures) const
+{
+    // Killable first (so the death rider fires), stable otherwise -> index 0 is the first killable
+    // creature, or the first creature when none is killable. Exactly FindBurnKillTarget.
+    std::vector<int> out = opp_creatures;
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        return s.battlefield[a].EffectiveToughness() <= damage
+            && s.battlefield[b].EffectiveToughness() >  damage;
+    });
+    return out;
+}
+
+std::vector<int> DecisionProvider::LifegainRemovalCandidates(
+    const GameState& s, int /*active*/, const std::vector<int>& opp_creatures) const
+{
+    std::vector<int> out = opp_creatures;
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        return s.battlefield[a].EffectivePower() > s.battlefield[b].EffectivePower();
+    });
+    return out;
+}
+
+std::vector<int> DecisionProvider::OwnPumpTargetCandidates(
+    const GameState& s, int /*controller*/, const std::vector<int>& own_attackers) const
+{
+    std::vector<int> out = own_attackers;
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        return s.battlefield[a].EffectivePower() > s.battlefield[b].EffectivePower();
+    });
+    return out;
+}
+
 bool GenericProvider::ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const
 {
     return false;   // no risky alt-cost payloads in a generic deck.

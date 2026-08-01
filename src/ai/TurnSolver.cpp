@@ -5548,7 +5548,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 std::vector<int> lands = hand_land_indices();
                 if (lands.empty()) { break; }
-                int pick = lands.front();   // heuristic default: first land in hand order
+                // WHICH land is provider-owned (RetraceDiscardCandidates); the base rule is the
+                // historical first-land-in-hand-order, so this is byte-identical.
+                const std::vector<int> rranked = ResolveProvider(state).RetraceDiscardCandidates(
+                    state, state.active_player_index, lands);
+                int pick = rranked.empty() ? lands.front() : rranked.front();
                 if (g_play_retrace_chooser && lands.size() > 1)
                 {
                     int chosen = (*g_play_retrace_chooser)(state, state.active_player_index, name, lands, pick);
@@ -6344,19 +6348,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // else the first land. Under --claude-play the human picks WHICH land (Shard Volley's
             // additional cost); g_play_sacrifice_chooser is nulled by RevealLogPause for the
             // rollout/search, so autonomous play keeps this pick and stays byte-identical.
+            // WHICH land is provider-owned (SacrificeLandCandidates); the base rule is the
+            // historical "first tapped land if any, else the first land", so this is byte-identical.
             std::vector<int> lands;
-            int idx = -1;
-            bool locked = false;   // once a tapped land is chosen as the default, keep it (orig `break`)
             for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
             {
                 const Permanent& p = state.battlefield[i];
                 if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
                 lands.push_back(i);
-                if (!locked)
-                {
-                    if (idx < 0)  { idx = i; }
-                    if (p.tapped) { idx = i; locked = true; }   // first tapped land -> default (was break)
-                }
+            }
+            int idx = -1;
+            if (!lands.empty())
+            {
+                const std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
+                    state, state.active_player_index, lands);
+                if (!ranked.empty()) { idx = ranked.front(); }
             }
             if (g_play_sacrifice_chooser && lands.size() > 1 && idx >= 0)
             {
