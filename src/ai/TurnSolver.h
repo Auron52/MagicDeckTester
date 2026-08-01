@@ -280,6 +280,14 @@ public:
         // tutor axis additive rather than an approximation of a cross product.
         int etbdig_choice = -1;
 
+        // Goblin Lackey put (combat_damage_puts_subtype_from_hand): which candidate of the
+        // provider's ranked CombatCheatCandidates the trigger puts onto the battlefield. -1
+        // (default) == the provider's top pick, byte-identical to no branch. Unlike scry_choice and
+        // etbdig_choice this is copied onto GameState::scripted_cheat_choice rather than pinned by a
+        // scoped guard, because it is decided in the main phase and consumed in the COMBAT-DAMAGE
+        // step -- a guard around the plan apply would be gone before the trigger fires.
+        int lackey_choice = -1;
+
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
         // cards. Top-level (triggered by the main plan); each entry nests its own

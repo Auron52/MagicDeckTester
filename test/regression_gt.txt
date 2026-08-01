@@ -30,8 +30,8 @@ auras_smoke_d0_s1001=4.4560/083d95ae3a2a9c0f
 auras_smoke_d3_s1001=4.1533/d1d5be0464ab5754
 auras_smoke_d5_s1001=4.1480/3f0c22061ad83dc3
 goblins_smoke_d0_s1001=4.8130/f552c4f31458f06b
-goblins_smoke_d3_s1001=4.2533/f7a5a6fc76590105
-goblins_smoke_d5_s1001=4.2133/fcea0ede46244802
+goblins_smoke_d3_s1001=4.2467/51ef62571df42a9e
+goblins_smoke_d5_s1001=4.2133/716fb970c57d217a
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/7b06530f1cd2f10f
@@ -75,10 +75,10 @@ auras_regression_d3_s3003=4.2220/fcba8b69ceff0f79
 auras_regression_d5_s2002=4.1220/44885db4120a1a00
 auras_regression_d5_s3003=4.2100/b6269af426628f17
 goblins_regression_d0_s2002=4.8210/2bbc224767e2abec
-goblins_regression_d3_s2002=4.3700/2c21692863ed3312
-goblins_regression_d3_s3003=4.3833/ac3b95c04733f0a4
-goblins_regression_d5_s2002=4.4080/99dc5fae25556f90
-goblins_regression_d5_s3003=4.3600/9d5dfbb4604373c6
+goblins_regression_d3_s2002=4.3667/6e8d8ec937c7affc
+goblins_regression_d3_s3003=4.3800/1e4b7ecfb3829b9a
+goblins_regression_d5_s2002=4.4040/2ffe5a1f1dfc54e2
+goblins_regression_d5_s3003=4.3560/47f9319f2f96c3e4
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/3c364eea0dbc63eb
