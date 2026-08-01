@@ -32,6 +32,60 @@ DECK=decks/Hinata2/Hinata2.cod
 PROF=decks/Hinata2/Hinata2.profile.json
 LIVE=decks/Hinata2/Hinata2.value.json
 
+# ---- STAGE 1: CHUNKED, SELF-RESUMING ROW DUMP ------------------------------------------------
+# Rows are appended as they are produced, so an interruption never loses ROWS -- but it does lose
+# the RESUME POINT, and that is the dangerous half. Per-game seed is `base_seed + gi` with gi
+# RESTARTING AT 0 every invocation (GoldFishRunner: SetupGame(deck, base_seed+gi); --game-index only
+# shifts the opponent-spawn pattern), so relaunching without advancing the seed REPLAYS the same
+# games and silently duplicates positions into the training set. Deriving the offset by hand from
+# the game seeds in the rows is exactly the step that should not exist.
+#
+# So: run in CHUNKS of games, one file per chunk, written to <chunk>.part and renamed to <chunk>.rows
+# only on a clean exit. Resume = "start after the highest COMPLETE chunk"; any .part left by a kill
+# is discarded and that chunk is simply redone. Zero loss, zero duplication, no bookkeeping to get
+# wrong -- the same shape as the matrix's <out>.cells.json and the mulligan generator's chunks.
+# Safe to Ctrl-C or kill at any moment; just re-run the same command.
+#
+# Usage: dumpB [target_rows] [games_per_chunk]   (chunk defaults: B 100 games ~42 min,
+# A 50 games ~48 min -- that is the MOST an interruption can cost).
+#   dumpB : K=3 volume run   ~823 rows/hr on 24 threads -> ~11k (the knee) in ~12 h
+#   dumpA : K=8 fidelity run ~352 rows/hr on 24 threads -> ~12.5k in ~34 h
+run_chunked_dump() {
+  local arm=$1 K=$2 base=$3 start_gi=$4 chunk=$5 target=${6:-11000}
+  local dir=logs/eval/rows_$arm
+  mkdir -p "$dir"
+  rm -f "$dir"/*.part                       # discard the chunk an interruption left half-written
+  while :; do
+    # resume point = end of the highest COMPLETE chunk (filenames are zero-padded start indices)
+    local gi=$start_gi
+    for f in "$dir"/chunk_*.rows; do
+      [ -e "$f" ] || continue
+      local b=${f##*/chunk_}; b=${b%.rows}
+      local endgi=$(( 10#${b%%_*} + 10#${b##*_} ))
+      [ "$endgi" -gt "$gi" ] && gi=$endgi
+    done
+    # bash has no "$FOO_$bar" indirection -- resolve the legacy filename via ${!name}
+    local lvar="LEGACY_ROWS_$arm"; local legacy="${!lvar:-}"
+    # cat first so grep sees ONE stream (grep -c over several files prints one count PER FILE)
+    local have=$( { cat "$dir"/chunk_*.rows "$legacy" 2>/dev/null || true; } | grep -vc '^#' )
+    have=${have:-0}
+    echo "[$(date +%H:%M:%S)] arm=$arm rows=$have next_gi=$gi (target $target)"
+    [ "$have" -ge "$target" ] && { echo "target reached"; break; }
+    local tag=$(printf "%07d_%05d" "$gi" "$chunk")
+    MTG_DUMP_VALUE_ROWS="$dir/chunk_$tag.part" MTG_EVAL_ROWS_K=$K \
+      ./build/Release/mtg "$DECK" --profile "$PROF" \
+      --seed $(( base + gi )) --game-index "$gi" --games "$chunk" --threads 24 > /dev/null 2>&1
+    if [ $? -eq 0 ] && [ -s "$dir/chunk_$tag.part" ]; then
+      mv "$dir/chunk_$tag.part" "$dir/chunk_$tag.rows"      # commit: this chunk is now durable
+    else
+      echo "chunk $tag did not complete cleanly -- discarding and stopping"; rm -f "$dir/chunk_$tag.part"; break
+    fi
+  done
+}
+# Legacy (pre-chunking) row files -- folded into the totals and into training.
+LEGACY_ROWS_B=logs/eval/hinata_value_v2b.rows
+LEGACY_ROWS_A=logs/eval/hinata_value_v2.rows
+
 case "${1:-status}" in
 
 status)
@@ -44,7 +98,7 @@ status)
 # Sort the rows before training: the dump is MULTI-THREADED, so row order varies run to run and an
 # unsorted file makes training irreproducible. Header line is preserved at the top.
 train)
-  SRC=${2:-$ROWS_B}
+  SRC=${2:-logs/eval/hinata_rows_B.all.rows}   # produced by `collect B`
   ( head -1 "$SRC"; tail -n +2 "$SRC" | sort ) > "${SRC%.rows}.sorted.rows"
   N=$(( $(wc -l < "${SRC%.rows}.sorted.rows") - 1 ))
   echo "training on $N rows from ${SRC%.rows}.sorted.rows"
@@ -89,25 +143,18 @@ deep)
     --out logs/eval/valueleaf_depth_hinata_v2_deep.txt
   ;;
 
-# ---- STAGE 1 RESUME ------------------------------------------------------------------------
-# The dumps APPEND, and per-game seed is base_seed+gi with gi restarting at 0 EVERY invocation
-# (GoldFishRunner: `SetupGame(deck, base_seed + gi)`; --game-index only shifts the opponent-spawn
-# pattern). So a naive relaunch REPLAYS the same games and duplicates positions into the training
-# set. Resume by advancing BOTH --seed and --game-index past the highest game index already dumped
-# (a gap is harmless, an overlap is not). Offsets below were derived from the game seeds carried in
-# the existing rows + a full thread-set of slack.
-#   dumpB : the K=3 volume run  -- ~823 rows/hr on 24 threads, ~12 h to the ~11k knee
-#   dumpA : the K=8 fidelity run -- ~352 rows/hr on 24 threads, ~34 h to ~12.5k
-dumpB)
-  MTG_DUMP_VALUE_ROWS=logs/eval/hinata_value_v2b.rows MTG_EVAL_ROWS_K=3 \
-    ./build/Release/mtg "$DECK" --profile "$PROF" \
-    --games 4000 --seed 20227 --game-index 207 --threads 24
-  ;;
 
-dumpA)
-  MTG_DUMP_VALUE_ROWS=logs/eval/hinata_value_v2.rows MTG_EVAL_ROWS_K=8 \
-    ./build/Release/mtg "$DECK" --profile "$PROF" \
-    --games 4000 --seed 8148 --game-index 140 --threads 24
+
+dumpB) run_chunked_dump B 3 20020 207 "${3:-100}" "${2:-11000}" ;;
+dumpA) run_chunked_dump A 8  8008 140 "${3:-50}"  "${2:-11000}" ;;
+
+# Concatenate legacy + every complete chunk into one training file (repeated '#' headers are
+# harmless -- read_rows just re-reads the same feature names).
+collect)
+  arm=${2:-B}; out=logs/eval/hinata_rows_$arm.all.rows
+  eval "legacy=\$LEGACY_ROWS_$arm"
+  cat $(ls logs/eval/rows_$arm/chunk_*.rows 2>/dev/null) "$legacy" 2>/dev/null > "$out"
+  echo "$out: $(grep -vc '^#' "$out") rows from $(ls logs/eval/rows_$arm/chunk_*.rows 2>/dev/null | wc -l) chunk(s) + legacy"
   ;;
 
 # Head-to-head on ONE common test set -- the only sound way to compare models trained on different
