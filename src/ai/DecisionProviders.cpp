@@ -275,9 +275,14 @@ bool GenericProvider::DiscardLandsFirst(const GameState&) const
 bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controller,
                                                 const CardDefinition& def) const
 {
-    // Gated, default OFF pending measurement -- it removes plan variants, so it is not
-    // byte-identical wherever it fires.
-    static const bool s_prune = EnvOn("MTG_PRUNE_DUP_LEGEND");
+    // ADOPTED (user's idea, user-approved). MTG_PRUNE_DUP_LEGEND=0 restores the old behaviour.
+    // MEASURED (test/dup_legend_prune_ab.sh, fresh seeds 41041..46046):
+    //     hinata_d0  36000 games/arm  7.1199 -> 7.0782  -0.0417  t=-158  6/6 seeds
+    //     hinata_d3/d5 -0.0058 each;  goblins_d0 +0.0000 (Muxus control);  knights_d0 +0.0000
+    // ~200x the two rankings adopted the same day. It was never a modelling bug: the legend rule is
+    // enforced immediately in both paths, so the duplicate dies and board value is unchanged --
+    // which makes the cast a TIE, and a tie-break took it 109 times per 600 d0 games.
+    static const bool s_prune = EnvOn("MTG_PRUNE_DUP_LEGEND", true);
     if (!s_prune) { return true; }
 
     if (!def.card.HasSupertype(Supertype::Legendary)) { return true; }
